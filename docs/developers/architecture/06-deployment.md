@@ -24,7 +24,9 @@ The installer (see [§ Installer](#installer)) puts everything under a single fo
 ├── .armctl/
 │   ├── .env                        # 0600 — generated; user edits optional fields
 │   ├── host-overlay.yml            # generated: storage locations, offload settings
-│   └── releases/<tag>/             # the unpacked release bundle (compose template, overlay, scripts)
+│   ├── lock                        # held while an armctl command runs
+│   ├── releases/<tag>/             # the unpacked release bundle (compose template, overlay, scripts)
+│   └── current -> releases/<tag>
 ├── certs/                          # 0700
 │   ├── arm-ca.key                  # 0400 — CA private key; NEVER mounted into a container
 │   ├── arm-ca.crt                  # 0444 — mounted read-only into every service
@@ -32,6 +34,10 @@ The installer (see [§ Installer](#installer)) puts everything under a single fo
 │   └── arm-ui.{key,crt}            # leaf for UI nginx
 ├── db/                             # Postgres data (bind-mount)
 ├── logs/                           # shared logs (PUID:PGID)
+├── backups/                        # database backups from armctl up / upgrade (newest five kept)
+├── scripts/                        # notification scripts, mounted read-only into the backend
+├── iso-library/                    # disc images for Rip from ISO
+├── ssh/                            # offload profile only
 ├── raw/                            # rip output (PUID:PGID, 2775 setgid)
 └── media/                          # transcoded library (PUID:PGID, 2775 setgid)
 ```
@@ -273,22 +279,23 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 | Path | Role |
 |---|---|
-| `install.sh` (root) | Bootstrap only. From a checkout it runs the `armctl` beside it. From curl it picks the release, downloads that release's bundle into the install folder and hands over. |
-| `deploy/armctl.sh` | The launcher: `install`, `up`, `down`, `upgrade`, `compose ...`. |
+| `install.sh` (root) | Bootstrap only. Run from a checkout, it packs a bundle from that checkout (`deploy/build-bundle.sh`, tagged `v<VERSION>` unless `--version` says otherwise) instead of downloading one. Run from curl, it picks the release and downloads that release's bundle. Either way it unpacks the bundle into the install folder, writes the `armctl` launcher and hands over to `armctl install`. |
+| `deploy/armctl.sh` | The release's command: `install`, `up`, `down`, `upgrade`, `compose ...`. |
 | `deploy/lib/` | Shared by dev and production: host detection, certificates, the udev rule and the lifecycle safety steps. `devtools/setup-dev.sh` loads the same files. |
 | `deploy/install/` | Production-only: Docker and NVIDIA setup, prompts, storage locations, offload walkthrough, PATH link. |
 | `deploy/docker-compose.release.yml` | The overlay naming release images for the services dev builds from source. |
 | `docker-compose.yml.example`, `.env.example` | Shipped unchanged. Copied into the bundle as they are. |
 | `.github/workflows/release.yml` | A job packs the bundle (`deploy/build-bundle.sh`) and attaches it to the GitHub release. |
 
-**The bundle** is the launcher, `deploy/lib/`, `deploy/install/`, the release overlay, the two unchanged template files and a version marker, packed as one archive with a checksum file beside it. Nothing in it is generated except the version marker.
+**The bundle** is `armctl.sh`, `deploy/lib/`, `deploy/install/`, the release overlay, the two unchanged template files and a version marker, packed as one archive with a checksum file beside it. Nothing in it is generated except the version marker.
 
 **Host layout:**
 
 ```
 ~/arm/
-  armctl                      launcher, also linked onto the PATH
+  armctl                      small launcher that runs .armctl/current/armctl.sh; also linked onto the PATH
   certs/ db/ raw/ media/ logs/ backups/ scripts/ iso-library/
+  ssh/                        offload profile only
   .armctl/
     .env                      secrets, pins, profile, detected values
     host-overlay.yml          generated: storage locations, offload settings
@@ -299,7 +306,7 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 
 The folder must be named `arm`, because the template writes its paths as `./arm/...` and `armctl` runs Compose from the folder that contains `arm`. The location option therefore names where the `arm` folder goes: the default gives `~/arm`, and `--prefix /srv` gives `/srv/arm`.
 
-Folder permissions: `certs` is 0700; `logs` is 2775 (setgid, group-writable). `raw` and `media` are created by the storage step.
+Folder permissions: `certs` and `.armctl` are 0700; `logs` is 2775 (setgid, group-writable). `raw` and `media` are created by the storage step and get 2775 only when they sit inside the `arm` folder; a location the user points at elsewhere keeps its own mode.
 
 ### The compose stack in production
 
@@ -317,32 +324,34 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 
 **The host overlay** is generated by `armctl install` from the saved answers. It holds only:
 
-- **Storage locations**: the `/raw` and `/media` mounts on `arm-backend`, when the user chose locations outside the install folder. The matching `ARM_HOST_RAW_PATH` and `ARM_HOST_MEDIA_PATH` go into `.env` so spawned containers mount the same places.
-- **Offload**: the published callback port for `arm-backend` (container port 8443) and the read-only SSH directory mount.
+- **Storage locations**: the `/raw` and `/media` mounts on `arm-backend`, always written with the chosen locations (the defaults sit inside the install folder). The matching `ARM_HOST_RAW_PATH` and `ARM_HOST_MEDIA_PATH` go into `.env` so spawned containers mount the same places.
+- **Offload** (offload profile only): the published callback port for `arm-backend` (container port 8443) and the read-only mount of `~/arm/ssh` at `/home/arm/.ssh`.
 
 **`.env` values that are always explicit.** The template defaults `ARM_HOST_RAW_PATH`, `ARM_HOST_MEDIA_PATH`, `ARM_HOST_LOGS_PATH` and `ARM_HOST_CERTS_PATH` from `${PWD}`, which is the directory Compose was invoked from. `armctl` can be run from anywhere, so the installer always writes absolute values for these. The template sets `name: armv3`, so the project name and the default network (`armv3_default`) do not depend on the folder Compose runs from.
 
 ### Install flow
 
-**Bootstrap (`install.sh` from curl).**
+**Bootstrap (`install.sh`).**
 
-1. Refuses to run as root.
+1. Refuses to run as root, and checks that `curl`, `tar` and `sha256sum` exist.
 2. Reads the location and release options and passes every other flag through.
-3. Picks the release: the named version, or the latest stable on the v3 line. A `--version` tag must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
-4. Downloads the bundle and its checksum from the GitHub release, verifies it, unpacks it under `.armctl/releases/<tag>/`, sets `current`, and creates `armctl`. A failed bootstrap leaves the target location exactly as it was.
-5. Hands over to `armctl install` with the terminal attached, so prompts work under a curl pipe.
+3. Works out the `arm` folder: `--prefix` names the folder it goes in (`--prefix /srv` gives `/srv/arm`; a prefix that already ends in `arm` is taken to be the folder itself), and the default is `~/arm`. It refuses an existing folder that has files in it but no `.armctl` folder, because ARM v3 installs fresh and does not convert an ARM v2 folder or an install made by the old v3 installer.
+4. Picks the release. From a checkout it packs a bundle from the checkout instead (see above). Otherwise it uses the named version, or the latest stable on the v3 line. A `--version` tag must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+5. Fetches the bundle and its checksum into a staging folder, verifies the checksum, rejects an archive with unsafe paths, and only then unpacks it under `.armctl/releases/<tag>/`, sets `current` and writes `armctl`. A failed bootstrap leaves the target location exactly as it was.
+6. Hands over to `armctl install` with the terminal attached (it reads `/dev/tty` when stdin is the script), so prompts work under a curl pipe.
 
-The bootstrap also accepts a local bundle path (`--bundle`, with `--version`; the `.sha256` file must sit beside it) instead of a download. That is what the install drill uses. From a checkout, `install.sh` skips steps 3 and 4 and runs `deploy/armctl.sh` directly.
+`--bundle <file>` (with `--version`; the `.sha256` file must sit beside it) uses a local bundle instead of a download. That is what the install drill uses.
 
-**`armctl install`, in stages.**
+**`armctl install`, in eight stages**, in the order `deploy/install/flow.sh` runs them:
 
-1. **Host**: checks Docker, its version, the compose plugin, the daemon and group membership.
-2. **Profile**: full box, ripper-only or remote offload. Offload runs the offload walkthrough in `deploy/install/offload.sh`.
+1. **Profile**: full box, ripper-only or remote offload. It comes first because the answer is known before a possible restart of the command under the `docker` group (stage 2), and is carried across that restart so the question is not asked twice.
+2. **Host**: checks Docker (installed, version 24 or newer, compose plugin, running daemon, group membership) and fixes what it can with consent; it automates only Debian and Ubuntu. Also takes the lock, checks for `openssl` and creates the folder layout.
 3. **Storage**: asks for the raw and media locations, creates them, checks they are writable.
-4. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant.
-5. **Configuration**: writes `.env` (secrets generated once, ids and GPUs detected, release pinned, profile recorded, `ARM_TRANSCODE_CAPABLE` set from the profile) and the host overlay. Offers the NVIDIA toolkit when an NVIDIA GPU is found, and the udev rule.
-6. **Start**: runs the same path as `armctl up`, including the health wait. On by default; `--no-start` skips it.
-7. **Finish**: the PATH link, the offload verification table when relevant, the URL (`https://localhost:8081`), and the first-login and certificate-trust hints.
+4. **Remote transcode offload**: runs the offload walkthrough (`deploy/install/offload.sh`) for the offload profile; for any other profile it prints "not used by the <profile> profile".
+5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant.
+6. **Configuration**: writes `.env` (secrets generated once, ids and GPUs detected, release pinned, profile recorded, `ARM_TRANSCODE_CAPABLE` set from the profile) and the host overlay. Offers the NVIDIA toolkit on the full profile when an NVIDIA GPU is found, offers the udev rule, and offers the PATH link (`~/.local/bin` when it is on the PATH, otherwise `/usr/local/bin` with sudo).
+7. **Start**: runs the same path as `armctl up`, including the health wait. On by default; `--no-start` skips it.
+8. **Finish**: the offload verification table when relevant, then the summary: the URL (`https://localhost:8081`), the first-login command, the certificate-trust hint, the everyday commands and any steps that were skipped.
 
 **Re-running `armctl install`.** Secrets and the CA are kept. Earlier answers become the defaults, and a run with no terminal keeps them. Detected values (GPUs, group ids) are refreshed. The profile is remembered. This differs from dev, where `--ripper-only` applies per run, and the difference is deliberate: a non-developer should not have to repeat it on every command.
 
@@ -352,7 +361,7 @@ The bootstrap also accepts a local bundle path (`--bundle`, with `--version`; th
 
 **`armctl up`** follows the same order as `setup-dev.sh up`, with pulling in place of building:
 
-1. **Pull** the images this host needs: the base transcode image unless the profile is ripper-only, the Intel or AMD variants only when that GPU is present, and no variants when transcodes are offloaded. A failed pull stops here with the running stack untouched.
+1. **Pull** the images this host needs: the base transcode image unless the profile is ripper-only, the Intel or AMD variants only when that GPU is present, and no variants when transcodes are offloaded (`--no-pull` skips the pull). A failed pull stops here with the running stack untouched. A check that every needed image is present on the host follows, and stops the same way.
 2. **Guard**: refuses while a rip or transcode is active, unless `--force`.
 3. **Refresh** the detected GPUs in `.env`.
 4. **Back up** the database into `~/arm/backups/`, keeping the newest five. `--no-backup` skips it.
@@ -368,7 +377,7 @@ The bootstrap also accepts a local bundle path (`--bundle`, with `--version`; th
 4. Switches: records the new version in `.env`, merges in any new settings with their defaults, and points `current` at the new release.
 5. Removes spawned containers, starts, recreates rippers, waits for health.
 
-The previous release's folder is kept for a manual rollback. Older ones are pruned.
+The previous release's folder is kept for a manual rollback. Older ones are pruned after a successful upgrade.
 
 **`armctl down`** refuses while a rip or transcode is active, unless `--force`. Then it removes the spawned rippers and transcoders and stops the stack.
 
