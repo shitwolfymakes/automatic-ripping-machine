@@ -544,15 +544,19 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
-            json={"title": "Blade Runner", "year": 1982, "metadata": {"tmdb_id": 78}},
+            json={
+                "title": "Blade Runner",
+                "year": 1982,
+                "external_ids": {"tmdb": "78"},
+            },
             headers=_auth(token),
         )
     assert r.status_code == 200
     body = r.json()
     assert body["job"]["status"] == "identified"
     assert body["job"]["title"] == "Blade Runner"
-    assert body["job"]["metadata_json"]["scan_result"] == {"disc_type": "dvd"}
-    assert body["job"]["metadata_json"]["tmdb_id"] == 78
+    assert body["job"]["metadata_json"]["scan_result"]["disc_type"] == "dvd"
+    assert body["job"]["metadata_json"]["identity"]["external_ids"]["tmdb"] == "78"
     assert body["fan_out"] == []
     types = {e["event_type"] for e in hub.events}
     assert {"identify.resolved", "rip.identify_resolved"} <= types
@@ -561,15 +565,24 @@ def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
 def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
     """Resolve for a CD whose MusicBrainz lookup missed: the UI's
     IdentifyDiscDialog posts artist + album + per-track tracks[]; the
-    resolve endpoint stores them verbatim under metadata_json so the
-    music path template (`{artist}/{album}/{track} - {track_title} - ...`)
-    can expand against them when transcode fans out."""
+    resolve endpoint stores them under metadata_json's typed `music`
+    section so the music path template
+    (`{artist}/{album}/{track} - {track_title} - ...`) can expand against
+    them when transcode fans out."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [
         _job(
             status=JobStatus.AWAITING_USER_ID,
-            meta={"scan_result": {"disc_type": "cd", "titles": [{"index": 1}, {"index": 2}]}},
+            meta={
+                "scan_result": {
+                    "disc_type": "cd",
+                    "titles": [
+                        {"index": 1, "duration_seconds": 180},
+                        {"index": 2, "duration_seconds": 220},
+                    ],
+                }
+            },
         )
     ]
     with TestClient(app) as client:
@@ -578,7 +591,7 @@ def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
             json={
                 "title": "Animals",
                 "year": 1977,
-                "metadata": {
+                "music": {
                     "artist": "Pink Floyd",
                     "album": "Animals",
                     "tracks": [{"title": "Dogs"}, {"title": "Pigs"}],
@@ -592,16 +605,79 @@ def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
     assert body["job"]["title"] == "Animals"
     assert body["job"]["year"] == 1977
     md = body["job"]["metadata_json"]
-    assert md["artist"] == "Pink Floyd"
-    assert md["album"] == "Animals"
-    assert md["tracks"] == [{"title": "Dogs"}, {"title": "Pigs"}]
+    assert md["music"]["artist"] == "Pink Floyd"
+    assert md["music"]["album"] == "Animals"
+    assert md["music"]["tracks"] == [{"title": "Dogs", "position": None, "length_ms": None, "disc_number": None}] + [
+        {"title": "Pigs", "position": None, "length_ms": None, "disc_number": None}
+    ]
+    assert "artist" not in md  # nothing lands top-level
     # scan_result is still preserved alongside the user-supplied metadata.
     assert md["scan_result"]["disc_type"] == "cd"
 
 
+def test_resolve_rejects_unknown_keys(signing_key: bytes) -> None:
+    """The free-form metadata bag is gone (G-03/§3.4): an unrecognized top-
+    level key is a caller bug, not silently-dropped data."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Fixed Title", "metadata": {"season": 3}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
+def test_resolve_music_lands_in_typed_section(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={
+                "title": "Abbey Road",
+                "music": {
+                    "artist": "The Beatles",
+                    "album": "Abbey Road",
+                    "tracks": [{"title": "Come Together"}],
+                },
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    md = r.json()["job"]["metadata_json"]
+    assert md["music"]["artist"] == "The Beatles"
+    assert "artist" not in md  # nothing lands top-level
+
+
+def test_resolve_title_only_keeps_existing_music_section(signing_key: bytes) -> None:
+    """A partial edit (title only) must not wipe a previously-resolved
+    music section."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={"music": {"artist": "The Beatles", "album": "Abbey Road", "tracks": []}},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Renamed"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    md = r.json()["job"]["metadata_json"]
+    assert md["music"]["artist"] == "The Beatles"
+
+
 def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
-    """The new RIPPED_AWAITING_IDENTIFY status is accepted by resolve as
-    groundwork for the future deferred-placeholder rip path."""
+    """Resolving a ripped placeholder promotes it to RIPPED — the rip is
+    already done, so IDENTIFIED (a pre-rip status) would be wrong (G-09)."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED_AWAITING_IDENTIFY, meta={})]
@@ -613,26 +689,29 @@ def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
         )
     assert r.status_code == 200
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert body["job"]["title"] == "Home Movie"
     assert body["fan_out"] == []
 
 
 def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
-    """job.metadata_json starts empty — merge yields exactly what the caller sent."""
+    """job.metadata_json starts empty and the caller sends no typed sections —
+    the round-tripped bag stays free of scan_result / music / identity."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
     with TestClient(app) as client:
         r = client.post(
             "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
-            json={"title": "Solaris", "metadata": {"k": "v"}},
+            json={"title": "Solaris"},
             headers=_auth(token),
         )
     assert r.status_code == 200
     body = r.json()
-    assert "scan_result" not in body["job"]["metadata_json"]
-    assert body["job"]["metadata_json"]["k"] == "v"
+    md = body["job"]["metadata_json"]
+    assert md.get("scan_result") is None
+    assert md.get("music") is None
+    assert md.get("identity") is None
 
 
 @pytest.mark.parametrize("status_in", [JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
@@ -663,7 +742,9 @@ def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status
     assert body["job"]["status"] == status_in.value
     assert body["job"]["title"] == "Sintel"
     assert body["job"]["year"] == 2010
-    # Merge semantics: partial metadata (sent {}) did NOT wipe existing keys.
+    # Merge semantics: a typed ResolveRequest with no metadata sections did
+    # NOT wipe existing keys (including the pre-typed-section extra key
+    # tmdb_id, kept alive by JobMetadata's extra="allow").
     md = body["job"]["metadata_json"]
     assert md["tmdb_id"] == 99
     assert md["scan_result"]["disc_type"] == "dvd"
@@ -673,28 +754,95 @@ def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status
     assert {"identify.resolved", "rip.identify_resolved"} <= types
 
 
-def test_resolve_metadata_merge_overlays_specific_keys(signing_key: bytes) -> None:
-    """req.metadata keys overlay existing metadata_json keys; non-overlapping keys are
-    preserved. Verifies the explicit-replace path (caller wants to overwrite tmdb_id)."""
+def test_resolve_ripped_partial_placeholder_clears_unidentified_flag(signing_key: bytes) -> None:
+    """Fix 75-6 regression: resolving a RIPPED_PARTIAL placeholder must clear
+    the spent `unidentified` flag too. RIPPED_PARTIAL stays in the PRESERVE
+    bucket (partiality wins over the placeholder status -- see rip-complete),
+    so before the fix the pop only ran on the PROMOTE branch and a resolved
+    partial placeholder kept flags.unidentified=true forever."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [
         _job(
-            status=JobStatus.IDENTIFIED,
-            meta={"tmdb_id": 99, "scan_result": {"x": 1}, "extra": "keep-me"},
+            status=JobStatus.RIPPED_PARTIAL,
+            title="MY_DISC",
+            year=None,
+            meta={"flags": {"unidentified": True}},
         )
     ]
     with TestClient(app) as client:
         r = client.post(
             "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
-            json={"title": "T", "metadata": {"tmdb_id": 42}},
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "ripped_partial"  # status unchanged (PRESERVE)
+    # Cleared per flag_is_set's semantics: the key may still be present as
+    # False (JobMetadata's Flags model default) or absent entirely -- either
+    # way it must no longer read as "set".
+    assert not (body["job"]["metadata_json"].get("flags") or {}).get("unidentified")
+    assert not (db.rows["jobs"][0].metadata_json.get("flags") or {}).get("unidentified")
+
+
+def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> None:
+    """req.external_ids overlays the existing identity.external_ids section
+    field-by-field, not a wholesale replace: sending only tmdb must not wipe
+    a previously stored imdb. Non-overlapping sections (scan_result) are
+    preserved too."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={
+                "identity": {"provider": "tmdb", "external_ids": {"tmdb": "99", "imdb": "tt0111161"}},
+                "scan_result": {"disc_type": "dvd"},
+            },
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "T", "external_ids": {"tmdb": "42"}},
             headers=_auth(token),
         )
     assert r.status_code == 200
     md = r.json()["job"]["metadata_json"]
-    assert md["tmdb_id"] == 42  # overwritten
-    assert md["extra"] == "keep-me"  # preserved
-    assert md["scan_result"] == {"x": 1}  # preserved
+    assert md["identity"]["external_ids"]["tmdb"] == "42"  # overwritten
+    assert md["identity"]["external_ids"]["imdb"] == "tt0111161"  # survives the partial update
+    assert md["identity"]["provider"] == "tmdb"  # preserved
+    assert md["scan_result"]["disc_type"] == "dvd"  # preserved
+
+
+def test_resolve_explicit_null_external_id_clears_it(signing_key: bytes) -> None:
+    """Fix 75-5 regression: sending an external_ids member field as explicit
+    null CLEARS the stored id -- distinct from omitting the field entirely
+    (which keeps it, covered by test_resolve_external_ids_overlay_existing_identity).
+    Before the fix, `is not None` treated "sent null" and "not sent" the
+    same, so an explicit null silently kept the old value instead of
+    clearing it."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.IDENTIFIED,
+            meta={
+                "identity": {"provider": "tmdb", "external_ids": {"tmdb": "99", "imdb": "tt0111161"}},
+            },
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "T", "external_ids": {"imdb": None}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    md = r.json()["job"]["metadata_json"]
+    assert md["identity"]["external_ids"]["imdb"] is None  # explicit null clears
+    assert md["identity"]["external_ids"]["tmdb"] == "99"  # untouched field survives
 
 
 # --- apply_session exception mapping (happy/collision in test_apply_session) --
@@ -960,3 +1108,104 @@ def test_update_job_edits_multiple_tracks(signing_key: bytes) -> None:
     assert by_id[_TRK_ID_B].episode_name == "Part Two"
     updated = [e for e in hub.events if e["event_type"] == "track.updated"]
     assert len(updated) == 2
+
+
+# --- resolve fills the identity columns (step 2 / G-03, G-14) ----------------
+
+
+def test_resolve_sets_media_type_and_season_columns(signing_key: bytes) -> None:
+    """Resolve is where a human corrects what identify guessed: media_type
+    (a TV box set mis-searched as a movie) and season are first-class."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "year": 1999, "media_type": "tv", "season": 3, "disc_number": 2},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    job = db.rows["jobs"][0]
+    assert job.media_type == MediaType.TV
+    assert job.season == 3
+    assert job.disc_number == 2
+    body = r.json()
+    assert body["job"]["media_type"] == "tv"
+    assert body["job"]["season"] == 3
+
+
+def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
+    """G-14's transitional lift (season/disc inside a free-form `metadata`
+    bag) is retired now that season/disc are first-class request fields
+    (G-03/§3.4): the old wire shape 422s instead of being silently lifted."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "metadata": {"season": "03", "disc": "2"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422
+
+
+def test_resolve_omitting_media_type_and_season_keeps_them(signing_key: bytes) -> None:
+    """Unlike title/year (a full identity statement), media_type and season
+    are classifications: a title-only correction must not wipe them."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
+    job.media_type = MediaType.TV
+    job.season = 3
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing (fixed)"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["jobs"][0].media_type == MediaType.TV
+    assert db.rows["jobs"][0].season == 3
+
+
+def test_resolve_explicit_null_media_type_and_season_clears_them(signing_key: bytes) -> None:
+    """Fix 75-5 regression: EXPLICIT null for media_type/season clears the
+    stored value -- distinct from omitting the field, which keeps it
+    (test_resolve_omitting_media_type_and_season_keeps_them above). Before
+    the fix, `req.media_type is not None` couldn't distinguish "sent null"
+    from "not sent", so an explicit null silently no-opped instead of
+    clearing."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
+    job.media_type = MediaType.TV
+    job.season = 3
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing (fixed)", "media_type": None, "season": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["jobs"][0].media_type is None
+    assert db.rows["jobs"][0].season is None
+
+
+def test_resolve_season_first_class_field_used_directly(signing_key: bytes) -> None:
+    """season is a first-class request field now (no legacy metadata bag to
+    fall back to); an unparseable value is a 422 from field validation, not
+    a silently-discarded loose key."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "The West Wing", "season": "three"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422

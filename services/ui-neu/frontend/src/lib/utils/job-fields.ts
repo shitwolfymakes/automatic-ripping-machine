@@ -38,31 +38,50 @@ function asScalarString(v: unknown): string | undefined {
  * for that key (never throws). Structured values (scan_result, tracks, raw)
  * are intentionally NOT surfaced here — they belong to the raw viewer.
  */
+const MEDIA_TYPE_TO_VIDEO_TYPE: Record<string, string> = {
+	tv: 'series'
+};
+
 export function readJobMetadata(
-	metadata_json: Record<string, unknown> | null | undefined
+	metadata_json: Record<string, unknown> | null | undefined,
+	job?: Pick<JobView, 'season' | 'pending_session_id' | 'media_type'> | null
 ): JobMetadata {
 	const md = (metadata_json ?? {}) as Record<string, unknown>;
 	const out: JobMetadata = {};
 
-	const imdb = asScalarString(md.imdb_id);
+	// Step 2 (backend): season and pending_session_id are job COLUMNS now.
+	if (job?.season != null) out.season = String(job.season).padStart(2, '0');
+	if (job?.pending_session_id) out.pending_session_id = job.pending_session_id;
+
+	// Step 2 (§3.4): the typed sections are authoritative — external ids
+	// live under identity.external_ids, the 1337-server extras under
+	// provider_raw.arm_server, music naming under music.
+	const asRecord = (v: unknown): Record<string, unknown> =>
+		v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+	const identity = asRecord(md.identity);
+	const ext = asRecord(identity.external_ids);
+	const armServer = asRecord(asRecord(md.provider_raw).arm_server);
+	const music = asRecord(md.music);
+
+	const imdb = asScalarString(ext.imdb);
 	if (imdb !== undefined) out.imdb_id = imdb;
-	const tmdb = asScalarString(md.tmdb_id);
+	const tmdb = asScalarString(ext.tmdb);
 	if (tmdb !== undefined) out.tmdb_id = tmdb;
-	const tvdb = asScalarString(md.tvdb_id);
+	const tvdb = asScalarString(ext.tvdb);
 	if (tvdb !== undefined) out.tvdb_id = tvdb;
-	const vt = asScalarString(md.video_type);
-	if (vt !== undefined) out.video_type = vt;
-	const season = asScalarString(md.season);
-	if (season !== undefined) out.season = season;
-	const artist = asScalarString(md.artist);
+	const vt = asScalarString(armServer.video_type);
+	if (vt !== undefined) {
+		out.video_type = vt;
+	} else if (job?.media_type) {
+		out.video_type = MEDIA_TYPE_TO_VIDEO_TYPE[job.media_type] ?? job.media_type;
+	}
+	const artist = asScalarString(music.artist);
 	if (artist !== undefined) out.artist = artist;
-	const album = asScalarString(md.album);
+	const album = asScalarString(music.album);
 	if (album !== undefined) out.album = album;
-	if (typeof md.multi_title === 'boolean') out.multi_title = md.multi_title;
-	const source = asScalarString(md.source_type);
+	if (typeof armServer.multi_title === 'boolean') out.multi_title = armServer.multi_title;
+	const source = asScalarString(armServer.source_type);
 	if (source !== undefined) out.source_type = source;
-	const pendingSession = asScalarString(md.pending_session_id);
-	if (pendingSession !== undefined) out.pending_session_id = pendingSession;
 
 	const scan = md.scan_result;
 	if (scan && typeof scan === 'object') {
@@ -132,7 +151,7 @@ export function buildMetadataFields(
 	}
 
 	// --- Promoted metadata_json known scalars ---
-	const md = readJobMetadata(job.metadata_json);
+	const md = readJobMetadata(job.metadata_json, job);
 	if (md.video_type) {
 		fields.push({ label: 'Type', value: videoTypeLabel(md.video_type) });
 	}

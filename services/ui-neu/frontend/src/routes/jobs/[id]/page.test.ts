@@ -208,7 +208,7 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Album',
 				disc_type: 'cd',
 				status: 'ripped',
-				metadata_json: { tracks: [{ title: 'Opening', duration_ms: 95000 }] }
+				metadata_json: { music: { tracks: [{ title: 'Opening', length_ms: 95000 }] } }
 			}),
 			tracks: [createTrack({ id: 'trk_1', kind: 'audio_track', status: 'done' })],
 			fingerprints: [{ algo: 'crc64', value: 'ABCDEF0123456789' }]
@@ -250,7 +250,7 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Album',
 				disc_type: 'cd',
 				status: 'ripped',
-				metadata_json: { tracks: [{ title: 'Opening', duration_ms: 95000 }] }
+				metadata_json: { music: { tracks: [{ title: 'Opening', length_ms: 95000 }] } }
 			}),
 			tracks: [],
 			fingerprints: []
@@ -271,7 +271,10 @@ describe('Job detail page (v3)', () => {
 				id: 'job_42',
 				title: 'Test Movie',
 				status: 'ripped',
-				metadata_json: { imdb_id: 'tt9999999', scan_result: { titles: [{ index: 0 }] } }
+				metadata_json: {
+					imdb_id: 'tt9999999',
+					scan_result: { disc_type: 'bluray', titles: [{ index: 0, duration_seconds: 0 }] }
+				}
 			}),
 			tracks: [],
 			fingerprints: []
@@ -373,7 +376,10 @@ describe('Job detail page (v3)', () => {
 				title: 'Test Movie',
 				status: 'ripped',
 				disc_type: 'bluray',
-				metadata_json: { imdb_id: 'tt7777777', multi_title: true, source_type: 'iso' }
+				metadata_json: {
+					identity: { provider: 'tmdb', external_ids: { imdb: 'tt7777777' } },
+					provider_raw: { arm_server: { multi_title: true, source_type: 'iso' } }
+				}
 			}),
 			tracks: [],
 			fingerprints: []

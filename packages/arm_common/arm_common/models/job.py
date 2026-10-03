@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, Str
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DiscType, JobStatus
+from arm_common.enums import DiscType, JobStatus, MediaType
 from arm_common.ulid import new_id
 
 
@@ -36,6 +36,22 @@ class Job(SQLModel, table=True):
     # in migration 0006 to make the multi-fingerprint design first-class.
     title: str | None = Field(default=None)
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # What the disc IS (movie/tv/music/data/iso) — set at identify from the
+    # provider's kind, correctable at resolve. Null = never identified. This
+    # is the routing input session defaults key on (gap analysis G-03);
+    # VARCHAR + app-side validation like every enum here.
+    media_type: MediaType | None = Field(default=None, sa_column=enum_column(MediaType, "media_type", nullable=True))
+    # TV box sets: user-supplied season (identify can't know it — see
+    # docs/arch/02 § TV). Null = not a season-shaped disc / unknown.
+    season: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # Explicit per-rip session choice (manual trigger). Promoted out of
+    # metadata_json (step 2 §3.4): it steers routing, so it is a column.
+    # SET NULL: a deleted session must not strand the job; the routed-session
+    # resolver already falls back to the disc-type default.
+    pending_session_id: str | None = Field(
+        default=None,
+        sa_column=Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True),
+    )
     # Multi-disc CD sets: which disc of the set this job ripped (1-based) and
     # the set size. Null = single-disc / unknown. Set at identify (resolve) or
     # corrected later via PATCH. No Postgres enum — plain nullable ints.

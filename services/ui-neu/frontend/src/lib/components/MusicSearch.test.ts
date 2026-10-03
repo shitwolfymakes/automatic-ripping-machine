@@ -28,6 +28,27 @@ const mockPatchJob = vi.mocked(patchJob);
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+it('seeds the album/artist inputs from metadata_json.music (typed section, not a bare key)', async () => {
+	mockSearch.mockResolvedValue({ candidates: [] });
+	renderComponent(MusicSearch, {
+		props: {
+			job: createJob({
+				id: 'job_1',
+				disc_type: 'cd',
+				title: '',
+				metadata_json: { music: { artist: 'Pink Floyd', album: 'The Wall' } }
+			}),
+			discTracks: []
+		}
+	});
+	expect(screen.getByPlaceholderText('Album or title...')).toHaveValue('The Wall');
+	expect(screen.getByPlaceholderText('Artist (optional)')).toHaveValue('Pink Floyd');
+	await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+	await waitFor(() =>
+		expect(mockSearch).toHaveBeenCalledWith('The Wall', expect.objectContaining({ artist: 'Pink Floyd' }))
+	);
+});
+
 it('searches with track_count when "match track count" is on and discTracks present', async () => {
 	mockSearch.mockResolvedValue({ candidates: [] });
 	renderComponent(MusicSearch, {
@@ -73,8 +94,8 @@ it('multi-disc apply writes only the held disc\'s tracks', async () => {
 	await waitFor(() => screen.getByText('Hey You'));
 	await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 	await waitFor(() => {
-		const [, payload] = mockResolve.mock.calls[0] as unknown as [string, { metadata: { tracks: Array<{ title: string; disc_number: number | null }> } }];
-		const titles = payload.metadata.tracks.map((t) => t.title);
+		const [, payload] = mockResolve.mock.calls[0] as unknown as [string, { music: { tracks: Array<{ title: string; disc_number: number | null }> } }];
+		const titles = payload.music.tracks.map((t) => t.title);
 		expect(titles).toEqual(['Hey You', 'Is There Anybody Out There?']);
 		expect(titles).not.toContain('In the Flesh?');
 		expect(onapply).toHaveBeenCalled();
@@ -379,7 +400,7 @@ it('loads detail and applies the chosen release via resolveJob', async () => {
 	await waitFor(() => {
 		expect(mockResolve).toHaveBeenCalledWith('job_9', expect.objectContaining({
 			title: 'Abbey Road',
-			metadata: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
+			music: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
 		}));
 		expect(onapply).toHaveBeenCalled();
 	});

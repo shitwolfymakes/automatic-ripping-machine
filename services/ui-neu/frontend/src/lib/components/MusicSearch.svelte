@@ -2,6 +2,7 @@
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
+	import { readJobMetadata } from '$lib/utils/job-fields';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from './Glyph.svelte';
@@ -13,9 +14,11 @@
 	}
 	let { job, discTracks, onapply }: Props = $props();
 
-	const meta = (job.metadata_json ?? {}) as Record<string, unknown>;
-	let query = $state(job.title || (typeof meta.album === 'string' ? meta.album : ''));
-	let artist = $state(typeof meta.artist === 'string' ? meta.artist : '');
+	// Seed from the typed `music` section (metadata_json.music.artist/.album) —
+	// bare top-level metadata keys are gone post-migration (see job-fields.ts).
+	const meta = readJobMetadata(job.metadata_json, job);
+	let query = $state(job.title || meta.album || '');
+	let artist = $state(meta.artist || '');
 	let filterType = $state('');
 	let filterFormat = $state('');
 	let filterCountry = $state('');
@@ -215,7 +218,7 @@
 				year: Number.isFinite(yr as number) ? yr : null,
 				disc_number: Number.isFinite(dn as number) ? dn : null,
 				disc_total: Number.isFinite(dt as number) ? dt : null,
-				metadata: { artist: editArtist.trim(), album: editAlbum.trim(), tracks }
+				music: { artist: editArtist.trim(), album: editAlbum.trim(), tracks }
 			});
 			feedback = { type: 'success', message: 'Release applied' };
 			// Persist the release cover + any track-title mappings in one PATCH so
