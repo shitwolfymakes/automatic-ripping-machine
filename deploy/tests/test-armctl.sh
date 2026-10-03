@@ -398,7 +398,8 @@ plink() {
             own)     ln -s "${ARM_DIR}/armctl" "${dest}" ;;
         esac
         ARMCTL_ASSUME="$3"; SKIPPED=()
-        sudo() { "$@"; }
+        sudo() { if [[ "${PLINK_SUDO_FAILS:-}" == 1 ]]; then return 1; fi; "$@"; }
+        if [[ "${PLINK_LN_FAILS:-}" == 1 ]]; then chmod 555 "$(dirname "${dest}")"; fi
         link_armctl </dev/null >/dev/null 2>&1
         if [[ -L "${dest}" ]]; then echo "LINK=$(readlink "${dest}")"; else echo "LINK=none"; fi
         echo "CMD=${ARMCTL_CMD}"
@@ -420,6 +421,15 @@ has "path link: a file we did not create is left alone" "FOREIGN=other" "$out"
 has "path link: the full path is advertised when blocked" "CMD=${TMPROOT}/plink-foreign/arm/armctl" "$out"
 out="$(plink own yes ask own)"
 has "path link: our own link is kept" "CMD=armctl" "$out"
+out="$(PLINK_SUDO_FAILS=1 plink sudofail no yes)"
+has "path link: a failed sudo link makes no link" "LINK=none" "$out"
+has "path link: a failed sudo link keeps the full path" "CMD=${TMPROOT}/plink-sudofail/arm/armctl" "$out"
+has "path link: a failed sudo link is recorded" "could not create" "$out"
+out="$(PLINK_LN_FAILS=1 plink lnfail yes ask)"
+has "path link: a failed ln makes no link" "LINK=none" "$out"
+has "path link: a failed ln keeps the full path" "CMD=${TMPROOT}/plink-lnfail/arm/armctl" "$out"
+has "path link: a failed ln is recorded" "could not create" "$out"
+chmod -R u+w "${TMPROOT}/plink-lnfail" 2>/dev/null || true
 
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?

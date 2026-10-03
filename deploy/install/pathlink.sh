@@ -14,6 +14,12 @@ path_has() {
     [[ ":${PATH}:" == *":$1:"* ]]
 }
 
+link_failed() {
+    warnline "could not create the link ${1}"
+    SKIPPED+=("armctl on the PATH (could not create ${1})")
+    return 1
+}
+
 # place_link <dest> <src> <sudo or empty>: 0 when dest is our link afterwards.
 place_link() {
     local dest="$1" src="$2" sudo_cmd="$3"
@@ -26,10 +32,11 @@ place_link() {
         SKIPPED+=("armctl on the PATH (${dest} is in the way)")
         return 1
     fi
+    # Checked by hand: errexit is off inside a function called from an `if`.
     if [[ -n "${sudo_cmd}" ]]; then
-        sudo ln -s "${src}" "${dest}"
+        sudo ln -s "${src}" "${dest}" || link_failed "${dest}" || return 1
     else
-        ln -s "${src}" "${dest}"
+        ln -s "${src}" "${dest}" || link_failed "${dest}" || return 1
     fi
     okline "linked ${dest}"
 }

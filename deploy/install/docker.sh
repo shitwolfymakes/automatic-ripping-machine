@@ -95,15 +95,16 @@ docker_apt_install() {
         || err "cannot read this system's release codename from ${OS_RELEASE_FILE}. Install Docker by hand: ${DOCKER_DOCS_URL}"
     arch="$(dpkg --print-architecture)"
     log "installing Docker Engine and the compose plugin from download.docker.com (sudo)"
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl
-    sudo install -m 0755 -d /etc/apt/keyrings
-    sudo curl -fsSL "https://download.docker.com/linux/${family}/gpg" -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    sudo apt-get update || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
+    sudo apt-get install -y ca-certificates curl || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
+    sudo install -m 0755 -d /etc/apt/keyrings || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
+    sudo curl -fsSL "https://download.docker.com/linux/${family}/gpg" -o /etc/apt/keyrings/docker.asc || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
+    sudo chmod a+r /etc/apt/keyrings/docker.asc || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
     printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
-        "${arch}" "${family}" "${codename}" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        "${arch}" "${family}" "${codename}" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null \
+        || err "Docker install failed writing the apt source. See ${DOCKER_DOCS_URL}"
+    sudo apt-get update || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || err "Docker install failed at: sudo step. See ${DOCKER_DOCS_URL}"
 }
 
 fix_docker_group() {
@@ -112,7 +113,7 @@ fix_docker_group() {
     if ! user_in_docker_group_file; then
         consent "docker group" "Add ${me} to the docker group so ARM can use Docker without sudo (needs sudo)?" \
             || err "ARM needs ${me} to be in the docker group. Add it with: sudo usermod -aG docker ${me}"
-        sudo usermod -aG docker "${me}"
+        sudo usermod -aG docker "${me}" || err "could not add ${me} to the docker group"
     fi
     reexec_under_docker_group
 }
@@ -131,7 +132,7 @@ ensure_docker() {
             failline "Docker is installed but its service is not running"
             consent "start Docker" "Start the Docker service now (needs sudo)?" \
                 || err "Docker must be running. Start it with: sudo systemctl enable --now docker"
-            sudo systemctl enable --now docker ;;
+            sudo systemctl enable --now docker || err "could not start Docker" ;;
         missing|old:*|no-compose)
             case "${state}" in
                 missing)    failline "Docker is not installed" ;;
