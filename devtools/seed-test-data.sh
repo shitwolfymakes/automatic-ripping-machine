@@ -60,13 +60,23 @@ if ! docker compose exec -T arm-db psql -U arm -d arm -c 'SELECT 1' >/dev/null 2
 fi
 
 psql_exec() { docker compose exec -T arm-db psql -U arm -d arm "$@"; }
+# Run inside arm-backend as the service user, not root: the backend drops to
+# PUID/PGID at boot, so anything this script creates under /logs (the
+# per-job log files and the /logs/jobs directory itself) must belong to that
+# user or the backend's own per-job log appends fail with EACCES afterwards.
+backend_exec() {
+    local puid pgid
+    puid="$(grep -E '^PUID=' .env 2>/dev/null | cut -d= -f2)"
+    pgid="$(grep -E '^PGID=' .env 2>/dev/null | cut -d= -f2)"
+    docker compose exec -T --user "${puid:-1000}:${pgid:-1000}" "$@"
+}
 
 # --- remove seed-owned per-job log files (tagged extra.seed=true in line 1) ---
 # Job ULIDs are regenerated each run, so we can't match by id; instead each
 # seeded /logs/jobs/<id>.log carries "seed": true in its first line's `extra`,
 # and this prunes exactly those (real job logs never carry it).
 clean_seed_logs() {
-    docker compose exec -T arm-backend python - <<'PY'
+    backend_exec arm-backend python - <<'PY'
 import glob, json, os
 removed = 0
 for p in glob.glob("/logs/jobs/*.log"):
@@ -90,7 +100,7 @@ PY
 # level/text filters have data. Status is derived from the job's position
 # (matches the INSERT order below).
 seed_logs() {
-    docker compose exec -T -e SEED_JOB_IDS="$1" arm-backend python - <<'PY'
+    backend_exec -e SEED_JOB_IDS="$1" arm-backend python - <<'PY'
 import json, os
 from datetime import datetime, timedelta, UTC
 
@@ -188,7 +198,7 @@ fi
 # 1 drive + 9 jobs + 26 tracks + 4 fingerprints. The 9th job is a multi-title DVD
 # (Cult Double Feature) whose 3 video tracks are each matched independently; the
 # detail routes validate the ULID pattern, so these must be real backend ULIDs.
-ids="$(docker compose exec -T arm-backend python -c "
+ids="$(backend_exec arm-backend python -c "
 from arm_common.ulid import new_id
 print(new_id('drv'))
 for _ in range(9): print(new_id('job'))

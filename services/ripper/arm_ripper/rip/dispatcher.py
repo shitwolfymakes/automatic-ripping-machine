@@ -1,6 +1,8 @@
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Protocol, TypedDict
 
 from arm_common import DiscType
 from arm_common.enums import TrackKind
@@ -14,7 +16,19 @@ logger = logging.getLogger("arm_ripper.rip.dispatcher")
 
 OnTrackStart = Callable[[TrackView], Awaitable[None]]
 OnTrackDone = Callable[[TrackView, RipResult], Awaitable[None]]
-OnTrackProgress = Callable[[TrackView, float], Awaitable[None]]
+
+
+class TransferStats(TypedDict):
+    """Byte-level detail for a copy whose size is known (the full-disc dump)."""
+
+    bytes_done: int
+    bytes_total: int | None
+    rate_bps: float | None
+
+
+class OnTrackProgress(Protocol):
+    def __call__(self, track: TrackView, fraction: float, stats: TransferStats | None = None, /) -> Awaitable[None]: ...
+
 
 # v3 default. 120s drops menu loops and vendor bumpers without cutting
 # the 2–5 minute extras users typically care about. Sessions can
@@ -99,7 +113,20 @@ async def rip_all(
             return
         first = tracks[0]
         await on_track_start(first)
-        result = await rip_data(device_path=device_path, output_dir=output_dir)
+        started = time.monotonic()
+
+        async def _on_data_progress(done: int, total: int | None) -> None:
+            if on_track_progress is None:
+                return
+            elapsed = time.monotonic() - started
+            stats: TransferStats = {
+                "bytes_done": done,
+                "bytes_total": total,
+                "rate_bps": done / elapsed if elapsed > 0 else None,
+            }
+            await on_track_progress(first, min(done / total, 1.0) if total else 0.0, stats)
+
+        result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
         await on_track_done(first, result)
         return
 
