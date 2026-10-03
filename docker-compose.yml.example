@@ -74,6 +74,7 @@ services:
       ARM_RIPPER_NOT_READY_REARM_POLLS: ${ARM_RIPPER_NOT_READY_REARM_POLLS:-}
       ARM_RIPPER_OPTICAL_SR_MAX: ${ARM_RIPPER_OPTICAL_SR_MAX:-}
       ARM_RIPPER_OPTICAL_SG_MAX: ${ARM_RIPPER_OPTICAL_SG_MAX:-}
+      ARM_RIPPER_CERTS_PATH: ${ARM_RIPPER_CERTS_PATH:-}
       # Phase 7b — GPUs detected host-side by setup-dev.sh into ARM_GPUS. The
       # GPU-free backend reads this to fill the gpus table; the dispatcher
       # injects device access into each ephemeral transcoder. [] => CPU-only.

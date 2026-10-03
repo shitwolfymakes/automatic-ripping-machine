@@ -19,3 +19,16 @@ def test_ripper_manager_settings_from_env() -> None:
     s = _settings(ARM_RIPPER_IMAGE="armv3-local/arm-ripper:x", PUID="1001", PGID="1000", CDROM_GID="24")
     assert s.ARM_RIPPER_IMAGE == "armv3-local/arm-ripper:x"
     assert (s.PUID, s.PGID, s.CDROM_GID) == ("1001", "1000", "24")
+
+
+def test_ripper_tunable_passthroughs_default_empty() -> None:
+    s = _settings()
+    for key in (
+        "ARM_RIPPER_POLL_INTERVAL_SECONDS",
+        "ARM_RIPPER_MIN_LENGTH_SECONDS",
+        "ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS",
+        "ARM_RIPPER_NOT_READY_REARM_POLLS",
+        "ARM_RIPPER_OPTICAL_SR_MAX",
+        "ARM_RIPPER_OPTICAL_SG_MAX",
+    ):
+        assert getattr(s, key) == ""

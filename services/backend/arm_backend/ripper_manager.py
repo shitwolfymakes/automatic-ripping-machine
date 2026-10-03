@@ -26,7 +26,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
-from arm_common import Drive, DriveLifecycle, DriveStatus
+from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus
 
 logger = logging.getLogger("arm_backend.ripper_manager")
 
@@ -38,6 +38,16 @@ _STOP_TIMEOUT_SECONDS = 30
 _DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors (spec §3)
 _HOST_DISK_MOUNT = "/host-disk"
 
+# backend Settings name -> env name the ripper/entrypoint reads
+_TUNABLE_ENV: dict[str, str] = {
+    "ARM_RIPPER_POLL_INTERVAL_SECONDS": "POLL_INTERVAL_SECONDS",
+    "ARM_RIPPER_MIN_LENGTH_SECONDS": "ARM_MIN_LENGTH_SECONDS",
+    "ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS": "MAKEMKV_KEYCHECK_INTERVAL_SECONDS",
+    "ARM_RIPPER_NOT_READY_REARM_POLLS": "ARM_NOT_READY_REARM_POLLS",
+    "ARM_RIPPER_OPTICAL_SR_MAX": "ARM_OPTICAL_SR_MAX",
+    "ARM_RIPPER_OPTICAL_SG_MAX": "ARM_OPTICAL_SG_MAX",
+}
+
 
 class RipperManagerError(RuntimeError):
     """A docker/transport failure, already reduced to an operator-readable line."""
@@ -48,6 +58,7 @@ class ReconcileSummary:
     created: list[str] = field(default_factory=list)
     adopted: list[str] = field(default_factory=list)
     restarted: list[str] = field(default_factory=list)
+    recreated: list[str] = field(default_factory=list)
     orphans_removed: list[str] = field(default_factory=list)
     failed: dict[str, str] = field(default_factory=dict)
 
@@ -66,7 +77,12 @@ class RipperManager:
 
     def host_paths_set(self) -> bool:
         s = self._settings
-        return bool(s.ARM_HOST_RAW_PATH and s.ARM_HOST_LOGS_PATH and s.ARM_HOST_CERTS_PATH)
+        return bool(s.ARM_HOST_RAW_PATH and s.ARM_HOST_LOGS_PATH and self._certs_path())
+
+    def _certs_path(self) -> str:
+        """Local host certs dir for the rippers' CA mount — ARM_RIPPER_CERTS_PATH
+        when set (remote-transcode installs), else ARM_HOST_CERTS_PATH."""
+        return self._settings.ARM_RIPPER_CERTS_PATH or self._settings.ARM_HOST_CERTS_PATH
 
     def probe(self) -> tuple[bool, str | None]:
         """Daemon reachable and ARM_RIPPER_IMAGE present? Never raises; TTL-cached."""
@@ -103,7 +119,11 @@ class RipperManager:
             value = getattr(s, key)
             if value:
                 env[key] = value
-        certs_root = Path(s.ARM_HOST_CERTS_PATH)
+        for setting, env_name in _TUNABLE_ENV.items():
+            value = getattr(s, setting)
+            if value:
+                env[env_name] = value
+        certs_root = Path(self._certs_path())
         volumes = {
             s.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "rw"},
             s.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
@@ -190,10 +210,27 @@ class RipperManager:
             logger.info("ripper removed drive_id=%s containers=%d", drive_id, len(containers))
         return len(containers)
 
-    def reconcile(self, enrolled: Sequence[Drive]) -> ReconcileSummary:
+    def _image_current(self, container: Any) -> bool:
+        """Does the container run the image ARM_RIPPER_IMAGE resolves to now?
+        Unknowable (missing image, transport error) counts as current — a
+        reconcile must never tear a working ripper down on a guess."""
+        try:
+            return bool(container.image.id == self._docker.images.get(self._settings.ARM_RIPPER_IMAGE).id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cannot compare image for container %s: %s", getattr(container, "name", "?"), _err(exc))
+            return True
+
+    def reconcile(self, enrolled: Sequence[Drive], *, busy: frozenset[str] = frozenset()) -> ReconcileSummary:
         """Boot-time: the Drive table is the source of truth (spec §3).
         Per-drive failures are recorded, not raised; only an un-listable
-        daemon raises."""
+        daemon raises. A running ripper whose container image no longer
+        matches ARM_RIPPER_IMAGE is recreated so `docker compose build`
+        actually takes effect — unless the drive is mid-rip (`busy`), in
+        which case it's adopted as-is and picked up on the next reconcile
+        after the job finishes. `busy` is RIPPING-only on purpose: a scan
+        has no job row yet (unknowable) and IDENTIFIED/AWAITING_REVIEW
+        would block upgrades indefinitely behind a review gate; a container
+        replaced mid-scan re-detects the seated disc on its first poll."""
         try:
             containers = self._labelled()
         except Exception as exc:  # noqa: BLE001
@@ -212,17 +249,35 @@ class RipperManager:
             except Exception as exc:  # noqa: BLE001
                 summary.failed[drive_id] = _err(exc)
         for drive in enrolled:
+            existing = by_drive.get(drive.id)
+            if existing is not None and not self._image_current(existing):
+                if drive.id in busy:
+                    logger.info(
+                        "ripper drive_id=%s runs a stale image but is ripping — adopting; recreated at the "
+                        "next backend restart once the drive is idle",
+                        drive.id,
+                    )
+                else:
+                    try:
+                        self._stop_and_remove(existing)
+                        self._docker.containers.run(**self.container_spec(drive))
+                    except Exception as exc:  # noqa: BLE001
+                        summary.failed[drive.id] = _err(exc)
+                        continue
+                    summary.recreated.append(drive.id)
+                    continue
             try:
-                outcome = self._start_or_create(drive, by_drive.get(drive.id))
+                outcome = self._start_or_create(drive, existing)
             except Exception as exc:  # noqa: BLE001
                 summary.failed[drive.id] = _err(exc)
                 continue
             getattr(summary, outcome).append(drive.id)
         logger.info(
-            "ripper reconcile: created=%d adopted=%d restarted=%d orphans_removed=%d failed=%d",
+            "ripper reconcile: created=%d adopted=%d restarted=%d recreated=%d orphans_removed=%d failed=%d",
             len(summary.created),
             len(summary.adopted),
             len(summary.restarted),
+            len(summary.recreated),
             len(summary.orphans_removed),
             len(summary.failed),
         )
@@ -238,8 +293,10 @@ async def reconcile_enrolled_rippers(manager: RipperManager, session_factory: An
         enrolled = list(
             (await db.execute(select(Drive).where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED))).scalars().all()
         )
+        ripping = (await db.execute(select(Job).where(col(Job.status) == JobStatus.RIPPING))).scalars().all()
+        busy = frozenset(j.drive_id for j in ripping if j.drive_id)
         try:
-            summary = await asyncio.to_thread(manager.reconcile, enrolled)
+            summary = await asyncio.to_thread(manager.reconcile, enrolled, busy=busy)
         except RipperManagerError as exc:
             logger.error("ripper reconcile skipped: %s", exc)
             return None

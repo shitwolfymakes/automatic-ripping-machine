@@ -52,8 +52,11 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     check "compose config lists arm-ripper" 0 "${rc}"
     rc=0; grep -q 'arm-ripper-sr' <<<"${services}" || rc=$?
     check "compose config lists no arm-ripper-srN" 1 "${rc}"
+    envfile="$(mktemp)"
+    printf 'POSTGRES_USER=a\nPOSTGRES_PASSWORD=b\nPOSTGRES_DB=c\nARM_SERVICE_TOKEN=t\n' > "${envfile}"
     replicas=""
-    replicas="$(cd "${ROOT}" && docker compose --env-file /dev/null -f "${TEMPLATE}" config 2>/dev/null | awk '/^  arm-ripper:$/{f=1} f && /replicas:/{print $2; exit}')" || true
+    replicas="$(cd "${ROOT}" && docker compose --env-file "${envfile}" -f "${TEMPLATE}" config 2>/dev/null | awk '/^  arm-ripper:$/{f=1} f && /replicas:/{print $2; exit}')" || true
+    rm -f "${envfile}"
     check "arm-ripper has replicas: 0" "0" "${replicas:-missing}"
 else
     echo "skip - docker compose not available; template checked by grep only"
