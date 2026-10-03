@@ -176,16 +176,36 @@ jobs:
       - name: Attach it to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+        # The installer and `armctl upgrade` take the latest release and then
+        # download its bundle, so a release must not be published before the
+        # bundle is attached. When this job creates the release, it creates it
+        # as a draft, attaches the bundle, and only then publishes it.
+        #
+        # A release made by hand (for example in the GitHub UI together with
+        # the tag) is left as it is: the bundle is uploaded to it and nothing
+        # else changes. Create such a release as a draft or a pre-release, and
+        # publish it only after this job has attached the bundle; a published
+        # stable release is "latest" while the images build, and installs in
+        # that window fail.
         run: |
           tag="${GITHUB_REF_NAME}"
+          created=0
           if ! gh release view "${tag}" >/dev/null 2>&1; then
             # A tag with a hyphen (v3.1.0-rc1) is a pre-release, so the
             # installer's "latest stable" lookup skips it.
             pre=()
             if [[ "${tag}" == *-* ]]; then pre=(--prerelease); fi
-            gh release create "${tag}" --title "${tag}" --generate-notes --verify-tag "${pre[@]}"
+            gh release create "${tag}" --draft --title "${tag}" --generate-notes --verify-tag "${pre[@]}"
+            created=1
           fi
           gh release upload "${tag}" \
             "dist/arm-installer-${tag}.tar.gz" \
             "dist/arm-installer-${tag}.tar.gz.sha256" \
             --clobber
+          if [[ "${created}" -eq 1 ]]; then
+            gh release edit "${tag}" --draft=false
+          elif [[ "$(gh release view "${tag}" --json isDraft --jq .isDraft)" == true ]]; then
+            # A draft this run did not create: made by hand, or left by an
+            # earlier run of this job that stopped before publishing it.
+            echo "::notice::release ${tag} is a draft with the installer bundle attached; publish it by hand"
+          fi

@@ -49,8 +49,12 @@ echo "==> packing the bundle"
 bundle="$(bash "${ROOT}/deploy/build-bundle.sh" "${TAG}" "${WORK}/bundle")"
 
 echo "==> installing into ${WORK}/arm (ripper-only, no host changes, not started)"
+# Every question is answered by a flag (profile, storage, host changes): run
+# from a terminal, the bootstrap re-attaches it, so an unanswered question
+# would stop the drill at a prompt.
 bash "${ROOT}/install.sh" --prefix "${WORK}" --bundle "${bundle}" --version "${TAG}" \
-    --profile ripper-only --image-prefix "${PFX}" --no-host-changes --no-start </dev/null
+    --profile ripper-only --raw-path "${WORK}/arm/raw" --media-path "${WORK}/arm/media" \
+    --image-prefix "${PFX}" --no-host-changes --no-start </dev/null
 
 echo "==> starting from the local images"
 "${WORK}/arm/armctl" up --no-pull --no-backup

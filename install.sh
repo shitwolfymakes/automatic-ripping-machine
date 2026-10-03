@@ -7,7 +7,8 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
-#   bash install.sh                      # install into ~/arm
+#   curl -fsSL <same url> | bash -s -- --version v3.1.0   # options through the pipe
+#   bash install.sh                    # install into ~/arm
 #   bash install.sh --prefix /srv        # install into /srv/arm
 #   bash install.sh --version v3.1.0     # a specific release
 #   bash install.sh --profile ripper-only --yes     # unattended; see below
@@ -46,6 +47,10 @@ Usage: install.sh [options] [armctl install options]
 Everything else is passed to `armctl install`, for example:
   --profile <full|ripper-only|offload>   --raw-path <dir>   --media-path <dir>
   --yes   --no-host-changes   --no-start
+
+When the installer is piped into bash, put the options after `bash -s --`:
+  curl -fsSL <url> | bash -s -- --version <tag>
+  curl -fsSL <url> | bash -s -- --prefix /srv --version <tag>
 EOF
 }
 

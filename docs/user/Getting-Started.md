@@ -70,6 +70,18 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 Run it as your normal user, not as root and not with `sudo`. It asks for
 `sudo` only for the steps that need it.
 
+The one-line install needs a published ARM v3 release that carries the
+installer bundle; until there is one (or to test a build that is not released
+yet), clone the repository and run `bash install.sh` from that checkout.
+
+To pass options through the pipe, put them after `bash -s --`. For example, to
+install a specific release, or to install it under `/srv`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash -s -- --version v3.1.0
+curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash -s -- --prefix /srv --version v3.1.0
+```
+
 Prefer to read it first?
 
 ```bash

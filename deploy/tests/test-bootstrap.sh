@@ -193,4 +193,15 @@ check "the launcher runs the current release with ARM_DIR set" "ARM_DIR=${L} ARG
 mkdir -p "${TMP}/bin"; ln -s "${L}/armctl" "${TMP}/bin/armctl"
 check "the launcher works through a PATH link" "ARM_DIR=${L} ARGS=down" "$(cd / && "${TMP}/bin/armctl" down)"
 
+# --- usage and the install drill ----------------------------------------------------
+usage="$(bootstrap_usage)"
+has "usage shows how to pass options through the pipe" "| bash -s -- --version <tag>" "${usage}"
+has "usage shows --prefix through the pipe" "| bash -s -- --prefix /srv --version <tag>" "${usage}"
+# The drill runs the bootstrap from a terminal, which the bootstrap re-attaches:
+# every question must be answered by a flag, or the drill stops at a prompt.
+drill="$(cat "${ROOT}/devtools/install-drill.sh")"
+for flag in --profile --raw-path --media-path --no-host-changes; do
+    has "the install drill answers ${flag} by flag" "${flag} " "${drill}"
+done
+
 exit "$fail"
