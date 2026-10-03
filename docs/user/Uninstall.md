@@ -1,22 +1,15 @@
 # Uninstall
 
 ARM v3 keeps everything inside its install prefix and installs no systemd units
-or distro integration, so removing it is two commands:
+or distro integration, so removing it is a few commands:
 
 ```bash
-cd ~/arm
-docker compose down          # stop and remove the containers + network
+armctl down          # stop the stack and the rippers/transcoders it started
 ```
 
-Then delete the prefix once you've saved anything you want to keep:
+Then remove the folder (`rm -rf ~/arm`; the database folder may need `sudo`), the data volume (`docker volume rm armv3_arm-data`), and the PATH link if one was made (`rm ~/.local/bin/armctl` or `sudo rm /usr/local/bin/armctl`). Do this once you've saved anything you want to keep. Use your actual prefix if you installed with `--prefix`.
 
-```bash
-rm -rf ~/arm
-```
-
-(Use your actual prefix if you installed with `--prefix`.)
-
-## What `docker compose down` removes
+## What `armctl down` removes
 
 - The `armv3-*` containers and the compose network.
 - It does **not** delete your bind-mounted data — `db/`, `raw/`, `media/`,
@@ -26,12 +19,12 @@ rm -rf ~/arm
 To also drop any anonymous volumes the stack created, add `--volumes`:
 
 ```bash
-docker compose down --volumes
+armctl compose down --volumes
 ```
 
 ## Save these first if you might reinstall
 
-- **`certs/arm-ca.key`** — your unique CA. If you keep it (and `.env`), a
+- **`certs/arm-ca.key`** — your unique CA. If you keep it (and `.armctl/.env`), a
   reinstall won't force every LAN device to re-trust a new certificate.
 - **`media/`** (and `raw/` if you haven't transcoded yet) — your actual ripped
   content.
@@ -43,7 +36,7 @@ docker compose down --volumes
 
 ## Removing the host udev rule (desktop installs)
 
-If you installed on a desktop, the installer added a scoped auto-mount rule.
+If you agreed to it during the install, the installer added a host-wide rule that stops the desktop auto-mounting optical discs.
 Remove it if you no longer want ARM's drives left un-automounted:
 
 ```bash

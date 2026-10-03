@@ -5,23 +5,26 @@
 # "ignore if invoked indirectly" case. SC2034: REMOTE_RUN is consumed by
 # sourced install.sh functions via "${REMOTE_RUN[@]}", not in this file;
 # LOCAL_FP is computed for parity with production but not asserted on here.)
-# Plain-bash unit test for install.sh's remote-offload walkthrough machinery:
+# Plain-bash unit test for the remote-offload walkthrough in deploy/install/offload.sh:
 # output helpers, input validators, paste-block generators, verify-step
-# classification, and the completion table. Sources install.sh via
-# ARM_INSTALL_SOURCE_ONLY; no docker, no root, no network.
+# classification, and the completion table. Sources the deploy modules directly; no docker, no root, no network.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL="${HERE}/../install.sh"
+DEPLOY="${HERE}/../deploy"
 
-if ! grep -q 'ARM_INSTALL_SOURCE_ONLY' "$INSTALL"; then
-    echo "FAIL - install.sh has no ARM_INSTALL_SOURCE_ONLY seam; refusing to source it" >&2
-    exit 1
-fi
+TMPROOT="$(mktemp -d)"
+trap 'rm -rf "$TMPROOT"' EXIT
 
-export ARM_INSTALL_SOURCE_ONLY=1
-# shellcheck disable=SC1090
-source "$INSTALL"
+# Settings the modules read. Individual checks re-point them at fixtures.
+ARM_DIR="${TMPROOT}/arm"; mkdir -p "${ARM_DIR}"
+ENV_FILE="${ARM_DIR}/.env"
+ARM_CERTS_DIR="${ARM_DIR}/certs"
+
+for f in lib/common.sh lib/detect.sh lib/certs.sh install/ui.sh install/nvidia.sh install/offload.sh; do
+    # shellcheck disable=SC1090
+    source "${DEPLOY}/${f}"
+done
 
 fail=0
 check() {  # check <label> <expected> <actual>
@@ -34,8 +37,6 @@ check() {  # check <label> <expected> <actual>
     fi
 }
 
-TMPROOT="$(mktemp -d)"
-trap 'rm -rf "$TMPROOT"' EXIT
 
 # --- output helpers ----------------------------------------------------------
 
@@ -101,29 +102,9 @@ check "prompt_valid: re-prompts then accepts" "yes" "$( [[ "$out" == *"expected 
 check "publish port from URL" "8080" "$(offload_backend_port "https://192.168.0.68:8080")"
 check "publish port default 443" "443" "$(offload_backend_port "https://arm.example.com")"
 
-# compose injection: run the awk-injection helper against a fixture compose.
-FIX="$TMPROOT/compose-fixture.yml"
-cat > "$FIX" <<'EOF'
-  arm-backend:
-    image: x/arm-backend:t
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-EOF
-inject_offload_compose "$FIX" "https://192.168.0.68:8080"
-check "ssh mount injected" "1" "$(grep -c '/home/arm/.ssh:ro' "$FIX")"
-check "port published" "1" "$(grep -c '"8080:8443"' "$FIX")"
-# idempotent: second run must not duplicate
-inject_offload_compose "$FIX" "https://192.168.0.68:8080"
-check "injection idempotent" "1" "$(grep -c '"8080:8443"' "$FIX")"
-
 # certs path: offload on -> remote-user-writable path
 check "certs path (offload)" "/home/sam/.arm/certs" "$(offload_certs_path "ssh://sam@192.168.0.92")"
 
-# idempotence with a CHANGED port: single ports key, latest port wins
-inject_offload_compose "$FIX" "https://192.168.0.68:9090"
-check "port injection converges to latest" "1" "$(grep -c '"9090:8443"' "$FIX")"
-check "no stale port left" "0" "$(grep -c '"8080:8443"' "$FIX")"
-check "single ports key" "1" "$(grep -c '^    ports:$' "$FIX")"
 
 # --- walkthrough: paste generators + verify classification -------------------
 
@@ -192,7 +173,7 @@ BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
 out="$(OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF=x/t:1 offload_completion_report)"
 check "table: header names endpoint" "yes" "$( [[ "$out" == *"Remote offload verification (ssh://sam@192.168.0.92)"* ]] && echo yes || echo no )"
 check "table: ssh row FAIL" "yes" "$( [[ "$out" == *"ssh + docker access"*FAIL* ]] && echo yes || echo no )"
-check "table: callback PENDING wording" "yes" "$( [[ "$out" == *"PENDING — stack not running"* && "$out" == *"re-run \`bash install.sh\`"* ]] && echo yes || echo no )"
+check "table: callback PENDING wording" "yes" "$( [[ "$out" == *"PENDING — stack not running"* && "$out" == *"re-run \`armctl install\`"* ]] && echo yes || echo no )"
 
 # --- Critical regression: non-interactive persisted rerun must restore remote state
 PERSISTDIR="$TMPROOT/persist"; mkdir -p "$PERSISTDIR/ssh"
@@ -204,8 +185,7 @@ ARM_TRANSCODE_PGID=1000
 ARM_GPUS=[{"vendor":"nvenc","device_path":"nvidia://0"}]
 ARM_RENDER_GID=
 EOF
-CERTS_ONLY=0
-PREFIX="$PERSISTDIR"
+ARM_DIR="$PERSISTDIR"; ENV_FILE="$PERSISTDIR/.env"; ARM_CERTS_DIR="$PERSISTDIR/certs"
 REMOTE_OFFLOAD=0
 declare -p REMOTE_RUN >/dev/null 2>&1 && unset REMOTE_RUN
 remote_script 'exit 0'
@@ -217,7 +197,6 @@ check "restore: backend san" "192.168.0.68" "$REMOTE_BACKEND_SAN"
 
 # order: non-interactive call with persisted config must still restore (tty guard after skip)
 REMOTE_OFFLOAD=0; REMOTE_GPUS=""
-PREFIX="$PERSISTDIR"; CERTS_ONLY=0
 setup_remote_offload </dev/null >/dev/null 2>&1 || true
 check "non-interactive persisted rerun: restored" "1" "$REMOTE_OFFLOAD"
 check "non-interactive persisted rerun: gpus kept" "yes" "$( [[ "$REMOTE_GPUS" == *nvenc* ]] && echo yes || echo no )"
@@ -226,10 +205,10 @@ check "non-interactive persisted rerun: gpus kept" "yes" "$( [[ "$REMOTE_GPUS" =
 
 # F1: ensure_ca creates a CA when absent, reuses when present (real openssl).
 CADIR="$TMPROOT/caprefix"; mkdir -p "$CADIR/certs"
-PREFIX="$CADIR" ensure_ca >/dev/null 2>&1
+ARM_CERTS_DIR="$CADIR/certs" ensure_ca >/dev/null 2>&1
 check "ensure_ca: creates" "yes" "$( [[ -s "$CADIR/certs/arm-ca.crt" && -s "$CADIR/certs/arm-ca.key" ]] && echo yes || echo no )"
 before="$(sha256sum "$CADIR/certs/arm-ca.crt")"
-PREFIX="$CADIR" ensure_ca >/dev/null 2>&1
+ARM_CERTS_DIR="$CADIR/certs" ensure_ca >/dev/null 2>&1
 check "ensure_ca: idempotent" "$before" "$(sha256sum "$CADIR/certs/arm-ca.crt")"
 
 # F2: unresolved-tag ref renders SKIPPED in the report, no verify call.
@@ -245,9 +224,9 @@ check "report: GPUs row present" "yes" "$( [[ "$out" == *"GPUs"* && "$out" == *"
 KEYDIR="$TMPROOT/persist/ssh"; mkdir -p "$KEYDIR"
 printf 'ssh-ed25519 AAAA test@x\n' > "$KEYDIR/id_ed25519.pub"
 remote_script 'exit 255'
-out="$(PREFIX="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=1 offload_completion_report)"
+out="$(ARM_DIR="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=1 offload_completion_report)"
 check "report: reoffer key block on ssh FAIL" "yes" "$( [[ "$out" == *"Fix-it blocks"* && "$out" == *"authorized_keys"* ]] && echo yes || echo no )"
-out="$(PREFIX="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=0 offload_completion_report)"
+out="$(ARM_DIR="$TMPROOT/persist" OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:t" OFFLOAD_REOFFER=0 offload_completion_report)"
 check "report: no reoffer when disabled" "no" "$( [[ "$out" == *"Fix-it blocks"* ]] && echo yes || echo no )"
 
 
@@ -273,9 +252,90 @@ check "report: image row honors .env pin" "yes" "$( [[ "$out" == *"armv3-local/a
 # Reruns regenerate leaves; a 400 owner-only key crash-loops PUID!=runner
 # stacks on their next restart. make_leaf must emit 440 group-readable.
 LEAFDIR="$TMPROOT/leafprefix"; mkdir -p "$LEAFDIR/certs"
-PREFIX="$LEAFDIR" ensure_ca >/dev/null 2>&1
-PREFIX="$LEAFDIR" ARM_PGID="$(id -g)" make_leaf test-leaf >/dev/null 2>&1
+ARM_CERTS_DIR="$LEAFDIR/certs" ensure_ca >/dev/null 2>&1
+ARM_CERTS_DIR="$LEAFDIR/certs" ARM_PGID="$(id -g)" make_leaf test-leaf >/dev/null 2>&1
 check "leaf key exists" "yes" "$( [[ -s "$LEAFDIR/certs/test-leaf.key" ]] && echo yes || echo no )"
 check "leaf key mode 440" "440" "$(stat -c '%a' "$LEAFDIR/certs/test-leaf.key")"
+
+# --- remote GPU detection ships the shared detection code ---------------------
+# ssh is replaced by `cat`, so the "remote output" is the script that would run.
+ssh() { cat; }
+shipped="$(remote_detect_gpus "ssh://sam@192.168.0.92" /dev/null)"
+unset -f ssh
+check "remote detect: ships the driver floor" "yes" "$( [[ "$shipped" == *"ARM_NVENC_MIN_DRIVER=530"* ]] && echo yes || echo no )"
+check "remote detect: ships detect_gpus and its helpers" "yes" \
+    "$( [[ "$shipped" == *"detect_gpus ()"* && "$shipped" == *"nvenc_driver_ok ()"* && "$shipped" == *"arm_warn ()"* ]] && echo yes || echo no )"
+check "remote detect: no encoder probe" "no" "$( [[ "$shipped" == *probe_encoder_caps* ]] && echo yes || echo no )"
+
+# --- consent ------------------------------------------------------------------
+SKIPPED=(); ARMCTL_ASSUME=yes
+rc=0; consent "thing" "Do the thing?" </dev/null || rc=$?
+check "consent: --yes accepts without asking" "0" "$rc"
+SKIPPED=(); ARMCTL_ASSUME=no
+rc=0; consent "thing" "Do the thing?" </dev/null || rc=$?
+check "consent: --no-host-changes declines" "1" "$rc"
+check "consent: declined step is recorded" "thing (declined by --no-host-changes)" "${SKIPPED[0]}"
+SKIPPED=(); ARMCTL_ASSUME=ask
+rc=0; consent "thing" "Do the thing?" </dev/null || rc=$?
+check "consent: no terminal declines instead of hanging" "1" "$rc"
+check "consent: no-terminal skip is recorded" "thing (no terminal to ask on)" "${SKIPPED[0]}"
+
+# --- offload inputs without a terminal -----------------------------------------
+NOENV="$TMPROOT/noenv"; mkdir -p "$NOENV"
+out="$( (ARM_DIR="$NOENV"; ENV_FILE="$NOENV/.env"; OFFLOAD_HOST_ARG=""; OFFLOAD_URL_ARG=""; setup_remote_offload) </dev/null 2>&1 || true)"
+check "offload: no terminal and no flags is an error" "yes" "$( [[ "$out" == *"--offload-host and --offload-backend-url"* ]] && echo yes || echo no )"
+out="$( (ARM_DIR="$NOENV"; ENV_FILE="$NOENV/.env"; OFFLOAD_HOST_ARG="not-an-endpoint"; OFFLOAD_URL_ARG="https://h:8443"; setup_remote_offload) </dev/null 2>&1 || true)"
+check "offload: a malformed --offload-host is rejected" "yes" "$( [[ "$out" == *"--offload-host must look like"* ]] && echo yes || echo no )"
+
+# --- no terminal: nothing is read from stdin ------------------------------------------
+# confirm answers "no" and leaves stdin alone (an answer on stdin is not taken).
+out="$(printf 'y\nleft\n' | { rc=0; confirm "Do it?" || rc=$?; echo "rc=${rc}"; cat; })"
+check "confirm: no terminal answers no" "yes" "$( [[ "$out" == rc=1* ]] && echo yes || echo no )"
+check "confirm: no terminal reads nothing from stdin" "yes" "$( [[ "$out" == *$'\ny\nleft' ]] && echo yes || echo no )"
+
+# The offload walkthrough with its inputs given as flags and no terminal: every
+# step is checked once, the run reaches the end, and nothing waits. The remote
+# is unreachable (ssh and every remote check fail).
+UNATT="$TMPROOT/unattended/arm"; mkdir -p "$UNATT/certs"
+unattended_walkthrough() {
+    ARM_DIR="$UNATT"; ENV_FILE="$UNATT/.env"; ARM_CERTS_DIR="$UNATT/certs"
+    OFFLOAD_HOST_ARG="ssh://sam@192.168.0.92"; OFFLOAD_URL_ARG="https://192.168.0.68:8080"; OFFLOAD_UIDGID_ARG=""
+    ARM_IMAGE_TAG_DEFAULT="v3.1.0"
+    ssh-keygen() { local f=""; while [[ $# -gt 0 ]]; do [[ "$1" == -f ]] && f="$2"; shift; done; : > "$f"; echo "ssh-ed25519 AAAA test" > "$f.pub"; }
+    ssh-keyscan() { return 1; }
+    ssh() { cat >/dev/null; return 255; }
+    REMOTE_RUN=(false)
+    setup_remote_offload
+    echo "WALKTHROUGH END GPUS=${REMOTE_GPUS}"
+}
+# Standalone, not after `||` or in an `if`: errexit must be live, as it is in
+# armctl, or a `read` at end-of-input would not end the run here.
+set +e
+out="$( ( set -e; unattended_walkthrough ) </dev/null 2>&1 )"
+rc=$?
+set -e
+check "unattended offload, stdin at end-of-input: the walkthrough completes" "0" "$rc"
+check "unattended offload: reaches the end with a CPU-only inventory" "yes" "$( [[ "$out" == *"WALKTHROUGH END GPUS=[]"* ]] && echo yes || echo no )"
+check "unattended offload: no Press Enter pause" "no" "$( [[ "$out" == *"Press Enter"* ]] && echo yes || echo no )"
+check "unattended offload: a failed step says it goes to the completion table" "yes" "$( [[ "$out" == *"not retried. The completion table reports this step."* ]] && echo yes || echo no )"
+
+# stdin an open pipe that never closes (ssh without -t, a service manager):
+# the walkthrough must not wait on it. A FIFO opened read-write never reaches
+# end-of-input, so any read would block until the deadline.
+FIFO="$TMPROOT/stdin.fifo"; mkfifo "$FIFO"
+exec 7<>"$FIFO"
+( set -e; unattended_walkthrough ) <&7 >"$TMPROOT/pipe.out" 2>&1 &
+pid=$!
+waited=0
+while kill -0 "$pid" 2>/dev/null && (( waited < 150 )); do sleep 0.1; waited=$(( waited + 1 )); done
+if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    rc="blocked"
+else
+    set +e; wait "$pid"; rc=$?; set -e
+fi
+exec 7>&-
+check "unattended offload, stdin an open pipe: does not block" "0" "$rc"
+check "unattended offload, open pipe: reaches the end" "yes" "$( [[ "$(cat "$TMPROOT/pipe.out")" == *"WALKTHROUGH END GPUS=[]"* ]] && echo yes || echo no )"
 
 exit "$fail"

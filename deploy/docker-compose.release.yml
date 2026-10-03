@@ -1,0 +1,19 @@
+# deploy/docker-compose.release.yml: the production overlay.
+#
+# Production runs docker-compose.yml.example exactly as committed, layered
+# with this file. The template builds these three services from source and
+# gives them no image name, so this overlay names the published image for
+# each. Everything else in the template (environment, mounts, the ripper and
+# transcode images, which are already variables) reaches production unchanged.
+#
+# A new service that the template builds from source needs one entry here;
+# deploy/tests/test-stack-contract.sh fails until it has one.
+#
+# ARM_IMAGE_PREFIX and ARM_IMAGE_TAG are written to .env by armctl.
+services:
+  arm-backend:
+    image: ${ARM_IMAGE_PREFIX:?armctl writes ARM_IMAGE_PREFIX to .env}/arm-backend:${ARM_IMAGE_TAG:?armctl writes ARM_IMAGE_TAG to .env}
+  arm-data-init:
+    image: ${ARM_IMAGE_PREFIX:?armctl writes ARM_IMAGE_PREFIX to .env}/arm-backend:${ARM_IMAGE_TAG:?armctl writes ARM_IMAGE_TAG to .env}
+  arm-ui:
+    image: ${ARM_IMAGE_PREFIX:?armctl writes ARM_IMAGE_PREFIX to .env}/arm-ui:${ARM_IMAGE_TAG:?armctl writes ARM_IMAGE_TAG to .env}

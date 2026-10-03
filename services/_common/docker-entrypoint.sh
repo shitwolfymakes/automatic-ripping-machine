@@ -51,7 +51,7 @@ WRITE_CHECK_ATTEMPTS="${WRITE_CHECK_ATTEMPTS:-5}"
 WRITE_CHECK_DELAY="${WRITE_CHECK_DELAY:-2}"
 
 # v3 invariant (docs/developers/architecture/06-deployment.md): never chown a user-mounted volume.
-# Ownership + setgid are host-prep (install.sh: `chmod 2775`). Here we only
+# Ownership + setgid are host-prep (`armctl install` / `setup-dev.sh`: `chmod 2775`). Here we only
 # VERIFY the drop-uid can write each mounted data dir and fail fast with a clear
 # diagnostic if not — instead of silently corrupting ownership (which bricks
 # NFSv4-ACL exports for every uid) or dying later with an opaque [Errno 13].

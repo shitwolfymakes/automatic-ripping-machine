@@ -10,55 +10,67 @@ forward automatically.
 > the two stacks can even run side by side (their containers and volumes are
 > namespaced `armv3-*` vs `arm-*`).
 
-## Minor / patch upgrade
+## Upgrade
 
 ```bash
-cd ~/arm
-docker compose pull
-docker compose up -d
+armctl upgrade
 ```
 
-That pulls the image tag named in `~/arm/docker-compose.yml`, recreates the
-changed containers, and the backend migrates the database to match. To pin or
-move to a specific version, set `ARM_IMAGE_TAG` in `~/arm/.env` and run the same
-two commands.
+That moves the install to the latest stable release. In order, it:
 
-## Major-version upgrade
+1. downloads the new release's installer bundle and checks it;
+2. pulls the new images;
+3. refuses to go further while a rip or transcode is running;
+4. backs up the database into `~/arm/backups/` (the newest five are kept);
+5. switches to the new release, restarts the stack and recreates the rippers;
+6. waits for the backend to report healthy.
 
-A major release may add new service blocks (e.g. a new ripper layout) or require
-new certificate SANs, so rerun the installer first to regenerate
-`docker-compose.yml` and the leaf certs, then pull:
+Until step 5, nothing about the running install has changed, so a failed
+download, a failed pull or an active rip leaves it exactly as it was. Run the
+command again when the cause is fixed.
 
-```bash
-cd ~/arm
-curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
-docker compose pull
-docker compose up -d
-```
+Options:
 
-Rerunning the installer is safe: it **preserves your `.env` secrets and your
-CA**, regenerates the (disposable) leaf certs, and only adds service blocks for
-newly-detected drives. See
-[Getting Started § Install](Getting-Started#install).
+| Option | Effect |
+|---|---|
+| `--version v3.1.0` | Move to that release instead of the latest stable one. The tag may contain only letters, digits, `.`, `_` and `-`, and must start with a letter or digit. |
+| `--force` | Go ahead while a rip or transcode is running. It is killed. |
+| `--no-backup` | Skip the database backup. |
+
+If `armctl` is not on your PATH, use `~/arm/armctl upgrade`.
+
+If the start or the health check fails after the switch, `armctl` says so and
+prints which release the install is now on, that it was **not** rolled back,
+the database backup taken in that run (or that none was taken), and where the
+previous release is kept. Once the cause is fixed, `armctl up` tries the start
+again. See [Rolling back](#rolling-back).
+
+If an upgrade stops part way through the switch (a power cut, for example),
+run `armctl upgrade` again: it notices and finishes the upgrade.
+
+To change an answer you gave at install time (profile, storage folders),
+run `armctl install` again. It keeps your secrets and certificates authority
+and asks the same questions with your earlier answers as the defaults.
 
 ## Before you upgrade
 
 - **No schema rollback.** Alembic `downgrade` is not supported across versions.
-  If you want a safety net, dump Postgres first:
-
-  ```bash
-  docker exec armv3-db pg_dump -U arm arm > ~/arm-backup-$(date +%F).sql
-  ```
-
-  (The dump contains plaintext secrets — store it somewhere you'd trust with a
-  password export.)
+  `armctl upgrade` takes a database backup before it switches; the files are in
+  `~/arm/backups/` and contain plaintext secrets, so treat them like a password
+  export.
 
 - **Watch the release notes / [CHANGELOG](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CHANGELOG.md)**
   for any manual steps a specific release calls out.
 
 ## Rolling back
 
-There's no schema downgrade, so a true rollback means restoring the Postgres
-dump you took above and pointing `ARM_IMAGE_TAG` back at the previous version.
-For minor versions where the schema didn't change, just resetting `ARM_IMAGE_TAG`
-and running `docker compose up -d` is enough.
+There is no automatic rollback, because a database migration cannot be
+reversed. `armctl upgrade` keeps the previous release in
+`~/arm/.armctl/releases/` and the backup it took in `~/arm/backups/`.
+
+If the schema did not change between the two releases, going back is:
+
+    armctl upgrade --version <previous tag>
+
+If it did, restore the backup taken before the upgrade into a fresh database
+first, then run the same command.

@@ -30,8 +30,8 @@ platform ([[project_linux_docker_only]]). **How to apply:** when bumping
 its `configure`, and (b) the chosen header tag's min driver (nv-codec-headers
 `README` at that tag), then keep three things in lockstep: `NVCODEC_VERSION` /
 `NVCODEC_SHA256` in the Dockerfile, and `ARM_NVENC_MIN_DRIVER` (the header's
-driver floor, currently 530) in **both** [install.sh](../../install.sh) and
-[devtools/setup-dev.sh](../../devtools/setup-dev.sh). That constant gates the
+driver floor, currently 530) in [deploy/lib/detect.sh](../../deploy/lib/detect.sh) (the one shell copy,
+loaded by both setup-dev.sh and armctl.sh). That constant gates the
 host-side GPU probe: a too-old driver is dropped from `ARM_GPUS` (warn to stderr,
 never stdout — it would corrupt the JSON) so the host cleanly falls back to CPU
 instead of failing every task. The gate only runs at install/setup time, so

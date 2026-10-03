@@ -23,6 +23,6 @@ TLS-secured deployment users run. install.sh already generates `arm-ui` on
 deployments to ui-neu with no installer change.
 
 **How to apply:** Reconcile *to* what `install.sh` generates, not away from it
-(install.sh itself is legacy and frozen). When a message or doc says "open the
+(the installer is `deploy/armctl.sh`; root `install.sh` is its bootstrap). When a message or doc says "open the
 UI", it means ui-neu on 8081. Any 8082 left in the tree is an arbitrary example
 (e.g. test origins in `test_ws_origin.py`), not a UI port.

@@ -14,9 +14,9 @@ choosing one of three paths, in precedence order:
 1. **You set it in the UI** *(recommended).* Open **Config → MakeMKV key** and
    paste your key (a purchased permanent key, or a beta you grabbed yourself).
    The ripper fetches it from the backend before each rip — no file editing, and
-   it survives a `docker compose down`/recreate. A key set here **overrides** the
+   it survives a restart or recreate. A key set here **overrides** the
    `MAKEMKV_KEY` env var below, and you can change it without restarting anything.
-2. **You supply a key via env.** Set `MAKEMKV_KEY=T-…` in `~/arm/.env`. Used when
+2. **You supply a key via env.** Set `MAKEMKV_KEY=T-…` in `~/arm/.armctl/.env`. Used when
    the UI key is blank. The script writes it into the container's
    `~/.MakeMKV/settings.conf`.
 3. **You leave both unset.** The script scrapes the *current month's free beta
@@ -31,10 +31,10 @@ restart needed.
 After setting a key (whichever path), verify it landed:
 
 ```bash
-cd ~/arm && docker compose exec arm-ripper-sr0 grep app_Key /home/arm/.MakeMKV/settings.conf
+docker exec armv3-ripper-sr0 grep app_Key /home/arm/.MakeMKV/settings.conf
 ```
 
-(The UI path takes effect on the next rip; the env path needs `docker compose up -d`.)
+(The UI path takes effect on the next rip; the env path needs `armctl up`.)
 
 ## Buying a key
 

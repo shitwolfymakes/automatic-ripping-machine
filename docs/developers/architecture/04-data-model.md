@@ -176,7 +176,7 @@ A user (or auto-transcode) says "apply session S to job J." This is the durable 
 - `created_at`, `completed_at`
 
 ### `gpus`
-DB-authoritative GPU inventory, editable in Settings > GPUs. The `ARM_GPUS` env descriptor only **seeds an empty table** at Backend boot (each seeded row starts `encoder_kinds: []`, `probed_at: NULL`); once rows exist, the table is never truncated or re-derived from the env var, so an operator's `enabled` toggle and probe history survive a restart. The Backend container gets full host HW access in compose to run the per-device probe (below), not to detect devices itself: device discovery still happens host-side at install time (`install.sh` / `devtools/setup-dev.sh`).
+DB-authoritative GPU inventory, editable in Settings > GPUs. The `ARM_GPUS` env descriptor only **seeds an empty table** at Backend boot (each seeded row starts `encoder_kinds: []`, `probed_at: NULL`); once rows exist, the table is never truncated or re-derived from the env var, so an operator's `enabled` toggle and probe history survive a restart. The Backend container gets full host HW access in compose to run the per-device probe (below), not to detect devices itself: device discovery still happens host-side at install time (`armctl install` / `devtools/setup-dev.sh`).
 
 - `id` (ULID)
 - `vendor` (enum: vaapi | nvenc | qsv)

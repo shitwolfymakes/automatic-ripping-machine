@@ -9,8 +9,8 @@ see the [Roadmap](Status-Roadmap).
 v3 is under active development. Expect rough edges, breaking changes between
 versions, and incomplete docs.
 
-- **Published images may not exist for every tag yet.** `docker compose pull`
-  can return 404 during the alpha. Build the images locally from a checkout —
+- **Published images may not exist for every tag yet.** the image pull
+  (`armctl up` / `armctl upgrade`) can return 404 during the alpha. Build the images locally from a checkout —
   see
   [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
 
@@ -29,8 +29,9 @@ versions, and incomplete docs.
 
 - **Desktop hosts need auto-mount disabled to eject.** On a host with a GNOME/
   KDE/XFCE session, `udisks2`/`gvfs` grabs the disc and the ripper can't eject
-  after a rip. The installer writes a scoped udev rule to fix this; if you
-  installed manually or eject still fails, see
+  after a rip. With your consent, the installer writes a host-wide udev rule
+  that stops auto-mounting of optical discs; if you declined it, installed
+  manually, or eject still fails, see
   [Troubleshooting § Disc won't eject](Troubleshooting#disc-wont-eject-after-a-rip).
 - **No database schema rollback.** Alembic `downgrade` across versions isn't
   supported — back up Postgres before upgrading if you want a safety net. See

@@ -16,12 +16,17 @@ Docker Compose is the one and only supported deploy target for v3.
 
 ## Install prefix and layout
 
-The install script (see "Install" below) drops everything under a single prefix, **`~/arm/` by default**. The user never clones the repo, never runs a build, never reads source. The stack is entirely image-based.
+The installer (see [§ Installer](#installer)) puts everything under a single folder, **`~/arm/` by default**. The user never clones the repo, never runs a build, never reads source. The stack is entirely image-based.
 
 ```
 ~/arm/
-├── .env                            # 0600 — generated; user edits optional fields
-├── docker-compose.yml              # 0644 — generated per host
+├── armctl                          # launcher (see § Installer)
+├── .armctl/
+│   ├── .env                        # 0600 — generated; user edits optional fields
+│   ├── host-overlay.yml            # generated: storage locations, offload settings
+│   ├── lock                        # held while an armctl command runs
+│   ├── releases/<tag>/             # the unpacked release bundle (compose template, overlay, scripts)
+│   └── current -> releases/<tag>
 ├── certs/                          # 0700
 │   ├── arm-ca.key                  # 0400 — CA private key; NEVER mounted into a container
 │   ├── arm-ca.crt                  # 0444 — mounted read-only into every service
@@ -29,11 +34,15 @@ The install script (see "Install" below) drops everything under a single prefix,
 │   └── arm-ui.{key,crt}            # leaf for UI nginx
 ├── db/                             # Postgres data (bind-mount)
 ├── logs/                           # shared logs (PUID:PGID)
+├── backups/                        # database backups from armctl up / upgrade (newest five kept)
+├── scripts/                        # notification scripts, mounted read-only into the backend
+├── iso-library/                    # disc images for Rip from ISO
+├── ssh/                            # offload profile only
 ├── raw/                            # rip output (PUID:PGID, 2775 setgid)
 └── media/                          # transcoded library (PUID:PGID, 2775 setgid)
 ```
 
-The user runs the stack from this directory: `cd ~/arm && docker compose up -d`. All bind-mounts in the generated compose are relative (`./certs/...`, `./raw`, etc.), so moving `~/arm/` to `/srv/arm/` or `/mnt/tank/arm/` is a matter of moving the directory — nothing is hard-coded to `$HOME`.
+The user runs the stack with `armctl up`. The template's bind-mounts are written as `./arm/...` and `armctl` runs Compose from the folder that contains `arm`; `--prefix /srv` gives `/srv/arm`. Nothing is hard-coded to `$HOME`.
 
 ## Build chain
 
@@ -53,11 +62,11 @@ v3 images are built fresh on upstream bases. They do **not** derive from the v2 
   - **Cosign-signed images.** Every published image is signed via Sigstore's keyless flow (OIDC from the GitHub Actions runner → short-lived Fulcio cert → Rekor transparency log). Users can verify with `cosign verify docker.io/automaticrippingmachine/arm-<service>:v3.x.y --certificate-identity=... --certificate-oidc-issuer=https://token.actions.githubusercontent.com`. No long-lived signing keys to manage.
   - **Weekly base rebuild.** A scheduled CI job rebuilds each image weekly on its current tag so Debian's security updates land without waiting for the next ARM release.
 - **Each service has its own Dockerfile under `services/<service>/Dockerfile`.** Shared Python code (schemas, clients) lives in `packages/arm_common/` and is installed into each image by the build, not mounted at runtime — there is no v2-style `PYTHONPATH=/opt/arm` shim.
-- **Nothing compiles on the host.** The installer (see [§ Install](#install)) only pulls pinned images from `docker.io/automaticrippingmachine/`. Contributors building locally use `docker compose -f docker-compose.yml build`; end users never do.
+- **Nothing compiles on the host.** The installer (see [§ Installer](#installer)) only pulls pinned images from `docker.io/automaticrippingmachine/`. Contributors building locally use `docker compose -f docker-compose.yml build`; end users never do.
 
 ## Compose topology
 
-The generated `~/arm/docker-compose.yml` references pinned images from `docker.io/automaticrippingmachine/` and bind-mounts paths under its own directory. No `build:` directives; nothing is compiled on the host.
+In production the stack is `docker-compose.yml.example` layered with the release overlay, which names pinned images from `docker.io/automaticrippingmachine/`; the template bind-mounts paths under the install folder. Nothing is built or compiled on the host.
 
 ```yaml
 name: armv3   # compose project name; keeps container/volume names distinct from v2
@@ -159,7 +168,7 @@ table is reconciled against the labelled containers: missing → created, exited
 → started, orphan → removed, and a container running an image that no longer
 matches `ARM_RIPPER_IMAGE` is recreated when the drive is idle. These
 containers are **outside the compose project** — `docker compose down` leaves
-them; `bash devtools/ripper-containers.sh {list|stop|remove}` manages them.
+them (`armctl down` removes them); `bash devtools/ripper-containers.sh {list|stop|remove}` manages them.
 
 Each service container, on startup, copies the mounted `/etc/ssl/arm/arm-ca.crt` into `/usr/local/share/ca-certificates/` and runs `update-ca-certificates`. This merges the per-install internal CA with the base image's Mozilla root bundle, so outbound HTTPS (TMDB, OMDB, Apprise) verifies against public roots and inbound/intra-compose HTTPS verifies against the internal CA — all via the default system trust store, no per-client `verify=` plumbing in application code. See [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls) for the full cert layout and rationale.
 
@@ -204,7 +213,7 @@ The container itself isn't declared in compose, though — it's created by the b
 
 ## Environment file
 
-`~/arm/.env` holds bootstrap values. The installer generates it with sensible defaults; the user edits only the optional fields (API keys, non-default ports) — and even those are primarily set via the UI, not the env file.
+`~/arm/.armctl/.env` holds bootstrap values. The installer generates it with sensible defaults; the user edits only the optional fields (API keys, non-default ports) — and even those are primarily set via the UI, not the env file.
 
 ```bash
 # Generated by the installer — do not commit
@@ -220,7 +229,7 @@ ARM_LOG_LEVEL=info
 
 `DATABASE_URL` is composed from these at compose-parse time for the Backend; see the compose snippet above.
 
-The pair of `~/arm/.env` + `~/arm/docker-compose.yml` is all a running install depends on. Re-running the installer on an existing install preserves `.env` (only re-derives `PUID`/`PGID`/`CDROM_GID` if those host facts changed), preserves the CA, and only *adds* new ripper service blocks for newly-attached drives. Upgrades come from the image tags in the compose file, not from editing `.env`.
+`~/arm/.armctl/.env`, the release bundle under `~/arm/.armctl/releases/` and the generated host overlay are all a running install depends on. Running `armctl install` again on an existing install keeps the secrets and the CA, takes the earlier answers as defaults, and refreshes detected host facts such as `PUID`/`PGID`/`CDROM_GID` and the GPUs. Upgrades come from `armctl upgrade`, which moves the pinned image tag, not from editing `.env`.
 
 ## File ownership
 
@@ -258,39 +267,132 @@ The ripper containers also need `group_add: ["${CDROM_GID}"]` so the PUID-droppe
 
 No `privileged: true` anywhere. If a ripper ever needs it for a weird host, we document that as an escape hatch but do not ship it on.
 
-## Install
+## Installer
 
-A single command bootstraps the whole stack:
+Production runs `docker-compose.yml.example` exactly as committed, layered with `deploy/docker-compose.release.yml` and a generated host overlay; nothing translates the template.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
 ```
 
-(Or `bash -c "$(curl -fsSL ...)"` for users who want a TTY; `install.sh --prefix /srv/arm` to override the default path.)
+### The pieces and where they live
 
-> `install.sh` predates the drive-lifecycle model and still emits per-drive services; it is scheduled for a rewrite before release — use [devtools/setup-dev.sh](../../../devtools/setup-dev.sh) (which follows the model above) meanwhile.
+| Path | Role |
+|---|---|
+| `install.sh` (root) | Bootstrap only. Run from a checkout, it packs a bundle from that checkout (`deploy/build-bundle.sh`, tagged `v<VERSION>` unless `--version` says otherwise) instead of downloading one. Run from curl, it picks the release and downloads that release's bundle. Either way it unpacks the bundle into the install folder, writes the `armctl` launcher and hands over to `armctl install`. |
+| `deploy/armctl.sh` | The release's command: `install`, `up`, `down`, `upgrade`, `compose ...`. |
+| `deploy/lib/` | Shared by dev and production: host detection, certificates, the udev rule and the lifecycle safety steps. `devtools/setup-dev.sh` loads the same files. |
+| `deploy/install/` | Production-only: Docker and NVIDIA setup, prompts, storage locations, offload walkthrough, PATH link. |
+| `deploy/docker-compose.release.yml` | The overlay naming release images for the services dev builds from source. |
+| `docker-compose.yml.example`, `.env.example` | Shipped unchanged. Copied into the bundle as they are. |
+| `.github/workflows/release.yml` | A job packs the bundle (`deploy/build-bundle.sh`) and attaches it to the GitHub release. |
 
-**What the installer does, in order:**
+**The bundle** is `armctl.sh`, `deploy/lib/`, `deploy/install/`, the release overlay, the two unchanged template files and a version marker, packed as one archive with a checksum file beside it. Nothing in it is generated except the version marker.
 
-1. **Prereq check.** `docker` ≥ 24, `docker compose` v2, `openssl` ≥ 1.1.1, `bash` ≥ 4. User is in the `docker` group (or `sudo` usable), and in the host's optical group. Fails fast with a clear message if anything is missing.
-2. **Create the install prefix** (`~/arm/` by default) with the layout shown above. Correct permissions on `certs/` (0700), `.env` (0600), and `raw`/`media` (2775 setgid). Run as the invoking user — no `sudo` needed if `~/arm/` is writable.
-3. **Generate the internal CA** at `~/arm/certs/arm-ca.{key,crt}` (EC P-384, 10-year expiry, CN = "ARM v3 Local CA"). The key is `0400`, stays on the host, and is never mounted into any container.
-4. **Probe for optical drives** via `ls /dev/sr* 2>/dev/null`; for each, generate a leaf cert (`arm-ripper-srN.{key,crt}`) signed by the CA. Also generate leaves for `arm-backend`, `arm-ui`, and `arm-db`. All leaves have a 10-year expiry. Leaf keys are written `0400` owned by the invoking user; the `arm-db` container re-permissions its leaf at startup via an entrypoint wrapper (see the compose block above) because Postgres refuses to read an SSL key not owned by the `postgres` user.
-5. **Seed `~/arm/.env`** from a bundled template: `ARM_SERVICE_TOKEN` (`openssl rand -hex 32`), `POSTGRES_PASSWORD` (`openssl rand -hex 24`), `PUID=$(id -u)`, `PGID=$(id -g)`, `CDROM_GID=$(stat -c %g /dev/sr0)` (falls back to `44` if no drive is present). Third-party API keys are left blank for the user to fill via the UI later.
-6. **Generate `~/arm/docker-compose.yml`** from a bundled template, emitting one `arm-ripper-srN` service block per detected drive (with the corresponding cert mounts). If no drives are detected, the stack still installs — only the ripper services are omitted — and a warning is printed.
-7. **Print next steps.** Install location, `cd ~/arm && docker compose up -d`, where to find the admin password once Backend boots (`docker compose logs arm-backend | grep "admin password"`), and how to import `arm-ca.crt` into a browser/OS trust store to clear cert warnings on the LAN.
+**Host layout:**
 
-`install.sh --start` runs `docker compose up -d` at the end; the default is "show me the commands" so the user can inspect the generated files before starting anything.
+```
+~/arm/
+  armctl                      small launcher that runs .armctl/current/armctl.sh; also linked onto the PATH
+  certs/ db/ raw/ media/ logs/ backups/ scripts/ iso-library/
+  ssh/                        offload profile only
+  .armctl/
+    .env                      secrets, pins, profile, detected values
+    host-overlay.yml          generated: storage locations, offload settings
+    lock                      held while an armctl command runs
+    releases/<tag>/           one unpacked bundle per installed release
+    current -> releases/<tag>
+```
 
-**Idempotent rerun.** Re-running `install.sh` is safe and recommended when adding drives, upgrading across major versions, or recovering from local edits:
+The folder must be named `arm`, because the template writes its paths as `./arm/...` and `armctl` runs Compose from the folder that contains `arm`. The location option therefore names where the `arm` folder goes: the default gives `~/arm`, and `--prefix /srv` gives `/srv/arm`.
 
-- **Existing `.env` is preserved.** Only `PUID`/`PGID`/`CDROM_GID` are re-derived from the host and overwritten if they drifted.
-- **Existing CA is preserved.** The CA is the one cert LAN clients have imported into their trust stores; regenerating it would force every browser, phone, and laptop to re-import. `install.sh --rotate-ca` is a separate, explicit subcommand that regenerates the CA + all leaves (with a confirmation prompt — the nuclear option for suspected CA key compromise).
-- **All leaf certs are regenerated every run**, signed by the existing CA. Leaves are disposable — LAN clients trust the CA, not the specific leaf, so new leaves are invisible across the network. This self-heals hand-edited / corrupted / stale leaves and picks up SAN changes (e.g. host LAN hostname changed, new drive added) without any special flag or branching in the installer. Running containers keep their in-memory cert until restart; the `docker compose up -d` the user runs next cycles anything whose config changed.
-- **Newly-detected drives** get a new `arm-ripper-srN` service block appended to the compose file and a matching leaf cert.
-- **Previously-removed drives** leave their service blocks intact (inert when the device is absent) — the user explicitly deletes them if they want. Their leaf certs also get regenerated on rerun, which is harmless.
+Folder permissions: `certs` and `.armctl` are 0700; `logs` is 2775 (setgid, group-writable). `raw` and `media` are created by the storage step and get 2775 only when they sit inside the `arm` folder; a location the user points at elsewhere keeps its own mode.
 
-**First-boot sequence** (after `docker compose up -d`):
+### The compose stack in production
+
+`armctl` always runs Compose with three files, in this order:
+
+1. `docker-compose.yml.example` from the bundle, byte-identical to the committed file.
+2. `docker-compose.release.yml`: adds `image:` for the services the template only builds (`arm-backend`, `arm-data-init`, `arm-ui`), using `ARM_IMAGE_PREFIX` and `ARM_IMAGE_TAG`.
+3. `host-overlay.yml`: generated per install.
+
+It also passes the project directory (the folder containing `arm`) and the `.env` path, and uses `up --no-build`.
+
+The ripper and transcode images are already variables in the template (`ARM_RIPPER_IMAGE`, `ARM_TRANSCODE_IMAGE`, `ARM_TRANSCODE_IMAGE_QSV`, `ARM_TRANSCODE_IMAGE_VAAPI`, `ARM_TRANSCODE_IMAGE_NVENC`). The installer writes them to `.env` from the prefix and tag. Variant tags follow `release.yml`: `arm-transcode:<tag>`, `arm-transcode:<tag>-intel`, `arm-transcode:<tag>-amd`.
+
+**Why this needs no translation.** A new environment variable, mount or setting added to the template reaches production on the next release with no further work, because production runs the template itself. One residual case: a brand-new service that dev builds from source needs one `image:` line in the release overlay. `deploy/tests/test-stack-contract.sh` fails if any service in the layered production config has no release image.
+
+**The host overlay** is generated by `armctl install` from the saved answers. It holds only:
+
+- **Storage locations**: the `/raw` and `/media` mounts on `arm-backend`, always written with the chosen locations (the defaults sit inside the install folder). The matching `ARM_HOST_RAW_PATH` and `ARM_HOST_MEDIA_PATH` go into `.env` so spawned containers mount the same places.
+- **Offload** (offload profile only): the published callback port for `arm-backend` (container port 8443) and the read-only mount of `~/arm/ssh` at `/home/arm/.ssh`.
+
+**`.env` values that are always explicit.** The template defaults `ARM_HOST_RAW_PATH`, `ARM_HOST_MEDIA_PATH`, `ARM_HOST_LOGS_PATH` and `ARM_HOST_CERTS_PATH` from `${PWD}`, which is the directory Compose was invoked from. `armctl` can be run from anywhere, so the installer always writes absolute values for these. The template sets `name: armv3`, so the project name and the default network (`armv3_default`) do not depend on the folder Compose runs from.
+
+### Install flow
+
+**Bootstrap (`install.sh`).**
+
+1. Refuses to run as root, and checks that `curl`, `tar` and `sha256sum` exist.
+2. Reads the location and release options and passes every other flag through.
+3. Works out the `arm` folder: `--prefix` names the folder it goes in (`--prefix /srv` gives `/srv/arm`; a prefix that already ends in `arm` is taken to be the folder itself), and the default is `~/arm`. It refuses an existing folder that has files in it but no `.armctl` folder, because ARM v3 installs fresh and does not convert an ARM v2 folder or an install made by the old v3 installer.
+4. Picks the release. From a checkout it packs a bundle from the checkout instead (see above). Otherwise it uses the named version, or the latest stable on the v3 line. A `--version` tag must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+5. Fetches the bundle and its checksum into a staging folder, verifies the checksum, rejects an archive with unsafe paths, and only then unpacks it under `.armctl/releases/<tag>/`, sets `current` and writes `armctl`. A failed bootstrap leaves the target location exactly as it was.
+6. Hands over to `armctl install` with the terminal attached (it reads `/dev/tty` when stdin is the script), so prompts work under a curl pipe.
+
+`--bundle <file>` (with `--version`; the `.sha256` file must sit beside it) uses a local bundle instead of a download. That is what the install drill uses.
+
+**`armctl install`, in eight stages**, in the order `deploy/install/flow.sh` runs them:
+
+1. **Profile**: full box, ripper-only or remote offload. It comes first because the answer is known before a possible restart of the command under the `docker` group (stage 2), and is carried across that restart so the question is not asked twice.
+2. **Host**: checks Docker (installed, version 24 or newer, compose plugin, running daemon, group membership) and fixes what it can with consent; it automates only Debian and Ubuntu. Also takes the lock, checks for `openssl` and creates the folder layout.
+3. **Storage**: asks for the raw and media locations, creates them, checks they are writable.
+4. **Remote transcode offload**: runs the offload walkthrough (`deploy/install/offload.sh`) for the offload profile; for any other profile it prints "not used by the <profile> profile".
+5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant.
+6. **Configuration**: writes `.env` (secrets generated once, ids and GPUs detected, release pinned, profile recorded, `ARM_TRANSCODE_CAPABLE` set from the profile) and the host overlay. Offers the NVIDIA toolkit on the full profile when an NVIDIA GPU is found, offers the udev rule, and offers the PATH link (`~/.local/bin` when it is on the PATH, otherwise `/usr/local/bin` with sudo).
+7. **Start**: runs the same path as `armctl up`, including the health wait. On by default; `--no-start` skips it.
+8. **Finish**: the offload verification table when relevant, then the summary: the URL (`https://localhost:8081`), the first-login command, the certificate-trust hint, the everyday commands and any steps that were skipped.
+
+**Re-running `armctl install`.** Secrets and the CA are kept. Earlier answers become the defaults, and a run with no terminal keeps them. Detected values (GPUs, group ids) are refreshed. The profile is remembered. This differs from dev, where `--ripper-only` applies per run, and the difference is deliberate: a non-developer should not have to repeat it on every command.
+
+**Flags.** `armctl install --help` lists them: `--profile`, `--raw-path`, `--media-path`, `--yes`, `--no-host-changes`, `--no-start`, `--rotate-ca`, `--image-prefix`, `--release-repo`, and the offload inputs. The bootstrap adds `--prefix`, `--version`, `--release-repo` and `--bundle` and passes the rest through. An unattended offload install can supply the inputs, but the commands pasted on the remote host stay manual. The run verifies each step and reports what is missing.
+
+### Lifecycle commands
+
+**`armctl up`** follows the same order as `setup-dev.sh up`, with pulling in place of building:
+
+1. **Pull** the images this host needs: the base transcode image unless the profile is ripper-only, the Intel or AMD variants only when that GPU is present, and no variants when transcodes are offloaded (`--no-pull` skips the pull). A failed pull stops here with the running stack untouched. A check that every needed image is present on the host follows, and stops the same way.
+2. **Guard**: refuses while a rip or transcode is active, unless `--force`.
+3. **Refresh** the detected GPUs in `.env`.
+4. **Back up** the database into `~/arm/backups/`, keeping the newest five. `--no-backup` skips it.
+5. **Remove** the spawned rippers and transcoders, and containers of retired services.
+6. **Start** from the pulled images, and recreate rippers if the backend kept running.
+7. **Wait** up to 90 seconds for the backend's health check, then print the URL.
+
+**`armctl upgrade [--version <tag>]`:**
+
+1. Picks the target: the latest stable v3, or the named version. If the install is already on it, it says so and stops. If `.env` and the `current` link name different releases (an upgrade stopped during the switch), it says what it found and runs the upgrade again to finish it, reusing the bundle that is already unpacked.
+2. Downloads, verifies and unpacks the new bundle beside the current one. Nothing live has changed yet.
+3. Hands over to the new release's `armctl`, which pulls the new images, runs the guard and takes the backup. Still nothing live has changed.
+4. Switches: first points `current` at the new release in one step (a new link renamed over the old one), then replaces `.env` with the candidate that records the new version and any new settings with their defaults. If `.env` cannot be replaced, `current` is put back and the install stays on the old release.
+5. Removes spawned containers, starts, recreates rippers, waits for health.
+
+The previous release's folder is kept for a manual rollback. Older ones are pruned after a successful upgrade.
+
+**`armctl down`** refuses while a rip or transcode is active, unless `--force`. Then it removes the spawned rippers and transcoders and stops the stack.
+
+**`armctl compose ...`** passes any Compose command through with the right files, `.env` and project directory. `armctl compose ps` and `armctl compose logs arm-backend` replace the bare `docker compose` forms, since typing `docker compose` in the install folder does not find the files.
+
+**Failure behavior.**
+
+- **Before the switch**, any failure (network, registry, checksum, active work, backup) leaves the running install exactly as it was, and the message says so.
+- **After the switch**, a failed start or health check is reported with the release the install is now on, a statement that it was not rolled back, the database backup taken in that run (or that none was taken), the folder where the previous release is kept, the command that shows the backend log, and that `armctl up` tries the start again once the cause is fixed. There is no automatic rollback, because database migrations cannot be reversed. See [the user Upgrading page](../../user/Upgrading.md#rolling-back).
+- **One at a time.** A lock in `.armctl/` stops two `armctl` runs overlapping. Without `flock` on the host, `armctl` warns and carries on unguarded.
+- **No terminal** never blocks on a prompt and reads nothing from stdin: defaults are taken, every yes/no question is answered "no", host changes are skipped unless `--yes` is given, and skipped steps are listed. An offload install with `--offload-host` and `--offload-backend-url` checks each walkthrough step once without waiting, and a step that fails is reported in the completion table. When `--yes` is given but `sudo` cannot run without a password, the udev rule is written to `.armctl/99-arm-no-automount.rules` with the three commands that install it, and the step is listed as skipped.
+
+The install drill, `devtools/install-drill.sh`, runs this path end to end against images built from a checkout. It is manual and refuses to run on a host that already has an ARM v3 stack.
+
+**First-boot sequence** (after `armctl up`):
 
 1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with a random password written to `/logs/first-boot.log` and printed to stdout.
 2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` with the printed password, is forced to change it.
@@ -301,18 +403,18 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 ## Update / upgrade
 
 - v3 images are tagged `docker.io/automaticrippingmachine/arm-<service>:v3.<x>.<y>`. Keeping the registry and namespace path from v2 so existing users don't have to follow a new identity.
-- Upgrade a minor version = `cd ~/arm && docker compose pull && docker compose up -d`. Backend runs migrations; DB schema moves forward.
-- Upgrade a major version = rerun `install.sh` to pick up any new service blocks or cert SANs the release requires, then `docker compose pull && docker compose up -d`.
+- Upgrade = `armctl upgrade` (see [§ Installer](#installer)). It pulls the new images, backs up the database and restarts the stack; the Backend runs migrations and the DB schema moves forward. A new service or setting reaches production through the template the release ships, so no separate major-version step exists.
 - **No rollback of DB schema.** Alembic `downgrade` is not supported past minor versions — back up the DB if paranoid.
 
 ## Uninstall
 
 ```bash
-cd ~/arm && docker compose down
+armctl down
 rm -rf ~/arm
+docker volume rm armv3_arm-data
 ```
 
-That's it. No systemd units, no distro integration, no state anywhere else on the host.
+The database folder may need `sudo` to remove. If a PATH link was made, remove `~/.local/bin/armctl` or `/usr/local/bin/armctl`. No systemd units and no distro integration; the optional udev rule is the only host-wide file, and `docs/user/Uninstall.md` says how to remove it.
 
 ## Backup
 
@@ -320,11 +422,11 @@ Four things to back up, in priority order:
 
 1. **`~/arm/certs/arm-ca.key`.** Unique-per-install and unrecoverable. If lost, the user has to rotate the CA and re-import on every LAN client — recoverable but annoying.
 2. **Postgres dump.** `pg_dump` from a cron against the `armv3-db` container; ARM doesn't manage this. Contains plaintext secrets — store the dump somewhere you'd trust with a password export.
-3. **`~/arm/.env`.** Useful for reproducing a deployment quickly; losing it just means regenerating `ARM_SERVICE_TOKEN` and the DB password (which then requires restoring the Postgres dump with matching credentials, or renaming the DB user).
+3. **`~/arm/.armctl/.env`.** Useful for reproducing a deployment quickly; losing it just means regenerating `ARM_SERVICE_TOKEN` and the DB password (which then requires restoring the Postgres dump with matching credentials, or renaming the DB user).
 4. **`~/arm/raw` and `~/arm/media`.** User's responsibility; these are large and the user knows their own backup strategy.
 
-`~/arm/docker-compose.yml` is regeneratable by rerunning `install.sh` against the same `.env` and `certs/`, so it doesn't strictly need a backup.
+The release bundle and the host overlay under `~/arm/.armctl/` are regenerated by `armctl install` and `armctl upgrade`, so they don't strictly need a backup. `armctl up` and `armctl upgrade` also leave database backups in `~/arm/backups/`.
 
 ## Platform-specific notes
 
-- **Bare-metal Docker on Linux**: the one supported path. Install via `install.sh` and run `docker compose up -d`; all docs default to this. NAS-appliance GUIs (Unraid/Synology) are out of scope for v3.0 — see "Explicitly NOT supported" above.
+- **Bare-metal Docker on Linux**: the one supported path. Install via `install.sh` and run `armctl up`; all docs default to this. NAS-appliance GUIs (Unraid/Synology) are out of scope for v3.0 — see "Explicitly NOT supported" above.

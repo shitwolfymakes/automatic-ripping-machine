@@ -197,8 +197,9 @@ class Settings(BaseSettings):
     ARM_RIPPER_CERTS_PATH: str = ""
 
     # --- Phase 7b: GPU inventory --------------------------------------------
-    # JSON array of GPUs detected host-side at install time (install.sh /
-    # setup-dev.sh enumerate /dev/dri + nvidia-smi and write this). The backend
+    # JSON array of GPUs detected host-side at install time (`armctl install` /
+    # `devtools/setup-dev.sh`, both via deploy/lib/detect.sh, enumerate /dev/dri
+    # + nvidia-smi and write this). The backend
     # parses it at lifespan startup to fill the `gpus` table — it does NOT probe
     # hardware itself. Empty/absent => CPU-only transcoding. See gpu_probe.py
     # for the schema. Re-run the installer after a GPU/driver change.

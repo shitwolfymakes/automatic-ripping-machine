@@ -17,7 +17,7 @@ All schemas are defined as Pydantic models in `packages/arm_common/schemas/` and
 
 ## Authentication between services
 
-Internal services (Ripper, Transcode) authenticate with a **shared service token** passed as `Authorization: Bearer <token>`. The token is generated once at install time (`openssl rand -hex 32`), stored in `~/arm/.env`, and injected into Backend, Ripper, and Transcode containers via Compose as `ARM_SERVICE_TOKEN`. Every container reads it from its own environment; there is no DB copy.
+Internal services (Ripper, Transcode) authenticate with a **shared service token** passed as `Authorization: Bearer <token>`. The token is generated once at install time (`openssl rand -hex 32`), stored in `~/arm/.armctl/.env`, and injected into Backend, Ripper, and Transcode containers via Compose as `ARM_SERVICE_TOKEN`. Every container reads it from its own environment; there is no DB copy.
 
 The UI authenticates as a logged-in user with a JWT in `Authorization: Bearer <jwt>` on REST and via a first-message `{"op": "auth", "token": "<jwt>"}` handshake on WS. See [05-cross-cutting.md](05-cross-cutting.md) for the full auth model.
 
