@@ -187,6 +187,24 @@ describe('Layout guest gating', () => {
 		expect(screen.getByTitle('Quick actions')).toBeInTheDocument();
 	});
 
+	it('quick-actions flyout offers Settings but no Import while the import flag is off', async () => {
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		await fireEvent.click(screen.getByTitle('Quick actions'));
+		expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
+		expect(screen.queryByRole('menuitem', { name: 'Import' })).not.toBeInTheDocument();
+	});
+
+	it('does not mount the Import wizard while the import flag is off', async () => {
+		const { showImportWizard } = await import('$lib/stores/importWizard');
+		showImportWizard.set(true);
+		try {
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			expect(screen.queryByRole('heading', { name: 'Import' })).not.toBeInTheDocument();
+		} finally {
+			showImportWizard.set(false);
+		}
+	});
+
 	it('guest sees a Login button instead of the sign-out icon', async () => {
 		const auth = (await import('$lib/stores/auth')) as unknown as {
 			__setSession: (kind: 'admin' | 'guest') => void;

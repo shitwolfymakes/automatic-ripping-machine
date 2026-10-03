@@ -14,8 +14,8 @@
 
 	let { selectedJobs, jobsStats, bulkBusy, onaction }: Props = $props();
 
-	// v3 only supports bulk DELETE (bulkPurgeJobs is MISSING), so the purge
-	// menu items are gone. Every remaining action routes through bulkDeleteJobs.
+	// v3 only supports bulk DELETE (no bulk purge endpoint). Every action
+	// routes through bulkDeleteJobs.
 	type BulkItem = {
 		action: 'delete';
 		label: string;

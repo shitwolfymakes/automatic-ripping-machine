@@ -99,8 +99,10 @@ def test_inbox_dismiss_all(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.post("/api/notifications/inbox/dismiss-all", headers=_auth(token))
-    assert r.json()["updated"] == 1  # only nin_1 was unseen
-    assert all(row.seen for row in db.rows["notification_inbox"])
+    assert r.json()["updated"] == 2  # nin_1 (unseen) and nin_2 (seen); nin_3 was already cleared
+    rows = {row.id: row for row in db.rows["notification_inbox"]}
+    assert all(row.seen and row.cleared for row in rows.values())
+    assert rows["nin_1"].seen_at is not None and rows["nin_1"].cleared_at is not None
 
 
 def test_inbox_purge(signing_key: bytes) -> None:

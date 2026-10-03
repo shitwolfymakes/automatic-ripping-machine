@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createRawSnippet } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
@@ -56,6 +57,14 @@ afterEach(() => {
 });
 
 describe('SchemaConfigForm', () => {
+	it('renders the beforeSave snippet above the Save button', () => {
+		const beforeSave = createRawSnippet(() => ({ render: () => '<div data-testid="before-save">extra</div>' }));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG, beforeSave } });
+		const extra = screen.getByTestId('before-save');
+		const save = screen.getByRole('button', { name: 'Save' });
+		expect(extra.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('renders a control per editable field, seeded from config', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		expect((screen.getByRole('combobox', { name: /provider/i }) as HTMLSelectElement).value).toBe('tmdb');

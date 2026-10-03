@@ -8,7 +8,10 @@ export const features = {
 	settings: true,
 	transcoder: true, // additionally gated at runtime by transcoderEnabled
 	files: true,
-	setup: false // setup-status/complete API MISSING in v3
+	setup: false, // setup-status/complete API MISSING in v3
+	// In-screen flags (not in ROUTE_FLAGS): they hide entry points inside a screen.
+	import: false, // Import wizard: ingress, folder scan and ISO create/scan APIs MISSING in v3
+	maintenance: false // Files orphan folders + transcoder job cleanup: APIs MISSING in v3
 } as const;
 
 const ROUTE_FLAGS: Record<string, keyof typeof features> = {

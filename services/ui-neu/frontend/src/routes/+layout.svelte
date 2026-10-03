@@ -16,7 +16,7 @@
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/uiPrefs';
-	import { isScreenEnabled } from '$lib/features';
+	import { features, isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
@@ -349,25 +349,27 @@
 								</button>
 							{/snippet}
 							{#snippet children({ close })}
-								<FlyoutItem
-									onclick={() => {
-										handleQuickAction('import-folder');
-										close();
-									}}
-								>
-									{#snippet icon()}
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-											/>
-										</svg>
-									{/snippet}
-									Import
-								</FlyoutItem>
-								<FlyoutDivider />
+								{#if features.import}
+									<FlyoutItem
+										onclick={() => {
+											handleQuickAction('import-folder');
+											close();
+										}}
+									>
+										{#snippet icon()}
+											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+												/>
+											</svg>
+										{/snippet}
+										Import
+									</FlyoutItem>
+									<FlyoutDivider />
+								{/if}
 								<FlyoutItem
 									onclick={() => {
 										handleQuickAction('settings');
@@ -498,13 +500,15 @@
 {/if}
 
 <!-- Folder import wizard (global, triggered from gear menu) -->
-<ImportWizard
-	open={$showImportWizard}
-	onclose={() => showImportWizard.set(false)}
-	oncreated={() => {
-		showImportWizard.set(false);
-	}}
-/>
+{#if features.import}
+	<ImportWizard
+		open={$showImportWizard}
+		onclose={() => showImportWizard.set(false)}
+		oncreated={() => {
+			showImportWizard.set(false);
+		}}
+	/>
+{/if}
 
 <style>
 	/* Sidebar shell: the one arrangement rule the block vocabulary doesn't

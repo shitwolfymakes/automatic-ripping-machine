@@ -1,16 +1,6 @@
 import { apiFetch } from './client';
 import type { SystemDiagnosticsResponse } from '$lib/types/api.gen';
 
-export interface JobStats {
-	by_status: Record<string, number>;
-	by_type: Record<string, number>;
-	total: number;
-}
-
-export function fetchJobStats(): Promise<JobStats> {
-	return apiFetch<JobStats>('/api/system/job-stats');
-}
-
 export interface PreflightCheck {
 	name: string;
 	success: boolean;

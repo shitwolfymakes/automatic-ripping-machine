@@ -19,9 +19,7 @@ import {
 	fetchTranscoderWorkers,
 	fetchTranscoderJobs,
 	retryTranscoderJob,
-	deleteTranscoderJob,
-	retranscodeTranscoderJob,
-	listHandbrakePresets
+	deleteTranscoderJob
 } from '../api/transcoder';
 
 const mockGet = vi.mocked(get);
@@ -79,15 +77,5 @@ describe('deleteTranscoderJob', () => {
 	it('DELETEs the task with a string id', async () => {
 		await deleteTranscoderJob('t-3');
 		expect(mockDel).toHaveBeenCalledWith('/api/transcodes/t-3');
-	});
-});
-
-describe('MISSING in v3', () => {
-	it('retranscodeTranscoderJob rejects (no v3 endpoint; use retry)', async () => {
-		await expect(retranscodeTranscoderJob('t-3')).rejects.toThrow(/not yet available in v3/);
-	});
-
-	it('listHandbrakePresets rejects (no v3 endpoint)', async () => {
-		await expect(listHandbrakePresets()).rejects.toThrow(/not yet available in v3/);
 	});
 });

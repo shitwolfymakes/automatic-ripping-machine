@@ -77,8 +77,7 @@ vi.mock('$lib/api/transcoder', () => ({
 		])
 	),
 	retryTranscoderJob: vi.fn(),
-	deleteTranscoderJob: vi.fn(),
-	retranscodeTranscoderJob: vi.fn()
+	deleteTranscoderJob: vi.fn()
 }));
 
 vi.mock('$lib/api/gpus', () => ({

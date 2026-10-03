@@ -261,16 +261,6 @@ export function fetchNamingVariables(): Promise<NamingVariablesResponse> {
 	return apiFetch<NamingVariablesResponse>('/api/naming/variables');
 }
 
-// ---------------------------------------------------------------------------
-// MISSING in v3 — no endpoint exists. Screens are feature-flagged OFF; the
-// stub rejects before any fetch so a hidden path fails loudly. Function shapes
-// are preserved so callers still compile. (P1/P2 backlog.)
-// ---------------------------------------------------------------------------
-
-export async function cancelWaitingJob(_id: string): Promise<never> {
-	notAvailable('Cancel waiting job');
-}
-
 // Timed review gate: operator Start for a disc held in awaiting_review.
 // Transitions AWAITING_REVIEW -> RIPPING and unblocks the parked ripper.
 export function startWaitingJob(id: string): Promise<JobView> {
@@ -283,33 +273,10 @@ export function pauseWaitingJob(id: string, paused = true): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/review-pause?paused=${paused}`, { method: 'POST' });
 }
 
-export async function fixJobPermissions(_id: string): Promise<never> {
-	notAvailable('Fix job permissions');
-}
-
-export async function skipAndFinalize(_jobId: string): Promise<never> {
-	notAvailable('Skip and finalize');
-}
-
-export async function forceComplete(_jobId: string): Promise<never> {
-	notAvailable('Force complete');
-}
-
-export async function submitToCrcDb(_id: string): Promise<never> {
-	notAvailable('Submit to CRC database');
-}
-
-export async function fetchCrcLookup(_jobId: string): Promise<never> {
-	notAvailable('CRC lookup');
-}
-
-export async function retranscodeJob(_id: string): Promise<never> {
-	notAvailable('Re-transcode job');
-}
-
-export async function toggleMultiTitle(_jobId: string, _enabled: boolean): Promise<never> {
-	notAvailable('Multi-title toggle');
-}
+// ---------------------------------------------------------------------------
+// MISSING in v3: no TVDB matching endpoint. TvdbMatch/EpisodeMatch are not
+// mounted yet; these reject before any fetch so a hidden path fails loudly.
+// ---------------------------------------------------------------------------
 
 export async function tvdbMatch(
 	_jobId: string,
@@ -326,39 +293,4 @@ export async function tvdbMatch(
 
 export async function fetchTvdbEpisodes(_jobId: string, _season: number): Promise<never> {
 	notAvailable('TVDB episode listing');
-}
-
-export async function updateJobTranscodeConfig(_jobId: string, _overrides: Record<string, unknown>): Promise<never> {
-	notAvailable('Per-job transcode config');
-}
-
-export async function updateJobNaming(
-	_jobId: string,
-	_data: { title_pattern_override?: string | null; folder_pattern_override?: string | null }
-): Promise<never> {
-	notAvailable('Per-job naming overrides');
-}
-
-export async function bulkPurgeJobs(_params: { job_ids?: string[]; status?: string }): Promise<never> {
-	notAvailable('Bulk purge jobs');
-}
-
-export async function fetchJobStats(_params?: {
-	search?: string;
-	video_type?: string;
-	disctype?: string;
-	days?: number;
-}): Promise<never> {
-	notAvailable('Job stats');
-}
-
-export async function fetchJobProgress(_id: string): Promise<never> {
-	notAvailable('Job progress polling');
-}
-
-export async function setJobTracks(
-	_jobId: string,
-	_tracks: { track_number: string; title: string; length_ms: number | null }[]
-): Promise<never> {
-	notAvailable('Replace job tracks');
 }
