@@ -72,8 +72,17 @@ bootstrap_resolve_tag() {
 # Download (or copy) the bundle and its checksum, verify, and unpack into
 # <dest>. On any failure <dest> is left exactly as it was: the bundle is
 # unpacked beside it first and moved into place only when complete.
+# A tag becomes a folder name (and is removed with rm -rf), so it must not be
+# able to name another folder.
+bootstrap_check_tag() {
+    if [[ ! "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+        bootstrap_err "'$1' is not a valid release tag (letters, digits, '.', '_' and '-' only, not starting with a punctuation mark). Nothing was changed."
+    fi
+}
+
 bootstrap_fetch_bundle() {
     local tag="$1" dest="$2" local_bundle="${3:-}" tmp archive base want got
+    bootstrap_check_tag "${tag}"
     tmp="$(mktemp -d)"
     archive="${tmp}/bundle.tar.gz"
     if [[ -n "${local_bundle}" ]]; then
@@ -171,8 +180,8 @@ bootstrap_main() {
         case "$1" in
             --prefix)         [[ $# -ge 2 ]] || bootstrap_err "--prefix needs a folder"; prefix="$2"; prefix_given=1; shift 2 ;;
             --prefix=*)       prefix="${1#*=}"; prefix_given=1; shift ;;
-            --version)        [[ $# -ge 2 ]] || bootstrap_err "--version needs a release tag"; version="$2"; shift 2 ;;
-            --version=*)      version="${1#*=}"; shift ;;
+            --version)        [[ $# -ge 2 ]] || bootstrap_err "--version needs a release tag"; bootstrap_check_tag "$2"; version="$2"; shift 2 ;;
+            --version=*)      bootstrap_check_tag "${1#*=}"; version="${1#*=}"; shift ;;
             --bundle)         [[ $# -ge 2 ]] || bootstrap_err "--bundle needs a file"; bundle="$2"; shift 2 ;;
             --bundle=*)       bundle="${1#*=}"; shift ;;
             --release-repo)   [[ $# -ge 2 ]] || bootstrap_err "--release-repo needs owner/repo"; ARM_RELEASE_REPO="$2"; pass+=(--release-repo "$2"); shift 2 ;;

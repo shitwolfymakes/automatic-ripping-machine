@@ -88,6 +88,7 @@ backup_abort() {
 # db service isn't running (fresh install: nothing to lose) or with --no-backup.
 # A failed, empty or truncated dump aborts the deploy.
 backup_db() {
+    BACKUP_FILE=""
     if [[ "${NO_BACKUP}" -eq 1 ]]; then
         arm_say "--no-backup: skipping the pre-deploy database backup"
         return 0
@@ -131,6 +132,7 @@ backup_db() {
     fi
     mv "${tmp}" "${file}" || backup_abort "cannot move ${tmp} into place"
     BACKUP_TMP=""
+    BACKUP_FILE="${file}"
     trap - EXIT INT TERM
     arm_say "database backup OK: ${file} (${size} bytes)"
     prune_backups "${dir}"

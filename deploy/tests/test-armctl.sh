@@ -567,7 +567,7 @@ out="$(upgrade_case upg-bundle v3.2.0 ok --bundle /tmp/b.tar.gz)"
 has "upgrade: --bundle without --version is refused" "--bundle needs --version" "$out"
 
 # --- upgrade: the new release applies it ----------------------------------------------
-# apply_case <name> <FAIL_AT step or ''>
+# apply_case <name> <FAIL_AT step or ''> [<setup code> [apply-upgrade args...]]
 apply_case() {
     (
         ARM_DIR="${TMPROOT}/$1/arm"; state="${ARM_DIR}/.armctl"
@@ -577,7 +577,7 @@ apply_case() {
         printf 'ARMCTL_PROFILE=full\nARM_IMAGE_PREFIX=reg\nARM_IMAGE_TAG=v3.1.0\nARM_RIPPER_IMAGE=reg/arm-ripper:v3.1.0\n' > "${ENV_FILE}"
         chmod 600 "${ENV_FILE}"
         ARMCTL_RELEASE_DIR="${REL}"; IMAGE_PREFIX_ARG=""
-        fail_at="$2"
+        fail_at="$2"; extra="${3:-}"; extra_args=("${@:4}")
         log_file="${TMPROOT}/apply.log"; : > "${log_file}"
         for fn in "${STEPS[@]}"; do
             eval "${fn}() { echo ${fn} >> \"\${log_file}\"; if [[ \"\${fail_at}\" == ${fn} ]]; then exit 1; fi; }"
@@ -586,7 +586,8 @@ apply_case() {
         published_url() { :; }
         compose() { echo "compose $*" >> "${log_file}"; }
         HEALTH_RESULT="backend healthy"
-        rc=0; ( cmd_apply_upgrade --from v3.1.0 --to v3.2.0 ) > "${TMPROOT}/apply.out" 2>&1 || rc=$?
+        eval "${extra}"
+        rc=0; ( cmd_apply_upgrade --from v3.1.0 --to v3.2.0 "${extra_args[@]+"${extra_args[@]}"}" ) > "${TMPROOT}/apply.out" 2>&1 || rc=$?
         {
             echo "rc=${rc}"
             echo "TAG=$(grep '^ARM_IMAGE_TAG=' "${ARM_STATE_DIR}/.env" | cut -d= -f2)"
@@ -622,6 +623,32 @@ has "apply: the install stays on the new release" "TAG=v3.2.0;" "$out"
 has "apply: the user is told it was not rolled back, and why" "not rolled back" "$out"
 has "apply: the previous release is still there for a manual rollback" "RELEASES=v3.0.0 v3.1.0 v3.2.0;" "$out"
 has "apply: the user is told where the previous release is" "releases/v3.1.0" "$out"
+
+# A failed start after the switch is reported like an unhealthy backend.
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+out="$(apply_case apply-start-fails '' 'go_live() { echo go_live >> "${log_file}"; exit 1; }')"
+has "apply: a failed start after the switch is an error" "rc=1;" "$out"
+has "apply: a failed start is reported as not rolled back" "not rolled back" "$out"
+has "apply: a failed start names the previous release" "releases/v3.1.0" "$out"
+has "apply: a failed start stays on the new release" "TAG=v3.2.0;RIPPER=reg/arm-ripper:v3.2.0;CURRENT=releases/v3.2.0;" "$out"
+has "apply: a failed start prunes nothing" "RELEASES=v3.0.0 v3.1.0 v3.2.0;" "$out"
+lacks "apply: a failed start does not wait for the backend" "wait_for_backend" "$out"
+
+# The backup named in the report is the one taken in this run, never a stale one.
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+stale='mkdir -p "${ARM_DIR}/backups"; : > "${ARM_DIR}/backups/pg-backup-20200101T000000Z.sql.gz"'
+out="$(apply_case apply-nobackup wait_for_backend "${stale}" --no-backup)"
+has "apply: --no-backup, the report says no backup was taken" "No database backup was taken (--no-backup)" "$out"
+lacks "apply: --no-backup, a stale backup is not named" "pg-backup-20200101T000000Z" "$out"
+out="$(apply_case apply-ownbackup wait_for_backend "${stale}; backup_db() { echo backup_db >> \"\${log_file}\"; BACKUP_FILE=\"\${ARM_DIR}/backups/pg-backup-20260101T000000Z.sql.gz\"; }")"
+has "apply: the report names the backup taken in this run" "Database backup from before the switch: ${TMPROOT}/apply-ownbackup/arm/backups/pg-backup-20260101T000000Z.sql.gz" "$out"
+lacks "apply: the report does not name the stale backup" "pg-backup-20200101T000000Z" "$out"
+
+# --version becomes a folder name, so it must not name another folder.
+out="$(upgrade_case upg-badver v3.2.0 ok --version ../.. --bundle /tmp/b.tar.gz)"
+has "upgrade: a path-like --version is refused" "is not a valid release tag" "$out"
+has "upgrade: a path-like --version exits 2" "rc=2" "$out"
+lacks "upgrade: a path-like --version fetches nothing" "fetch " "$out"
 
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?

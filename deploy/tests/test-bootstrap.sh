@@ -73,6 +73,21 @@ archive="$(bash "${DEPLOY}/build-bundle.sh" v3.9.9 "${TMP}/out")"
 check "a good bundle is unpacked" "yes" "$( [[ -x "${TMP}/rel/v3.9.9/armctl.sh" && -f "${TMP}/rel/v3.9.9/lib/common.sh" ]] && echo yes || echo no )"
 check "no partial folder is left behind" "no" "$( [[ -e "${TMP}/rel/v3.9.9.partial" ]] && echo yes || echo no )"
 
+# A tag becomes a folder name; one that could name another folder is refused
+# before anything is removed or written.
+mkdir -p "${TMP}/trav/a/b"; echo keep > "${TMP}/trav/marker"
+for badtag in '../..' 'a/b' '.hidden' ''; do
+    rc=0; out="$( (bootstrap_fetch_bundle "${badtag}" "${TMP}/trav/a/b/${badtag}" "${archive}") 2>&1)" || rc=$?
+    check "tag '${badtag}' is refused" "1" "$rc"
+    has "tag '${badtag}': the refusal says nothing was changed" "Nothing was changed" "${out}"
+    check "tag '${badtag}': nothing was removed" "keep" "$(cat "${TMP}/trav/marker" 2>/dev/null)"
+done
+for oktag in drill v3.1.0-rc1; do
+    rc=0; ( bootstrap_fetch_bundle "${oktag}" "${TMP}/rel/${oktag}" "${archive}" ) >/dev/null 2>&1 || rc=$?
+    check "tag '${oktag}' is accepted" "0" "$rc"
+    check "tag '${oktag}' is unpacked" "yes" "$( [[ -x "${TMP}/rel/${oktag}/armctl.sh" ]] && echo yes || echo no )"
+done
+
 mkdir -p "${TMP}/bad"; cp "${archive}" "${TMP}/bad/b.tar.gz"
 echo "0000000000000000000000000000000000000000000000000000000000000000  b.tar.gz" > "${TMP}/bad/b.tar.gz.sha256"
 rc=0; out="$( (bootstrap_fetch_bundle v3.9.9 "${TMP}/rel/tampered" "${TMP}/bad/b.tar.gz") 2>&1)" || rc=$?

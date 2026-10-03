@@ -299,16 +299,15 @@ prune_releases() {
 }
 
 after_switch_failure() {
-    local from="$1" to="$2" f newest=""
-    for f in "${ARM_DIR}/backups"/pg-backup-*.sql.gz; do
-        if [[ -f "${f}" ]]; then
-            newest="${f}"
-        fi
-    done
-    arm_err "the stack was switched to ${to}, but the backend did not become healthy."
+    local from="$1" to="$2"
+    arm_err "the stack was switched to ${to}, but it did not start cleanly or the backend did not become healthy."
     arm_sub "The install is now on ${to}. It was not rolled back, because database migrations cannot be reversed."
-    if [[ -n "${newest}" ]]; then
-        arm_sub "Database backup from before the switch: ${newest}"
+    if [[ -n "${BACKUP_FILE:-}" ]]; then
+        arm_sub "Database backup from before the switch: ${BACKUP_FILE}"
+    elif [[ "${NO_BACKUP}" -eq 1 ]]; then
+        arm_sub "No database backup was taken (--no-backup)."
+    else
+        arm_sub "No database backup was taken in this run (the database was not running)."
     fi
     arm_sub "Previous release kept at: ${ARM_STATE_DIR}/releases/${from}"
     arm_sub "Logs: ${ARMCTL_CMD} compose logs ${BACKEND_SERVICE}"
@@ -323,6 +322,9 @@ cmd_upgrade() {
         case "$1" in
             --version)
                 if [[ $# -lt 2 ]]; then arm_err "--version needs a release tag"; exit 2; fi
+                if [[ ! "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+                    arm_err "'$2' is not a valid release tag. Nothing was changed."; exit 2
+                fi
                 version="$2"; shift 2 ;;
             --bundle)
                 if [[ $# -lt 2 ]]; then arm_err "--bundle needs a file"; exit 2; fi
@@ -410,8 +412,7 @@ cmd_apply_upgrade() {
     fi
     arm_say "switched to ${to}"
 
-    go_live
-    if ! ( finish_up ); then
+    if ! ( go_live ) || ! ( finish_up ); then
         after_switch_failure "${from}" "${to}"
         exit 1
     fi
