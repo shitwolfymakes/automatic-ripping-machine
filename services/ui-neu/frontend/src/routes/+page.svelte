@@ -8,6 +8,7 @@
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
 	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';
+	import IsoPreparingRow from '$lib/components/IsoPreparingRow.svelte';
 	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
 	import JobRow from '$lib/components/JobRow.svelte';
 	import TranscodeCard from '$lib/components/TranscodeCard.svelte';
@@ -62,6 +63,7 @@
 		}
 	});
 
+	let preparingRips = $derived(dash.preparing ?? []);
 	let scanningJobs = $derived(activeJobs.filter((j: JobView) => j.status?.toLowerCase() === 'created'));
 	let waitingJobs = $derived(
 		activeJobs.filter((j: JobView) => {
@@ -284,10 +286,31 @@
 							<DiscReviewWidget
 								{job}
 								driveNames={dash.drive_names}
+								isoSources={dash.iso_sources}
+								isoSourceKinds={dash.iso_source_kinds}
 								paused={!dash.ripping_enabled}
 								onrefresh={refreshDashboard}
 								ondismiss={() => dismissJob(job.id)}
 							/>
+						</div>
+					{/each}
+				</div>
+			</SectionFrame>
+		</section>
+	{/if}
+
+	<!-- Preparing: ISO rips scanning / unpacking their image, no job yet -->
+	{#if preparingRips.length > 0}
+		<section in:fade={fadeIn} out:fade={fadeOut}>
+			<SectionFrame
+				variant="full"
+				accent="var(--color-accent-4)"
+				label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
+			>
+				<div class="space-y-2">
+					{#each preparingRips as prepare (prepare.drive_id)}
+						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
+							<IsoPreparingRow {prepare} />
 						</div>
 					{/each}
 				</div>
@@ -306,7 +329,11 @@
 				<div class="space-y-2">
 					{#each scanningJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow {job} />
+							<ActiveJobRow
+								{job}
+								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
+								isoKind={job.drive_id ? (dash.iso_source_kinds?.[job.drive_id] ?? 'iso') : 'iso'}
+							/>
 						</div>
 					{/each}
 				</div>
@@ -329,6 +356,8 @@
 								{job}
 								progress={ripProgress.value[job.id]?.progress_pct ?? null}
 								eta={ripProgress.value[job.id]?.eta_seconds ?? null}
+								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
+								isoKind={job.drive_id ? (dash.iso_source_kinds?.[job.drive_id] ?? 'iso') : 'iso'}
 							/>
 						</div>
 					{/each}
@@ -376,7 +405,7 @@
 	{/if}
 
 	<!-- Idle state -->
-	{#if pageReady && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
+	{#if pageReady && preparingRips.length === 0 && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
 		<div in:fade={fadeIn}>
 			<EmptyDashboardPanel
 				drivesOnline={dash.drives_online}

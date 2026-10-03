@@ -12,7 +12,7 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.drive_scanner import PruneUnavailable, _tunables
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
-from arm_common import Drive, DriveIdentityKind, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
+from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
 from arm_common.enums import TERMINAL_JOB_STATUSES
 from arm_common.models.user import ADMIN_ROLE
 from arm_common.schemas import (
@@ -59,11 +59,17 @@ def _to_view(drive: Drive, jobs_for_drive: list[Job]) -> DriveView:
 
 @router.get("", response_model=list[DriveView])
 async def list_drives(
+    include_retired: bool = Query(False, description="Include retired (one-shot ISO rip) drive rows."),
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> list[DriveView]:
     result = await session.execute(select(Drive).order_by(col(Drive.created_at).asc()))
     drives = list(result.scalars().all())
+    if not include_retired:
+        # Filtered in Python, not `col(Drive.lifecycle) != DriveLifecycle.RETIRED` —
+        # FakeSession (tier-1 tests) only matches `==`/`in_`/`lt`/`gt` clauses on
+        # the statement AST, so a `!=` filter would be misread as equality there.
+        drives = [d for d in drives if d.lifecycle is not DriveLifecycle.RETIRED]
     # Fetch all jobs and group in Python — FakeSession cannot evaluate SQL GROUP BY.
     jobs = list((await session.execute(select(Job))).scalars().all())
     jobs_by_drive: dict[str, list[Job]] = {}
@@ -84,8 +90,18 @@ async def drive_diagnostic(
     """ "Look for issues": every drive row judged against the lifecycle model,
     plus the health of the parts that make the model work (scanner, ripper
     manager, the host's by-id mount). Never 503s — a missing subsystem is
-    itself a finding."""
-    drives = list((await db.execute(select(Drive).order_by(col(Drive.created_at).asc()))).scalars().all())
+    itself a finding. Virtual (ISO) drives are excluded entirely: they have
+    no scanner/by-id/container health to report, and the lifecycle-else
+    branch below ("ignored") assumes only an optical row can be here."""
+    drives = list(
+        (
+            await db.execute(
+                select(Drive).where(col(Drive.kind) == DriveKind.OPTICAL).order_by(col(Drive.created_at).asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     now = datetime.now(timezone.utc)
     scanner = getattr(request.app.state, "drive_scanner", None)
     manager = getattr(request.app.state, "ripper_manager", None)
@@ -202,7 +218,9 @@ async def rescan_drives(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"cannot remove missing drives: {exc}"
         ) from exc
-    drives = list((await db.execute(select(Drive))).scalars().all())
+    # Online/stale counts are an optical-drive heartbeat view; virtual (ISO)
+    # rows never heartbeat and would only ever land in "stale".
+    drives = list((await db.execute(select(Drive).where(col(Drive.kind) == DriveKind.OPTICAL))).scalars().all())
     now = datetime.now(timezone.utc)
     online = 0
     stale = 0
@@ -233,6 +251,7 @@ async def update_drive(
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    _require_optical(drive, "update")
 
     fields = req.model_dump(exclude_unset=True)
 
@@ -264,6 +283,7 @@ async def delete_drive(
     drive = (await db.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
+    _require_optical(drive, "delete")
     if drive.lifecycle is DriveLifecycle.ENROLLED:
         # An enrolled row owns a ripper container; deleting it here would
         # silently orphan that container. unenroll (which stops/removes it)
@@ -298,6 +318,13 @@ async def _load_drive(db: AsyncSession, drive_id: str) -> Drive:
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {drive_id}")
     return drive
+
+
+def _require_optical(drive: Drive, op: str) -> None:
+    """Virtual (ISO) drives are a one-shot rip row, not an operator-managed
+    piece of hardware: none of the lifecycle/tuning endpoints apply to them."""
+    if drive.kind != DriveKind.OPTICAL:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"cannot {op} an ISO rip drive")
 
 
 def _require_lifecycle(drive: Drive, op: str, *allowed: DriveLifecycle) -> None:
@@ -355,6 +382,7 @@ async def enroll_drive(
     it to finish and commit, instead of reading + clobbering a stale row."""
     async with _drive_lock(request, drive_id):
         drive = await _load_drive(db, drive_id)
+        _require_optical(drive, "enroll")
         manager = _manager(request)
         _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
         if not drive.present:
@@ -391,6 +419,7 @@ async def ignore_drive(
     """detected -> ignored: "not ARM's". Persisted so the scanner never re-nags,
     and never pruned."""
     drive = await _load_drive(db, drive_id)
+    _require_optical(drive, "ignore")
     _require_lifecycle(drive, "ignore", DriveLifecycle.DETECTED)
     drive.lifecycle = DriveLifecycle.IGNORED
     db.add(drive)
@@ -406,6 +435,7 @@ async def unignore_drive(
     db: AsyncSession = Depends(get_session),
 ) -> DriveView:
     drive = await _load_drive(db, drive_id)
+    _require_optical(drive, "unignore")
     _require_lifecycle(drive, "unignore", DriveLifecycle.IGNORED)
     drive.lifecycle = DriveLifecycle.DETECTED
     db.add(drive)
@@ -432,6 +462,7 @@ async def unenroll_drive(
     Serialized per-drive (see `_drive_lock`) for the same reason as enroll."""
     async with _drive_lock(request, drive_id):
         drive = await _load_drive(db, drive_id)
+        _require_optical(drive, "unenroll")
         manager = _manager(request)
         _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
         ripping = (

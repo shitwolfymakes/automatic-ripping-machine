@@ -3,11 +3,18 @@ import type { DriveView } from '$lib/types/api.gen';
 export const DETACHED_LABEL = '○ detached: reconnect the drive';
 export const NO_SERIAL_LABEL = 'no serial, identified by port';
 
-export function partitionDrives(drives: DriveView[]): {
+// Settings > Drives lists optical drives only (spec 7.5); an in-flight ISO
+// rip is a virtual drive and never shows there.
+export function opticalOnly(drives: DriveView[]): DriveView[] {
+	return drives.filter((d) => (d.kind ?? 'optical') === 'optical');
+}
+
+export function partitionDrives(all: DriveView[]): {
 	enrolled: DriveView[];
 	detected: DriveView[];
 	ignored: DriveView[];
 } {
+	const drives = opticalOnly(all);
 	return {
 		enrolled: drives.filter((d) => d.lifecycle === 'enrolled'),
 		detected: drives.filter((d) => d.lifecycle === 'detected'),

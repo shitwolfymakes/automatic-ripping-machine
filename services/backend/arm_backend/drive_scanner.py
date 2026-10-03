@@ -29,9 +29,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
-from arm_common import Config, Drive, DriveIdentityKind, DriveLifecycle, new_id
+from arm_common import Config, Drive, DriveIdentityKind, DriveKind, DriveLifecycle, new_id
 
 logger = logging.getLogger("arm_backend.drive_scanner")
 
@@ -196,7 +196,10 @@ async def reconcile_drives(
     now: datetime,
     prune_days: int,
 ) -> ScanSummary:
-    rows = list((await session.execute(select(Drive))).scalars().all())
+    # Virtual (ISO) drives are never scanned, matched, marked absent or
+    # pruned here — the host sysfs scan has nothing to say about them; the
+    # watchdog owns their lifecycle (spec: iso-source-rip).
+    rows = list((await session.execute(select(Drive).where(col(Drive.kind) == DriveKind.OPTICAL))).scalars().all())
     by_id = {r.by_id_name: r for r in rows if r.by_id_name}
     by_port = {r.sysfs_port: r for r in rows if r.sysfs_port and not r.by_id_name}
     seen: set[int] = set()

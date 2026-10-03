@@ -92,6 +92,9 @@ class Config(SQLModel, table=True):
     # the backend's config seeder backfills it from the env value once, then
     # this column is authoritative and the dispatcher reads it per tick.
     max_parallel_transcodes: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    # ISO-source ripping (ephemeral per-ISO virtual drives, docs/developers/
+    # architecture/10-iso-source-ripping.md): how many ISO rips may run at once.
+    max_parallel_iso_rips: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default="1"))
     # Runtime transcode switch (Settings > Transcoding). NULL means the row
     # predates the column; every reader treats NULL as enabled and the config
     # seeder backfills it to true on the next boot. Encode-task creation and

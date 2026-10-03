@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
 	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
@@ -16,11 +17,18 @@
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobInfoForm from './JobInfoForm.svelte';
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
+	import IsoSourceChip from './IsoSourceChip.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
 		job?: JobView;
 		driveNames?: Record<string, string> | null;
+		/** drive id -> ISO file name, for the dashboard's currently-enrolled
+		 *  virtual drives. Presence of `job.drive_id` here swaps the drive pill
+		 *  for an ISO source chip and reroutes Cancel through cancelIsoRip. */
+		isoSources?: Record<string, string> | null;
+		/** drive id -> 'iso' / 'folder' for the same drives. */
+		isoSourceKinds?: Record<string, 'iso' | 'folder'> | null;
 		paused?: boolean;
 		/** Review countdown duration (config manual_wait_seconds). Cosmetic — the
 		 *  ripper owns the authoritative clock; this only drives the UI timer. */
@@ -29,7 +37,16 @@
 		ondismiss?: () => void;
 	}
 
-	let { job, driveNames, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
+	let {
+		job,
+		driveNames,
+		isoSources,
+		isoSourceKinds,
+		paused = false,
+		manualWaitSeconds = 60,
+		onrefresh,
+		ondismiss
+	}: Props = $props();
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -74,6 +91,10 @@
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
 	let displayJob = $derived((data?.job ?? job) as JobView);
+	// An ISO rip's drive_id is a still-enrolled virtual drive; once the rip
+	// completes that drive retires and drops out of isoSources, matching the
+	// card leaving the dashboard.
+	let isoName = $derived(displayJob.drive_id ? (isoSources?.[displayJob.drive_id] ?? null) : null);
 
 	let sessions = $state<SessionView[]>([]);
 	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
@@ -129,7 +150,11 @@
 		if (!job) return;
 		cancelling = true;
 		try {
-			await abandonJob(job.id);
+			if (isoName && job.drive_id) {
+				await cancelIsoRip(job.drive_id);
+			} else {
+				await abandonJob(job.id);
+			}
 		} catch {
 			// still dismiss — next refresh will reconcile
 		} finally {
@@ -225,7 +250,7 @@
 {#if !job}
 	<SkeletonCard lines={4} />
 {:else}
-	<div class="disc-review-widget">
+	<div class="disc-review-widget" data-source={isoName ? 'iso' : 'disc'}>
 		<!-- Status bar -->
 		<div class="disc-review-widget-status-bar">
 			<div class="flex items-center gap-2">
@@ -271,7 +296,14 @@
 					</h3>
 				</div>
 				<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
-					<span class="disc-review-widget-pill">{driveLabel(displayJob.drive_id, driveNames)}</span>
+					{#if isoName}
+						<IsoSourceChip
+							name={isoName}
+							kind={displayJob.drive_id ? (isoSourceKinds?.[displayJob.drive_id] ?? 'iso') : 'iso'}
+						/>
+					{:else}
+						<span class="disc-review-widget-pill">{driveLabel(displayJob.drive_id, driveNames)}</span>
+					{/if}
 					<span class="inline-flex items-center gap-1 disc-review-widget-pill">
 						<DiscTypeIcon disctype={displayJob.disc_type} size="h-3.5 w-3.5" />
 						{discTypeLabel(displayJob.disc_type)}
@@ -320,7 +352,7 @@
 		{/if}
 
 		<!-- Action buttons -->
-		<div class="flex items-center gap-1.5 disc-review-widget-actions">
+		<div class="flex flex-wrap items-center gap-1.5 disc-review-widget-actions">
 			<button onclick={() => toggleSection('info')} class="btn disc-review-widget-action-btn" aria-pressed={showInfo}>
 				Info
 			</button>
@@ -347,7 +379,12 @@
 			{/if}
 			<a href="/jobs/{job.id}" class="btn disc-review-widget-action-btn"> View details </a>
 			{#if $isAdmin}
-				<button onclick={handleCancel} disabled={cancelling} class="btn btn-danger ml-auto">
+				<button
+					onclick={handleCancel}
+					disabled={cancelling}
+					class="btn btn-danger ml-auto"
+					title={isoName ? 'Cancel the rip and remove the virtual drive' : undefined}
+				>
 					{cancelling ? 'Cancelling...' : 'Cancel'}
 				</button>
 			{/if}

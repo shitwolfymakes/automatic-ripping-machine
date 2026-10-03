@@ -28,6 +28,7 @@ from arm_backend.identity.proposals import (
     revert_manual_track,
 )
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.job_abandon import abandon_job_transition
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -417,35 +418,8 @@ async def abandon_job(
             detail=f"job already in terminal status {job.status.value}",
         )
 
-    job.status = JobStatus.ABANDONED
-    db.add(job)
-    await db.flush()
-
     delete_raw = bool(req and req.delete_raw)
-    payload = {
-        "job_id": job.id,
-        "drive_id": job.drive_id,
-        "status": job.status.value,
-        "delete_raw": delete_raw,
-    }
-    # Tell the ripper: cancel any active rip on this drive matching the
-    # job, optionally rmtree /raw/<id>/. Also wakes a parked
-    # `_await_resolution` waiter (handler treats the message as a generic
-    # "drive state changed; re-poll" signal).
-    await hub.emit(
-        topic=f"ripper.commands.{job.drive_id}",
-        event_type="job.abandoned",
-        payload=payload,
-        job_id=job.id,
-        session=db,
-    )
-    await hub.emit(
-        topic="ripper.events",
-        event_type="rip.abandoned",
-        payload=payload,
-        job_id=job.id,
-        session=db,
-    )
+    await abandon_job_transition(db, hub, job, delete_raw=delete_raw)
     await db.commit()
     await db.refresh(job)
 

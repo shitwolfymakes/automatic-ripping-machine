@@ -13,7 +13,7 @@ from arm_common.schemas import DirectoryListing, FileEntry, FileRoot
 ROOTS: dict[str, FileRoot] = {
     "MEDIA": FileRoot(key="MEDIA", label="Media", path=settings.MEDIA_ROOT, writable=True),
     "RAW": FileRoot(key="RAW", label="Raw rips", path=settings.RAW_ROOT, writable=True),
-    "ISO": FileRoot(key="ISO", label="ISO ingress", path=settings.ISO_INGRESS_ROOT, writable=True),
+    "ISO": FileRoot(key="ISO", label="ISO library", path=settings.ISO_INGRESS_ROOT, writable=False),
     "LOG": FileRoot(key="LOG", label="Logs", path="/logs", writable=False),
 }
 

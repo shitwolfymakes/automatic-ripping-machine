@@ -829,3 +829,40 @@ async def test_rip_all_live_done_handles_unselected_titles_gracefully(monkeypatc
 
     # Track 0 went start → done. Title 5 was unselected; no events for it.
     assert events == ["start-trk_0", "done-trk_0"]
+
+
+async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatch, tmp_path):
+    """The backend routes an ISO image MakeMKV could not open to the full-disc
+    dump session: its single DATA_DUMP track must go through rip_data, never
+    back into makemkvcon, even though the scan still says bluray."""
+    data_calls: list[str] = []
+
+    async def fake_rip_data(*, device_path, output_dir):
+        data_calls.append(device_path)
+        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1, sha256="x")
+
+    async def fake_rip_disc(**_kwargs):
+        raise AssertionError("makemkvcon must not be invoked for a dump track")
+
+    monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
+    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    dump = _track(0, source_ref="full")
+    dump = dump.model_copy(update={"kind": TrackKind.DATA_DUMP})
+    done: list[tuple[str, bool]] = []
+
+    async def on_start(_t):
+        pass
+
+    async def on_done(t, result):
+        done.append((t.id, result.ok))
+
+    await dispatcher_module.rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/source/movie.iso",
+        tracks=[dump],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+    assert data_calls == ["/source/movie.iso"]
+    assert done == [("trk_0", True)]

@@ -3,7 +3,7 @@ from arm_common.schemas import DriveDevicePathUpdateRequest, DriveRescanResponse
 
 
 def test_lifecycle_wire_strings_are_stable() -> None:
-    assert {s.value for s in DriveLifecycle} == {"detected", "ignored", "enrolled"}
+    assert {s.value for s in DriveLifecycle} == {"detected", "ignored", "enrolled", "retired"}
     assert {s.value for s in DriveIdentityKind} == {"by_id", "port"}
 
 

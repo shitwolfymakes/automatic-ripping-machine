@@ -608,6 +608,10 @@ export type ConfigUpdateRequest = {
      */
     max_parallel_transcodes?: number | null;
     /**
+     * Max Parallel Iso Rips
+     */
+    max_parallel_iso_rips?: number | null;
+    /**
      * Transcode Enabled
      */
     transcode_enabled?: boolean | null;
@@ -715,6 +719,10 @@ export type ConfigView = {
      * Max Parallel Transcodes
      */
     max_parallel_transcodes: number;
+    /**
+     * Max Parallel Iso Rips
+     */
+    max_parallel_iso_rips: number;
     /**
      * Transcode Enabled
      */
@@ -930,6 +938,12 @@ export type Drive = {
     sysfs_port?: string | null;
     identity_kind?: DriveIdentityKind | null;
     lifecycle?: DriveLifecycle;
+    kind?: DriveKind;
+    source_kind?: DriveSourceKind | null;
+    /**
+     * Source Path
+     */
+    source_path?: string | null;
     /**
      * Present
      */
@@ -1103,12 +1117,22 @@ export type DriveDiagnosticResponse = {
 export type DriveIdentityKind = 'by_id' | 'port';
 
 /**
+ * DriveKind
+ *
+ * What a Drive row represents. OPTICAL is a physical drive the scanner
+ * found; VIRTUAL is an ephemeral per-ISO-rip drive row (source_kind /
+ * source_path identify the ISO), created enrolled and retired when its one
+ * rip ends.
+ */
+export type DriveKind = 'optical' | 'virtual';
+
+/**
  * DriveLifecycle
  *
  * Operator-owned state of a physical optical drive the backend has seen.
  * Presence (plugged in right now) is a separate, orthogonal fact.
  */
-export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled';
+export type DriveLifecycle = 'detected' | 'ignored' | 'enrolled' | 'retired';
 
 /**
  * DriveMediaStatus
@@ -1157,6 +1181,14 @@ export type DriveRescanResponse = {
      */
     pruned?: number;
 };
+
+/**
+ * DriveSourceKind
+ *
+ * What a virtual drive's source is: an .iso image, or a disc folder (a
+ * BDMV / VIDEO_TS tree MakeMKV reads directly).
+ */
+export type DriveSourceKind = 'iso' | 'folder';
 
 /**
  * DriveStatus
@@ -1302,6 +1334,12 @@ export type DriveView = {
      */
     last_error: string | null;
     current_job?: DriveCurrentJobView | null;
+    kind?: DriveKind;
+    source_kind?: DriveSourceKind | null;
+    /**
+     * Source Path
+     */
+    source_path?: string | null;
 };
 
 /**
@@ -1806,6 +1844,180 @@ export type InAppChannelConfig = {
      * Type
      */
     type?: 'inapp';
+};
+
+/**
+ * IsoFolderEntry
+ *
+ * One disc folder in the library (GET /api/iso/folders).
+ */
+export type IsoFolderEntry = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Parent
+     */
+    parent: string;
+    /**
+     * Disc Type
+     */
+    disc_type: 'bluray' | 'dvd';
+    /**
+     * Ripping
+     */
+    ripping?: boolean;
+};
+
+/**
+ * IsoFolderListing
+ */
+export type IsoFolderListing = {
+    /**
+     * Host Path
+     */
+    host_path: string;
+    /**
+     * Entries
+     */
+    entries: Array<IsoFolderEntry>;
+    /**
+     * Partial
+     */
+    partial?: boolean;
+};
+
+/**
+ * IsoLibraryEntry
+ */
+export type IsoLibraryEntry = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Kind
+     */
+    kind: 'folder' | 'iso';
+    /**
+     * Size Bytes
+     */
+    size_bytes?: number | null;
+    /**
+     * Modified At
+     */
+    modified_at?: string | null;
+    /**
+     * Ripping
+     */
+    ripping?: boolean;
+};
+
+/**
+ * IsoLibraryListing
+ */
+export type IsoLibraryListing = {
+    /**
+     * Host Path
+     */
+    host_path: string;
+    /**
+     * Subpath
+     */
+    subpath: string;
+    /**
+     * Parent Subpath
+     */
+    parent_subpath: string | null;
+    /**
+     * Entries
+     */
+    entries: Array<IsoLibraryEntry>;
+};
+
+/**
+ * IsoPreparePhase
+ *
+ * What an ISO ripper is doing before its job exists: scanning the image
+ * (or its extracted folder) or unpacking it for MakeMKV.
+ */
+export type IsoPreparePhase = 'scanning' | 'extracting';
+
+/**
+ * IsoPrepareReport
+ *
+ * POST /api/ripper/iso-prepare: what an ISO ripper is doing before
+ * identify creates its job. Sent on every phase change, throttled progress
+ * updates, and as a keepalive while a phase runs.
+ */
+export type IsoPrepareReport = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+    phase: IsoPreparePhase;
+    /**
+     * Progress Pct
+     */
+    progress_pct?: number | null;
+    /**
+     * Current File
+     */
+    current_file?: string | null;
+};
+
+/**
+ * IsoPrepareView
+ *
+ * GET /api/iso/rips/preparing: one ISO rip that has no job yet.
+ */
+export type IsoPrepareView = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+    phase: IsoPreparePhase;
+    /**
+     * Progress Pct
+     */
+    progress_pct?: number | null;
+    /**
+     * Current File
+     */
+    current_file?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * IsoRipCreated
+ */
+export type IsoRipCreated = {
+    /**
+     * Drive Id
+     */
+    drive_id: string;
+};
+
+/**
+ * IsoRipRequest
+ */
+export type IsoRipRequest = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
 };
 
 /**
@@ -4974,6 +5186,37 @@ export type HeartbeatApiRipperHeartbeatPostResponses = {
 
 export type HeartbeatApiRipperHeartbeatPostResponse = HeartbeatApiRipperHeartbeatPostResponses[keyof HeartbeatApiRipperHeartbeatPostResponses];
 
+export type IsoPrepareReportApiRipperIsoPreparePostData = {
+    body: IsoPrepareReport;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ripper/iso-prepare';
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostError = IsoPrepareReportApiRipperIsoPreparePostErrors[keyof IsoPrepareReportApiRipperIsoPreparePostErrors];
+
+export type IsoPrepareReportApiRipperIsoPreparePostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type IsoPrepareReportApiRipperIsoPreparePostResponse = IsoPrepareReportApiRipperIsoPreparePostResponses[keyof IsoPrepareReportApiRipperIsoPreparePostResponses];
+
 export type GetDriveApiRipperDrivesDriveIdGetData = {
     body?: never;
     headers?: {
@@ -6155,7 +6398,14 @@ export type ListDrivesApiDrivesGetData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         *
+         * Include retired (one-shot ISO rip) drive rows.
+         */
+        include_retired?: boolean;
+    };
     url: '/api/drives';
 };
 
@@ -6467,6 +6717,173 @@ export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponses = {
 };
 
 export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApiDrivesDriveIdUnenrollPostResponses[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostResponses];
+
+export type LibraryApiIsoLibraryGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Subpath
+         */
+        subpath?: string;
+    };
+    url: '/api/iso/library';
+};
+
+export type LibraryApiIsoLibraryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LibraryApiIsoLibraryGetError = LibraryApiIsoLibraryGetErrors[keyof LibraryApiIsoLibraryGetErrors];
+
+export type LibraryApiIsoLibraryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: IsoLibraryListing;
+};
+
+export type LibraryApiIsoLibraryGetResponse = LibraryApiIsoLibraryGetResponses[keyof LibraryApiIsoLibraryGetResponses];
+
+export type FoldersApiIsoFoldersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/folders';
+};
+
+export type FoldersApiIsoFoldersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FoldersApiIsoFoldersGetError = FoldersApiIsoFoldersGetErrors[keyof FoldersApiIsoFoldersGetErrors];
+
+export type FoldersApiIsoFoldersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: IsoFolderListing;
+};
+
+export type FoldersApiIsoFoldersGetResponse = FoldersApiIsoFoldersGetResponses[keyof FoldersApiIsoFoldersGetResponses];
+
+export type PreparingApiIsoRipsPreparingGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/rips/preparing';
+};
+
+export type PreparingApiIsoRipsPreparingGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreparingApiIsoRipsPreparingGetError = PreparingApiIsoRipsPreparingGetErrors[keyof PreparingApiIsoRipsPreparingGetErrors];
+
+export type PreparingApiIsoRipsPreparingGetResponses = {
+    /**
+     * Response Preparing Api Iso Rips Preparing Get
+     *
+     * Successful Response
+     */
+    200: Array<IsoPrepareView>;
+};
+
+export type PreparingApiIsoRipsPreparingGetResponse = PreparingApiIsoRipsPreparingGetResponses[keyof PreparingApiIsoRipsPreparingGetResponses];
+
+export type CreateRipApiIsoRipsPostData = {
+    body: IsoRipRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/iso/rips';
+};
+
+export type CreateRipApiIsoRipsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRipApiIsoRipsPostError = CreateRipApiIsoRipsPostErrors[keyof CreateRipApiIsoRipsPostErrors];
+
+export type CreateRipApiIsoRipsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: IsoRipCreated;
+};
+
+export type CreateRipApiIsoRipsPostResponse = CreateRipApiIsoRipsPostResponses[keyof CreateRipApiIsoRipsPostResponses];
+
+export type CancelRipApiIsoRipsDriveIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/iso/rips/{drive_id}';
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteError = CancelRipApiIsoRipsDriveIdDeleteErrors[keyof CancelRipApiIsoRipsDriveIdDeleteErrors];
+
+export type CancelRipApiIsoRipsDriveIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CancelRipApiIsoRipsDriveIdDeleteResponse = CancelRipApiIsoRipsDriveIdDeleteResponses[keyof CancelRipApiIsoRipsDriveIdDeleteResponses];
 
 export type ListSessionsApiSessionsGetData = {
     body?: never;

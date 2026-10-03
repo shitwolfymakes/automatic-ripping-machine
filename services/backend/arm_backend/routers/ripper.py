@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import iso_prepare
 from arm_backend.disc_dedupe import find_reusable_job_for_disc
 from arm_backend.auth import (
     require_drive_owner_by_job,
@@ -38,16 +39,18 @@ from arm_common import (
     DriveStatus,
     Job,
     JobStatus,
+    OutputMode,
     MakemkvKeyState,
     RipPreset,
     Session,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
+    IsoPrepareReport,
     flag_is_set,
     with_flags,
     HeldJobView,
@@ -90,6 +93,44 @@ class RipPresetUnavailable(Exception):
         super().__init__(detail)
         self.reason = reason
         self.detail = detail
+
+
+ISO_NO_TITLES = (
+    "MakeMKV found no titles in this ISO, even after unpacking it. "
+    'To keep a copy of the image anyway, rip it again with the "ISO: Full-disc dump" session.'
+)
+FOLDER_NO_TITLES = "MakeMKV found no titles in this disc folder. Check that its BDMV or VIDEO_TS tree is complete."
+
+
+async def _virtual_source_drive(db: AsyncSession, job: Job) -> Drive | None:
+    """The job's drive when it is a virtual one (an ISO or disc-folder rip)."""
+    if job.drive_id is None:
+        return None
+    drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+    return drive if drive is not None and drive.kind == DriveKind.VIRTUAL else None
+
+
+async def _fail_titleless_source(db: AsyncSession, hub: WSHub, job: Job, reason: str) -> None:
+    job.status = JobStatus.FAILED
+    job.ripped_at = datetime.now(timezone.utc)
+    db.add(job)
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.failed",
+        payload={
+            "job_id": job.id,
+            "drive_id": job.drive_id,
+            "status": job.status.value,
+            "tracks_done": 0,
+            "tracks_failed": 0,
+            "tracks_total": 0,
+            "reason": reason,
+        },
+        job_id=job.id,
+        session=db,
+    )
+    await db.commit()
+    logger.warning("rip-start job_id=%s failed: %s", job.id, reason)
 
 
 async def _load_routed_session(db: AsyncSession, job: Job) -> Session | None:
@@ -296,6 +337,26 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     await session.commit()
 
 
+@router.post(
+    "/iso-prepare",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service_token)],
+)
+async def iso_prepare_report(
+    req: IsoPrepareReport, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    """An ISO ripper's phase before its job exists (scanning, extracting with
+    progress). Kept in memory (`iso_prepare`) and pushed to the dashboard
+    through a non-persisted `ripper.events` event, which wakes its refresh."""
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
+    if drive is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    view = iso_prepare.record(req)
+    await _get_hub(request).emit(
+        topic="ripper.events", event_type="iso.preparing", payload=view.model_dump(mode="json"), persist=False
+    )
+
+
 @router.get("/drives/{drive_id}", response_model=Drive, dependencies=[Depends(require_service_token)])
 async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session)) -> Drive:
     """This ripper's own row. Port-identity rippers read `device_path` from
@@ -463,6 +524,8 @@ async def identify(
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
+    # An ISO rip's job exists from here on; its "preparing" status is done.
+    iso_prepare.clear(drive.id)
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
@@ -758,6 +821,21 @@ async def rip_start(
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
     new_tracks = select_tracks(job.id, scan, preset)
+    if not new_tracks and preset.output_mode == OutputMode.ISO:
+        # A full-disc dump copies the image whole and needs no titles; the
+        # operator picked it, so honour it whatever the scan found.
+        # select_tracks synthesises the single dump track for DATA discs.
+        new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
+    virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
+    if virtual is not None:
+        # MakeMKV found nothing in the image (not even once it was unpacked,
+        # arm_ripper.iso_extract) or in the disc folder. Fail it like a disc with no titles, with
+        # the reason on the job's event; never switch it to a full-disc dump
+        # behind the operator's back (that filed the .iso where a movie was
+        # expected). The ripper then exits and the watchdog retires the drive.
+        reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
+        await _fail_titleless_source(session, hub, job, reason)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
     if not new_tracks:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

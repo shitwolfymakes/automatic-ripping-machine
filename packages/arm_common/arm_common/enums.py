@@ -48,6 +48,33 @@ class DriveLifecycle(StrEnum):
     DETECTED = "detected"  # seen by the scanner, no decision yet
     IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
     ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+    RETIRED = "retired"  # a virtual (ISO) drive whose one-shot rip has ended
+
+
+class DriveKind(StrEnum):
+    """What a Drive row represents. OPTICAL is a physical drive the scanner
+    found; VIRTUAL is an ephemeral per-ISO-rip drive row (source_kind /
+    source_path identify the ISO), created enrolled and retired when its one
+    rip ends."""
+
+    OPTICAL = "optical"
+    VIRTUAL = "virtual"
+
+
+class DriveSourceKind(StrEnum):
+    """What a virtual drive's source is: an .iso image, or a disc folder (a
+    BDMV / VIDEO_TS tree MakeMKV reads directly)."""
+
+    ISO = "iso"
+    FOLDER = "folder"
+
+
+class IsoPreparePhase(StrEnum):
+    """What an ISO ripper is doing before its job exists: scanning the image
+    (or its extracted folder) or unpacking it for MakeMKV."""
+
+    SCANNING = "scanning"
+    EXTRACTING = "extracting"
 
 
 class DriveIdentityKind(StrEnum):

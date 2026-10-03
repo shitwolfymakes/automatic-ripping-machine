@@ -8,7 +8,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.drive_scanner import ScannedDrive, ScanSummary, reconcile_drives  # noqa: E402
-from arm_common import Drive, DriveIdentityKind, DriveLifecycle, DriveStatus  # noqa: E402
+from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -229,3 +229,30 @@ async def test_two_new_rows_on_the_same_node_across_ticks_get_distinct_hostnames
     by_ids = {r.by_id_name for r in rows}
     assert len(hostnames) == 2  # distinct — no UNIQUE collision
     assert by_ids == {by_id_a, by_id_b}
+
+
+async def test_virtual_drive_is_never_touched_by_reconcile() -> None:
+    """A virtual (ISO) drive has nothing to do with the host sysfs scan: it
+    must not be matched against a scanned node, marked absent, or pruned —
+    even on a tick where nothing at all is scanned and the row is long past
+    the prune window."""
+    db = FakeSession()
+    virtual = Drive(
+        id="drv_v",
+        hostname="iso-v",
+        device_path="/source/x.iso",
+        status=DriveStatus.ONLINE,
+        lifecycle=DriveLifecycle.ENROLLED,
+        kind=DriveKind.VIRTUAL,
+        source_kind=DriveSourceKind.ISO,
+        source_path="x.iso",
+        present=True,
+        last_seen_at=NOW - timedelta(days=100),
+    )
+    db.rows["drives"] = [virtual]
+    summary = await reconcile_drives(db, [], now=NOW, prune_days=7)
+    [row] = db.rows["drives"]
+    assert row is virtual
+    assert row.present is True
+    assert row.last_seen_at == NOW - timedelta(days=100)
+    assert summary == ScanSummary(detected=0, ignored=0, enrolled=0, absent=0, pruned=0)

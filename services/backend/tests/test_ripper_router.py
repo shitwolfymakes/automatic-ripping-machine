@@ -33,7 +33,9 @@ from arm_common import (  # noqa: E402
     DiscFingerprint,
     DiscType,
     Drive,
+    DriveKind,
     DriveLifecycle,
+    DriveSourceKind,
     DriveStatus,
     Job,
     JobStatus,
@@ -364,6 +366,74 @@ def test_register_compares_identity_only_against_a_bound_row(
         assert "unenroll and re-enroll" in detail
         assert row.status is DriveStatus.ERROR
         assert row.last_error == detail
+
+
+def test_register_accepts_enrolled_virtual_drive() -> None:
+    """A virtual (ISO) drive row has no by-id identity at all (by_id_name is
+    None on both sides) and a /source path instead of a /dev node — register
+    needs no code change for this: the existing lifecycle + identity checks
+    already accept it as-is. This test pins that behaviour."""
+    db = FakeSession()
+    db.rows["drives"] = [
+        Drive(
+            id="drv_iso",
+            hostname="scan-drv_iso",
+            device_path="/source/x.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.ENROLLED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/x.iso",
+            by_id_name=None,
+            present=False,
+        )
+    ]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register",
+            json=_register_body(
+                drive_id="drv_iso",
+                hostname="arm-ripper-iso-drv_iso",
+                device_path="/source/x.iso",
+                by_id_name=None,
+            ),
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    row = db.rows["drives"][0]
+    assert row.hostname == "arm-ripper-iso-drv_iso"
+    assert row.device_path == "/source/x.iso"
+    assert row.status is DriveStatus.ONLINE
+
+
+def test_register_refuses_a_retired_virtual_drive() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [
+        Drive(
+            id="drv_iso",
+            hostname="scan-drv_iso",
+            device_path="/source/x.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.RETIRED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/x.iso",
+            by_id_name=None,
+        )
+    ]
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/register",
+            json=_register_body(
+                drive_id="drv_iso",
+                hostname="arm-ripper-iso-drv_iso",
+                device_path="/source/x.iso",
+                by_id_name=None,
+            ),
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 409, r.text
+    assert "not enrolled" in r.json()["detail"]
 
 
 # --- /identify ---------------------------------------------------------------
@@ -2473,3 +2543,137 @@ async def test_resolve_manual_season_beats_label_hint() -> None:
     assert outcome.changed == 0
     assert job2.season == 5
     assert job2.identity_provenance.get("season") == "manual"
+
+
+# --- rip-start: an ISO image with no titles fails like a disc, never a silent dump --
+
+
+def _virtual_drive() -> Drive:
+    return Drive(
+        id="drv_x",
+        hostname=_HOSTNAME,
+        device_path="/source/movie.iso",
+        status=DriveStatus.ONLINE,
+        kind=DriveKind.VIRTUAL,
+    )
+
+
+def _iso_dump_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_builtin_iso_dump",
+        name="ISO: Full-disc dump",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.ISO,
+    )
+
+
+def _iso_dump_session() -> Session:
+    return Session(
+        id="ses_builtin_iso_dump",
+        name="ISO: Full-disc dump",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        rip_preset_id="rpr_builtin_iso_dump",
+        transcode_preset_id=None,
+        output_path_template="{title} ({year})/{title} ({year}).iso",
+    )
+
+
+def _titleless_bluray_job() -> Job:
+    scan = _scan_dict("bluray")
+    scan["titles"] = []
+    job = _job(status=JobStatus.IDENTIFIED, disc_type=DiscType.BLURAY, meta={"scan_result": scan})
+    job.pending_session_id = "ses_r"
+    return job
+
+
+class _RecordingHub:
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def emit(self, topic, event_type, payload, *, persist=True, job_id=None, track_id=None, session=None):
+        self.events.append({"topic": topic, "event_type": event_type, "payload": payload})
+
+
+def test_rip_start_iso_without_titles_fails_the_job_instead_of_dumping_it() -> None:
+    """MakeMKV found no titles in the image, not even unpacked: the job fails
+    with that reason, like a disc with no titles. It is never switched to the
+    full-disc dump behind the operator's back (that copied the .iso into the
+    library where a movie was expected)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_virtual_drive()]
+    job = _titleless_bluray_job()
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    hub = _RecordingHub()
+    app = _make_app(db)
+    app.state.ws_hub = hub
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert "no titles" in r.json()["detail"]
+    assert job.status == JobStatus.FAILED
+    assert job.pending_session_id == "ses_r"
+    assert db.rows["tracks"] == []
+    failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
+    assert len(failed) == 1
+    assert "no titles" in failed[0]["payload"]["reason"]
+
+
+def test_rip_start_iso_dump_still_works_when_the_operator_chose_it() -> None:
+    """Picking the "ISO: Full-disc dump" session on purpose still copies the
+    image whole, titles or not."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_virtual_drive()]
+    job = _titleless_bluray_job()
+    job.pending_session_id = "ses_builtin_iso_dump"
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["rip_preset_id"] == "rpr_builtin_iso_dump"
+    assert [t["kind"] for t in body["tracks"]] == ["data_dump"]
+    assert job.status == JobStatus.RIPPING
+
+
+def test_rip_start_optical_without_titles_is_still_422() -> None:
+    """The fallback is for ISO sources only: a physical disc that scans to no
+    titles keeps the 422 (the ripper abandons it, as before)."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_titleless_bluray_job()]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert "zero tracks" in r.json()["detail"]
+
+
+def test_rip_start_titleless_disc_folder_says_folder_not_iso() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    drive = _virtual_drive()
+    drive.source_kind = DriveSourceKind.FOLDER
+    db.rows["drives"] = [drive]
+    db.rows["jobs"] = [_titleless_bluray_job()]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"].startswith("MakeMKV found no titles in this disc folder.")

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 
@@ -57,6 +57,12 @@ vi.mock('$lib/stores/auth', async () => {
 		__setSession: (kind: 'admin' | 'guest') => {
 			_role.set(kind === 'admin' ? 'admin' : null);
 			_isAuthenticated.set(kind === 'admin');
+		},
+		// Test-only: a logged-in session whose role is not a writer (admin).
+		// No such account exists today; the ISO gate must still hold for one.
+		__setReader: () => {
+			_role.set('reader');
+			_isAuthenticated.set(true);
 		}
 	};
 });
@@ -101,6 +107,21 @@ vi.mock('$lib/stores/dashboard', async () => {
 
 vi.mock('$lib/api/dashboard', () => ({
 	setRippingEnabled: vi.fn(() => Promise.resolve())
+}));
+
+// The gear menu opens the real IsoPicker; keep its loads off the (partly
+// mocked) API client, which has no `get` / `ApiError` here.
+const fetchIsoFoldersMock = vi.fn(() => Promise.resolve({ host_path: '/mnt/iso', entries: [], partial: false }));
+vi.mock('$lib/api/iso', () => ({
+	fetchIsoFolders: () => fetchIsoFoldersMock(),
+	fetchIsoLibrary: vi.fn(() =>
+		Promise.resolve({ host_path: '/mnt/iso', subpath: '', parent_subpath: null, entries: [] })
+	),
+	startIsoRip: vi.fn(),
+	cancelIsoRip: vi.fn()
+}));
+vi.mock('$lib/api/sessions', () => ({
+	fetchSessions: vi.fn(() => Promise.resolve([]))
 }));
 
 function childSnippet() {
@@ -187,21 +208,58 @@ describe('Layout guest gating', () => {
 		expect(screen.getByTitle('Quick actions')).toBeInTheDocument();
 	});
 
-	it('quick-actions flyout offers Settings but no Import while the import flag is off', async () => {
+	it('quick-actions flyout offers Settings and Rip from ISO for admin', async () => {
 		renderComponent(Layout, { props: { children: childSnippet() } });
 		await fireEvent.click(screen.getByTitle('Quick actions'));
 		expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
-		expect(screen.queryByRole('menuitem', { name: 'Import' })).not.toBeInTheDocument();
+		expect(screen.getByRole('menuitem', { name: 'Rip from ISO' })).toBeInTheDocument();
+		expect(screen.getByRole('menuitem', { name: 'Rip from folder' })).toBeInTheDocument();
 	});
 
-	it('does not mount the Import wizard while the import flag is off', async () => {
-		const { showImportWizard } = await import('$lib/stores/importWizard');
-		showImportWizard.set(true);
+	it('Rip from folder opens the picker in folder mode', async () => {
+		const { showIsoPicker } = await import('$lib/stores/isoPicker');
 		try {
 			renderComponent(Layout, { props: { children: childSnippet() } });
-			expect(screen.queryByRole('heading', { name: 'Import' })).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByTitle('Quick actions'));
+			await fireEvent.click(screen.getByRole('menuitem', { name: 'Rip from folder' }));
+			expect(await screen.findByRole('heading', { name: 'Rip from folder' })).toBeInTheDocument();
+			await waitFor(() => expect(fetchIsoFoldersMock).toHaveBeenCalled());
 		} finally {
-			showImportWizard.set(false);
+			showIsoPicker.set(false);
+		}
+	});
+
+	it('hides the Rip from ISO item and mounts no picker for guests', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as {
+			__setSession: (kind: 'admin' | 'guest') => void;
+		};
+		auth.__setSession('guest');
+		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		showIsoPicker.set(true);
+		try {
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			expect(screen.queryByRole('menuitem', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('menuitem', { name: 'Rip from folder' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('heading', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+		} finally {
+			showIsoPicker.set(false);
+		}
+	});
+
+	it('hides the Rip from ISO item and mounts no picker for a signed-in non-writer', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setReader: () => void };
+		auth.__setReader();
+		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		showIsoPicker.set(true);
+		try {
+			renderComponent(Layout, { props: { children: childSnippet() } });
+			await fireEvent.click(screen.getByTitle('Quick actions'));
+			expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
+			expect(screen.queryByRole('menuitem', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('menuitem', { name: 'Rip from folder' })).not.toBeInTheDocument();
+			expect(screen.queryByRole('heading', { name: 'Rip from ISO' })).not.toBeInTheDocument();
+		} finally {
+			showIsoPicker.set(false);
 		}
 	});
 

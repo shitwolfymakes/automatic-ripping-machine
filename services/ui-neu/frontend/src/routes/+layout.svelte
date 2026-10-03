@@ -7,16 +7,17 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { setRippingEnabled } from '$lib/api/dashboard';
 	import { goto } from '$app/navigation';
-	import { showImportWizard } from '$lib/stores/importWizard';
-	import ImportWizard from '$lib/components/ImportWizard.svelte';
+	import { isoPickerMode, showIsoPicker } from '$lib/stores/isoPicker';
+	import IsoPicker from '$lib/components/IsoPicker.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 	import Flyout from '$lib/components/Flyout.svelte';
 	import FlyoutItem from '$lib/components/FlyoutItem.svelte';
 	import FlyoutDivider from '$lib/components/FlyoutDivider.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
-	import { logoutLocal, initAuth, isGuest } from '$lib/stores/auth';
+	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/uiPrefs';
-	import { features, isScreenEnabled } from '$lib/features';
+	import { isScreenEnabled } from '$lib/features';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
@@ -43,8 +44,9 @@
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
 	function handleQuickAction(action: string) {
-		if (action === 'import-folder') {
-			showImportWizard.set(true);
+		if (action === 'rip-iso' || action === 'rip-folder') {
+			isoPickerMode.set(action === 'rip-folder' ? 'folder' : 'iso');
+			showIsoPicker.set(true);
 		} else if (action === 'settings') {
 			goto('/settings');
 		}
@@ -349,24 +351,29 @@
 								</button>
 							{/snippet}
 							{#snippet children({ close })}
-								{#if features.import}
+								<!-- Writers (admin) only: create/cancel are require_writer. -->
+								{#if $isAdmin}
 									<FlyoutItem
 										onclick={() => {
-											handleQuickAction('import-folder');
+											handleQuickAction('rip-iso');
 											close();
 										}}
 									>
 										{#snippet icon()}
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-												/>
-											</svg>
+											<Glyph name="disc-3" />
 										{/snippet}
-										Import
+										Rip from ISO
+									</FlyoutItem>
+									<FlyoutItem
+										onclick={() => {
+											handleQuickAction('rip-folder');
+											close();
+										}}
+									>
+										{#snippet icon()}
+											<Glyph name="folder" />
+										{/snippet}
+										Rip from folder
 									</FlyoutItem>
 									<FlyoutDivider />
 								{/if}
@@ -499,13 +506,14 @@
 	<BottomStatsBar />
 {/if}
 
-<!-- Folder import wizard (global, triggered from gear menu) -->
-{#if features.import}
-	<ImportWizard
-		open={$showImportWizard}
-		onclose={() => showImportWizard.set(false)}
-		oncreated={() => {
-			showImportWizard.set(false);
+<!-- ISO picker (global, triggered from gear menu; writers only) -->
+{#if $isAdmin}
+	<IsoPicker
+		open={$showIsoPicker}
+		mode={$isoPickerMode}
+		onclose={() => showIsoPicker.set(false)}
+		onstarted={() => {
+			showIsoPicker.set(false);
 		}}
 	/>
 {/if}

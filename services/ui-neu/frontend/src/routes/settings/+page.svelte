@@ -338,10 +338,8 @@
 		{#snippet ready(_)}
 			{@const settings = _}
 			<!-- Tab Bar -->
-			<!-- settings-page-tabs adds breathing room below the tab strip (mb-2)
-			 and clips the 1px vertical scroll .tabs' own border-bottom can
-			 trigger inside its overflow-x-auto (overflow-y: hidden) - tabs feel
-			 cramped against headings otherwise. -->
+			<!-- settings-page-tabs adds breathing room below the tab strip (mb-2) -
+			 tabs feel cramped against headings otherwise. -->
 			<!-- role="tablist" sits on an inner <div>, not the <nav> itself: a
 			 <nav> is a non-interactive landmark and cannot carry the
 			 interactive tablist role (svelte a11y
@@ -858,13 +856,10 @@
 		gap: 0.75rem;
 	}
 
-	/* .tabs' own border-bottom, inside this strip's overflow-x-auto, adds a
-	   spurious 1px vertical scrollbar without overflow-y hidden; mb-2 keeps
-	   the tab strip from feeling cramped against the page title above the
-	   outer .stack gap. */
+	/* mb-2 keeps the tab strip from feeling cramped against the page title
+	   above the outer .stack gap. */
 	.settings-page-tabs {
 		margin-bottom: 0.5rem;
-		overflow-y: hidden;
 	}
 	/* the Themes tab's four cards were p-6 (1.5rem) in the original, not
 	   .panel's own p-4 (1rem) default. */

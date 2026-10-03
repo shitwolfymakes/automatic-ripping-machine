@@ -45,9 +45,18 @@ vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn(() => Promise.resolve([]))
 }));
 
-function renderWidget(overrides = {}) {
+vi.mock('$lib/api/iso', () => ({
+	cancelIsoRip: vi.fn(() => Promise.resolve())
+}));
+
+function renderWidget(overrides = {}, isoSources: Record<string, string> | null = null) {
 	return renderComponent(DiscReviewWidget, {
-		props: { job: createJob({ status: 'identified', ...overrides }), driveNames: {}, paused: false }
+		props: {
+			job: createJob({ status: 'identified', ...overrides }),
+			driveNames: {},
+			paused: false,
+			isoSources
+		}
 	});
 }
 
@@ -122,6 +131,49 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(screen.getByText(/Apply session/)).toBeInTheDocument();
 			expect(screen.getByText('Cancel')).toBeInTheDocument();
+		});
+	});
+
+	describe('ISO rip', () => {
+		it('shows the ISO chip instead of the drive pill for an ISO rip', async () => {
+			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'Paddington_2.iso' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+			expect(screen.getByText('ISO')).toBeInTheDocument();
+			expect(screen.getAllByText('Paddington_2.iso').length).toBeGreaterThan(0);
+			expect(screen.queryByText('drv_iso_1')).not.toBeInTheDocument();
+		});
+
+		it('keeps the drive pill for a physical-drive rip', async () => {
+			renderWidget({ status: 'awaiting_review', drive_id: 'drv_1' }, null);
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+			expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+			expect(screen.getByText('drv_1')).toBeInTheDocument();
+		});
+
+		it('marks the card root data-source="iso" for an ISO rip', async () => {
+			const { container } = renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'a.iso' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+			expect(container.querySelector('.disc-review-widget')).toHaveAttribute('data-source', 'iso');
+		});
+
+		it('titles Cancel for an ISO rip and cancels through cancelIsoRip', async () => {
+			const { cancelIsoRip } = await import('$lib/api/iso');
+			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'a.iso' });
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			const cancelBtn = screen.getByText('Cancel');
+			expect(cancelBtn).toHaveAttribute('title', 'Cancel the rip and remove the virtual drive');
+			await fireEvent.click(cancelBtn);
+			await waitFor(() => expect(cancelIsoRip).toHaveBeenCalledWith('drv_iso_1'));
+			const { abandonJob } = await import('$lib/api/jobs');
+			expect(abandonJob).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('footer wrap', () => {
+		it('wraps the footer actions', async () => {
+			const { container } = renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
+			expect(container.querySelector('.disc-review-widget-actions')).toHaveClass('flex-wrap');
 		});
 	});
 });

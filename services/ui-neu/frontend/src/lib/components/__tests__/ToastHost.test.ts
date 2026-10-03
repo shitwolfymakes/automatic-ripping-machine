@@ -22,4 +22,23 @@ describe('ToastHost', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
 		expect(screen.queryByText('Closable')).toBeNull();
 	});
+
+	it('renders a toast link when one is given', async () => {
+		addToast({
+			tone: 'success',
+			title: 'ISO rip started',
+			body: 'a.iso is in the ripping queue.',
+			link: { href: '/', label: 'View card' }
+		});
+		renderComponent(ToastHost);
+		const link = await screen.findByRole('link', { name: 'View card' });
+		expect(link).toHaveAttribute('href', '/');
+	});
+
+	it('renders no link when the toast does not carry one', async () => {
+		addToast({ tone: 'info', title: 'No link here' });
+		renderComponent(ToastHost);
+		await screen.findByText('No link here');
+		expect(screen.queryByRole('link')).not.toBeInTheDocument();
+	});
 });

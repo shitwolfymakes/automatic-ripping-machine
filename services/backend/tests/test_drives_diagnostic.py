@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import drives as drives_router  # noqa: E402
-from arm_common import Config, Drive, DriveLifecycle, DriveStatus, User  # noqa: E402
+from arm_common import Config, Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus, User  # noqa: E402
 from arm_common.enums import DriveIdentityKind, DriveMediaStatus  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -255,3 +255,42 @@ def test_system_notes(signing_key, tmp_path) -> None:
     with client:
         body = _get(client, auth)
     assert "ripper manager: image arm-ripper:latest not present on docker host" in body["system"]
+
+
+def test_virtual_drives_are_absent_from_diagnostic_items(signing_key, tmp_path) -> None:
+    now = datetime.now(timezone.utc)
+    db = FakeSession()
+    db.rows["drives"] = [
+        _drive(DriveLifecycle.ENROLLED, id="drv_optical"),
+        Drive(
+            id="drv_iso",
+            hostname="iso-abc",
+            device_path="/source/x.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.ENROLLED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/x.iso",
+        ),
+        Drive(
+            id="drv_iso_retired",
+            hostname="iso-xyz",
+            device_path="/source/y.iso",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.RETIRED,
+            kind=DriveKind.VIRTUAL,
+            source_kind=DriveSourceKind.ISO,
+            source_path="Movies/y.iso",
+        ),
+    ]
+    (tmp_path / "by-id").mkdir()
+    client, auth = _app(
+        db,
+        signing_key,
+        scanner=_StubScanner(last_scan_at=now, disk_root=tmp_path),
+        manager=_StubManager(statuses={"drv_optical": ("running", True)}),
+    )
+    with client:
+        body = _get(client, auth)
+    ids = {d["id"] for d in body["drives"]}
+    assert ids == {"drv_optical"}

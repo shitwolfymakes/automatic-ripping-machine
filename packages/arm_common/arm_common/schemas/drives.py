@@ -9,7 +9,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from arm_common.enums import DriveIdentityKind, DriveLifecycle, DriveMediaStatus, DriveMode, DriveStatus, JobStatus
+from arm_common.enums import (
+    DriveIdentityKind,
+    DriveKind,
+    DriveLifecycle,
+    DriveMediaStatus,
+    DriveMode,
+    DriveSourceKind,
+    DriveStatus,
+    JobStatus,
+)
 
 
 class DriveCurrentJobView(BaseModel):
@@ -50,6 +59,9 @@ class DriveView(BaseModel):
     model: str | None
     last_error: str | None
     current_job: DriveCurrentJobView | None = None
+    kind: DriveKind = DriveKind.OPTICAL
+    source_kind: DriveSourceKind | None = None
+    source_path: str | None = None
 
 
 class DriveUpdateRequest(BaseModel):
