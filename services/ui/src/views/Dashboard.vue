@@ -15,6 +15,7 @@ import type {
 } from '../api/types'
 import { isTerminalJobStatus } from '../utils/jobStatus'
 import { taskOrdinal } from '../utils/transcodeOrdinal'
+import { driveStatusLabel, partitionDrives, statusClasses } from '../utils/drives'
 
 const REFRESH_MS = Number(import.meta.env.VITE_DASHBOARD_REFRESH_MS ?? 5000)
 const ACTIVE_JOB_STATUSES: JobStatus[] = ['created', 'awaiting_user_id', 'identified', 'ripping']
@@ -37,7 +38,10 @@ const recentTerminalJobs = computed(() =>
 const activeTranscodes = computed(() =>
   transcodes.tasks.filter((t) => ACTIVE_TASK_STATUSES.includes(t.status)),
 )
-const onlineDriveCount = computed(() => drives.value.filter((d) => d.status !== 'offline').length)
+const enrolledDrives = computed(() => partitionDrives(drives.value).enrolled)
+const onlineDriveCount = computed(
+  () => enrolledDrives.value.filter((d) => d.status !== 'offline').length,
+)
 
 function progressOf(taskId: string, fallback: number): number {
   return transcodes.liveProgress[taskId]?.progress_pct ?? fallback
@@ -100,7 +104,7 @@ onUnmounted(() => {
   <div class="row" style="gap: 12px; flex-wrap: wrap; margin-bottom: 12px">
     <div class="card stat">
       <div class="muted">Drives online</div>
-      <div class="stat-value">{{ onlineDriveCount }} / {{ drives.length }}</div>
+      <div class="stat-value">{{ onlineDriveCount }} / {{ enrolledDrives.length }}</div>
     </div>
     <div class="card stat">
       <div class="muted">Active rips</div>
@@ -175,7 +179,9 @@ onUnmounted(() => {
 
   <div class="card">
     <h3 style="margin-top: 0">Drives</h3>
-    <p v-if="drives.length === 0" class="muted">No drives registered yet.</p>
+    <p v-if="enrolledDrives.length === 0" class="muted">
+      No enrolled drives. Enroll one on the Drives page.
+    </p>
     <table v-else>
       <thead>
         <tr>
@@ -187,14 +193,14 @@ onUnmounted(() => {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="d in drives" :key="d.id">
+        <tr v-for="d in enrolledDrives" :key="d.id">
           <td>{{ d.hostname }}</td>
           <td>
             <code>{{ d.device_path }}</code>
           </td>
           <td>{{ d.display_name ?? '—' }}</td>
           <td>
-            <span class="badge">{{ d.status }}</span>
+            <span :class="statusClasses(d)">{{ driveStatusLabel(d) }}</span>
           </td>
           <td>{{ d.last_seen_at ?? '—' }}</td>
         </tr>

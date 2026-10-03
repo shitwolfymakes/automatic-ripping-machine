@@ -85,4 +85,6 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
   del: (path: string) => request<void>('DELETE', path, undefined, false),
   delJson: <T>(path: string) => request<T>('DELETE', path),
+  // POST whose success answer may be 204 with no body (e.g. unenroll deleting the row).
+  postVoid: (path: string) => request<void>('POST', path, undefined, false),
 }

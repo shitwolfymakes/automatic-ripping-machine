@@ -138,7 +138,7 @@ def app_client(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     # dispatcher needs a real docker socket, which the SQLite e2e tier can't
     # provide. Without this the lifespan would branch on whatever the host
     # happens to have, making main.py coverage environment-dependent.
-    monkeypatch.setattr(main_mod, "_build_docker_client", lambda _docker_host="": None)
+    monkeypatch.setattr(main_mod, "_build_docker_client", lambda _docker_host="", **_kw: None)
 
     # Deterministic GPU inventory: ARM_GPUS is unset under test, so the loader
     # would return [] anyway, but pin it so the `transcode.hw_unavailable` emit

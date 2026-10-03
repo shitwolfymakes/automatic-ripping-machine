@@ -19,6 +19,7 @@ import pytest
 # arm_ripper.config builds a pydantic Settings at import time; set placeholders
 # before importing any arm_ripper.* module (matches the other ripper tests).
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
