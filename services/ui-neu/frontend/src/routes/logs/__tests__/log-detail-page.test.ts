@@ -182,41 +182,4 @@ describe('Logs single-job viewer', () => {
 		cleanup();
 		expect(unsub).toHaveBeenCalled();
 	});
-
-	it('subscribes to the live feed for this job on mount', async () => {
-		fetchJobLog.mockResolvedValue(ENTRIES);
-		renderComponent(LogDetailPage);
-		await waitFor(() => expect(subscribeMock).toHaveBeenCalledWith('logs.job_a', expect.any(Function)));
-	});
-
-	it('appends a live line delivered via the WS subscription', async () => {
-		fetchJobLog.mockResolvedValue(ENTRIES);
-		renderComponent(LogDetailPage);
-		await waitFor(() => expect(screen.getByText('started ripping')).toBeInTheDocument());
-
-		wsHandler?.({
-			op: 'event',
-			event_id: 'evt_1',
-			event_type: 'log.line',
-			emitted_at: 'now',
-			topic: 'logs.job_a',
-			job_id: 'job_a',
-			track_id: null,
-			payload: { ts: 't', level: 'info', service: 'arm-transcode-t1', job_id: 'job_a', msg: 'live line', extra: {} }
-		});
-
-		await waitFor(() => {
-			expect(screen.getByText('live line')).toBeInTheDocument();
-		});
-	});
-
-	it('unsubscribes on destroy', async () => {
-		const unsub = vi.fn();
-		subscribeMock.mockReturnValue(unsub);
-		fetchJobLog.mockResolvedValue(ENTRIES);
-		renderComponent(LogDetailPage);
-		await waitFor(() => expect(subscribeMock).toHaveBeenCalled());
-		cleanup();
-		expect(unsub).toHaveBeenCalled();
-	});
 });
