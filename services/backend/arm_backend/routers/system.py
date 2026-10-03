@@ -30,7 +30,7 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
-from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
+from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
 from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
 from arm_common.schemas import (

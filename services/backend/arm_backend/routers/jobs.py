@@ -19,6 +19,8 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identity.pipeline import resolve_job
+from arm_backend.identity.proposals import record_manual_job, record_manual_track, revert_manual_track
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -63,6 +65,7 @@ from arm_common.schemas import (
     TranscodeTaskView,
 )
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
 from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
 from arm_common.ulid import is_valid_id
 
@@ -74,6 +77,17 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+# Resolver-owned attributes on TrackEditRequest / JobUpdateRequest: an edit to
+# one of these becomes a `manual` identity proposal (with provenance) instead
+# of a direct column write, so it goes through the same tiered resolver as
+# every other identity source. Everything else is still a plain `setattr`.
+# Derived from the claim-field maps so the resolver, the recorders and this
+# router cannot drift apart. JobUpdateRequest has no `season` (it is set
+# through /resolve), so the job set is the maps' attrs the request can carry.
+_IDENTITY_TRACK_ATTRS = frozenset(TRACK_CLAIM_FIELDS.values())
+_IDENTITY_JOB_ATTRS = frozenset(JOB_CLAIM_FIELDS.values()).intersection(JobUpdateRequest.model_fields)
 
 
 # Manual-trigger pre-check (drive media status). The ripper posts every
@@ -832,8 +846,11 @@ async def update_job(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
 
     job_fields = req.model_dump(exclude_unset=True, exclude={"tracks"})
+    job_identity = {k: v for k, v in job_fields.items() if k in _IDENTITY_JOB_ATTRS}
     for key, value in job_fields.items():
-        setattr(job, key, value)
+        if key not in _IDENTITY_JOB_ATTRS:
+            setattr(job, key, value)
+    identity_touched = record_manual_job(job, job_identity) if job_identity else False
     db.add(job)
 
     edited_track_ids: list[str] = []
@@ -849,11 +866,21 @@ async def update_job(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"unknown track_id {edit.track_id} for job {job_id}",
                 )
-            for key, value in edit.model_dump(exclude_unset=True, exclude={"track_id"}).items():
-                setattr(track, key, value)
+            data = edit.model_dump(exclude_unset=True, exclude={"track_id", "revert_fields"})
+            identity = {k: v for k, v in data.items() if k in _IDENTITY_TRACK_ATTRS}
+            for key, value in data.items():
+                if key not in _IDENTITY_TRACK_ATTRS:
+                    setattr(track, key, value)
+            if identity and record_manual_track(job, track, identity):
+                identity_touched = True
+            if edit.revert_fields:
+                revert_manual_track(job, track.source_ref, edit.revert_fields)
+                identity_touched = True
             db.add(track)
             edited_track_ids.append(track.id)
 
+    if identity_touched:
+        await resolve_job(db, job)
     await db.flush()
     for tid in edited_track_ids:
         await hub.emit(
@@ -945,18 +972,14 @@ async def resolve(
 
     job.title = req.title
     job.year = req.year
-    job.disc_number = req.disc_number
-    job.disc_total = req.disc_total
-    # Fix 75-5: media_type/season are classifications, not part of the
-    # identity statement -- omitted keeps the stored value, but an EXPLICIT
-    # null clears it (the operator saying "this isn't a season" or "clear
-    # the kind"). model_fields_set is the only way to tell "sent null" from
-    # "not sent" here, since both collapse to req.media_type is None.
+    # Fix 75-5: media_type is a classification, not part of the identity
+    # statement -- omitted keeps the stored value, but an EXPLICIT null
+    # clears it (the operator saying "clear the kind"). model_fields_set is
+    # the only way to tell "sent null" from "not sent" here, since both
+    # collapse to req.media_type is None.
     fields_set = req.model_fields_set
     if "media_type" in fields_set:
         job.media_type = req.media_type
-    if "season" in fields_set:
-        job.season = req.season
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0031
     # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
@@ -973,6 +996,17 @@ async def resolve(
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
     job.metadata_json = new_metadata
+    # Disc position and season are identity fields: they go through the
+    # resolver as manual proposals so provenance is recorded and later
+    # sources (episode matching, disc hints) never override them. This must
+    # run AFTER job.metadata_json = new_metadata above -- record_manual_job
+    # writes into metadata_json too, and assigning new_metadata first would
+    # wipe the claim it just wrote.
+    manual_job = {"disc_number": req.disc_number, "disc_total": req.disc_total}
+    if "season" in fields_set:
+        manual_job["season"] = req.season
+    record_manual_job(job, manual_job)
+    await resolve_job(session, job)
     session.add(job)
 
     # Fix 75-2: commit the resolve's job mutations (title/year/status/etc.)

@@ -155,6 +155,7 @@
 										<TrackTitleSearch
 											jobId={job.id}
 											track={tracks.find((t) => t.id === row.trackId)!}
+											mediaType={job.media_type}
 											onapply={() => handleTrackTitleApply(row.trackId!)}
 											onclear={() => onrefresh?.()}
 											onclose={() => toggleTrackSearch(row.trackId!)}

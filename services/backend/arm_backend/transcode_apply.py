@@ -87,6 +87,7 @@ def _build_track_ctx(
     # set these; a movie's single track leaves them null and inherits job identity.
     eff_title = track.title or job.title or ""
     eff_year = track.year if track.year is not None else job.year
+    eff_season = track.season if track.season is not None else job.season
     episode = f"{track.episode_number:02d}" if track.episode_number is not None else ""
 
     # Human-readable metadata fields land inside path segments; sanitise
@@ -98,13 +99,11 @@ def _build_track_ctx(
         "title": sanitize_path_component(eff_title),
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
-        # G-14: the job columns (season, disc_number) are authoritative now.
-        # The metadata.get() fallbacks below are belt-and-braces for rows
-        # written before those columns existed / before the metadata-mirror
-        # scrub (migration 0032) — not an active lift path. Ints are
-        # zero-padded to match the S{NN}D{NN} convention (docs/developers/architecture/02 § TV).
+        # Per-track season (set by a disc map or episode match) wins over the
+        # job-level season; the metadata.get() fallback remains for pre-G-14 rows.
+        # Ints are zero-padded to match the S{NN}D{NN} convention (docs/developers/architecture/02 § TV).
         "season": sanitize_path_component(
-            f"{job.season:02d}" if job.season is not None else str(metadata.get("season") or "")
+            f"{eff_season:02d}" if eff_season is not None else str(metadata.get("season") or "")
         ),
         "disc": sanitize_path_component(
             f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")

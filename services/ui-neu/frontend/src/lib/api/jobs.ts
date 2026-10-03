@@ -93,10 +93,12 @@ export function updateTrackTitle(
 	return patchJob(jobId, { tracks: [{ track_id: trackId, ...data }] });
 }
 
-// Clear the operator title override (null = clear in v3).
+// Clear the operator title override: `title` is resolver-owned, so revert it
+// (hands it back to the automatic sources) rather than pinning a manual null.
+// year / imdb_id / poster_url are plain fields and are cleared with null.
 export function clearTrackTitle(jobId: string, trackId: string): Promise<JobView> {
 	return patchJob(jobId, {
-		tracks: [{ track_id: trackId, title: null, year: null, imdb_id: null, poster_url: null }]
+		tracks: [{ track_id: trackId, year: null, imdb_id: null, poster_url: null, revert_fields: ['title'] }]
 	});
 }
 
