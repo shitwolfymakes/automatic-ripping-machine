@@ -520,6 +520,109 @@ out="$(udev_case no ask)"
 lacks "udev: no terminal does not write" "WROTE" "$out"
 has "udev: the skip is recorded" "SKIPPED=udev rule" "$out"
 
+# --- upgrade: the old release fetches, then hands over ------------------------------
+# upgrade_case <name> <resolved tag> <fetch: ok|fail> [upgrade args...]
+upgrade_case() {
+    (
+        ARM_DIR="${TMPROOT}/$1/arm"; mkdir -p "${ARM_DIR}/.armctl/releases/v3.1.0"; armctl_settings
+        ln -sfn releases/v3.1.0 "${ARM_STATE_DIR}/current"
+        printf 'ARMCTL_PROFILE=full\nARM_IMAGE_TAG=v3.1.0\n' > "${ENV_FILE}"
+        resolved="$2"; fetch="$3"; shift 3
+        ARMCTL_RELEASE_DIR="${TMPROOT}/fake-rel"; mkdir -p "${ARMCTL_RELEASE_DIR}"
+        log_file="${TMPROOT}/upgrade.log"; : > "${log_file}"
+        # The release's own install.sh, as a stub.
+        cat > "${ARMCTL_RELEASE_DIR}/install.sh" <<'STUB'
+bootstrap_resolve_tag() { printf '%s' "${resolved}"; }
+bootstrap_fetch_bundle() {
+    echo "fetch $1 [${3:-}]" >> "${log_file}"
+    if [[ "${fetch}" == fail ]]; then echo "ERROR: download failed" >&2; exit 1; fi
+    mkdir -p "$2"
+}
+STUB
+        run_new_release() { echo "handover $*" >> "${log_file}"; }
+        rc=0; ( cmd_upgrade "$@" ) > "${TMPROOT}/upgrade.out" 2>&1 || rc=$?
+        {
+            echo "rc=${rc}"
+            echo "TAG=$(grep '^ARM_IMAGE_TAG=' "${ENV_FILE}" | cut -d= -f2)"
+            echo "CURRENT=$(readlink "${ARM_STATE_DIR}/current")"
+        } >> "${log_file}"
+        tr '\n' ';' < "${log_file}"
+        cat "${TMPROOT}/upgrade.out"
+    )
+}
+out="$(upgrade_case upg-same v3.1.0 ok)"
+has "upgrade: already on the latest does nothing" "already on v3.1.0" "$out"
+lacks "upgrade: already on the latest fetches nothing" "fetch " "$out"
+out="$(upgrade_case upg-new v3.2.0 ok --force)"
+has "upgrade: the new bundle is fetched" "fetch v3.2.0 []" "$out"
+has "upgrade: the NEW release carries out the upgrade" "handover ${TMPROOT}/upg-new/arm/.armctl/releases/v3.2.0/armctl.sh apply-upgrade --from v3.1.0 --to v3.2.0 --force" "$out"
+has "upgrade: the old release changes nothing itself" "TAG=v3.1.0;CURRENT=releases/v3.1.0;" "$out"
+out="$(upgrade_case upg-named v3.2.0 ok --version v3.1.5)"
+has "upgrade: --version names the target" "fetch v3.1.5 []" "$out"
+out="$(upgrade_case upg-offline v3.2.0 fail)"
+has "upgrade: a failed download stops" "rc=1" "$out"
+lacks "upgrade: a failed download hands nothing over" "handover" "$out"
+has "upgrade: a failed download leaves the install as it was" "TAG=v3.1.0;CURRENT=releases/v3.1.0;" "$out"
+out="$(upgrade_case upg-bundle v3.2.0 ok --bundle /tmp/b.tar.gz)"
+has "upgrade: --bundle without --version is refused" "--bundle needs --version" "$out"
+
+# --- upgrade: the new release applies it ----------------------------------------------
+# apply_case <name> <FAIL_AT step or ''>
+apply_case() {
+    (
+        ARM_DIR="${TMPROOT}/$1/arm"; state="${ARM_DIR}/.armctl"
+        mkdir -p "${state}/releases/v3.0.0" "${state}/releases/v3.1.0" "${state}/releases/v3.2.0"
+        armctl_settings
+        ln -sfn releases/v3.1.0 "${ARM_STATE_DIR}/current"
+        printf 'ARMCTL_PROFILE=full\nARM_IMAGE_PREFIX=reg\nARM_IMAGE_TAG=v3.1.0\nARM_RIPPER_IMAGE=reg/arm-ripper:v3.1.0\n' > "${ENV_FILE}"
+        chmod 600 "${ENV_FILE}"
+        ARMCTL_RELEASE_DIR="${REL}"; IMAGE_PREFIX_ARG=""
+        fail_at="$2"
+        log_file="${TMPROOT}/apply.log"; : > "${log_file}"
+        for fn in "${STEPS[@]}"; do
+            eval "${fn}() { echo ${fn} >> \"\${log_file}\"; if [[ \"\${fail_at}\" == ${fn} ]]; then exit 1; fi; }"
+        done
+        backend_started_at() { echo T1; }
+        published_url() { :; }
+        compose() { echo "compose $*" >> "${log_file}"; }
+        HEALTH_RESULT="backend healthy"
+        rc=0; ( cmd_apply_upgrade --from v3.1.0 --to v3.2.0 ) > "${TMPROOT}/apply.out" 2>&1 || rc=$?
+        {
+            echo "rc=${rc}"
+            echo "TAG=$(grep '^ARM_IMAGE_TAG=' "${ARM_STATE_DIR}/.env" | cut -d= -f2)"
+            echo "RIPPER=$(grep '^ARM_RIPPER_IMAGE=' "${ARM_STATE_DIR}/.env" | cut -d= -f2)"
+            echo "CURRENT=$(readlink "${ARM_STATE_DIR}/current")"
+            echo "RELEASES=$(cd "${ARM_STATE_DIR}/releases" && echo *)"
+            echo "MODE=$(stat -c '%a' "${ARM_STATE_DIR}/.env")"
+        } >> "${log_file}"
+        tr '\n' ';' < "${log_file}"
+        cat "${TMPROOT}/apply.out"
+    )
+}
+out="$(apply_case apply-ok '')"
+has "apply: pull, verify, guard and backup all come before the switch" \
+    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;respawn_rippers_if_needed;wait_for_backend;rc=0;" "$out"
+has "apply: .env is on the new release" "TAG=v3.2.0;RIPPER=reg/arm-ripper:v3.2.0;" "$out"
+has "apply: current points at the new release" "CURRENT=releases/v3.2.0;" "$out"
+has "apply: the previous release is kept, older ones pruned" "RELEASES=v3.1.0 v3.2.0;" "$out"
+has "apply: .env stays private" "MODE=600;" "$out"
+has "apply: the switch is announced" "switched to v3.2.0" "$out"
+
+for step in pull_images verify_images_present guard_running_spawned backup_db; do
+    out="$(apply_case "apply-${step}" "${step}")"
+    has "apply: a failure at ${step} stops the upgrade" "rc=1;" "$out"
+    has "apply: a failure at ${step} leaves .env on the old release" "TAG=v3.1.0;RIPPER=reg/arm-ripper:v3.1.0;" "$out"
+    has "apply: a failure at ${step} leaves current on the old release" "CURRENT=releases/v3.1.0;" "$out"
+    lacks "apply: a failure at ${step} removes no container" "remove_spawned_containers" "$out"
+done
+
+out="$(apply_case apply-unhealthy wait_for_backend)"
+has "apply: an unhealthy backend after the switch is an error" "rc=1;" "$out"
+has "apply: the install stays on the new release" "TAG=v3.2.0;" "$out"
+has "apply: the user is told it was not rolled back, and why" "not rolled back" "$out"
+has "apply: the previous release is still there for a manual rollback" "RELEASES=v3.0.0 v3.1.0 v3.2.0;" "$out"
+has "apply: the user is told where the previous release is" "releases/v3.1.0" "$out"
+
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"

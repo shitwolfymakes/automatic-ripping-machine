@@ -274,6 +274,151 @@ cmd_down() {
     compose down
 }
 
+# Its own function so tests can replace it: `exec` cannot be stubbed. The
+# lock (fd 9) and ARMCTL_LOCK_HELD pass to the new process.
+run_new_release() {
+    exec "$@"
+}
+
+# Remove every release folder except the ones named.
+prune_releases() {
+    local dir name keep k
+    for dir in "${ARM_STATE_DIR}/releases"/*/; do
+        [[ -d "${dir}" ]] || continue
+        name="$(basename "${dir}")"
+        keep=0
+        for k in "$@"; do
+            if [[ "${name}" == "${k}" ]]; then
+                keep=1
+            fi
+        done
+        if [[ "${keep}" -eq 0 ]]; then
+            rm -rf "${ARM_STATE_DIR}/releases/${name}"
+        fi
+    done
+}
+
+after_switch_failure() {
+    local from="$1" to="$2" f newest=""
+    for f in "${ARM_DIR}/backups"/pg-backup-*.sql.gz; do
+        if [[ -f "${f}" ]]; then
+            newest="${f}"
+        fi
+    done
+    arm_err "the stack was switched to ${to}, but the backend did not become healthy."
+    arm_sub "The install is now on ${to}. It was not rolled back, because database migrations cannot be reversed."
+    if [[ -n "${newest}" ]]; then
+        arm_sub "Database backup from before the switch: ${newest}"
+    fi
+    arm_sub "Previous release kept at: ${ARM_STATE_DIR}/releases/${from}"
+    arm_sub "Logs: ${ARMCTL_CMD} compose logs ${BACKEND_SERVICE}"
+    arm_sub "To go back by hand, see 'Rolling back' on the Upgrading page of the ARM docs."
+}
+
+# Runs in the release that is currently installed: pick the target, download
+# and verify its bundle, then let the NEW release's armctl do the upgrade.
+cmd_upgrade() {
+    local version="" bundle="" pass=() current target repo new_dir
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --version)
+                if [[ $# -lt 2 ]]; then arm_err "--version needs a release tag"; exit 2; fi
+                version="$2"; shift 2 ;;
+            --bundle)
+                if [[ $# -lt 2 ]]; then arm_err "--bundle needs a file"; exit 2; fi
+                bundle="$2"; shift 2 ;;
+            --force|--no-backup|--no-pull) pass+=("$1"); shift ;;
+            *) arm_err "unknown option for upgrade: $1"; exit 2 ;;
+        esac
+    done
+    require_installed
+    if [[ -n "${bundle}" && -z "${version}" ]]; then
+        arm_err "--bundle needs --version <tag>, the release the bundle is for"
+        exit 2
+    fi
+    # The bootstrap's release lookup and bundle fetch, from this release's copy.
+    # shellcheck source=/dev/null
+    ARM_INSTALL_SOURCE_ONLY=1 source "${ARMCTL_RELEASE_DIR}/install.sh"
+    repo="$(env_file_value ARMCTL_RELEASE_REPO)" || exit 1
+    if [[ -n "${repo}" ]]; then
+        ARM_RELEASE_REPO="${repo}"
+    fi
+    current="$(env_file_value ARM_IMAGE_TAG)" || exit 1
+    if [[ -n "${version}" ]]; then
+        target="${version}"
+    else
+        target="$(bootstrap_resolve_tag)" || exit 1
+    fi
+    if [[ "${target}" == "${current}" ]]; then
+        arm_say "already on ${current}; nothing to upgrade"
+        return 0
+    fi
+    arm_say "upgrading ${current} to ${target}"
+    new_dir="${ARM_STATE_DIR}/releases/${target}"
+    bootstrap_fetch_bundle "${target}" "${new_dir}" "${bundle}"
+    run_new_release "${new_dir}/armctl.sh" apply-upgrade --from "${current}" --to "${target}" "${pass[@]+"${pass[@]}"}"
+}
+
+# Runs in the NEW release. Everything up to "The switch" works on a candidate
+# .env and leaves the running install exactly as it was.
+cmd_apply_upgrade() {
+    local from="" to="" live_env env_next
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --from)      from="$2"; shift 2 ;;
+            --to)        to="$2"; shift 2 ;;
+            --force)     FORCE=1; shift ;;
+            --no-backup) NO_BACKUP=1; shift ;;
+            --no-pull)   NO_PULL=1; shift ;;
+            *) arm_err "unknown option for apply-upgrade: $1"; exit 2 ;;
+        esac
+    done
+    if [[ -z "${from}" || -z "${to}" ]]; then
+        arm_err "apply-upgrade is run by 'armctl upgrade'; do not call it directly"
+        exit 2
+    fi
+    require_installed
+    load_profile
+    ARM_HINT_FORCE_CMD="${ARMCTL_CMD} upgrade --force"
+    ARM_HINT_IMAGES_READY="The new images are pulled"
+
+    # The candidate .env: the live one, plus any settings this release adds,
+    # with every image pinned to the new release.
+    live_env="${ENV_FILE}"
+    env_next="${ARM_STATE_DIR}/.env.next"
+    # Each step is checked on its own so a failure stops the upgrade even when
+    # this function is called from an `if` or `||` (errexit is off there).
+    rm -f "${env_next}" || exit 1
+    cp -p "${live_env}" "${env_next}" || { arm_err "could not copy ${live_env}"; exit 1; }
+    env_merge_new_keys "${ARMCTL_RELEASE_DIR}/.env.example" "${env_next}" || { rm -f "${env_next}"; arm_err "could not merge new settings into the candidate .env"; exit 1; }
+    write_image_pins "${to}" "${env_next}" || { rm -f "${env_next}"; arm_err "could not pin the new images in the candidate .env"; exit 1; }
+    use_env_file "${env_next}"
+
+    select_up_services
+    pull_images
+    verify_images_present
+    guard_running_spawned
+    refresh_arm_gpus
+    backup_db
+
+    # The switch. From here the install is on the new release.
+    mv "${env_next}" "${live_env}" || { arm_err "could not replace ${live_env}; the install is still on ${from}"; exit 1; }
+    use_env_file "${live_env}"
+    if ! ln -sfn "releases/${to}" "${ARM_STATE_DIR}/current"; then
+        arm_err "could not point ${ARM_STATE_DIR}/current at ${to}; ${live_env} already names ${to}, so fix the link by hand"
+        exit 1
+    fi
+    arm_say "switched to ${to}"
+
+    go_live
+    if ! ( finish_up ); then
+        after_switch_failure "${from}" "${to}"
+        exit 1
+    fi
+    prune_releases "${to}" "${from}"
+    arm_say "upgrade to ${to} complete"
+}
+
 armctl_main() {
     local cmd="${1:-help}"
     if [[ $# -gt 0 ]]; then
@@ -289,6 +434,8 @@ armctl_main() {
         install) cmd_install "$@" ;;
         up)      require_docker_ready; acquire_lock; cmd_up "$@" ;;
         down)    require_docker_ready; acquire_lock; cmd_down "$@" ;;
+        upgrade)       require_docker_ready; acquire_lock; cmd_upgrade "$@" ;;
+        apply-upgrade) require_docker_ready; acquire_lock; cmd_apply_upgrade "$@" ;;
         compose) require_docker_ready; require_installed; compose "$@" ;;
         *)       arm_err "unknown command: ${cmd}"; armctl_usage >&2; exit 2 ;;
     esac
