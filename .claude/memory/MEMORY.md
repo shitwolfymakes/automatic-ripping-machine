@@ -27,3 +27,4 @@
 - [arm-v3 is the tracking fork](project_armv3_tracking_fork.md) — since 2026-10-02 `uprightbass360/arm-v3` (remote `armv3`) mirrors the PR stack, holds defect issues + labels, and the recut top-of-stack branches (PRs #122–#128); PRs still merge via shitwolfymakes
 - [Stack move-down workflow](project_stack_move_down_workflow.md) — how register move-down rows are hoisted into the origin PR (arm-v3 mirror PRs for CI, then wolfy); full restack deferred because the stale bases make it expensive
 - [Stack linearised 2026-10-03](project_stack_linear_restack.md) — the wolfy stack is now linear (0 merges, GitHub stack #118 = all 34 PRs); backup refs `backup/pre-linear-20261003/*` on arm-v3; restack children by rebase, never merge-forward
+- [hifi verification method](project_hifi_verification_method.md) — temp admin via DB + argon2, ISO rips as the disc path, log-capture loop, SQL quoting and image gotchas (2026-10-03 register verification)
