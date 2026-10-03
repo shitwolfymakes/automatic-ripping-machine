@@ -431,6 +431,95 @@ has "path link: a failed ln keeps the full path" "CMD=${TMPROOT}/plink-lnfail/ar
 has "path link: a failed ln is recorded" "could not create" "$out"
 chmod -R u+w "${TMPROOT}/plink-lnfail" 2>/dev/null || true
 
+# --- install flow ----------------------------------------------------------------------
+echo v3.1.0 > "${REL}/VERSION"
+FLOW_STEPS=(ensure_docker acquire_lock ensure_layout choose_storage ensure_ca write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
+# flow <install name> [install args...]: run cmd_install with every stage
+# replaced by a recorder; print the order, then the parsed answers.
+flow() {
+    (
+        ARM_DIR="${TMPROOT}/$1/arm"; mkdir -p "${ARM_DIR}/.armctl"; armctl_settings; rm -f "${ENV_FILE}"
+        shift
+        ARMCTL_RELEASE_DIR="${REL}"
+        log_file="${TMPROOT}/flow.log"; : > "${log_file}"
+        for fn in "${FLOW_STEPS[@]}"; do
+            eval "${fn}() { echo ${fn} >> \"\${log_file}\"; }"
+        done
+        choose_profile() { PROFILE="${PROFILE_ARG:-full}"; echo "choose_profile ${PROFILE}" >> "${log_file}"; }
+        setup_remote_offload() { REMOTE_BACKEND_SAN="192.168.0.68"; echo setup_remote_offload >> "${log_file}"; }
+        write_env() { echo write_env >> "${log_file}"; if [[ "${PROFILE}" == offload ]]; then echo 'ARM_TRANSCODE_DOCKER_HOST=ssh://sam@h' > "${ENV_FILE}"; else : > "${ENV_FILE}"; fi; }
+        make_leaf() { echo "make_leaf $*" >> "${log_file}"; }
+        offload_remote_run_init() { :; }
+        hostname() { echo testhost; }
+        ARMCTL_ARGV=(install "$@")
+        cmd_install "$@" </dev/null >/dev/null 2>&1
+        echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"
+        echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}"
+        tr '\n' ';' < "${log_file}"
+    )
+}
+check "install: full box runs every stage in order" \
+    "choose_profile full;ensure_docker;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;" \
+    "$(flow flow-full)"
+out="$(flow flow-offload --profile offload)"
+has "install: offload runs the walkthrough after storage" "choose_storage;setup_remote_offload;ensure_ca;" "$out"
+has "install: offload puts the callback address on the backend certificate" "make_leaf arm-backend 192.168.0.68;" "$out"
+lacks "install: offload does not offer the local NVIDIA toolkit" "ensure_nvidia_container_toolkit" "$out"
+has "install: offload ends with the verification table" "finish_up;offload_completion_report;" "$out"
+has "install: a profile given by flag is not repeated in the restart arguments" "ARGV=install --profile offload;" "$out"
+out="$(flow flow-ripper --profile ripper-only)"
+lacks "install: ripper-only does not offer the NVIDIA toolkit" "ensure_nvidia_container_toolkit" "$out"
+lacks "install: ripper-only has no offload walkthrough" "setup_remote_offload" "$out"
+out="$(flow flow-nostart --no-start)"
+lacks "install: --no-start does not start the stack" "stack_up" "$out"
+has "install: --no-start still configures" "write_env;write_host_overlay;" "$out"
+out="$(flow flow-flags --yes --raw-path /r --media-path=/m --image-prefix ghcr.io/fork)"
+has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
+out="$(flow flow-decline --no-host-changes)"
+has "install: --no-host-changes declines host changes" "ASSUME=no " "$out"
+out="$( (new_install flow-bad; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --bogus) 2>&1 || true)"
+has "install: an unknown option is rejected" "unknown option for install: --bogus" "$out"
+out="$( (new_install flow-noval; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --raw-path) 2>&1 || true)"
+has "install: an option without its value is rejected" "--raw-path needs a value" "$out"
+out="$( (new_install flow-nover; ARMCTL_RELEASE_DIR="${TMPROOT}/empty-rel"; mkdir -p "${ARMCTL_RELEASE_DIR}"; ARMCTL_ARGV=(install); cmd_install) 2>&1 || true)"
+has "install: a bundle without VERSION is rejected" "no VERSION file" "$out"
+has "install: --help lists the options" "--offload-backend-url" "$(install_usage)"
+
+# layout and summary, for real
+new_install layout; ( ensure_layout )
+check "layout: certs folder is private" "700" "$(stat -c '%a' "${ARM_DIR}/certs")"
+check "layout: state folder is private" "700" "$(stat -c '%a' "${ARM_STATE_DIR}")"
+check "layout: logs folder is setgid, group-writable" "2775" "$(stat -c '%a' "${ARM_DIR}/logs")"
+for d in db backups scripts iso-library; do
+    check "layout: ${d} exists" "yes" "$( [[ -d "${ARM_DIR}/${d}" ]] && echo yes || echo no )"
+done
+out="$( (SKIPPED=("udev rule (no terminal to ask on)"); print_install_summary 1) )"
+has "summary: names the URL" "https://localhost:8081" "$out"
+has "summary: lists what was skipped" "udev rule (no terminal to ask on)" "$out"
+has "summary: says how to revisit skipped steps" "armctl install" "$out"
+out="$( (SKIPPED=(); print_install_summary 0) )"
+has "summary: --no-start says how to start" "armctl up" "$out"
+lacks "summary: nothing skipped, no skipped section" "skipped during this install" "$out"
+
+# udev: consent gates the write; a current rule asks nothing
+udev_case() {  # udev_case <rule current: yes|no> <ARMCTL_ASSUME>
+    (
+        command() { if [[ "$1" == -v && "$2" == udevadm ]]; then return 0; fi; builtin command "$@"; }
+        # eval, so the helper's own $1 is baked into the stub.
+        eval "udev_rule_current() { [[ $1 == yes ]]; }"
+        ensure_udev_rule() { echo WROTE; }
+        sudo() { return 0; }
+        ARMCTL_ASSUME="$2"; SKIPPED=()
+        install_udev_rule </dev/null
+        echo "SKIPPED=${SKIPPED[*]:-}"
+    )
+}
+lacks "udev: a current rule is not rewritten" "WROTE" "$(udev_case yes yes)"
+has "udev: with consent the rule is written" "WROTE" "$(udev_case no yes)"
+out="$(udev_case no ask)"
+lacks "udev: no terminal does not write" "WROTE" "$out"
+has "udev: the skip is recorded" "SKIPPED=udev rule" "$out"
+
 # --- dispatch -----------------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"
