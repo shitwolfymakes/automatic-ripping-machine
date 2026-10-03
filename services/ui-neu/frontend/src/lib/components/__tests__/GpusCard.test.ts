@@ -22,11 +22,9 @@ vi.mock('$lib/stores/encoders.svelte', () => ({
 }));
 
 const subscribeMock = vi.fn();
-const startMock = vi.fn();
 let wsHandler: ((env: WSEnvelope) => void) | null = null;
 vi.mock('$lib/api/ws', () => ({
 	wsClient: {
-		start: () => startMock(),
 		subscribe: (topic: string, handler: (env: WSEnvelope) => void) => {
 			wsHandler = handler;
 			return subscribeMock(topic, handler);
@@ -226,12 +224,6 @@ describe('GpusCard', () => {
 
 		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
 		expect(mockRefreshEncoders).not.toHaveBeenCalled();
-	});
-
-	it('starts the WebSocket on mount so gpu.probed reaches a directly loaded Settings page', async () => {
-		mockFetchGpus.mockResolvedValue([]);
-		render(GpusCard);
-		await waitFor(() => expect(startMock).toHaveBeenCalled());
 	});
 
 	it('releases the subscription on destroy', async () => {

@@ -7,20 +7,20 @@ Start there, and read the architecture docs at
 [`docs/arch/README.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/arch/README.md)
 to understand the v3 service topology before making changes.
 
-> This is **ARM v3** — a FastAPI backend, a Vue UI, Postgres, a ripper per drive,
+> This is **ARM v3** — a FastAPI backend, a SvelteKit UI, Postgres, a ripper per drive,
 > and an ephemeral transcoder. It shares no code with v2 (frozen, no longer developed).
 > If you're patching Flask/`arm.yaml`/the v2 monolith, you're in the wrong tree.
 
 ## Project layout
 
-The Python side is a [`uv`](https://astral.sh/uv) workspace; the UI is a Vite/Vue
-app.
+The Python side is a [`uv`](https://astral.sh/uv) workspace; the UI is a SvelteKit
+(Svelte 5) app.
 
 - `packages/arm_common/` — shared Pydantic schemas, enums, SQLModel models.
 - `services/backend/` — FastAPI app, Alembic migrations, WS hub, dispatchers.
 - `services/ripper/` — per-drive poller + MakeMKV/HandBrake/abcde drivers.
 - `services/transcode/` — ephemeral per-job transcoder.
-- `services/ui/` — Vue 3 SPA served by nginx.
+- `services/ui-neu/` - SvelteKit SPA served by nginx (the `arm-ui` image).
 - `devtools/` — contributor tooling (setup, smoke tests, OpenAPI regen).
 
 ## Local development
@@ -54,7 +54,8 @@ rules in
 
 ```bash
 uv run pytest                       # all backend/ripper/transcode suites; zero infra
-uv run pre-commit run --all-files   # ruff, mypy, eslint, prettier, vue-tsc, shellcheck
+uv run pre-commit run --all-files   # ruff, mypy, shellcheck
+cd services/ui-neu/frontend && npm run check && npx vitest run   # UI: svelte-check + tests
 ```
 
 If you change a backend router or an `arm_common` schema that affects the API,
@@ -62,8 +63,8 @@ regenerate the OpenAPI artifacts (CI's `openapi-drift` job gates on this) and
 commit them:
 
 ```bash
-bash devtools/regen-openapi-snapshot.sh    # refresh services/ui/openapi.snapshot.json
-cd services/ui && npm run openapi-types     # regenerate the TS types
+bash devtools/regen-openapi-snapshot.sh    # refresh services/ui-neu/openapi.snapshot.json
+bash services/ui-neu/scripts/codegen.sh    # regenerate the TS types (api.gen.ts)
 ```
 
 Heavier end-to-end drills live in `devtools/` — `iso-smoke.sh` (full
@@ -74,8 +75,8 @@ scan → rip → transcode against an ISO fixture, no disc needed) and
 
 - One logical change per PR; open it **against `main`**.
 - Rebase before review (the trunk is squash-merged and kept linear).
-- CI must pass: ruff format/lint, mypy + `vue-tsc`, the `pytest` suites, and the
-  OpenAPI drift check.
+- CI must pass: ruff format/lint, mypy, the UI's `svelte-check` and vitest suites,
+  the `pytest` suites, and the OpenAPI and UI codegen drift checks.
 - Update affected docs — including this wiki — in the same PR. See
   [Contributing to the Wiki](Contribute-Wiki).
 

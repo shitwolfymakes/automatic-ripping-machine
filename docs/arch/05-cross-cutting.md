@@ -32,9 +32,9 @@ repo-root/
 │   │   ├── arm_transcode/
 │   │   ├── Dockerfile
 │   │   └── pyproject.toml
-│   └── ui/                      # Vue 3 + Vite
-│       ├── src/
-│       ├── package.json
+│   └── ui-neu/                  # SvelteKit (Svelte 5) SPA; the arm-ui image
+│       ├── frontend/            # src/, package.json
+│       ├── openapi.snapshot.json
 │       └── Dockerfile
 ├── docs/
 │   └── arch/                    # this directory

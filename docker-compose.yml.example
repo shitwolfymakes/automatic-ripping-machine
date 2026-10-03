@@ -247,28 +247,13 @@ services:
   arm-ui:
     build:
       context: .
-      dockerfile: services/ui/Dockerfile
+      dockerfile: services/ui-neu/Dockerfile
     container_name: armv3-ui
     restart: unless-stopped
     depends_on:
       - arm-backend
     ports:
       - "8081:443"
-    volumes:
-      - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
-      - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
-      - ./arm/certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
-
-  arm-ui-neu:
-    build:
-      context: .
-      dockerfile: services/ui-neu/Dockerfile
-    container_name: armv3-ui-neu
-    restart: unless-stopped
-    depends_on:
-      - arm-backend
-    ports:
-      - "8082:443"
     volumes:
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro

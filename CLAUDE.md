@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 Automatic Ripping Machine **v3** — a greenfield rebuild that now occupies the
-whole repository. It is a multi-service system (FastAPI Backend, Vue UI, a
+whole repository. It is a multi-service system (FastAPI Backend, SvelteKit UI, a
 ripper per optical drive, and an ephemeral transcoder) on Postgres, and it
 shares nothing with the legacy v2 codebase at the code level. ARM v2 is frozen
 and not in this tree; its code remains in the repository's pre-cutover git history.
@@ -33,7 +33,7 @@ Layout:
 - [services/backend/](services/backend/) — FastAPI app (`arm_backend`), Alembic migrations ([services/backend/migrations/](services/backend/migrations/)), the WebSocket hub, and dispatchers (transcode, notification, log-tail). JWT + service-token auth.
 - [services/ripper/](services/ripper/) — per-drive poller + Backend client + makemkv/HandBrake/abcde drivers (`arm_ripper`). One ripper service per optical drive.
 - [services/transcode/](services/transcode/) — ephemeral, per-task transcoder spawned by the Backend (`arm_transcode`).
-- [services/ui/](services/ui/) — Vue 3 SPA served by nginx. Its TypeScript API types are generated from the Backend's OpenAPI schema.
+- [services/ui-neu/](services/ui-neu/) - SvelteKit (Svelte 5) SPA served by nginx, published as the `arm-ui` image. Its TypeScript API types are generated from the committed OpenAPI snapshot ([services/ui-neu/openapi.snapshot.json](services/ui-neu/openapi.snapshot.json)).
 - [services/_common/](services/_common/) — shared container entrypoint (CA-merge + PUID drop + tini exec).
 - [packages/arm_common/](packages/arm_common/) — shared Pydantic schemas, enums, SQLModel models, ULID helper, and structured-logging helpers, imported by every Python service.
 
@@ -46,8 +46,8 @@ Postgres, via async SQLAlchemy/SQLModel. Schema is managed by Alembic under [ser
 The UI is generated from the Backend's OpenAPI schema, and CI's `openapi-drift` job fails if they diverge. After changing a Backend router or an `arm_common` schema that affects the API, regenerate both and commit the artifacts:
 
 ```bash
-bash devtools/regen-openapi-snapshot.sh    # refresh services/ui/openapi.snapshot.json
-cd services/ui && npm run openapi-types     # regenerate the TypeScript types
+bash devtools/regen-openapi-snapshot.sh    # refresh services/ui-neu/openapi.snapshot.json
+bash services/ui-neu/scripts/codegen.sh    # regenerate the TypeScript types (api.gen.ts)
 ```
 
 ## Commands
@@ -77,7 +77,8 @@ The suite needs no Docker, Postgres, drives, or network (in-memory fake session 
 
 ```bash
 uv run pre-commit install              # install the git hook once
-uv run pre-commit run --all-files      # ruff, mypy, eslint, prettier, vue-tsc, shellcheck
+uv run pre-commit run --all-files      # ruff, mypy, shellcheck
+cd services/ui-neu/frontend && npm run check && npx vitest run   # UI: svelte-check + tests
 ```
 
 ## Development model

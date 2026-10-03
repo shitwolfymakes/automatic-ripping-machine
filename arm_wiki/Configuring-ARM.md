@@ -48,7 +48,7 @@ cd ~/arm && docker compose up -d
 
 ## The UI Settings page
 
-Open **Settings** (`/config`) in the web UI. These values live in the database
+Open **Settings** (`/settings`) in the web UI. These values live in the database
 and apply immediately. The full set:
 
 ### Metadata / identification

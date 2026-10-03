@@ -1,6 +1,6 @@
 // Minimal UI WebSocket client — a single shared connection per page that
 // subscribes to backend topics on demand. Ported from the legacy Vue UI
-// (services/ui/src/api/ws.ts), adapted to ui-neu's same-origin setup and
+// (removed 2026-09-27), adapted to ui-neu's same-origin setup and
 // localStorage token getter.
 //
 // Design: one connection, topic -> handler-set demux, `subscribe(topic, h)`

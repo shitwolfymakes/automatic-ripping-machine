@@ -200,7 +200,7 @@ Drop the `v3-` prefix now that these are the only workflows. Re-evaluate `publis
 
 ### 6. Ports — no change
 
-- The UI stays on host `8081` (mapped to container `443`/TLS). `8081` is the canonical port the installer generates and that existing installs already use; v2's `8080` is **not** reclaimed. (The earlier plan to move back to `8080` was dropped — the installed, TLS-secured deployment is the source of truth, and it has always run on `8081`.)
+- The UI stays on host `8081` (mapped to container `443`/TLS). `8081` is the canonical port the installer generates and that existing installs already use; v2's `8080` is **not** reclaimed. (The earlier plan to move back to `8080` was dropped — the installed, TLS-secured deployment is the source of truth, and it has always run on `8081`.) The SvelteKit UI (`services/ui-neu/`) took over `arm-ui` and `8081` when the Vue UI was removed on 2026-09-27.
 
 ### 7. v2 preservation — no tag
 
