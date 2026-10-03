@@ -15,13 +15,7 @@ export default defineConfig({
 			reporter: ['text', 'json', 'lcov'],
 			reportsDirectory: 'coverage',
 			include: ['src/**/*.{ts,svelte}'],
-			exclude: [
-				'src/**/*.test.ts',
-				'src/**/*.spec.ts',
-				'src/**/*.d.ts',
-				'src/lib/types/**',
-				'src/routes/+layout.ts'
-			]
+			exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/*.d.ts', 'src/lib/types/**', 'src/routes/+layout.ts']
 		}
 	}
 });

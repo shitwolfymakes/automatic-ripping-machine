@@ -59,9 +59,7 @@
 
 	const filteredSessions = $derived.by(() => {
 		const mt = discTypeToMediaType(job.disc_type);
-		const byMediaType = sessions.filter(
-			(s) => mt === null || s.media_type === mt || s.media_type === 'tv'
-		);
+		const byMediaType = sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
 		// Encode sessions can only be applied while transcoding is running;
 		// when it's disabled, only passthrough-compatible sessions are offered
 		// - but only once transcodePresets has loaded (presetsLoading), since a
@@ -73,9 +71,7 @@
 		return byMediaType;
 	});
 
-	const hasDuplicateInRequest = $derived(
-		collisions.some((c) => c.reason === 'duplicate_in_request')
-	);
+	const hasDuplicateInRequest = $derived(collisions.some((c) => c.reason === 'duplicate_in_request'));
 
 	// I3: the backend refuses overwrite unconditionally when any collision is
 	// owned by a DIFFERENT job (see _evict_colliding_tasks / G-08) — eviction
@@ -103,9 +99,7 @@
 	const ripById = $derived(new Map(ripPresets.map((p) => [p.id, p])));
 	const tcById = $derived(new Map(transcodePresets.map((p) => [p.id, p])));
 
-	const selectedRipPreset = $derived(
-		selectedSession ? (ripById.get(selectedSession.rip_preset_id) ?? null) : null
-	);
+	const selectedRipPreset = $derived(selectedSession ? (ripById.get(selectedSession.rip_preset_id) ?? null) : null);
 	const selectedTranscodePreset = $derived(
 		selectedSession && selectedSession.transcode_preset_id
 			? (tcById.get(selectedSession.transcode_preset_id) ?? null)
@@ -188,12 +182,24 @@
 		// degrades the recipe preview (names fall back to ids) rather than
 		// breaking the dialog.
 		fetchSessions()
-			.then((s) => { sessions = s; })
-			.catch(() => { sessions = []; });
+			.then((s) => {
+				sessions = s;
+			})
+			.catch(() => {
+				sessions = [];
+			});
 		Promise.all([fetchRipPresets(), fetchTranscodePresets()])
-			.then(([rp, tp]) => { ripPresets = rp; transcodePresets = tp; })
-			.catch(() => { ripPresets = []; transcodePresets = []; })
-			.finally(() => { presetsLoading = false; });
+			.then(([rp, tp]) => {
+				ripPresets = rp;
+				transcodePresets = tp;
+			})
+			.catch(() => {
+				ripPresets = [];
+				transcodePresets = [];
+			})
+			.finally(() => {
+				presetsLoading = false;
+			});
 	});
 
 	async function applyOnce(overwrite: boolean): Promise<void> {
@@ -218,12 +224,7 @@
 </script>
 
 <div class="modal">
-	<button
-		type="button"
-		class="apply-session-scrim"
-		aria-label="Close dialog"
-		onclick={onclose}
-	></button>
+	<button type="button" class="apply-session-scrim" aria-label="Close dialog" onclick={onclose}></button>
 
 	<div
 		class="modal-panel modal-wide apply-session-panel"
@@ -232,9 +233,7 @@
 		aria-modal="true"
 		aria-labelledby="apply-session-title"
 	>
-		<h3 id="apply-session-title" class="modal-title">
-			Apply session to job
-		</h3>
+		<h3 id="apply-session-title" class="modal-title">Apply session to job</h3>
 
 		{#if error}
 			<p class="field-error apply-session-error" data-testid="apply-session-error">
@@ -252,11 +251,7 @@
 					     indistinguishable from "no passthrough sessions". -->
 					<p class="field-help" data-testid="apply-session-presets-loading">Loading...</p>
 				{:else}
-					<select
-						id="apply-session-select"
-						data-testid="apply-session-select"
-						bind:value={selected}
-					>
+					<select id="apply-session-select" data-testid="apply-session-select" bind:value={selected}>
 						<option value="" disabled>Choose...</option>
 						{#each filteredSessions as s (s.id)}
 							<option value={s.id}>{s.name} ({s.media_type})</option>
@@ -272,10 +267,7 @@
 			{/if}
 
 			{#if selectedSession}
-				<div
-					data-testid="recipe-preview"
-					class="code-block apply-session-recipe"
-				>
+				<div data-testid="recipe-preview" class="code-block apply-session-recipe">
 					<p class="apply-session-recipe-title">Recipe</p>
 					<dl class="apply-session-recipe-list">
 						<div class="apply-session-recipe-row">
@@ -286,10 +278,7 @@
 						</div>
 						<div class="apply-session-recipe-row">
 							<dt class="apply-session-recipe-dt">Transcode:</dt>
-							<dd
-								data-testid="recipe-transcode-preset"
-								class="apply-session-recipe-dd"
-							>
+							<dd data-testid="recipe-transcode-preset" class="apply-session-recipe-dd">
 								{selectedTranscodePreset?.name ?? 'No transcode'}
 							</dd>
 						</div>
@@ -313,12 +302,14 @@
 					</dl>
 				</div>
 				{#if previewProblem}
-					<p
-						data-testid="recipe-output-problem"
-						class="apply-session-problem"
-					>
+					<p data-testid="recipe-output-problem" class="apply-session-problem">
 						<svg class="apply-session-problem-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+							/>
 						</svg>
 						<span>{previewProblem}</span>
 					</p>
@@ -326,13 +317,7 @@
 			{/if}
 
 			<div class="modal-actions">
-				<button
-					type="button"
-					onclick={onclose}
-					class="btn btn-ghost"
-				>
-					Cancel
-				</button>
+				<button type="button" onclick={onclose} class="btn btn-ghost"> Cancel </button>
 				<button
 					type="button"
 					data-testid="apply-session-apply"
@@ -344,9 +329,7 @@
 				</button>
 			</div>
 		{:else}
-			<p class="apply-session-collision-intro">
-				This session can't be applied because of path collisions:
-			</p>
+			<p class="apply-session-collision-intro">This session can't be applied because of path collisions:</p>
 			<ul class="apply-session-collision-list">
 				{#each collisions as c (c.output_path + c.reason)}
 					<li>
@@ -362,8 +345,8 @@
 				</p>
 			{:else if hasDuplicateInRequest}
 				<p class="apply-session-collision-note">
-					Two or more tracks resolve to the same output path - the session's template doesn't
-					differentiate per track. Pick a session whose template includes <code>{'{track}'}</code>
+					Two or more tracks resolve to the same output path - the session's template doesn't differentiate per track.
+					Pick a session whose template includes <code>{'{track}'}</code>
 					(e.g. <em>Movie -> Archive MKV</em>), or rip with a single-track preset.
 					<strong>Overwrite</strong> won't help here.
 				</p>
@@ -375,13 +358,7 @@
 			{/if}
 
 			<div class="modal-actions">
-				<button
-					type="button"
-					onclick={onclose}
-					class="btn btn-ghost"
-				>
-					Cancel
-				</button>
+				<button type="button" onclick={onclose} class="btn btn-ghost"> Cancel </button>
 				{#if !hasCrossJobCollision && !hasDuplicateInRequest}
 					<button
 						type="button"
@@ -404,30 +381,114 @@
 	   (same pattern ConfirmDialog.svelte uses: relative stacking context via
 	   the panel's own z-index, no absolute/inset needed beyond covering the
 	   modal's own padded box). */
-	.apply-session-scrim { position: absolute; inset: 0; z-index: 0; background: transparent; border: 0; padding: 0; cursor: default; }
-	.apply-session-panel { position: relative; z-index: 1; }
-	.apply-session-error { margin-top: 0.5rem; }
-	.apply-session-select-field { margin-top: 1rem; }
+	.apply-session-scrim {
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		background: transparent;
+		border: 0;
+		padding: 0;
+		cursor: default;
+	}
+	.apply-session-panel {
+		position: relative;
+		z-index: 1;
+	}
+	.apply-session-error {
+		margin-top: 0.5rem;
+	}
+	.apply-session-select-field {
+		margin-top: 1rem;
+	}
 	/* original recipe box: rounded-lg border border-gray-200 bg-gray-50
 	   px-3 py-2 text-sm - code-block's own font-mono/0.72rem sizing is for
 	   literal preformatted text; this dl reads as prose, so type is reset
 	   back to text-sm/text-secondary while keeping code-block's box (border,
 	   radius, tint background). */
-	.apply-session-recipe { margin-top: 0.75rem; font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.25rem; white-space: normal; }
-	.apply-session-recipe-title { font-weight: 500; color: var(--color-text-secondary); }
-	.apply-session-recipe-list { margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.125rem; color: var(--color-text-muted); }
-	.apply-session-recipe-row { display: flex; gap: 0.25rem; }
-	.apply-session-recipe-row-col { flex-direction: column; }
-	.apply-session-recipe-dt { flex-shrink: 0; }
-	.apply-session-recipe-dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
-	.apply-session-recipe-output { font-family: var(--font-mono); font-size: 0.75rem; white-space: normal; }
-	.apply-session-recipe-faint { color: var(--color-text-faint); }
-	.apply-session-recipe-output-list { display: flex; flex-direction: column; gap: 0.125rem; }
-	.apply-session-recipe-output-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.apply-session-problem { margin-top: 0.5rem; display: flex; align-items: flex-start; gap: 0.375rem; font-size: 0.875rem; color: var(--color-on-warning-soft); }
-	.apply-session-problem-icon { flex-shrink: 0; margin-top: 0.125rem; width: 1rem; height: 1rem; }
-	.apply-session-collision-intro { margin-top: 0.5rem; font-size: 0.875rem; color: var(--color-text-muted); }
-	.apply-session-collision-list { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; }
-	.apply-session-collision-path { color: var(--color-text); }
-	.apply-session-collision-note { margin-top: 0.75rem; font-size: 0.875rem; color: var(--color-text-muted); }
+	.apply-session-recipe {
+		margin-top: 0.75rem;
+		font-family: var(--font-sans);
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		white-space: normal;
+	}
+	.apply-session-recipe-title {
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.apply-session-recipe-list {
+		margin-top: 0.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		color: var(--color-text-muted);
+	}
+	.apply-session-recipe-row {
+		display: flex;
+		gap: 0.25rem;
+	}
+	.apply-session-recipe-row-col {
+		flex-direction: column;
+	}
+	.apply-session-recipe-dt {
+		flex-shrink: 0;
+	}
+	.apply-session-recipe-dd {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--color-text);
+	}
+	.apply-session-recipe-output {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		white-space: normal;
+	}
+	.apply-session-recipe-faint {
+		color: var(--color-text-faint);
+	}
+	.apply-session-recipe-output-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+	.apply-session-recipe-output-item {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.apply-session-problem {
+		margin-top: 0.5rem;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.375rem;
+		font-size: 0.875rem;
+		color: var(--color-on-warning-soft);
+	}
+	.apply-session-problem-icon {
+		flex-shrink: 0;
+		margin-top: 0.125rem;
+		width: 1rem;
+		height: 1rem;
+	}
+	.apply-session-collision-intro {
+		margin-top: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
+	.apply-session-collision-list {
+		margin-top: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.875rem;
+	}
+	.apply-session-collision-path {
+		color: var(--color-text);
+	}
+	.apply-session-collision-note {
+		margin-top: 0.75rem;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
 </style>

@@ -108,10 +108,7 @@ export function videoTypeLabel(vt: string | null | undefined): string {
 // (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
 // tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
 // v3 equivalent, so those fields are dropped here rather than synthesized.
-export function buildMetadataFields(
-	job: JobView,
-	driveNames?: Record<string, string> | null
-): MetadataField[] {
+export function buildMetadataFields(job: JobView, driveNames?: Record<string, string> | null): MetadataField[] {
 	const active = isJobActive(job.status);
 
 	const fields: MetadataField[] = [];
@@ -140,8 +137,7 @@ export function buildMetadataFields(
 
 	// --- Promoted real JobView columns ---
 	if (job.disc_number != null) {
-		const discValue =
-			job.disc_total != null ? `${job.disc_number} of ${job.disc_total}` : String(job.disc_number);
+		const discValue = job.disc_total != null ? `${job.disc_number} of ${job.disc_total}` : String(job.disc_number);
 		fields.push({ label: 'Disc #', value: discValue });
 	}
 	if (job.poster_url_manual) {
@@ -189,4 +185,3 @@ export function buildMetadataFields(
 
 	return fields;
 }
-

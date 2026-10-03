@@ -15,7 +15,7 @@
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
+	import { isJobActive } from '$lib/utils/job-type';
 	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
@@ -88,9 +88,7 @@
 		flashNote(`${n} transcode task${n === 1 ? '' : 's'} queued`);
 	}
 
-	let isVideoDisc = $derived(
-		detail?.job.disc_type === 'dvd' || detail?.job.disc_type === 'bluray'
-	);
+	let isVideoDisc = $derived(detail?.job.disc_type === 'dvd' || detail?.job.disc_type === 'bluray');
 
 	let isCdDisc = $derived(detail?.job.disc_type === 'cd');
 
@@ -104,7 +102,6 @@
 	let rawMetadataPairs = $derived(
 		detail ? Object.entries((detail.job.metadata_json ?? {}) as Record<string, unknown>) : []
 	);
-
 
 	function handleTrackTitleApply() {
 		editingTrackId = null;
@@ -203,453 +200,727 @@
 	<title>ARM - {detail?.job.title || 'Job Detail'}</title>
 </svelte:head>
 
-<LoadState
-	data={detail}
-	loading={jobLoading}
-	error={jobError}
-	transitionKey="job-detail-main"
->
+<LoadState data={detail} loading={jobLoading} error={jobError} transitionKey="job-detail-main">
 	{#snippet loadingSlot()}
 		<SkeletonCard lines={6} />
 	{/snippet}
 	{#snippet ready(d)}
-	{@const job = d.job}
-	{@const tracks = d.tracks}
-	<div class="stack-lg stack">
-		<!-- Breadcrumb -->
-		<nav class="job-detail-breadcrumb">
-			<a href="/" class="job-detail-breadcrumb-link">Dashboard</a>
-			<span class="mx-1.5 job-detail-breadcrumb-sep">&rsaquo;</span>
-			<span class="job-detail-breadcrumb-current">{job.title || 'Untitled'}</span>
-		</nav>
+		{@const job = d.job}
+		{@const tracks = d.tracks}
+		<div class="stack-lg stack">
+			<!-- Breadcrumb -->
+			<nav class="job-detail-breadcrumb">
+				<a href="/" class="job-detail-breadcrumb-link">Dashboard</a>
+				<span class="mx-1.5 job-detail-breadcrumb-sep">&rsaquo;</span>
+				<span class="job-detail-breadcrumb-current">{job.title || 'Untitled'}</span>
+			</nav>
 
-		{#if actionNote}
-			<div
-				data-testid="action-note"
-				class="job-detail-action-note"
-			>
-				{actionNote}
-			</div>
-		{/if}
-
-		<!-- Main header container -->
-		<div class="job-detail-header-card">
-
-			<!-- Title bar -->
-			<div class="flex flex-wrap items-center gap-2 job-detail-title-bar">
-				<h1 class="job-detail-title">
-					{job.title || 'Untitled'}
-				</h1>
-				{#if job.year}
-					<span class="job-detail-year">({job.year})</span>
-				{/if}
-				<StatusBadge status={effectiveJobStatus(job)} />
-				{#if jobMeta.imdb_id && !isCdDisc}
-					<a href="https://www.imdb.com/title/{jobMeta.imdb_id}" target="_blank" rel="noopener noreferrer" class="badge badge-imdb job-detail-imdb-badge">IMDb</a>
-				{/if}
-				{#if jobMeta.multi_title}
-					<span class="badge badge-sm job-detail-multi-title-badge">Multi-Title</span>
-				{/if}
-				{#if jobMeta.source_type === 'iso'}
-					<span class="job-detail-source-badge">ISO</span>
-				{:else if jobMeta.source_type === 'folder'}
-					<span class="job-detail-source-badge">Folder</span>
-				{/if}
-
-				<!-- Action buttons pushed right -->
-				<div class="flex flex-wrap items-center gap-2 ml-auto">
-					{#if canResolve && $isAdmin}
-						<button
-							type="button"
-							data-testid="identify-open"
-							onclick={() => (showIdentify = true)}
-							class="btn job-detail-header-btn"
-						>
-							{identifyLabel}
-						</button>
-					{/if}
-					{#if canApply && $isAdmin}
-						<button
-							type="button"
-							data-testid="apply-open"
-							onclick={() => (showApply = true)}
-							class="btn job-detail-header-btn"
-						>
-							Apply session
-						</button>
-					{/if}
-					{#if $isAdmin}
-						<JobActions {job} onaction={loadJob} ondelete={() => goto('/')} />
-					{/if}
+			{#if actionNote}
+				<div data-testid="action-note" class="job-detail-action-note">
+					{actionNote}
 				</div>
-			</div>
+			{/if}
 
-			<!-- Poster + Metadata grid -->
-			<div class="flex flex-col sm:flex-row items-start">
-				<!-- Poster -->
-				<div class="shrink-0 job-detail-poster-cell">
-					<PosterImage
-						url={jobPoster(job)}
-						alt={job.title ?? 'Poster'}
-						class="job-detail-poster"
-						style={`aspect-ratio: ${job.disc_type === 'cd' ? '1/1' : '2/3'}`}
-					/>
+			<!-- Main header container -->
+			<div class="job-detail-header-card">
+				<!-- Title bar -->
+				<div class="flex flex-wrap items-center gap-2 job-detail-title-bar">
+					<h1 class="job-detail-title">
+						{job.title || 'Untitled'}
+					</h1>
+					{#if job.year}
+						<span class="job-detail-year">({job.year})</span>
+					{/if}
+					<StatusBadge status={effectiveJobStatus(job)} />
+					{#if jobMeta.imdb_id && !isCdDisc}
+						<a
+							href="https://www.imdb.com/title/{jobMeta.imdb_id}"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="badge badge-imdb job-detail-imdb-badge">IMDb</a
+						>
+					{/if}
+					{#if jobMeta.multi_title}
+						<span class="badge badge-sm job-detail-multi-title-badge">Multi-Title</span>
+					{/if}
+					{#if jobMeta.source_type === 'iso'}
+						<span class="job-detail-source-badge">ISO</span>
+					{:else if jobMeta.source_type === 'folder'}
+						<span class="job-detail-source-badge">Folder</span>
+					{/if}
+
+					<!-- Action buttons pushed right -->
+					<div class="flex flex-wrap items-center gap-2 ml-auto">
+						{#if canResolve && $isAdmin}
+							<button
+								type="button"
+								data-testid="identify-open"
+								onclick={() => (showIdentify = true)}
+								class="btn job-detail-header-btn"
+							>
+								{identifyLabel}
+							</button>
+						{/if}
+						{#if canApply && $isAdmin}
+							<button
+								type="button"
+								data-testid="apply-open"
+								onclick={() => (showApply = true)}
+								class="btn job-detail-header-btn"
+							>
+								Apply session
+							</button>
+						{/if}
+						{#if $isAdmin}
+							<JobActions {job} onaction={loadJob} ondelete={() => goto('/')} />
+						{/if}
+					</div>
 				</div>
 
-				<!-- Metadata grid -->
-				<div class="job-detail-metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-					{#each metadataFields as field}
-						<div class="job-detail-metadata-cell">
-							{#if !field.empty}
-								<div class="job-detail-metadata-label">{field.label}</div>
-								{#if field.link}
-									<a href={field.link} target="_blank" rel="noopener noreferrer" class="mt-1 block job-detail-metadata-value job-detail-metadata-link {field.mono ? 'mono job-detail-metadata-mono' : ''}">{field.value}</a>
-								{:else}
-									<div class="mt-1 job-detail-metadata-value {field.mono ? 'mono job-detail-metadata-mono truncate' : ''}" title={field.mono ? field.value : undefined}>{field.value}</div>
+				<!-- Poster + Metadata grid -->
+				<div class="flex flex-col sm:flex-row items-start">
+					<!-- Poster -->
+					<div class="shrink-0 job-detail-poster-cell">
+						<PosterImage
+							url={jobPoster(job)}
+							alt={job.title ?? 'Poster'}
+							class="job-detail-poster"
+							style={`aspect-ratio: ${job.disc_type === 'cd' ? '1/1' : '2/3'}`}
+						/>
+					</div>
+
+					<!-- Metadata grid -->
+					<div class="job-detail-metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+						{#each metadataFields as field, i (field.empty ? `pad-${i}` : field.label)}
+							<div class="job-detail-metadata-cell">
+								{#if !field.empty}
+									<div class="job-detail-metadata-label">{field.label}</div>
+									{#if field.link}
+										<a
+											href={field.link}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="mt-1 block job-detail-metadata-value job-detail-metadata-link {field.mono
+												? 'mono job-detail-metadata-mono'
+												: ''}">{field.value}</a
+										>
+									{:else}
+										<div
+											class="mt-1 job-detail-metadata-value {field.mono
+												? 'mono job-detail-metadata-mono truncate'
+												: ''}"
+											title={field.mono ? field.value : undefined}
+										>
+											{field.value}
+										</div>
+									{/if}
 								{/if}
-							{/if}
-						</div>
-					{/each}
+							</div>
+						{/each}
+					</div>
 				</div>
-			</div>
 
-			<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
+				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
 			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
-			{#if isVideoDisc}
-				<div class="flex job-detail-panel-toggle-bar">
-					<button onclick={() => (activePanel = activePanel === 'title' ? null : 'title')} class="job-detail-panel-tab" aria-pressed={activePanel === 'title'}>Poster &amp; metadata search</button>
-				</div>
-			{:else if isCdDisc}
-				<div class="flex job-detail-panel-toggle-bar">
-					<button onclick={() => (activePanel = activePanel === 'music' ? null : 'music')} class="job-detail-panel-tab" aria-pressed={activePanel === 'music'}>Match CD</button>
-				</div>
-			{/if}
+				{#if isVideoDisc}
+					<div class="flex job-detail-panel-toggle-bar">
+						<button
+							onclick={() => (activePanel = activePanel === 'title' ? null : 'title')}
+							class="job-detail-panel-tab"
+							aria-pressed={activePanel === 'title'}>Poster &amp; metadata search</button
+						>
+					</div>
+				{:else if isCdDisc}
+					<div class="flex job-detail-panel-toggle-bar">
+						<button
+							onclick={() => (activePanel = activePanel === 'music' ? null : 'music')}
+							class="job-detail-panel-tab"
+							aria-pressed={activePanel === 'music'}>Match CD</button
+						>
+					</div>
+				{/if}
 
-			<!-- Active panel content -->
-			{#if activePanel === 'title'}
-				<div class="job-detail-panel-content">
-					<TitleSearch {job} onapply={handleTitleApply} />
-				</div>
-			{/if}
-			{#if activePanel === 'music'}
-				<div class="job-detail-panel-content">
-					<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
-				</div>
-			{/if}
-		</div>
+				<!-- Active panel content -->
+				{#if activePanel === 'title'}
+					<div class="job-detail-panel-content">
+						<TitleSearch {job} onapply={handleTitleApply} />
+					</div>
+				{/if}
+				{#if activePanel === 'music'}
+					<div class="job-detail-panel-content">
+						<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
+					</div>
+				{/if}
+			</div>
 
-		<!-- Lifecycle widget: visual stage progression below header, above status bars -->
-		<div class="job-detail-lifecycle-card">
-			<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
-		</div>
+			<!-- Lifecycle widget: visual stage progression below header, above status bars -->
+			<div class="job-detail-lifecycle-card">
+				<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
+			</div>
 
-		<!-- Tracks -->
-		{#if tracks.length > 0}
-			<section>
-				<div class="mb-3 flex items-center justify-between">
-					<h2 class="job-detail-section-title">
-						Tracks ({tracks.length})
-					</h2>
-				</div>
-				<div class="overflow-x-auto job-detail-table-scroll">
-					<table class="table responsive-table">
-						<thead>
-							<tr>
-								<th class="table-header">#</th>
-								<th class="table-header">Kind</th>
-								<th class="table-header">Title</th>
-								{#if tracksAreSeries}
-									<th class="table-header">Episode</th>
-								{/if}
-								<th class="table-header">Filename</th>
-								<th class="table-header">Length</th>
-								<th class="table-header">Size</th>
-								<th class="table-header">Include</th>
-								<th class="table-header">Rip</th>
-								<th class="table-header">Transcode</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each tracks as track}
-								{@const preview = previewByTrack.get(track.id)}
-								<tr class="table-row" data-disabled={track.excluded}>
-									<td class="table-cell" data-label="#">{track.index}</td>
-									<td class="table-cell job-detail-track-kind" data-label="Kind">{trackKindLabel(track.kind)}</td>
-									<td
-										class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}"
-										data-label="Title"
-										onclick={$isAdmin ? () => { editingTrackId = editingTrackId === track.id ? null : track.id; } : undefined}
-									>
-										{#if track.title}
-											<div class="flex items-center gap-1.5">
-												{#if track.poster_url}
-													<img data-poster src={posterSrc(track.poster_url)} alt="" class="job-detail-track-poster" onerror={posterFallback} />
-												{/if}
-												<div>
-													<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
-													{#if track.year}
-														<span class="job-detail-track-year"> ({track.year})</span>
+			<!-- Tracks -->
+			{#if tracks.length > 0}
+				<section>
+					<div class="mb-3 flex items-center justify-between">
+						<h2 class="job-detail-section-title">
+							Tracks ({tracks.length})
+						</h2>
+					</div>
+					<div class="overflow-x-auto job-detail-table-scroll">
+						<table class="table responsive-table">
+							<thead>
+								<tr>
+									<th class="table-header">#</th>
+									<th class="table-header">Kind</th>
+									<th class="table-header">Title</th>
+									{#if tracksAreSeries}
+										<th class="table-header">Episode</th>
+									{/if}
+									<th class="table-header">Filename</th>
+									<th class="table-header">Length</th>
+									<th class="table-header">Size</th>
+									<th class="table-header">Include</th>
+									<th class="table-header">Rip</th>
+									<th class="table-header">Transcode</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each tracks as track (track.id)}
+									{@const preview = previewByTrack.get(track.id)}
+									<tr class="table-row" data-disabled={track.excluded}>
+										<td class="table-cell" data-label="#">{track.index}</td>
+										<td class="table-cell job-detail-track-kind" data-label="Kind">{trackKindLabel(track.kind)}</td>
+										<td
+											class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}"
+											data-label="Title"
+											onclick={$isAdmin
+												? () => {
+														editingTrackId = editingTrackId === track.id ? null : track.id;
+													}
+												: undefined}
+										>
+											{#if track.title}
+												<div class="flex items-center gap-1.5">
+													{#if track.poster_url}
+														<img
+															data-poster
+															src={posterSrc(track.poster_url)}
+															alt=""
+															class="job-detail-track-poster"
+															onerror={posterFallback}
+														/>
 													{/if}
-													<div class="mt-0.5 flex flex-wrap items-center gap-1">
-														{#if track.imdb_id}
-															<a href="https://www.imdb.com/title/{track.imdb_id}" target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a>
+													<div>
+														<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
+														{#if track.year}
+															<span class="job-detail-track-year"> ({track.year})</span>
 														{/if}
-														{#if track.edition}
-															<span class="job-detail-track-meta-pill">{track.edition}</span>
-														{/if}
-														{#if track.role}
-															<span class="job-detail-track-meta-pill">{track.role}</span>
-														{/if}
+														<div class="mt-0.5 flex flex-wrap items-center gap-1">
+															{#if track.imdb_id}
+																<a
+																	href="https://www.imdb.com/title/{track.imdb_id}"
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	onclick={(e) => e.stopPropagation()}
+																	class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a
+																>
+															{/if}
+															{#if track.edition}
+																<span class="job-detail-track-meta-pill">{track.edition}</span>
+															{/if}
+															{#if track.role}
+																<span class="job-detail-track-meta-pill">{track.role}</span>
+															{/if}
+														</div>
 													</div>
 												</div>
-											</div>
-										{:else}
-											<span class="job-detail-track-untitled">{job.title || 'Untitled'}{#if job.year} ({job.year}){/if}</span>
-										{/if}
-									</td>
-									{#if tracksAreSeries}
-										<td class="table-cell" data-label="Episode">
-											{#if track.episode_number != null}
-												<span class="job-detail-track-title job-detail-track-title-strong">{track.episode_number}</span>
-												{#if track.episode_name}
-													<span class="ml-1.5 job-detail-track-episode-name">{track.episode_name}</span>
+											{:else}
+												<span class="job-detail-track-untitled"
+													>{job.title || 'Untitled'}{#if job.year}
+														({job.year}){/if}</span
+												>
+											{/if}
+										</td>
+										{#if tracksAreSeries}
+											<td class="table-cell" data-label="Episode">
+												{#if track.episode_number != null}
+													<span class="job-detail-track-title job-detail-track-title-strong"
+														>{track.episode_number}</span
+													>
+													{#if track.episode_name}
+														<span class="ml-1.5 job-detail-track-episode-name">{track.episode_name}</span>
+													{/if}
+												{:else}
+													<span class="job-detail-track-faint">-</span>
 												{/if}
+											</td>
+										{/if}
+										<td
+											class="truncate table-cell mono job-detail-track-filename"
+											data-label="Filename"
+											title={preview?.output_name ?? ''}
+										>
+											{#if preview?.output_name}
+												<span>{preview.output_name}</span>
+												{#if track.custom_filename}
+													<span class="ml-1 badge badge-sm badge-warning">custom</span>
+												{/if}
+											{:else}
+												<span class="job-detail-track-faint">{track.excluded ? 'excluded' : '-'}</span>
+											{/if}
+										</td>
+										<td class="table-cell" data-label="Length">
+											{#if track.duration_seconds != null}
+												{formatDuration(track.duration_seconds)}
+											{:else if track.expected_duration_seconds != null}
+												<span class="job-detail-track-faint">~{formatDuration(track.expected_duration_seconds)}</span>
+											{:else}-{/if}
+										</td>
+										<td class="table-cell job-detail-track-kind" data-label="Size">{trackSizeLabel(track)}</td>
+										<td class="table-cell" data-label="Include">
+											{#if $isAdmin}
+												<input
+													type="checkbox"
+													checked={!track.excluded}
+													onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
+													title="Include this track in transcode output (the disc still rips in full)"
+													class="job-detail-track-checkbox"
+												/>
+											{:else}
+												<span class="job-detail-track-untitled">{track.excluded ? 'Excluded' : 'Included'}</span>
+											{/if}
+										</td>
+										<!-- Rip outcome -->
+										<td class="table-cell" data-label="Rip">
+											<span class="flex items-center gap-1">
+												<StatusBadge status={track.status} />
+												{#if track.attempts > 1}
+													<span class="job-detail-track-attempts" title="Rip attempts">x{track.attempts}</span>
+												{/if}
+											</span>
+										</td>
+										<!-- Transcode outcome (— when no transcode task yet) -->
+										<td class="table-cell" data-label="Transcode">
+											{#if track.transcode_status}
+												<StatusBadge status={track.transcode_status} />
 											{:else}
 												<span class="job-detail-track-faint">-</span>
 											{/if}
 										</td>
+									</tr>
+									{#if track.status === 'failed' && track.last_error}
+										<tr>
+											<td colspan="99" class="table-cell job-detail-track-error" data-label="">
+												<span class="job-detail-error-strong">Error:</span>
+												{track.last_error}
+											</td>
+										</tr>
 									{/if}
-									<td class="truncate table-cell mono job-detail-track-filename" data-label="Filename" title={preview?.output_name ?? ''}>
-										{#if preview?.output_name}
-											<span>{preview.output_name}</span>
-											{#if track.custom_filename}
-												<span class="ml-1 badge badge-sm badge-warning">custom</span>
-											{/if}
-										{:else}
-											<span class="job-detail-track-faint">{track.excluded ? 'excluded' : '-'}</span>
-										{/if}
-									</td>
-									<td class="table-cell" data-label="Length">
-										{#if track.duration_seconds != null}
-											{formatDuration(track.duration_seconds)}
-										{:else if track.expected_duration_seconds != null}
-											<span class="job-detail-track-faint">~{formatDuration(track.expected_duration_seconds)}</span>
-										{:else}-{/if}
-									</td>
-									<td class="table-cell job-detail-track-kind" data-label="Size">{trackSizeLabel(track)}</td>
-									<td class="table-cell" data-label="Include">
-										{#if $isAdmin}
-											<input
-												type="checkbox"
-												checked={!track.excluded}
-												onchange={(e) => toggleExcluded(track.id, !(e.currentTarget as HTMLInputElement).checked)}
-												title="Include this track in transcode output (the disc still rips in full)"
-												class="job-detail-track-checkbox"
-											/>
-										{:else}
-											<span class="job-detail-track-untitled">{track.excluded ? 'Excluded' : 'Included'}</span>
-										{/if}
-									</td>
-									<!-- Rip outcome -->
-									<td class="table-cell" data-label="Rip">
-										<span class="flex items-center gap-1">
-											<StatusBadge status={track.status} />
-											{#if track.attempts > 1}
-												<span class="job-detail-track-attempts" title="Rip attempts">x{track.attempts}</span>
-											{/if}
-										</span>
-									</td>
-									<!-- Transcode outcome (— when no transcode task yet) -->
-									<td class="table-cell" data-label="Transcode">
-										{#if track.transcode_status}
-											<StatusBadge status={track.transcode_status} />
-										{:else}
-											<span class="job-detail-track-faint">-</span>
-										{/if}
-									</td>
-								</tr>
-								{#if track.status === 'failed' && track.last_error}
-									<tr>
-										<td colspan="99" class="table-cell job-detail-track-error" data-label="">
-											<span class="job-detail-error-strong">Error:</span> {track.last_error}
-										</td>
-									</tr>
-								{/if}
-								{#if editingTrackId === track.id}
-									<tr>
-										<td colspan="99" class="table-cell" data-label="">
-											<TrackTitleSearch jobId={job.id} {track} onapply={handleTrackTitleApply} onclose={() => { editingTrackId = null; }} />
-										</td>
-									</tr>
-								{/if}
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
-		{/if}
+									{#if editingTrackId === track.id}
+										<tr>
+											<td colspan="99" class="table-cell" data-label="">
+												<TrackTitleSearch
+													jobId={job.id}
+													{track}
+													onapply={handleTrackTitleApply}
+													onclose={() => {
+														editingTrackId = null;
+													}}
+												/>
+											</td>
+										</tr>
+									{/if}
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+			{/if}
 
-		<!-- Disc fingerprints (read-only) -->
-		{#if d.fingerprints && d.fingerprints.length > 0}
-			<section>
-				<h2 class="mb-3 job-detail-section-title">Disc fingerprints</h2>
-				<div class="overflow-x-auto job-detail-table-scroll">
-					<table class="table responsive-table">
-						<thead>
-							<tr>
-								<th class="table-header">Algorithm</th>
-								<th class="table-header">Value</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each d.fingerprints as fp}
-								<tr class="table-row">
-									<td class="table-cell job-detail-uppercase" data-label="Algorithm">{fp.algo}</td>
-									<td class="truncate table-cell mono job-detail-fingerprint-value" data-label="Value" title={fp.value}>{fp.value}</td>
+			<!-- Disc fingerprints (read-only) -->
+			{#if d.fingerprints && d.fingerprints.length > 0}
+				<section>
+					<h2 class="mb-3 job-detail-section-title">Disc fingerprints</h2>
+					<div class="overflow-x-auto job-detail-table-scroll">
+						<table class="table responsive-table">
+							<thead>
+								<tr>
+									<th class="table-header">Algorithm</th>
+									<th class="table-header">Value</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
-		{/if}
+							</thead>
+							<tbody>
+								{#each d.fingerprints as fp (`${fp.algo}:${fp.value}`)}
+									<tr class="table-row">
+										<td class="table-cell job-detail-uppercase" data-label="Algorithm">{fp.algo}</td>
+										<td
+											class="truncate table-cell mono job-detail-fingerprint-value"
+											data-label="Value"
+											title={fp.value}>{fp.value}</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+			{/if}
 
-		<!-- Music tracklist (CD jobs; read-only). Fallback ONLY when there are no
+			<!-- Music tracklist (CD jobs; read-only). Fallback ONLY when there are no
 		     real Track rows yet — once the disc has tracks (which carry the mapped
 		     song titles), the Tracks table above is authoritative and this would
 		     just duplicate it. Mirrors neu's single-section behavior. -->
-		{#if tracks.length === 0 && musicTracks.length > 0}
-			<section>
-				<h2 class="mb-3 job-detail-section-title">
-					Tracklist
-					<span class="job-detail-section-subtitle">({musicTracks.length} tracks via MusicBrainz)</span>
-				</h2>
-				<div class="overflow-x-auto job-detail-table-scroll">
-					<table class="table responsive-table">
-						<thead>
-							<tr>
-								<th class="table-header">#</th>
-								<th class="table-header">Title</th>
-								<th class="table-header job-detail-right">Duration</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each musicTracks as mt}
-								<tr class="table-row">
-									<td class="table-cell" data-label="#">{mt.number}</td>
-									<td class="table-cell" data-label="Title">{mt.title}</td>
-									<td class="table-cell job-detail-right" data-label="Duration">{mt.durationLabel}</td>
+			{#if tracks.length === 0 && musicTracks.length > 0}
+				<section>
+					<h2 class="mb-3 job-detail-section-title">
+						Tracklist
+						<span class="job-detail-section-subtitle">({musicTracks.length} tracks via MusicBrainz)</span>
+					</h2>
+					<div class="overflow-x-auto job-detail-table-scroll">
+						<table class="table responsive-table">
+							<thead>
+								<tr>
+									<th class="table-header">#</th>
+									<th class="table-header">Title</th>
+									<th class="table-header job-detail-right">Duration</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
-		{/if}
-
-		<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
-		<JobLogPanel jobId={job.id} status={job.status} />
-
-		<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
-		{#if rawMetadataPairs.length > 0}
-			<section>
-				<button
-					type="button"
-					onclick={() => { showRawMetadata = !showRawMetadata; }}
-					class="flex w-full items-center gap-2 job-detail-section-title"
-					aria-expanded={showRawMetadata}
-				>
-					<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-					</svg>
-					Raw metadata
-				</button>
-				{#if showRawMetadata}
-					<div class="mt-3 overflow-x-auto job-detail-raw-metadata">
-						{#each rawMetadataPairs as [key, value]}
-							<JsonTree {value} name={key} depth={0} />
-						{/each}
+							</thead>
+							<tbody>
+								{#each musicTracks as mt (mt.number)}
+									<tr class="table-row">
+										<td class="table-cell" data-label="#">{mt.number}</td>
+										<td class="table-cell" data-label="Title">{mt.title}</td>
+										<td class="table-cell job-detail-right" data-label="Duration">{mt.durationLabel}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
 					</div>
-				{/if}
-			</section>
-		{/if}
-	</div>
+				</section>
+			{/if}
 
-	{#if showIdentify}
-		<IdentifyDialog {job} driveNames={$dashboard.drive_names} onclose={() => (showIdentify = false)} onidentified={handleIdentified} />
-	{/if}
-	{#if showApply}
-		<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
-	{/if}
+			<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
+			<JobLogPanel jobId={job.id} status={job.status} />
+
+			<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
+			{#if rawMetadataPairs.length > 0}
+				<section>
+					<button
+						type="button"
+						onclick={() => {
+							showRawMetadata = !showRawMetadata;
+						}}
+						class="flex w-full items-center gap-2 job-detail-section-title"
+						aria-expanded={showRawMetadata}
+					>
+						<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+						</svg>
+						Raw metadata
+					</button>
+					{#if showRawMetadata}
+						<div class="mt-3 overflow-x-auto job-detail-raw-metadata">
+							{#each rawMetadataPairs as [key, value] (key)}
+								<JsonTree {value} name={key} depth={0} />
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{/if}
+		</div>
+
+		{#if showIdentify}
+			<IdentifyDialog
+				{job}
+				driveNames={$dashboard.drive_names}
+				onclose={() => (showIdentify = false)}
+				onidentified={handleIdentified}
+			/>
+		{/if}
+		{#if showApply}
+			<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
+		{/if}
 	{/snippet}
 </LoadState>
 
 <style>
-	.job-detail-breadcrumb { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.job-detail-breadcrumb-link { color: var(--color-primary-text); }
-	.job-detail-breadcrumb-link:hover { text-decoration: underline; }
-	.job-detail-breadcrumb-sep { color: var(--color-text-faint); }
-	.job-detail-breadcrumb-current { color: var(--color-text-muted); }
-	.job-detail-action-note { border: 1px solid var(--color-border-strong); border-radius: var(--radius-lg); background: var(--color-primary-tint-1); padding: 0.5rem 1rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-primary-text); }
-	.job-detail-header-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-1); }
-	.job-detail-title-bar { border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem; }
+	.job-detail-breadcrumb {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.job-detail-breadcrumb-link {
+		color: var(--color-primary-text);
+	}
+	.job-detail-breadcrumb-link:hover {
+		text-decoration: underline;
+	}
+	.job-detail-breadcrumb-sep {
+		color: var(--color-text-faint);
+	}
+	.job-detail-breadcrumb-current {
+		color: var(--color-text-muted);
+	}
+	.job-detail-action-note {
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-lg);
+		background: var(--color-primary-tint-1);
+		padding: 0.5rem 1rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-primary-text);
+	}
+	.job-detail-header-card {
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-surface);
+		box-shadow: var(--shadow-1);
+	}
+	.job-detail-title-bar {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.75rem 1.25rem;
+	}
 	/* the original header buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
 	   0.875rem) - between .btn's default and .btn-sm */
-	.job-detail-header-btn { min-height: auto; padding: 0.375rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; }
-	.job-detail-title { font-size: 1.25rem; line-height: 1.75rem; font-weight: 700; color: var(--color-text); }
-	.job-detail-year { font-size: 1rem; line-height: 1.5rem; color: var(--color-text-faint); }
-	.job-detail-imdb-badge { border-radius: 9999px; padding: 0.125rem 0.625rem; font-size: 10px; }
-	.job-detail-multi-title-badge { border-radius: 9999px; text-transform: uppercase; background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
-	.job-detail-source-badge { border-radius: var(--radius-sm); padding: 0.125rem 0.5rem; font-size: 10px; font-weight: 500; background: color-mix(in srgb, var(--color-accent-3) 15%, transparent); color: var(--color-accent-3); }
-	.job-detail-poster-cell { border-bottom: 1px solid var(--color-border); padding: 1rem; }
-	@media (min-width: 640px) { .job-detail-poster-cell { border-bottom: 0; border-right: 1px solid var(--color-border); } }
-	/* :global: forwarded through PosterImage's class prop */
-	:global(.job-detail-poster) { width: 120px; border-radius: var(--radius-md); object-fit: cover; box-shadow: var(--shadow-1); }
-	.job-detail-metadata-cell { border-bottom: 1px solid var(--color-border); border-right: 1px solid var(--color-border); padding: 0.75rem 1rem; }
-	.job-detail-metadata-cell:nth-child(2n) { border-right-width: 0; }
+	.job-detail-header-btn {
+		min-height: auto;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+	}
+	.job-detail-title {
+		font-size: 1.25rem;
+		line-height: 1.75rem;
+		font-weight: 700;
+		color: var(--color-text);
+	}
+	.job-detail-year {
+		font-size: 1rem;
+		line-height: 1.5rem;
+		color: var(--color-text-faint);
+	}
+	.job-detail-imdb-badge {
+		border-radius: 9999px;
+		padding: 0.125rem 0.625rem;
+		font-size: 10px;
+	}
+	.job-detail-multi-title-badge {
+		border-radius: 9999px;
+		text-transform: uppercase;
+		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
+		color: var(--color-accent-3);
+	}
+	.job-detail-source-badge {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.5rem;
+		font-size: 10px;
+		font-weight: 500;
+		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
+		color: var(--color-accent-3);
+	}
+	.job-detail-poster-cell {
+		border-bottom: 1px solid var(--color-border);
+		padding: 1rem;
+	}
 	@media (min-width: 640px) {
-		.job-detail-metadata-cell:nth-child(2n) { border-right-width: 1px; }
-		.job-detail-metadata-cell:nth-child(3n) { border-right-width: 0; }
+		.job-detail-poster-cell {
+			border-bottom: 0;
+			border-right: 1px solid var(--color-border);
+		}
+	}
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.job-detail-poster) {
+		width: 120px;
+		border-radius: var(--radius-md);
+		object-fit: cover;
+		box-shadow: var(--shadow-1);
+	}
+	.job-detail-metadata-cell {
+		border-bottom: 1px solid var(--color-border);
+		border-right: 1px solid var(--color-border);
+		padding: 0.75rem 1rem;
+	}
+	.job-detail-metadata-cell:nth-child(2n) {
+		border-right-width: 0;
+	}
+	@media (min-width: 640px) {
+		.job-detail-metadata-cell:nth-child(2n) {
+			border-right-width: 1px;
+		}
+		.job-detail-metadata-cell:nth-child(3n) {
+			border-right-width: 0;
+		}
 	}
 	@media (min-width: 1024px) {
-		.job-detail-metadata-cell:nth-child(3n) { border-right-width: 1px; }
-		.job-detail-metadata-cell:nth-child(4n) { border-right-width: 0; }
+		.job-detail-metadata-cell:nth-child(3n) {
+			border-right-width: 1px;
+		}
+		.job-detail-metadata-cell:nth-child(4n) {
+			border-right-width: 0;
+		}
 	}
-	.job-detail-metadata-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); }
-	.job-detail-metadata-value { font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text); }
-	.job-detail-metadata-link { color: var(--color-primary); }
-	.job-detail-metadata-link:hover { text-decoration: underline; }
-	.job-detail-metadata-mono { font-size: 0.75rem; line-height: 1rem; }
-	.job-detail-panel-toggle-bar { border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-surface) 50%, transparent); }
-	.job-detail-panel-tab { flex: 1 1 0%; padding: 0.625rem 1rem; text-align: center; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-muted); transition: color var(--motion-fast) var(--ease); }
-	.job-detail-panel-tab:hover { color: var(--color-text-secondary); }
-	.job-detail-panel-tab[aria-pressed="true"] { color: var(--color-primary); border-bottom: 2px solid var(--color-primary); background: var(--color-primary-tint-1); }
-	.job-detail-panel-content { border-top: 1px solid var(--color-border); padding: 1.25rem; }
-	.job-detail-lifecycle-card { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); padding: 0.75rem 1rem; box-shadow: var(--shadow-1); }
-	.job-detail-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
-	.job-detail-section-title .chevron { transition: transform var(--motion-fast) var(--ease); }
-	.job-detail-section-title[aria-expanded="true"] .chevron { transform: rotate(90deg); }
-	.job-detail-section-subtitle { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; color: var(--color-text-muted); }
-	.job-detail-table-scroll { border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-	.job-detail-right { text-align: right; }
-	.job-detail-track-kind { color: var(--color-text-secondary); }
-	.job-detail-track-title-cell { cursor: pointer; }
-	.job-detail-track-title-cell:hover { background: var(--color-primary-tint-1); }
-	.job-detail-track-poster { height: 2rem; width: 1.25rem; border-radius: var(--radius-sm); object-fit: cover; }
-	.job-detail-track-title { color: var(--color-text); }
-	.job-detail-track-title-strong { font-weight: 500; }
-	.job-detail-error-strong { font-weight: 600; }
-	.job-detail-uppercase { text-transform: uppercase; }
-	.job-detail-track-year { color: var(--color-text-faint); }
-	.job-detail-track-imdb-badge { border-radius: 9999px; padding: 0.125rem 0.375rem; font-size: 9px; }
-	.job-detail-track-meta-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 9px; font-weight: 500; background: var(--color-primary-tint-2); color: var(--color-text-secondary); }
-	.job-detail-track-untitled { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.job-detail-track-episode-name { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.job-detail-track-faint { color: var(--color-text-faint); }
-	.job-detail-track-filename { max-width: 260px; color: var(--color-text-secondary); }
-	.job-detail-track-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
-	.job-detail-track-attempts { font-size: 10px; color: var(--color-text-faint); }
-	.job-detail-track-error { background: var(--color-danger-soft); color: var(--color-on-danger-soft); }
-	.job-detail-fingerprint-value { max-width: 420px; color: var(--color-text-secondary); }
-	.job-detail-raw-metadata { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.75rem; }
+	.job-detail-metadata-label {
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+	}
+	.job-detail-metadata-value {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+	.job-detail-metadata-link {
+		color: var(--color-primary);
+	}
+	.job-detail-metadata-link:hover {
+		text-decoration: underline;
+	}
+	.job-detail-metadata-mono {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.job-detail-panel-toggle-bar {
+		border-top: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-surface) 50%, transparent);
+	}
+	.job-detail-panel-tab {
+		flex: 1 1 0%;
+		padding: 0.625rem 1rem;
+		text-align: center;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+		transition: color var(--motion-fast) var(--ease);
+	}
+	.job-detail-panel-tab:hover {
+		color: var(--color-text-secondary);
+	}
+	.job-detail-panel-tab[aria-pressed='true'] {
+		color: var(--color-primary);
+		border-bottom: 2px solid var(--color-primary);
+		background: var(--color-primary-tint-1);
+	}
+	.job-detail-panel-content {
+		border-top: 1px solid var(--color-border);
+		padding: 1.25rem;
+	}
+	.job-detail-lifecycle-card {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-surface);
+		padding: 0.75rem 1rem;
+		box-shadow: var(--shadow-1);
+	}
+	.job-detail-section-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.job-detail-section-title .chevron {
+		transition: transform var(--motion-fast) var(--ease);
+	}
+	.job-detail-section-title[aria-expanded='true'] .chevron {
+		transform: rotate(90deg);
+	}
+	.job-detail-section-subtitle {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 400;
+		color: var(--color-text-muted);
+	}
+	.job-detail-table-scroll {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+	}
+	.job-detail-right {
+		text-align: right;
+	}
+	.job-detail-track-kind {
+		color: var(--color-text-secondary);
+	}
+	.job-detail-track-title-cell {
+		cursor: pointer;
+	}
+	.job-detail-track-title-cell:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.job-detail-track-poster {
+		height: 2rem;
+		width: 1.25rem;
+		border-radius: var(--radius-sm);
+		object-fit: cover;
+	}
+	.job-detail-track-title {
+		color: var(--color-text);
+	}
+	.job-detail-track-title-strong {
+		font-weight: 500;
+	}
+	.job-detail-error-strong {
+		font-weight: 600;
+	}
+	.job-detail-uppercase {
+		text-transform: uppercase;
+	}
+	.job-detail-track-year {
+		color: var(--color-text-faint);
+	}
+	.job-detail-track-imdb-badge {
+		border-radius: 9999px;
+		padding: 0.125rem 0.375rem;
+		font-size: 9px;
+	}
+	.job-detail-track-meta-pill {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.375rem;
+		font-size: 9px;
+		font-weight: 500;
+		background: var(--color-primary-tint-2);
+		color: var(--color-text-secondary);
+	}
+	.job-detail-track-untitled {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.job-detail-track-episode-name {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.job-detail-track-faint {
+		color: var(--color-text-faint);
+	}
+	.job-detail-track-filename {
+		max-width: 260px;
+		color: var(--color-text-secondary);
+	}
+	.job-detail-track-checkbox {
+		width: 1rem;
+		height: 1rem;
+		border-radius: var(--radius-sm);
+		accent-color: var(--color-primary);
+	}
+	.job-detail-track-attempts {
+		font-size: 10px;
+		color: var(--color-text-faint);
+	}
+	.job-detail-track-error {
+		background: var(--color-danger-soft);
+		color: var(--color-on-danger-soft);
+	}
+	.job-detail-fingerprint-value {
+		max-width: 420px;
+		color: var(--color-text-secondary);
+	}
+	.job-detail-raw-metadata {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		padding: 0.75rem;
+	}
 </style>

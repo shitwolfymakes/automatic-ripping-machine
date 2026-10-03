@@ -64,6 +64,12 @@
 <style>
 	/* the form is capped to a comfortable reading width and its own vertical
 	   rhythm (space-y-4 = 1rem) rather than the wider panel default. */
-	.change-password-form { width: 100%; max-width: 24rem; gap: 1rem; }
-	.change-password-form-submit { width: 100%; }
+	.change-password-form {
+		width: 100%;
+		max-width: 24rem;
+		gap: 1rem;
+	}
+	.change-password-form-submit {
+		width: 100%;
+	}
 </style>

@@ -14,7 +14,7 @@ import type {
 	ConfigView,
 	ConfigUpdateRequest,
 	SettingsSchemaResponse,
-		KeyCheckResponse,
+	KeyCheckResponse,
 	TranscodePresetView,
 	TranscodePresetCreateRequest
 } from '$lib/types/api.gen';
@@ -74,10 +74,7 @@ export async function fetchSettings(): Promise<SettingsData> {
 		// The page reads arm_config for legacy panels; expose the config row as a
 		// loose string map so those controls render without a BFF envelope.
 		arm_config: Object.fromEntries(
-			Object.entries(config as Record<string, unknown>).map(([k, v]) => [
-				k,
-				v == null ? null : String(v)
-			])
+			Object.entries(config as Record<string, unknown>).map(([k, v]) => [k, v == null ? null : String(v)])
 		),
 		transcoder_config: null,
 		naming_variables: null
@@ -87,9 +84,7 @@ export async function fetchSettings(): Promise<SettingsData> {
 // PATCH /api/config — v3 returns the updated ConfigView. The BFF returned
 // { success, warning }; adapt to that envelope so the consumer's feedback path
 // keeps working (a successful PATCH is { success: true }).
-export async function saveArmConfig(
-	config: ConfigUpdateRequest
-): Promise<{ success: boolean; warning?: string }> {
+export async function saveArmConfig(config: ConfigUpdateRequest): Promise<{ success: boolean; warning?: string }> {
 	await patch<ConfigView>('/api/config', config);
 	return { success: true };
 }
@@ -100,10 +95,7 @@ export async function saveArmConfig(
 // tri-state KeyCheckResponse (ok/invalid/missing/error/unknown) that
 // SchemaConfigForm renders.
 // ---------------------------------------------------------------------------
-export function checkApiKey(
-	name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv',
-	value?: string
-): Promise<KeyCheckResponse> {
+export function checkApiKey(name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv', value?: string): Promise<KeyCheckResponse> {
 	return post<KeyCheckResponse>(`/api/config/keys/${name}/check`, { value });
 }
 

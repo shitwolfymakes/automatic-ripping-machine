@@ -2,12 +2,11 @@ import { render } from '@testing-library/svelte';
 
 export { screen, fireEvent, within, waitFor, cleanup } from '@testing-library/svelte';
 
-// Thin wrapper — extensible for future context providers or global setup.
-// Uses permissive types to avoid Svelte 5 component type mismatches with
-// @testing-library/svelte v5 internals.
-export function renderComponent(
-	component: any,
-	options: Record<string, unknown> = {}
-) {
+// Any component render() accepts. Props stay loosely typed so tests can pass
+// partial props without fighting Svelte 5 component generics.
+type RenderableComponent = Parameters<typeof render>[0];
+
+// Thin wrapper, extensible for future context providers or global setup.
+export function renderComponent(component: RenderableComponent, options: Record<string, unknown> = {}) {
 	return render(component, options);
 }

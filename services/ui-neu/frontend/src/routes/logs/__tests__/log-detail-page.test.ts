@@ -109,9 +109,7 @@ describe('Logs single-job viewer', () => {
 		fetchJobLog.mockResolvedValue(many);
 		renderComponent(LogDetailPage);
 		await waitFor(() => {
-			expect(
-				screen.getByText('Showing the last 1000 lines. Download the .zip for the full log.')
-			).toBeInTheDocument();
+			expect(screen.getByText('Showing the last 1000 lines. Download the .zip for the full log.')).toBeInTheDocument();
 		});
 	});
 

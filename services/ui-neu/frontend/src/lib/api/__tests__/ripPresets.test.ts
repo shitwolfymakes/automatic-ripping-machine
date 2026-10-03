@@ -8,13 +8,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get, post, patch, del } from '$lib/api/client';
-import {
-	fetchRipPresets,
-	fetchRipPreset,
-	createRipPreset,
-	updateRipPreset,
-	deleteRipPreset
-} from '../ripPresets';
+import { fetchRipPresets, fetchRipPreset, createRipPreset, updateRipPreset, deleteRipPreset } from '../ripPresets';
 
 const mockGet = vi.mocked(get);
 const mockPost = vi.mocked(post);

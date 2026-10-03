@@ -245,7 +245,11 @@ export function namingPreview(
 }
 
 // v3 POST /api/naming/validate → { valid }.
-export function validatePattern(template: string, mediaType: MediaType, hasTranscodePreset = false): Promise<NamingValidateResponse> {
+export function validatePattern(
+	template: string,
+	mediaType: MediaType,
+	hasTranscodePreset = false
+): Promise<NamingValidateResponse> {
 	return apiFetch<NamingValidateResponse>('/api/naming/validate', {
 		method: 'POST',
 		body: JSON.stringify({ template, media_type: mediaType, has_transcode_preset: hasTranscodePreset })

@@ -18,14 +18,7 @@
 		onclose?: () => void;
 	}
 
-	let {
-		open = $bindable(false),
-		title,
-		children,
-		headerActions,
-		width = 'max-w-lg',
-		onclose,
-	}: Props = $props();
+	let { open = $bindable(false), title, children, headerActions, width = 'max-w-lg', onclose }: Props = $props();
 
 	function close() {
 		open = false;

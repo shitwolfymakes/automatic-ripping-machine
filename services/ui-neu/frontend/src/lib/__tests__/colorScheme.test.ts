@@ -3,8 +3,16 @@ import { get } from 'svelte/store';
 import { COLOR_SCHEMES, colorScheme, schemeLocksMode } from '../stores/colorScheme';
 
 const DARK_ONLY_IDS = [
-	'glass', 'cinema', 'gaming', 'royale', 'lcars',
-	'tactical', 'craft', 'terminal', 'blockbuster', 'hollywood-video-v2'
+	'glass',
+	'cinema',
+	'gaming',
+	'royale',
+	'lcars',
+	'tactical',
+	'craft',
+	'terminal',
+	'blockbuster',
+	'hollywood-video-v2'
 ];
 
 describe('COLOR_SCHEMES', () => {
@@ -110,49 +118,56 @@ describe('applyScheme effective-mode tokens', () => {
 	it('writes the light value once the saved theme switches back to light and the scheme re-applies', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface-dark']
+		);
 
 		localStorage.setItem('theme', 'light');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface']
+		);
 	});
 
 	it('flips --color-page and --color-primary-text along with --color-surface', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-page').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-page-dark']);
-		expect(document.documentElement.style.getPropertyValue('--color-primary-text').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-primary-text-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-page').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-page-dark']
+		);
+		expect(document.documentElement.style.getPropertyValue('--color-primary-text').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-primary-text-dark']
+		);
 	});
 
 	it('still writes the legacy -dark-suffixed names unchanged', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-surface-dark').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface-dark']);
-		expect(document.documentElement.style.getPropertyValue('--color-page-dark').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-page-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface-dark').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface-dark']
+		);
+		expect(document.documentElement.style.getPropertyValue('--color-page-dark').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-page-dark']
+		);
 	});
 
 	it('keeps --color-primary mode-invariant even though the scheme has a --color-primary-dark alias', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-primary').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-primary']);
+		expect(document.documentElement.style.getPropertyValue('--color-primary').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-primary']
+		);
 		// The legacy alias itself is still written unchanged for unmigrated
 		// components (e.g. `dark:text-primary-dark`).
-		expect(document.documentElement.style.getPropertyValue('--color-primary-dark').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-primary-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-primary-dark').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-primary-dark']
+		);
 	});
 
 	it('does not write a -dark value for a role the scheme does not pair (e.g. --radius)', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--radius').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--radius']);
+		expect(document.documentElement.style.getPropertyValue('--radius').trim()).toBe(DEFAULT_SCHEME.tokens['--radius']);
 	});
 
 	it('restores a saved light preference after leaving a mode-locked scheme, instead of inheriting its leftover dark class', () => {
@@ -167,8 +182,9 @@ describe('applyScheme effective-mode tokens', () => {
 		// saved preference, not from the dark class lcars left behind.
 		reapply('blue');
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface']
+		);
 	});
 });
 
@@ -186,28 +202,32 @@ describe('theme store toggling re-applies scheme tokens', () => {
 		const { theme, toggleTheme } = await import('../stores/theme');
 		theme.set('dark');
 		theme.set('light'); // force a change notification regardless of prior test state
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface']
+		);
 
 		toggleTheme();
 		expect(get(theme)).toBe('dark');
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface-dark']
+		);
 	});
 
 	it('toggleTheme back to light flips --color-surface back to the light value', async () => {
 		const { theme, toggleTheme } = await import('../stores/theme');
 		theme.set('light');
 		theme.set('dark'); // force a change notification regardless of prior test state
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface-dark']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface-dark']
+		);
 
 		toggleTheme();
 		expect(get(theme)).toBe('light');
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(DEFAULT_SCHEME.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			DEFAULT_SCHEME.tokens['--color-surface']
+		);
 	});
 
 	it('does not re-apply when the active scheme locks the mode', async () => {
@@ -215,13 +235,15 @@ describe('theme store toggling re-applies scheme tokens', () => {
 		const lcars = COLOR_SCHEMES.find((s) => s.id === 'lcars')!;
 		const { theme, toggleTheme } = await import('../stores/theme');
 		theme.set('dark');
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(lcars.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			lcars.tokens['--color-surface']
+		);
 
 		// Toggling the theme store while a locked scheme is active must not
 		// change the locked scheme's own tokens.
 		toggleTheme();
-		expect(document.documentElement.style.getPropertyValue('--color-surface').trim())
-			.toBe(lcars.tokens['--color-surface']);
+		expect(document.documentElement.style.getPropertyValue('--color-surface').trim()).toBe(
+			lcars.tokens['--color-surface']
+		);
 	});
 });

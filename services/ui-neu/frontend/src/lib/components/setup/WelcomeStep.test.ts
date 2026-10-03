@@ -14,15 +14,25 @@ const mockStatus: SetupStatus = {
 };
 
 // Mock fetch for system-info and dashboard calls
-vi.stubGlobal('fetch', vi.fn((url: string) => {
-	if (url.includes('system-info')) {
-		return Promise.resolve({ ok: true, json: () => Promise.resolve({ cpu: 'Test CPU', memory_total_gb: 16 }) });
-	}
-	if (url.includes('dashboard')) {
-		return Promise.resolve({ ok: true, json: () => Promise.resolve({ transcoder_online: true, transcoder_stats: { pending: 0, completed: 5, worker_running: true } }) });
-	}
-	return Promise.resolve({ ok: false });
-}));
+vi.stubGlobal(
+	'fetch',
+	vi.fn((url: string) => {
+		if (url.includes('system-info')) {
+			return Promise.resolve({ ok: true, json: () => Promise.resolve({ cpu: 'Test CPU', memory_total_gb: 16 }) });
+		}
+		if (url.includes('dashboard')) {
+			return Promise.resolve({
+				ok: true,
+				json: () =>
+					Promise.resolve({
+						transcoder_online: true,
+						transcoder_stats: { pending: 0, completed: 5, worker_running: true }
+					})
+			});
+		}
+		return Promise.resolve({ ok: false });
+	})
+);
 
 describe('WelcomeStep', () => {
 	afterEach(() => cleanup());

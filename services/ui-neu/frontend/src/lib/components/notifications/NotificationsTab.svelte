@@ -1,8 +1,14 @@
 <script lang="ts">
 	import type { Channel, Catalog, ChannelCreate, AppriseConfig } from '$lib/types/notifications';
 	import {
-		fetchChannels, fetchServices, fetchEventTypes, createChannel, updateChannel,
-		deleteChannel, testSendChannel, composeUrl, testConfig
+		fetchChannels,
+		fetchServices,
+		fetchEventTypes,
+		createChannel,
+		updateChannel,
+		deleteChannel,
+		testSendChannel,
+		testConfig
 	} from '$lib/api/channels';
 	import type { EventTypeInfo } from '$lib/api/channels';
 	import { addToast } from '$lib/stores/toast.svelte';
@@ -23,7 +29,9 @@
 	let filter = $state<ChannelFilter>('all');
 	let deleteTarget = $state<Channel | null>(null);
 
-	$effect(() => { load(); });
+	$effect(() => {
+		load();
+	});
 
 	// The system in-app channel (ncl_inbox) is the UI notification bell, not an
 	// external Apprise destination: it has no URL to test and can't be deleted
@@ -56,12 +64,11 @@
 		paused: channels.filter((c) => !c.enabled).length,
 		issues: channels.filter((c) => c.last_error).length
 	});
-	const visible = $derived(channels.filter((c) =>
-		filter === 'all' ? true :
-		filter === 'enabled' ? c.enabled :
-		filter === 'paused' ? !c.enabled :
-		!!c.last_error
-	));
+	const visible = $derived(
+		channels.filter((c) =>
+			filter === 'all' ? true : filter === 'enabled' ? c.enabled : filter === 'paused' ? !c.enabled : !!c.last_error
+		)
+	);
 
 	function serviceNameFor(c: Channel): string {
 		return c.type === 'apprise' ? 'Service' : c.type;
@@ -79,7 +86,9 @@
 		try {
 			const config = await toConfig(body);
 			const payload: ChannelCreate = {
-				type: body.type, name: body.name, enabled: body.enabled,
+				type: body.type,
+				name: body.name,
+				enabled: body.enabled,
 				config: config as ChannelCreate['config'],
 				subscribed_events: body.subscribed_events,
 				templates: body.templates
@@ -216,7 +225,9 @@
 		}
 	}
 
-	function toggleExpand(c: Channel) { expandedId = expandedId === c.id ? null : c.id; }
+	function toggleExpand(c: Channel) {
+		expandedId = expandedId === c.id ? null : c.id;
+	}
 </script>
 
 <div class="stack notifications-tab">
@@ -228,14 +239,24 @@
 		<StatStrip total={counts.total} issues={counts.issues} subscribedEvents={counts.subscribedEvents} />
 
 		{#if addOpen}
-			<AddChannelForm {catalog} {eventTypes} onsave={handleAdd} oncancel={() => (addOpen = false)} ontest={handleTestUnsaved} />
+			<AddChannelForm
+				{catalog}
+				{eventTypes}
+				onsave={handleAdd}
+				oncancel={() => (addOpen = false)}
+				ontest={handleTestUnsaved}
+			/>
 		{/if}
 
 		{#if channels.length > 0}
 			<div class="panel-section notifications-tab-toolbar">
 				<FilterPills active={filter} counts={filterCounts} onselect={(f) => (filter = f)} />
 				{#if !addOpen}
-					<button type="button" onclick={() => (addOpen = true)} class="btn btn-primary btn-sm notifications-tab-add-btn">+ Add channel</button>
+					<button
+						type="button"
+						onclick={() => (addOpen = true)}
+						class="btn btn-primary btn-sm notifications-tab-add-btn">+ Add channel</button
+					>
 				{/if}
 			</div>
 			<ChannelList
@@ -256,33 +277,13 @@
 			<div class="panel-section notifications-tab-empty">
 				<p class="notifications-tab-empty-title">No notification channels yet</p>
 				<p class="notifications-tab-empty-body">Add one to start receiving alerts for rip and transcode events.</p>
-				<button type="button" onclick={() => (addOpen = true)} class="btn btn-primary notifications-tab-empty-cta">Add your first channel</button>
+				<button type="button" onclick={() => (addOpen = true)} class="btn btn-primary notifications-tab-empty-cta"
+					>Add your first channel</button
+				>
 			</div>
 		{/if}
 	{/if}
 </div>
-
-<style>
-	/* space-y-5 (1.25rem), not .stack's default gap (1rem). */
-	.notifications-tab { gap: 1.25rem; }
-	.notifications-tab-load-error { padding: 0.75rem 1rem; }
-	.notifications-tab-loading { padding: 2rem 0; text-align: center; color: var(--color-text-faint); }
-	/* panel-section's own uniform 1rem padding vs this toolbar's px-4 py-3;
-	   the original was bg-page, not panel-section's own primary-tint-1. */
-	.notifications-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--color-page); }
-	/* the original was rounded-md px-3 py-1.5 text-xs (0.375rem radius,
-	   0.375rem vertical padding, 1rem bundled line-height) with no border at
-	   all; btn-primary's radius-lg, btn-sm's 0.25rem vertical padding and
-	   inherited 1.25rem line-height (btn-sm sets font-size but not
-	   line-height), and its own 1px border are all a hair off. */
-	.notifications-tab-add-btn { border: 0; border-radius: var(--radius-md); padding: 0.375rem 0.75rem; line-height: 1rem; }
-	/* the original was p-8 (2rem all around, matches panel-section's default
-	   of 1rem doubled); stated explicitly for clarity. */
-	.notifications-tab-empty { padding: 2rem; text-align: center; background: var(--color-page); }
-	.notifications-tab-empty-title { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-primary); }
-	.notifications-tab-empty-body { margin-top: 0.25rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.notifications-tab-empty-cta { margin-top: 1rem; }
-</style>
 
 <ConfirmDialog
 	open={deleteTarget !== null}
@@ -293,3 +294,61 @@
 	onconfirm={confirmDelete}
 	oncancel={() => (deleteTarget = null)}
 />
+
+<style>
+	/* space-y-5 (1.25rem), not .stack's default gap (1rem). */
+	.notifications-tab {
+		gap: 1.25rem;
+	}
+	.notifications-tab-load-error {
+		padding: 0.75rem 1rem;
+	}
+	.notifications-tab-loading {
+		padding: 2rem 0;
+		text-align: center;
+		color: var(--color-text-faint);
+	}
+	/* panel-section's own uniform 1rem padding vs this toolbar's px-4 py-3;
+	   the original was bg-page, not panel-section's own primary-tint-1. */
+	.notifications-tab-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		background: var(--color-page);
+	}
+	/* the original was rounded-md px-3 py-1.5 text-xs (0.375rem radius,
+	   0.375rem vertical padding, 1rem bundled line-height) with no border at
+	   all; btn-primary's radius-lg, btn-sm's 0.25rem vertical padding and
+	   inherited 1.25rem line-height (btn-sm sets font-size but not
+	   line-height), and its own 1px border are all a hair off. */
+	.notifications-tab-add-btn {
+		border: 0;
+		border-radius: var(--radius-md);
+		padding: 0.375rem 0.75rem;
+		line-height: 1rem;
+	}
+	/* the original was p-8 (2rem all around, matches panel-section's default
+	   of 1rem doubled); stated explicitly for clarity. */
+	.notifications-tab-empty {
+		padding: 2rem;
+		text-align: center;
+		background: var(--color-page);
+	}
+	.notifications-tab-empty-title {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 600;
+		color: var(--color-primary);
+	}
+	.notifications-tab-empty-body {
+		margin-top: 0.25rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.notifications-tab-empty-cta {
+		margin-top: 1rem;
+	}
+</style>

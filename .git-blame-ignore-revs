@@ -1,0 +1,5 @@
+# Bulk formatting commits that git blame should skip.
+# Enable locally with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style(ui-neu): format the frontend with Prettier
+1a6a6a2e46b478b24618306bcf00e537160d5c81

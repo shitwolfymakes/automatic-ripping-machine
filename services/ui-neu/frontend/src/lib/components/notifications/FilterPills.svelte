@@ -19,7 +19,7 @@
 </script>
 
 <div class="filter-pills inline-flex gap-1">
-	{#each pills as p}
+	{#each pills as p (p.key)}
 		<button type="button" onclick={() => onselect?.(p.key)} aria-pressed={active === p.key} class="chip">
 			{p.label} | {counts[p.key]}
 		</button>
@@ -27,7 +27,12 @@
 </div>
 
 <style>
-	.filter-pills { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-page); padding: 0.125rem; }
+	.filter-pills {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-page);
+		padding: 0.125rem;
+	}
 	/* Inside this bordered pill-group the chip block's default looks (tint-2
 	   background at rest, solid-fill white-on-blue when pressed, and a smaller
 	   padding than this group's pills ever had) are too loud next to the
@@ -41,6 +46,12 @@
 		background: none;
 		color: var(--color-text-muted);
 	}
-	.filter-pills .chip:hover { background: var(--color-primary-tint-2); color: var(--color-text); }
-	.filter-pills .chip[aria-pressed="true"] { background: var(--color-primary-tint-3); color: var(--color-primary); }
+	.filter-pills .chip:hover {
+		background: var(--color-primary-tint-2);
+		color: var(--color-text);
+	}
+	.filter-pills .chip[aria-pressed='true'] {
+		background: var(--color-primary-tint-3);
+		color: var(--color-primary);
+	}
 </style>

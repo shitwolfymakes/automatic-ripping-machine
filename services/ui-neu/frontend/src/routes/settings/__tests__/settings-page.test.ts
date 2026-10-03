@@ -10,12 +10,34 @@ import type { DriveView } from '$lib/types/api.gen';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
-		id: 'drv_1', hostname: 'arm-ripper-abc', device_path: '/dev/sr0', display_name: null, status: 'online',
-		last_seen_at: null, media_status: null, media_status_at: null, default_session_id: null, rip_speed: null,
-		drive_mode: null, uhd_capable: null, prescan_cache_mb: null, prescan_timeout: null, prescan_retries: null,
-		disc_enum_timeout: null, created_at: null, updated_at: null, lifecycle: 'enrolled', present: true,
-		identity_kind: 'by_id', serial: 'AAAABBBB000E', by_id_name: 'usb-X_AAAABBBB000E-0:0', vendor: 'PIONEER',
-		model: 'BD-RW BDR-S12JX', last_error: null, current_job: null, ...over
+		id: 'drv_1',
+		hostname: 'arm-ripper-abc',
+		device_path: '/dev/sr0',
+		display_name: null,
+		status: 'online',
+		last_seen_at: null,
+		media_status: null,
+		media_status_at: null,
+		default_session_id: null,
+		rip_speed: null,
+		drive_mode: null,
+		uhd_capable: null,
+		prescan_cache_mb: null,
+		prescan_timeout: null,
+		prescan_retries: null,
+		disc_enum_timeout: null,
+		created_at: null,
+		updated_at: null,
+		lifecycle: 'enrolled',
+		present: true,
+		identity_kind: 'by_id',
+		serial: 'AAAABBBB000E',
+		by_id_name: 'usb-X_AAAABBBB000E-0:0',
+		vendor: 'PIONEER',
+		model: 'BD-RW BDR-S12JX',
+		last_error: null,
+		current_job: null,
+		...over
 	} as DriveView;
 }
 
@@ -39,36 +61,126 @@ const mockSchema = {
 		{
 			name: 'Metadata',
 			fields: [
-				{ key: 'metadata_provider', group: 'Metadata', tier: 'operator', label: 'Metadata provider', help: '', type: 'enum', editable: true, enum_values: ['tmdb', 'omdb'] },
-				{ key: 'tmdb_api_key', group: 'Metadata', tier: 'secret', label: 'TMDb API key', help: '', type: 'string', editable: true, enum_values: null }
+				{
+					key: 'metadata_provider',
+					group: 'Metadata',
+					tier: 'operator',
+					label: 'Metadata provider',
+					help: '',
+					type: 'enum',
+					editable: true,
+					enum_values: ['tmdb', 'omdb']
+				},
+				{
+					key: 'tmdb_api_key',
+					group: 'Metadata',
+					tier: 'secret',
+					label: 'TMDb API key',
+					help: '',
+					type: 'string',
+					editable: true,
+					enum_values: null
+				}
 			]
 		},
 		{
 			name: 'Ripping',
 			fields: [
-				{ key: 'auto_rip_on_insert', group: 'Ripping', tier: 'operator', label: 'Auto-rip on insert', help: '', type: 'bool', editable: true, enum_values: null },
-				{ key: 'block_on_miss', group: 'Ripping', tier: 'operator', label: 'Block on miss', help: '', type: 'bool', editable: true, enum_values: null }
+				{
+					key: 'auto_rip_on_insert',
+					group: 'Ripping',
+					tier: 'operator',
+					label: 'Auto-rip on insert',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				},
+				{
+					key: 'block_on_miss',
+					group: 'Ripping',
+					tier: 'operator',
+					label: 'Block on miss',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				}
 			]
 		},
 		{
 			name: 'Transcoding',
 			fields: [
-				{ key: 'transcode_enabled', group: 'Transcoding', tier: 'operator', label: 'Enable transcoding', help: '', type: 'bool', editable: true, enum_values: null },
-				{ key: 'transcode_capable', group: 'Transcoding', tier: 'infra', label: 'Transcode capable', help: '', type: 'bool', editable: false, enum_values: null },
-				{ key: 'auto_transcode_on_idle', group: 'Transcoding', tier: 'operator', label: 'Auto-transcode on idle', help: '', type: 'bool', editable: true, enum_values: null },
-				{ key: 'max_parallel_transcodes', group: 'Transcoding', tier: 'operator', label: 'Max parallel transcodes', help: '', type: 'int', editable: true, enum_values: null }
+				{
+					key: 'transcode_enabled',
+					group: 'Transcoding',
+					tier: 'operator',
+					label: 'Enable transcoding',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				},
+				{
+					key: 'transcode_capable',
+					group: 'Transcoding',
+					tier: 'infra',
+					label: 'Transcode capable',
+					help: '',
+					type: 'bool',
+					editable: false,
+					enum_values: null
+				},
+				{
+					key: 'auto_transcode_on_idle',
+					group: 'Transcoding',
+					tier: 'operator',
+					label: 'Auto-transcode on idle',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				},
+				{
+					key: 'max_parallel_transcodes',
+					group: 'Transcoding',
+					tier: 'operator',
+					label: 'Max parallel transcodes',
+					help: '',
+					type: 'int',
+					editable: true,
+					enum_values: null
+				}
 			]
 		},
 		{
 			name: 'Notifications',
 			fields: [
-				{ key: 'notifications_enabled', group: 'Notifications', tier: 'operator', label: 'Enable notifications', help: '', type: 'bool', editable: true, enum_values: null }
+				{
+					key: 'notifications_enabled',
+					group: 'Notifications',
+					tier: 'operator',
+					label: 'Enable notifications',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				}
 			]
 		},
 		{
 			name: 'System',
 			fields: [
-				{ key: 'RAW_ROOT', group: 'System', tier: 'infra', label: 'Raw root', help: '', type: 'string', editable: false, enum_values: null }
+				{
+					key: 'RAW_ROOT',
+					group: 'System',
+					tier: 'infra',
+					label: 'Raw root',
+					help: '',
+					type: 'string',
+					editable: false,
+					enum_values: null
+				}
 			]
 		}
 	]
@@ -110,7 +222,9 @@ vi.mock('$lib/api/drives', () => ({
 	ignoreDrive: vi.fn(() => Promise.resolve()),
 	unignoreDrive: vi.fn(() => Promise.resolve()),
 	fetchDriveDiagnostic: vi.fn(() => Promise.resolve({ drives: [], system: [] })),
-	rescanDrives: vi.fn(() => Promise.resolve({ online: 0, stale: 0, detected: 0, enrolled: 0, ignored: 0, absent: 0, pruned: 0 }))
+	rescanDrives: vi.fn(() =>
+		Promise.resolve({ online: 0, stale: 0, detected: 0, enrolled: 0, ignored: 0, absent: 0, pruned: 0 })
+	)
 }));
 
 vi.mock('$lib/api/sessions', () => ({
@@ -195,7 +309,16 @@ vi.mock('$lib/api/channels', () => ({
 	fetchServices: vi.fn(() =>
 		Promise.resolve({
 			featured: ['discord'],
-			services: [{ id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord', required_fields: [], advanced_fields: [] }]
+			services: [
+				{
+					id: 'discord',
+					name: 'Discord',
+					docs_url: '',
+					url_scheme: 'discord',
+					required_fields: [],
+					advanced_fields: []
+				}
+			]
 		})
 	),
 	fetchEventTypes: vi.fn(() =>
@@ -424,9 +547,7 @@ describe('Settings Page', () => {
 		it('hides the channels UI and shows a hint when notifications are disabled', async () => {
 			// default mockConfig has notifications_enabled: false
 			await renderAndOpenTab('Notifications');
-			await waitFor(() =>
-				expect(screen.getByText(/notifications are disabled/i)).toBeInTheDocument()
-			);
+			await waitFor(() => expect(screen.getByText(/notifications are disabled/i)).toBeInTheDocument());
 			expect(screen.queryByText('Family Discord')).not.toBeInTheDocument();
 			// the master toggle (a switch, not a checkbox — auto-saves, no Save button)
 			expect(screen.getByRole('switch', { name: /enable notifications/i })).toBeInTheDocument();
@@ -435,13 +556,9 @@ describe('Settings Page', () => {
 		it('master toggle auto-saves on click (no Save button)', async () => {
 			const { saveArmConfig } = await import('$lib/api/settings');
 			await renderAndOpenTab('Notifications');
-			await waitFor(() =>
-				expect(screen.getByRole('switch', { name: /enable notifications/i })).toBeInTheDocument()
-			);
+			await waitFor(() => expect(screen.getByRole('switch', { name: /enable notifications/i })).toBeInTheDocument());
 			await fireEvent.click(screen.getByRole('switch', { name: /enable notifications/i }));
-			await waitFor(() =>
-				expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ notifications_enabled: true })
-			);
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ notifications_enabled: true }));
 			// the channels UI appears immediately (optimistic) without a Save action
 			await waitFor(() => expect(screen.getByText('Family Discord')).toBeInTheDocument());
 		});
@@ -574,7 +691,9 @@ describe('Settings Page', () => {
 			setTranscoderEnabled(false);
 			await renderAndOpenTab('Transcoding');
 			await waitFor(() => {
-				expect(screen.getByText('This deployment is ripper-only; transcoding cannot be enabled here.')).toBeInTheDocument();
+				expect(
+					screen.getByText('This deployment is ripper-only; transcoding cannot be enabled here.')
+				).toBeInTheDocument();
 			});
 			// Locked OFF even though the backend column is true (fixture
 			// default): the column is meaningless without capability.

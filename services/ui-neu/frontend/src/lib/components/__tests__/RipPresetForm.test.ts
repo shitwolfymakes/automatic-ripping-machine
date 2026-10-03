@@ -59,15 +59,9 @@ describe('RipPresetForm', () => {
 			// media_type editable on create
 			expect(mediaType).not.toBeDisabled();
 
-			const optionValues = (el: HTMLSelectElement) =>
-				Array.from(el.options).map((o) => o.value);
+			const optionValues = (el: HTMLSelectElement) => Array.from(el.options).map((o) => o.value);
 			expect(optionValues(mediaType)).toEqual(['movie', 'tv', 'music', 'data', 'iso']);
-			expect(optionValues(trackSelection)).toEqual([
-				'main_feature',
-				'all_tracks',
-				'archive',
-				'custom'
-			]);
+			expect(optionValues(trackSelection)).toEqual(['main_feature', 'all_tracks', 'archive', 'custom']);
 			expect(optionValues(idMode)).toEqual(['required', 'skip', 'deferred_placeholder']);
 			expect(optionValues(outputMode)).toEqual(['tracks', 'iso', 'data_copy']);
 		});
@@ -202,9 +196,7 @@ describe('RipPresetForm', () => {
 			expect(screen.getByTestId('preset-output-mode')).toBeDisabled();
 
 			// Warning banner instead of the old "only the name is editable" note.
-			expect(
-				screen.getByText(/built-in preset and can't be edited/i)
-			).toBeInTheDocument();
+			expect(screen.getByText(/built-in preset and can't be edited/i)).toBeInTheDocument();
 
 			// TrackFiltersEditor hidden for built-in even though track_selection is custom
 			expect(screen.queryByTestId('tf-min-duration')).not.toBeInTheDocument();

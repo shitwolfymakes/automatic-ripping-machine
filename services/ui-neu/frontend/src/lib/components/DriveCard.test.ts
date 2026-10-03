@@ -219,7 +219,7 @@ describe('DriveCard', () => {
 			await fireEvent.click(screen.getByTestId('drive-unenroll'));
 			await waitFor(() => expect(onupdate).toHaveBeenCalled());
 			expect(window.confirm).toHaveBeenCalledWith(
-				"Unenroll Main Drive? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan."
+				'Unenroll Main Drive? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.'
 			);
 			expect(unenrollDriveMock).toHaveBeenCalledWith('drv_1');
 		});
@@ -240,9 +240,7 @@ describe('DriveCard', () => {
 			renderDrive();
 			await fireEvent.click(screen.getByTestId('drive-unenroll'));
 			await waitFor(() =>
-				expect(screen.getByTestId('drive-unenroll-error')).toHaveTextContent(
-					'cannot unenroll: a drive is ripping'
-				)
+				expect(screen.getByTestId('drive-unenroll-error')).toHaveTextContent('cannot unenroll: a drive is ripping')
 			);
 			expect(screen.getByTestId('drive-unenroll')).not.toBeDisabled();
 		});
@@ -278,9 +276,7 @@ describe('DriveCard', () => {
 			triggerManualMock.mockRejectedValueOnce(new Error('ripping is paused; no new jobs accepted'));
 			renderDrive({ id: 'drv_1' });
 			await fireEvent.click(screen.getByTestId('drive-start-rip'));
-			await waitFor(() =>
-				expect(screen.getByTestId('drive-manual-error')).toHaveTextContent('ripping is paused')
-			);
+			await waitFor(() => expect(screen.getByTestId('drive-manual-error')).toHaveTextContent('ripping is paused'));
 		});
 
 		it('resets the session selection and calls onupdate after a successful rip', async () => {
@@ -322,18 +318,14 @@ describe('DriveCard', () => {
 			renderDrive({ id: 'drv_1', default_session_id: null }, sessions);
 			await fireEvent.click(screen.getByTitle('Drive settings'));
 			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: 'ses_2' } });
-			await waitFor(() =>
-				expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: 'ses_2' })
-			);
+			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: 'ses_2' }));
 		});
 
 		it('clears the default (null) when "— none —" is chosen', async () => {
 			renderDrive({ id: 'drv_1', default_session_id: 'ses_1' }, sessions);
 			await fireEvent.click(screen.getByTitle('Drive settings'));
 			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: '' } });
-			await waitFor(() =>
-				expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: null })
-			);
+			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { default_session_id: null }));
 		});
 
 		it('surfaces a save error inline', async () => {
@@ -341,9 +333,7 @@ describe('DriveCard', () => {
 			renderDrive({ id: 'drv_1', default_session_id: null }, sessions);
 			await fireEvent.click(screen.getByTitle('Drive settings'));
 			await fireEvent.change(screen.getByTestId('drive-default-session'), { target: { value: 'ses_1' } });
-			await waitFor(() =>
-				expect(screen.getByTestId('drive-default-session-error')).toHaveTextContent('default boom')
-			);
+			await waitFor(() => expect(screen.getByTestId('drive-default-session-error')).toHaveTextContent('default boom'));
 		});
 	});
 

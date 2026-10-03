@@ -3,11 +3,7 @@
 	// is not built yet. Renders a DISABLED button (so no handler fires) plus a
 	// small "Coming soon" badge; the title tooltip names the feature. Single
 	// source of truth — every deferred operator control uses this.
-	let {
-		label,
-		feature = label,
-		class: klass = ''
-	}: { label: string; feature?: string; class?: string } = $props();
+	let { label, feature = label, class: klass = '' }: { label: string; feature?: string; class?: string } = $props();
 </script>
 
 <span class="inline-flex items-center gap-1.5">
@@ -19,9 +15,7 @@
 	>
 		{label}
 	</button>
-	<span class="badge badge-sm">
-		Coming soon
-	</span>
+	<span class="badge badge-sm"> Coming soon </span>
 </span>
 
 <style>

@@ -26,7 +26,7 @@ const MOVIE_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'var(--color-info-soft)',
 	placeholderText: 'var(--color-info)',
 	accent: 'var(--color-info)',
-	iconColor: 'var(--color-info)',
+	iconColor: 'var(--color-info)'
 };
 
 const SERIES_CONFIG: VideoTypeConfig = {
@@ -37,7 +37,7 @@ const SERIES_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'color-mix(in srgb, var(--color-accent-3) 30%, transparent)',
 	placeholderText: 'var(--color-accent-3)',
 	accent: 'var(--color-accent-3)',
-	iconColor: 'var(--color-accent-3)',
+	iconColor: 'var(--color-accent-3)'
 };
 
 const MUSIC_CONFIG: VideoTypeConfig = {
@@ -48,7 +48,7 @@ const MUSIC_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'var(--color-success-soft)',
 	placeholderText: 'var(--color-success)',
 	accent: 'var(--color-success)',
-	iconColor: 'var(--color-success)',
+	iconColor: 'var(--color-success)'
 };
 
 const DATA_CONFIG: VideoTypeConfig = {
@@ -59,7 +59,7 @@ const DATA_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'var(--color-warning-soft)',
 	placeholderText: 'var(--color-warning)',
 	accent: 'var(--color-warning)',
-	iconColor: 'var(--color-warning)',
+	iconColor: 'var(--color-warning)'
 };
 
 // Unidentified video disc: ARM knows it's a DVD/Blu-ray/UHD but
@@ -73,7 +73,7 @@ const VIDEO_FALLBACK_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'color-mix(in srgb, var(--color-accent-4) 30%, transparent)',
 	placeholderText: 'var(--color-accent-4)',
 	accent: 'var(--color-accent-4)',
-	iconColor: 'var(--color-accent-4)',
+	iconColor: 'var(--color-accent-4)'
 };
 
 const FALLBACK_CONFIG: VideoTypeConfig = {
@@ -84,22 +84,19 @@ const FALLBACK_CONFIG: VideoTypeConfig = {
 	placeholderBg: 'var(--color-primary-tint-2)',
 	placeholderText: 'var(--color-text-faint)',
 	accent: 'var(--color-text-faint)',
-	iconColor: 'var(--color-text-muted)',
+	iconColor: 'var(--color-text-muted)'
 };
 
 const TYPE_MAP: Record<string, VideoTypeConfig> = {
 	movie: MOVIE_CONFIG,
 	series: SERIES_CONFIG,
 	music: MUSIC_CONFIG,
-	data: DATA_CONFIG,
+	data: DATA_CONFIG
 };
 
 const VIDEO_DISCTYPES = new Set(['dvd', 'bluray', 'bluray4k', 'uhd']);
 
-export function getVideoTypeConfig(
-	videoType: string | null | undefined,
-	disctype?: string | null,
-): VideoTypeConfig {
+export function getVideoTypeConfig(videoType: string | null | undefined, disctype?: string | null): VideoTypeConfig {
 	const known = videoType ? TYPE_MAP[videoType.toLowerCase()] : undefined;
 	if (known) return known;
 	if (disctype && VIDEO_DISCTYPES.has(disctype.toLowerCase())) {
@@ -126,16 +123,16 @@ const ACTIVE_STATUSES = new Set([
 	'identified',
 	'identifying',
 	'ready',
-	'ripping',                  // legacy pre-v2.0.0
+	'ripping', // legacy pre-v2.0.0
 	'video_ripping',
 	'audio_ripping',
 	'copying',
 	'ejecting',
 	'transcoding',
-	'waiting',                  // legacy pre-v2.0.0
+	'waiting', // legacy pre-v2.0.0
 	'manual_paused',
 	'makemkv_throttled',
-	'waiting_transcode',
+	'waiting_transcode'
 ]);
 
 const DISC_TYPE_LABELS: Record<string, string> = {
@@ -145,7 +142,7 @@ const DISC_TYPE_LABELS: Record<string, string> = {
 	cd: 'CD',
 	music: 'Music CD',
 	data: 'Data',
-	unknown: 'Unknown',
+	unknown: 'Unknown'
 };
 
 export function discTypeLabel(disctype: string | null | undefined): string {

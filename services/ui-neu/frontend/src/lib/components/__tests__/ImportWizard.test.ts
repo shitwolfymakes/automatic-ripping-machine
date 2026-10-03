@@ -8,33 +8,61 @@ vi.mock('$lib/components/IngressBrowser.svelte', async () => ({
 }));
 
 const searchMetadataMock = vi.fn(() => Promise.resolve([]));
-const scanIsoMock = vi.fn<(path: string) => Promise<unknown>>(() => Promise.resolve({
-	disc_type: 'bluray', iso_size: 12345678, stream_count: 7,
-	label: 'MOVIE_ISO', title_suggestion: 'ISO Movie', year_suggestion: '2025',
-	volume_id: 'VOL_LABEL_HERE'
-}));
-const createIsoJobMock = vi.fn<(data: Record<string, unknown>) => Promise<unknown>>(() => Promise.resolve({ success: true, job_id: 2 }));
-const scanFolderMock = vi.fn<(path: string) => Promise<unknown>>(() => Promise.resolve({
-	disc_type: 'bluray', folder_size_bytes: 25000000000, stream_count: 5,
-	label: 'TEST_DISC', title_suggestion: 'Test Movie', year_suggestion: '2025',
-	season: null, disc_number: null, disc_total: null
-}));
-const createFolderJobMock = vi.fn<(data: Record<string, unknown>) => Promise<unknown>>(() => Promise.resolve({ job_id: 1 }));
+const scanIsoMock = vi.fn<(path: string) => Promise<unknown>>(() =>
+	Promise.resolve({
+		disc_type: 'bluray',
+		iso_size: 12345678,
+		stream_count: 7,
+		label: 'MOVIE_ISO',
+		title_suggestion: 'ISO Movie',
+		year_suggestion: '2025',
+		volume_id: 'VOL_LABEL_HERE'
+	})
+);
+const createIsoJobMock = vi.fn<(data: Record<string, unknown>) => Promise<unknown>>(() =>
+	Promise.resolve({ success: true, job_id: 2 })
+);
+const scanFolderMock = vi.fn<(path: string) => Promise<unknown>>(() =>
+	Promise.resolve({
+		disc_type: 'bluray',
+		folder_size_bytes: 25000000000,
+		stream_count: 5,
+		label: 'TEST_DISC',
+		title_suggestion: 'Test Movie',
+		year_suggestion: '2025',
+		season: null,
+		disc_number: null,
+		disc_total: null
+	})
+);
+const createFolderJobMock = vi.fn<(data: Record<string, unknown>) => Promise<unknown>>(() =>
+	Promise.resolve({ job_id: 1 })
+);
 
 vi.mock('$lib/api/import-jobs', () => ({
 	scanFolder: (path: string) => scanFolderMock(path),
 	createFolderJob: (data: Record<string, unknown>) => createFolderJobMock(data),
 	scanIso: (path: string) => scanIsoMock(path),
 	createIsoJob: (data: Record<string, unknown>) => createIsoJobMock(data),
-	fetchIngressRoot: vi.fn(() => Promise.resolve([
-		{ key: 'ingress', label: 'Ingress', path: '/home/arm/ingress' }
-	])),
-	fetchIngressDirectory: vi.fn(() => Promise.resolve({
-		path: '/home/arm/ingress',
-		entries: [
-			{ name: 'Movie_Folder', type: 'directory', size: 4294967296, modified: '2025-06-15T12:00:00Z', extension: '', category: 'directory', permissions: 'rwxr-xr-x', owner: 'arm', group: 'arm' }
-		]
-	}))
+	fetchIngressRoot: vi.fn(() => Promise.resolve([{ key: 'ingress', label: 'Ingress', path: '/home/arm/ingress' }])),
+	fetchIngressDirectory: vi.fn(() =>
+		Promise.resolve({
+			path: '/home/arm/ingress',
+			entries: [
+				{
+					name: 'Movie_Folder',
+					type: 'directory',
+					size: 4294967296,
+					modified: '2025-06-15T12:00:00Z',
+					extension: '',
+					category: 'directory',
+					permissions: 'rwxr-xr-x',
+					owner: 'arm',
+					group: 'arm'
+				}
+			]
+		})
+	)
 }));
 
 vi.mock('$lib/api/jobs', () => ({
@@ -175,7 +203,7 @@ describe('ImportWizard', () => {
 				source_path: '/home/arm/ingress/Movie.iso',
 				title: 'ISO Movie',
 				year: '2025',
-				disctype: 'bluray',
+				disctype: 'bluray'
 			});
 		});
 	});

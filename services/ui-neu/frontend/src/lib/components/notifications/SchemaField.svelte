@@ -49,7 +49,7 @@
 				{#if !field.required}
 					<option value="">(not set)</option>
 				{/if}
-				{#each field.values ?? [] as opt}
+				{#each field.values ?? [] as opt (opt)}
 					<option value={opt}>{opt}</option>
 				{/each}
 			</select>

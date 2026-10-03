@@ -162,9 +162,7 @@ describe('GpusCard', () => {
 		await fireEvent.click(screen.getByLabelText(/Delete qsv/));
 		const confirm = await screen.findByRole('button', { name: 'Delete' });
 		await fireEvent.click(confirm);
-		await waitFor(() =>
-			expect(screen.getByRole('alert').textContent).toContain('in use by a running transcode')
-		);
+		await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('in use by a running transcode'));
 		expect(screen.getByText('QSV')).toBeInTheDocument();
 		expect(mockRefreshEncoders).not.toHaveBeenCalled();
 	});

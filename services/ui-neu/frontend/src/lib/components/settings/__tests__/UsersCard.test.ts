@@ -108,9 +108,7 @@ describe('UsersCard', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: /close/i }));
 
-		await waitFor(() =>
-			expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
-		);
+		await waitFor(() => expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument());
 	});
 
 	it('closes the slide-over and reports success after a password change', async () => {

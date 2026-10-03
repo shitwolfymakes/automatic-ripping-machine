@@ -38,10 +38,13 @@ describe('updateDrive', () => {
 	it('PATCHes /api/drives/:id', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ id: 'drv_x', display_name: 'New Name' }));
 		const result = await updateDrive('drv_x', { display_name: 'New Name' });
-		expect(mockFetch).toHaveBeenCalledWith('/api/drives/drv_x', expect.objectContaining({
-			method: 'PATCH',
-			body: JSON.stringify({ display_name: 'New Name' })
-		}));
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/drives/drv_x',
+			expect.objectContaining({
+				method: 'PATCH',
+				body: JSON.stringify({ display_name: 'New Name' })
+			})
+		);
 		expect(result).toEqual({ id: 'drv_x', display_name: 'New Name' });
 	});
 });
@@ -65,7 +68,10 @@ describe('rescanDrives', () => {
 	it('POSTs /api/drives/rescan?force=true when force is set', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ online: 1, stale: 0 }));
 		await rescanDrives(true);
-		expect(mockFetch).toHaveBeenCalledWith('/api/drives/rescan?force=true', expect.objectContaining({ method: 'POST' }));
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/drives/rescan?force=true',
+			expect.objectContaining({ method: 'POST' })
+		);
 	});
 });
 

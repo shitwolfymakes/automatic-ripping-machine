@@ -2,31 +2,22 @@
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 
-	let {
-		catalog,
-		selectedId,
-		onpick
-	}: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } = $props();
+	let { catalog, selectedId, onpick }: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } =
+		$props();
 
 	let open = $state(false);
 	let search = $state('');
 	let rootEl: HTMLDivElement | undefined = $state();
 
 	const byId = $derived(new Map(catalog.services.map((s) => [s.id, s])));
-	const selected = $derived(selectedId ? byId.get(selectedId) ?? null : null);
+	const selected = $derived(selectedId ? (byId.get(selectedId) ?? null) : null);
 
-	const featured = $derived(
-		catalog.featured.map((id) => byId.get(id)).filter((s): s is CatalogService => !!s)
-	);
+	const featured = $derived(catalog.featured.map((id) => byId.get(id)).filter((s): s is CatalogService => !!s));
 	const rest = $derived(
-		catalog.services
-			.filter((s) => !catalog.featured.includes(s.id))
-			.sort((a, b) => a.name.localeCompare(b.name))
+		catalog.services.filter((s) => !catalog.featured.includes(s.id)).sort((a, b) => a.name.localeCompare(b.name))
 	);
 	const q = $derived(search.trim().toLowerCase());
-	const filtered = $derived(
-		q ? catalog.services.filter((s) => s.name.toLowerCase().includes(q)) : null
-	);
+	const filtered = $derived(q ? catalog.services.filter((s) => s.name.toLowerCase().includes(q)) : null);
 
 	function choose(id: string) {
 		onpick?.(id);
@@ -45,12 +36,7 @@
 </script>
 
 <div class="service-dropdown" bind:this={rootEl}>
-	<button
-		type="button"
-		onclick={() => (open = !open)}
-		aria-expanded={open}
-		class="service-dropdown-trigger"
-	>
+	<button type="button" onclick={() => (open = !open)} aria-expanded={open} class="service-dropdown-trigger">
 		{#if selected}
 			<span class="cluster">
 				<ServiceGlyph id={selected.id} name={selected.name} size={22} />
@@ -59,7 +45,9 @@
 		{:else}
 			<span class="service-dropdown-placeholder">Select a service...</span>
 		{/if}
-		<svg class="service-dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+		<svg class="service-dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+			><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg
+		>
 	</button>
 
 	{#if open}
@@ -89,12 +77,7 @@
 
 {#snippet option(svc: CatalogService)}
 	<li>
-		<button
-			type="button"
-			onclick={() => choose(svc.id)}
-			class="flyout-item"
-			aria-pressed={svc.id === selectedId}
-		>
+		<button type="button" onclick={() => choose(svc.id)} class="flyout-item" aria-pressed={svc.id === selectedId}>
 			<ServiceGlyph id={svc.id} name={svc.name} size={22} />
 			<span class="service-dropdown-name">{svc.name}</span>
 			<span class="mono service-dropdown-scheme">{svc.url_scheme}://</span>
@@ -106,7 +89,9 @@
 	/* The panel anchors under the trigger button (relative/absolute), unlike
 	   the Flyout primitive's viewport-fixed positioning, so it stays a local
 	   class rather than .flyout. */
-	.service-dropdown { position: relative; }
+	.service-dropdown {
+		position: relative;
+	}
 	.service-dropdown-trigger {
 		display: flex;
 		width: 100%;
@@ -122,11 +107,24 @@
 		color: var(--color-text);
 		cursor: pointer;
 	}
-	.service-dropdown-trigger:hover { border-color: var(--color-primary); }
-	.service-dropdown-name { color: var(--color-text-secondary); }
-	.service-dropdown-placeholder { color: var(--color-text-muted); }
-	.service-dropdown-chevron { width: 1rem; height: 1rem; flex-shrink: 0; transition: transform var(--motion-fast) var(--ease); }
-	.service-dropdown-trigger[aria-expanded="true"] .service-dropdown-chevron { transform: rotate(180deg); }
+	.service-dropdown-trigger:hover {
+		border-color: var(--color-primary);
+	}
+	.service-dropdown-name {
+		color: var(--color-text-secondary);
+	}
+	.service-dropdown-placeholder {
+		color: var(--color-text-muted);
+	}
+	.service-dropdown-chevron {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		transition: transform var(--motion-fast) var(--ease);
+	}
+	.service-dropdown-trigger[aria-expanded='true'] .service-dropdown-chevron {
+		transform: rotate(180deg);
+	}
 	.service-dropdown-panel {
 		position: absolute;
 		z-index: 20;
@@ -138,11 +136,32 @@
 		background: var(--color-surface-raised);
 		box-shadow: var(--shadow-2);
 	}
-	.service-dropdown-search { padding: 0.5rem; }
-	.service-dropdown-list { max-height: 280px; overflow-y: auto; padding: 0.25rem 0; }
-	.service-dropdown-empty { padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.service-dropdown-group { padding: 0.5rem 0.75rem 0.25rem; }
-	.service-dropdown-group-muted { color: var(--color-text-muted); }
-	.service-dropdown-scheme { margin-left: auto; font-size: 10.5px; color: var(--color-text-muted); }
-	.service-dropdown-list .flyout-item[aria-pressed="true"] { background: var(--color-primary-tint-3); }
+	.service-dropdown-search {
+		padding: 0.5rem;
+	}
+	.service-dropdown-list {
+		max-height: 280px;
+		overflow-y: auto;
+		padding: 0.25rem 0;
+	}
+	.service-dropdown-empty {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.service-dropdown-group {
+		padding: 0.5rem 0.75rem 0.25rem;
+	}
+	.service-dropdown-group-muted {
+		color: var(--color-text-muted);
+	}
+	.service-dropdown-scheme {
+		margin-left: auto;
+		font-size: 10.5px;
+		color: var(--color-text-muted);
+	}
+	.service-dropdown-list .flyout-item[aria-pressed='true'] {
+		background: var(--color-primary-tint-3);
+	}
 </style>

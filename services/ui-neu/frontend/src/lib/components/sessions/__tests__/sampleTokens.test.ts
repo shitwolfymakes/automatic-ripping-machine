@@ -9,7 +9,7 @@ it('leaves unknown tokens for the type as-is is impossible — only valid tokens
 	expect(resolveSample('{artist}/{album}', 'music')).toBe('Radiohead/OK Computer');
 });
 it('every declared token for a type has a sample value', () => {
-	for (const [mt, map] of Object.entries(MEDIA_SAMPLE)) {
+	for (const map of Object.values(MEDIA_SAMPLE)) {
 		for (const k of Object.keys(map)) expect(String((map as any)[k]).length).toBeGreaterThan(0);
 	}
 });
@@ -20,7 +20,18 @@ it('every declared token for a type has a sample value', () => {
 it('samples every authoritative token per media type', () => {
 	const BACKEND_TOKENS: Record<string, string[]> = {
 		movie: ['title', 'year', 'track', 'duration_human', 'transcode_slug', 'ext'],
-		tv: ['show', 'year', 'season', 'disc', 'track', 'episode', 'episode_title', 'duration_human', 'transcode_slug', 'ext'],
+		tv: [
+			'show',
+			'year',
+			'season',
+			'disc',
+			'track',
+			'episode',
+			'episode_title',
+			'duration_human',
+			'transcode_slug',
+			'ext'
+		],
 		music: ['artist', 'album', 'disc', 'track', 'track_title', 'transcode_slug', 'ext'],
 		data: ['title'],
 		iso: ['title', 'year', 'ext']
@@ -33,7 +44,10 @@ it('samples every authoritative token per media type', () => {
 });
 
 it('resolves a full TV template with no leftover tokens', () => {
-	const out = resolveSample('{show} ({year})/Season {season}/{show} - S{season}D{disc}E{episode} ({duration_human}) - {transcode_slug}.{ext}', 'tv');
+	const out = resolveSample(
+		'{show} ({year})/Season {season}/{show} - S{season}D{disc}E{episode} ({duration_human}) - {transcode_slug}.{ext}',
+		'tv'
+	);
 	expect(out).not.toMatch(/\{\w+\}/);
 	expect(out).toContain('Breaking Bad');
 });

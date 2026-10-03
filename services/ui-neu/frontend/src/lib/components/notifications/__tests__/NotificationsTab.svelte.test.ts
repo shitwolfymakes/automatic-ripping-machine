@@ -12,7 +12,19 @@ const mockEventTypes = [
 	{
 		key: 'rip.completed',
 		label: 'Rip completed',
-		variables: ['job_title', 'drive_id', 'tracks_done', 'tracks_total', 'status', 'job_id', 'job_year', 'job_disc_type', 'event_type', 'occurred_at', 'tracks_failed'],
+		variables: [
+			'job_title',
+			'drive_id',
+			'tracks_done',
+			'tracks_total',
+			'status',
+			'job_id',
+			'job_year',
+			'job_disc_type',
+			'event_type',
+			'occurred_at',
+			'tracks_failed'
+		],
 		default_title: 'ARM: rip completed - {job_title}',
 		default_body: '{job_title} finished ripping on drive {drive_id} ({tracks_done}/{tracks_total} tracks).'
 	},
@@ -72,7 +84,9 @@ describe('NotificationsTab', () => {
 		await screen.findByText('Hook');
 		await fireEvent.click(screen.getByRole('switch', { name: /enabled/i }));
 		await waitFor(() => expect(api.updateChannel).toHaveBeenCalledWith(1, { enabled: false }));
-		await waitFor(() => expect(screen.getByRole('switch', { name: /enabled/i }).getAttribute('aria-checked')).toBe('true'));
+		await waitFor(() =>
+			expect(screen.getByRole('switch', { name: /enabled/i }).getAttribute('aria-checked')).toBe('true')
+		);
 	});
 
 	it('test-send resolves synchronously and shows "Test delivered" on ok', async () => {
@@ -111,17 +125,23 @@ describe('NotificationsTab', () => {
 		const sendTestButtons = await screen.findAllByRole('button', { name: /send test/i });
 		const editorBtn = sendTestButtons.find((b) => b.textContent?.toLowerCase().includes('send test'));
 		await fireEvent.click(editorBtn!);
-		await waitFor(() => expect(testConfig).toHaveBeenCalledWith(
-			expect.objectContaining({ type: 'webhook', config: expect.objectContaining({ url: 'https://x' }) })
-		));
+		await waitFor(() =>
+			expect(testConfig).toHaveBeenCalledWith(
+				expect.objectContaining({ type: 'webhook', config: expect.objectContaining({ url: 'https://x' }) })
+			)
+		);
 		expect(testSend).not.toHaveBeenCalled();
 	});
 
 	it('editor save with apprise dirty: PATCH config {service_id, fields}', async () => {
 		const ch = appriseChannel({
 			id: 1,
-			config: { type: 'apprise', url: 'discord://1/2', service_id: 'discord',
-			          fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' } }
+			config: {
+				type: 'apprise',
+				url: 'discord://1/2',
+				service_id: 'discord',
+				fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' }
+			}
 		});
 		vi.spyOn(api, 'fetchChannels').mockResolvedValue([ch]);
 		vi.spyOn(api, 'fetchServices').mockResolvedValue(discordCatalog);
@@ -135,20 +155,30 @@ describe('NotificationsTab', () => {
 		adv.open = true;
 		await fireEvent.input(await screen.findByLabelText(/Thread/i), { target: { value: '9' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-		await waitFor(() => expect(update).toHaveBeenCalledWith(1, expect.objectContaining({
-			config: expect.objectContaining({
-				type: 'apprise', service_id: 'discord',
-				fields: expect.objectContaining({ thread: '9', webhook_id: '<hidden>' })
-			})
-		})));
-		expect(compose).not.toHaveBeenCalled();  // server-side recompose
+		await waitFor(() =>
+			expect(update).toHaveBeenCalledWith(
+				1,
+				expect.objectContaining({
+					config: expect.objectContaining({
+						type: 'apprise',
+						service_id: 'discord',
+						fields: expect.objectContaining({ thread: '9', webhook_id: '<hidden>' })
+					})
+				})
+			)
+		);
+		expect(compose).not.toHaveBeenCalled(); // server-side recompose
 	});
 
 	it('editor save with no apprise edits: omits config', async () => {
 		const ch = appriseChannel({
 			id: 1,
-			config: { type: 'apprise', url: 'discord://1/2', service_id: 'discord',
-			          fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' } }
+			config: {
+				type: 'apprise',
+				url: 'discord://1/2',
+				service_id: 'discord',
+				fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' }
+			}
 		});
 		vi.spyOn(api, 'fetchChannels').mockResolvedValue([ch]);
 		vi.spyOn(api, 'fetchServices').mockResolvedValue(discordCatalog);
@@ -165,8 +195,12 @@ describe('NotificationsTab', () => {
 	it('editor Send test with dirty apprise: calls testConfig with {channel_id, fields}', async () => {
 		const ch = appriseChannel({
 			id: 1,
-			config: { type: 'apprise', url: 'discord://1/2', service_id: 'discord',
-			          fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' } }
+			config: {
+				type: 'apprise',
+				url: 'discord://1/2',
+				service_id: 'discord',
+				fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' }
+			}
 		});
 		vi.spyOn(api, 'fetchChannels').mockResolvedValue([ch]);
 		vi.spyOn(api, 'fetchServices').mockResolvedValue(discordCatalog);
@@ -182,19 +216,27 @@ describe('NotificationsTab', () => {
 		const sendTestBtns = await screen.findAllByRole('button', { name: /send test/i });
 		const editorBtn = sendTestBtns.find((b) => b.textContent?.toLowerCase().includes('send test'));
 		await fireEvent.click(editorBtn!);
-		await waitFor(() => expect(testCfg).toHaveBeenCalledWith(expect.objectContaining({
-			channel_id: 1,
-			fields: expect.objectContaining({ thread: '9' }),
-			event_type: expect.any(String)
-		})));
+		await waitFor(() =>
+			expect(testCfg).toHaveBeenCalledWith(
+				expect.objectContaining({
+					channel_id: 1,
+					fields: expect.objectContaining({ thread: '9' }),
+					event_type: expect.any(String)
+				})
+			)
+		);
 		expect(testSend).not.toHaveBeenCalled();
 	});
 
 	it('editor Send test with NO apprise edits: tests the saved channel (testSendChannel)', async () => {
 		const ch = appriseChannel({
 			id: 1,
-			config: { type: 'apprise', url: 'discord://1/2', service_id: 'discord',
-			          fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' } }
+			config: {
+				type: 'apprise',
+				url: 'discord://1/2',
+				service_id: 'discord',
+				fields: { webhook_id: '<hidden>', webhook_token: '<hidden>', thread: '5' }
+			}
 		});
 		vi.spyOn(api, 'fetchChannels').mockResolvedValue([ch]);
 		vi.spyOn(api, 'fetchServices').mockResolvedValue(discordCatalog);
@@ -225,15 +267,18 @@ describe('NotificationsTab', () => {
 		await fireEvent.click(screen.getByLabelText('Rip completed'));
 		await fireEvent.click(screen.getByRole('button', { name: /save channel/i }));
 
-		await waitFor(() => expect(create).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: 'apprise',
-				config: expect.objectContaining({
-					type: 'apprise', service_id: 'discord',
-					fields: expect.objectContaining({ webhook_id: '1' })
+		await waitFor(() =>
+			expect(create).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: 'apprise',
+					config: expect.objectContaining({
+						type: 'apprise',
+						service_id: 'discord',
+						fields: expect.objectContaining({ webhook_id: '1' })
+					})
 				})
-			})
-		));
+			)
+		);
 		expect(compose).not.toHaveBeenCalled();
 	});
 });

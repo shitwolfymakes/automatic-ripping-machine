@@ -13,7 +13,10 @@
 	aria-checked={checked}
 	aria-label={label}
 	{disabled}
-	onclick={(e) => { e.stopPropagation(); onchange?.(!checked); }}
+	onclick={(e) => {
+		e.stopPropagation();
+		onchange?.(!checked);
+	}}
 	class="toggle"
 >
 	<span class="toggle-thumb"></span>

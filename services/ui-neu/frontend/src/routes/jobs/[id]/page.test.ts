@@ -45,9 +45,7 @@ vi.mock('$lib/api/jobs', () => ({
 	updateTrack: vi.fn(() => Promise.resolve()),
 	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
 	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
-	applySession: vi.fn(() =>
-		Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })
-	),
+	applySession: vi.fn(() => Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })),
 	searchMusicMetadata: vi.fn(() => Promise.resolve({ candidates: [] })),
 	fetchMusicDetail: vi.fn(() => Promise.resolve({}))
 }));
@@ -174,9 +172,7 @@ describe('Job detail page (v3)', () => {
 			fingerprints: []
 		});
 		renderComponent(Page);
-		await waitFor(() =>
-			expect(screen.getByRole('button', { name: 'Match CD' })).toBeInTheDocument()
-		);
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Match CD' })).toBeInTheDocument());
 	});
 
 	it('does not show the Match CD tab for video jobs', async () => {
@@ -323,7 +319,9 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
 		const imdb = screen.getByRole('link', { name: 'IMDb' });
 		expect(imdb.getAttribute('href')).toBe('https://www.imdb.com/title/tt5555555');
-		expect(document.querySelector('img[src="/api/images/proxy?url=https%3A%2F%2Fexample.test%2Fp.jpg"]')).not.toBeNull();
+		expect(
+			document.querySelector('img[src="/api/images/proxy?url=https%3A%2F%2Fexample.test%2Fp.jpg"]')
+		).not.toBeNull();
 	});
 
 	it('renders an Episode column only when a track is a series', async () => {
@@ -428,7 +426,9 @@ describe('Job detail page (v3)', () => {
 	it('shows a Transcode badge when the track has a transcode_status', async () => {
 		mockFetchJob.mockResolvedValueOnce({
 			job: createJob({ id: 'job_42', status: 'ripped' }),
-			tracks: [createTrack({ id: 'trk_1', source_ref: 'title_01.mkv', status: 'done', transcode_status: 'failed' } as any)],
+			tracks: [
+				createTrack({ id: 'trk_1', source_ref: 'title_01.mkv', status: 'done', transcode_status: 'failed' } as any)
+			],
 			fingerprints: []
 		} as any);
 		renderComponent(Page);

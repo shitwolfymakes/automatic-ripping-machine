@@ -7,13 +7,31 @@ vi.mock('$lib/api/client', () => ({
 
 import { apiFetch, post } from '$lib/api/client';
 import {
-	fetchJobs, fetchJob, abandonJob, deleteJob, bulkDeleteJobs,
-	searchMetadata, fetchMediaDetail, searchMusicMetadata, fetchMusicDetail,
-	updateJobTitle, updateJobConfig, triggerManual,
+	fetchJobs,
+	fetchJob,
+	abandonJob,
+	deleteJob,
+	bulkDeleteJobs,
+	searchMetadata,
+	fetchMediaDetail,
+	searchMusicMetadata,
+	fetchMusicDetail,
+	updateJobTitle,
+	updateJobConfig,
+	triggerManual,
 	// MISSING in v3
-	cancelWaitingJob, startWaitingJob, pauseWaitingJob, fixJobPermissions,
-	skipAndFinalize, forceComplete, submitToCrcDb, fetchCrcLookup,
-	fetchJobProgress, updateJobTranscodeConfig, retranscodeJob, setJobTracks
+	cancelWaitingJob,
+	startWaitingJob,
+	pauseWaitingJob,
+	fixJobPermissions,
+	skipAndFinalize,
+	forceComplete,
+	submitToCrcDb,
+	fetchCrcLookup,
+	fetchJobProgress,
+	updateJobTranscodeConfig,
+	retranscodeJob,
+	setJobTracks
 } from '../api/jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);

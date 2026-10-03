@@ -119,7 +119,15 @@ describe('TranscodeCard', () => {
 		});
 
 		it('links to /jobs/{job_id}, not session_application_id', async () => {
-			const job = { id: 'txt_1', job_id: 'job_42', session_application_id: 'sap_9', status: 'in_progress', source_track_id: 'trk', progress_pct: 0, attempts: 1 } as any;
+			const job = {
+				id: 'txt_1',
+				job_id: 'job_42',
+				session_application_id: 'sap_9',
+				status: 'in_progress',
+				source_track_id: 'trk',
+				progress_pct: 0,
+				attempts: 1
+			} as any;
 			const { getByText } = renderComponent(TranscodeCard, { props: { job } });
 			await fireEvent.click(getByText('Transcode #txt_1'));
 			await waitFor(() => {

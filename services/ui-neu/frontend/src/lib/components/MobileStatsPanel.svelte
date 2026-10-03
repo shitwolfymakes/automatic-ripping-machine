@@ -53,9 +53,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div data-mobile-stats class="mobile-stats flex-1 overflow-y-auto" onclick={handleClick}>
 	<div class="mobile-stats-section">
-		<p class="eyebrow mobile-stats-heading">
-			Services
-		</p>
+		<p class="eyebrow mobile-stats-heading">Services</p>
 		<div class="stack stack-sm mobile-stats-list">
 			{#each services as s (s.label)}
 				{@const linked = !$isGuest || !s.href.startsWith('/settings')}
@@ -74,9 +72,7 @@
 	<hr class="mobile-stats-hr" />
 
 	<div class="mobile-stats-section">
-		<p class="eyebrow mobile-stats-heading">
-			Activity
-		</p>
+		<p class="eyebrow mobile-stats-heading">Activity</p>
 		<div class="stack stack-sm mobile-stats-list mobile-stats-activity">
 			<svelte:element
 				this={$isGuest ? 'span' : 'a'}
@@ -89,10 +85,7 @@
 				<p class="nav-item mobile-stats-ripping">{rippingCount} ripping</p>
 			{/if}
 			{#if $dashboard.active_transcodes.length > 0}
-				<a
-					href="/transcoder"
-					class="nav-item mobile-stats-transcoding"
-				>
+				<a href="/transcoder" class="nav-item mobile-stats-transcoding">
 					{$dashboard.active_transcodes.length} transcoding
 				</a>
 			{/if}
@@ -102,10 +95,7 @@
 				</p>
 			{/if}
 			{#if ($dashboard.notification_count ?? 0) > 0}
-				<a
-					href="/notifications"
-					class="nav-item mobile-stats-notification"
-				>
+				<a href="/notifications" class="nav-item mobile-stats-notification">
 					{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}
 				</a>
 			{/if}

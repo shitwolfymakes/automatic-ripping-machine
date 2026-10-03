@@ -4,7 +4,13 @@ import '@testing-library/jest-dom/vitest';
 // (slide, fade, etc.) that use the Web Animations API.
 if (typeof Element.prototype.animate !== 'function') {
 	Element.prototype.animate = function () {
-		return { cancel: () => {}, finish: () => {}, pause: () => {}, play: () => {}, onfinish: null } as unknown as Animation;
+		return {
+			cancel: () => {},
+			finish: () => {},
+			pause: () => {},
+			play: () => {},
+			onfinish: null
+		} as unknown as Animation;
 	};
 }
 

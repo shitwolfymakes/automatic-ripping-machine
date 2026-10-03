@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatBytes, statusColor, statusLabel, statusAccentVar, timeAgo, elapsedTime, etaTime, formatDateTime } from '../utils/format';
+import {
+	formatBytes,
+	statusColor,
+	statusLabel,
+	statusAccentVar,
+	timeAgo,
+	elapsedTime,
+	etaTime,
+	formatDateTime
+} from '../utils/format';
 
 describe('formatBytes', () => {
 	it.each([
@@ -37,7 +46,7 @@ describe('statusColor', () => {
 		['waiting', 'status-warning'],
 		// JobStatus (transcoder TranscodeJob.status)
 		['completed', 'status-success'],
-		['failed', 'status-error'],   // also TrackStatus.failed (v2.0.0+)
+		['failed', 'status-error'], // also TrackStatus.failed (v2.0.0+)
 		['pending', 'status-warning'],
 		['processing', 'status-processing'],
 		// TrackStatus (Track.status)
@@ -79,7 +88,7 @@ describe('statusLabel', () => {
 		['queued', 'Queued'],
 		['in_progress', 'In Progress'],
 		['done', 'Done'],
-		[null, 'Unknown'],
+		[null, 'Unknown']
 	])('statusLabel(%s) = %s', (input, expected) => {
 		expect(statusLabel(input)).toBe(expected);
 	});

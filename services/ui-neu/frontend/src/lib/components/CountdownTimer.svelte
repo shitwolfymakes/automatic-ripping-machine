@@ -18,9 +18,7 @@
 	let remaining = $derived(Math.max(0, Math.ceil((deadline - now) / 1000)));
 	let minutes = $derived(Math.floor(remaining / 60));
 	let seconds = $derived(remaining % 60);
-	let progress = $derived(
-		waitSeconds > 0 ? Math.min(1, Math.max(0, 1 - remaining / waitSeconds)) : 1
-	);
+	let progress = $derived(waitSeconds > 0 ? Math.min(1, Math.max(0, 1 - remaining / waitSeconds)) : 1);
 	let expired = $derived(remaining <= 0);
 
 	function handleClick() {
@@ -78,29 +76,67 @@
 </div>
 
 <style>
-	.countdown-timer { display: flex; align-items: center; gap: 0.5rem; }
-	.countdown-timer-btn {
-		display: flex; align-items: center; justify-content: center;
-		width: 1.25rem; height: 1.25rem; flex-shrink: 0; border-radius: 9999px; border: 0; background: none;
-		color: var(--color-primary-text); cursor: pointer;
-		transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+	.countdown-timer {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
-	.countdown-timer-btn:hover { background: var(--color-primary-tint-3); }
-	.countdown-timer-label { font-size: 0.875rem; font-weight: 500; color: var(--color-primary-text); }
-	.countdown-timer-value { font-variant-numeric: tabular-nums; }
-	.countdown-timer-track { width: 5rem; }
-	.countdown-timer-track .progress-track { height: 0.375rem; }
+	.countdown-timer-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		border-radius: 9999px;
+		border: 0;
+		background: none;
+		color: var(--color-primary-text);
+		cursor: pointer;
+		transition:
+			background-color var(--motion-fast) var(--ease),
+			color var(--motion-fast) var(--ease);
+	}
+	.countdown-timer-btn:hover {
+		background: var(--color-primary-tint-3);
+	}
+	.countdown-timer-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--color-primary-text);
+	}
+	.countdown-timer-value {
+		font-variant-numeric: tabular-nums;
+	}
+	.countdown-timer-track {
+		width: 5rem;
+	}
+	.countdown-timer-track .progress-track {
+		height: 0.375rem;
+	}
 	/* ticks once per second; the block's default 250ms fill transition is too
 	   quick for that cadence, so this keeps the original 1s linear pace. */
-	.countdown-timer-track .progress-fill { transition-duration: 1000ms; }
+	.countdown-timer-track .progress-fill {
+		transition-duration: 1000ms;
+	}
 	/* inverted: rendered on a colored (accent) background, e.g. the review-gate
 	   panel, so text/track/fill switch to on-primary tones instead of the
 	   primary-text/primary-tint roles meant for a plain surface. */
-	.countdown-timer[data-inverted="true"] .countdown-timer-btn { color: color-mix(in srgb, var(--color-on-primary) 90%, transparent); }
+	.countdown-timer[data-inverted='true'] .countdown-timer-btn {
+		color: color-mix(in srgb, var(--color-on-primary) 90%, transparent);
+	}
 	/* inverted sits on a coloured fill, so the hover scrim is the on-primary
 	   white rather than a surface token. */
-	.countdown-timer[data-inverted="true"] .countdown-timer-btn:hover { background: color-mix(in srgb, var(--color-on-primary) 20%, transparent); }
-	.countdown-timer[data-inverted="true"] .countdown-timer-label { color: color-mix(in srgb, var(--color-on-primary) 90%, transparent); }
-	.countdown-timer[data-inverted="true"] .countdown-timer-track .progress-track { background: color-mix(in srgb, var(--color-on-primary) 25%, transparent); }
-	.countdown-timer[data-inverted="true"] .countdown-timer-track .progress-fill { background: color-mix(in srgb, var(--color-on-primary) 80%, transparent); }
+	.countdown-timer[data-inverted='true'] .countdown-timer-btn:hover {
+		background: color-mix(in srgb, var(--color-on-primary) 20%, transparent);
+	}
+	.countdown-timer[data-inverted='true'] .countdown-timer-label {
+		color: color-mix(in srgb, var(--color-on-primary) 90%, transparent);
+	}
+	.countdown-timer[data-inverted='true'] .countdown-timer-track .progress-track {
+		background: color-mix(in srgb, var(--color-on-primary) 25%, transparent);
+	}
+	.countdown-timer[data-inverted='true'] .countdown-timer-track .progress-fill {
+		background: color-mix(in srgb, var(--color-on-primary) 80%, transparent);
+	}
 </style>

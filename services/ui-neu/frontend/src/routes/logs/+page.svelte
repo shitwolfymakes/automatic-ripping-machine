@@ -44,9 +44,7 @@
 
 <div class="stack">
 	<h1 class="page-title">Logs</h1>
-	<p class="logs-page-hint">
-		Browse a job's aggregated log. Select a job to view, filter, and download its log.
-	</p>
+	<p class="logs-page-hint">Browse a job's aggregated log. Select a job to view, filter, and download its log.</p>
 
 	<!-- Action bar: filters (status / title-id search) -->
 	<div class="cluster panel-section logs-page-action-bar">
@@ -102,16 +100,41 @@
 </div>
 
 <style>
-	.logs-page-hint { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.logs-page-muted { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.logs-page-search { width: auto; min-height: auto; }
+	.logs-page-hint {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.logs-page-muted {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.logs-page-search {
+		width: auto;
+		min-height: auto;
+	}
 	/* original was px-4 py-3 gap-3 (1rem/0.75rem/0.75rem), not
 	   panel-section's own uniform 1rem padding or cluster's 0.5rem gap */
-	.logs-page-action-bar { gap: 0.75rem; padding: 0.75rem 1rem; }
+	.logs-page-action-bar {
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+	}
 	/* the original header row was plain (px-4 py-3 font-medium, no
 	   uppercase/background/border) - table-header's own styling is tuned
 	   for the dashboard/jobs/job-detail tables, which this page's original
 	   markup never matched, so it is overridden back to the plain look */
-	.logs-page-table-header { padding: 0.75rem 1rem; text-align: left; font-size: 0.875rem; font-weight: 500; letter-spacing: normal; text-transform: none; color: var(--color-text); background: none; }
-	.logs-page-table .table-cell { padding: 0.75rem 1rem; }
+	.logs-page-table-header {
+		padding: 0.75rem 1rem;
+		text-align: left;
+		font-size: 0.875rem;
+		font-weight: 500;
+		letter-spacing: normal;
+		text-transform: none;
+		color: var(--color-text);
+		background: none;
+	}
+	.logs-page-table .table-cell {
+		padding: 0.75rem 1rem;
+	}
 </style>

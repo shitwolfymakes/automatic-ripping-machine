@@ -77,9 +77,12 @@ The suite needs no Docker, Postgres, drives, or network (in-memory fake session 
 
 ```bash
 uv run pre-commit install              # install the git hook once
-uv run pre-commit run --all-files      # ruff, mypy, shellcheck
+uv run pre-commit run --all-files      # ruff, mypy, eslint + prettier (ui-neu), shellcheck
 cd services/ui-neu/frontend && npm run check && npx vitest run   # UI: svelte-check + tests
+cd services/ui-neu/frontend && npm run lint && npm run format    # UI: ESLint + Prettier (format rewrites files)
 ```
+
+The ui-neu hooks need `npm ci --prefix services/ui-neu/frontend` once (`setup-dev.sh` does it). The bulk Prettier reformat is listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip it in `git blame`.
 
 ## Development model
 

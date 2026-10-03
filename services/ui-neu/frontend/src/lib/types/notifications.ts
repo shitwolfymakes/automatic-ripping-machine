@@ -121,4 +121,3 @@ export function isCatalogField(v: unknown): v is CatalogField {
 	const f = v as Record<string, unknown>;
 	return typeof f.key === 'string' && typeof f.label === 'string' && typeof f.type === 'string';
 }
-

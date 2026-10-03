@@ -34,6 +34,29 @@ repos:
           - arm_transcode
         types: [python]
 
+      # ESLint + Prettier run as local hooks against ui-neu's own node_modules
+      # (no global install needed). Like mypy above, each run covers the whole
+      # frontend tree rather than the staged files, because the configs are
+      # discovered from services/ui-neu/frontend.
+      #
+      # One-time setup: `npm ci --prefix services/ui-neu/frontend`
+      # (devtools/setup-dev.sh already does this).
+      - id: eslint-ui-neu
+        name: eslint (ui-neu)
+        entry: bash -c 'cd services/ui-neu/frontend && npm run --silent lint:fix'
+        language: system
+        pass_filenames: false
+        files: ^services/ui-neu/frontend/.+\.(ts|js|svelte)$
+        exclude: ^services/ui-neu/frontend/(src/lib/types/api\.gen\.ts|static/)
+
+      - id: prettier-ui-neu
+        name: prettier (ui-neu)
+        entry: bash -c 'cd services/ui-neu/frontend && npm run --silent format'
+        language: system
+        pass_filenames: false
+        files: ^services/ui-neu/frontend/.+\.(ts|js|svelte|css|json|html)$
+        exclude: ^services/ui-neu/frontend/(src/lib/types/api\.gen\.ts|static/|package-lock\.json$)
+
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.10.0
     hooks:

@@ -68,7 +68,10 @@ const mockStart = vi.mocked(startWaitingJob);
 const mockPause = vi.mocked(pauseWaitingJob);
 
 /** Render the widget with a JobView. */
-function renderWidget(jobOverrides: Partial<Parameters<typeof createJob>[0]> = {}, extraProps: Record<string, unknown> = {}) {
+function renderWidget(
+	jobOverrides: Partial<Parameters<typeof createJob>[0]> = {},
+	extraProps: Record<string, unknown> = {}
+) {
 	return renderComponent(DiscReviewWidget, {
 		props: { job: createJob({ status: 'identified', ...jobOverrides }), ...extraProps }
 	});
@@ -233,7 +236,14 @@ describe('DiscReviewWidget', () => {
 		it('renders v3 track rows (index / title / source)', async () => {
 			mockFetchJob.mockResolvedValue(
 				detail({ title: 'Kolchak', disc_type: 'bluray' }, [
-					createTrack({ id: 'trk_1', index: 0, source_ref: 'Kolchak_t00.mkv', title: 'Demon in Lace', duration_seconds: 3012, episode_number: 16 })
+					createTrack({
+						id: 'trk_1',
+						index: 0,
+						source_ref: 'Kolchak_t00.mkv',
+						title: 'Demon in Lace',
+						duration_seconds: 3012,
+						episode_number: 16
+					})
 				])
 			);
 			renderWidget({ disc_type: 'bluray' });
@@ -362,9 +372,7 @@ describe('DiscReviewWidget', () => {
 		});
 
 		it('renders no metadata chips for a bare disc', async () => {
-			mockFetchJob.mockResolvedValueOnce(
-				detail({ status: 'awaiting_review', disc_type: 'bluray', metadata_json: {} })
-			);
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', disc_type: 'bluray', metadata_json: {} }));
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(screen.queryByText(/titles$/)).not.toBeInTheDocument();

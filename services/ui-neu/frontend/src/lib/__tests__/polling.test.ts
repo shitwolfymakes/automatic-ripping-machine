@@ -56,9 +56,12 @@ describe('createPollingStore', () => {
 
 	it('refresh() debounces concurrent calls', async () => {
 		let resolve: (v: string) => void;
-		const fetcher = vi
-			.fn()
-			.mockImplementation(() => new Promise<string>((r) => { resolve = r; }));
+		const fetcher = vi.fn().mockImplementation(
+			() =>
+				new Promise<string>((r) => {
+					resolve = r;
+				})
+		);
 		const store = createPollingStore(fetcher, 'initial');
 
 		const p1 = store.refresh();
@@ -134,9 +137,7 @@ describe('createPollingStore', () => {
 	});
 
 	it('clears error on successful refresh after failure', async () => {
-		const fetcher = vi.fn()
-			.mockRejectedValueOnce(new Error('fail'))
-			.mockResolvedValueOnce('ok');
+		const fetcher = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValueOnce('ok');
 		const store = createPollingStore(fetcher, 'initial');
 
 		await store.refresh();

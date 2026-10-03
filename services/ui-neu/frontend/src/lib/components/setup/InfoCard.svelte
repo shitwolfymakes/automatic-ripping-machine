@@ -17,5 +17,7 @@
 </div>
 
 <style>
-	.info-card-body { margin-top: 0.25rem; }
+	.info-card-body {
+		margin-top: 0.25rem;
+	}
 </style>

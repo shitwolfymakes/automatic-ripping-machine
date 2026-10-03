@@ -17,13 +17,13 @@
 		</p>
 		<div class="flex gap-1">
 			<button disabled={page <= 1} onclick={() => onpage(page - 1)} class="btn btn-sm">Prev</button>
-			{#each Array.from({ length: pages }, (_, i) => i + 1) as p}
+			{#each Array.from({ length: pages }, (_, i) => i + 1) as p (p)}
 				{#if p === page || p === 1 || p === pages || Math.abs(p - page) <= 1}
 					<button
 						onclick={() => onpage(p)}
 						aria-pressed={p === page}
-						class="btn btn-sm {p === page ? 'btn-primary' : ''}"
-					>{p}</button>
+						class="btn btn-sm {p === page ? 'btn-primary' : ''}">{p}</button
+					>
 				{:else if Math.abs(p - page) === 2}
 					<span class="job-pagination-ellipsis px-1">...</span>
 				{/if}
@@ -34,6 +34,11 @@
 {/if}
 
 <style>
-	.job-pagination-summary { font-size: 0.875rem; color: var(--color-text-muted); }
-	.job-pagination-ellipsis { color: var(--color-text-faint); }
+	.job-pagination-summary {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
+	.job-pagination-ellipsis {
+		color: var(--color-text-faint);
+	}
 </style>

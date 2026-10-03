@@ -127,6 +127,23 @@ jobs:
         working-directory: .
       - run: npm run lint:styles
 
+  lint-ui-neu:
+    name: 'lint (ui-neu: eslint + prettier)'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ui-neu/frontend
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: services/ui-neu/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+
   test-ui-neu:
     name: test (ui-neu — vitest)
     runs-on: ubuntu-latest

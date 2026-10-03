@@ -36,7 +36,8 @@
 
 <div class="channel-list">
 	<div class="channel-list-header">
-		<span></span><span>Channel</span><span class="hidden channel-list-header-delivery md:block">Last delivery</span><span class="channel-list-header-center">Enabled</span><span class="channel-list-header-center">Actions</span>
+		<span></span><span>Channel</span><span class="hidden channel-list-header-delivery md:block">Last delivery</span
+		><span class="channel-list-header-center">Enabled</span><span class="channel-list-header-center">Actions</span>
 	</div>
 	{#each channels as c (c.id)}
 		<div class="channel-list-row-group">
@@ -65,9 +66,16 @@
 </div>
 
 <style>
-	.channel-list { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-surface); }
+	.channel-list {
+		overflow: hidden;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-xl);
+		background: var(--color-surface);
+	}
 	/* :global: .list-row is ChannelRow.svelte's own root class (a different component); fixed 64px for the actions column reproduces the original's grid-cols-[44px_1fr_110px_64px_64px] exactly, on both header and row, so they stay aligned (auto resolves independently per grid and shifts them apart - see fix round 1). */
-	.channel-list :global(.list-row) { grid-template-columns: 44px 1fr 110px 64px 64px; }
+	.channel-list :global(.list-row) {
+		grid-template-columns: 44px 1fr 110px 64px 64px;
+	}
 	.channel-list-header {
 		display: grid;
 		grid-template-columns: 44px 1fr 110px 64px 64px;
@@ -81,8 +89,17 @@
 		text-transform: uppercase;
 		color: var(--color-text-muted);
 	}
-	.channel-list-header-delivery { white-space: nowrap; text-align: right; }
-	.channel-list-header-center { text-align: center; }
-	.channel-list-row-group { border-bottom: 1px solid var(--color-border); }
-	.channel-list-row-group:last-child { border-bottom: 0; }
+	.channel-list-header-delivery {
+		white-space: nowrap;
+		text-align: right;
+	}
+	.channel-list-header-center {
+		text-align: center;
+	}
+	.channel-list-row-group {
+		border-bottom: 1px solid var(--color-border);
+	}
+	.channel-list-row-group:last-child {
+		border-bottom: 0;
+	}
 </style>

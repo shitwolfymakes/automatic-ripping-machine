@@ -41,6 +41,9 @@ describe('deleteTheme', () => {
 	it('DELETEs /api/themes/:id', async () => {
 		mockFetch.mockResolvedValue(jsonResponse(null));
 		await deleteTheme('custom');
-		expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/api/themes/custom'), expect.objectContaining({ method: 'DELETE' }));
+		expect(mockFetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/themes/custom'),
+			expect.objectContaining({ method: 'DELETE' })
+		);
 	});
 });

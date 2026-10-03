@@ -17,7 +17,19 @@ describe('block files', () => {
 	}
 	it('layout.css declares the helpers', () => {
 		const css = readFileSync(resolve(__dirname, '../layout.css'), 'utf8');
-		for (const c of ['.stack', '.stack-sm', '.stack-lg', '.cluster', '.grid-2', '.grid-3', '.page', '.page-header', '.page-title', '.split']) expect(css, c).toContain(c);
+		for (const c of [
+			'.stack',
+			'.stack-sm',
+			'.stack-lg',
+			'.cluster',
+			'.grid-2',
+			'.grid-3',
+			'.page',
+			'.page-header',
+			'.page-title',
+			'.split'
+		])
+			expect(css, c).toContain(c);
 	});
 	it('app.css imports every block file', () => {
 		const app = readFileSync(resolve(__dirname, '../../../app.css'), 'utf8');

@@ -31,7 +31,9 @@ it('renders the live preview from previewTemplate (response.expansion)', async (
 	renderComponent(OutputPathField, { value: 'movies/{title} ({year}).{ext}', mediaType: 'movie', onchange: vi.fn() });
 	await waitFor(() => expect(screen.getByText('movies/Fight Club (1999).mkv')).toBeInTheDocument());
 	// request body is { template, media_type, has_transcode_preset? }
-	expect(previewTemplate).toHaveBeenCalledWith(expect.objectContaining({ template: 'movies/{title} ({year}).{ext}', media_type: 'movie' }));
+	expect(previewTemplate).toHaveBeenCalledWith(
+		expect.objectContaining({ template: 'movies/{title} ({year}).{ext}', media_type: 'movie' })
+	);
 });
 
 it('surfaces an error when preview rejects (invalid token -> 4xx throws)', async () => {

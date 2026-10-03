@@ -20,5 +20,8 @@
 <style>
 	/* the .badge block's horizontal padding (0.5rem) is tighter than this
 	   component's original px-2.5 (0.625rem). */
-	.status-badge { padding-left: 0.625rem; padding-right: 0.625rem; }
+	.status-badge {
+		padding-left: 0.625rem;
+		padding-right: 0.625rem;
+	}
 </style>

@@ -56,14 +56,8 @@
 	<div class="cluster panel-section log-detail-page-actions">
 		<span class="eyebrow">Actions</span>
 		<div class="cluster">
-			<button onclick={load} class="btn log-detail-page-action-btn">
-				Refresh
-			</button>
-			<a
-				href={jobLogDownloadUrl(jobId)}
-				class="btn log-detail-page-action-btn"
-				aria-disabled={entries.length === 0}
-			>
+			<button onclick={load} class="btn log-detail-page-action-btn"> Refresh </button>
+			<a href={jobLogDownloadUrl(jobId)} class="btn log-detail-page-action-btn" aria-disabled={entries.length === 0}>
 				Download .zip
 			</a>
 		</div>
@@ -83,13 +77,32 @@
 </div>
 
 <style>
-	.log-detail-page-id { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.log-detail-page-actions { justify-content: space-between; }
-	.log-detail-page-truncated { font-size: 0.75rem; line-height: 1rem; color: var(--color-on-warning-soft); }
-	.log-detail-page-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.log-detail-page-id {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.log-detail-page-actions {
+		justify-content: space-between;
+	}
+	.log-detail-page-truncated {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-on-warning-soft);
+	}
+	.log-detail-page-loading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	/* original was px-3 py-2 (0.75rem/0.5rem), not .btn's default 0.5rem
 	   1rem; text-sm matches .btn's own bundled font-size/line-height so no
 	   size modifier is needed, just the padding restated */
-	.log-detail-page-action-btn { padding: 0.5rem 0.75rem; }
-	a[aria-disabled="true"] { pointer-events: none; opacity: 0.5; }
+	.log-detail-page-action-btn {
+		padding: 0.5rem 0.75rem;
+	}
+	a[aria-disabled='true'] {
+		pointer-events: none;
+		opacity: 0.5;
+	}
 </style>

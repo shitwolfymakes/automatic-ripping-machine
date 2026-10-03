@@ -1,7 +1,10 @@
 <script lang="ts">
 	import SlideOver from '../SlideOver.svelte';
 
-	interface Props { open?: boolean; onclose?: () => void; }
+	interface Props {
+		open?: boolean;
+		onclose?: () => void;
+	}
 	let { open = $bindable(true), onclose }: Props = $props();
 </script>
 

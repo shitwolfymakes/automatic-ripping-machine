@@ -14,14 +14,7 @@
 	let { onclick, icon, danger = false, disabled = false, children }: Props = $props();
 </script>
 
-<button
-	type="button"
-	role="menuitem"
-	{onclick}
-	{disabled}
-	class="flyout-item"
-	data-danger={danger}
->
+<button type="button" role="menuitem" {onclick} {disabled} class="flyout-item" data-danger={danger}>
 	{#if icon}
 		<span class="shrink-0 flyout-item-icon">{@render icon()}</span>
 	{/if}
@@ -31,10 +24,10 @@
 <style>
 	/* flyout.css's .flyout-item covers layout/hover/disabled; the danger tone
 	   and icon-slot colour are FlyoutItem-specific additions. */
-	.flyout-item[data-danger="true"] {
+	.flyout-item[data-danger='true'] {
 		color: var(--color-danger);
 	}
-	.flyout-item[data-danger="true"]:hover {
+	.flyout-item[data-danger='true']:hover {
 		background: var(--color-danger-soft);
 	}
 	.flyout-item-icon {
