@@ -395,3 +395,50 @@ def test_probe_checks_the_ripper_image() -> None:
     m, client = _manager()
     client.images.get.side_effect = docker.errors.ImageNotFound("x")
     assert m.probe() == (False, "image arm-ripper:test not present on docker host")
+
+
+# --- container_statuses -----------------------------------------------------
+
+
+def test_container_statuses_unreachable_probe_returns_all_unknown_without_listing() -> None:
+    """probe() saying docker is unreachable must short-circuit before any
+    container listing — _labelled is never called."""
+    m, client = _manager()
+    client.images.get.side_effect = docker.errors.ImageNotFound("x")  # probe() -> (False, ...)
+    assert m.container_statuses(["drv_a", "drv_b"]) == {
+        "drv_a": ("unknown", None),
+        "drv_b": ("unknown", None),
+    }
+    client.containers.list.assert_not_called()
+
+
+def test_container_statuses_listing_raises_returns_all_unknown() -> None:
+    m, client = _manager()
+    client.containers.list.side_effect = docker.errors.DockerException("socket gone")
+    assert m.container_statuses(["drv_a", "drv_b"]) == {
+        "drv_a": ("unknown", None),
+        "drv_b": ("unknown", None),
+    }
+
+
+def test_container_statuses_maps_by_label_from_one_listing() -> None:
+    m, client = _manager()
+    client.images.get.return_value.id = "sha256:same"
+    client.containers.list.return_value = [
+        _container("drv_a"),
+        _container("drv_b", status="exited"),
+        _with_image(_container("drv_c"), "sha256:old"),
+    ]
+    assert m.container_statuses(["drv_a", "drv_b", "drv_c", "drv_missing"]) == {
+        "drv_a": ("running", True),
+        "drv_b": ("exited", True),
+        "drv_c": ("running", False),
+        "drv_missing": ("missing", None),
+    }
+    client.containers.list.assert_called_once_with(all=True, filters={"label": DOCKER_LABEL_KEY})
+
+
+def test_container_statuses_missing_when_no_container_carries_the_label() -> None:
+    m, client = _manager()
+    client.containers.list.return_value = []
+    assert m.container_statuses(["drv_none"]) == {"drv_none": ("missing", None)}

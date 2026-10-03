@@ -144,6 +144,10 @@ def enumerate_optical(*, sysfs_root: Path, disk_root: Path) -> list[ScannedDrive
     return drives
 
 
+class PruneUnavailable(RuntimeError):
+    """Raised by scan_once(prune_now=True) when the host enumeration cannot be trusted."""
+
+
 @dataclass(frozen=True)
 class ScanSummary:
     detected: int
@@ -286,12 +290,49 @@ class DriveScanner:
         # select(Drive) then insert, so an overlapping pair can each decide a
         # row is new and double-INSERT. Serialize reconciliation in-process.
         self._lock = asyncio.Lock()
+        # Surfaced by GET /api/drives/diagnostic so a dead or failing scanner
+        # is visible in the UI, not only in the log.
+        self.last_scan_at: datetime | None = None
+        self.last_error: str | None = None
 
-    async def scan_once(self, session: AsyncSession) -> ScanSummary:
+    @property
+    def disk_root(self) -> Path:
+        """The host `/dev/disk`-style mount this scanner enumerates —
+        surfaced read-only for GET /api/drives/diagnostic's by-id check."""
+        return self._disk_root
+
+    def enumeration_problem(self) -> str | None:
+        """None when the host enumeration can be trusted; otherwise a reason
+        an empty (or partial) `enumerate_optical` result is not legitimate —
+        the sysfs or by-id mount itself is missing, not "nothing plugged
+        in". Checked before a prune_now scan (Force Rescan) so a degraded
+        host mount can never be read as "prune everything absent"."""
+        if not (self._sysfs_root / "class" / "block").is_dir():
+            return f"host sysfs is not mounted ({self._sysfs_root / 'class' / 'block'})"
+        if not (self._disk_root / "by-id").is_dir():
+            return f"host by-id directory is not mounted ({self._disk_root / 'by-id'})"
+        return None
+
+    async def scan_once(self, session: AsyncSession, *, prune_now: bool = False) -> ScanSummary:
+        """One reconcile. `prune_now` (Force Rescan) drops the prune window to
+        zero days: every detected row that is not present right now is deleted
+        — enrolled and ignored rows are never pruned (reconcile_drives). Refuses
+        (raises PruneUnavailable) rather than pruning when the host enumeration
+        cannot be trusted — an unreadable sysfs/by-id mount looks exactly like
+        "no drives" otherwise, and prune_now would wipe every DETECTED row."""
         async with self._lock:
+            if prune_now:
+                problem = self.enumeration_problem()
+                if problem is not None:
+                    raise PruneUnavailable(problem)
             _, prune_days = await _tunables(session)
             scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
-            return await reconcile_drives(session, scanned, now=datetime.now(timezone.utc), prune_days=prune_days)
+            summary = await reconcile_drives(
+                session, scanned, now=datetime.now(timezone.utc), prune_days=0 if prune_now else prune_days
+            )
+            self.last_scan_at = datetime.now(timezone.utc)
+            self.last_error = None
+            return summary
 
     async def run(self) -> None:
         logger.info("drive scanner starting: sysfs=%s disk=%s", self._sysfs_root, self._disk_root)
@@ -303,6 +344,7 @@ class DriveScanner:
                     await self.scan_once(session)
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001 — a bad tick must never kill the loop
+            except Exception as exc:  # noqa: BLE001 — a bad tick must never kill the loop
                 logger.exception("drive scan failed; retrying next tick")
+                self.last_error = f"{type(exc).__name__}: {exc}"[:300]
             await asyncio.sleep(interval)
