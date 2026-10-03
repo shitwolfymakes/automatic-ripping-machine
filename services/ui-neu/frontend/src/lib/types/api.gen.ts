@@ -541,6 +541,18 @@ export type ConfigFieldMeta = {
      * Enum Values
      */
     enum_values?: Array<string> | null;
+    /**
+     * Enum Labels
+     */
+    enum_labels?: {
+        [key: string]: string;
+    } | null;
+    /**
+     * Enum Requires
+     */
+    enum_requires?: {
+        [key: string]: string;
+    } | null;
 };
 
 /**
@@ -611,6 +623,22 @@ export type ConfigUpdateRequest = {
      * Thediscdb Refresh Days
      */
     thediscdb_refresh_days?: number | null;
+    /**
+     * Episode Sources
+     */
+    episode_sources?: Array<string> | null;
+    /**
+     * Disc Hint Sources
+     */
+    disc_hint_sources?: Array<string> | null;
+    /**
+     * Episode Match Tolerance Seconds
+     */
+    episode_match_tolerance_seconds?: number | null;
+    /**
+     * Episode Auto Apply
+     */
+    episode_auto_apply?: boolean | null;
     /**
      * Ripping Paused
      */
@@ -707,6 +735,22 @@ export type ConfigView = {
      * Thediscdb Refresh Days
      */
     thediscdb_refresh_days: number;
+    /**
+     * Episode Sources
+     */
+    episode_sources: Array<string>;
+    /**
+     * Disc Hint Sources
+     */
+    disc_hint_sources: Array<string>;
+    /**
+     * Episode Match Tolerance Seconds
+     */
+    episode_match_tolerance_seconds: number;
+    /**
+     * Episode Auto Apply
+     */
+    episode_auto_apply: boolean;
     /**
      * Ripping Paused
      */

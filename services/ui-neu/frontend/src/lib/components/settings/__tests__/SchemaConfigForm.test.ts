@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
-import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
+import { ApiError } from '$lib/api/client';
+import { sectionFields } from '$lib/utils/settings-sections';
+import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
@@ -12,6 +14,15 @@ vi.mock('$lib/api/settings', () => ({
 	saveArmConfig: (config: Record<string, unknown>) => saveArmConfig(config),
 	checkApiKey: (name: string, value?: string) => checkApiKey(name, value)
 }));
+
+// sectionFields itself is exercised end to end in settings-sections.test.ts;
+// here it's a spy over the real implementation so most tests see the real
+// Metadata sections while the layout-hints test below can swap in a fixed
+// shape without depending on the production section map.
+vi.mock('$lib/utils/settings-sections', async () => {
+	const actual = await vi.importActual<typeof import('$lib/utils/settings-sections')>('$lib/utils/settings-sections');
+	return { ...actual, sectionFields: vi.fn(actual.sectionFields) };
+});
 
 const GROUP: SettingsGroup = {
 	name: 'Metadata',
@@ -54,6 +65,7 @@ afterEach(() => {
 	cleanup();
 	saveArmConfig.mockClear();
 	checkApiKey.mockClear();
+	vi.mocked(sectionFields).mockClear();
 });
 
 describe('SchemaConfigForm', () => {
@@ -87,6 +99,42 @@ describe('SchemaConfigForm', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0].tmdb_api_key).toBe('new-key');
+	});
+
+	it('resends a reverted field on a second save instead of diffing against the stale original config', async () => {
+		// I1: uncheck/re-check (here: change/revert) in one visit must not diff
+		// against the original `config` prop, which the parent never refreshes.
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		const select = screen.getByRole('combobox', { name: /provider/i });
+
+		await fireEvent.change(select, { target: { value: 'omdb' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ metadata_provider: 'omdb' });
+
+		await fireEvent.change(select, { target: { value: 'tmdb' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
+		expect(saveArmConfig.mock.calls[1][0]).toEqual({ metadata_provider: 'tmdb' });
+	});
+
+	it('holds a saved secret as <hidden> in the baseline and clears the field back to its masked state', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'new-key' } });
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
+
+		// The field itself goes back to the masked, empty state (never leaves the
+		// raw secret rendered once it's saved)...
+		const input = screen.getByLabelText(/tmdb key/i) as HTMLInputElement;
+		expect(input.value).toBe('');
+		expect(input.placeholder).toMatch(/set, leave blank to keep/i);
+
+		// ...and a resave with nothing further typed omits it again (baseline is
+		// '<hidden>', not the raw key just sent).
+		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
+		expect('tmdb_api_key' in saveArmConfig.mock.calls[1][0]).toBe(false);
 	});
 });
 
@@ -225,5 +273,210 @@ describe('SchemaConfigForm key-check button', () => {
 		await waitFor(() =>
 			expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('Valid, using the monthly beta key')
 		);
+	});
+});
+
+describe('SchemaConfigForm save feedback', () => {
+	it('shows the server message in an alert when Save is rejected', async () => {
+		const detail = 'episode_match_tolerance_seconds must be 1 to 1800';
+		saveArmConfig.mockRejectedValueOnce(new ApiError(400, detail, { detail }));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save settings.");
+		expect(screen.getByRole('alert')).toHaveTextContent('must be 1 to 1800');
+	});
+
+	it('shows a network-failure message when the request never reaches the server', async () => {
+		saveArmConfig.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		const alert = await screen.findByRole('alert');
+		expect(alert).toHaveTextContent("Couldn't save settings.");
+		expect(alert).toHaveTextContent("The server didn't respond. Your changes are still here, so try Save again.");
+	});
+
+	it('shows a check-circle glyph beside a successful save', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+	});
+});
+
+describe('SchemaConfigForm section layout hints', () => {
+	const fieldA: ConfigFieldMeta = {
+		key: 'a',
+		group: 'Metadata',
+		tier: 'operator',
+		label: 'Field A',
+		help: '',
+		type: 'bool',
+		editable: true,
+		enum_values: null
+	};
+	const fieldB: ConfigFieldMeta = { ...fieldA, key: 'b', label: 'Field B' };
+	const fieldC: ConfigFieldMeta = { ...fieldA, key: 'c', label: 'Field C' };
+	const fieldD: ConfigFieldMeta = { ...fieldA, key: 'd', label: 'Field D' };
+	const LAYOUT_GROUP: SettingsGroup = { name: 'Metadata', fields: [fieldA, fieldB, fieldC, fieldD] };
+	const LAYOUT_CONFIG = { a: true, b: true, c: true, d: true };
+
+	it('renders column and advanced groups without repeating keys', () => {
+		vi.mocked(sectionFields).mockReturnValueOnce([
+			{
+				title: 'Test section',
+				columns: [[fieldA, fieldB]],
+				fields: [fieldC],
+				advanced: [fieldD]
+			}
+		]);
+
+		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
+
+		// Each key rendered exactly once.
+		expect(screen.getAllByRole('checkbox')).toHaveLength(4);
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		expect(within(columnsGrid).getByLabelText('Field A')).toBeInTheDocument();
+		expect(within(columnsGrid).getByLabelText('Field B')).toBeInTheDocument();
+		expect(within(columnsGrid).queryByLabelText('Field C')).not.toBeInTheDocument();
+		expect(within(columnsGrid).queryByLabelText('Field D')).not.toBeInTheDocument();
+
+		const advancedLabel = screen.getByText('Advanced');
+		const fieldDCheckbox = screen.getByLabelText('Field D');
+		// Field D renders after the "Advanced" label, not before it.
+		expect(advancedLabel.compareDocumentPosition(fieldDCheckbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		const fieldCCheckbox = screen.getByLabelText('Field C');
+		expect(fieldCCheckbox.compareDocumentPosition(advancedLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('renders the registered summary component for a section named "tv-episodes"', () => {
+		vi.mocked(sectionFields).mockReturnValueOnce([
+			{
+				title: 'Test section',
+				summary: 'tv-episodes',
+				columns: [],
+				fields: [fieldA],
+				advanced: []
+			}
+		]);
+		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
+		expect(screen.getByRole('group', { name: 'TV episodes summary' })).toBeInTheDocument();
+		expect(screen.getByLabelText('Field A')).toBeInTheDocument();
+	});
+});
+
+describe('SchemaConfigForm TV episodes section', () => {
+	const TV_FIELDS: ConfigFieldMeta[] = [
+		{
+			key: 'disc_hint_sources',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Read season and disc number from',
+			help: 'Read from the disc in this order, before ARM identifies it.',
+			type: 'ranked',
+			editable: true,
+			enum_values: ['bd_title', 'label'],
+			enum_labels: { bd_title: 'Blu-ray disc title', label: 'Disc volume label' }
+		},
+		{
+			key: 'episode_sources',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Episode sources',
+			help: 'Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.',
+			type: 'ranked',
+			editable: true,
+			enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+			enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' },
+			enum_requires: { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key' }
+		},
+		{
+			key: 'episode_auto_apply',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Apply confident matches',
+			help: 'When off, every match is kept as a suggestion to review on the job page.',
+			type: 'bool',
+			editable: true
+		},
+		{
+			key: 'episode_match_tolerance_seconds',
+			group: 'Metadata',
+			tier: 'operator',
+			label: 'Match tolerance (seconds)',
+			help: "How far a track's runtime may differ from an episode's and still match.",
+			type: 'int',
+			editable: true
+		}
+	];
+	const TV_GROUP: SettingsGroup = { name: 'Metadata', fields: TV_FIELDS };
+	const TV_CONFIG = {
+		disc_hint_sources: ['bd_title', 'label'],
+		episode_sources: ['tmdb', 'tvmaze', 'tvdb'],
+		episode_auto_apply: true,
+		episode_match_tolerance_seconds: 300
+	};
+
+	it('renders the panel with the summary, both ranked lists, the auto-apply toggle and the advanced tolerance field', () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+
+		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
+		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		expect(within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' })).toBeInTheDocument();
+		expect(within(columnsGrid).getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+
+		expect(screen.getByLabelText('Apply confident matches')).toBeInTheDocument();
+		expect(screen.getByText('Advanced')).toBeInTheDocument();
+		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
+	});
+
+	it('places the two ranked lists in different column cells (side by side, not stacked)', () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+
+		const columnsGrid = screen.getByTestId('settings-section-columns');
+		const discHints = within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' });
+		const episodeSources = within(columnsGrid).getByRole('list', { name: 'Episode sources' });
+
+		const cells = Array.from(columnsGrid.children);
+		expect(cells).toHaveLength(2);
+		const discHintsCell = cells.find((c) => c.contains(discHints));
+		const episodeSourcesCell = cells.find((c) => c.contains(episodeSources));
+		expect(discHintsCell).toBeDefined();
+		expect(episodeSourcesCell).toBeDefined();
+		expect(discHintsCell).not.toBe(episodeSourcesCell);
+	});
+
+	it('shows the empty-sources note when episode_sources is empty, and hides it otherwise', () => {
+		const { unmount } = renderComponent(SchemaConfigForm, {
+			props: { group: TV_GROUP, config: { ...TV_CONFIG, episode_sources: [] } }
+		});
+		expect(screen.getByTestId('tv-episodes-empty-note')).toHaveTextContent(
+			'With every source off, ARM does not match episodes automatically.'
+		);
+		unmount();
+
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		expect(screen.queryByTestId('tv-episodes-empty-note')).not.toBeInTheDocument();
+	});
+
+	it('moving TVmaze up updates the summary text before Save', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
+		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
+
+		expect(summary).toHaveTextContent('TVmaze, TMDb, TVDB');
+		expect(saveArmConfig).not.toHaveBeenCalled();
+	});
+
+	it('saves the reordered episode_sources', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ episode_sources: ['tvmaze', 'tmdb', 'tvdb'] });
 	});
 });

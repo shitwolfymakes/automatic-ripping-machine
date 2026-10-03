@@ -85,7 +85,7 @@ describe('apiFetch (preserved behaviors)', () => {
 		await expect(apiFetch('/api/bad')).rejects.toThrow('API 502: Bad Gateway');
 	});
 
-	it('keeps the status-text message for a non-string detail and preserves the body', async () => {
+	it('joins a Pydantic 422 array detail into a readable message and preserves the body', async () => {
 		const errorBody = { detail: [{ msg: 'bad', loc: ['body', 'x'] }] };
 		mockFetch.mockResolvedValue(jsonResponse(errorBody, false, 422, 'Unprocessable'));
 		await apiFetch('/api/v').then(
@@ -94,10 +94,32 @@ describe('apiFetch (preserved behaviors)', () => {
 			},
 			(e) => {
 				expect(e).toBeInstanceOf(ApiError);
-				expect(e.message).toBe('API 422: Unprocessable');
+				expect(e.message).toBe('bad');
 				expect(e.body).toEqual(errorBody);
 			}
 		);
+	});
+
+	it('joins multiple Pydantic 422 error messages with "; "', async () => {
+		const errorBody = {
+			detail: [
+				{ msg: 'field required', loc: ['body', 'a'] },
+				{ msg: 'value is not a valid integer', loc: ['body', 'b'] }
+			]
+		};
+		mockFetch.mockResolvedValue(jsonResponse(errorBody, false, 422, 'Unprocessable'));
+		await expect(apiFetch('/api/v')).rejects.toThrow('field required; value is not a valid integer');
+	});
+
+	it('keeps the status-text message when an array detail has no string msg fields', async () => {
+		const errorBody = { detail: [{ loc: ['body', 'x'] }] };
+		mockFetch.mockResolvedValue(jsonResponse(errorBody, false, 422, 'Unprocessable'));
+		await expect(apiFetch('/api/v')).rejects.toThrow('API 422: Unprocessable');
+	});
+
+	it('keeps the status-text message for an empty array detail', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ detail: [] }, false, 422, 'Unprocessable'));
+		await expect(apiFetch('/api/v')).rejects.toThrow('API 422: Unprocessable');
 	});
 });
 

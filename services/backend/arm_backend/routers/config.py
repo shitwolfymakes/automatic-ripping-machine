@@ -27,6 +27,12 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import drain_parked_applications_after_rip
 from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
+from arm_backend.identity.sources.registry import (
+    episode_auto_apply,
+    episode_sources_setting,
+    episode_tolerance,
+    hint_sources_setting,
+)
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
@@ -53,6 +59,8 @@ _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editabl
 # it masks automatically; a secret-tier field not yet on ConfigView is skipped.
 _SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
 
+_RANKED_META = {m.key: m for m in CONFIG_FIELD_META if m.type == "ranked"}
+
 
 def _to_view(cfg: Config) -> ConfigView:
     view = ConfigView(
@@ -72,6 +80,10 @@ def _to_view(cfg: Config) -> ConfigView:
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         thediscdb_enabled=bool(cfg.thediscdb_enabled),
         thediscdb_refresh_days=int(cfg.thediscdb_refresh_days) if cfg.thediscdb_refresh_days is not None else 7,
+        episode_sources=list(episode_sources_setting(cfg)),
+        disc_hint_sources=list(hint_sources_setting(cfg)),
+        episode_match_tolerance_seconds=episode_tolerance(cfg),
+        episode_auto_apply=episode_auto_apply(cfg),
         ripping_paused=bool(cfg.ripping_paused),
         # bool()/int() coerce the None a bare in-memory Config carries (DB-level
         # server_default only) for rows/fixtures predating these columns.
@@ -150,6 +162,32 @@ async def update_config(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
     if "transcode_enabled" in fields and fields["transcode_enabled"] is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="transcode_enabled must be a boolean")
+    for key, meta in _RANKED_META.items():
+        if key not in fields:
+            continue
+        values = fields[key]
+        if values is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a list")
+        unknown = [v for v in values if v not in (meta.enum_values or [])]
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{key}: unknown value(s) {', '.join(unknown)}",
+            )
+        if len(set(values)) != len(values):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: duplicate values")
+    if "episode_match_tolerance_seconds" in fields:
+        tol = fields["episode_match_tolerance_seconds"]
+        # Pydantic's lax int validator accepts a JSON bool (bool is an int
+        # subclass) and coerces it to 0/1 before `fields` sees it, so the
+        # bool-ness check has to read the raw wire value, not `tol`.
+        raw_tol = raw.get("episode_match_tolerance_seconds")
+        if tol is None or isinstance(raw_tol, bool) or not 1 <= tol <= 1800:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
+            )
+    if "episode_auto_apply" in fields and fields["episode_auto_apply"] is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="episode_auto_apply must be true or false")
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

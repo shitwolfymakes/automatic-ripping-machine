@@ -65,6 +65,10 @@ class ConfigView(BaseModel):
     makemkv_sdf_enabled: bool
     thediscdb_enabled: bool
     thediscdb_refresh_days: int
+    episode_sources: list[str]
+    disc_hint_sources: list[str]
+    episode_match_tolerance_seconds: int
+    episode_auto_apply: bool
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
@@ -96,6 +100,10 @@ class ConfigUpdateRequest(BaseModel):
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None
     thediscdb_refresh_days: int | None = None
+    episode_sources: list[str] | None = None
+    disc_hint_sources: list[str] | None = None
+    episode_match_tolerance_seconds: int | None = None
+    episode_auto_apply: bool | None = None
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None

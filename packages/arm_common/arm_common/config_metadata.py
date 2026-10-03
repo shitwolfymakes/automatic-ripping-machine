@@ -13,9 +13,13 @@ class ConfigFieldMeta(BaseModel):
     tier: str  # "secret" | "operator" | "infra"
     label: str
     help: str
-    type: str  # "string" | "bool" | "int" | "enum" | "string[]"
+    type: str  # "string" | "bool" | "int" | "enum" | "string[]" | "ranked"
     editable: bool
     enum_values: list[str] | None = None
+    # Display names for enum / ranked values (value -> label).
+    enum_labels: dict[str, str] | None = None
+    # Ranked only: value -> the secret config key it needs before it can run.
+    enum_requires: dict[str, str] | None = None
 
 
 CONFIG_FIELD_META: list[ConfigFieldMeta] = [
@@ -53,7 +57,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         group="Metadata",
         tier="secret",
         label="TVDb API key",
-        help="TheTVDB v4 API key (used for episode matching).",
+        help="Needed for the TVDB episode source.",
         type="string",
         editable=True,
     ),
@@ -82,6 +86,51 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         label="TheDiscDB refresh interval (days)",
         help="How often the backend refreshes its TheDiscDB snapshot from GitHub.",
         type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="episode_sources",
+        group="Metadata",
+        tier="operator",
+        label="Episode sources",
+        help="Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.",
+        type="ranked",
+        editable=True,
+        enum_values=["tmdb", "tvmaze", "tvdb"],
+        enum_labels={"tmdb": "TMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"},
+        enum_requires={"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"},
+    ),
+    ConfigFieldMeta(
+        key="disc_hint_sources",
+        group="Metadata",
+        tier="operator",
+        label="Read season and disc number from",
+        help="Read from the disc in this order, before ARM identifies it.",
+        type="ranked",
+        editable=True,
+        enum_values=["bd_title", "label"],
+        enum_labels={"bd_title": "Blu-ray disc title", "label": "Disc volume label"},
+    ),
+    ConfigFieldMeta(
+        key="episode_match_tolerance_seconds",
+        group="Metadata",
+        tier="operator",
+        label="Match tolerance (seconds)",
+        help=(
+            "The most a track's runtime may differ from an episode's and still match. "
+            "ARM narrows this to a tenth of the episode's runtime, at least 60 seconds. "
+            "1 to 1800, default 300."
+        ),
+        type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="episode_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident matches",
+        help="When off, every match is kept as a suggestion to review on the job page.",
+        type="bool",
         editable=True,
     ),
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column

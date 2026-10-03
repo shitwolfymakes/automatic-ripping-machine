@@ -52,6 +52,20 @@ class Config(SQLModel, table=True):
     thediscdb_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     thediscdb_refresh_days: int = Field(sa_column=Column(Integer, nullable=False, server_default="7"))
     thediscdb_refreshed_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Identity settings (PR 4): ranked source lists for episode matching + disc
+    # hints, the match-tolerance window, and the auto-apply gate.
+    episode_sources: list[str] = Field(
+        default_factory=lambda: ["tmdb", "tvmaze", "tvdb"],
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{tmdb,tvmaze,tvdb}"),
+    )
+    disc_hint_sources: list[str] = Field(
+        default_factory=lambda: ["bd_title", "label"],
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{bd_title,label}"),
+    )
+    episode_match_tolerance_seconds: int = Field(
+        default=300, sa_column=Column(Integer, nullable=False, server_default="300")
+    )
+    episode_auto_apply: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
     # still encouraged to override with their own contact info (UI placeholder hint).
     musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)
