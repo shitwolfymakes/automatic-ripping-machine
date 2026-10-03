@@ -233,8 +233,8 @@ over a network share). So the ripper reports a **preparing** phase instead:
 
 > MakeMKV is pinned to 1.18.4 in the ripper image: 2.0.0's `makemkvcon`
 > segfaults on every unencrypted (decrypted-backup) Blu-ray, which is what ISO
-> and folder sources usually are. See `docs/ops/makemkv.md` (failure modes) on
-> the `fix/pin-makemkv-1.18.4` branch.
+> and folder sources usually are. See
+> [MakeMKV-Ripper.md, failure modes](../../user/MakeMKV-Ripper.md#failure-modes).
 
 A disc folder is a directory with a `BDMV` (Blu-ray) or `VIDEO_TS` (DVD)
 tree at its root: an extracted or backed-up disc. It lives in the same ISO
