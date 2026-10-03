@@ -8,10 +8,17 @@ metadata:
 On 2026-10-03 the whole wolfy stack (#61 → #110, with #82 moved into the chain
 above #101 and #105 above #82) was rewritten linear: 494 commits, 0 merge
 commits, every PR head descends from its base's current head, every PR
-MERGEABLE. GitHub's native stack feature now tracks #101..#110 (stack 114);
-#82 sits outside it with base feat/iso-source-rip, and #105's base could not
-be moved onto #82 through the API ("part of a stack") – use the web stack
-editor if that matters.
+MERGEABLE. GitHub's native stacked-PR feature (public preview) tracks the chain as
+**stack #118**: all 34 PRs, #61 at the bottom, #110 on top; #103 stays a
+separate PR on main. Stacks are explicit objects, not inferred from bases:
+build or repair them with the `gh stack` extension
+(`gh extension install github/gh-stack`), always with
+`GH_REPO=shitwolfymakes/automatic-ripping-machine` because this checkout's
+`gh` default repo resolves to upstream. `gh stack link <prs bottom..top>`
+creates the stack and corrects any base that does not match the chain;
+it refuses a list that spans several existing stacks, so `gh stack unstack
+<n>` the partial ones first. Stacks created by hand in the web UI are easy
+to leave partial.
 
 Backup of every pre-restack head: `backup/pre-linear-20261003/<branch>` on
 arm-v3 (38 refs), local tags of the same name, and a SHA manifest in the
