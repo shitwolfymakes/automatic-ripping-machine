@@ -244,6 +244,7 @@ async def ignore_drive(
     drive.lifecycle = DriveLifecycle.IGNORED
     db.add(drive)
     await db.commit()
+    await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
     return await _view_for(db, drive)
 
 
@@ -258,6 +259,7 @@ async def unignore_drive(
     drive.lifecycle = DriveLifecycle.DETECTED
     db.add(drive)
     await db.commit()
+    await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
     return await _view_for(db, drive)
 
 
