@@ -338,7 +338,7 @@ class EpisodeStageRunner:
                     **{
                         field: value
                         for field, value in current_ids(job).model_dump(exclude_none=True).items()
-                        if field not in ids_before
+                        if ids_before.get(field) != value  # new, or a movie TMDb id swapped for a show's
                     }
                 )
 

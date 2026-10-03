@@ -30,6 +30,22 @@ rip when auto-rip is off, optionally pinning a session for that disc).
 **`/jobs/:id`** is one job in detail: the disc that was identified, its tracks,
 per-track rip progress, and any transcode sessions applied to it. From here you
 can act on a job (e.g. resolve an unidentified disc, or abandon it).
+
+The job header has a **Movie | TV** switch. A disc of same-length episodes is
+treated as TV automatically; flip the switch if ARM guessed wrong. Switching to
+Movie asks first when any track already has a hand-set episode. The title
+search offers the same Movie/TV toggle (it defaults to TV for episodic discs),
+and applying a result stores the show's TMDb, IMDb and TVDB ids so episodes can
+be matched.
+
+TV jobs also get a **Match Episodes** tab. It shows where each track's season
+and episode came from, lists the other sources that matched (TMDb, TVmaze,
+TVDB), and offers a suggestion when ARM was not confident enough to apply a
+match on its own: **accept** it to use that source. **Re-run** matches again
+(optionally for another season or disc) and shows a preview; **Apply & pin**
+keeps that source for the job, and **Unpin** returns to the automatic choice. You
+can also set a track's season and episode by hand, and **revert** it to the
+matched value. Guests see the tab read-only.
 **`/logs`** and **`/logs/:job_id`** show the structured logs; **`/files`**,
 **`/notifications`** and **`/transcoder`** cover the file browser, the
 notification history and the transcode queue.

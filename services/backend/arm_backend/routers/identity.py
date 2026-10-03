@@ -309,10 +309,13 @@ async def _browse_season(
     if provider.http.backing_off():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"{source}: backing off")
 
-    show_id = getattr(current_ids(job), provider.id_field, None)
+    ids = current_ids(job)
+    if ids.tmdb_kind == "movie":
+        ids = ids.model_copy(update={"tmdb": None, "tmdb_kind": None})  # a movie's TMDb id is not a show id
+    show_id = getattr(ids, provider.id_field, None)
     if show_id is None:
         try:
-            show_id = await provider.resolve_show_id(current_ids(job))
+            show_id = await provider.resolve_show_id(ids)
         except SourceMiss:
             show_id = None
         except SourceError as e:

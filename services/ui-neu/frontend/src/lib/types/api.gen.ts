@@ -1572,6 +1572,10 @@ export type ExternalIds = {
      * Musicbrainz Release
      */
     musicbrainz_release?: string | null;
+    /**
+     * Tmdb Kind
+     */
+    tmdb_kind?: 'movie' | 'tv' | null;
     [key: string]: unknown;
 };
 
@@ -2399,6 +2403,7 @@ export type JobUpdateRequest = {
      * Disc Total
      */
     disc_total?: number | null;
+    media_type?: MediaType | null;
     /**
      * Tracks
      */
@@ -2476,6 +2481,21 @@ export type JobView = {
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
     readonly actions: JobActions;
+    /**
+     * Looks Episodic
+     *
+     * The stored scan looks like a TV disc (several same-length episode
+     * titles, no feature): the title search defaults to TV (spec 3.3).
+     */
+    readonly looks_episodic: boolean;
+    /**
+     * Has Series
+     *
+     * A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
+     * show id some episode source resolved (spec 3.4). False means the
+     * Match Episodes tab asks for the series first.
+     */
+    readonly has_series: boolean;
 };
 
 /**
@@ -2849,6 +2869,7 @@ export type MetadataCandidate = {
      * Track Count
      */
     track_count?: number | null;
+    external_ids?: ExternalIds | null;
 };
 
 /**

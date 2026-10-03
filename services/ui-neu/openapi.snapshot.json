@@ -12518,6 +12518,21 @@
               }
             ],
             "title": "Musicbrainz Release"
+          },
+          "tmdb_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "movie",
+                  "tv"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tmdb Kind"
           }
         },
         "additionalProperties": true,
@@ -13910,6 +13925,16 @@
             ],
             "title": "Disc Total"
           },
+          "media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tracks": {
             "anyOf": [
               {
@@ -14117,6 +14142,18 @@
           "actions": {
             "$ref": "#/components/schemas/JobActions",
             "readOnly": true
+          },
+          "looks_episodic": {
+            "type": "boolean",
+            "title": "Looks Episodic",
+            "description": "The stored scan looks like a TV disc (several same-length episode\ntitles, no feature): the title search defaults to TV (spec 3.3).",
+            "readOnly": true
+          },
+          "has_series": {
+            "type": "boolean",
+            "title": "Has Series",
+            "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved (spec 3.4). False means the\nMatch Episodes tab asks for the series first.",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -14129,7 +14166,9 @@
           "year",
           "metadata_json",
           "resumed_from_crash",
-          "actions"
+          "actions",
+          "looks_episodic",
+          "has_series"
         ],
         "title": "JobView"
       },
@@ -14765,6 +14804,16 @@
               }
             ],
             "title": "Track Count"
+          },
+          "external_ids": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

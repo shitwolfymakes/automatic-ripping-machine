@@ -94,7 +94,8 @@ class MetadataDispatcher:
         if scan.disc_type == DiscType.CD:
             return await self._identify_cd(scan)
 
-        return await self._identify_video(scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv)
+        hit = await self._identify_video(scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv)
+        return await self._with_tmdb_ids(hit, cfg)
 
     async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
@@ -198,7 +199,32 @@ class MetadataDispatcher:
         if not imdb_id or not cfg.tmdb_api_key:
             return None
         tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
-        return await self._call("tmdb_find_imdb", tmdb.find_by_imdb_id(imdb_id))
+        hit = await self._call("tmdb_find_imdb", tmdb.find_by_imdb_id(imdb_id))
+        if hit is not None:
+            hit.payload.setdefault("imdb_id", imdb_id)
+        return await self._with_tmdb_ids(hit, cfg)
+
+    async def _with_tmdb_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
+        """Fill a TMDb hit's IMDb / TVDB ids (one `external_ids` call) so the
+        stored identity lets every episode source find the show (spec 3.4).
+        Ids already in the payload win; a failed or timed-out call (bounded
+        by PROVIDER_TIMEOUT_SECONDS) changes nothing."""
+        if hit is None or hit.provider != "tmdb" or hit.kind not in ("movie", "tv") or not cfg.tmdb_api_key:
+            return hit
+        tmdb_id = hit.payload.get("id")
+        if tmdb_id is None:
+            return hit
+        try:
+            found = await asyncio.wait_for(
+                TMDBClient(cfg.tmdb_api_key, self._http).get_external_id_map(tmdb_id, hit.kind),
+                timeout=PROVIDER_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.info("metadata.tmdb_external_ids timeout id=%s", tmdb_id)
+            return hit
+        for key, value in found.items():
+            hit.payload.setdefault(key, value)
+        return hit
 
     async def _call(self, label: str, coro) -> MetadataResult | None:  # type: ignore[no-untyped-def]
         try:

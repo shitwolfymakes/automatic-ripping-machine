@@ -42,6 +42,23 @@ def _first_str(*candidates: Any) -> str | None:
     return None
 
 
+def external_ids_of(result: MetadataResult) -> ExternalIds:
+    """Every id a provider hit carries, plus the kind of its TMDb id.
+
+    The single derivation used by identify (`metadata_with_identity`) and
+    the title-search candidates, so both store the same ids."""
+    payload = result.payload or {}
+    provider = result.provider or "unknown"
+    tmdb = _first_str(payload.get("tmdb_id"), payload.get("id") if provider == "tmdb" else None)
+    return ExternalIds(
+        imdb=_first_str(payload.get("imdb_id"), payload.get("imdbID")),
+        tmdb=tmdb,
+        tvdb=_first_str(payload.get("tvdb_id")),
+        musicbrainz_release=_first_str(payload.get("id") if provider == "musicbrainz" else None),
+        tmdb_kind=result.kind if tmdb and result.kind in ("movie", "tv") else None,
+    )
+
+
 def metadata_with_identity(
     metadata_json: dict[str, Any] | None,
     result: MetadataResult,
@@ -58,12 +75,7 @@ def metadata_with_identity(
     """
     payload = result.payload or {}
     provider = result.provider or "unknown"
-    external = ExternalIds(
-        imdb=_first_str(payload.get("imdb_id"), payload.get("imdbID")),
-        tmdb=_first_str(payload.get("tmdb_id"), payload.get("id") if provider == "tmdb" else None),
-        tvdb=_first_str(payload.get("tvdb_id")),
-        musicbrainz_release=_first_str(payload.get("id") if provider == "musicbrainz" else None),
-    )
+    external = external_ids_of(result)
     identity = JobIdentity(
         provider=provider,
         external_ids=external,

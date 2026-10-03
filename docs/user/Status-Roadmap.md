@@ -37,10 +37,9 @@ The architectural goals that defined v3 are in place:
 - **Stabilising the alpha** toward a v3.0 release: published, signed images for
   every supported platform, and CI-built release tags. See
   [Known Issues](Status-Known-Issues).
-- **TV-series-aware ripping** (episode detection and naming conventions) and
-  further session ergonomics, building on the sessions/presets foundation. The
-  UI already has **TVDB episode matching** for mapping titles to episodes; it
-  needs a v3 episode-lookup endpoint before it is switched on.
+- **TV-series-aware ripping**: episode matching and the **Match Episodes** tab
+  are built (see the Web UI page); naming conventions and further session
+  ergonomics, building on the sessions/presets foundation, are still to come.
 - **Maintenance tools**: find and remove orphaned media folders and log files,
   clean up finished transcode jobs, and clear the raw rip area from the UI. The
   buttons are hidden until these endpoints exist in v3.

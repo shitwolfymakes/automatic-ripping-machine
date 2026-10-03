@@ -31,7 +31,9 @@ const jobDefaults: JobView = {
 	poster_url_manual: null,
 	metadata_json: {},
 	resumed_from_crash: false,
-	rip_progress: null
+	rip_progress: null,
+	looks_episodic: false,
+	has_series: false
 };
 
 export function createJob(overrides: Partial<JobView> = {}): JobView {

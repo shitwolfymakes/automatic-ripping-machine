@@ -13,7 +13,7 @@ from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import LookupError as MetaLookupError
-from arm_backend.metadata.base import LookupTimeout, MetadataResult, extract_poster_url
+from arm_backend.metadata.base import LookupTimeout, MetadataResult, external_ids_of, extract_poster_url
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
@@ -60,6 +60,7 @@ def _to_candidate(r: MetadataResult) -> MetadataCandidate:
         country=payload.get("country"),
         status=payload.get("status"),
         track_count=int(track_count) if isinstance(track_count, int) else None,
+        external_ids=external_ids_of(r),
     )
 
 
@@ -92,6 +93,8 @@ async def search_metadata(
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
         return MetadataSearchResponse(candidates=[], detail=f"{resolved} unavailable: {exc}")
+    for r in results:
+        r.provider = r.provider or resolved
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
 
 

@@ -540,7 +540,11 @@ def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequen
         field = id_field_by_source.get(outcome.source_id)
         if show_id and field:
             found[field] = show_id
-    return ExternalIds(**found)
+            if field == "tmdb":
+                # A resolved TMDb show id is TV-kind, which lets `merge_new_ids`
+                # replace a stored movie-kind id with it.
+                found["tmdb_kind"] = "tv"
+    return ExternalIds.model_validate(found)
 
 
 async def run_episode_stage(

@@ -370,6 +370,26 @@ def test_match_apply_with_a_miss_outcome_merges_no_ids(signing_key: bytes) -> No
     assert "tmdb" not in job.metadata_json["identity"]["external_ids"]
 
 
+def test_match_apply_replaces_a_movie_kind_tmdb_with_the_show_id(signing_key: bytes) -> None:
+    """A movie-kind TMDb id is not a show id: the show id this compute
+    resolved replaces it, stored with `tmdb_kind="tv"`."""
+    job = _job(meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "1749913", "tmdb_kind": "movie"}}})
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    db = _db(job, tracks=tracks)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="100")
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{JOB_ID}/identity/match", json={"apply": True}, headers=_auth(admin_token))
+
+    assert r.status_code == 200
+    ext = job.metadata_json["identity"]["external_ids"]
+    assert ext["tmdb"] == "100"
+    assert ext["tmdb_kind"] == "tv"
+    assert ext["imdb"] == "tt1"
+
+
 def test_match_apply_expires_before_the_fresh_reselect(signing_key: bytes) -> None:
     """F1: `db.expire_all()` runs before the `with_for_update` re-select, so
     that re-select (and `resolve_job`'s own track re-select right after it)
@@ -905,3 +925,20 @@ def test_episodes_browse_unexpected_exception_502(
     assert r.status_code == 502
     assert r.json()["detail"] == "tmdb: unexpected error"
     assert "Traceback" in caplog.text
+
+
+def test_episodes_browse_never_offers_a_movie_tmdb_id_as_a_show_id(signing_key: bytes) -> None:
+    job = _job(meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "1749913", "tmdb_kind": "movie"}}})
+    db = _db(job)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, show_id="5084")
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([provider]))
+
+    with TestClient(app) as client:
+        r = client.get(
+            f"/api/jobs/{JOB_ID}/identity/episodes",
+            params={"source": "tmdb", "season": 1},
+            headers=_auth(admin_token),
+        )
+
+    assert r.status_code == 200
+    assert r.json()["show_id"] == "5084"  # resolved afresh, not the movie id

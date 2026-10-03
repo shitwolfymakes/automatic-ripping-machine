@@ -18,6 +18,8 @@ from arm_common.enums import (
     TrackStatus,
     TranscodeTaskStatus,
 )
+from arm_common.disc_shape import looks_episodic as _looks_episodic
+from arm_common.schemas.identity import IdentityClaims
 from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
 
 
@@ -220,6 +222,29 @@ class JobView(BaseModel):
     def actions(self) -> JobActions:
         return job_actions_for(self.status)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def looks_episodic(self) -> bool:
+        """The stored scan looks like a TV disc (several same-length episode
+        titles, no feature): the title search defaults to TV (spec 3.3)."""
+        scan = self.metadata_json.scan_result
+        return bool(scan and _looks_episodic(scan.titles))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_series(self) -> bool:
+        """A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
+        show id some episode source resolved (spec 3.4). False means the
+        Match Episodes tab asks for the series first."""
+        identity = self.metadata_json.identity
+        ids = identity.external_ids if identity else None
+        if ids and ((ids.tmdb and ids.tmdb_kind == "tv") or ids.tvdb or ids.tvmaze):
+            return True
+        claims = self.metadata_json.identity_claims
+        if isinstance(claims, IdentityClaims):
+            return any(src.inputs.get("show_id") for src in claims.sources.values())
+        return False
+
 
 class HeldJobView(BaseModel):
     """Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
@@ -273,6 +298,9 @@ class JobUpdateRequest(BaseModel):
     poster_url_manual: str | None = None
     disc_number: int | None = None
     disc_total: int | None = None
+    # The header Movie | TV switch: the type alone, ids untouched. The episode
+    # stage re-runs on the change (routers/jobs.py identity snapshot).
+    media_type: MediaType | None = None
     tracks: list[TrackEditRequest] | None = None
 
 
