@@ -47,6 +47,31 @@ check "arm_sub: re-indents the line it is given" "      detail" "$(arm_sub '    
 check "arm_warn: bang, on stderr" "  ! careful" "$(arm_warn careful 2>&1 >/dev/null)"
 check "arm_err: ERROR, on stderr" "ERROR: broken" "$(arm_err broken 2>&1 >/dev/null)"
 
+# --- banner ---------------------------------------------------------------------
+# show_banner <tty 0|1> <cols> <lang>: banner for v3.0.0-rc3 under those conditions.
+show_banner() {
+    (
+        STUB_TTY="$1"; STUB_COLS="$2"
+        banner_is_tty() { [[ "${STUB_TTY}" -eq 1 ]]; }
+        banner_cols() { printf '%s' "${STUB_COLS}"; }
+        LC_ALL=""; LC_CTYPE=""; LANG="$3"
+        banner v3.0.0-rc3
+    )
+}
+out="$(show_banner 1 120 en_US.UTF-8)"
+has "banner: the art on a wide UTF-8 terminal" "███████████" "$out"
+check "banner: the version is centred under the art" \
+    "$(printf '%*s' $(( (BANNER_WIDTH - 10) / 2 )) '')v3.0.0-rc3" "$(grep -F 'v3.0.0-rc3' <<<"$out")"
+check "banner: BANNER_WIDTH is the art's width" "${BANNER_WIDTH}" \
+    "$(printf '%s\n' "$BANNER_ART" | LC_ALL=C.UTF-8 wc -L)"
+out="$(show_banner 1 80 en_US.UTF-8)"
+lacks "banner: no art on a terminal narrower than the art" "█" "$out"
+has "banner: a title line instead" "Automatic Ripping Machine v3.0.0-rc3" "$out"
+lacks "banner: no art without a UTF-8 locale" "█" "$(show_banner 1 120 C)"
+out="$(show_banner 0 120 en_US.UTF-8)"
+lacks "banner: no art when output is not a terminal" "█" "$out"
+has "banner: the title line when output is not a terminal" "Automatic Ripping Machine v3.0.0-rc3" "$out"
+
 # --- root refusal ---------------------------------------------------------------
 out="$( (current_uid() { echo 0; }; refuse_root) 2>&1 || true)"
 has "root is refused with the reason" "do not run armctl as root" "$out"
@@ -478,6 +503,7 @@ flow() {
         setup_remote_offload() { REMOTE_BACKEND_SAN="192.168.0.68"; echo setup_remote_offload >> "${log_file}"; }
         write_env() { echo write_env >> "${log_file}"; if [[ "${PROFILE}" == offload ]]; then echo 'ARM_TRANSCODE_DOCKER_HOST=ssh://sam@h' > "${ENV_FILE}"; else : > "${ENV_FILE}"; fi; }
         make_leaf() { echo "make_leaf $*" >> "${log_file}"; }
+        banner() { echo "banner $*" >> "${log_file}"; }
         offload_remote_run_init() { :; }
         hostname() { echo testhost; }
         ARMCTL_ARGV=(install "$@")
@@ -488,7 +514,7 @@ flow() {
     )
 }
 check "install: full box runs every stage in order" \
-    "choose_profile full;ensure_docker;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;" \
+    "banner v3.1.0;choose_profile full;ensure_docker;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;" \
     "$(flow flow-full)"
 out="$(flow flow-offload --profile offload)"
 has "install: offload runs the walkthrough after storage" "choose_storage;setup_remote_offload;ensure_ca;" "$out"
@@ -499,6 +525,7 @@ has "install: a profile given by flag is not repeated in the restart arguments" 
 out="$(flow flow-ripper --profile ripper-only)"
 lacks "install: ripper-only does not offer the NVIDIA toolkit" "ensure_nvidia_container_toolkit" "$out"
 lacks "install: ripper-only has no offload walkthrough" "setup_remote_offload" "$out"
+lacks "install: no second banner after the docker group restart" "banner" "$(ARMCTL_SG_REEXEC=1 flow flow-regroup)"
 out="$(flow flow-nostart --no-start)"
 lacks "install: --no-start does not start the stack" "stack_up" "$out"
 has "install: --no-start still configures" "write_env;write_host_overlay;" "$out"

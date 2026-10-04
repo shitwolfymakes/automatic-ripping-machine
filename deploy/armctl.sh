@@ -34,7 +34,7 @@ for _lib in common detect certs udev lifecycle; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/lib/${_lib}.sh"
 done
-for _mod in ui config docker nvidia offload pathlink flow; do
+for _mod in ui banner config docker nvidia offload pathlink flow; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/install/${_mod}.sh"
 done

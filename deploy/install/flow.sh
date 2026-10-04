@@ -153,6 +153,9 @@ cmd_install() {
     [[ -n "${ARM_IMAGE_TAG_DEFAULT}" ]] \
         || err "this release bundle has no VERSION file; download the installer again"
 
+    # Once per install: not again when ensure_docker restarts this command
+    # under the docker group.
+    [[ -n "${ARMCTL_SG_REEXEC:-}" ]] || banner "${ARM_IMAGE_TAG_DEFAULT}"
     STEP=0; STEP_TOTAL=8
     step "Profile"
     choose_profile
