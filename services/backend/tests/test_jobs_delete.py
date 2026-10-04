@@ -615,3 +615,55 @@ async def test_resolve_media_outputs_returns_empty_when_no_tasks(
 
     result = await jobs_router._resolve_media_outputs(db, "job_01JZXR7K3M5Q8N4VWA00000002")
     assert result == []
+
+
+def test_delete_job_files_removes_a_disc_backup_folder(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    (backup / "BDMV").mkdir(parents=True)
+    (backup / "BDMV" / "index.bdmv").write_bytes(b"i")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not backup.exists()
+    assert media_root.exists()
+
+
+def test_delete_job_files_does_not_follow_a_symlinked_folder(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "BDMV").mkdir(parents=True)
+    (elsewhere / "BDMV" / "index.bdmv").write_bytes(b"i")
+    link = media_root / "Iron Man (2008)"
+    link.symlink_to(elsewhere, target_is_directory=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert (elsewhere / "BDMV" / "index.bdmv").exists()
+
+
+def test_delete_job_files_refuses_a_folder_outside_media_root(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    outside = tmp_path / "other" / "Iron Man (2008)"
+    (outside / "BDMV").mkdir(parents=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002",
+        [media_root / ".." / "other" / "Iron Man (2008)"],
+        raw_root=raw_root,
+        media_root=media_root,
+    )
+    assert counters["media_files_removed"] == 0
+    assert outside.exists()

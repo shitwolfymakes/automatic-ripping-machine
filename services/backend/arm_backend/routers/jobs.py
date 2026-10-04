@@ -586,7 +586,9 @@ def _delete_job_files(
     media_root: Path,
 ) -> dict[str, int]:
     """Delete `raw_root/<job_id>/` and every file in `media_outputs`, then
-    prune emptied media parent dirs.
+    prune emptied media parent dirs. A media output that is a folder (the
+    Blu-ray decrypted backup) is removed whole, but only when it is a real
+    directory inside `media_root`.
 
     Per-file unlink (rather than rmtree of the title dir) because re-rips of
     the same disc land outputs in the same `media/<Title>/` parent — a sibling
@@ -614,10 +616,21 @@ def _delete_job_files(
     files_removed = 0
     parents_seen: set[Path] = set()
     for path in media_outputs:
-        if not path.exists():
+        if not path.exists() and not path.is_symlink():
             continue
         try:
-            path.unlink()
+            if path.is_dir() and not path.is_symlink():
+                # A disc backup's output is its title folder. Only ever the
+                # recorded path itself, and only inside media_root.
+                if not path.resolve().is_relative_to(media_root.resolve()):
+                    logger.warning("delete: refusing folder outside media_root path=%s", path)
+                    continue
+                shutil.rmtree(path)
+            elif path.is_symlink() and path.is_dir():
+                logger.warning("delete: refusing to follow symlinked folder path=%s", path)
+                continue
+            else:
+                path.unlink()
             files_removed += 1
             parents_seen.add(path.parent)
         except OSError as exc:
