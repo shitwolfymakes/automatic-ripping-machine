@@ -278,3 +278,22 @@ def test_every_builtin_session_template_is_valid_and_year_optional() -> None:
         tpl = row["output_path_template"]
         assert "year" not in required_tokens(tpl), row["id"]
         validate_template(tpl, row["media_type"], has_transcode_preset=row.get("transcode_preset_id") is not None)
+
+
+async def test_run_seeders_adds_the_bd_backup_builtins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_common import MediaType, OutputMode
+
+    monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
+    db = FakeSession()
+    await run_seeders(db)
+    preset = next(p for p in db.rows["rip_presets"] if p.id == "rpr_builtin_bd_backup")
+    assert (preset.name, preset.output_mode, preset.media_type, preset.is_builtin) == (
+        "Blu-ray: Decrypted backup",
+        OutputMode.FOLDER,
+        MediaType.ISO,
+        True,
+    )
+    session = next(s for s in db.rows["sessions"] if s.id == "ses_builtin_bd_backup")
+    assert session.rip_preset_id == "rpr_builtin_bd_backup"
+    assert session.transcode_preset_id == "tpr_builtin_iso_passthrough"
+    assert session.output_path_template == "{title} ({year?})"
