@@ -96,7 +96,9 @@ def move_tree(src: Path, dst: Path) -> int:
     """Move the folder `src` to `dst`. Returns the total size of its files.
 
     Refuses to touch an existing `dst` (`FileExistsError`, an `OSError`, so a
-    caller that fails a task on `OSError` needs nothing extra).
+    caller that fails a task on `OSError` needs nothing extra). Unlike
+    `transcode_none`'s rename, it never overwrites: an existing destination is
+    always refused, whatever the session's overwrite flag.
     """
     if dst.exists() or dst.is_symlink():
         raise FileExistsError(f"destination already exists: {dst}")
