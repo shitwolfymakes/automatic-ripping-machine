@@ -2647,6 +2647,27 @@ def test_rip_start_iso_dump_still_works_when_the_operator_chose_it() -> None:
     assert job.status == JobStatus.RIPPING
 
 
+def test_rip_start_iso_dump_of_a_bluray_with_titles_dumps_it() -> None:
+    """A physical Blu-ray whose scan found titles, with the "ISO: Full-disc
+    dump" session picked: one full-disc dump track, not a MakeMKV rip of the
+    titles."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED, disc_type=DiscType.BLURAY, meta={"scan_result": _scan_dict("bluray")})
+    job.pending_session_id = "ses_builtin_iso_dump"
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _iso_dump_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _iso_dump_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["rip_preset_id"] == "rpr_builtin_iso_dump"
+    assert [t["kind"] for t in body["tracks"]] == ["data_dump"]
+
+
 def test_rip_start_optical_without_titles_is_still_422() -> None:
     """The fallback is for ISO sources only: a physical disc that scans to no
     titles keeps the 422 (the ripper abandons it, as before)."""

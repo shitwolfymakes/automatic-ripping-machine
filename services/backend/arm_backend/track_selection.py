@@ -1,4 +1,4 @@
-from arm_common import TrackStatus, DiscType, RipPreset, Track, TrackKind, TrackSelection
+from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
 
 MAIN_FEATURE_MIN_SECONDS = 45 * 60
@@ -91,23 +91,35 @@ def _select_audio(scan: ScanResult, rip_preset: RipPreset, job_id: str) -> list[
     return [_audio_track(job_id, t) for t in scan.titles]
 
 
+def _full_dump(job_id: str) -> list[Track]:
+    return [
+        Track(
+            job_id=job_id,
+            kind=TrackKind.DATA_DUMP,
+            index=0,
+            source_ref="full",
+            status=TrackStatus.QUEUED,
+            attempts=0,
+        )
+    ]
+
+
+def _dumps_whole_disc(scan: ScanResult, rip_preset: RipPreset) -> bool:
+    """A DATA disc has no titles, and an ISO preset copies a DVD or Blu-ray
+    whole whatever titles the scan found: both are one full-disc dump."""
+    if scan.disc_type == DiscType.DATA:
+        return True
+    return rip_preset.output_mode == OutputMode.ISO and scan.disc_type in (DiscType.DVD, DiscType.BLURAY)
+
+
 def select_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
     """Apply rip-preset track-selection rules to a scan."""
+    if _dumps_whole_disc(scan, rip_preset):
+        return _full_dump(job_id)
     if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
         return _select_video(scan, rip_preset, job_id)
     if scan.disc_type == DiscType.CD:
         return _select_audio(scan, rip_preset, job_id)
-    if scan.disc_type == DiscType.DATA:
-        return [
-            Track(
-                job_id=job_id,
-                kind=TrackKind.DATA_DUMP,
-                index=0,
-                source_ref="full",
-                status=TrackStatus.QUEUED,
-                attempts=0,
-            )
-        ]
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")
 
 
@@ -120,11 +132,11 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
     the preset computes *defaults*, not membership. The kept set is whatever
     `select_tracks` would have produced, matched by `source_ref`. (spec §4.3)
 
-    DATA discs have no per-title list — they synthesise a single full-dump Track,
-    so review persistence delegates straight to `select_tracks`.
+    A full-disc dump (a DATA disc, or the ISO preset) has no per-title list:
+    review persistence is the single dump Track `select_tracks` makes.
     """
-    if scan.disc_type == DiscType.DATA:
-        return select_tracks(job_id, scan, rip_preset)
+    if _dumps_whole_disc(scan, rip_preset):
+        return _full_dump(job_id)
 
     kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset)}
     is_cd = scan.disc_type == DiscType.CD
