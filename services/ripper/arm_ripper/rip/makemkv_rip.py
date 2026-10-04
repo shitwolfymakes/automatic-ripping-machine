@@ -300,6 +300,7 @@ async def _stream_output(
     on_disc_progress: OnDiscProgress | None,
     on_title_done: OnTitleDone | None = None,
     eligible_source_indexes: list[int] | None = None,
+    gate_disc_progress: bool = True,
 ) -> None:
     assert proc.stdout is not None
     eligible = eligible_source_indexes or []
@@ -347,7 +348,7 @@ async def _stream_output(
                     await on_title_progress(state.current_title, cur_frac)
                 except Exception as exc:
                     logger.debug("title progress callback raised: %s", exc)
-            elif state.save_phase_started and on_disc_progress is not None:
+            elif (state.save_phase_started or not gate_disc_progress) and on_disc_progress is not None:
                 try:
                     await on_disc_progress(tot_frac)
                 except Exception as exc:
@@ -474,6 +475,84 @@ class RipDiscResult:
     titles: dict[int, RipResult]
 
 
+async def _run_makemkvcon(
+    cmd: list[str],
+    state: _ParserState,
+    *,
+    on_title_start: OnTitleStart | None = None,
+    on_title_progress: OnTitleProgress | None = None,
+    on_disc_progress: OnDiscProgress | None = None,
+    on_title_done: OnTitleDone | None = None,
+    eligible_source_indexes: list[int] | None = None,
+    gate_disc_progress: bool = True,
+) -> str | None:
+    """Run one makemkvcon invocation to completion, streaming its robot output
+    into `state`. Returns None on a clean exit, else the error text: not on
+    PATH, timed out, the expired-binary kill switch, or a non-zero exit.
+    Cancel-safe: a cancelled caller kills the subprocess before unwinding."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as e:
+        return f"makemkvcon not on PATH: {e}"
+
+    streamer = asyncio.create_task(
+        _stream_output(
+            proc,
+            state,
+            on_title_start,
+            on_title_progress,
+            on_disc_progress,
+            on_title_done=on_title_done,
+            eligible_source_indexes=eligible_source_indexes,
+            gate_disc_progress=gate_disc_progress,
+        )
+    )
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        streamer.cancel()
+        return _compose_error(f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s", state.diagnostics)
+    finally:
+        # Cancel-safe cleanup: parent abandon → CancelledError. Kill the
+        # subprocess so /raw can be wiped without orphan fds.
+        if proc.returncode is None:
+            proc.kill()
+            try:
+                await proc.wait()
+            except BaseException:
+                pass
+        streamer.cancel()
+
+    # Drain the streamer so every line after EOF is processed before callers read `state`.
+    try:
+        await streamer
+    except asyncio.CancelledError:
+        pass
+
+    if state.binary_expired:
+        return _compose_error(
+            "makemkvcon refused: binary is past its hard-coded expiry "
+            "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
+            "rebuild the ripper image after upstream ships a fresher tarball. "
+            "See docs/user/MakeMKV-Ripper.md § Failure modes.",
+            state.diagnostics,
+        )
+
+    if proc.returncode != 0:
+        stderr = b""
+        if proc.stderr is not None:
+            stderr = await proc.stderr.read()
+        msg = stderr.decode(errors="replace").strip()[:400] or f"exit={proc.returncode}"
+        return _compose_error(f"makemkvcon failed: {msg}", state.diagnostics)
+    return None
+
+
 async def rip_disc(
     device_path: str,
     output_dir: Path,
@@ -525,82 +604,18 @@ async def rip_disc(
         minlength_seconds,
     )
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError as e:
-        return RipDiscResult(overall_error=f"makemkvcon not on PATH: {e}", titles={})
-
     state = _ParserState()
-    streamer = asyncio.create_task(
-        _stream_output(
-            proc,
-            state,
-            on_title_start,
-            on_title_progress,
-            on_disc_progress,
-            on_title_done=on_title_done,
-            eligible_source_indexes=eligible_source_indexes,
-        )
+    error = await _run_makemkvcon(
+        cmd,
+        state,
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+        on_title_done=on_title_done,
+        eligible_source_indexes=eligible_source_indexes,
     )
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        streamer.cancel()
-        return RipDiscResult(
-            overall_error=_compose_error(
-                f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s",
-                state.diagnostics,
-            ),
-            titles={},
-        )
-    finally:
-        # Cancel-safe cleanup: parent abandon → CancelledError. Kill the
-        # subprocess so /raw can be wiped without orphan fds.
-        if proc.returncode is None:
-            proc.kill()
-            try:
-                await proc.wait()
-            except BaseException:
-                pass
-        streamer.cancel()
-
-    # Drain the streamer so all PRGV / PRGT / MSG lines after EOF are processed
-    # before we read state.titles below.
-    try:
-        await streamer
-    except asyncio.CancelledError:
-        pass
-
-    # Distinct error for the binary-expired path so operators see "rebuild
-    # against a fresher upstream tarball" instead of a generic exit code.
-    # The streamer already killed the proc, so we hit this branch fast.
-    if state.binary_expired:
-        return RipDiscResult(
-            overall_error=_compose_error(
-                "makemkvcon refused: binary is past its hard-coded expiry "
-                "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
-                "rebuild the ripper image after upstream ships a fresher tarball. "
-                "See docs/user/MakeMKV-Ripper.md § Failure modes.",
-                state.diagnostics,
-            ),
-            titles={},
-        )
-
-    if proc.returncode != 0:
-        stderr = b""
-        if proc.stderr is not None:
-            stderr = await proc.stderr.read()
-        msg = stderr.decode(errors="replace").strip()[:400] or f"exit={proc.returncode}"
-        return RipDiscResult(
-            overall_error=_compose_error(f"makemkvcon failed: {msg}", state.diagnostics),
-            titles={},
-        )
+    if error is not None:
+        return RipDiscResult(overall_error=error, titles={})
 
     # Final title's on_title_done — the streamer fires done at PRGC
     # transitions, but the last title in the rip never gets a follow-up
