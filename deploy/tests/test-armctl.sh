@@ -282,9 +282,38 @@ e="$(env_case env-switch full keep)"
 lacks "env: leaving the offload profile removes its keys" "ARM_TRANSCODE_DOCKER_HOST=" "$(grep -v '^#' <<<"$e")"
 lacks "env: leaving the offload profile removes the ripper certs override" "ARM_RIPPER_CERTS_PATH=" "$(grep -v '^#' <<<"$e")"
 
+e="$(env_case env-owner full)"
+has "env: a fresh install records the installing user" "PUID=$(id -u)" "$e"
+env_owner="${TMPROOT}/env-owner/arm/.armctl/.env"
+env_set PUID 1500 "${env_owner}"; env_set PGID 1600 "${env_owner}"
+e="$(env_case env-owner full keep)"
+has "env: a re-run keeps a PUID the user set" "PUID=1500" "$e"
+has "env: a re-run keeps a PGID the user set" "PGID=1600" "$e"
+
 pin="${TMPROOT}/pin.env"; printf 'ARM_IMAGE_PREFIX=ghcr.io/fork\nARM_IMAGE_TAG=v3.0.0\n' > "$pin"
 ( IMAGE_PREFIX_ARG=""; write_image_pins v3.2.0 "$pin" )
 has "pins: an existing prefix is kept across an upgrade" "ARM_RIPPER_IMAGE=ghcr.io/fork/arm-ripper:v3.2.0" "$(cat "$pin")"
+
+pin="${TMPROOT}/pin-override.env"; : > "$pin"
+( IMAGE_PREFIX_ARG=""; write_image_pins v3.0.0 "$pin" )
+env_set ARM_TRANSCODE_IMAGE_QSV "myregistry/arm-transcode:custom-intel" "$pin"
+out="$( IMAGE_PREFIX_ARG=""; write_image_pins v3.2.0 "$pin" 2>&1 )"
+has "pins: a hand-set image is kept across an upgrade" "ARM_TRANSCODE_IMAGE_QSV=myregistry/arm-transcode:custom-intel" "$(cat "$pin")"
+has "pins: a kept image is reported" "ARM_TRANSCODE_IMAGE_QSV" "$out"
+has "pins: the images armctl set still move" "ARM_TRANSCODE_IMAGE_VAAPI=docker.io/automaticrippingmachine/arm-transcode:v3.2.0-amd" "$(cat "$pin")"
+( IMAGE_PREFIX_ARG="ghcr.io/fork"; write_image_pins v3.2.0 "$pin" >/dev/null 2>&1 )
+has "pins: a new prefix moves the images armctl set" "ARM_RIPPER_IMAGE=ghcr.io/fork/arm-ripper:v3.2.0" "$(cat "$pin")"
+has "pins: a new prefix keeps a hand-set image" "ARM_TRANSCODE_IMAGE_QSV=myregistry/arm-transcode:custom-intel" "$(cat "$pin")"
+
+# --- GPUs set by hand ---------------------------------------------------------------
+gpu_env="${TMPROOT}/gpu-manual.env"
+printf 'ARM_GPUS_MANUAL=true\nARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD129","encoder_kinds":[]}]\n' > "${gpu_env}"
+out="$( ENV_FILE="${gpu_env}"; RIPPER_ONLY=0; DETECTED_GPUS_SET=0
+        detect_gpus() { printf '[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; }
+        refresh_arm_gpus; detect_gpus_once; printf 'DETECTED=%s\n' "${DETECTED_GPUS}" )"
+has "gpus: a hand-set list survives a refresh" 'ARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD129"' "$(cat "${gpu_env}")"
+has "gpus: the refresh says it kept the list" "ARM_GPUS_MANUAL" "$out"
+has "gpus: image selection follows the hand-set list" 'DETECTED=[{"vendor":"qsv"' "$out"
 out="$( (write_image_pins "" "$pin") 2>&1 || true)"
 has "pins: an empty version is refused" "no release version" "$out"
 

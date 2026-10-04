@@ -202,6 +202,15 @@ check "env_set appends a new key" "A=1;B=2;" \
 check "env_set replaces an existing key, even the only one" "A=x|y&z;" \
     "$(dev_out 'f="$(mktemp)"; echo A=1 > "$f"; env_set A "x|y&z" "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
 # shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_set keeps a key where it was" "A=1;B=9;C=3;" \
+    "$(dev_out 'f="$(mktemp)"; printf "A=1\nB=2\nC=3\n" > "$f"; env_set B 9 "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_set keeps a backslash in the value" 'A=a\nb;' \
+    "$(dev_out 'f="$(mktemp)"; echo A=1 > "$f"; env_set A "a\\nb" "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
+check "env_set leaves one copy of a duplicated key" "A=1;B=9;" \
+    "$(dev_out 'f="$(mktemp)"; printf "A=1\nB=2\nB=3\n" > "$f"; env_set B 9 "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
+# shellcheck disable=SC2016  # the snippet expands inside dev_out's eval, not here
 check "env_unset removes a key" "B=2;" \
     "$(dev_out 'f="$(mktemp)"; printf "A=1\nB=2\n" > "$f"; env_unset A "$f"; tr "\n" ";" < "$f"; rm -f "$f"')"
 check "detect_cdrom_gid falls back to 44" "44" \

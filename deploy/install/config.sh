@@ -139,28 +139,42 @@ env_merge_new_keys() {
 # write_image_pins <tag> [env file]: pin every image to one release. The
 # backend, data-init and UI images come from ARM_IMAGE_PREFIX/ARM_IMAGE_TAG
 # through docker-compose.release.yml; the ripper and transcode images are
-# variables the compose template already reads.
+# variables the compose template already reads. Those four move with the
+# release only while they still hold the value armctl last wrote; one the user
+# changed is kept, and reported, so it is never silently replaced.
 write_image_pins() {
-    local tag="$1" file="${2:-${ENV_FILE}}" prefix
+    local tag="$1" file="${2:-${ENV_FILE}}" prefix old_prefix old_tag
     [[ -n "${tag}" ]] || err "no release version to pin the images to"
-    prefix="${IMAGE_PREFIX_ARG:-}"
-    if [[ -z "${prefix}" ]]; then
-        prefix="$(sed -nE 's/^ARM_IMAGE_PREFIX=(.+)$/\1/p' "${file}" 2>/dev/null | tail -n1)"
-    fi
+    old_prefix="$(sed -nE 's/^ARM_IMAGE_PREFIX=(.+)$/\1/p' "${file}" 2>/dev/null | tail -n1)"
+    old_tag="$(sed -nE 's/^ARM_IMAGE_TAG=(.+)$/\1/p' "${file}" 2>/dev/null | tail -n1)"
+    prefix="${IMAGE_PREFIX_ARG:-${old_prefix}}"
     prefix="${prefix:-${ARM_IMAGE_PREFIX_DEFAULT}}"
     env_set ARM_IMAGE_PREFIX "${prefix}" "${file}"
     env_set ARM_IMAGE_TAG "${tag}" "${file}"
-    env_set ARM_RIPPER_IMAGE "${prefix}/arm-ripper:${tag}" "${file}"
-    env_set ARM_TRANSCODE_IMAGE "${prefix}/arm-transcode:${tag}" "${file}"
-    env_set ARM_TRANSCODE_IMAGE_QSV "${prefix}/arm-transcode:${tag}-intel" "${file}"
-    env_set ARM_TRANSCODE_IMAGE_VAAPI "${prefix}/arm-transcode:${tag}-amd" "${file}"
+    pin_image ARM_RIPPER_IMAGE arm-ripper ""
+    pin_image ARM_TRANSCODE_IMAGE arm-transcode ""
+    pin_image ARM_TRANSCODE_IMAGE_QSV arm-transcode -intel
+    pin_image ARM_TRANSCODE_IMAGE_VAAPI arm-transcode -amd
+}
+
+# pin_image <key> <image> <tag suffix>: write_image_pins' per-image step; reads
+# its file, prefix, tag, old_prefix and old_tag.
+pin_image() {
+    local key="$1" image="$2" suffix="$3" current
+    current="$(sed -nE "s/^${key}=(.*)\$/\\1/p" "${file}" 2>/dev/null | tail -n1)"
+    if [[ -n "${current}" && "${current}" != "${old_prefix}/${image}:${old_tag}${suffix}" ]]; then
+        log "keeping your ${key}=${current} (it does not follow the release; update it yourself)"
+        return 0
+    fi
+    env_set "${key}" "${prefix}/${image}:${tag}${suffix}" "${file}"
 }
 
 # Write ENV_FILE from the bundle's .env.example. Secrets are generated once
 # and kept on every later run; everything detected or answered is rewritten.
 write_env() {
-    local example="${ARMCTL_RELEASE_DIR}/.env.example" key
+    local example="${ARMCTL_RELEASE_DIR}/.env.example" key fresh=1
     if [[ -f "${ENV_FILE}" ]]; then
+        fresh=0
         log ".env exists; keeping its secrets and refreshing detected values"
         env_merge_new_keys "${example}" "${ENV_FILE}"
     else
@@ -173,8 +187,14 @@ write_env() {
         chmod 600 "${ENV_FILE}"
     fi
 
-    env_set PUID "$(id -u)"
-    env_set PGID "$(id -g)"
+    # The file owner is the installing user on a fresh install. After that it is
+    # the user's to change (to match a media server), so a re-run keeps it.
+    if [[ "${fresh}" -eq 1 || -z "$(env_file_value PUID)" ]]; then
+        env_set PUID "$(id -u)"
+    fi
+    if [[ "${fresh}" -eq 1 || -z "$(env_file_value PGID)" ]]; then
+        env_set PGID "$(id -g)"
+    fi
     env_set CDROM_GID "$(detect_cdrom_gid)"
     env_set ARMCTL_PROFILE "${PROFILE}"
     # The template defaults these from ${PWD}, the folder compose was started

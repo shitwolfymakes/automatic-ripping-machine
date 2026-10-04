@@ -89,11 +89,21 @@ detect_cdrom_gid() {
 # and nvidia-smi, so it never writes .env: a refused `up` leaves .env untouched.
 DETECTED_GPUS=""
 DETECTED_GPUS_SET=0
+# With ARM_GPUS_MANUAL=true the hand-set ARM_GPUS stands in for detection.
 detect_gpus_once() {
     if [[ "${DETECTED_GPUS_SET}" -eq 0 ]]; then
-        DETECTED_GPUS="$(detect_gpus)"
+        if gpus_manual; then
+            DETECTED_GPUS="$(env_file_value ARM_GPUS)"
+        else
+            DETECTED_GPUS="$(detect_gpus)"
+        fi
         DETECTED_GPUS_SET=1
     fi
+}
+
+# True when .env says ARM_GPUS is set by hand and must not be re-detected.
+gpus_manual() {
+    grep -qE '^ARM_GPUS_MANUAL=true$' "${ENV_FILE}" 2>/dev/null
 }
 
 # Refresh ARM_GPUS from host detection (it's derived, not a secret), UNLESS the
@@ -103,6 +113,8 @@ detect_gpus_once() {
 # overwrite a hand-set remote GPU list with the wrong hardware.
 # --ripper-only also skips detection: a ripper-only install never spawns a
 # local transcoder, so there's nothing to advertise GPUs for.
+# ARM_GPUS_MANUAL=true keeps a hand-set list (to drop a GPU, or correct a wrong
+# detection) across every run.
 refresh_arm_gpus() {
     local value
     if grep -qE '^ARM_TRANSCODE_DOCKER_HOST=..*' "${ENV_FILE}"; then
@@ -110,6 +122,9 @@ refresh_arm_gpus() {
         return 0
     elif [[ "${RIPPER_ONLY}" -eq 1 ]]; then
         value="[]"
+    elif gpus_manual; then
+        arm_say "ARM_GPUS_MANUAL=true — keeping .env's ARM_GPUS as set by hand"
+        return 0
     else
         detect_gpus_once
         value="${DETECTED_GPUS}"

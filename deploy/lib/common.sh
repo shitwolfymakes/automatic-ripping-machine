@@ -48,15 +48,22 @@ env_file_value() {
     printf '%s' "${val}"
 }
 
-# Set KEY=VALUE in a .env file (default: ENV_FILE). Delete-then-append rather
-# than `sed s|...|value|`: the value may be free text (a URL, a path), and a
-# `&` or `|` in it would corrupt a sed replacement. The file is rewritten in
-# place so its mode is kept.
+# Set KEY=VALUE in a .env file (default: ENV_FILE). An existing key is replaced
+# where it stands, so it stays beside its comment; a new key is appended. awk
+# reads the value from the environment, not -v or a sed replacement: the value
+# may be free text (a URL, a path), and `&`, `|` or `\` in it would be mangled.
+# The file is rewritten in place so its mode is kept.
 env_set() {
     local key="$1" value="$2" file="${3:-${ENV_FILE}}" rest
     if grep -q "^${key}=" "${file}" 2>/dev/null; then
-        rest="$(grep -v "^${key}=" "${file}" || true)"
-        if [[ -n "${rest}" ]]; then printf '%s\n' "${rest}" > "${file}"; else : > "${file}"; fi
+        rest="$(ENV_SET_KEY="${key}" ENV_SET_VALUE="${value}" awk '
+            index($0, ENVIRON["ENV_SET_KEY"] "=") == 1 {
+                if (!done) { print ENVIRON["ENV_SET_KEY"] "=" ENVIRON["ENV_SET_VALUE"]; done = 1 }
+                next
+            }
+            { print }' "${file}")"
+        printf '%s\n' "${rest}" > "${file}"
+        return 0
     fi
     printf '%s=%s\n' "${key}" "${value}" >> "${file}"
 }

@@ -232,6 +232,11 @@ still empty), and the dispatcher passes the right device into each
 short-lived transcoder container it spawns. No overlay file, no
 `COMPOSE_FILE` juggling, no GPU access on the Backend itself.
 
+To keep a list you wrote yourself (to leave a GPU out, or correct a wrong
+detection), add `ARM_GPUS_MANUAL=true` to `.env`. ARM then keeps `ARM_GPUS`
+as written on every run, and pulls the `-intel` / `-amd` images that list
+calls for.
+
 > **Re-run the installer after any GPU or driver change** (new card, driver
 > upgrade) so `ARM_GPUS` is refreshed. Re-probe the affected row from
 > Settings > GPUs afterward (or restart the Backend, which probes any
