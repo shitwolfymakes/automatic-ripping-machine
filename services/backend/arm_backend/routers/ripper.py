@@ -851,6 +851,9 @@ async def rip_start(
     try:
         new_tracks = select_tracks(job.id, scan, preset)
     except DiscBackupNeedsBluray as exc:
+        # Fail the job with the reason on its event: the ripper gives up on a
+        # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
+        await _fail_titleless_source(session, hub, job, str(exc))
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
     if virtual is not None:

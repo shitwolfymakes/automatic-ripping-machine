@@ -2718,11 +2718,20 @@ def test_rip_start_bd_backup_of_a_dvd_is_422() -> None:
     db.rows["tracks"] = []
     db.rows["sessions"] = [_session_row(), _bd_backup_session()]
     db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _bd_backup_preset()]
-    with TestClient(_make_app(db)) as client:
+    hub = _RecordingHub()
+    app = _make_app(db)
+    app.state.ws_hub = hub
+    with TestClient(app) as client:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert r.json()["detail"] == "disc backup needs a Blu-ray, not disc_type=dvd"
     assert db.rows["tracks"] == []
+    # The job fails visibly, with the reason on its event, instead of sitting
+    # IDENTIFIED with no explanation after the ripper gives up on the 422.
+    assert job.status == JobStatus.FAILED
+    failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
+    assert len(failed) == 1
+    assert "disc backup needs a Blu-ray" in failed[0]["payload"]["reason"]
 
 
 async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:
