@@ -57,6 +57,7 @@ def _db(
     track_output_path: str | None,
     task_output_path: str | None,
     task_attempts: int = 0,
+    track_kind: TrackKind = TrackKind.VIDEO_TITLE,
 ) -> FakeSession:
     db = FakeSession()
     db.rows["session_applications"] = [
@@ -72,7 +73,7 @@ def _db(
         Track(
             id="trk_1",
             job_id="job_01JZXR7K3M5Q8N4VWA00000001",
-            kind=TrackKind.VIDEO_TITLE,
+            kind=track_kind,
             index=1,
             source_ref="t0",
             output_path=track_output_path,
@@ -538,3 +539,61 @@ async def test_no_application_row_skips_aggregate(tmp_path: Path) -> None:
 
     assert ok is True
     assert [e["event_type"] for e in sent] == ["task.started", "task.completed"]
+
+
+def _backup_dir(root: Path) -> Path:
+    (root / "BDMV").mkdir(parents=True)
+    (root / "BDMV" / "index.bdmv").write_bytes(b"idx")
+    return root
+
+
+async def test_disc_backup_is_moved_as_a_folder(tmp_path: Path) -> None:
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    media_root = tmp_path / "media"
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True
+    assert (media_root / "Iron Man (2008)" / "BDMV" / "index.bdmv").read_bytes() == b"idx"
+    assert not raw.exists()
+    assert sent[2]["payload"]["size_bytes"] == 3
+
+
+async def test_disc_backup_onto_an_existing_folder_fails_and_keeps_it(tmp_path: Path) -> None:
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    media_root = tmp_path / "media"
+    existing = media_root / "Iron Man (2008)"
+    existing.mkdir(parents=True)
+    (existing / "old.txt").write_text("keep")
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, _sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is False
+    assert "FileExistsError" in (task.last_error or "")
+    assert sorted(p.name for p in existing.iterdir()) == ["old.txt"]
+    assert raw.exists()
+
+
+async def test_disc_backup_chowns_the_whole_tree(tmp_path: Path, monkeypatch: Any) -> None:
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    media_root = tmp_path / "media"
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, _sent = _hub_with_recorder()
+    chowned: list[Path] = []
+    monkeypatch.setattr("arm_backend.passthrough_executor.os.chown", lambda p, _u, _g: chowned.append(Path(p)))
+
+    await execute_passthrough_task(
+        db,
+        db.rows["transcode_tasks"][0],
+        hub,
+        _settings(MEDIA_ROOT=str(media_root), ARM_TRANSCODE_PUID="1000", ARM_TRANSCODE_PGID="1000"),
+    )
+
+    final = media_root / "Iron Man (2008)"
+    assert set(chowned) == {final, final / "BDMV", final / "BDMV" / "index.bdmv"}

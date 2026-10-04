@@ -29,11 +29,12 @@ from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
     Track,
+    TrackKind,
     TranscodeTask,
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.fileops import transcode_none
+from arm_common.fileops import move_tree, transcode_none
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -177,10 +178,12 @@ async def execute_passthrough_task(
             error = "task has no output_path"
         else:
             final = Path(settings.MEDIA_ROOT) / task_output_path
+            is_folder = track.kind == TrackKind.DISC_BACKUP
+            mover = move_tree if is_folder else transcode_none
             try:
-                size = await asyncio.to_thread(transcode_none, Path(track_output_path), final)
+                size = await asyncio.to_thread(mover, Path(track_output_path), final)
                 if settings.ARM_TRANSCODE_PUID:
-                    _best_effort_chown(final, settings)
+                    _best_effort_chown(final, settings, tree=is_folder)
             except OSError as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
 
@@ -242,10 +245,12 @@ async def execute_passthrough_task(
         return error is None
 
 
-def _best_effort_chown(final: Path, settings: Settings) -> None:
+def _best_effort_chown(final: Path, settings: Settings, *, tree: bool = False) -> None:
     try:
         uid = int(settings.ARM_TRANSCODE_PUID)
         gid = int(settings.ARM_TRANSCODE_PGID) if settings.ARM_TRANSCODE_PGID else -1
-        os.chown(final, uid, gid)
+        paths = [final, *final.rglob("*")] if tree else [final]
+        for path in paths:
+            os.chown(path, uid, gid)
     except (OSError, ValueError) as exc:
         logger.debug("post-move chown skipped: %s", exc)
