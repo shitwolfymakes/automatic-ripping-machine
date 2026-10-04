@@ -633,6 +633,50 @@ def test_delete_job_files_removes_a_disc_backup_folder(tmp_path: Path) -> None:
     assert media_root.exists()
 
 
+def test_delete_job_files_keeps_a_sibling_jobs_file_in_the_backup_folder(tmp_path: Path) -> None:
+    """Movie templates also write into "{title} ({year?})/": deleting the
+    backup removes only its BDMV/ and CERTIFICATE/, never a sibling job's
+    .mkv, and the folder stays while it still holds something."""
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    (backup / "BDMV").mkdir(parents=True)
+    (backup / "BDMV" / "index.bdmv").write_bytes(b"i")
+    (backup / "CERTIFICATE").mkdir()
+    (backup / "CERTIFICATE" / "id.bdmv").write_bytes(b"c")
+    sibling = backup / "Iron Man (2008).mkv"
+    sibling.write_bytes(b"m")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not (backup / "BDMV").exists()
+    assert not (backup / "CERTIFICATE").exists()
+    assert sibling.read_bytes() == b"m"
+    assert counters["media_dirs_pruned"] == 0
+
+
+def test_delete_job_files_does_not_follow_a_symlinked_bdmv(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    backup.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "index.bdmv").write_bytes(b"i")
+    (backup / "BDMV").symlink_to(elsewhere, target_is_directory=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert (elsewhere / "index.bdmv").exists()
+    assert (backup / "BDMV").is_symlink()
+
+
 def test_delete_job_files_does_not_follow_a_symlinked_folder(tmp_path: Path) -> None:
     raw_root = tmp_path / "raw"
     raw_root.mkdir()

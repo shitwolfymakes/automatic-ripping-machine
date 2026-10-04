@@ -584,6 +584,10 @@ def _prune_empty_dirs(leaf_parent: Path, root: Path) -> int:
     return pruned
 
 
+# What `makemkvcon backup` writes into a disc backup's title folder.
+_DISC_BACKUP_PARTS = ("BDMV", "CERTIFICATE")
+
+
 def _delete_job_files(
     job_id: str,
     media_outputs: Iterable[Path],
@@ -593,8 +597,9 @@ def _delete_job_files(
 ) -> dict[str, int]:
     """Delete `raw_root/<job_id>/` and every file in `media_outputs`, then
     prune emptied media parent dirs. A media output that is a folder (the
-    Blu-ray decrypted backup) is removed whole, but only when it is a real
-    directory inside `media_root`.
+    Blu-ray decrypted backup) has its BDMV/ and CERTIFICATE/ removed, and is
+    itself removed only once empty, and only when it is a real directory
+    inside `media_root`.
 
     Per-file unlink (rather than rmtree of the title dir) because re-rips of
     the same disc land outputs in the same `media/<Title>/` parent — a sibling
@@ -632,7 +637,20 @@ def _delete_job_files(
                 if resolved == root or not resolved.is_relative_to(root):
                     logger.warning("delete: refusing folder not strictly inside media_root path=%s", path)
                     continue
-                shutil.rmtree(path)
+                # Movie templates also write into "{title} ({year?})/", so the
+                # folder can hold a sibling job's files: remove only the backup
+                # structure, then the folder only once nothing else is left.
+                removed = False
+                for part in _DISC_BACKUP_PARTS:
+                    sub = path / part
+                    if sub.is_dir() and not sub.is_symlink():
+                        shutil.rmtree(sub)
+                        removed = True
+                if not removed:
+                    logger.warning("delete: no disc backup structure to remove in folder path=%s", path)
+                    continue
+                if not any(path.iterdir()):
+                    path.rmdir()
             elif path.is_symlink() and path.is_dir():
                 logger.warning("delete: refusing to follow symlinked folder path=%s", path)
                 continue
