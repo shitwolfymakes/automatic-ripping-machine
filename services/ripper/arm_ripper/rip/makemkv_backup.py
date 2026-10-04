@@ -11,6 +11,7 @@ not the `mkv all` save marker (PRGT:5024).
 
 import asyncio
 import logging
+import shutil
 from pathlib import Path
 
 from arm_common.fileops import tree_size
@@ -33,6 +34,8 @@ async def rip_backup(device_path: str, output_dir: Path, on_progress: OnDiscProg
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / BACKUP_DIRNAME
+    # A backup left by an earlier run must never pass this run's success check.
+    shutil.rmtree(target, ignore_errors=True)
     cmd = [
         "makemkvcon",
         "backup",

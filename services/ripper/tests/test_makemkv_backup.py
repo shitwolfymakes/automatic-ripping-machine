@@ -42,9 +42,13 @@ class _FakeProc:
         self.returncode = -9
 
 
-def _stub(monkeypatch, proc: _FakeProc, calls: list[tuple[Any, ...]]) -> None:
+def _stub(monkeypatch, proc: _FakeProc, calls: list[tuple[Any, ...]], *, writes_to: Path | None = None) -> None:
+    """`writes_to`: the fake makemkvcon writes a backup there when it runs."""
+
     async def fake_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
         calls.append(args)
+        if writes_to is not None:
+            _write_backup(writes_to)
         return proc
 
     monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_exec)
@@ -59,8 +63,7 @@ def _write_backup(output_dir: Path) -> None:
 
 async def test_rip_backup_runs_one_backup_decrypt_command(monkeypatch, tmp_path):
     calls: list[tuple[Any, ...]] = []
-    _stub(monkeypatch, _FakeProc([]), calls)
-    _write_backup(tmp_path)
+    _stub(monkeypatch, _FakeProc([]), calls, writes_to=tmp_path)
     await rip_backup("/dev/sr0", tmp_path)
     assert calls == [
         (
@@ -76,8 +79,7 @@ async def test_rip_backup_runs_one_backup_decrypt_command(monkeypatch, tmp_path)
 
 
 async def test_rip_backup_success_reports_the_folder_size_and_no_sha(monkeypatch, tmp_path):
-    _stub(monkeypatch, _FakeProc([]), [])
-    _write_backup(tmp_path)
+    _stub(monkeypatch, _FakeProc([]), [], writes_to=tmp_path)
     result = await rip_backup("/dev/sr0", tmp_path)
     assert (result.ok, result.output_path, result.size_bytes, result.sha256) == (
         True,
@@ -88,8 +90,7 @@ async def test_rip_backup_success_reports_the_folder_size_and_no_sha(monkeypatch
 
 
 async def test_rip_backup_reports_disc_progress_without_a_save_phase_marker(monkeypatch, tmp_path):
-    _stub(monkeypatch, _FakeProc(["PRGV:0,2500,10000", "PRGV:0,10000,10000"]), [])
-    _write_backup(tmp_path)
+    _stub(monkeypatch, _FakeProc(["PRGV:0,2500,10000", "PRGV:0,10000,10000"]), [], writes_to=tmp_path)
     ticks: list[float] = []
 
     async def on_progress(fraction: float) -> None:
@@ -102,6 +103,16 @@ async def test_rip_backup_reports_disc_progress_without_a_save_phase_marker(monk
 async def test_rip_backup_exit_zero_without_index_bdmv_fails(monkeypatch, tmp_path):
     _stub(monkeypatch, _FakeProc([]), [])
     (tmp_path / BACKUP_DIRNAME).mkdir()
+    result = await rip_backup("/dev/sr0", tmp_path)
+    assert result.ok is False
+    assert result.error is not None and "produced no BDMV" in result.error
+
+
+async def test_rip_backup_never_passes_on_a_stale_backup(monkeypatch, tmp_path):
+    """A backup left by an earlier run is cleared first, so its index.bdmv
+    cannot pass the success check for a run that wrote nothing."""
+    _write_backup(tmp_path)
+    _stub(monkeypatch, _FakeProc([]), [])
     result = await rip_backup("/dev/sr0", tmp_path)
     assert result.ok is False
     assert result.error is not None and "produced no BDMV" in result.error
