@@ -4,7 +4,8 @@ import { formatBytes } from './format';
 const TRACK_KIND_LABELS: Record<string, string> = {
 	video_title: 'Video',
 	audio_track: 'Audio',
-	data_dump: 'Data'
+	data_dump: 'Data',
+	disc_backup: 'Disc backup'
 };
 
 export function trackKindLabel(kind: string | null | undefined): string {

@@ -160,6 +160,7 @@
 			<option value="tracks">Tracks</option>
 			<option value="iso">ISO</option>
 			<option value="data_copy">Data copy</option>
+			<option value="folder">Disc backup (folder)</option>
 		</select>
 	</label>
 

@@ -6,7 +6,8 @@ describe('trackKindLabel', () => {
 	it.each([
 		['video_title', 'Video'],
 		['audio_track', 'Audio'],
-		['data_dump', 'Data']
+		['data_dump', 'Data'],
+		['disc_backup', 'Disc backup']
 	])('maps %s -> %s', (kind, label) => {
 		expect(trackKindLabel(kind)).toBe(label);
 	});
