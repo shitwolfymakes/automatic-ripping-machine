@@ -177,3 +177,49 @@ def test_review_iso_preset_persists_the_single_dump():
     scan = _scan(7200, 1800)
     tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _iso_preset())
     assert [(t.kind, t.excluded) for t in tracks] == [(TrackKind.DATA_DUMP, False)]
+
+
+# --- FOLDER output mode: one decrypted-backup track, Blu-ray only ---
+
+
+def _backup_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_builtin_bd_backup",
+        name="Blu-ray: Decrypted backup",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.FOLDER,
+    )
+
+
+def test_folder_preset_backs_up_a_bluray_with_titles():
+    scan = ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[ScanTitle(index=i, duration_seconds=d) for i, d in enumerate([7200, 1800])],
+    )
+    tracks = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
+    assert [(t.kind, t.index, t.source_ref) for t in tracks] == [(TrackKind.DISC_BACKUP, 0, "full")]
+
+
+def test_folder_preset_backs_up_a_bluray_without_titles():
+    """A backup copies the disc structure; it does not need MakeMKV's title list."""
+    scan = ScanResult(disc_type=DiscType.BLURAY)
+    tracks = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
+    assert [t.kind for t in tracks] == [TrackKind.DISC_BACKUP]
+
+
+@pytest.mark.parametrize("disc_type", [DiscType.DVD, DiscType.DATA, DiscType.CD])
+def test_folder_preset_refuses_anything_but_a_bluray(disc_type: DiscType):
+    from arm_backend.track_selection import DiscBackupNeedsBluray
+
+    scan = ScanResult(disc_type=disc_type, titles=[ScanTitle(index=1, duration_seconds=3600)])
+    with pytest.raises(DiscBackupNeedsBluray, match=f"disc backup needs a Blu-ray, not disc_type={disc_type.value}"):
+        select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
+
+
+def test_review_folder_preset_persists_the_single_backup():
+    scan = ScanResult(disc_type=DiscType.BLURAY, titles=[ScanTitle(index=0, duration_seconds=7200)])
+    tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
+    assert [(t.kind, t.excluded) for t in tracks] == [(TrackKind.DISC_BACKUP, False)]

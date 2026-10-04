@@ -2582,6 +2582,30 @@ def _iso_dump_session() -> Session:
     )
 
 
+def _bd_backup_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_builtin_bd_backup",
+        name="Blu-ray: Decrypted backup",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.FOLDER,
+    )
+
+
+def _bd_backup_session() -> Session:
+    return Session(
+        id="ses_builtin_bd_backup",
+        name="Blu-ray: Decrypted backup",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        rip_preset_id="rpr_builtin_bd_backup",
+        transcode_preset_id=None,
+        output_path_template="{title} ({year?})",
+    )
+
+
 def _titleless_bluray_job() -> Job:
     scan = _scan_dict("bluray")
     scan["titles"] = []
@@ -2666,6 +2690,57 @@ def test_rip_start_iso_dump_of_a_bluray_with_titles_dumps_it() -> None:
     body = r.json()
     assert body["rip_preset_id"] == "rpr_builtin_iso_dump"
     assert [t["kind"] for t in body["tracks"]] == ["data_dump"]
+
+
+def test_rip_start_bd_backup_of_a_bluray_gives_one_backup_track() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED, disc_type=DiscType.BLURAY, meta={"scan_result": _scan_dict("bluray")})
+    job.pending_session_id = "ses_builtin_bd_backup"
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _bd_backup_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _bd_backup_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert [t["kind"] for t in r.json()["tracks"]] == ["disc_backup"]
+
+
+def test_rip_start_bd_backup_of_a_dvd_is_422() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED, disc_type=DiscType.DVD, meta={"scan_result": _scan_dict("dvd")})
+    job.pending_session_id = "ses_builtin_bd_backup"
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["sessions"] = [_session_row(), _bd_backup_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session"), _bd_backup_preset()]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"] == "disc backup needs a Blu-ray, not disc_type=dvd"
+    assert db.rows["tracks"] == []
+
+
+async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:
+    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_common import Job as _Job
+    from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
+
+    db = FakeSession()
+    db.rows["sessions"] = [_bd_backup_session()]
+    db.rows["rip_presets"] = [_movie_preset(), _bd_backup_preset()]
+    db.rows["tracks"] = []
+    job = _Job(
+        id="job_01JZXR7K3M5Q8N4VWA0000I02", drive_id="drv_x", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW
+    )
+    job.pending_session_id = "ses_builtin_bd_backup"
+    scan = _ScanResult(disc_type=DiscType.DVD, titles=[_ScanTitle(index=1, duration_seconds=4200)])
+    await _persist_review_tracks(db, job, scan)
+    assert [t for t in db.added if type(t).__name__ == "Track"] == []
 
 
 def test_rip_start_optical_without_titles_is_still_422() -> None:

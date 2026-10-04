@@ -184,6 +184,7 @@ class TrackKind(StrEnum):
     VIDEO_TITLE = "video_title"
     AUDIO_TRACK = "audio_track"
     DATA_DUMP = "data_dump"
+    DISC_BACKUP = "disc_backup"
 
 
 class TrackRole(StrEnum):
@@ -223,6 +224,7 @@ class OutputMode(StrEnum):
     TRACKS = "tracks"
     ISO = "iso"
     DATA_COPY = "data_copy"
+    FOLDER = "folder"
 
 
 class TranscodeTool(StrEnum):
