@@ -435,6 +435,140 @@ async def test_mismatch_skipped_when_job_media_type_unknown(tmp_path: Path) -> N
     assert len(outcome.tasks) == 1
 
 
+def _add_backup_session(db: FakeSession) -> None:
+    """The built-in "Blu-ray: Decrypted backup" session: a FOLDER rip preset
+    and the passthrough transcode preset, filing the title folder."""
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_builtin_bd_backup",
+            name="Blu-ray: Decrypted backup",
+            media_type=MediaType.ISO,
+            is_builtin=True,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.FOLDER,
+        )
+    )
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_builtin_iso_passthrough",
+            name="ISO passthrough",
+            media_type=MediaType.ISO,
+            is_builtin=True,
+            tool=TranscodeTool.NONE,
+            container=ContainerFormat.MKV,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_builtin_bd_backup",
+            name="Blu-ray: Decrypted backup",
+            media_type=MediaType.ISO,
+            is_builtin=True,
+            rip_preset_id="rpr_builtin_bd_backup",
+            transcode_preset_id="tpr_builtin_iso_passthrough",
+            output_path_template="{title} ({year?})",
+        )
+    )
+
+
+async def _apply_backup(db: FakeSession, job: Job, hub: CapturingHub) -> Any:
+    return await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_builtin_bd_backup",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("excluded_backup", [False, True])
+async def test_backup_session_on_a_job_ripped_as_titles_is_a_media_mismatch(
+    tmp_path: Path, excluded_backup: bool
+) -> None:
+    """The backup session files a disc backup folder. On a job ripped as
+    titles it would file the .mkv as an extension-less "Title (Year)" file,
+    so it is skipped as a media mismatch and fans out nothing. An excluded
+    backup track counts as none."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.disc_type = DiscType.BLURAY
+    job.media_type = MediaType.MOVIE
+    _add_backup_session(db)
+    if excluded_backup:
+        db.rows["tracks"].append(
+            Track(
+                id="trk_b",
+                job_id=job.id,
+                kind=TrackKind.DISC_BACKUP,
+                index=2,
+                source_ref="backup",
+                status=TrackStatus.DONE,
+                excluded=True,
+            )
+        )
+    hub = CapturingHub()
+
+    outcome = await _apply_backup(db, job, hub)
+
+    assert outcome.skipped_reason == "media_mismatch"
+    assert outcome.error_detail is not None
+    assert "no backup track" in outcome.error_detail
+    assert outcome.tasks == []
+    assert outcome.application is None
+    assert db.rows["session_applications"] == []
+    assert db.rows["transcode_tasks"] == []
+    assert hub.events == []
+
+
+@pytest.mark.asyncio
+async def test_backup_session_on_a_backed_up_job_fans_out_one_task(tmp_path: Path) -> None:
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.disc_type = DiscType.BLURAY
+    job.media_type = MediaType.MOVIE
+    _add_backup_session(db)
+    db.rows["tracks"] = [
+        Track(
+            id="trk_b",
+            job_id=job.id,
+            kind=TrackKind.DISC_BACKUP,
+            index=1,
+            source_ref="backup",
+            status=TrackStatus.DONE,
+        )
+    ]
+    hub = CapturingHub()
+
+    outcome = await _apply_backup(db, job, hub)
+
+    assert outcome.skipped_reason is None
+    assert [t.output_path for t in outcome.tasks] == ["Iron Man (2008)"]
+
+
+@pytest.mark.asyncio
+async def test_backup_session_applied_before_the_rip_still_parks(tmp_path: Path) -> None:
+    """Before the rip there is no backup track to look for yet: the apply
+    parks for the rip-complete fan-out, as any session does."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.IDENTIFIED)
+    job.disc_type = DiscType.BLURAY
+    _add_backup_session(db)
+    db.rows["tracks"] = []
+    hub = CapturingHub()
+
+    outcome = await _apply_backup(db, job, hub)
+
+    assert outcome.skipped_reason == "no_tracks"
+    assert outcome.tasks == []
+
+
 def test_media_mismatch_detail_survives_raw_string_media_type() -> None:
     """M2: a forward-compat row can load `media_type` as a raw `str` instead
     of a `MediaType` member. `media_mismatch_detail` must render it via
