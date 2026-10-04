@@ -541,15 +541,21 @@ async def review_pause(
 
 
 async def _resolve_media_outputs(db: AsyncSession, job_id: str) -> list[Path]:
-    """Return absolute paths of every transcode output recorded against this
-    job's tracks. `output_path` is relative; join to MEDIA_ROOT. Tasks with
-    no output yet (queued / failed before disk landing) are skipped."""
+    """Return absolute paths of every finished transcode output recorded
+    against this job's tracks. `output_path` is relative; join to MEDIA_ROOT.
+
+    Only DONE tasks count: `output_path` is recorded at fan-out, before the
+    output lands, so a queued, running, or failed task's path can name a file
+    or folder this job never wrote. A disc backup whose move was refused
+    because the destination already existed ends FAILED naming that folder,
+    which belongs to another job or the user."""
     media_root = Path(settings.MEDIA_ROOT)
     rows = (
         await db.execute(
             select(TranscodeTask.output_path)
             .join(Track, col(TranscodeTask.source_track_id) == col(Track.id))
             .where(col(Track.job_id) == job_id)
+            .where(col(TranscodeTask.status) == TranscodeTaskStatus.DONE)
             .where(col(TranscodeTask.output_path).is_not(None))
         )
     ).all()
