@@ -15,6 +15,7 @@ a harmless no-op).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import logging
 import os
 from datetime import UTC, datetime
@@ -181,9 +182,11 @@ async def execute_passthrough_task(
             is_folder = track.kind == TrackKind.DISC_BACKUP
             mover = move_tree if is_folder else transcode_none
             try:
-                size = await asyncio.to_thread(mover, Path(track_output_path), final)
-                if settings.ARM_TRANSCODE_PUID:
-                    _best_effort_chown(final, settings, tree=is_folder)
+                # Move and chown together in the worker thread: a backup
+                # tree's chown walks every file, too much for the event loop.
+                size = await asyncio.to_thread(
+                    _move_and_chown, mover, Path(track_output_path), final, settings, is_folder
+                )
             except OSError as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
 
@@ -243,6 +246,15 @@ async def execute_passthrough_task(
         # transaction, separate from the claim commit above.
         await db.commit()
         return error is None
+
+
+def _move_and_chown(
+    mover: Callable[[Path, Path], int], source: Path, final: Path, settings: Settings, is_folder: bool
+) -> int:
+    size = mover(source, final)
+    if settings.ARM_TRANSCODE_PUID:
+        _best_effort_chown(final, settings, tree=is_folder)
+    return size
 
 
 def _best_effort_chown(final: Path, settings: Settings, *, tree: bool = False) -> None:

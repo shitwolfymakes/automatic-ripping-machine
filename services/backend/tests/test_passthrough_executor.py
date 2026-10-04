@@ -597,3 +597,29 @@ async def test_disc_backup_chowns_the_whole_tree(tmp_path: Path, monkeypatch: An
 
     final = media_root / "Iron Man (2008)"
     assert set(chowned) == {final, final / "BDMV", final / "BDMV" / "index.bdmv"}
+
+
+async def test_disc_backup_tree_chown_runs_off_the_event_loop(tmp_path: Path, monkeypatch: Any) -> None:
+    """Chowning a whole backup tree walks thousands of files: it runs in the
+    worker thread with the move, never on the event loop."""
+    import threading
+
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    media_root = tmp_path / "media"
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, _sent = _hub_with_recorder()
+    threads: set[int] = set()
+    monkeypatch.setattr(
+        "arm_backend.passthrough_executor.os.chown", lambda _p, _u, _g: threads.add(threading.get_ident())
+    )
+
+    ok = await execute_passthrough_task(
+        db,
+        db.rows["transcode_tasks"][0],
+        hub,
+        _settings(MEDIA_ROOT=str(media_root), ARM_TRANSCODE_PUID="1000", ARM_TRANSCODE_PGID="1000"),
+    )
+
+    assert ok is True
+    assert threads
+    assert threading.get_ident() not in threads
