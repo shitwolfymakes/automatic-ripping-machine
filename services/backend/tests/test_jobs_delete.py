@@ -667,3 +667,53 @@ def test_delete_job_files_refuses_a_folder_outside_media_root(tmp_path: Path) ->
     )
     assert counters["media_files_removed"] == 0
     assert outside.exists()
+
+
+@pytest.mark.parametrize("spelling", ["root", "dotdot"])
+def test_delete_job_files_never_removes_media_root_itself(tmp_path: Path, spelling: str) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    (media_root / "sub").mkdir(parents=True)
+    keep = media_root / "keep.mkv"
+    keep.write_bytes(b"k")
+    target = media_root if spelling == "root" else media_root / "sub" / ".."
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [target], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert keep.exists()
+
+
+def test_delete_job_files_skips_a_dangling_symlink(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    link = media_root / "gone.mkv"
+    link.symlink_to(tmp_path / "missing.mkv")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert link.is_symlink()
+
+
+def test_delete_job_files_unlinks_a_symlinked_file_but_keeps_its_target(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    target = tmp_path / "real.mkv"
+    target.write_bytes(b"r")
+    link = media_root / "link.mkv"
+    link.symlink_to(target)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not link.is_symlink()
+    assert target.exists()

@@ -616,14 +616,15 @@ def _delete_job_files(
     files_removed = 0
     parents_seen: set[Path] = set()
     for path in media_outputs:
-        if not path.exists() and not path.is_symlink():
+        if not path.exists():
             continue
         try:
             if path.is_dir() and not path.is_symlink():
                 # A disc backup's output is its title folder. Only ever the
                 # recorded path itself, and only inside media_root.
-                if not path.resolve().is_relative_to(media_root.resolve()):
-                    logger.warning("delete: refusing folder outside media_root path=%s", path)
+                resolved, root = path.resolve(), media_root.resolve()
+                if resolved == root or not resolved.is_relative_to(root):
+                    logger.warning("delete: refusing folder not strictly inside media_root path=%s", path)
                     continue
                 shutil.rmtree(path)
             elif path.is_symlink() and path.is_dir():
@@ -634,7 +635,7 @@ def _delete_job_files(
             files_removed += 1
             parents_seen.add(path.parent)
         except OSError as exc:
-            logger.warning("delete: media unlink failed path=%s err=%s", path, exc)
+            logger.warning("delete: media delete failed path=%s err=%s", path, exc)
 
     # Deepest-first so a leaf dir is checked for emptiness before its stem.
     dirs_pruned = 0
