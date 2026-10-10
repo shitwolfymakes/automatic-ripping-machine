@@ -66,7 +66,7 @@
 		submitting = true;
 		error = null;
 		try {
-			const metadata = isCd
+			const music = isCd
 				? {
 						artist: artist.trim(),
 						album: album.trim(),
@@ -76,7 +76,7 @@
 			const resp = await resolveJob(job.id, {
 				title: isCd ? album.trim() : title.trim(),
 				year: year ?? null,
-				metadata
+				music
 			});
 			onidentified(resp);
 		} catch (e) {

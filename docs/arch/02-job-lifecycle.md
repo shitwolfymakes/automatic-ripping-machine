@@ -130,7 +130,7 @@ Session Applications are the runtime record of "apply this session to this job";
                           └─────────┘        └─────────────┘      └─────────┘
 ```
 
-`waiting_identify` is the durable "this session application is parked until you tell us what the disc is" state. See [§ Unidentified and placeholder rips](#unidentified-and-placeholder-rips) for when it's used and the transitions around it.
+`waiting_identify` is the durable "this session application is parked until there is something to fan out" state: until the disc is identified, and until the rip has persisted its Track rows (the ripper writes them at rip-start, so a session applied or resolved before that has no tracks yet). Resolve and rip-complete both drain parked applications; whichever runs once tracks exist promotes them to `queued`. See [§ Unidentified and placeholder rips](#unidentified-and-placeholder-rips) for the transitions around it.
 
 ### Transcode task state machine
 
@@ -277,6 +277,7 @@ Transcode is gated on identity, not on rip completion. Specifically:
 - An auto-session queued via `drives.default_session_id` stays in `session_applications.status = waiting_identify` while the job is `awaiting_user_id`. No `transcode_tasks` rows exist yet — fan-out is deferred until identity resolves.
 - A manual session apply against an unidentified job returns the same `waiting_identify` state rather than failing; the UI surfaces this as "queued — waiting for you to identify this disc."
 - On identity resolution (`POST /api/jobs/{job_id}/resolve`), Backend transitions every `waiting_identify` session_application to `queued` and fans out `transcode_tasks` using the now-resolved title. Path templates expand against the resolved identity; output paths are correct from the first byte the transcoder writes.
+- If resolve runs before the rip has started (no Track rows yet — the ripper persists them at rip-start), the application stays `waiting_identify` with `skipped_reason = no_tracks`. `rip-complete` drains parked applications before the drive-default auto-apply hook runs, so an explicit pre-rip session choice is never lost.
 - If the user changes identity *again* after transcoding has already started (rare — requires them to re-open the resolve dialog post-identification), already-completed transcode outputs stay where they are. This is identical to the "user renamed the movie after transcoding" case, which v3 treats as out-of-scope manual cleanup. Queued and in-progress tasks are not re-pathed mid-flight.
 
 The raw-side cleanup rule from [§ `/raw` — intermediate storage](#raw--intermediate-storage) applies unchanged: `/raw/<job_id>/` is removed per retention policy once all its derived transcodes are terminal.

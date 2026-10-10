@@ -14,7 +14,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -64,10 +64,14 @@ def _build_track_ctx(
     metadata: dict[str, object] = job.metadata_json or {}
     track_index_padded = f"{track.index:02d}"
 
-    # Best-effort per-track music title: job.metadata_json["tracks"] is populated
-    # by the music identification flow (separate phase); we read it if present.
+    # Music naming reads the typed `music` section (§3.4); the bare
+    # top-level keys are the pre-0031 fallback.
+    raw_music = metadata.get("music")
+    music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
+
+    # Best-effort per-track music title from the music track list.
     track_title = ""
-    tracks_meta = metadata.get("tracks")
+    tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
     if isinstance(tracks_meta, list) and 0 <= track.index - 1 < len(tracks_meta):
         entry = tracks_meta[track.index - 1]
         if isinstance(entry, dict):
@@ -90,14 +94,23 @@ def _build_track_ctx(
         "title": sanitize_path_component(eff_title),
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
-        "season": sanitize_path_component(str(metadata.get("season") or "")),
-        "disc": sanitize_path_component(str(metadata.get("disc") or "")),
+        # G-14: the job columns (season, disc_number) are authoritative now.
+        # The metadata.get() fallbacks below are belt-and-braces for rows
+        # written before those columns existed / before the metadata-mirror
+        # scrub (migration 0032) — not an active lift path. Ints are
+        # zero-padded to match the S{NN}D{NN} convention (docs/arch/02 § TV).
+        "season": sanitize_path_component(
+            f"{job.season:02d}" if job.season is not None else str(metadata.get("season") or "")
+        ),
+        "disc": sanitize_path_component(
+            f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
+        ),
         "track": track_index_padded,
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
-        "artist": sanitize_path_component(str(metadata.get("artist") or "")),
-        "album": sanitize_path_component(str(metadata.get("album") or "")),
+        "artist": sanitize_path_component(str(music_meta.get("artist") or metadata.get("artist") or "")),
+        "album": sanitize_path_component(str(music_meta.get("album") or metadata.get("album") or "")),
         "track_title": sanitize_path_component(track_title),
         "transcode_slug": slugify(transcode_preset.name) if transcode_preset is not None else "",
         "ext": transcode_preset.container.value if transcode_preset is not None else "",

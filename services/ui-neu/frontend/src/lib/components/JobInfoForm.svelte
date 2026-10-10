@@ -55,8 +55,7 @@
 				title: title.trim(),
 				year: num(year),
 				disc_number: num(discNumber),
-				disc_total: num(discTotal),
-				metadata: {}
+				disc_total: num(discTotal)
 			});
 			touched = {};
 			feedback = { type: 'success', message: 'Saved' };

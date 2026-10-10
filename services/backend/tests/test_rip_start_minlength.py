@@ -3,7 +3,7 @@ threads it through `RipStartResponse.min_length_seconds`. The ripper
 falls back to its host-side `ARM_MIN_LENGTH_SECONDS` baseline when the
 field is None — so we explicitly test:
 
-  - No pending_session_id → None
+  - No routed session → None
   - pending_session_id with no overrides → None
   - pending_session_id with overrides_json["min_length_seconds"]=N → N
   - Bogus override (string, bool, negative) → None (defensive)
@@ -30,7 +30,7 @@ from arm_common import (  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
 
-def _make_job(metadata_json: dict | None = None) -> Job:
+def _make_job(pending_session_id: str | None = None) -> Job:
     return Job(
         id="job_01JZXR7K3M5Q8N4VWA00000001",
         drive_id="drv_x",
@@ -38,7 +38,8 @@ def _make_job(metadata_json: dict | None = None) -> Job:
         title=None,
         year=None,
         status=JobStatus.IDENTIFIED,
-        metadata_json=metadata_json or {},
+        metadata_json={},
+        pending_session_id=pending_session_id,
     )
 
 
@@ -58,7 +59,7 @@ def _make_session(overrides_json: dict | None) -> Session:
 @pytest.mark.asyncio
 async def test_no_pending_session_returns_none() -> None:
     db = FakeSession()
-    job = _make_job(metadata_json={})
+    job = _make_job()
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -67,7 +68,7 @@ async def test_no_pending_session_returns_none() -> None:
 async def test_pending_session_without_overrides_returns_none() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json=None)]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -76,7 +77,7 @@ async def test_pending_session_without_overrides_returns_none() -> None:
 async def test_session_overrides_min_length() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 1200})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result == 1200
 
@@ -85,7 +86,7 @@ async def test_session_overrides_min_length() -> None:
 async def test_session_overrides_with_unrelated_keys_only_returns_none() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"some_other_key": "x"})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -94,7 +95,7 @@ async def test_session_overrides_with_unrelated_keys_only_returns_none() -> None
 async def test_string_value_rejected() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": "600"})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -105,7 +106,7 @@ async def test_bool_value_rejected() -> None:
     `True` would resolve to `1`. Reject explicitly."""
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": True})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -114,7 +115,7 @@ async def test_bool_value_rejected() -> None:
 async def test_negative_value_rejected() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": -1})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
@@ -124,7 +125,7 @@ async def test_zero_is_valid() -> None:
     """0 means "no minlength filter" — pass through to makemkvcon as-is."""
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 0})]
-    job = _make_job(metadata_json={"pending_session_id": "ses_x"})
+    job = _make_job(pending_session_id="ses_x")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result == 0
 
@@ -136,6 +137,30 @@ async def test_missing_session_returns_none() -> None:
     fall back to the baseline."""
     db = FakeSession()
     db.rows["sessions"] = []
-    job = _make_job(metadata_json={"pending_session_id": "ses_gone"})
+    job = _make_job(pending_session_id="ses_gone")
     result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_drive_default_session_override_applies_without_flag() -> None:
+    """G-01: the override follows the ROUTED session, so an auto-rip whose
+    drive has a default session gets that session's min-length even with
+    auto_transcode_on_idle off."""
+    from arm_common import Config, Drive, DriveStatus
+
+    db = FakeSession()
+    db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 900})]
+    db.rows["drives"] = [
+        Drive(
+            id="drv_x",
+            hostname="h",
+            device_path="/dev/sr0",
+            status=DriveStatus.ONLINE,
+            default_session_id="ses_x",
+        )
+    ]
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False, auto_rip_on_insert=True, block_on_miss=True)]
+    job = _make_job()
+    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    assert result == 900
