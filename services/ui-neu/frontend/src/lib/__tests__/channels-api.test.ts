@@ -3,7 +3,8 @@ import * as client from '$lib/api/client';
 import {
 	fetchChannels, fetchChannel, createChannel, updateChannel,
 	deleteChannel, testSendChannel, fetchDispatches,
-	fetchServices, fetchEventTypes, composeUrl, testConfig
+	fetchServices, fetchEventTypes, composeUrl, testConfig,
+	fetchScripts, fetchScript, previewBash
 } from '$lib/api/channels';
 
 describe('channels api', () => {
@@ -87,5 +88,16 @@ describe('channels api', () => {
 		expect(spy).toHaveBeenCalledWith('/api/notifications/test', {
 			method: 'POST', body: JSON.stringify(body)
 		});
+	});
+
+	it('fetchScripts, fetchScript, previewBash hit the scripts endpoints', async () => {
+		const spy = vi.spyOn(client, 'apiFetch').mockResolvedValue({} as never);
+		await fetchScripts();
+		expect(spy).toHaveBeenCalledWith('/api/notifications/scripts');
+		await fetchScript('send-email.sh');
+		expect(spy).toHaveBeenCalledWith('/api/notifications/scripts/send-email.sh');
+		const body = { config: { type: 'bash', script: 'a.sh' }, event_type: 'rip.failed', run: true };
+		await previewBash(body as never);
+		expect(spy).toHaveBeenCalledWith('/api/notifications/scripts/preview', { method: 'POST', body: JSON.stringify(body) });
 	});
 });

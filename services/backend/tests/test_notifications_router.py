@@ -16,7 +16,7 @@ from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import notifications as notif_router  # noqa: E402
 from arm_backend.notifications import catalog as cat  # noqa: E402
-from arm_common import NotificationChannel, User  # noqa: E402
+from arm_common import NotificationChannel, NotificationDispatchLog, User  # noqa: E402
 from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -410,6 +410,17 @@ def test_test_adhoc_config_success(signing_key: bytes) -> None:
     assert notifier.calls[0][0] == ["discord://1/2"]
     # ad-hoc log row has channel_id None
     assert any(r.channel_id is None for r in db.rows.get("notification_dispatch_log", []))
+
+
+def test_test_adhoc_config_without_type_is_apprise(signing_key: bytes) -> None:
+    """Pre-bash clients POST a config with no discriminator; it still means apprise."""
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    app, token = _make_app(signing_key, db, notifier)
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/test", json={"config": {"url": "json://localhost/x"}}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True and notifier.calls[0][0] == ["json://localhost/x"]
 
 
 def test_test_adhoc_no_url_returns_ok_false(signing_key: bytes) -> None:
@@ -1029,3 +1040,393 @@ def test_patch_channel_redacted_url_echo_keeps_stored(signing_key: bytes) -> Non
         )
     assert r.status_code == 200, r.text
     assert ch.config["url"] == "json://host/secret"
+
+
+# --- bash hooks ---------------------------------------------------------------
+
+import stat  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from arm_backend.config import settings as app_settings  # noqa: E402
+
+HOOK = (
+    "#!/usr/bin/env bash\n"
+    "# arm-hook: Send an email\n"
+    '# arm-input: TO label="Recipient" required\n'
+    "# arm-input: SMTP_PASS secret\n"
+)
+
+
+def _bash_script(tmp_path: Path, name: str, body: str, executable: bool = True) -> Path:
+    p = tmp_path / name
+    p.write_text(HOOK + body)
+    if executable:
+        p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    return p
+
+
+@pytest.fixture
+def scripts_root(tmp_path: Path, monkeypatch) -> Path:
+    monkeypatch.setattr(app_settings, "ARM_SCRIPTS_ROOT", str(tmp_path))
+    return tmp_path
+
+
+def _bash_channel(**over) -> NotificationChannel:
+    cfg = {
+        "type": "bash",
+        "script": "ok.sh",
+        "timeout_seconds": 5,
+        "inputs": {"TO": "me@x", "SMTP_PASS": "pw"},
+        "secret_keys": ["SMTP_PASS"],
+    }
+    cfg.update(over.pop("config", {}))
+    kw = {
+        "id": "ncl_b",
+        "type": "bash",
+        "name": "b",
+        "enabled": True,
+        "config": cfg,
+        "subscribed_events": ["rip.failed"],
+        "templates": {},
+    }
+    kw.update(over)
+    return NotificationChannel(**kw)
+
+
+def test_scripts_list_and_detail(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    _bash_script(scripts_root, "b.sh", "exit 0\n", executable=False)
+    app, token = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        lst = client.get("/api/notifications/scripts", headers=_auth(token))
+        det = client.get("/api/notifications/scripts/ok.sh", headers=_auth(token))
+        missing = client.get("/api/notifications/scripts/nope.sh", headers=_auth(token))
+        bad = client.get("/api/notifications/scripts/..", headers=_auth(token))
+    assert lst.status_code == 200
+    assert lst.json() == [
+        {"name": "b.sh", "executable": False, "description": "Send an email"},
+        {"name": "ok.sh", "executable": True, "description": "Send an email"},
+    ]
+    assert det.status_code == 200
+    assert [i["key"] for i in det.json()["inputs"]] == ["TO", "SMTP_PASS"] and det.json()["preview"].startswith("#!")
+    assert missing.status_code == 404 and bad.status_code in (404, 422)
+
+
+def test_create_bash_channel_masks_secret_and_stamps_secret_keys(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "bash",
+        "name": "Mail",
+        "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a@b", "SMTP_PASS": "pw"}},
+        "subscribed_events": ["rip.completed"],
+        "templates": {"rip.completed": {"inputs": {"TO": "c@d"}}},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    cfg = r.json()["config"]
+    assert (
+        cfg["inputs"] == {"TO": "a@b", "SMTP_PASS": "<hidden>"}
+        and cfg["secret_keys"] == ["SMTP_PASS"]
+        and cfg["timeout_seconds"] == 30
+    )
+    assert r.json()["templates"]["rip.completed"]["inputs"] == {"TO": "c@d"}
+    stored = [o for o in db.added if isinstance(o, NotificationChannel)][0]
+    assert stored.config["inputs"]["SMTP_PASS"] == "pw"
+
+
+def test_create_bash_channel_rejects_path_and_secret_event_override(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    app, token = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        bad_path = client.post(
+            "/api/notifications/channels",
+            json={
+                "type": "bash",
+                "name": "x",
+                "config": {"type": "bash", "script": "../x.sh"},
+                "subscribed_events": [],
+            },
+            headers=_auth(token),
+        )
+        bad_secret = client.post(
+            "/api/notifications/channels",
+            json={
+                "type": "bash",
+                "name": "x",
+                "config": {"type": "bash", "script": "ok.sh"},
+                "subscribed_events": ["rip.failed"],
+                "templates": {"rip.failed": {"inputs": {"SMTP_PASS": "x"}}},
+            },
+            headers=_auth(token),
+        )
+    assert bad_path.status_code == 422 and "file name" in bad_path.json()["detail"]
+    assert bad_secret.status_code == 422 and "SMTP_PASS" in bad_secret.json()["detail"]
+
+
+def test_patch_bash_channel_keeps_hidden_secret(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    ch = _bash_channel()
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={
+                "config": {
+                    "type": "bash",
+                    "script": "ok.sh",
+                    "timeout_seconds": 10,
+                    "inputs": {"TO": "new@x", "SMTP_PASS": "<hidden>"},
+                }
+            },
+            headers=_auth(token),
+        )
+        assert r.status_code == 200, r.text
+        assert ch.config["inputs"] == {"TO": "new@x", "SMTP_PASS": "pw"} and ch.config["timeout_seconds"] == 10
+        assert r.json()["config"]["inputs"]["SMTP_PASS"] == "<hidden>"
+        wrong_type = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={"config": {"type": "apprise", "url": "json://x"}},
+            headers=_auth(token),
+        )
+        assert wrong_type.status_code == 422
+        bad_secret = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={"templates": {"rip.failed": {"inputs": {"SMTP_PASS": "x"}}}},
+            headers=_auth(token),
+        )
+        assert bad_secret.status_code == 422
+
+
+def test_patch_bash_channel_rejects_hook_error(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    ch = _bash_channel()
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={"config": {"type": "bash", "script": "../x.sh"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422 and "file name" in r.json()["detail"]
+
+
+def test_test_saved_bash_channel(signing_key: bytes, scripts_root: Path) -> None:
+    out = scripts_root / "out.txt"
+    _bash_script(scripts_root, "ok.sh", f'printf "%s|%s|%s" "$ARM_EVENT_TYPE" "$1" "$TO" > "{out}"\n')
+    ch = _bash_channel(templates={"rip.failed": {"title": "custom {job_title}", "inputs": {"TO": "oncall@x"}}})
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_b/test", json={}, headers=_auth(token))
+    assert r.status_code == 200 and r.json() == {"ok": True, "error": None}
+    assert out.read_text().startswith("rip.failed|custom ") and out.read_text().endswith("|oncall@x")
+    assert ch.last_success_at is not None
+    assert [o for o in db.added if isinstance(o, NotificationDispatchLog)][0].success
+
+
+def test_test_saved_bash_channel_failure_and_hook_error(signing_key: bytes, scripts_root: Path) -> None:
+    db = FakeSession()
+    db.rows["notification_channels"] = [
+        _bash_channel(config={"script": "missing.sh"}),
+        _bash_channel(id="ncl_c", config={"script": "../x.sh"}),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels/ncl_b/test", json={}, headers=_auth(token))
+        h = client.post("/api/notifications/channels/ncl_c/test", json={}, headers=_auth(token))
+    assert r.status_code == 200 and r.json()["ok"] is False and r.json()["error"] == "script not found: missing.sh"
+    assert h.status_code == 200 and h.json()["ok"] is False and "file name" in h.json()["error"]
+
+
+def test_test_unsaved_bash_config(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    app, token = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        ok = client.post(
+            "/api/notifications/test",
+            json={"config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a"}}},
+            headers=_auth(token),
+        )
+        missing_input = client.post(
+            "/api/notifications/test", json={"config": {"type": "bash", "script": "ok.sh"}}, headers=_auth(token)
+        )
+    assert ok.status_code == 200 and ok.json()["ok"] is True
+    assert missing_input.status_code == 200 and missing_input.json() == {"ok": False, "error": "input TO is required"}
+
+
+def test_preview_resolves_and_masks(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "ok.sh", "echo hi; exit 0\n")
+    app, token = _make_app(signing_key, FakeSession())
+    body = {
+        "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a@b", "SMTP_PASS": "pw"}},
+        "event_type": "rip.failed",
+        "template": {"title": "custom {job_title}", "inputs": {"TO": "c@d"}},
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/scripts/preview", json=body, headers=_auth(token))
+        run = client.post("/api/notifications/scripts/preview", json={**body, "run": True}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["title"].startswith("custom ") and j["argv"][:2] == ["/usr/bin/env", "bash"] and j["argv"][3] == j["title"]
+    assert (
+        j["inputs"] == {"TO": "c@d", "SMTP_PASS": "<hidden>"}
+        and j["env"]["SMTP_PASS"] == "<hidden>"
+        and j["env"]["ARM_EVENT_TYPE"] == "rip.failed"
+    )
+    assert j["result"] is None and j["error"] is None
+    assert run.json()["result"]["ok"] is True and run.json()["result"]["stdout"].strip() == "hi"
+
+
+def test_preview_fills_hidden_secret_from_channel_and_reports_hook_error(
+    signing_key: bytes, scripts_root: Path
+) -> None:
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel()]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"}},
+                "event_type": "rip.failed",
+                "channel_id": "ncl_b",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+        err = client.post(
+            "/api/notifications/scripts/preview",
+            json={"config": {"type": "bash", "script": "ok.sh", "inputs": {}}, "event_type": "rip.failed"},
+            headers=_auth(token),
+        )
+        unknown = client.post(
+            "/api/notifications/scripts/preview",
+            json={"config": {"type": "bash", "script": "ok.sh"}, "event_type": "rip.failed", "channel_id": "ncl_zzz"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200 and r.json()["inputs"]["SMTP_PASS"] == "<hidden>" and r.json()["result"]["ok"]
+    assert err.status_code == 200 and err.json()["error"] == "input TO is required" and err.json()["argv"] == []
+    assert unknown.status_code == 404
+
+
+def test_preview_and_scripts_require_roles(signing_key: bytes, scripts_root: Path) -> None:
+    _bash_script(scripts_root, "a.sh", "exit 0\n")
+    app, _ = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        # Script source is writer-only: a guest may not list or read it.
+        assert client.get("/api/notifications/scripts").status_code == 403
+        assert client.get("/api/notifications/scripts/a.sh").status_code == 403
+        assert (
+            client.post(
+                "/api/notifications/scripts/preview",
+                json={"config": {"type": "bash", "script": "a.sh"}, "event_type": "rip.failed"},
+            ).status_code
+            == 403
+        )
+
+
+def test_preview_ignores_client_supplied_secret_keys(signing_key: bytes, scripts_root: Path) -> None:
+    """secret_keys is server-owned: a preview can neither name nor swap its way to a stored secret."""
+    _bash_script(scripts_root, "ok.sh", 'echo "$SMTP_PASS"\n')
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel()]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        swapped = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "gone.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+            },
+            headers=_auth(token),
+        )
+        stored = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "ok.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+            },
+            headers=_auth(token),
+        )
+        ran = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {
+                    "type": "bash",
+                    "script": "ok.sh",
+                    "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                },
+                "event_type": "rip.failed",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+    assert swapped.status_code == 422 and "stored script" in swapped.json()["detail"]
+    assert stored.status_code == 200, stored.text
+    assert stored.json()["inputs"]["SMTP_PASS"] == "<hidden>" and stored.json()["env"]["SMTP_PASS"] == "<hidden>"
+    # The operator's own script may print its own secret; only inputs/env are masked.
+    assert ran.json()["result"]["stdout"].strip() == "pw"
+    assert ran.json()["inputs"]["SMTP_PASS"] == "<hidden>" and ran.json()["env"]["SMTP_PASS"] == "<hidden>"
+
+
+def test_apprise_test_error_is_generic_bash_error_is_detailed(signing_key: bytes, scripts_root: Path) -> None:
+    db = FakeSession()
+    notifier = _FakeNotifier()
+    notifier.raise_on_notify = True
+    db.rows["notification_channels"] = [
+        NotificationChannel(
+            id="ncl_1", type="apprise", name="D", config={"type": "apprise", "url": "json://localhost/x"}
+        ),
+        _bash_channel(config={"script": "missing.sh"}),
+    ]
+    app, token = _make_app(signing_key, db, notifier)
+    with TestClient(app) as client:
+        apprise = client.post("/api/notifications/channels/ncl_1/test", json={}, headers=_auth(token))
+        bash = client.post("/api/notifications/channels/ncl_b/test", json={}, headers=_auth(token))
+    assert apprise.json() == {"ok": False, "error": "test send failed"}
+    assert bash.json() == {"ok": False, "error": "script not found: missing.sh"}
+
+
+def test_patch_bash_validates_event_inputs_against_the_new_script(signing_key: bytes, scripts_root: Path) -> None:
+    """A PATCH that swaps the script re-stamps secret_keys before the template check."""
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    new_script = scripts_root / "new.sh"
+    new_script.write_text("#!/usr/bin/env bash\n# arm-input: NEWSEC secret\nexit 0\n")
+    new_script.chmod(new_script.stat().st_mode | stat.S_IXUSR)
+    ch = _bash_channel()
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={
+                "config": {"type": "bash", "script": "new.sh", "inputs": {}},
+                "templates": {"rip.failed": {"inputs": {"NEWSEC": "leak"}}},
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 422 and "NEWSEC" in r.json()["detail"]

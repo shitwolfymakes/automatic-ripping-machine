@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # owning drive's ripper was offline).
     RAW_ROOT: str = "/raw"
 
+    # Bash hook scripts. Bind-mounted read-only from ./arm/scripts; a bash
+    # channel stores a file name inside this directory, never a path.
+    ARM_SCRIPTS_ROOT: str = "/scripts"
+
     # Sandbox root for ISO-import scanning (kept for the diagnostics path
     # check; the iso-scan endpoint itself was dropped upstream in favor of
     # the ephemeral-worker design).
