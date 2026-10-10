@@ -41,6 +41,25 @@ class DriveMode(StrEnum):
     MANUAL = "manual"  # ripper waits for an explicit manual.trigger
 
 
+class DriveLifecycle(StrEnum):
+    """Operator-owned state of a physical optical drive the backend has seen.
+    Presence (plugged in right now) is a separate, orthogonal fact."""
+
+    DETECTED = "detected"  # seen by the scanner, no decision yet
+    IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
+    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+
+
+class DriveIdentityKind(StrEnum):
+    """What a Drive row's identity is keyed on. BY_ID is the udev
+    /dev/disk/by-id link name (stable across replug and renumbering); PORT
+    is the sysfs device path — the degraded fallback for drives that expose
+    no serial, and the UI says so."""
+
+    BY_ID = "by_id"
+    PORT = "port"
+
+
 class JobStatus(StrEnum):
     CREATED = "created"
     AWAITING_USER_ID = "awaiting_user_id"
