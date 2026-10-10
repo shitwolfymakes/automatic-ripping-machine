@@ -164,6 +164,27 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # See docs/superpowers/specs/2026-06-18-settings-audit-design.md §1.1.
     # --- Transcoding ---
     ConfigFieldMeta(
+        key="transcode_enabled",
+        group="Transcoding",
+        tier="operator",
+        label="Enable transcoding",
+        help="Master switch for encode work. Off: no new encode tasks are created or "
+        "spawned; queued ones are held and resume when re-enabled. Passthrough "
+        "sessions (plain file moves into the library) keep working either way.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="transcode_capable",
+        group="Transcoding",
+        tier="infra",
+        label="Transcode capable",
+        help="Whether this deployment can run transcode containers at all "
+        "(set at install time; a ripper-only install is not capable).",
+        type="bool",
+        editable=False,
+    ),
+    ConfigFieldMeta(
         key="auto_transcode_on_idle",
         group="Transcoding",
         tier="operator",

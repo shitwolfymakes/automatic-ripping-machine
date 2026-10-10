@@ -14,9 +14,11 @@ import pytest  # noqa: E402
 from arm_backend.auto_session import (  # noqa: E402
     SessionNotFoundError,
     apply_session_internal,
+    fan_out_waiting_identify_applications,
     media_mismatch_detail,
 )
 from arm_common import (  # noqa: E402
+    Config,
     ContainerFormat,
     DiscType,
     HwPreference,
@@ -440,3 +442,96 @@ async def test_awaiting_user_id_parks_as_waiting_identify(tmp_path: Path) -> Non
     # No transcode tasks fanned out → no session.queued emit (the dropdown
     # value sits idle until the user resolves identity).
     assert hub.events == []
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_of_encode_drive_default_skips_and_creates_nothing_when_disabled(tmp_path: Path) -> None:
+    """`maybe_auto_apply_session` (rip-complete's drive-default auto-apply)
+    runs this exact engine with `source="auto"`; with the runtime toggle
+    off, an encode-preset session's auto-apply must skip with
+    `skipped_reason="transcode_disabled"` (which the caller logs at WARN)
+    and persist nothing — no application, no task, no WS event."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["config"] = [Config(id=1, transcode_enabled=False)]
+    hub = CapturingHub()
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="auto",
+        hub=hub,  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason == "transcode_disabled"
+    assert outcome.application is None
+    assert outcome.tasks == []
+    assert db.rows["session_applications"] == []
+    assert db.rows["transcode_tasks"] == []
+    assert hub.events == []
+
+
+@pytest.mark.asyncio
+async def test_fan_out_parks_encode_application_but_promotes_passthrough_when_disabled(tmp_path: Path) -> None:
+    """`fan_out_waiting_identify_applications` (resolve's promotion pass):
+    with the toggle off, a parked encode-preset application stays in
+    WAITING_IDENTIFY with `skipped_reason="transcode_disabled"`, while a
+    parked passthrough application on the same job promotes to QUEUED."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_pass",
+            name="Passthrough",
+            media_type=MediaType.MOVIE,
+            is_builtin=True,
+            tool=TranscodeTool.NONE,
+            container=ContainerFormat.MKV,
+            hw_preference=HwPreference.CPU_ONLY,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_pass",
+            name="Passthrough",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_pass",
+            output_path_template="{title} ({year})/{title} - {transcode_slug}.{ext}",
+        )
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_encode",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        ),
+        SessionApplication(
+            id="sap_pass",
+            session_id="ses_pass",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        ),
+    ]
+    db.rows["config"] = [Config(id=1, transcode_enabled=False)]
+    hub = CapturingHub()
+
+    outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)  # type: ignore[arg-type]
+
+    by_id = {o.application.id: o for o in outcomes}
+    assert by_id["sap_encode"].skipped_reason == "transcode_disabled"
+    assert by_id["sap_encode"].application.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert by_id["sap_encode"].tasks == []
+
+    assert by_id["sap_pass"].skipped_reason is None
+    assert by_id["sap_pass"].application.status == SessionApplicationStatus.QUEUED
+    assert len(by_id["sap_pass"].tasks) == 1

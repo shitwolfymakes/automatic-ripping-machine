@@ -46,7 +46,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			keys: ['community_keydb_enabled', 'makemkv_sdf_enabled']
 		}
 	],
-	Transcoding: [{ title: 'Scheduling', keys: ['auto_transcode_on_idle'] }]
+	Transcoding: [{ title: 'Scheduling', keys: ['transcode_enabled', 'auto_transcode_on_idle'] }]
 };
 
 /** Maps the four API-key field keys (from the "API keys" section above) to

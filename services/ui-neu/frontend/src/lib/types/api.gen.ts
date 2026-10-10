@@ -571,6 +571,10 @@ export type ConfigUpdateRequest = {
      */
     max_parallel_transcodes?: number | null;
     /**
+     * Transcode Enabled
+     */
+    transcode_enabled?: boolean | null;
+    /**
      * Makemkv Sdf Enabled
      */
     makemkv_sdf_enabled?: boolean | null;
@@ -658,6 +662,14 @@ export type ConfigView = {
      * Max Parallel Transcodes
      */
     max_parallel_transcodes: number;
+    /**
+     * Transcode Enabled
+     */
+    transcode_enabled: boolean;
+    /**
+     * Transcode Capable
+     */
+    transcode_capable: boolean;
     /**
      * Makemkv Sdf Enabled
      */
@@ -2888,7 +2900,7 @@ export type ResolveFanOutOutcomeView = {
     /**
      * Skipped Reason
      */
-    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | null;
+    skipped_reason?: 'collisions' | 'template' | 'session_missing' | 'no_tracks' | 'no_outputs' | 'media_mismatch' | 'transcode_disabled' | null;
     /**
      * Error Detail
      */

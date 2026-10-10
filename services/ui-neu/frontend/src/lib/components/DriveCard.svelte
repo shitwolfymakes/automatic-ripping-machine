@@ -1,6 +1,8 @@
 <script lang="ts">
-	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
+	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 	import { updateDrive, unenrollDrive } from '$lib/api/drives';
+	import { transcoderEnabled } from '$lib/stores/config';
+	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
 	import { triggerManual } from '$lib/api/jobs';
 	import { driveStatusLabel, isRipping, DETACHED_LABEL } from '$lib/utils/drives';
 	import StatusBadge from './StatusBadge.svelte';
@@ -13,6 +15,9 @@
 		drive?: Drive;
 		onupdate?: () => void | Promise<void>;
 		sessions?: SessionView[];
+		// Transcode presets, used only to tell passthrough sessions apart
+		// from encode ones on a ripper-only deployment (see pickerSessions).
+		transcodePresets?: TranscodePresetView[];
 		globalDefaults?: {
 			prescan_cache_mb?: number;
 			prescan_timeout?: number;
@@ -21,7 +26,21 @@
 		};
 	}
 
-	let { drive, onupdate, globalDefaults = {}, sessions = [] }: Props = $props();
+	let { drive, onupdate, globalDefaults = {}, sessions = [], transcodePresets = [] }: Props = $props();
+
+	// A ripper-only deployment (not transcode-capable) can never run an encode
+	// session, so both session pickers offer only passthrough ones. An
+	// encode session already saved as the default for this drive stays listed in
+	// the default picker so the select still shows the real value.
+	const passthroughSessions = $derived(
+		sessions.filter((s) => isPassthroughSession(s, presetToolMap(transcodePresets)))
+	);
+	const pickerSessions = $derived($transcoderEnabled ? sessions : passthroughSessions);
+	const defaultPickerSessions = $derived.by(() => {
+		if ($transcoderEnabled) return sessions;
+		const current = sessions.find((s) => s.id === drive?.default_session_id);
+		return current && !passthroughSessions.includes(current) ? [...passthroughSessions, current] : passthroughSessions;
+	});
 
 	let editing = $state(false);
 	let editName = $state('');
@@ -372,7 +391,7 @@
 			class="min-w-0 flex-1 drive-card-session-select"
 		>
 			<option value="">- none -</option>
-			{#each sessions as s (s.id)}
+			{#each pickerSessions as s (s.id)}
 				<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
 			{/each}
 		</select>
@@ -437,7 +456,7 @@
 					disabled={savingDefaultSession}
 				>
 					<option value="">- none -</option>
-					{#each sessions as s (s.id)}
+					{#each defaultPickerSessions as s (s.id)}
 						<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
 					{/each}
 				</select>

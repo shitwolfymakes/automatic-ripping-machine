@@ -6,7 +6,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fetchSettings, saveArmConfig } from '$lib/api/settings';
 	import type { SettingsData } from '$lib/api/settings';
-	import type { DriveView as Drive, DriveDiagnosticResponse, SessionView, SettingsGroup } from '$lib/types/api.gen';
+	import type { DriveView as Drive, DriveDiagnosticResponse, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { theme, toggleTheme } from '$lib/stores/theme';
@@ -17,6 +17,7 @@
 	import { partitionDrives } from '$lib/utils/drives';
 	import { formatDateTime } from '$lib/utils/format';
 	import { fetchSessions } from '$lib/api/sessions';
+	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
@@ -24,7 +25,7 @@
 	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
-	import { transcoderEnabled } from '$lib/stores/config';
+	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
@@ -51,10 +52,13 @@
 	const configGroups = $derived(
 		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
 	);
-	// Full visible-tab list: config groups first, then screen-tabs (drop 'transcoding' when transcoder disabled).
+	// Full visible-tab list: config groups first, then screen-tabs. The
+	// Transcoding tab always shows (even on a ripper-only, not-capable
+	// deployment) so the locked toggle + hint below is reachable; see the
+	// 'transcoding' tab body for the capable-vs-not split.
 	const visibleTabs = $derived([
 		...configGroups.map((g) => g.name),
-		...screenTabs.filter((t) => t !== 'transcoding' || $transcoderEnabled),
+		...screenTabs,
 	]);
 
 	// Schema groups by name, for the template tab bodies.
@@ -125,14 +129,20 @@
 	let parts = $derived(partitionDrives($drives));
 
 	let driveSessions = $state<SessionView[]>([]);
+	// Only consulted on a ripper-only deployment, where DriveCard's session
+	// pickers drop encode sessions (it needs each preset's tool to tell).
+	let driveTranscodePresets = $state<TranscodePresetView[]>([]);
 
 	async function loadDriveSessions() {
 		if (driveSessions.length > 0) return;
-		try {
-			driveSessions = await fetchSessions();
-		} catch {
-			// non-fatal: the Start-rip session picker just stays empty
-		}
+		// Fetched together so the passthrough filter never sees sessions
+		// without their presets. A preset-fetch failure is independent and
+		// non-fatal: preset-backed sessions just stay hidden on a ripper-only
+		// box (never mis-offered as passthrough).
+		const [sessionsResult, presetsResult] = await Promise.allSettled([fetchSessions(), fetchTranscodePresets()]);
+		if (presetsResult.status === 'fulfilled') driveTranscodePresets = presetsResult.value;
+		// non-fatal on rejection: the Start-rip session picker just stays empty
+		if (sessionsResult.status === 'fulfilled') driveSessions = sessionsResult.value;
 	}
 
 	// --- Drive diagnostics ---
@@ -273,6 +283,20 @@
 		}
 	}
 
+	// Keep the app-wide runtime toggle in step with a Settings save so an SPA
+	// navigation to /transcoder (banner) or an apply dialog (passthrough-only
+	// filter) reflects the new value without a reload. The saved values are
+	// also folded back into `settings.config`: SchemaConfigForm only sends
+	// fields that differ from its `config` prop, so without this a
+	// disable-then-re-enable in one visit would diff against the stale
+	// original value and never send the re-enable.
+	function onTranscodingSaved(payload: Record<string, unknown>) {
+		if (settings) settings = { ...settings, config: { ...settings.config, ...payload } };
+		if ('transcode_enabled' in payload) {
+			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
+		}
+	}
+
 	function clearFeedback(setter: (v: null) => void) {
 		setTimeout(() => setter(null), 4000);
 	}
@@ -331,12 +355,29 @@
 			<SchemaConfigForm group={rippingGroup} config={settings.config} />
 		{/if}
 
-		<!-- Transcoding Tab (single auto_transcode_on_idle toggle, schema-driven) -->
-		{#if activeTab === 'transcoding' && $transcoderEnabled && transcodingGroup}
-			<div class="space-y-6">
-				<SchemaConfigForm group={transcodingGroup} config={settings.config} />
-				<GpusCard />
-			</div>
+		<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
+			 GPU inventory) when this deployment can run transcode containers.
+			 On a ripper-only deployment (not capable), only the disabled
+			 transcode_enabled toggle + a hint shows - GpusCard and the
+			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
+			 stay hidden. -->
+		{#if activeTab === 'transcoding'}
+			{#if $transcoderEnabled && transcodingGroup}
+				<div class="space-y-6">
+					<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved} />
+					<GpusCard />
+				</div>
+			{:else}
+				<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
+					<label class="field field-row settings-page-notif-toggle-row">
+						<!-- Always rendered off: on a ripper-only box the backend column
+							 still defaults to true, but it has no effect without capability. -->
+						<Toggle checked={false} label="Enable transcoding" disabled />
+						<span class="field-label">Enable transcoding</span>
+					</label>
+					<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
+				</div>
+			{/if}
 		{/if}
 
 		{#if activeTab === 'sessions'}
@@ -568,7 +609,7 @@
 					{#if parts.enrolled.length > 0}
 						<div class="grid-2 settings-page-drive-grid">
 							{#each parts.enrolled as drive (drive.id)}
-								<DriveCard {drive} sessions={driveSessions} onupdate={() => drives.refresh()} globalDefaults={{
+								<DriveCard {drive} sessions={driveSessions} transcodePresets={driveTranscodePresets} onupdate={() => drives.refresh()} globalDefaults={{
 									prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
 									prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
 									prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,

@@ -65,6 +65,41 @@ async def test_seed_config_backfills_missing_signing_key() -> None:
     assert len(db.rows["config"][0].session_signing_key) == 32
 
 
+async def test_seed_backfills_transcode_enabled() -> None:
+    # Row exists with transcode_enabled=None (pre-0037 install).
+    db = FakeSession()
+    db.rows["config"] = [
+        Config(
+            id=1,
+            auto_transcode_on_idle=False,
+            auto_rip_on_insert=True,
+            block_on_miss=True,
+            default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+            session_signing_key=b"x" * 32,
+            transcode_enabled=None,
+        )
+    ]
+    await _seed_config_singleton(db)
+    assert db.rows["config"][0].transcode_enabled is True
+
+
+async def test_seed_preserves_operator_false() -> None:
+    db = FakeSession()
+    db.rows["config"] = [
+        Config(
+            id=1,
+            auto_transcode_on_idle=False,
+            auto_rip_on_insert=True,
+            block_on_miss=True,
+            default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+            session_signing_key=b"x" * 32,
+            transcode_enabled=False,
+        )
+    ]
+    await _seed_config_singleton(db)
+    assert db.rows["config"][0].transcode_enabled is False
+
+
 async def test_run_seeders_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
     db = FakeSession()
