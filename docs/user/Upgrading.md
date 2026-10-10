@@ -49,10 +49,16 @@ If an upgrade stops part way (a power cut, for example), what to run depends
 on where it stopped:
 
 - During the switch, after `current` points at the new release but before
-  `.env` is replaced: run `armctl upgrade` again. It notices and finishes the
-  upgrade. `armctl up` refuses to start in that state and says so.
+  `.env` is replaced: run the same command again, with the same `--version`
+  if you gave one (`armctl upgrade --version <tag>`). It notices and finishes
+  the upgrade. A plain `armctl upgrade` would aim at the latest stable
+  release, which may not be the one you were moving to. `armctl up` refuses
+  to start in this state and prints the command to run.
 - After the switch, while the stack was starting: run `armctl up`. The install
-  is already on the new release; `armctl upgrade` reports it as up to date.
+  is already on the new release. `armctl upgrade` does not start it: it prints
+  "already on <tag>; nothing to upgrade" when that is the latest stable
+  release, refuses to move to the latest stable when the installed release is
+  a newer pre-release, and upgrades again when a newer stable release exists.
 
 With no `--version`, `armctl upgrade` never moves to an older release than the
 one installed (for example from a pre-release to an older stable one). Name the

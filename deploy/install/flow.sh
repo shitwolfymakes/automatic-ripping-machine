@@ -100,11 +100,12 @@ refuse_second_stack() {
     fi
     names="$(grep '^armv3-' <<<"${names}" || true)"
     if [[ -n "${names}" ]]; then
-        failline "containers of another armv3 stack are on this host: $(tr '\n' ' ' <<<"${names}")"
+        failline "containers of another armv3 stack exist on this host (running or stopped): $(tr '\n' ' ' <<<"${names}")"
         log "ARM uses the fixed project name armv3, so this install would take them over."
-        log "Stop that stack first (the dev stack: bash devtools/setup-dev.sh down; another install: its armctl down),"
-        log "then run the installer again."
-        err "a stack with the project name armv3 already runs on this host (the dev stack, or another install). Nothing was changed."
+        log "Stop that stack first (the dev stack: bash devtools/setup-dev.sh down; another install: its armctl down)."
+        log "If that install's folder is gone, remove the listed containers with: docker rm -f <name> ..."
+        log "Then run the installer again."
+        err "a stack with the project name armv3 exists on this host, running or stopped (the dev stack, or another install). Nothing was changed."
     fi
 }
 

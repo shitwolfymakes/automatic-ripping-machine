@@ -204,7 +204,7 @@ out="$(up_half up-half v3.2.0)"
 has "up: a half-switched install is refused" "rc=1" "$out"
 lacks "up: a half-switched install starts nothing" "STARTED" "$out"
 has "up: the refusal names the release in .env and the linked one" "names v3.1.0, but ${TMPROOT}/up-half/arm/.armctl/current points at v3.2.0" "$out"
-has "up: the refusal names armctl upgrade as the repair" "Run '${TMPROOT}/up-half/arm/armctl upgrade'" "$out"
+has "up: the refusal names armctl upgrade --version <linked> as the repair" "Run '${TMPROOT}/up-half/arm/armctl upgrade --version v3.2.0'" "$out"
 out="$(up_half up-agree v3.1.0)"
 has "up: .env and current agreeing starts the stack" "STARTED" "$out"
 
@@ -638,7 +638,8 @@ second_stack() {  # second_stack <names docker ps -a prints> [docker rc]
 out="$(second_stack $'armv3-db\narmv3-backend\nsomething-else')"
 has "second stack: a fresh install stops" "rc=1" "$out"
 lacks "second stack: nothing after the check runs" "CONTINUED" "$out"
-has "second stack: the message names the fixed project name" "a stack with the project name armv3 already runs on this host" "$out"
+has "second stack: the message names the fixed project name" "a stack with the project name armv3 exists on this host, running or stopped" "$out"
+has "second stack: docker rm is offered when the other install is gone" "docker rm -f" "$out"
 has "second stack: the containers are listed" "armv3-db armv3-backend" "$out"
 out="$(second_stack $'other-app\nmy-armv3-thing')"
 has "second stack: other containers are fine" "CONTINUED" "$out"
@@ -935,11 +936,12 @@ out="$(UPG_ENV_TAG=v3.2.0 upgrade_case upg-half-env v3.2.0 ok)"
 lacks "upgrade: .env and current disagreeing is not 'already on'" "already on" "$out"
 has "upgrade: .env ahead of current fetches the missing bundle" "fetch v3.2.0 []" "$out"
 has "upgrade: .env ahead of current runs apply from the linked release" "apply-upgrade --from v3.1.0 --to v3.2.0" "$out"
+lacks "upgrade: .env ahead of current is not called a revert" "reverting" "$out"
 
 # A half switch where the resolved target is .env's own release: the run goes
 # back, and says it is reverting, not finishing.
 out="$(UPG_LINK=v3.2.0 UPG_HAVE=v3.2.0 upgrade_case upg-revert v3.1.0 ok)"
-has "upgrade: a half switch back to .env's release says it reverts" "reverting the unfinished upgrade to v3.2.0: going back to v3.1.0" "$out"
+has "upgrade: a half switch back to .env's release says current goes back to it" "pointing current back at v3.1.0, the release ${TMPROOT}/upg-revert/arm/.armctl/.env names" "$out"
 lacks "upgrade: a revert does not claim to finish the upgrade" "again to finish it" "$out"
 has "upgrade: a revert runs apply from the linked release" "apply-upgrade --from v3.2.0 --to v3.1.0" "$out"
 # An explicit --bundle is not silently ignored when the target is unpacked.
@@ -1057,6 +1059,14 @@ has "apply, heal: a failed .env replace stops the upgrade" "rc=1;" "$out"
 has "apply, heal: current stays on the new release" "TAG=v3.1.0;RIPPER=reg/arm-ripper:v3.1.0;CURRENT=releases/v3.2.0;" "$out"
 has "apply, heal: the message describes the real state" "still names v3.1.0, while ${TMPROOT}/apply-heal-envfail/arm/.armctl/current points at v3.2.0" "$out"
 lacks "apply, heal: it does not claim the install is on the old release" "the install is still on v3.1.0" "$out"
+
+# The same failure in a run that was pointing `current` back at .env's release
+# (.env names another release than --from): it stays half-switched, and says so.
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+out="$(apply_case apply-revert-envfail '' 'sed -i "s/^ARM_IMAGE_TAG=.*/ARM_IMAGE_TAG=v3.0.5/" "${ENV_FILE}"; mv() { if [[ "$1" == *.env.next ]]; then return 1; fi; command mv "$@"; }')"
+has "apply, revert: a failed .env replace stops the upgrade" "rc=1;" "$out"
+has "apply, revert: the message says the install is still half-switched" "the install is still half-switched: ${TMPROOT}/apply-revert-envfail/arm/.armctl/.env names v3.0.5, ${TMPROOT}/apply-revert-envfail/arm/.armctl/current names v3.1.0" "$out"
+lacks "apply, revert: it does not claim the install is on --from" "the install is still on v3.1.0" "$out"
 
 # A failed start after the switch is reported like an unhealthy backend.
 # The real go_live, with only `compose up` failing: it must stop right there.

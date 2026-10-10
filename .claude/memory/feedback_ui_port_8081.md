@@ -22,6 +22,5 @@ truth: it produces the real, TLS-secured deployment users run, and it publishes
 `arm-ui` (ui-neu) on `8081:443`.
 
 **How to apply:** Reconcile *to* what `armctl install` generates, not away from
-it. When a message or doc says "open the
-UI", it means ui-neu on 8081. Any 8082 left in the tree is an arbitrary example
+it. When a message or doc says "open the UI", it means ui-neu on 8081. Any 8082 left in the tree is an arbitrary example
 (e.g. test origins in `test_ws_origin.py`), not a UI port.

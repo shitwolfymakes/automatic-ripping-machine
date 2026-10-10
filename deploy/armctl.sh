@@ -251,14 +251,15 @@ linked_release() {
 
 # An upgrade that stopped between repointing `current` and replacing .env
 # leaves the new release's compose files with the old release's image pins.
-# Starting that mix is wrong; `armctl upgrade` is what finishes the switch.
+# Starting that mix is wrong; `armctl upgrade --version <linked>` finishes the
+# switch. A plain `armctl upgrade` could resolve another release and revert.
 refuse_half_switch() {
     local tag linked
     tag="$(env_file_value ARM_IMAGE_TAG)"
     linked="$(linked_release)"
     if [[ -n "${tag}" && -n "${linked}" && "${tag}" != "${linked}" ]]; then
         arm_err "an upgrade stopped part way: ${ENV_FILE} names ${tag}, but ${ARM_STATE_DIR}/current points at ${linked}."
-        arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade' to repair the install, then '${ARMCTL_CMD} up' if it is not running."
+        arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade --version ${linked}' to finish the switch, then '${ARMCTL_CMD} up' if it is not running."
         exit 1
     fi
 }
@@ -360,7 +361,7 @@ link_current() {
 # sees the mismatch and finishes the upgrade. Every step is checked, so this is
 # safe in a conditional context.
 switch_release() {
-    local from="$1" to="$2" env_next="$3" live_env="$4" old_link
+    local from="$1" to="$2" env_next="$3" live_env="$4" old_link env_tag
     old_link="$(readlink "${ARM_STATE_DIR}/current" 2>/dev/null || true)"
     if ! link_current "releases/${to}"; then
         arm_err "could not point ${ARM_STATE_DIR}/current at ${to}; the install is still on ${from}"
@@ -375,7 +376,15 @@ switch_release() {
         arm_err "could not replace ${live_env}; it still names ${from}, while ${ARM_STATE_DIR}/current points at ${to}."
         arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade --version ${to}' again to finish the upgrade."
     elif [[ -n "${old_link}" ]] && link_current "${old_link}"; then
-        arm_err "could not replace ${live_env}; the install is still on ${from}"
+        env_tag="$(sed -nE 's/^ARM_IMAGE_TAG=(.*)$/\1/p' "${live_env}" 2>/dev/null | tail -n 1)"
+        if [[ -z "${env_tag}" || "${env_tag}" == "${from}" ]]; then
+            arm_err "could not replace ${live_env}; the install is still on ${from}"
+        else
+            # A run that was setting `current` back to .env's release: the
+            # install is still half-switched, as it was before this run.
+            arm_err "could not replace ${live_env}; the install is still half-switched: ${live_env} names ${env_tag}, ${ARM_STATE_DIR}/current names ${from}."
+            arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade --version ${to}' again once the cause is fixed."
+        fi
     else
         arm_err "could not replace ${live_env}, and could not point ${ARM_STATE_DIR}/current back at ${from}."
         arm_sub "Run '${ARMCTL_CMD} upgrade --version ${to}' again to finish the upgrade."
@@ -460,9 +469,9 @@ cmd_upgrade() {
         # The upgrade is run again from the release that is not the target.
         if [[ "${target}" == "${current}" ]]; then
             from="${linked}"
-            # Nothing was started on ${linked} (the stop came before .env was
-            # replaced), so going back is safe; say that it is a revert.
-            arm_say "reverting the unfinished upgrade to ${linked}: going back to ${target}"
+            # Nothing was started with the two halves disagreeing, so pointing
+            # `current` at .env's release is safe, whichever one is newer.
+            arm_say "pointing current back at ${target}, the release ${ENV_FILE} names"
         else
             from="${current}"
             arm_say "running the upgrade to ${target} again to finish it"
