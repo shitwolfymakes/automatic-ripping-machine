@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -219,6 +219,32 @@ class RipperManager:
         except Exception as exc:  # noqa: BLE001
             logger.warning("cannot compare image for container %s: %s", getattr(container, "name", "?"), _err(exc))
             return True
+
+    def container_statuses(self, drive_ids: Iterable[str]) -> dict[str, tuple[str, bool | None]]:
+        """(docker state, image current?) per drive id for /api/drives/diagnostic, from ONE
+        container listing. Every id maps to ("unknown", None) when docker is unreachable
+        (probe() says so, or the listing fails), ("missing", None) when no container carries
+        its label. Never raises."""
+        ids = list(drive_ids)
+        ok, _detail = self.probe()
+        if not ok:
+            return dict.fromkeys(ids, ("unknown", None))
+        try:
+            containers = self._labelled()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cannot list containers: %s", _err(exc))
+            return dict.fromkeys(ids, ("unknown", None))
+        by_drive: dict[str, Any] = {}
+        for c in containers:
+            by_drive.setdefault(c.labels.get(DOCKER_LABEL_KEY), c)
+        result: dict[str, tuple[str, bool | None]] = {}
+        for drive_id in ids:
+            existing = by_drive.get(drive_id)
+            if existing is None:
+                result[drive_id] = ("missing", None)
+            else:
+                result[drive_id] = (str(existing.status), self._image_current(existing))
+        return result
 
     def reconcile(self, enrolled: Sequence[Drive], *, busy: frozenset[str] = frozenset()) -> ReconcileSummary:
         """Boot-time: the Drive table is the source of truth (spec §3).

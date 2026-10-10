@@ -107,6 +107,6 @@ describe('JobManual.vue', () => {
     const detectedOnline = drive({ id: 'drv_d', lifecycle: 'detected', status: 'online' })
     stubFetch({ drives: [detectedOnline] })
     const wrapper = await mountJobManual()
-    expect(wrapper.text()).toContain('No enrolled drives — enroll one on the Drives page.')
+    expect(wrapper.text()).toContain('No enrolled drives: enroll one on the Drives page.')
   })
 })
