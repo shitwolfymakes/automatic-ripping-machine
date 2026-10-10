@@ -29,3 +29,4 @@
 - [Stack linearised 2026-10-03](project_stack_linear_restack.md) — the wolfy stack is now linear (0 merges, GitHub stack #118 = all 34 PRs); backup refs `backup/pre-linear-20261003/*` on arm-v3; restack children by rebase, never merge-forward
 - [hifi verification method](project_hifi_verification_method.md) — temp admin via DB + argon2, ISO rips as the disc path, log-capture loop, SQL quoting and image gotchas (2026-10-03 register verification)
 - [Subagents stay in their worktree](feedback_subagents_stay_in_worktree.md) — implementers given a worktree also edited the main checkout (2026-10-04); forbid it in dispatches and check the main checkout status after each task
+- [Docs describe the current state](feedback_docs_describe_current_state.md) — docs, memory, comments and CLAUDE.md say what is true now; replace an old description instead of annotating it ("DONE", "no longer", "used to"); history lives in git, spec/plan and CHANGELOG

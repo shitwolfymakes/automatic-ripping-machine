@@ -335,7 +335,7 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 
 1. Refuses to run as root, and checks that `curl`, `tar` and `sha256sum` exist.
 2. Reads the location and release options and passes every other flag through.
-3. Works out the `arm` folder: `--prefix` names the folder it goes in (`--prefix /srv` gives `/srv/arm`; a prefix that already ends in `arm` is taken to be the folder itself), and the default is `~/arm`. It refuses an existing folder that has files in it but no `.armctl` folder, because ARM v3 installs fresh and does not convert an ARM v2 folder or an install made by the old v3 installer.
+3. Works out the `arm` folder: `--prefix` names the folder it goes in (`--prefix /srv` gives `/srv/arm`; a prefix that already ends in `arm` is taken to be the folder itself), and the default is `~/arm`. It refuses an existing folder that has files in it but no `.armctl` folder: ARM v3 installs only into a new or empty folder and does not convert a folder made by anything else, such as an ARM v2 folder.
 4. Picks the release. From a checkout it packs a bundle from the checkout instead (see above). Otherwise it uses the named version, or the latest stable on the v3 line. A `--version` tag must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
 5. Fetches the bundle and its checksum into a staging folder, verifies the checksum, rejects an archive with unsafe paths, and only then unpacks it under `.armctl/releases/<tag>/`, sets `current` and writes `armctl`. A failed bootstrap leaves the target location exactly as it was.
 6. Hands over to `armctl install` with the terminal attached (it reads `/dev/tty` when stdin is the script), so prompts work under a curl pipe.
