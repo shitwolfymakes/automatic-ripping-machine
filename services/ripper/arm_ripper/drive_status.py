@@ -24,6 +24,7 @@ import logging
 import os
 
 from arm_common import DriveMediaStatus
+from arm_ripper.drive_poll import DriveErrorKind, classify_drive_error
 
 logger = logging.getLogger("arm_ripper.drive_status")
 
@@ -47,12 +48,17 @@ _CDS_TO_ENUM: dict[int, DriveMediaStatus] = {
 def probe_drive_media(device_path: str) -> tuple[DriveMediaStatus, str]:
     """Return (status, human-readable reason). Never raises.
 
-    open() failure → UNAVAILABLE; ioctl unsupported → UNKNOWN.
+    open() failure → DETACHED for ENOENT/ENXIO/ENODEV (the drive is gone,
+    not merely unreadable), UNAVAILABLE otherwise (EPERM/EACCES — the node
+    is there but the cgroup rule or group is wrong — and everything else);
+    ioctl unsupported → UNKNOWN.
     """
     try:
         fd = os.open(device_path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError as exc:
-        return DriveMediaStatus.UNAVAILABLE, f"open: errno={exc.errno} {exc.strerror or exc}"
+        kind = classify_drive_error(exc)
+        status = DriveMediaStatus.DETACHED if kind is DriveErrorKind.ABSENT else DriveMediaStatus.UNAVAILABLE
+        return status, f"open: errno={exc.errno} {exc.strerror or exc}"
     try:
         try:
             raw = fcntl.ioctl(fd, _CDROM_DRIVE_STATUS, 0)

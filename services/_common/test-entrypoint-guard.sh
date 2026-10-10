@@ -23,6 +23,12 @@ MOUNT_TEST=(true)
 WRITE_CHECK_ATTEMPTS=2        # small so retry-then-fail is fast
 # shellcheck disable=SC2034  # used by the sourced entrypoint
 WRITE_CHECK_DELAY=0           # no sleeping in tests
+# READ_TEST mirrors WRITE_TEST for the read-only-mount path: substitute plain
+# `test -r` for the production `gosu arm test -r`. RO_TEST is stubbed per-case
+# below (production reads /proc/self/mounts; these temp dirs are never
+# actually read-only mounts, so each case overrides RO_TEST directly).
+# shellcheck disable=SC2034  # used by the sourced entrypoint
+READ_TEST=(test -r)
 export ARM_ENTRYPOINT_SOURCE_ONLY=1
 # shellcheck disable=SC1090
 source "${ENTRYPOINT}"
@@ -87,6 +93,56 @@ err="$(
 check "non-mountpoint dir returns 0 (skip)" 0 "${rc}"
 [[ -z "${err}" ]] || { echo "FAIL - non-mountpoint dir emitted stderr: ${err}" >&2; fail=1; }
 chmod 755 "${nm}"; rmdir "${nm}"
+
+# 6. RO mount, dir readable -> returns 0 (no FATAL). Override RO_TEST to
+#    report "this dir is a read-only mount" (rc 0).
+rod="$(mktemp -d)"
+rc=0
+err="$(
+    # shellcheck disable=SC2034  # consumed by require_writable in the sourced entrypoint
+    RO_TEST=(true)
+    require_writable "${rod}" 2>&1 1>/dev/null
+)" || rc=$?
+check "RO mount, readable dir returns 0" 0 "${rc}"
+[[ -z "${err}" ]] || { echo "FAIL - RO readable dir emitted stderr: ${err}" >&2; fail=1; }
+rmdir "${rod}"
+
+# 7. RO mount, dir NOT readable -> rc 1 + read-only FATAL text. chmod 000
+#    only blocks reads for non-root; running as root would read anything, so
+#    skip with a note rather than produce a false pass/fail.
+if [[ "$(id -u)" -eq 0 ]]; then
+    echo "skip - RO mount, unreadable dir (running as root; chmod 000 is not enforced)"
+else
+    rou="$(mktemp -d)"; chmod 000 "${rou}"
+    rc=0
+    err="$(
+        # shellcheck disable=SC2034  # consumed by require_writable in the sourced entrypoint
+        RO_TEST=(true)
+        require_writable "${rou}" 2>&1 1>/dev/null
+    )" || rc=$?
+    check "RO mount, unreadable dir returns 1" 1 "${rc}"
+    case "${err}" in
+        *FATAL*"not readable by arm (read-only mount)"*) echo "ok   - diagnostic is the read-only FATAL text" ;;
+        *) echo "FAIL - diagnostic missing read-only FATAL text: ${err}" >&2; fail=1 ;;
+    esac
+    chmod 755 "${rou}"; rmdir "${rou}"
+fi
+
+# 8. RW mount, dir not writable -> still returns 1 with the ORIGINAL writable
+#    FATAL text (regression guard: RO_TEST=(false) must take the write path).
+rwu="$(mktemp -d)"; chmod 000 "${rwu}"
+rc=0
+err="$(
+    # shellcheck disable=SC2034  # consumed by require_writable in the sourced entrypoint
+    RO_TEST=(false)
+    require_writable "${rwu}" 2>&1 1>/dev/null
+)" || rc=$?
+check "RW mount, unwritable dir returns 1" 1 "${rc}"
+case "${err}" in
+    *"FATAL: ${rwu} is not writable by arm"*) echo "ok   - diagnostic is the original writable FATAL text" ;;
+    *) echo "FAIL - diagnostic missing original writable FATAL text: ${err}" >&2; fail=1 ;;
+esac
+chmod 755 "${rwu}"; rmdir "${rwu}"
 
 if [[ "${fail}" -eq 0 ]]; then
     echo "PASS - all require_writable guard cases"
