@@ -1,22 +1,26 @@
 ---
 name: no-em-dashes-in-ui-copy
-description: Owner never wants em-dashes (—) in anything a user sees — UI strings, API notes/messages rendered by the UI, empty states, placeholders.
+description: Owner rule on AI-typical special characters in the UI — no em-dashes, and no unicode symbols (✓ ✗ ⚠ → · … ≥ ▾ ○) used as UI; correct the characters, do not reword or change what is shown.
 metadata:
   type: feedback
 ---
 
-No em-dashes in user-facing copy. Applies to Svelte/Vue markup text, string
-constants that render (labels, empty states, confirm dialogs), and backend
-strings the UI shows (diagnostic notes, HTTP `detail` messages, notification
-titles). Code comments and docs are not covered.
+Correct AI-agent character habits in anything a user sees, in ui-neu and the
+wolfy UI, and in backend strings the UI renders (diagnostic notes, `detail`
+messages):
 
-**Why:** Owner directive (2026-09-04, Plan 6 smoke): "no em-dashes. I never
-want to see them."
+- No em-dashes (`—`). Use `:`, `,`, `.` or `and` in sentences; `-` for an
+  empty cell; `(none)` for an empty select option.
+- No unicode symbols standing in for UI: `✓ ✗ ⚠ ⏱ ✕ × → ← ▴ ▾ ▲ ▼ ○ ▸` become
+  inline SVG glyphs (see [[glyph-icons-not-emoji]]); `…` becomes `...`; `≥`
+  becomes `>=`; `·` field separators become `|` (or `,` in prose).
 
-**How to apply:** Rewrite with a colon, comma, period, or "and"
-(`drive is detached: reconnect it`, `Plug one in and it appears here`).
-Empty table cells use `-`; empty select options use `(none)`. Before
-committing UI work, `grep -rn -- "—"` the touched markup/strings and the
-backend messages they render. A repo-wide sweep of pre-existing strings
-(e.g. `notification_events.py` titles, older ui-neu components) is still
-open, see [[drive-lifecycle-followups]].
+**Why:** owner directives 2026-09-04/05: "no em-dashes. I never want to see
+them" and "I don't want to humanize or sanitize, I want to correct special
+char usage commonly used by ai agents".
+
+**How to apply:** this is character correction only. Do not reword copy, change
+layout, logic or what is displayed while doing it. Comments and generated
+files are out of scope. Seeded data names (built-in sessions/presets) are data,
+not copy; changing them is a seeder + migration decision. Check with
+`grep -rnP "[^\x00-\x7F]" src` minus comments/tests/generated before committing UI work.

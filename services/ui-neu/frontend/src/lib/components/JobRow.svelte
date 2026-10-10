@@ -30,29 +30,29 @@
 {#if !job}
 	<tr aria-busy="true">
 		{#each { length: 7 } as _}
-			<td class="p-2" data-label=""><Skeleton variant="line" width="80%" height="1rem" /></td>
+			<td class="table-cell" data-label=""><Skeleton variant="line" width="80%" height="1rem" /></td>
 		{/each}
 	</tr>
 {:else}
-<tr class="border-b border-primary/20 hover:bg-page dark:border-primary/20 dark:hover:bg-primary/5 {selected ? 'bg-primary/[0.03] dark:bg-primary/[0.06]' : ''}">
+<tr class="table-row" data-selected={selected}>
 	<!-- Checkbox -->
-	<td class="px-4 py-3 w-8" data-label="">
+	<td class="table-cell w-8" data-label="">
 		{#if showSelect}
 			<input
 				type="checkbox"
 				checked={selected}
 				onchange={() => onselect?.(job.id, !selected)}
-				class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
+				class="job-row-checkbox"
 			/>
 		{/if}
 	</td>
 
 	<!-- Title -->
-	<td class="px-4 py-3" data-label="Title">
-		<div class="flex items-center gap-2">
-			<VideoTypeIcon icon={typeConfig.icon} class="h-4 w-4 shrink-0 {typeConfig.iconColor}" />
+	<td class="table-cell" data-label="Title">
+		<div class="flex items-center gap-2" style:--jt-icon={typeConfig.iconColor}>
+			<VideoTypeIcon icon={typeConfig.icon} class="h-4 w-4 shrink-0 job-row-type-icon" />
 			<div class="min-w-0">
-				<a href="/jobs/{job.id}" class="font-medium text-primary-text hover:underline dark:text-primary-text-dark">
+				<a href="/jobs/{job.id}" class="job-row-title-link">
 					{job.title || 'Untitled'}
 				</a>
 			</div>
@@ -60,7 +60,7 @@
 	</td>
 
 	<!-- Year -->
-	<td class="px-4 py-3 text-sm" data-label="Year">
+	<td class="table-cell" data-label="Year">
 		<div class="flex items-center gap-1.5">
 			{#if job.year}
 				<span>{job.year}</span>
@@ -69,31 +69,31 @@
 	</td>
 
 	<!-- Rip -->
-	<td class="px-4 py-3" data-label="Rip">
+	<td class="table-cell" data-label="Rip">
 		<StatusBadge status={job.status} />
 	</td>
 
 	<!-- Transcode -->
-	<td class="px-4 py-3" data-label="Transcode">
+	<td class="table-cell" data-label="Transcode">
 		{#if tc}
 			<span class="flex items-center gap-1.5">
 				<StatusBadge status={tc.badgeStatus} />
 				{#if tcDetail}
-					<span class="text-[11px] text-gray-500 dark:text-gray-400">{tcDetail}</span>
+					<span class="job-row-transcode-detail">{tcDetail}</span>
 				{/if}
 			</span>
 		{:else}
-			<span class="text-gray-400 dark:text-gray-500">-</span>
+			<span class="job-row-dash">-</span>
 		{/if}
 	</td>
 
 	<!-- Type (colored badge) -->
-	<td class="px-4 py-3 text-sm" data-label="Type">
-		<span class="rounded-sm px-1.5 py-0.5 text-xs font-medium {typeConfig.badgeClasses}">{typeConfig.label}</span>
+	<td class="table-cell" data-label="Type">
+		<span class="job-row-type-pill" style:--jt-bg={typeConfig.badgeBg} style:--jt-text={typeConfig.badgeText}>{typeConfig.label}</span>
 	</td>
 
 	<!-- Disc -->
-	<td class="px-4 py-3 text-sm" data-label="Disc">
+	<td class="table-cell" data-label="Disc">
 		{#if job.disc_type}
 			<span class="inline-flex items-center gap-1">
 				<DiscTypeIcon disctype={job.disc_type} size="h-4 w-4" />
@@ -103,3 +103,13 @@
 	</td>
 </tr>
 {/if}
+
+<style>
+	.job-row-transcode-detail { font-size: 11px; line-height: 1rem; color: var(--color-text-muted); }
+	.job-row-dash { color: var(--color-text-faint); }
+	.job-row-type-pill { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; background: var(--jt-bg); color: var(--jt-text); }
+	.job-row-checkbox { width: 1rem; height: 1rem; border-radius: var(--radius-sm); accent-color: var(--color-primary); }
+	.job-row-title-link { font-weight: 500; color: var(--color-primary-text); }
+	/* :global: forwarded through VideoTypeIcon's class prop onto its own icon */
+	:global(.job-row-type-icon) { color: var(--jt-icon); }
+</style>

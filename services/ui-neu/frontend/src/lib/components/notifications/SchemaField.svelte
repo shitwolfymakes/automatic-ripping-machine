@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { CatalogField } from '$lib/types/notifications';
-	import { FIELD_INPUT_CLASS } from '$lib/types/notifications';
 
 	let {
 		field,
@@ -28,26 +27,24 @@
 </script>
 
 {#if field.type === 'bool'}
-	<label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+	<label class="field field-row">
 		<input
 			type="checkbox"
 			aria-label={field.label}
 			checked={boolValue}
 			onchange={(e) => setValue(e.currentTarget.checked)}
-			class="rounded border-primary/40 text-primary focus:ring-primary"
 		/>
 		<span>{field.label}{field.required ? ' *' : ''}</span>
 	</label>
 {:else}
-	<label class="flex flex-col gap-1">
-		<span class="text-sm font-medium text-gray-700 dark:text-gray-300">{field.label}{field.required ? ' *' : ''}</span>
+	<label class="field">
+		<span class="field-label">{field.label}{field.required ? ' *' : ''}</span>
 		{#if field.type === 'choice'}
 			<select
 				aria-label={field.label}
 				value={displayValue}
 				onchange={(e) => setValue((e.currentTarget as HTMLSelectElement).value)}
 				required={field.required}
-				class={FIELD_INPUT_CLASS}
 			>
 				{#if !field.required}
 					<option value="">(not set)</option>
@@ -64,7 +61,6 @@
 				value={displayValue}
 				oninput={onInput}
 				required={field.required}
-				class={FIELD_INPUT_CLASS}
 			/>
 		{:else}
 			<input
@@ -74,7 +70,6 @@
 				{placeholder}
 				oninput={onInput}
 				required={field.required}
-				class={FIELD_INPUT_CLASS}
 			/>
 		{/if}
 	</label>

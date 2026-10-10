@@ -148,23 +148,22 @@
 		if (e.key === 'Enter') handleSearch();
 	}
 
-	const btnBase = 'rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50 transition-colors';
-	const inputBase = 'rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
+
 </script>
 
-<div class="space-y-3 rounded-md border border-primary/15 bg-primary/5 p-3 dark:border-primary/20 dark:bg-primary/10">
+<div class="stack-sm stack panel-section">
 	<div class="flex items-center justify-between">
-		<h5 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+		<h5 class="eyebrow">
 			Track {track.index} Title Override
 		</h5>
 		<div class="flex items-center gap-1.5">
 			{#if track.title}
-				<button onclick={handleClear} disabled={clearing} class="{btnBase} text-amber-600 ring-1 ring-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:ring-amber-700 dark:hover:bg-amber-900/20">
+				<button onclick={handleClear} disabled={clearing} class="btn btn-warning track-title-search-action-btn">
 					{clearing ? 'Clearing...' : 'Clear Override'}
 				</button>
 			{/if}
 			{#if onclose}
-				<button onclick={onclose} title="Close" class="{btnBase} text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+				<button onclick={onclose} title="Close" class="btn btn-icon">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
 				</button>
 			{/if}
@@ -173,32 +172,32 @@
 
 	<!-- Search form -->
 	<div class="flex flex-wrap gap-1.5">
-		<input type="text" bind:value={query} onkeydown={handleSearchKeydown} placeholder="Title..." class="min-w-[150px] flex-1 {inputBase}" />
-		<input type="text" bind:value={yearInput} onkeydown={handleSearchKeydown} placeholder="Year" class="w-16 {inputBase}" />
-		<input type="text" bind:value={imdbInput} onkeydown={handleSearchKeydown} placeholder="tt..." class="w-28 {inputBase}" />
-		<button onclick={handleSearch} disabled={searching || (!query.trim() && !imdbInput.trim())} class="{btnBase} w-[62px] text-center bg-primary text-on-primary hover:bg-primary-hover">
+		<input type="text" bind:value={query} onkeydown={handleSearchKeydown} placeholder="Title..." class="field-control flex-1 track-title-search-min" />
+		<input type="text" bind:value={yearInput} onkeydown={handleSearchKeydown} placeholder="Year" class="field-control w-16" />
+		<input type="text" bind:value={imdbInput} onkeydown={handleSearchKeydown} placeholder="tt..." class="field-control w-28" />
+		<button onclick={handleSearch} disabled={searching || (!query.trim() && !imdbInput.trim())} class="btn btn-primary track-title-search-btn track-title-search-action-btn">
 			{searching ? '...' : 'Search'}
 		</button>
 	</div>
 
 	<!-- Track output options: custom filename + (series) episode -->
-	<div class="space-y-2 rounded-md border border-primary/10 bg-page/40 p-2 dark:border-primary/15 dark:bg-surface-dark/40">
+	<div class="stack-sm stack track-title-search-options">
 		<div class="flex flex-wrap items-end gap-1.5">
-			<label class="min-w-[150px] flex-1">
-				<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Custom filename</span>
-				<input type="text" bind:value={editFilename} placeholder="Custom filename (optional)" class="w-full {inputBase}" />
+			<label class="field flex-1 track-title-search-min">
+				<span class="field-label track-title-search-tiny-label">Custom filename</span>
+				<input type="text" bind:value={editFilename} placeholder="Custom filename (optional)" />
 			</label>
 			{#if isSeries}
-				<label class="w-20">
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Episode</span>
-					<input type="text" bind:value={editEpisodeNum} placeholder="Episode #" class="w-full {inputBase}" />
+				<label class="field w-20">
+					<span class="field-label track-title-search-tiny-label">Episode</span>
+					<input type="text" bind:value={editEpisodeNum} placeholder="Episode #" />
 				</label>
-				<label class="min-w-[120px] flex-1">
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Episode name</span>
-					<input type="text" bind:value={editEpisodeName} placeholder="Episode name" class="w-full {inputBase}" />
+				<label class="field flex-1 track-title-search-episode-name-min">
+					<span class="field-label track-title-search-tiny-label">Episode name</span>
+					<input type="text" bind:value={editEpisodeName} placeholder="Episode name" />
 				</label>
 			{/if}
-			<button onclick={saveOptions} disabled={savingOptions} class="{btnBase} bg-primary text-on-primary hover:bg-primary-hover">
+			<button onclick={saveOptions} disabled={savingOptions} class="btn btn-primary track-title-search-action-btn">
 				{savingOptions ? 'Saving...' : 'Save options'}
 			</button>
 		</div>
@@ -206,13 +205,13 @@
 
 	{#if searchError}
 		{#if searchError.toLowerCase().includes('api key')}
-			<div class="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-600/40 dark:bg-amber-900/20 dark:text-amber-300">
+			<div class="alert alert-warning">
 				<p>{searchError}</p>
-				<p class="mt-0.5 text-amber-600 dark:text-amber-400">Configure API keys in <a href="/settings" class="underline hover:no-underline">Settings</a>.</p>
+				<p class="mt-0.5 track-title-search-alert-hint">Configure API keys in <a href="/settings" class="track-title-search-alert-link">Settings</a>.</p>
 			</div>
 		{:else}
 			<div class="flex items-center gap-3">
-				<p class="text-xs text-gray-500 dark:text-gray-400">{searchError}</p>
+				<p class="field-help">{searchError}</p>
 			</div>
 		{/if}
 	{/if}
@@ -221,13 +220,13 @@
 	{#if !detail && results.length > 0}
 		<div class="flex flex-wrap items-stretch gap-1.5">
 			{#each results.slice(0, 8) as result}
-				<button onclick={() => handleSelect(result)} class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-primary/15 px-1.5 py-1 text-left hover:border-primary/40 dark:border-primary/20" title="{result.title}{result.year ? ` (${result.year})` : ''}">
+				<button onclick={() => handleSelect(result)} class="flex min-w-0 flex-1 items-center gap-1.5 track-title-search-result" title="{result.title}{result.year ? ` (${result.year})` : ''}">
 					{#if result.poster_url}
-						<PosterImage url={result.poster_url} class="h-10 w-7 shrink-0 rounded-sm object-cover" />
+						<PosterImage url={result.poster_url} class="h-10 w-7 shrink-0 track-title-search-result-poster" />
 					{/if}
 					<div class="min-w-0">
-						<p class="truncate text-[10px] font-medium text-gray-900 dark:text-white">{result.title}</p>
-						<p class="truncate text-[9px] text-gray-500 dark:text-gray-400">{result.year ?? ''}</p>
+						<p class="truncate track-title-search-result-title">{result.title}</p>
+						<p class="truncate track-title-search-result-year">{result.year ?? ''}</p>
 					</div>
 				</button>
 			{/each}
@@ -236,43 +235,73 @@
 
 	<!-- Detail / Edit -->
 	{#if loadingDetail}
-		<p class="text-xs text-gray-400">Loading...</p>
+		<p class="field-help">Loading...</p>
 	{:else if detail}
-		<div class="space-y-2">
+		<div class="stack-sm stack">
 			<div class="grid grid-cols-2 gap-2">
-				<label class="col-span-2">
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Title</span>
-					<input type="text" bind:value={editTitle} class="w-full {inputBase}" />
+				<label class="field col-span-2">
+					<span class="field-label track-title-search-tiny-label">Title</span>
+					<input type="text" bind:value={editTitle} />
 				</label>
-				<label>
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Year</span>
-					<input type="text" bind:value={editYear} class="w-full {inputBase}" />
+				<label class="field">
+					<span class="field-label track-title-search-tiny-label">Year</span>
+					<input type="text" bind:value={editYear} />
 				</label>
-				<label>
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Type</span>
-					<select bind:value={editType} class="w-full {inputBase}">
+				<label class="field">
+					<span class="field-label track-title-search-tiny-label">Type</span>
+					<select bind:value={editType}>
 						<option value="movie">Movie</option>
 						<option value="series">Series</option>
 					</select>
 				</label>
-				<label class="col-span-2">
-					<span class="mb-0.5 block text-[10px] font-medium text-gray-500 dark:text-gray-400">Poster URL</span>
-					<input type="text" bind:value={editPosterUrl} placeholder="https://..." class="w-full {inputBase}" />
+				<label class="field col-span-2">
+					<span class="field-label track-title-search-tiny-label">Poster URL</span>
+					<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
 				</label>
 			</div>
 			<div class="flex items-center gap-2">
-				<button onclick={applyFromDetail} disabled={applying || !editTitle.trim()} class="{btnBase} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600">
+				<button onclick={applyFromDetail} disabled={applying || !editTitle.trim()} class="btn track-title-search-success-btn track-title-search-action-btn">
 					{applying ? 'Applying...' : 'Apply'}
 				</button>
 				{#if results.length > 0}
-					<button onclick={() => { detail = null; }} class="{btnBase} text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+					<button onclick={() => { detail = null; }} class="btn btn-ghost track-title-search-back-btn">
 						Back
 					</button>
 				{/if}
 				{#if feedback}
-					<span class="text-xs {feedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">{feedback.message}</span>
+					<span class="track-title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
 				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.track-title-search-min { min-width: 150px; }
+	.track-title-search-episode-name-min { min-width: 120px; }
+	/* the search button had a fixed width to keep the row stable between its
+	   'Search'/'...' label states */
+	.track-title-search-btn { width: 62px; justify-content: center; }
+	/* the original buttons were px-2 py-1 text-xs (0.5rem/0.25rem, 12px/16px) -
+	   .btn-sm's own padding (0.75rem/0.25rem) and line-height (inherited
+	   1.25rem) both differ */
+	.track-title-search-action-btn { min-height: auto; padding: 0.25rem 0.5rem; font-size: 0.75rem; line-height: 1rem; border: 0; }
+	.btn-warning.track-title-search-action-btn { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 30%, transparent); }
+	.track-title-search-back-btn { min-height: auto; padding: 0.25rem 0.5rem; font-size: 0.75rem; line-height: 1rem; border: 0; }
+	.track-title-search-options { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-page) 40%, transparent); padding: 0.5rem; }
+	.track-title-search-tiny-label { font-size: 10px; line-height: normal; }
+	.track-title-search-alert-hint { font-size: 0.75rem; line-height: 1rem; color: var(--color-on-warning-soft); }
+	.track-title-search-alert-link { text-decoration: underline; }
+	.track-title-search-alert-link:hover { text-decoration: none; }
+	.track-title-search-result { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.25rem 0.375rem; text-align: left; transition: border-color var(--motion-fast) var(--ease); }
+	.track-title-search-result:hover { border-color: var(--color-border-strong); }
+	/* :global: forwarded through PosterImage's class prop */
+	:global(.track-title-search-result-poster) { border-radius: var(--radius-sm); object-fit: cover; }
+	.track-title-search-result-title { font-size: 10px; font-weight: 500; color: var(--color-text); }
+	.track-title-search-result-year { font-size: 9px; color: var(--color-text-muted); }
+	.track-title-search-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	.track-title-search-success-btn:hover { filter: brightness(0.9); }
+	.track-title-search-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.track-title-search-feedback[data-tone="success"] { color: var(--color-success); }
+	.track-title-search-feedback[data-tone="error"] { color: var(--color-danger); }
+</style>

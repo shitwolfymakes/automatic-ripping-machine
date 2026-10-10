@@ -8,7 +8,7 @@
 [data-scheme="nordic-frost"] .section-frame-bar-bottom {
 	background: rgba(136, 192, 208, 0.15) !important;
 }
-[data-scheme="nordic-frost"] aside nav a[data-active="true"] {
+[data-scheme="nordic-frost"] aside .nav-item[data-active="true"] {
 	background: rgba(136, 192, 208, 0.15) !important;
 	color: rgb(94, 129, 172) !important;
 }

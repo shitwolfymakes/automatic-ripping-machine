@@ -45,27 +45,24 @@
 	});
 </script>
 
-<div class="space-y-4">
+<div class="stack">
 	<div>
-		<a href="/logs" class="text-sm text-primary-text hover:underline dark:text-primary-text-dark">&lt;- All logs</a>
-		<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Job log</h1>
-		<p class="font-mono text-xs text-gray-500">{jobId}</p>
+		<a href="/logs" class="btn btn-link">&lt;- All logs</a>
+		<h1 class="page-title">Job log</h1>
+		<p class="mono log-detail-page-id">{jobId}</p>
 	</div>
 
 	<!-- Action bar: log actions (Refresh / Download) -->
-	<div
-		class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/15 bg-page px-4 py-3 dark:border-primary/20 dark:bg-primary/5"
-	>
-		<span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Actions</span>
-		<div class="flex items-center gap-2">
-			<button onclick={load} class="rounded-lg border border-primary/25 px-3 py-2 text-sm hover:bg-primary/5">
+	<div class="cluster panel-section log-detail-page-actions">
+		<span class="eyebrow">Actions</span>
+		<div class="cluster">
+			<button onclick={load} class="btn log-detail-page-action-btn">
 				Refresh
 			</button>
 			<a
 				href={jobLogDownloadUrl(jobId)}
-				class="rounded-lg border border-primary/25 px-3 py-2 text-sm hover:bg-primary/5"
-				class:pointer-events-none={entries.length === 0}
-				class:opacity-50={entries.length === 0}
+				class="btn log-detail-page-action-btn"
+				aria-disabled={entries.length === 0}
 			>
 				Download .zip
 			</a>
@@ -73,14 +70,26 @@
 	</div>
 
 	{#if truncated}
-		<p class="text-xs text-amber-600 dark:text-amber-400">
+		<p class="log-detail-page-truncated">
 			Showing the last {DEFAULT_LIMIT} lines. Download the .zip for the full log.
 		</p>
 	{/if}
 
 	{#if loading}
-		<p class="text-sm text-gray-500">Loading log...</p>
+		<p class="log-detail-page-loading">Loading log...</p>
 	{:else}
 		<LogView {entries} {error} search={true} maxHeightClass="max-h-[70vh]" />
 	{/if}
 </div>
+
+<style>
+	.log-detail-page-id { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.log-detail-page-actions { justify-content: space-between; }
+	.log-detail-page-truncated { font-size: 0.75rem; line-height: 1rem; color: var(--color-on-warning-soft); }
+	.log-detail-page-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	/* original was px-3 py-2 (0.75rem/0.5rem), not .btn's default 0.5rem
+	   1rem; text-sm matches .btn's own bundled font-size/line-height so no
+	   size modifier is needed, just the padding restated */
+	.log-detail-page-action-btn { padding: 0.5rem 0.75rem; }
+	a[aria-disabled="true"] { pointer-events: none; opacity: 0.5; }
+</style>

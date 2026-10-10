@@ -86,9 +86,6 @@
     const TIER_LABELS: Record<string, string> = { dvd: 'DVD', bluray: 'Blu-ray', uhd: 'UHD' };
     const TIER_HINTS: Record<string, string> = { dvd: '< 720p', bluray: '720p-1080p', uhd: '> 1080p' };
 
-    const dirtyRing = 'rounded-lg ring-2 ring-primary/40 dark:ring-primary/50';
-    const inputClass = 'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
-
     let saveAsModalOpen = $state(false);
     let newPresetName = $state('');
     let saveAsNewError = $state<string>('');
@@ -184,37 +181,36 @@
 </script>
 
 {#if offline || !scheme}
-    <div class="rounded-lg border border-amber-500/40 bg-amber-50 p-4 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
-        <p class="font-semibold">Transcoder service unavailable</p>
-        <p class="mt-1 text-sm">Cannot load preset options. Check that arm-transcoder is running.</p>
+    <div class="alert alert-warning preset-editor-offline">
+        <p class="alert-title">Transcoder service unavailable</p>
+        <p class="alert-body">Cannot load preset options. Check that arm-transcoder is running.</p>
         {#if onRetry}
-            <button onclick={onRetry} class="mt-2 rounded-md bg-amber-600 px-3 py-1 text-sm font-medium text-white hover:bg-amber-700">
+            <button onclick={onRetry} class="btn btn-warning btn-sm preset-editor-retry-btn">
                 Retry
             </button>
         {/if}
     </div>
 {:else}
-    <div class="space-y-4">
+    <div class="stack">
         {#if isUnavailable}
-            <div class="rounded-lg border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
+            <div class="alert alert-warning">
                 This preset was built for scheme <strong>{selectedPreset?.scheme}</strong> but the active scheme is <strong>{scheme.slug}</strong>. Pick a compatible preset to save changes.
             </div>
         {/if}
-        <div class="flex items-baseline justify-between border-b border-gray-200 pb-2 dark:border-gray-700">
+        <div class="preset-editor-scheme-row">
             <div>
-                <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Active scheme</p>
-                <p class="text-base font-semibold text-gray-900 dark:text-white">{scheme.name}</p>
+                <p class="eyebrow">Active scheme</p>
+                <p class="preset-editor-scheme-name">{scheme.name}</p>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{builtinCount} built-in | {customCount} custom</p>
+            <p class="preset-editor-scheme-count">{builtinCount} built-in | {customCount} custom</p>
         </div>
-        <div>
-            <label for="preset-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Preset</label>
+        <label class="field">
+            <span class="field-label">Preset</span>
             <select
                 id="preset-select"
                 value={selectedSlug}
                 onchange={(e) => handleDropdownChange((e.target as HTMLSelectElement).value)}
                 disabled={saving}
-                class="mt-1 w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white"
             >
                 <optgroup label="Built-in">
                     {#each presets.filter(p => p.builtin && !p.unavailable) as p (p.slug)}
@@ -237,32 +233,31 @@
                 {/if}
             </select>
             {#if selectedPreset?.description}
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{selectedPreset.description}</p>
+                <span class="field-help">{selectedPreset.description}</span>
             {/if}
-        </div>
+        </label>
 
         <div>
-            <div class="flex items-center justify-between">
-                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Customize</h4>
+            <div class="preset-editor-customize-head">
+                <h4 class="preset-editor-customize-title">Customize</h4>
                 {#if dirty}
-                    <span class="rounded-full bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary dark:text-primary-300">
+                    <span class="badge preset-editor-dirty-count">
                         {dirtyCount} {dirtyCount === 1 ? 'change' : 'changes'}
                     </span>
                 {/if}
             </div>
 
-            <div class="mt-3 space-y-3">
-                <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                    <p class="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Shared</p>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label class="space-y-1">
-                            <span class="text-xs text-gray-600 dark:text-gray-400">Audio encoder</span>
-                            <div class={isSharedDirty('audio_encoder') ? dirtyRing : ''}>
+            <div class="stack stack-sm preset-editor-tiers">
+                <div class="panel-section">
+                    <p class="eyebrow preset-editor-tier-heading">Shared</p>
+                    <div class="grid-2">
+                        <label class="field">
+                            <span class="field-label preset-editor-sub-label">Audio encoder</span>
+                            <div data-dirty={isSharedDirty('audio_encoder')} class="preset-editor-dirty-wrap">
                                 <select
                                     value={effectiveShared('audio_encoder')}
                                     onchange={(e) => setShared('audio_encoder', (e.target as HTMLSelectElement).value)}
                                     disabled={saving || isUnavailable}
-                                    class="{inputClass} w-full"
                                 >
                                     {#each scheme.supported_audio_encoders as enc}
                                         <option value={enc}>{enc}</option>
@@ -270,14 +265,13 @@
                                 </select>
                             </div>
                         </label>
-                        <label class="space-y-1">
-                            <span class="text-xs text-gray-600 dark:text-gray-400">Subtitle mode</span>
-                            <div class={isSharedDirty('subtitle_mode') ? dirtyRing : ''}>
+                        <label class="field">
+                            <span class="field-label preset-editor-sub-label">Subtitle mode</span>
+                            <div data-dirty={isSharedDirty('subtitle_mode')} class="preset-editor-dirty-wrap">
                                 <select
                                     value={effectiveShared('subtitle_mode')}
                                     onchange={(e) => setShared('subtitle_mode', (e.target as HTMLSelectElement).value)}
                                     disabled={saving || isUnavailable}
-                                    class="{inputClass} w-full"
                                 >
                                     {#each scheme.supported_subtitle_modes as mode}
                                         <option value={mode}>{mode}</option>
@@ -289,19 +283,18 @@
                 </div>
 
                 {#each ['dvd', 'bluray', 'uhd'] as tier}
-                    <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                        <p class="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            {TIER_LABELS[tier]} <span class="text-gray-400">| {TIER_HINTS[tier]}</span>
+                    <div class="panel-section">
+                        <p class="eyebrow preset-editor-tier-heading">
+                            {TIER_LABELS[tier]} <span class="preset-editor-tier-hint">| {TIER_HINTS[tier]}</span>
                         </p>
-                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <label class="space-y-1">
-                                <span class="text-xs text-gray-600 dark:text-gray-400">Encoder</span>
-                                <div class={isTierDirty(tier, 'video_encoder') ? dirtyRing : ''}>
+                        <div class="preset-editor-tier-grid">
+                            <label class="field">
+                                <span class="field-label preset-editor-sub-label">Encoder</span>
+                                <div data-dirty={isTierDirty(tier, 'video_encoder')} class="preset-editor-dirty-wrap">
                                     <select
                                         value={effectiveTier(tier, 'video_encoder')}
                                         onchange={(e) => setTier(tier, 'video_encoder', (e.target as HTMLSelectElement).value)}
                                         disabled={saving || isUnavailable}
-                                        class="{inputClass} w-full"
                                     >
                                         {#each scheme.supported_encoders as enc}
                                             <option value={enc.slug}>{enc.name}</option>
@@ -309,9 +302,9 @@
                                     </select>
                                 </div>
                             </label>
-                            <label class="space-y-1">
-                                <span class="text-xs text-gray-600 dark:text-gray-400">Quality (CRF 0-51)</span>
-                                <div class={isTierDirty(tier, 'video_quality') ? dirtyRing : ''}>
+                            <label class="field">
+                                <span class="field-label preset-editor-sub-label">Quality (CRF 0-51)</span>
+                                <div data-dirty={isTierDirty(tier, 'video_quality')} class="preset-editor-dirty-wrap">
                                     <input
                                         type="number" min="0" max="51" step="1"
                                         data-testid="tier-{tier}-quality"
@@ -321,13 +314,12 @@
                                             setTier(tier, 'video_quality', raw === '' ? '' : Number(raw));
                                         }}
                                         disabled={saving || isUnavailable}
-                                        class="{inputClass} w-full"
                                     />
                                 </div>
                             </label>
-                            <label class="space-y-1 lg:col-span-2">
-                                <span class="text-xs text-gray-600 dark:text-gray-400">HandBrake preset</span>
-                                <div class={isTierDirty(tier, 'handbrake_preset') ? dirtyRing : ''}>
+                            <label class="field preset-editor-handbrake-field">
+                                <span class="field-label preset-editor-sub-label">HandBrake preset</span>
+                                <div data-dirty={isTierDirty(tier, 'handbrake_preset')} class="preset-editor-dirty-wrap">
                                     {#if handbrakeAvailable && handbrakeKnown.has(String(effectiveTier(tier, 'handbrake_preset')))}
                                         <select
                                             value={effectiveTier(tier, 'handbrake_preset')}
@@ -336,7 +328,6 @@
                                                 setTier(tier, 'handbrake_preset', v === '__custom__' ? '' : v);
                                             }}
                                             disabled={saving || isUnavailable}
-                                            class="{inputClass} w-full"
                                         >
                                             {#each Object.entries(handbrakePresetGroups) as [category, names]}
                                                 <optgroup label={category}>
@@ -353,7 +344,6 @@
                                             value={effectiveTier(tier, 'handbrake_preset')}
                                             oninput={(e) => setTier(tier, 'handbrake_preset', (e.target as HTMLInputElement).value)}
                                             disabled={saving || isUnavailable}
-                                            class="{inputClass} w-full"
                                             placeholder={handbrakeAvailable ? 'Custom preset name' : 'HandBrake preset name'}
                                         />
                                     {/if}
@@ -361,21 +351,20 @@
                                 {#if handbrakeAvailable && handbrakeKnown.has(String(effectiveTier(tier, 'handbrake_preset')))}
                                     <button
                                         type="button"
-                                        class="text-xs text-primary hover:underline"
+                                        class="btn btn-link btn-sm"
                                         onclick={() => setTier(tier, 'handbrake_preset', '')}
                                     >Use a custom preset name</button>
                                 {/if}
                             </label>
                             {#each Object.entries(scheme.advanced_fields ?? {}) as [key, def]}
-                                <label class="space-y-1">
-                                    <span class="text-xs text-gray-600 dark:text-gray-400">{key}</span>
-                                    <div class={isTierDirty(tier, key) ? dirtyRing : ''}>
+                                <label class="field">
+                                    <span class="field-label preset-editor-sub-label">{key}</span>
+                                    <div data-dirty={isTierDirty(tier, key)} class="preset-editor-dirty-wrap">
                                         {#if def.type === 'enum' && def.values}
                                             <select
                                                 value={effectiveTier(tier, key) || def.default || ''}
                                                 onchange={(e) => setTier(tier, key, (e.target as HTMLSelectElement).value)}
                                                 disabled={saving || isUnavailable}
-                                                class="{inputClass} w-full"
                                             >
                                                 {#each def.values as v}
                                                     <option value={v}>{v}</option>
@@ -387,12 +376,11 @@
                                                 value={effectiveTier(tier, key)}
                                                 oninput={(e) => setTier(tier, key, (e.target as HTMLInputElement).value)}
                                                 disabled={saving || isUnavailable}
-                                                class="{inputClass} w-full"
                                             />
                                         {/if}
                                     </div>
                                     {#if def.description}
-                                        <span class="block text-xs text-gray-400">{def.description}</span>
+                                        <span class="field-help preset-editor-advanced-desc">{def.description}</span>
                                     {/if}
                                 </label>
                             {/each}
@@ -402,14 +390,14 @@
             </div>
         </div>
 
-        <div class="flex items-center justify-between border-t border-gray-200 pt-3 dark:border-gray-700">
-            <div class="flex items-center gap-3">
+        <div class="preset-editor-save-bar">
+            <div class="preset-editor-save-actions">
                 <button
                     type="button"
                     onclick={handleSave}
                     disabled={!canSave}
                     title={disabledSaveReason()}
-                    class="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    class="btn btn-primary"
                 >
                     {saving ? 'Saving...' : 'Save changes'}
                 </button>
@@ -418,7 +406,7 @@
                         type="button"
                         onclick={() => { saveAsModalOpen = true; newPresetName = ''; saveAsNewError = ''; }}
                         disabled={!dirty}
-                        class="rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="btn preset-editor-save-as-btn"
                     >
                         Save as new preset
                     </button>
@@ -428,7 +416,7 @@
                 type="button"
                 onclick={handleRevert}
                 disabled={!dirty && selectedSlug === initialSlug}
-                class="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+                class="btn btn-link preset-editor-revert-btn"
             >
                 Revert
             </button>
@@ -436,42 +424,43 @@
     </div>
 
     {#if undoToast}
-        <div class="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-xl dark:bg-gray-700">
-            {undoToast.message}
-            <button onclick={handleUndo} class="ml-3 underline">Undo</button>
+        <div class="toast preset-editor-undo-toast">
+            <span class="toast-body">
+                {undoToast.message}
+                <button onclick={handleUndo} class="preset-editor-undo-btn">Undo</button>
+            </span>
         </div>
     {/if}
 
     {#if saveAsModalOpen}
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="save-as-heading">
-            <div class="w-full max-w-md rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-                <h3 id="save-as-heading" class="text-lg font-semibold text-gray-900 dark:text-white">Save as new preset</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="save-as-heading">
+            <div class="modal-panel preset-editor-save-as-panel">
+                <h3 id="save-as-heading" class="modal-title">Save as new preset</h3>
+                <p class="modal-body">
                     Saves your current customizations as a new preset based on <strong>{selectedPreset?.name}</strong>.
                 </p>
-                <label class="mt-3 block">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Name</span>
+                <label class="field preset-editor-save-as-field">
+                    <span class="field-label">Name</span>
                     <input
                         type="text"
                         bind:value={newPresetName}
                         placeholder="e.g. Weekend Rips"
-                        class="{inputClass} mt-1 w-full"
                     />
                     {#if newPresetName.trim()}
-                        <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">Will be saved as: <code>{slugify(newPresetName)}</code></span>
+                        <span class="field-help">Will be saved as: <code>{slugify(newPresetName)}</code></span>
                     {/if}
                     {#if saveAsNewError}
-                        <span class="mt-1 block text-xs text-red-600 dark:text-red-400">{saveAsNewError}</span>
+                        <span class="field-error">{saveAsNewError}</span>
                     {/if}
                 </label>
-                <div class="mt-4 flex justify-end gap-2">
+                <div class="modal-actions">
                     <button type="button" onclick={() => { saveAsModalOpen = false; }}
-                            class="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
+                            class="btn btn-ghost">
                         Cancel
                     </button>
                     <button type="button" onclick={handleSaveAsConfirm}
                             disabled={!newPresetName.trim()}
-                            class="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50">
+                            class="btn btn-primary">
                         Create preset
                     </button>
                 </div>
@@ -479,3 +468,68 @@
         </div>
     {/if}
 {/if}
+
+<style>
+	/* alert's default padding is 0.5rem/0.75rem; the original offline
+	   banner was p-4 (1rem all round), a bigger standalone notice than an
+	   inline alert strip. */
+	.preset-editor-offline { padding: 1rem; }
+	/* original Retry: solid amber-600 fill with white text, not btn-warning's
+	   outlined look. */
+	.preset-editor-retry-btn { margin-top: 0.5rem; border-color: var(--color-warning); background: var(--color-warning); color: var(--color-on-primary); }
+	/* darken-on-hover without a literal colour: no --color-warning-hover
+	   token exists (unlike --color-primary-hover), and color-mix against a
+	   text token would flip direction between light/dark; a brightness
+	   filter reproduces the darkened solid fill in both themes. */
+	.preset-editor-retry-btn:hover { filter: brightness(0.85); }
+	.preset-editor-scheme-row { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; }
+	.preset-editor-scheme-name { font-size: 1rem; font-weight: 600; color: var(--color-text); }
+	.preset-editor-scheme-count { font-size: 0.75rem; color: var(--color-text-muted); }
+	.preset-editor-customize-head { display: flex; align-items: center; justify-content: space-between; }
+	.preset-editor-customize-title { font-size: 0.875rem; font-weight: 600; color: var(--color-text-secondary); }
+	/* original dirty-count pill: bg-primary/20 text-primary, a heavier tint
+	   than badge's default (primary-tint-2/primary-text). */
+	.preset-editor-dirty-count { background: var(--color-primary-tint-3); color: var(--color-primary); }
+	.preset-editor-tiers { margin-top: 0.75rem; }
+	.preset-editor-tier-heading { margin-bottom: 0.5rem; }
+	.preset-editor-tier-hint { color: var(--color-text-faint); }
+	/* original: grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 - no 4-column grid
+	   helper exists (layout.css only goes to grid-3). */
+	.preset-editor-tier-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+	@media (min-width: 640px) { .preset-editor-tier-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+	@media (min-width: 1024px) { .preset-editor-tier-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+	/* original sub-labels were text-xs (0.75rem), not field-label's own
+	   text-sm (0.875rem) - these are secondary labels inside a nested
+	   panel-section, a visually smaller role than a top-level field label. */
+	.preset-editor-sub-label { font-size: 0.75rem; line-height: 1rem; font-weight: 400; color: var(--color-text-muted); }
+	/* the dirty-ring wrapper: rounded-lg ring-2 ring-primary/40 around the
+	   control when this field carries an override. */
+	.preset-editor-dirty-wrap[data-dirty="true"] { border-radius: var(--radius-lg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent); }
+	.preset-editor-handbrake-field { grid-column: span 1; }
+	@media (min-width: 1024px) { .preset-editor-handbrake-field { grid-column: span 2; } }
+	.preset-editor-advanced-desc { display: block; color: var(--color-text-faint); }
+	.preset-editor-save-bar { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 0.75rem; }
+	.preset-editor-save-actions { display: flex; align-items: center; gap: 0.75rem; }
+	/* original save button: bg-primary px-4 py-1.5 font-semibold - .btn-primary's
+	   default padding (py-0.5rem) is 2px taller per side than this button's
+	   original py-1.5 (0.375rem). */
+	.preset-editor-save-actions > :first-child { padding-top: 0.375rem; padding-bottom: 0.375rem; font-weight: 600; }
+	/* original "Save as new preset": outlined primary-coloured button
+	   (border-primary text-primary hover:bg-primary/10), close to bare .btn
+	   but with the solid primary border colour and semibold weight instead
+	   of .btn's border-strong/font-medium. */
+	.preset-editor-save-as-btn { border-color: var(--color-primary); color: var(--color-primary); font-weight: 600; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+	.preset-editor-save-as-btn:hover { background: var(--color-primary-tint-2); }
+	.preset-editor-revert-btn { color: var(--color-text-muted); }
+	.preset-editor-revert-btn:hover { color: var(--color-text-secondary); background: none; text-decoration: none; }
+	/* original: fixed bottom-4 left-1/2 -translate-x-1/2, a solid dark bar
+	   with always-white text regardless of theme. The strict token set
+	   forbids the literal rgb(17 24 39)/white values that were here - the
+	   `toast` block's own surface-raised/tone-accent look is used instead,
+	   with only the fixed bottom-centre position kept scoped; any visible
+	   difference from the original's own always-dark bar is a deviation. */
+	.preset-editor-undo-toast { position: fixed; bottom: 1rem; left: 50%; z-index: 40; transform: translateX(-50%); }
+	.preset-editor-undo-btn { margin-left: 0.75rem; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+	.preset-editor-save-as-panel { padding: 1.25rem; }
+	.preset-editor-save-as-field { margin-top: 0.75rem; }
+</style>

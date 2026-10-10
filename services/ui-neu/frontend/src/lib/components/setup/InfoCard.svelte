@@ -9,9 +9,13 @@
 	let { label, children }: Props = $props();
 </script>
 
-<div class="rounded-lg border border-primary/20 bg-surface p-4 dark:border-primary/20 dark:bg-surface-dark">
-	<div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</div>
-	<div class="mt-1">
+<div class="panel">
+	<div class="eyebrow">{label}</div>
+	<div class="info-card-body">
 		{@render children()}
 	</div>
 </div>
+
+<style>
+	.info-card-body { margin-top: 0.25rem; }
+</style>

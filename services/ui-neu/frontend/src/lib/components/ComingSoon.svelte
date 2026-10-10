@@ -15,11 +15,25 @@
 		type="button"
 		disabled
 		title={`${feature} - coming soon (not yet available in v3)`}
-		class="cursor-not-allowed rounded px-2 py-0.5 text-xs font-medium opacity-50 {klass}"
+		class="coming-soon-btn {klass}"
 	>
 		{label}
 	</button>
-	<span class="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+	<span class="badge badge-sm">
 		Coming soon
 	</span>
 </span>
+
+<style>
+	.coming-soon-btn {
+		padding: 0.125rem 0.5rem;
+		border-radius: var(--radius-sm);
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+		opacity: 0.5;
+	}
+	.coming-soon-btn:disabled {
+		cursor: not-allowed;
+	}
+</style>

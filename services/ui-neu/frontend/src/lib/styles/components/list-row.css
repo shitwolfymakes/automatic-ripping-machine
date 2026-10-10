@@ -1,0 +1,20 @@
+/* list-row: one row in a list of records (channels, presets, drives, files).
+   Elements: list-row-lead (icon/glyph), list-row-main (title + secondary line),
+   list-row-meta (right-aligned data), list-row-actions (buttons).
+   Modifiers: list-row-compact.
+   State: [data-active="true"], [data-disabled="true"], [aria-expanded].
+   The column template is set by the list that owns the rows. */
+@layer components {
+	.list-row { display: grid; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border-top: 1px solid var(--color-border); cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+	.list-row:first-child { border-top: 0; }
+	.list-row:hover { background: var(--color-primary-tint-1); }
+	.list-row[data-active="true"] { background: var(--color-primary-tint-2); }
+	.list-row[data-disabled="true"] { opacity: 0.5; }
+	.list-row-lead { display: flex; align-items: center; gap: 0.5rem; }
+	.list-row-main { min-width: 0; }
+	.list-row-main > :first-child { font-size: 0.875rem; font-weight: 500; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.list-row-main > :nth-child(2) { font-size: 0.75rem; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.list-row-meta { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-text-muted); text-align: right; }
+	.list-row-actions { display: flex; align-items: center; justify-content: center; gap: 0.25rem; }
+	.list-row-compact { padding: 0.5rem 0.75rem; gap: 0.75rem; }
+}

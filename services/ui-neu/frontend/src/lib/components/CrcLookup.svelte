@@ -43,43 +43,42 @@
 		}
 	}
 
-	const inputBase =
-		'rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary dark:border-primary/30 dark:bg-primary/10 dark:text-white';
+
 </script>
 
-<div class="space-y-4">
+<div class="stack">
 	<!-- CRC64 hash display -->
 	{#if crcId}
-		<div class="flex items-center gap-2 text-sm">
-			<span class="text-gray-500 dark:text-gray-400">CRC64:</span>
-			<code class="rounded-sm bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-300">{crcId}</code>
+		<div class="flex items-center gap-2 crc-lookup-hash-row">
+			<span class="crc-lookup-label">CRC64:</span>
+			<code class="mono crc-lookup-hash">{crcId}</code>
 		</div>
 	{/if}
 
 	<!-- Lookup (no v3 endpoint) -->
 	<div class="flex items-center gap-2">
-		<p class="text-sm text-gray-500 dark:text-gray-400">CRC database lookup is not yet available in v3.</p>
+		<p class="field-help">CRC database lookup is not yet available in v3.</p>
 		<ComingSoon label="Look up" feature="CRC lookup" />
 	</div>
 
 	<!-- Manual poster URL (LIVE: updateJobTitle) -->
-	<hr class="border-gray-200 dark:border-gray-700" />
-	<div class="space-y-3">
-		<h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Manual poster URL</h4>
-		<label class="block">
-			<span class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Poster URL</span>
-			<input type="text" bind:value={posterUrl} placeholder="https://..." class="w-full {inputBase}" />
+	<hr class="crc-lookup-divider" />
+	<div class="stack">
+		<h4 class="crc-lookup-heading">Manual poster URL</h4>
+		<label class="field">
+			<span class="field-label">Poster URL</span>
+			<input type="text" bind:value={posterUrl} placeholder="https://..." />
 		</label>
 		<div class="flex items-center gap-2">
 			<button
 				onclick={handleApply}
 				disabled={applying}
-				class="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 disabled:opacity-50 transition-colors"
+				class="btn crc-lookup-success-btn"
 			>
 				{applying ? 'Applying...' : 'Apply to Job'}
 			</button>
 			{#if applyFeedback}
-				<span class="text-xs {applyFeedback.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">
+				<span class="crc-lookup-feedback" data-tone={applyFeedback.type}>
 					{applyFeedback.message}
 				</span>
 			{/if}
@@ -87,9 +86,22 @@
 	</div>
 
 	<!-- Submit (no v3 endpoint) -->
-	<hr class="border-gray-200 dark:border-gray-700" />
-	<div class="space-y-3">
-		<h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Submit to CRC Database</h4>
+	<hr class="crc-lookup-divider" />
+	<div class="stack">
+		<h4 class="crc-lookup-heading">Submit to CRC Database</h4>
 		<ComingSoon label="Submit to CRC Database" feature="CRC submit" />
 	</div>
 </div>
+
+<style>
+	.crc-lookup-hash-row { font-size: 0.875rem; line-height: 1.25rem; }
+	.crc-lookup-label { color: var(--color-text-muted); }
+	.crc-lookup-hash { border-radius: var(--radius-sm); background: var(--color-primary-tint-2); padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
+	.crc-lookup-divider { border: 0; border-top: 1px solid var(--color-border); }
+	.crc-lookup-heading { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: var(--color-text-secondary); }
+	.crc-lookup-success-btn { border: 0; padding: 0.375rem 0.75rem; background: var(--color-success); color: var(--color-on-primary); }
+	.crc-lookup-success-btn:hover { filter: brightness(0.9); }
+	.crc-lookup-feedback { font-size: 0.75rem; line-height: 1rem; }
+	.crc-lookup-feedback[data-tone="success"] { color: var(--color-success); }
+	.crc-lookup-feedback[data-tone="error"] { color: var(--color-danger); }
+</style>

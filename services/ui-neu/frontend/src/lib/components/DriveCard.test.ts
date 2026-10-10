@@ -98,9 +98,30 @@ describe('DriveCard', () => {
 		});
 
 		it('renders the detached copy and dims the card when offline and absent', () => {
-			renderDrive({ status: 'offline', present: false, media_status: 'detached' });
+			const { container } = renderDrive({ status: 'offline', present: false, media_status: 'detached' });
 			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
+			// the original shell's only status-driven style was opacity-60 while
+			// detached, carried here as the data-detached state hook.
+			expect(container.querySelector('.drive-card')).toHaveAttribute('data-detached', 'true');
 		});
+
+		// The pre-migration card shell (git 441d35d2) was a fixed
+		// `border-primary/20` box: drive status coloured the inline header
+		// label only, never the card. So the shell stays a plain `card` -
+		// `card-status` would add a 4px left accent stripe the baseline has
+		// no counterpart for. DriveCard needs an enrolled drive to render, so
+		// the parity harness never exercises it on the local stack; assert the
+		// shell's classes here instead.
+		it.each(['online', 'offline', 'error'] as const)(
+			'keeps the card shell free of a status accent when status is %s',
+			(status) => {
+				const { container } = renderDrive({ status });
+				const card = container.querySelector('.drive-card');
+				expect(card).toHaveClass('card');
+				expect(card).not.toHaveClass('card-status');
+				expect(card).not.toHaveAttribute('data-status');
+			}
+		);
 
 		it('shows the error reason', () => {
 			renderDrive({ status: 'error', last_error: 'identity mismatch: row is bound to X' });
@@ -111,7 +132,7 @@ describe('DriveCard', () => {
 			renderDrive({ status: 'offline', present: true, media_status: null });
 			const badge = screen.getByTestId('drive-status-label');
 			expect(badge).toHaveTextContent('offline');
-			expect(badge.className).toContain('bg-amber-500/20');
+			expect(badge.className).toContain('badge-warning');
 		});
 	});
 

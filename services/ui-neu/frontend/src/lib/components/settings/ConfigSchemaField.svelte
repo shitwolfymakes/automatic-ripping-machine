@@ -14,26 +14,23 @@
 	const boolValue = $derived(Boolean(value));
 	const displayValue = $derived(isHiddenSecret ? '' : (value ?? ''));
 	const placeholder = $derived(isHiddenSecret ? '******** (set, leave blank to keep)' : '');
-
-	const inputClass =
-		'w-full rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm dark:border-primary/30 dark:bg-primary/10 dark:text-white';
 </script>
 
-<div class="space-y-1 scroll-mt-24 rounded-lg transition-shadow" id="setting-{field.key}" data-testid="setting-{field.key}">
+<div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
 	{#if field.type === 'bool'}
-		<label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+		<label class="field field-row">
 			<input
 				type="checkbox"
 				aria-label={field.label}
 				checked={boolValue}
 				onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
 			/>
-			<span class="font-medium">{field.label}</span>
+			<span class="field-label">{field.label}</span>
 		</label>
 	{:else}
-		<div class="text-sm font-medium text-gray-700 dark:text-gray-300">{field.label}</div>
+		<div class="field-label">{field.label}</div>
 		{#if !field.editable}
-			<div class="font-mono text-sm text-gray-500 dark:text-gray-400">{value ?? '-'}</div>
+			<div class="mono config-schema-field-value">{value ?? '-'}</div>
 		{:else}
 			<!-- The control and an optional trailing action (e.g. a Check button)
 			     share one row so they align regardless of the help text below. -->
@@ -43,7 +40,7 @@
 						aria-label={field.label}
 						value={value ?? ''}
 						onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
-						class={inputClass}
+						class="field-control w-full"
 					>
 						{#each field.enum_values ?? [] as opt}
 							<option value={opt}>{opt}</option>
@@ -56,7 +53,7 @@
 						value={displayValue}
 						{placeholder}
 						oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
-						class={inputClass}
+						class="field-control w-full"
 					/>
 				{/if}
 				{#if action}{@render action()}{/if}
@@ -64,6 +61,17 @@
 		{/if}
 	{/if}
 	{#if field.help}
-		<p class="text-xs text-gray-500 dark:text-gray-400">{field.help}</p>
+		<p class="field-help">{field.help}</p>
 	{/if}
 </div>
+
+<style>
+	/* scroll-mt-24 (the settings page scrolls a field to the top with an
+	   offset for the sticky header) and the highlight-flash transition aren't
+	   covered by any block. gap: the original was space-y-1 (0.25rem), tighter
+	   than the stack-sm modifier (0.5rem). */
+	.config-schema-field { gap: 0.25rem; scroll-margin-top: 6rem; border-radius: var(--radius-lg); transition: box-shadow var(--motion-base) var(--ease); }
+	/* the read-only value was font-mono text-sm text-gray-500 (0.875rem/1.25rem);
+	   .mono is size-neutral, so this component supplies its own original size. */
+	.config-schema-field-value { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+</style>

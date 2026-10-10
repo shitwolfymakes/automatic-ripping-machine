@@ -81,19 +81,18 @@
 		}
 	}
 
-	const labelClass = 'text-sm font-medium text-gray-700 dark:text-gray-300';
-	const inputClass =
-		'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
+	// the old shared input-class constants are gone: inputs live in .field
+	// wrappers now, styled by field.css's descendant rule.
 </script>
 
-<form class="space-y-4" onsubmit={submit}>
-	<h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+<form class="stack transcode-preset-form" onsubmit={submit}>
+	<h3 class="transcode-preset-form-title">
 		{isBuiltin ? 'View transcode preset' : editing ? 'Edit transcode preset' : 'New transcode preset'}
 	</h3>
 
 	{#if isBuiltin}
 		<div
-			class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300"
+			class="alert alert-warning"
 			data-testid="tp-builtin-note"
 			role="status"
 		>
@@ -102,11 +101,11 @@
 	{/if}
 
 	{#if error}
-		<p class="text-sm text-red-600 dark:text-red-400" data-testid="tp-error">{error}</p>
+		<p class="field-error" data-testid="tp-error">{error}</p>
 	{/if}
 
-	<div>
-		<label class={labelClass} for="tp-name">Name</label>
+	<label class="field">
+		<span class="field-label">Name</span>
 		<input
 			id="tp-name"
 			data-testid="tp-name"
@@ -114,18 +113,16 @@
 			required
 			bind:value={name}
 			disabled={submitting || isBuiltin}
-			class={inputClass}
 		/>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-media-type">Media type</label>
+	<label class="field">
+		<span class="field-label">Media type</span>
 		<select
 			id="tp-media-type"
 			data-testid="tp-media-type"
 			bind:value={mediaType}
 			disabled={editing}
-			class={inputClass}
 		>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
@@ -133,43 +130,40 @@
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-tool">Tool</label>
+	<label class="field">
+		<span class="field-label">Tool</span>
 		<select
 			id="tp-tool"
 			data-testid="tp-tool"
 			bind:value={tool}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="handbrake">HandBrake</option>
 			<option value="abcde">abcde</option>
 			<option value="none">None</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-preset-ref">Preset ref (HandBrake/abcde profile name)</label>
+	<label class="field">
+		<span class="field-label">Preset ref (HandBrake/abcde profile name)</span>
 		<input
 			id="tp-preset-ref"
 			data-testid="tp-preset-ref"
 			type="text"
 			bind:value={presetRef}
 			disabled={isBuiltin}
-			class={inputClass}
 		/>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-container">Container</label>
+	<label class="field">
+		<span class="field-label">Container</span>
 		<select
 			id="tp-container"
 			data-testid="tp-container"
 			bind:value={container}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="mkv">MKV</option>
 			<option value="mp4">MP4</option>
@@ -180,57 +174,54 @@
 			<option value="iso">ISO</option>
 			<option value="none">None</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-codec">Codec</label>
+	<label class="field">
+		<span class="field-label">Codec</span>
 		<select
 			id="tp-codec"
 			data-testid="tp-codec"
 			bind:value={codec}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="">(default)</option>
 			<option value="h264">H.264</option>
 			<option value="h265">H.265</option>
 			<option value="av1">AV1</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-hw-preference">Hardware preference</label>
+	<label class="field">
+		<span class="field-label">Hardware preference</span>
 		<select
 			id="tp-hw-preference"
 			data-testid="tp-hw-preference"
 			bind:value={hwPreference}
 			disabled={isBuiltin}
-			class={inputClass}
 		>
 			<option value="">(unset)</option>
 			<option value="cpu_only">CPU only</option>
 			<option value="any">Any</option>
 		</select>
-	</div>
+	</label>
 
-	<div>
-		<label class={labelClass} for="tp-extra-args">Extra args</label>
+	<label class="field">
+		<span class="field-label">Extra args</span>
 		<input
 			id="tp-extra-args"
 			data-testid="tp-extra-args"
 			type="text"
 			bind:value={extraArgs}
 			disabled={isBuiltin}
-			class={inputClass}
 		/>
-	</div>
+	</label>
 
-	<div class="flex justify-end gap-3 pt-2">
+	<div class="transcode-preset-form-actions">
 		<button
 			type="button"
 			onclick={oncancel}
 			disabled={submitting}
-			class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+			class="btn btn-ghost"
 		>
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
@@ -239,10 +230,15 @@
 				type="submit"
 				disabled={!canSubmit}
 				data-testid="tp-submit"
-				class="rounded-lg px-4 py-2 text-sm font-medium confirm-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn btn-primary"
 			>
 				{submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
 	</div>
 </form>
+
+<style>
+	.transcode-preset-form-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; color: var(--color-text); }
+	.transcode-preset-form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; }
+</style>

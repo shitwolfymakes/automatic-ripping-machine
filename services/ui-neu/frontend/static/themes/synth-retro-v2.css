@@ -21,7 +21,7 @@
 	background: linear-gradient(90deg, #9333ea, #ff007f) !important;
 	box-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
 }
-[data-scheme="synth-retro-v2"] aside nav a[data-active="true"] {
+[data-scheme="synth-retro-v2"] aside .nav-item[data-active="true"] {
 	color: #ff007f !important;
 	background: rgba(255, 0, 127, 0.05) !important;
 	border-left: 3px solid #ff007f;

@@ -1,0 +1,131 @@
+/* Design tokens. Primitives (the raw palette) are private to this file;
+   components and themes reference the semantic roles only (spec 5).
+   Colour roles live in @theme so Tailwind also emits them as utilities
+   for @apply. Themes override the roles under [data-scheme]. */
+
+@theme {
+	/* primitives (private) */
+	--color-p-blue-600: rgb(37, 99, 235);
+	--color-p-blue-700: rgb(29, 78, 216);
+	--color-p-blue-400: rgb(96, 165, 250);
+	--color-p-gray-900: rgb(17, 24, 39);
+	--color-p-gray-700: rgb(55, 65, 81);
+	--color-p-gray-500: rgb(107, 114, 128);
+	--color-p-gray-400: rgb(156, 163, 175);
+	--color-p-gray-300: rgb(209, 213, 219);
+	--color-p-gray-100: rgb(243, 244, 246);
+
+	/* surfaces */
+	--color-page: rgb(232, 240, 255);
+	--color-surface: rgb(241, 247, 255);
+	--color-surface-raised: rgb(255, 255, 255);
+	--color-backdrop: rgb(0 0 0 / 0.5);
+
+	/* borders */
+	--color-border: color-mix(in srgb, var(--color-primary) 18%, transparent);
+	--color-border-strong: color-mix(in srgb, var(--color-primary) 30%, transparent);
+
+	/* text */
+	--color-text: var(--color-p-gray-900);
+	--color-text-secondary: var(--color-p-gray-700);
+	--color-text-muted: var(--color-p-gray-500);
+	--color-text-faint: var(--color-p-gray-400);
+
+	/* primary */
+	--color-primary: var(--color-p-blue-600);
+	--color-primary-hover: var(--color-p-blue-700);
+	--color-on-primary: rgb(255, 255, 255);
+	--color-primary-text: var(--color-p-blue-700);
+	--color-primary-tint-1: color-mix(in srgb, var(--color-primary) 5%, transparent);
+	--color-primary-tint-2: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	--color-primary-tint-3: color-mix(in srgb, var(--color-primary) 20%, transparent);
+
+	/* tones: solid, soft background, text on soft */
+	--color-danger: rgb(220, 38, 38);
+	--color-danger-soft: rgb(254, 242, 242);
+	--color-on-danger-soft: rgb(185, 28, 28);
+	--color-warning: rgb(245, 158, 11);
+	--color-warning-soft: rgb(255, 251, 235);
+	--color-on-warning-soft: rgb(146, 64, 14);
+	--color-success: rgb(22, 163, 74);
+	--color-success-soft: rgb(240, 253, 244);
+	--color-on-success-soft: rgb(21, 128, 61);
+	--color-info: var(--color-primary);
+	--color-info-soft: var(--color-primary-tint-2);
+	--color-on-info-soft: var(--color-primary-text);
+
+	/* job / drive status (existing, themeable) */
+	--color-status-ripping: rgb(59, 130, 246);
+	--color-status-transcoding: rgb(139, 92, 246);
+	--color-status-finishing: rgb(245, 158, 11);
+	--color-status-waiting: rgb(234, 179, 8);
+	--color-status-scanning: rgb(6, 182, 212);
+	--color-status-success: rgb(34, 197, 94);
+	--color-status-error: rgb(239, 68, 68);
+
+	/* fixed accents used by disc-type icons and glyph tiles */
+	--color-accent-1: rgb(245, 158, 11);
+	--color-accent-2: rgb(59, 130, 246);
+	--color-accent-3: rgb(139, 92, 246);
+	--color-accent-4: rgb(6, 182, 212);
+
+	/* section-frame accent (themeable via --frame-accent) */
+	--color-frame-accent: rgb(255, 153, 0);
+	--color-on-frame-accent: rgb(0, 0, 0);
+
+	--radius-sm: calc(var(--radius) * 0.25);
+	--radius-md: calc(var(--radius) * 0.75);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.5);
+	--radius-2xl: calc(var(--radius) * 2);
+
+	--font-display: 'Rajdhani', var(--font-sans);
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+	--animate-indeterminate: indeterminate 1.5s ease-in-out infinite;
+}
+
+:root {
+	--radius: 0.5rem;
+	--shadow-1: 0 1px 2px rgb(0 0 0 / 0.05);
+	--shadow-2: 0 10px 25px rgb(0 0 0 / 0.15);
+	--motion-fast: 150ms;
+	--motion-base: 250ms;
+	--ease: cubic-bezier(0.4, 0, 0.2, 1);
+	--control-h: 2.25rem;
+	--control-h-sm: 1.75rem;
+	/* the 11px uppercase tracked label used by panel titles and table headers */
+	--eyebrow-size: 11px;
+	--eyebrow-tracking: 0.12em;
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+.dark {
+	--color-page: rgb(13, 16, 28);
+	--color-surface: rgb(22, 28, 45);
+	--color-surface-raised: rgb(30, 37, 58);
+	--color-backdrop: rgb(0 0 0 / 0.6);
+	--color-border: color-mix(in srgb, var(--color-primary) 22%, transparent);
+	--color-border-strong: color-mix(in srgb, var(--color-primary) 38%, transparent);
+	--color-text: var(--color-p-gray-100);
+	--color-text-secondary: var(--color-p-gray-300);
+	--color-text-muted: var(--color-p-gray-400);
+	--color-text-faint: var(--color-p-gray-500);
+	--color-primary-text: var(--color-p-blue-400);
+	--color-danger: rgb(248, 113, 113);
+	--color-danger-soft: rgb(127 29 29 / 0.35);
+	--color-on-danger-soft: rgb(252, 165, 165);
+	--color-warning: rgb(251, 191, 36);
+	--color-warning-soft: rgb(120 53 15 / 0.35);
+	--color-on-warning-soft: rgb(252, 211, 77);
+	--color-success: rgb(74, 222, 128);
+	--color-success-soft: rgb(20 83 45 / 0.35);
+	--color-on-success-soft: rgb(134, 239, 172);
+	--shadow-2: 0 10px 25px rgb(0 0 0 / 0.5);
+}
+
+@keyframes indeterminate {
+	0% { transform: translateX(-100%); }
+	100% { transform: translateX(400%); }
+}

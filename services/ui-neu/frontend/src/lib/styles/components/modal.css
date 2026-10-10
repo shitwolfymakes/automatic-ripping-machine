@@ -1,0 +1,12 @@
+/* modal: a centred dialog over a scrim.
+   Elements: modal-backdrop (the fixed scrim; may be the same element as .modal),
+   modal-panel, modal-title, modal-body, modal-actions.
+   Modifiers: modal-wide. */
+@layer components {
+	.modal, .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: var(--color-backdrop); padding: 1rem; }
+	.modal-panel { width: 100%; max-width: 28rem; max-height: 90vh; overflow: auto; border: 1px solid var(--color-border-strong); border-radius: var(--radius-xl); background: var(--color-surface); padding: 1.5rem; box-shadow: var(--shadow-2); }
+	.modal-wide .modal-panel, .modal-panel.modal-wide { max-width: 48rem; }
+	.modal-title { font-size: 1.125rem; font-weight: 600; color: var(--color-text); }
+	.modal-body { margin-top: 0.75rem; font-size: 0.875rem; color: var(--color-text-secondary); }
+	.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
+}

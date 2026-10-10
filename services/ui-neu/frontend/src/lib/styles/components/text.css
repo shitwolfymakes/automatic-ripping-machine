@@ -1,0 +1,11 @@
+/* text helpers: eyebrow (small uppercase tracked label), mono, kbd.
+   .mono is size-neutral (font-family + tabular-nums only): it sits inside
+   many different contexts (a table cell, a card value, a read-only field)
+   each with its own original text size, so the size comes from the
+   surrounding block or the consumer's own scoped rule, never from .mono
+   itself. */
+@layer components {
+	.eyebrow { font-size: var(--eyebrow-size); font-weight: 600; letter-spacing: var(--eyebrow-tracking); text-transform: uppercase; color: var(--color-text-muted); }
+	.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+	.kbd { display: inline-block; border: 1px solid var(--color-border-strong); border-bottom-width: 2px; border-radius: var(--radius-sm); padding: 0 0.375rem; font-family: var(--font-mono); font-size: 0.6875rem; color: var(--color-text-secondary); background: var(--color-surface-raised); }
+}

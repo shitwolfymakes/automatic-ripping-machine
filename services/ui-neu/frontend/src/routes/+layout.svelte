@@ -159,29 +159,26 @@
 {:else}
 <div class="flex h-screen overflow-hidden">
 	<!-- Sidebar -->
-	<aside class="hidden w-64 shrink-0 border-r border-primary/20 bg-surface dark:border-primary/20 dark:bg-surface-dark lg:block">
+	<aside class="sidebar hidden lg:block">
 		<div class="flex h-full flex-col">
-			<div data-logo class="flex items-center justify-center py-6">
-				<img src="/img/arm-logo-black.png" alt="ARM" class="h-24 w-24 dark:hidden" />
-				<img src="/img/arm-logo-white.png" alt="ARM" class="hidden h-24 w-24 dark:block" />
+			<div data-logo class="nav-logo">
+				<img src="/img/arm-logo-black.png" alt="ARM" class="layout-logo-light" />
+				<img src="/img/arm-logo-white.png" alt="ARM" class="layout-logo-dark" />
 			</div>
-			<hr class="border-primary/20 dark:border-primary/20" />
-			<nav class="flex-1 space-y-1 px-3 py-4">
+			<hr class="layout-hr" />
+			<nav class="nav flex-1 overflow-y-auto">
 				{#each navItems as item}
 					<a
 						href={item.href}
 						data-active={isActive(item.href, $page.url.pathname) || undefined}
-						class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-							{isActive(item.href, $page.url.pathname)
-								? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-								: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
+						class="nav-item"
 					>
-						<svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
 						</svg>
 						{item.label}
 						{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-							<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
+							<span class="nav-badge">{$dashboard.notification_count}</span>
 						{/if}
 					</a>
 				{/each}
@@ -199,11 +196,11 @@
 	<!-- Main content -->
 	<div class="flex flex-1 flex-col overflow-hidden">
 		<!-- Top bar -->
-		<header class="flex h-14 items-center justify-between border-b border-primary/20 bg-surface px-4 dark:border-primary/20 dark:bg-surface-dark lg:px-6">
+		<header class="layout-header flex h-14 items-center justify-between px-4 lg:px-6">
 			<button
 				onclick={() => sidebarOpen ? (sidebarOpen = false) : openSidebar()}
 				aria-label="Toggle sidebar"
-				class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-400 dark:hover:bg-primary/15 lg:hidden"
+				class="btn btn-icon layout-header-icon lg:hidden"
 			>
 				<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -211,48 +208,55 @@
 			</button>
 
 			<!-- Stats bar (desktop only) -->
-			<div class="hidden lg:flex items-center gap-3 text-sm">
+			<div class="layout-stats-bar hidden lg:flex items-center gap-3">
 				<!-- Service health dots -->
 				<div class="flex items-center gap-3">
-					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
-						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.arm_online ? 'bg-green-500' : 'bg-red-500'}"></div>
-						<span class="text-gray-700 dark:text-gray-200">ARM</span>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="layout-health-link">
+						<span class="status-dot" data-status={$dashboard.arm_online ? 'ok' : 'error'}></span>
+						<span class="layout-health-label">ARM</span>
 					</svelte:element>
-					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
-						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.db_available ? 'bg-green-500' : 'bg-yellow-500'}"></div>
-						<span class="text-gray-700 dark:text-gray-200">DB</span>
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#system'} class="layout-health-link">
+						<span class="status-dot" data-status={$dashboard.db_available ? 'ok' : 'warn'}></span>
+						<span class="layout-health-label">DB</span>
 					</svelte:element>
-					<a href="/transcoder" class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}">
-						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true) ? 'bg-green-500' : $dashboard.transcoder_online ? 'bg-yellow-500' : 'bg-gray-400'}"></div>
-						<span class="text-gray-700 dark:text-gray-200">Transcode</span>
+					<a href="/transcoder" class="layout-health-link">
+						<span
+							class="status-dot"
+							data-status={$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true)
+								? 'ok'
+								: $dashboard.transcoder_online
+									? 'warn'
+									: 'off'}
+						></span>
+						<span class="layout-health-label">Transcode</span>
 					</a>
-					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#Metadata/makemkv_key'} class="flex items-center gap-1.5 transition-opacity {$isGuest ? '' : 'hover:opacity-75'}"
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#Metadata/makemkv_key'} class="layout-health-link"
 						title={$dashboard.makemkv_key_valid === true
 							? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
 							: $dashboard.makemkv_key_valid === false
 								? 'MakeMKV key invalid - click to update'
 								: 'MakeMKV key not checked yet'}
 					>
-						<div class="h-2 w-2 shrink-0 rounded-full {$dashboard.makemkv_key_valid === true ? 'bg-green-500' : 'bg-red-500'}"></div>
-						<span class="text-gray-700 dark:text-gray-200">Key</span>
+						<span class="status-dot" data-status={$dashboard.makemkv_key_valid === true ? 'ok' : 'error'}></span>
+						<span class="layout-health-label">Key</span>
 					</svelte:element>
 				</div>
 				<!-- Divider -->
-				<div class="h-6 w-px bg-black dark:bg-white/30"></div>
+				<div class="layout-header-divider"></div>
 				<!-- Live activity -->
-				<div class="flex items-center gap-3 text-xs">
-					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#drives'} class="text-gray-600 dark:text-gray-300 transition-colors {$isGuest ? '' : 'hover:text-primary dark:hover:text-primary'}">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</svelte:element>
+				<div class="layout-activity-group flex items-center gap-3">
+					<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : '/settings#drives'} class="layout-activity-link">{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}</svelte:element>
 					{#if rippingCount > 0}
-						<span class="font-semibold text-blue-600 dark:text-blue-400">{rippingCount} ripping</span>
+						<span class="layout-activity-ripping">{rippingCount} ripping</span>
 					{/if}
 					{#if $dashboard.active_transcodes.length > 0}
-						<a href="/transcoder" class="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors dark:text-indigo-400 dark:hover:text-indigo-300">{$dashboard.active_transcodes.length} transcoding</a>
+						<a href="/transcoder" class="layout-activity-transcoding">{$dashboard.active_transcodes.length} transcoding</a>
 					{/if}
 					{#if $dashboard.transcoder_online && (Number($dashboard.transcoder_stats?.pending) || 0) > 0}
-						<span class="font-semibold text-yellow-600 dark:text-yellow-400">{$dashboard.transcoder_stats?.pending} queued</span>
+						<span class="layout-activity-queued">{$dashboard.transcoder_stats?.pending} queued</span>
 					{/if}
 					{#if ($dashboard.notification_count ?? 0) > 0}
-						<a href="/notifications" class="font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
+						<a href="/notifications" class="layout-activity-notification">{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a>
 					{/if}
 				</div>
 			</div>
@@ -261,15 +265,17 @@
 				<!-- Auto-Start toggle -->
 				{#if !$isGuest && $dashboard.db_available}
 					<button
+						type="button"
+						role="switch"
+						aria-checked={$dashboard.ripping_enabled}
 						onclick={toggleRipping}
 						disabled={togglingPause}
-						class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors {$dashboard.ripping_enabled
-							? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-							: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}"
+						class="btn layout-autostart"
+						data-active={$dashboard.ripping_enabled}
 					>
-						<div class="relative h-5 w-9 rounded-lg transition-colors {$dashboard.ripping_enabled ? 'bg-primary' : 'bg-amber-500'}">
-							<div class="absolute top-0.5 h-4 w-4 rounded-lg bg-white shadow transition-transform {$dashboard.ripping_enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
-						</div>
+						<span class="toggle" aria-hidden="true">
+							<span class="toggle-thumb"></span>
+						</span>
 						{$dashboard.ripping_enabled ? 'Auto-Start' : 'Paused'}
 					</button>
 				{/if}
@@ -279,7 +285,7 @@
 					{#snippet trigger({ toggle })}
 						<button
 							onclick={toggle}
-							class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+							class="btn btn-icon layout-header-icon"
 							title="Quick actions"
 						>
 							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,7 +318,7 @@
 				{#if $isGuest}
 					<button
 						onclick={() => goto('/login')}
-						class="rounded-lg px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+						class="btn btn-link"
 						title="Log in"
 					>
 						Login
@@ -320,7 +326,7 @@
 				{:else}
 					<button
 						onclick={handleSignOut}
-						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+						class="btn btn-icon layout-header-icon"
 						title="Sign out"
 						aria-label="Sign out"
 					>
@@ -333,7 +339,7 @@
 				{#if !$schemeLocksMode}
 					<button
 						onclick={toggleTheme}
-						class="rounded-lg p-2 text-gray-500 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15"
+						class="btn btn-icon layout-header-icon"
 					>
 						{#if $theme === 'dark'}
 							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,46 +357,42 @@
 
 		<!-- Mobile sidebar overlay -->
 		{#if sidebarOpen}
-			<div class="fixed inset-0 z-40 lg:hidden">
-				<button class="absolute inset-0 bg-black/50" aria-label="Close sidebar" onclick={() => sidebarOpen = false}></button>
-				<aside class="relative z-50 flex h-full w-64 flex-col bg-surface shadow-xl dark:bg-surface-dark">
-					<div data-logo class="flex items-center justify-center py-4">
-						<img src="/img/arm-logo-black.png" alt="ARM" class="h-20 w-20 dark:hidden" />
-						<img src="/img/arm-logo-white.png" alt="ARM" class="hidden h-20 w-20 dark:block" />
+			<div class="layout-drawer-overlay fixed inset-0 lg:hidden">
+				<button class="layout-scrim absolute inset-0" aria-label="Close sidebar" onclick={() => sidebarOpen = false}></button>
+				<aside class="layout-drawer relative flex h-full flex-col">
+					<div data-logo class="nav-logo layout-drawer-logo">
+						<img src="/img/arm-logo-black.png" alt="ARM" class="layout-logo-light layout-logo-sm" />
+						<img src="/img/arm-logo-white.png" alt="ARM" class="layout-logo-dark layout-logo-sm" />
 					</div>
 					<!-- Menu / Stats view toggle -->
-					<div class="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-lg bg-primary/10 p-1 dark:bg-primary/15">
+					<div class="tabs tabs-pills layout-drawer-tabs mx-3 mb-2 grid grid-cols-2">
 						{#each [{ id: 'menu', label: 'Menu' }, { id: 'stats', label: 'Stats' }] as view (view.id)}
 							<button
 								type="button"
+								data-active={drawerView === view.id}
 								onclick={() => drawerView = view.id as 'menu' | 'stats'}
-								class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {drawerView === view.id
-									? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-									: 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
+								class="tabs-tab layout-drawer-tab"
 							>
 								{view.label}
 							</button>
 						{/each}
 					</div>
-					<hr class="border-primary/20 dark:border-primary/20" />
+					<hr class="layout-hr" />
 					{#if drawerView === 'menu'}
-						<nav class="flex-1 overflow-y-auto space-y-1 px-3 py-4">
+						<nav class="nav flex-1 overflow-y-auto">
 							{#each navItems as item}
 								<a
 									href={item.href}
 									onclick={() => sidebarOpen = false}
 									data-active={isActive(item.href, $page.url.pathname) || undefined}
-									class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
-										{isActive(item.href, $page.url.pathname)
-											? 'bg-primary-light-bg text-primary-text dark:bg-primary-light-bg-dark/30 dark:text-primary-text-dark'
-											: 'text-gray-700 hover:bg-primary/10 dark:text-gray-300 dark:hover:bg-primary/15'}"
+									class="nav-item"
 								>
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
 									</svg>
 									{item.label}
 									{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-										<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-medium text-white">{$dashboard.notification_count}</span>
+										<span class="nav-badge">{$dashboard.notification_count}</span>
 									{/if}
 								</a>
 							{/each}
@@ -419,3 +421,173 @@
 	onclose={() => showImportWizard.set(false)}
 	oncreated={() => { showImportWizard.set(false); }}
 />
+
+<style>
+	/* Sidebar shell: the one arrangement rule the block vocabulary doesn't
+	   cover (a nav host needs a fixed width and a border, .nav itself is
+	   just the link list). */
+	.sidebar {
+		width: 16rem;
+		flex-shrink: 0;
+		border-right: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.layout-stats-bar {
+		font-size: 0.875rem;
+	}
+	.layout-activity-group {
+		font-size: 0.75rem;
+	}
+	.layout-header {
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.layout-hr {
+		border-top: 1px solid var(--color-border);
+	}
+	.layout-header-divider {
+		height: 1.5rem;
+		width: 1px;
+		background: var(--color-border-strong);
+	}
+	/* original header icon buttons were p-2 (0.5rem/8px), not .btn-icon's
+	   default 0.375rem (6px) - that smaller value is right for the denser
+	   row icon buttons elsewhere (channel rows use p-1.5/6px), but shifts
+	   these four header buttons (sidebar toggle, quick actions, sign out,
+	   theme) ~2px narrower than the original. */
+	.layout-header-icon {
+		padding: 0.5rem;
+	}
+	.layout-logo-light, .layout-logo-dark {
+		height: 6rem;
+		width: 6rem;
+	}
+	.layout-logo-sm {
+		height: 5rem;
+		width: 5rem;
+	}
+	.layout-logo-dark { display: none; }
+	/* The ARM wordmark is two pre-rendered bitmaps (black-on-transparent,
+	   white-on-transparent); dark mode swaps which one is visible. */
+	:global(.dark) .layout-logo-light { display: none; } /* hide the black wordmark */
+	:global(.dark) .layout-logo-dark { display: block; } /* swap to the white wordmark */
+
+	/* Service health dots: label + hover affordance shared by all four rows. */
+	.layout-health-link {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		transition: opacity var(--motion-fast) var(--ease);
+	}
+	a.layout-health-link:hover {
+		opacity: 0.75;
+	}
+	.layout-health-label {
+		color: var(--color-text-secondary);
+	}
+	.layout-activity-link {
+		color: var(--color-text-muted);
+		transition: color var(--motion-fast) var(--ease);
+	}
+	a.layout-activity-link:hover {
+		color: var(--color-primary-text);
+	}
+	/* Four distinct count tones. These are TEXT labels, so they take the
+	   accent roles that match their originals (blue-400, indigo-400,
+	   amber-400), not the --color-status-* machine that fills dots and
+	   progress bars: a scheme is free to redefine the status colours for its
+	   own state machine (winamp-97 sets every one of them to terminal green),
+	   which would collapse all four counts into one colour. */
+	.layout-activity-ripping {
+		font-weight: 600;
+		color: var(--color-accent-2);
+	}
+	.layout-activity-transcoding {
+		font-weight: 600;
+		color: var(--color-accent-3);
+	}
+	.layout-activity-queued {
+		font-weight: 600;
+		color: var(--color-accent-1);
+	}
+	.layout-activity-notification {
+		font-weight: 600;
+		color: var(--color-warning);
+	}
+	a.layout-activity-transcoding:hover,
+	a.layout-activity-notification:hover {
+		color: var(--color-primary-hover);
+	}
+
+	/* Auto-Start control: a labeled toggle, tinted by whether ripping is on.
+	   Overrides the shared .btn box model (border, min-height, padding) back
+	   to this control's original geometry (no border, natural height,
+	   px-3 py-1.5), since .btn's border-strong ring and --control-h min-height
+	   were designed for bordered action buttons, not this pill. */
+	.layout-autostart {
+		gap: 0.5rem;
+		min-height: auto;
+		padding: 0.375rem 0.75rem;
+		border: 0;
+		color: var(--color-on-warning-soft);
+		background: var(--color-warning-soft);
+	}
+	.layout-autostart[data-active="true"] {
+		color: var(--color-primary-text);
+		background: var(--color-primary-tint-2);
+	}
+	/* Off/paused tint, scoped to aria-checked="false" so it does not outrank
+	   toggle.css's [role="switch"][aria-checked="true"] > .toggle rule (a
+	   scoped selector's Svelte hash otherwise wins that specificity fight
+	   even when unconditional, since this button carries the real
+	   role="switch" aria-checked). */
+	.layout-autostart[aria-checked="false"] .toggle {
+		background: var(--color-warning);
+	}
+
+	/* Mobile drawer */
+	.layout-drawer-overlay {
+		z-index: 40;
+	}
+	.layout-scrim {
+		z-index: 50;
+		background: var(--color-backdrop);
+	}
+	.layout-drawer {
+		z-index: 50;
+		width: 16rem;
+		background: var(--color-surface);
+		box-shadow: var(--shadow-2);
+	}
+	.layout-drawer-logo {
+		padding-top: 1rem;
+		padding-bottom: 1rem;
+	}
+	.layout-drawer-tabs {
+		background: var(--color-primary-tint-2);
+		padding: 0.25rem;
+		border-radius: var(--radius-lg);
+	}
+	.layout-drawer-tab {
+		text-align: center;
+		padding: 0.375rem 0.75rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+	}
+	.layout-drawer-tab:hover {
+		color: var(--color-text);
+	}
+	/* Plain buttons, not role="tab" (the drawer's Menu/Stats toggle is not a
+	   tabpanel switcher in the ARIA sense), so the selected look keys off
+	   data-active rather than the tabs block's own aria-selected hook. The
+	   active tone is the tinted one this control has always used (the same
+	   tint/text pair as an active nav-item), not tabs-pills' solid fill. */
+	.layout-drawer-tab[data-active="true"] {
+		/* Opaque, not the transparent tint token: the strip underneath is
+		   already tinted, and a second translucent tint on top would stack
+		   into a visibly darker pill than the flat one this control has. */
+		background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+		color: var(--color-primary-text);
+	}
+</style>

@@ -108,12 +108,12 @@
 		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
 
-	function deltaClass(trackLen: number | null | undefined, epRuntime: number | null): string {
-		if (!trackLen || !epRuntime) return '';
+	function deltaTone(trackLen: number | null | undefined, epRuntime: number | null): string | undefined {
+		if (!trackLen || !epRuntime) return undefined;
 		const delta = Math.abs(trackLen - epRuntime * 60);
-		if (delta < 60) return 'text-green-400';
-		if (delta < 180) return 'text-yellow-400';
-		return 'text-red-400';
+		if (delta < 60) return 'success';
+		if (delta < 180) return 'warning';
+		return 'danger';
 	}
 
 	function deltaText(trackLen: number | null | undefined, epRuntime: number | null): string {
@@ -293,70 +293,70 @@
 	});
 </script>
 
-<div class="space-y-3">
+<div class="stack">
 	<!-- Controls bar (always visible) -->
-	<div class="flex flex-wrap items-center gap-3 rounded-lg bg-surface/50 p-3 ring-1 ring-primary/10 dark:bg-surface-dark/50 dark:ring-primary/10">
+	<div class="flex flex-wrap items-center gap-3 panel-section episode-match-controls">
 		<div class="flex items-center gap-1.5">
-			<span class="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Season</span>
+			<span class="eyebrow episode-match-label">Season</span>
 			<input
 				type="number"
 				bind:value={seasonInput}
 				min="1"
-				class="w-12 rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-center text-xs text-gray-900 dark:border-primary/20 dark:bg-surface-dark dark:text-white"
+				class="w-12 episode-match-mini-input"
 			/>
 		</div>
 		<div class="flex items-center gap-1.5">
-			<span class="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Disc</span>
+			<span class="eyebrow episode-match-label">Disc</span>
 			<input
 				type="number"
 				bind:value={discInput}
 				min="1"
-				class="w-12 rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-center text-xs text-gray-900 dark:border-primary/20 dark:bg-surface-dark dark:text-white"
+				class="w-12 episode-match-mini-input"
 			/>
-			<span class="text-xs text-gray-400">of</span>
+			<span class="episode-match-of">of</span>
 			<input
 				type="number"
 				bind:value={discTotalInput}
 				min="1"
-				class="w-12 rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-center text-xs text-gray-900 dark:border-primary/20 dark:bg-surface-dark dark:text-white"
+				class="w-12 episode-match-mini-input"
 			/>
 		</div>
 		<div class="flex items-center gap-1.5">
-			<span class="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Tolerance</span>
+			<span class="eyebrow episode-match-label">Tolerance</span>
 			<input
 				type="number"
 				bind:value={toleranceInput}
 				min="60"
 				step="60"
-				class="w-16 rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-center text-xs text-gray-900 dark:border-primary/20 dark:bg-surface-dark dark:text-white"
+				class="w-16 episode-match-mini-input"
 			/>
-			<span class="text-[10px] text-gray-400">sec</span>
+			<span class="episode-match-sec">sec</span>
 		</div>
 		<button
 			onclick={runMatch}
 			disabled={loading}
-			class="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+			class="btn btn-primary episode-match-run-btn"
 		>
 			{loading ? 'Matching...' : 'Match'}
 		</button>
 		{#if matches.length > 0}
-			<div class="ml-auto flex items-center gap-2 text-xs">
-				<span class="text-green-500">{matchCount} matched</span>
-				<span class="text-gray-500">&middot;</span>
+			<div class="ml-auto flex items-center gap-2 episode-match-summary">
+				<span class="episode-match-summary-tone" data-tone="success">{matchCount} matched</span>
+				<span class="episode-match-dot">&middot;</span>
 				{#if unmatched > 0}
-					<span class="text-amber-500">{unmatched} unmatched</span>
+					<span class="episode-match-summary-tone" data-tone="warning">{unmatched} unmatched</span>
 				{:else}
-					<span class="text-gray-500">0 unmatched</span>
+					<span class="episode-match-dot">0 unmatched</span>
 				{/if}
-				<span class="text-gray-500">&middot;</span>
-				<span class="text-gray-500">{shortTracks.length} skipped</span>
+				<span class="episode-match-dot">&middot;</span>
+				<span class="episode-match-dot">{shortTracks.length} skipped</span>
 			</div>
 		{/if}
 	</div>
 
 	<!-- Error -->
 	{#if error}
-		<div class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+		<div class="alert alert-danger">
 			{error}
 		</div>
 	{/if}
@@ -364,38 +364,39 @@
 	<!-- Match table -->
 	{#if matches.length > 0 || Object.keys(assignments).length > 0}
 		<div class="overflow-x-auto">
-			<table class="w-full table-fixed text-sm">
+			<table class="table episode-match-table">
 				<colgroup>
-					<col class="w-[25%]" />
-					<col class="w-[8%]" />
-					<col class="w-[28%]" />
-					<col class="w-[23%]" />
-					<col class="w-[8%]" />
-					<col class="w-[8%]" />
+					<col />
+					<col />
+					<col />
+					<col />
+					<col />
+					<col />
 				</colgroup>
 				<thead>
-					<tr class="border-b border-primary/10 dark:border-primary/10">
-						<th class="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Track</th>
-						<th class="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Duration</th>
-						<th class="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Episode</th>
-						<th class="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Title</th>
-						<th class="px-2 py-1.5 text-right text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">TVDB</th>
-						<th class="px-2 py-1.5 text-right text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Delta</th>
+					<tr>
+						<th class="table-header">Track</th>
+						<th class="table-header">Duration</th>
+						<th class="table-header">Episode</th>
+						<th class="table-header">Title</th>
+						<th class="table-header episode-match-right">TVDB</th>
+						<th class="table-header episode-match-right">Delta</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each mainTracks as track}
 						{@const tn = String(track.index)}
 						{@const ep = getEpisodeForTrack(tn)}
-						<tr class="border-b border-primary/5 dark:border-primary/5">
-							<td class="px-2 py-2">
-								<span class="text-xs text-gray-500">T{tn}</span>
-								<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">{(track.source_ref ?? '').slice(0, 30)}</span>
+						<tr class="table-row">
+							<td class="table-cell">
+								<span class="episode-match-track-num">T{tn}</span>
+								<span class="ml-1 episode-match-source-ref">{(track.source_ref ?? '').slice(0, 30)}</span>
 							</td>
-							<td class="px-2 py-2 text-gray-300 dark:text-gray-300">{formatDuration(track.duration_seconds)}</td>
-							<td class="px-2 py-2">
+							<td class="table-cell episode-match-duration">{formatDuration(track.duration_seconds)}</td>
+							<td class="table-cell">
 								<select
-									class="w-full rounded border border-primary/20 bg-surface px-1.5 py-0.5 text-xs truncate dark:border-primary/20 dark:bg-surface-dark {assignments[tn] != null ? 'text-green-400' : 'text-gray-400'}"
+									class="w-full truncate episode-match-select"
+									data-assigned={assignments[tn] != null}
 									value={assignments[tn] ?? ''}
 									onchange={(e) => {
 										const val = (e.target as HTMLSelectElement).value;
@@ -410,18 +411,18 @@
 									{/each}
 								</select>
 							</td>
-							<td class="px-2 py-2 text-xs text-gray-300 dark:text-gray-400">
+							<td class="table-cell episode-match-title">
 								{namingPreviews[tn]?.rendered_title || ep?.name || '-'}
 							</td>
-							<td class="px-2 py-2 text-right text-gray-400">{ep ? `${ep.runtime}m` : '-'}</td>
-							<td class="px-2 py-2 text-right {deltaClass(track.duration_seconds, ep?.runtime ?? null)}">
+							<td class="table-cell episode-match-right episode-match-runtime">{ep ? `${ep.runtime}m` : '-'}</td>
+							<td class="table-cell episode-match-right episode-match-delta" data-tone={deltaTone(track.duration_seconds, ep?.runtime ?? null)}>
 								{deltaText(track.duration_seconds, ep?.runtime ?? null)}
 							</td>
 						</tr>
 					{/each}
 					{#if shortTracks.length > 0}
-						<tr class="opacity-40">
-							<td class="px-2 py-2 text-xs text-gray-500" colspan="6">
+						<tr class="table-row" data-disabled="true">
+							<td class="table-cell episode-match-skip-note" colspan="6">
 								{shortTracks.length} short track{shortTracks.length > 1 ? 's' : ''} skipped (menus, intros)
 							</td>
 						</tr>
@@ -437,34 +438,34 @@
 					in:reveal
 					onclick={applyMatches}
 					disabled={applying || matchCount === 0}
-					class="rounded-md bg-green-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
+					class="btn episode-match-success-btn episode-match-wide-btn"
 				>
 					{applying ? 'Applying...' : 'Apply Matches'}
 				</button>
 				<button
 					in:reveal
 					onclick={clearAll}
-					class="rounded-md px-4 py-1.5 text-sm text-gray-500 ring-1 ring-gray-300 transition-colors hover:bg-gray-50 dark:text-gray-400 dark:ring-gray-600 dark:hover:bg-gray-800"
+					class="btn episode-match-clear-btn episode-match-wide-btn"
 				>
 					Clear All
 				</button>
 			{/if}
-			<span class="ml-auto text-[11px] text-gray-400 dark:text-gray-500">
+			<span class="ml-auto episode-match-hint">
 				Change season/disc and re-match to try different assignments.
 			</span>
 		</div>
 	{:else if loading}
 		<div class="flex items-center justify-center py-8">
-			<div class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
-				<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-					<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+			<div class="flex items-center gap-2 episode-match-loading">
+				<svg class="h-5 w-5 episode-match-spinner" fill="none" viewBox="0 0 24 24">
+					<circle class="episode-match-spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+					<path class="episode-match-spinner-arc" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 				</svg>
 				Matching episodes...
 			</div>
 		</div>
 	{:else if !error && !applying}
-		<div class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+		<div class="py-6 episode-match-empty episode-match-center">
 			{#if !tvdbId && !imdbId}
 				No IMDB or TVDB ID set. Use <strong>Search</strong> to identify the show first.
 			{:else if mainTracks.length === 0}
@@ -475,3 +476,50 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.episode-match-controls { background: var(--color-primary-tint-1); }
+	.episode-match-label { color: var(--color-text-muted); }
+	.episode-match-mini-input { border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); padding: 0.125rem 0.375rem; text-align: center; font-size: 0.75rem; line-height: 1rem; color: var(--color-text); }
+	.episode-match-of { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.episode-match-sec { font-size: 10px; color: var(--color-text-faint); }
+	.episode-match-summary { font-size: 0.75rem; line-height: 1rem; }
+	.episode-match-summary-tone[data-tone="success"] { color: var(--color-success); }
+	.episode-match-summary-tone[data-tone="warning"] { color: var(--color-on-warning-soft); }
+	.episode-match-dot { color: var(--color-text-muted); }
+	.episode-match-table { table-layout: fixed; }
+	.episode-match-table col:nth-child(1) { width: 25%; }
+	.episode-match-table col:nth-child(2) { width: 8%; }
+	.episode-match-table col:nth-child(3) { width: 28%; }
+	.episode-match-table col:nth-child(4) { width: 23%; }
+	.episode-match-table col:nth-child(5) { width: 8%; }
+	.episode-match-table col:nth-child(6) { width: 8%; }
+	.episode-match-right { text-align: right; }
+	.episode-match-center { text-align: center; }
+	.episode-match-track-num { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.episode-match-source-ref { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.episode-match-duration { color: var(--color-text-secondary); }
+	.episode-match-select { border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); padding: 0.125rem 0.375rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.episode-match-select[data-assigned="true"] { color: var(--color-success); }
+	.episode-match-title { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
+	.episode-match-runtime { color: var(--color-text-faint); }
+	.episode-match-delta { font-size: inherit; }
+	.episode-match-delta[data-tone="success"] { color: var(--color-success); }
+	.episode-match-delta[data-tone="warning"] { color: var(--color-on-warning-soft); }
+	.episode-match-delta[data-tone="danger"] { color: var(--color-danger); }
+	.episode-match-skip-note { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.episode-match-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
+	.episode-match-clear-btn { box-shadow: 0 0 0 1px var(--color-border-strong); color: var(--color-text-muted); }
+	/* the original Match button was px-3 py-1 (0.75rem/0.25rem); Apply
+	   Matches / Clear All were px-4 py-1.5 (1rem/0.375rem) */
+	.episode-match-run-btn { padding: 0.25rem 0.75rem; }
+	.episode-match-wide-btn { padding: 0.375rem 1rem; }
+	.episode-match-success-btn:hover { filter: brightness(0.9); }
+	.episode-match-hint { font-size: 11px; color: var(--color-text-faint); }
+	.episode-match-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.episode-match-spinner { animation: episode-match-spin 1s linear infinite; }
+	.episode-match-spinner-track { opacity: 0.25; }
+	.episode-match-spinner-arc { opacity: 0.75; }
+	@keyframes episode-match-spin { to { transform: rotate(360deg); } }
+	.episode-match-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+</style>

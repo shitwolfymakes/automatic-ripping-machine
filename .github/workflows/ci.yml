@@ -107,7 +107,6 @@ jobs:
       # longer enumerate drives (drive lifecycle §5).
       - name: setup-dev / compose template suite
         run: bash devtools/test-setup-dev.sh
-
       # Zero-infra unit test that sources docker-entrypoint.sh via its
       # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Entrypoint render-access suite
@@ -160,6 +159,11 @@ jobs:
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
       - run: npm run check
+      # style lint: bans inline utility styling outside the allowed layout
+      # families (see devtools/ui-neu-style-lint.mjs and docs/ui-neu-theming.md)
+      - run: node --test devtools/ui-neu-style-lint.test.mjs
+        working-directory: .
+      - run: npm run lint:styles
 
   test-ui-neu:
     name: test (ui-neu — vitest)

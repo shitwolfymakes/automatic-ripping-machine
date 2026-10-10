@@ -82,12 +82,12 @@ type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'>;
  */
 export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string } {
 	const s = job.status?.toLowerCase() ?? '';
-	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-amber-500, #f59e0b)' };
+	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-accent-1)' };
 	if (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify')
-		return { label: 'IDENTIFY', accent: 'var(--color-cyan-500, #06b6d4)' };
+		return { label: 'IDENTIFY', accent: 'var(--color-accent-4)' };
 	if (s === 'identified') return { label: 'READY', accent: 'var(--color-primary)' };
 	if (s === 'ripped' || s === 'ripped_partial')
-		return { label: 'RIPPED | NEEDS SESSION', accent: 'var(--color-violet-500, #8b5cf6)' };
+		return { label: 'RIPPED | NEEDS SESSION', accent: 'var(--color-accent-3)' };
 	return { label: s.toUpperCase(), accent: 'var(--color-primary)' };
 }
 

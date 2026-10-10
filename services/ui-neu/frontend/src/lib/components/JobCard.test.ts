@@ -68,7 +68,7 @@ describe('JobCard', () => {
 			const { container } = renderComponent(JobCard, {
 				props: { job: createJob({ status: 'ripping' }) }
 			});
-			expect(container.querySelector('.animate-indeterminate')).toBeInTheDocument();
+			expect(container.querySelector('.job-card-progress-indeterminate-fill')).toBeInTheDocument();
 		});
 	});
 
