@@ -28,7 +28,7 @@ never touch; the ones you might are flagged **editable** below.
 | `PUID` / `PGID` | **Editable.** UID/GID that owns everything ARM writes to `raw`/`media`. Match your media server (Plex/Jellyfin) so it can read the files. See [File ownership](#file-ownership). |
 | `CDROM_GID` | The host's optical group GID, detected via `stat -c %g /dev/sr0` (usually `44` on Debian/Ubuntu, `19` on Arch). Lets the ripper read the drive. |
 | `ARM_LOG_LEVEL` | **Editable.** `info` (default) or `debug`. Set `debug` before reproducing a bug. |
-| `ARM_ALLOWED_ORIGINS` | **Editable.** Comma-separated allowlist of URLs the WebSocket endpoint accepts from browsers. Add every URL you open the UI at — e.g. `https://localhost:8081,https://nas.lan:8081`. |
+| `ARM_ALLOWED_ORIGINS` | **Editable.** Comma-separated allowlist of *extra* origins the WebSocket endpoint accepts from browsers. Same-origin connections are accepted automatically, so this stays empty unless the UI sits behind your own reverse proxy on a different origin — e.g. `https://arm.example.com`. |
 | `MAX_PARALLEL_TRANSCODES` | **Editable.** How many transcoder containers may run at once. Default `1` (a 1080p HandBrake job pegs every core). |
 | `ARM_IMAGE_PREFIX` / `ARM_IMAGE_TAG` | Registry path + image tag. **Bump `ARM_IMAGE_TAG` to upgrade** — see [Upgrading](Upgrading). |
 | `ARM_TRANSCODE_IMAGE` | The image the backend spawns per transcode job. |
