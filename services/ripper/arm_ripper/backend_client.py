@@ -24,6 +24,11 @@ from arm_common.schemas import (
 logger = logging.getLogger("arm_ripper.backend_client")
 
 
+class RegisterRefused(RuntimeError):
+    """The backend answered register with a non-retriable refusal (404 unknown
+    drive, 409 not enrolled / identity mismatch). Carries the backend's detail."""
+
+
 class BackendClient:
     def __init__(
         self,
@@ -46,10 +51,22 @@ class BackendClient:
         await self._client.aclose()
 
     async def register(
-        self, *, hostname: str, device_path: str, ripper_version: str, serial: str | None = None
+        self, *, drive_id: str, hostname: str, device_path: str, ripper_version: str, by_id_name: str | None
     ) -> Drive:
-        req = RegisterRequest(hostname=hostname, device_path=device_path, ripper_version=ripper_version, serial=serial)
+        req = RegisterRequest(
+            drive_id=drive_id,
+            hostname=hostname,
+            device_path=device_path,
+            ripper_version=ripper_version,
+            by_id_name=by_id_name,
+        )
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
+        if r.status_code in (404, 409):
+            try:
+                detail = r.json().get("detail", r.text)
+            except ValueError:
+                detail = r.text
+            raise RegisterRefused(str(detail))
         r.raise_for_status()
         return Drive.model_validate(r.json())
 

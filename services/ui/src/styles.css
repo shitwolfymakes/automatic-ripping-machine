@@ -194,3 +194,18 @@ nav.topnav .spacer {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.badge.detached {
+  text-transform: none;
+  opacity: 0.75;
+}
+.badge.error {
+  text-transform: none;
+  color: var(--error);
+  border-color: var(--error);
+}
+tr.detached td {
+  color: var(--muted);
+}
+.warn {
+  color: #e0b341;
+}

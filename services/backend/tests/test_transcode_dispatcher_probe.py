@@ -82,14 +82,14 @@ def test_probe_cache_expires_after_ttl(monkeypatch) -> None:
 
     fake_now = {"t": 1000.0}
     monkeypatch.setattr(
-        "arm_backend.transcode_dispatcher.time.monotonic",
+        "arm_backend.docker_probe.time.monotonic",
         lambda: fake_now["t"],
     )
 
     assert d.probe() == (True, None)
     assert d._docker.ping.call_count == 1
 
-    fake_now["t"] += 31.0  # past _PROBE_TTL_SECONDS (30.0)
+    fake_now["t"] += 31.0  # past PROBE_TTL_SECONDS (30.0)
     assert d.probe() == (True, None)
     assert d._docker.ping.call_count == 2
 

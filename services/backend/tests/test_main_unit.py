@@ -67,6 +67,36 @@ def test_build_docker_client_remote_uses_base_url(monkeypatch: pytest.MonkeyPatc
     assert captured["base_url"] == "ssh://sam@transcoder-server"
 
 
+def test_build_docker_client_default_purpose_is_transcode_dispatcher(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _raise() -> object:
+        raise RuntimeError("no socket")
+
+    fake_docker = type("D", (), {"from_env": staticmethod(_raise)})
+    monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
+    with caplog.at_level("WARNING", logger="arm_backend"):
+        assert main_mod._build_docker_client() is None
+    assert "transcode dispatcher disabled" in caplog.text
+
+
+def test_build_docker_client_purpose_is_used_in_the_warning(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """C2: the warning names whichever docker-backed feature failed to
+    build a client, not always "transcode dispatcher"."""
+
+    def _raise() -> object:
+        raise RuntimeError("no socket")
+
+    fake_docker = type("D", (), {"from_env": staticmethod(_raise)})
+    monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
+    with caplog.at_level("WARNING", logger="arm_backend"):
+        assert main_mod._build_docker_client(purpose="ripper manager") is None
+    assert "ripper manager disabled" in caplog.text
+    assert "transcode dispatcher" not in caplog.text
+
+
 def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

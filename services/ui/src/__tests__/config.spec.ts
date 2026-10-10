@@ -22,6 +22,8 @@ const baseConfig = {
   makemkv_key_checked_at: null,
   updated_by_user_id: null,
   updated_at: null,
+  drive_scan_interval_seconds: 30,
+  drive_detected_prune_days: 7,
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -165,5 +167,61 @@ describe('Config.vue notifications', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="retention"]').exists()).toBe(false)
     expect(wrapper.find('textarea').exists()).toBe(false)
+  })
+})
+
+describe('Config.vue drive scanner tunables', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    localStorage.setItem('arm_token', 'aaa.bbb.ccc')
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders both tunables from the config', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(baseConfig)))
+    const wrapper = mount(Config)
+    await flushPromises()
+    expect(
+      (wrapper.find('[data-testid="drive-scan-interval"]').element as HTMLInputElement).value,
+    ).toBe('30')
+    expect(
+      (wrapper.find('[data-testid="drive-prune-days"]').element as HTMLInputElement).value,
+    ).toBe('7')
+  })
+
+  it('sends the edited numbers in the PATCH body', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(baseConfig))
+      .mockResolvedValueOnce(jsonResponse({ ...baseConfig, drive_scan_interval_seconds: 15 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(Config)
+    await flushPromises()
+    await wrapper.find('[data-testid="drive-scan-interval"]').setValue('15')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as Record<string, unknown>
+    expect(body.drive_scan_interval_seconds).toBe(15)
+    expect(body.drive_detected_prune_days).toBe(7)
+  })
+
+  it('shows the backend detail when a value is rejected', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(baseConfig))
+      .mockResolvedValueOnce(
+        jsonResponse({ detail: 'drive_scan_interval_seconds must be >= 1' }, 400),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(Config)
+    await flushPromises()
+    await wrapper.find('[data-testid="drive-scan-interval"]').setValue('0')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.error').text()).toContain('must be >= 1')
   })
 })
