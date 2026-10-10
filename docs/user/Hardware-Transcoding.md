@@ -165,9 +165,13 @@ CI builds and publishes all three.
 
 **Naming convention**: the variant tag is `<ARM_TRANSCODE_IMAGE>` with its
 tag suffixed `-intel` / `-amd`, for example `arm-transcode:latest-intel`. The
-Backend derives this automatically for a QSV or VAAPI claim; NVENC and CPU
-spawns always use the base image (there is no NVENC variant to derive, since
-NVENC needs nothing baked in beyond the HandBrake build).
+Backend derives this automatically for a QSV or VAAPI claim. The published
+base image also carries a `-nvidia` tag (`arm-transcode:latest-nvidia`,
+`arm-transcode:v3.1.0-nvidia`): the same image under a vendor name, so the
+three vendors are named alike. NVENC and CPU spawns use the unsuffixed base
+tag; nothing is derived for NVENC, since it needs nothing baked in beyond the
+HandBrake build. Pointing `ARM_TRANSCODE_IMAGE_NVENC` at the `-nvidia` tag
+pulls the same image.
 
 **Setting `ARM_TRANSCODE_IMAGE` does not rename the compose-built variants.**
 They stay `arm-transcode:latest-intel` / `arm-transcode:latest-amd` unless
@@ -177,7 +181,7 @@ match. An explicit per-vendor override always wins:
 ```bash
 ARM_TRANSCODE_IMAGE_QSV=myregistry/arm-transcode:v3.1.0-intel
 ARM_TRANSCODE_IMAGE_VAAPI=myregistry/arm-transcode:v3.1.0-amd
-ARM_TRANSCODE_IMAGE_NVENC=myregistry/arm-transcode:v3.1.0-nvenc
+ARM_TRANSCODE_IMAGE_NVENC=myregistry/arm-transcode:v3.1.0-nvidia
 ```
 
 **When the derived or overridden variant is missing** (not present on the

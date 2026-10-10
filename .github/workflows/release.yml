@@ -4,7 +4,10 @@
 # Per-service images publish to:
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:<tag>
 # arm-transcode also publishes its GPU-vendor variants (Dockerfile targets
-# `intel` / `amd`) as :<tag>-intel and :<tag>-amd; :<tag> is the base target.
+# `intel` / `amd`) as :<tag>-intel and :<tag>-amd; :<tag> is the base target
+# (CPU + NVENC), which is also tagged :<tag>-nvidia so the three vendors are
+# named alike. :<tag> and :<tag>-nvidia are the same image (one build, one
+# digest, two tags).
 #
 # `:latest` is NOT set here — it tracks `main` HEAD and is owned by
 # publish-main.yml. A release is identified solely by its semver tag.
@@ -61,7 +64,7 @@ jobs:
         include:
           - {service: backend, target: "", suffix: ""}
           - {service: ripper, target: "", suffix: ""}
-          - {service: transcode, target: base, suffix: ""}
+          - {service: transcode, target: base, suffix: "", alias: "-nvidia"}
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
           - {service: ui, dir: ui-neu, target: "", suffix: ""}
@@ -103,8 +106,11 @@ jobs:
           flavor: |
             latest=false
             suffix=${{ matrix.suffix }}
+          # `alias` (base transcode only) adds a second tag for the same
+          # build: :<tag>-nvidia next to :<tag>.
           tags: |
             type=ref,event=tag
+            type=ref,event=tag,suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
 
       - name: Build & push
         id: build
