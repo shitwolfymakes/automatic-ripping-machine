@@ -9,6 +9,32 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	updateTranscodePreset: vi.fn()
 }));
 
+const mockFetchGpus = vi.fn(() =>
+	Promise.resolve([
+		{
+			id: 'gpu_1',
+			vendor: 'qsv',
+			device_path: '/dev/dri/renderD128',
+			encoder_kinds: ['h264', 'h265'],
+			status: 'available',
+			enabled: true,
+			claimed_by_task_id: null,
+			last_seen_at: null
+		},
+		{
+			id: 'gpu_2',
+			vendor: 'vaapi',
+			device_path: '/dev/dri/renderD129',
+			encoder_kinds: ['h264'],
+			status: 'available',
+			enabled: false,
+			claimed_by_task_id: null,
+			last_seen_at: null
+		}
+	])
+);
+vi.mock('$lib/api/gpus', () => ({ fetchGpus: () => mockFetchGpus() }));
+
 const createMock = vi.mocked(createTranscodePreset);
 const updateMock = vi.mocked(updateTranscodePreset);
 
@@ -227,5 +253,33 @@ describe('TranscodePresetForm', () => {
 			await fireEvent.click(screen.getByTestId('tp-submit'));
 			await waitFor(() => expect(screen.getByText('save boom')).toBeInTheDocument());
 		});
+	});
+});
+
+describe('GPU awareness (G-30/G-31)', () => {
+	afterEach(() => cleanup());
+
+	it('labels the empty codec choice as CPU, not default', () => {
+		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
+		const codec = screen.getByTestId('tp-codec') as HTMLSelectElement;
+		const labels = Array.from(codec.options).map((o) => o.textContent);
+		expect(labels).toContain("CPU (preset's own encoder)");
+		expect(labels).not.toContain('(default)');
+	});
+
+	it('shows the live inventory hint under hardware preference', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
+		await waitFor(() => expect(screen.getByTestId('tp-gpu-hint')).toBeInTheDocument());
+		const hint = screen.getByTestId('tp-gpu-hint').textContent ?? '';
+		expect(hint).toContain('QSV renderD128 (h264, h265)');
+		expect(hint).toContain('VAAPI renderD129 (h264) disabled');
+	});
+
+	it('says CPU fallback when the host has no GPUs', async () => {
+		mockFetchGpus.mockResolvedValueOnce([]);
+		renderComponent(TranscodePresetForm, { props: { preset: makePreset(), oncancel: vi.fn(), onsaved: vi.fn() } });
+		await waitFor(() =>
+			expect(screen.getByTestId('tp-gpu-hint').textContent).toContain('no GPUs configured')
+		);
 	});
 });

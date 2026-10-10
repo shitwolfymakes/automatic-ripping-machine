@@ -225,13 +225,13 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=False,
     ),
     ConfigFieldMeta(
-        key="MAX_PARALLEL_TRANSCODES",
-        group="System",
-        tier="infra",
+        key="max_parallel_transcodes",
+        group="Transcoding",
+        tier="operator",
         label="Max parallel transcodes",
-        help="Concurrent transcode containers (deploy-time; UI-editable later).",
-        type="string",
-        editable=False,
+        help="Concurrent transcode containers. Applies from the next dispatcher tick; the MAX_PARALLEL_TRANSCODES env value only seeds this once.",
+        type="int",
+        editable=True,
     ),
     # Drive-lifecycle scanner tunables (spec 2026-09-03 §2) — exposed while the
     # cadence is being dialled in on real hardware.

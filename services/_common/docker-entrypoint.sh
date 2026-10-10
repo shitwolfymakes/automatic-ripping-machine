@@ -296,7 +296,7 @@ if [[ -S /var/run/docker.sock ]]; then
     fi
 fi
 
-for d in /logs /raw /media /data; do
+for d in /logs /raw /media; do
     require_writable "$d" || exit 1
 done
 

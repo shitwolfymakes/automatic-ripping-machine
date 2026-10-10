@@ -79,7 +79,8 @@ def test_infra_returns_whitelisted_values_only():
     assert r.status_code == 200, r.text
     body = r.json()
     assert "MEDIA_ROOT" in body
-    assert "MAX_PARALLEL_TRANSCODES" in body
+    # moved to operator config (config.max_parallel_transcodes) — no longer infra
+    assert "MAX_PARALLEL_TRANSCODES" not in body
     # secrets / bootstrap NEVER exposed
     for forbidden in ("DATABASE_URL", "ARM_SERVICE_TOKEN", "TLS_CERT_PATH", "TLS_KEY_PATH"):
         assert forbidden not in body
