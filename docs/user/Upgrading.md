@@ -45,11 +45,21 @@ the database backup taken in that run (or that none was taken), and where the
 previous release is kept. Once the cause is fixed, `armctl up` tries the start
 again. See [Rolling back](#rolling-back).
 
-If an upgrade stops part way through the switch (a power cut, for example),
-run `armctl upgrade` again: it notices and finishes the upgrade.
+If an upgrade stops part way (a power cut, for example), what to run depends
+on where it stopped:
+
+- During the switch, after `current` points at the new release but before
+  `.env` is replaced: run `armctl upgrade` again. It notices and finishes the
+  upgrade. `armctl up` refuses to start in that state and says so.
+- After the switch, while the stack was starting: run `armctl up`. The install
+  is already on the new release; `armctl upgrade` reports it as up to date.
+
+With no `--version`, `armctl upgrade` never moves to an older release than the
+one installed (for example from a pre-release to an older stable one). Name the
+release with `--version <tag>` to do that on purpose.
 
 To change an answer you gave at install time (profile, storage folders),
-run `armctl install` again. It keeps your secrets and certificates authority
+run `armctl install` again. It keeps your secrets and certificate authority
 and asks the same questions with your earlier answers as the defaults.
 
 ## Before you upgrade
