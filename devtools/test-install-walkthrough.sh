@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2317,SC2329,SC2034
-# (Shadow functions below are invoked indirectly by sourced install.sh code —
+# (Shadow functions below are invoked indirectly by the sourced deploy modules;
 # newer shellcheck flags them unreachable; this is the documented
 # "ignore if invoked indirectly" case. SC2034: REMOTE_RUN is consumed by
-# sourced install.sh functions via "${REMOTE_RUN[@]}", not in this file;
+# the sourced offload functions via "${REMOTE_RUN[@]}", not in this file;
 # LOCAL_FP is computed for parity with production but not asserted on here.)
 # Plain-bash unit test for the remote-offload walkthrough in deploy/install/offload.sh:
 # output helpers, input validators, paste-block generators, verify-step

@@ -9,14 +9,14 @@
 # The step is optional (CPU transcoding works without it), so nothing in it
 # may end the install: every failure is a warning and a SKIPPED entry.
 
-# True when any ARM container is running: the stack (armv3-*) or a ripper or
-# transcoder the backend spawned. Also true when docker cannot be asked, since
-# then nothing proves the restart is safe.
+# 0 when any ARM container is running: the stack (armv3-*) or a ripper or
+# transcoder the backend spawned. 1 when none is. 2 when docker cannot be
+# asked, since then nothing proves the restart is safe.
 arm_containers_running() {
     local names spawned
-    names="$(docker ps --format '{{.Names}}' 2>/dev/null)" || return 0
-    spawned="$(docker ps -q --filter "label=arm.drive_id" 2>/dev/null)" || return 0
-    spawned+="$(docker ps -q --filter "label=arm.task_id" 2>/dev/null)" || return 0
+    names="$(docker ps --format '{{.Names}}' 2>/dev/null)" || return 2
+    spawned="$(docker ps -q --filter "label=arm.drive_id" 2>/dev/null)" || return 2
+    spawned+="$(docker ps -q --filter "label=arm.task_id" 2>/dev/null)" || return 2
     [[ -n "${spawned}" ]] && return 0
     grep -q '^armv3-' <<<"${names}"
 }
@@ -37,7 +37,7 @@ install_nvidia_toolkit_steps() {
 }
 
 ensure_nvidia_container_toolkit() {
-    local pci info
+    local pci info running=0
     if ! command -v lspci >/dev/null 2>&1; then
         return 0
     fi
@@ -67,9 +67,15 @@ CTK
     log "NVIDIA GPU detected; nvidia-container-toolkit enables NVENC transcoding."
     # Installing it restarts Docker, which stops every container on this host,
     # a rip or transcode in progress included.
-    if arm_containers_running; then
+    arm_containers_running || running=$?
+    if [[ "${running}" -eq 0 ]]; then
         warnline "installing nvidia-container-toolkit restarts Docker, which would stop the ARM containers running now"
         SKIPPED+=("NVIDIA container toolkit (ARM is running and the install restarts Docker; run '${ARMCTL_CMD} down', then '${ARMCTL_CMD} install' again)")
+        return 0
+    fi
+    if [[ "${running}" -eq 2 ]]; then
+        warnline "could not ask Docker which containers are running, so the toolkit install (which restarts Docker) is skipped"
+        SKIPPED+=("NVIDIA container toolkit (Docker could not be queried for running containers; check that 'docker ps' works, then run '${ARMCTL_CMD} install' again)")
         return 0
     fi
     if ! consent "NVIDIA container toolkit" "Install nvidia-container-toolkit now (needs sudo, and restarts Docker)?"; then

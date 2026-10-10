@@ -100,6 +100,7 @@ tar -P -C "${TMP}/evil-src" --transform 's|^evil$|../evil|' -czf "${TMP}/bad/e.t
 (cd "${TMP}/bad" && sha256sum e.tar.gz > e.tar.gz.sha256)
 rc=0; out="$( (bootstrap_fetch_bundle v3.9.9 "${TMP}/rel/escape" "${TMP}/bad/e.tar.gz") 2>&1)" || rc=$?
 check "an archive that escapes its folder is refused" "1" "$rc"
+has "the refusal comes from the unsafe-path guard" "contains unsafe paths" "$out"
 check "the escaping file was not written" "no" "$( [[ -e "${TMP}/rel/evil" ]] && echo yes || echo no )"
 
 rc=0; out="$( (curl() { return 22; }; bootstrap_fetch_bundle v3.9.9 "${TMP}/rel/offline") 2>&1)" || rc=$?
@@ -192,6 +193,14 @@ bootstrap_write_launcher "${L}"
 check "the launcher runs the current release with ARM_DIR set" "ARM_DIR=${L} ARGS=up --force" "$("${L}/armctl" up --force)"
 mkdir -p "${TMP}/bin"; ln -s "${L}/armctl" "${TMP}/bin/armctl"
 check "the launcher works through a PATH link" "ARM_DIR=${L} ARGS=down" "$(cd / && "${TMP}/bin/armctl" down)"
+
+# --- piped into bash with ARM_INSTALL_SOURCE_ONLY leaked into the environment ---------
+# Under `curl | bash` BASH_SOURCE is empty; the seam must not abort with
+# "unbound variable", and the installer must run (here: its --help).
+rc=0; out="$(ARM_INSTALL_SOURCE_ONLY=1 bash -s -- --help <"${ROOT}/install.sh" 2>&1)" || rc=$?
+check "piped with a leaked ARM_INSTALL_SOURCE_ONLY: exits 0" "0" "$rc"
+lacks "piped with a leaked ARM_INSTALL_SOURCE_ONLY: no unbound variable" "unbound variable" "$out"
+has "piped with a leaked ARM_INSTALL_SOURCE_ONLY: the installer runs" "Usage: install.sh" "$out"
 
 # --- usage and the install drill ----------------------------------------------------
 usage="$(bootstrap_usage)"

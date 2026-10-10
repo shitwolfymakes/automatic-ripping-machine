@@ -37,7 +37,8 @@ USAGE
 # because they may live elsewhere.
 ensure_layout() {
     mkdir -p "${ARM_DIR}"/{certs,db,logs,backups,scripts,iso-library} "${ARM_STATE_DIR}" || return 1
-    chmod 700 "${ARM_DIR}/certs" "${ARM_STATE_DIR}" || return 1
+    # backups/ holds database dumps, which contain secrets.
+    chmod 700 "${ARM_DIR}/certs" "${ARM_DIR}/backups" "${ARM_STATE_DIR}" || return 1
     # setgid + group-writable: files ARM creates inherit the folder's group.
     chmod 2775 "${ARM_DIR}/logs" || return 1
 }
@@ -87,6 +88,26 @@ udev_rule_by_hand() {
     SKIPPED+=("udev rule (sudo was not available; the commands to install it by hand are printed above)")
 }
 
+# The compose project name (armv3) and the container names are fixed, so a
+# fresh install on a host where another armv3 stack exists (the dev stack, or
+# an install in another folder) would take over its containers. Checked once,
+# on a fresh install, before anything is written.
+refuse_second_stack() {
+    local names
+    if ! names="$(docker ps -a --format '{{.Names}}' 2>/dev/null)"; then
+        warnline "could not list the containers on this host; not checking for another ARM stack"
+        return 0
+    fi
+    names="$(grep '^armv3-' <<<"${names}" || true)"
+    if [[ -n "${names}" ]]; then
+        failline "containers of another armv3 stack are on this host: $(tr '\n' ' ' <<<"${names}")"
+        log "ARM uses the fixed project name armv3, so this install would take them over."
+        log "Stop that stack first (the dev stack: bash devtools/setup-dev.sh down; another install: its armctl down),"
+        log "then run the installer again."
+        err "a stack with the project name armv3 already runs on this host (the dev stack, or another install). Nothing was changed."
+    fi
+}
+
 print_install_summary() {  # print_install_summary <started 0|1>
     local started="$1" s
     printf '\n'
@@ -111,7 +132,7 @@ print_install_summary() {  # print_install_summary <started 0|1>
 }
 
 cmd_install() {
-    local start=1 rotate_ca=0 release_repo="" backend_san args=() a
+    local start=1 rotate_ca=0 release_repo="" backend_san args=() a fresh=0
     OFFLOAD_HOST_ARG=""; OFFLOAD_URL_ARG=""; OFFLOAD_UIDGID_ARG=""
     REMOTE_OFFLOAD=0; REMOTE_DOCKER_HOST=""; REMOTE_BACKEND_URL=""; REMOTE_BACKEND_SAN=""
     REMOTE_TRANSCODE_PUID=""; REMOTE_TRANSCODE_PGID=""; REMOTE_GPUS=""; REMOTE_RENDER_GID=""
@@ -156,6 +177,8 @@ cmd_install() {
     # Once per install: not again when ensure_docker restarts this command
     # under the docker group.
     [[ -n "${ARMCTL_SG_REEXEC:-}" ]] || banner "${ARM_IMAGE_TAG_DEFAULT}"
+    # A fresh install: no .env yet when this run started.
+    [[ -f "${ENV_FILE}" ]] || fresh=1
     STEP=0; STEP_TOTAL=8
     step "Profile"
     choose_profile
@@ -167,6 +190,9 @@ cmd_install() {
 
     step "Host"
     ensure_docker
+    if [[ "${fresh}" -eq 1 ]]; then
+        refuse_second_stack
+    fi
     acquire_lock
     require openssl "openssl is needed to generate certificates and secrets; install it and run the installer again"
     ensure_layout
@@ -184,6 +210,7 @@ cmd_install() {
     step "Certificates"
     if [[ "${rotate_ca}" -eq 1 ]]; then
         warnline "--rotate-ca replaces the CA: every browser and device that trusted the old one must import the new arm-ca.crt"
+        warnline "a running stack keeps serving the old certificates until it is restarted: run '${ARMCTL_CMD} down', then '${ARMCTL_CMD} up'"
         if [[ "${ARMCTL_ASSUME}" != yes ]]; then
             confirm "Replace the CA?" || err "kept the existing CA; nothing was changed"
         fi

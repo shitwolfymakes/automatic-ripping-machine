@@ -26,6 +26,10 @@ valid_profile() {
 choose_profile() {
     local saved reply def
     saved="$(env_file_value ARMCTL_PROFILE)"
+    if [[ -n "${saved}" ]] && ! valid_profile "${saved}"; then
+        warnline "ignoring the saved ARMCTL_PROFILE '${saved}' in ${ENV_FILE}: it must be full, ripper-only or offload" >&2
+        saved=""
+    fi
     if [[ -n "${PROFILE_ARG}" ]]; then
         valid_profile "${PROFILE_ARG}" || err "--profile must be full, ripper-only or offload (got '${PROFILE_ARG}')"
         PROFILE="${PROFILE_ARG}"
@@ -73,6 +77,10 @@ pick_storage() {
     saved="$(env_file_value "${key}")"
     # .env.example ships these keys as ${PWD}/arm/...; that is not an answer.
     if [[ "${saved}" != /* ]]; then
+        saved=""
+    elif ! valid_storage_path "${saved}"; then
+        # stderr: this function's stdout is the answer.
+        warnline "ignoring the saved ${key}='${saved}' in ${ENV_FILE}: it must be a full path without : \" \$ # \\ or quote characters" >&2
         saved=""
     fi
     def="${saved:-${def}}"

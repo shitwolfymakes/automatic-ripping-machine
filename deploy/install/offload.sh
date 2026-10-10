@@ -65,9 +65,10 @@ offload_certs_path()   { printf '/home/%s/.arm/certs' "$(endpoint_user "$1")"; }
 # call. Like the local path, this only reports which devices exist; the backend
 # probes what each can encode.
 remote_detect_gpus() {
-    local target="$1" key="$2" out
-    # target is ssh://user@host: strip the scheme for the ssh CLI.
-    local sshdest="${target#ssh://}"
+    local target="$1" key="$2" out user port sshdest
+    # ssh takes the port as -p, not as part of the destination.
+    user="$(endpoint_user "${target}")"; port="$(endpoint_port "${target}")"
+    sshdest="${user:+${user}@}$(endpoint_host "${target}")"
     # shellcheck disable=SC2029 # intentional: function bodies are expanded client-side and shipped as source to the remote bash -s
     out="$(
         {
@@ -78,7 +79,7 @@ remote_detect_gpus() {
             # shellcheck disable=SC2016 # single quotes are intentional: $(...) must expand on the remote, not here
             printf 'printf "%%s\\n" "$(detect_render_gid || true)"\n'
         } | ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 \
-                -o StrictHostKeyChecking=accept-new "$sshdest" bash -s 2>/dev/null
+                -o StrictHostKeyChecking=accept-new ${port:+-p "$port"} "$sshdest" bash -s 2>/dev/null
     )" || return 1
     printf '%s\n' "$out"
 }
@@ -292,7 +293,7 @@ offload_completion_report() {
 # setup_remote_offload's persisted-skip path (interactive rerun) and by the
 # non-interactive path — it must be tty-independent, since a headless rerun
 # of an already-offloaded deployment still needs its remote GPU inventory
-# restored, or seed_env's local GPU detection silently overwrites it.
+# restored, or write_env's local GPU detection silently overwrites it.
 offload_restore_persisted() {
     REMOTE_DOCKER_HOST="$(sed -nE 's/^ARM_TRANSCODE_DOCKER_HOST=(.+)$/\1/p' "${ENV_FILE}" | head -n1)"
     REMOTE_BACKEND_URL="$(sed -nE 's/^ARM_TRANSCODE_BACKEND_URL=(.+)$/\1/p' "${ENV_FILE}" | head -n1)"
@@ -324,7 +325,7 @@ skip_note() {
 
 # Interactive: offer remote transcode offload. On yes, provision a dedicated
 # ssh key, print the authorize line, detect the REMOTE GPU inventory, and set
-# the REMOTE_* globals the rest of install.sh consumes. On no/non-interactive,
+# the REMOTE_* globals that write_env and write_host_overlay read. On no/non-interactive,
 # leaves REMOTE_OFFLOAD empty => byte-for-byte local behavior downstream.
 setup_remote_offload() {
     REMOTE_OFFLOAD=0
@@ -347,7 +348,7 @@ setup_remote_offload() {
             || err "--offload-host must look like ssh://user@host[:port] (got '${OFFLOAD_HOST_ARG}')"
         REMOTE_DOCKER_HOST="${OFFLOAD_HOST_ARG}"
     else
-        REMOTE_DOCKER_HOST="$(prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]")"
+        REMOTE_DOCKER_HOST="$(prompt_valid "  Remote docker endpoint" valid_ssh_endpoint "ssh://user@host[:port]")" || exit 1
     fi
     if [[ -z "$(endpoint_user "$REMOTE_DOCKER_HOST")" ]]; then
         warnline "no user in endpoint; docker's ssh:// URL usually needs one (user@host)"
@@ -358,7 +359,7 @@ setup_remote_offload() {
             || err "--offload-backend-url must look like https://host:port (got '${OFFLOAD_URL_ARG}')"
         REMOTE_BACKEND_URL="${OFFLOAD_URL_ARG}"
     else
-        REMOTE_BACKEND_URL="$(prompt_valid "  Routable backend URL the transcoder calls back" valid_https_url "https://host:port")"
+        REMOTE_BACKEND_URL="$(prompt_valid "  Routable backend URL the transcoder calls back" valid_https_url "https://host:port")" || exit 1
     fi
     if [[ -z "$(url_port "$REMOTE_BACKEND_URL")" ]]; then
         warnline "no port in URL; the stack serves 8443 internally, so a portless URL is almost certainly wrong"
@@ -444,11 +445,10 @@ setup_remote_offload() {
     done
 
     # Step 2 — CA for transcoder callbacks
-    # ensure_ca: the CA is normally created in section 3 (make_ca), which runs
-    # AFTER this walkthrough (section 2) — on a fresh interactive install
-    # there's no CA on disk yet, and paste_block_ca's `cat` of a missing file
-    # would crash under `set -e`. Make it idempotently here; section 3's
-    # make_ca call below is a no-op reuse in that case.
+    # The Certificates step of `armctl install` runs after this walkthrough, so
+    # on a fresh install there is no CA on disk yet and paste_block_ca's `cat`
+    # of the missing file would fail. ensure_ca is idempotent: the later
+    # Certificates step reuses the CA made here.
     ensure_ca
     local certs_path; certs_path="$(offload_certs_path "$REMOTE_DOCKER_HOST")"
     echo; log "Step 2 of 5 — place the CA for transcoder callbacks"

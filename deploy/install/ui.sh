@@ -55,7 +55,8 @@ confirm() {
 prompt_valid() {
     local prompt="$1" validator="$2" hint="$3" value
     while true; do
-        read -rp "${prompt} (${hint}): " value
+        # End of input (Ctrl-D) would otherwise ask again forever.
+        read -rp "${prompt} (${hint}): " value || err "no answer (end of input); stopping here"
         if "$validator" "$value"; then
             printf '%s' "$value"
             return 0

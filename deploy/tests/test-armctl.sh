@@ -132,6 +132,13 @@ rc=0; out="$(images "reg/arm-backend:v3.1.0" 2>&1)" || rc=$?
 check "a missing image stops the run" "1" "$rc"
 has "the missing image is named" "arm-backend (reg/arm-backend:v3.1.0)" "$out"
 has "the user is told nothing changed" "Nothing has been changed" "$out"
+# During an upgrade compose reads the candidate .env.next; the hint names the
+# live .env, the file the user can look at.
+out="$( ( new_install images-next; use_env_file "${ARM_STATE_DIR}/.env.next"
+          compose() { case "$*" in "config --services") echo arm-db ;; config) printf 'services:\n  arm-db:\n    image: postgres:18\n' ;; esac; }
+          docker() { return 1; }; UP_SERVICES=(); verify_images_present ) 2>&1 || true)"
+has "a missing image during an upgrade: the hint names the live .env" "ARM_IMAGE_TAG in ${TMPROOT}/images-next/arm/.armctl/.env," "$out"
+lacks "a missing image during an upgrade: the hint does not name .env.next" ".env.next" "$out"
 
 # --- up and down ordering ---------------------------------------------------------
 STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus backup_db remove_spawned_containers remove_retired_services respawn_rippers_if_needed wait_for_backend)
@@ -178,6 +185,29 @@ has "down: --force reaches the guard" "FORCE=1" "$(run_cmd down-force '' cmd_dow
 out="$( (new_install hints; guard_running_spawned() { echo "${ARM_HINT_FORCE_CMD}"; }; remove_spawned_containers() { :; }; remove_retired_services() { :; }; compose() { :; }; cmd_down) 2>&1)"
 has "down: the refusal names armctl down --force" "armctl down --force" "$out"
 
+# An upgrade that stopped between repointing `current` and replacing .env:
+# `up` must not start the new release's template with the old image pins.
+up_half() {
+    (
+        new_install "$1"
+        ARMCTL_CMD="${ARM_DIR}/armctl"  # armctl_settings keeps the first value it saw in this process
+        printf 'ARMCTL_PROFILE=full\nARM_IMAGE_TAG=v3.1.0\n' > "${ENV_FILE}"
+        ln -sfn "releases/$2" "${ARM_STATE_DIR}/current"
+        stack_up() { echo STARTED; }; finish_up() { :; }
+        set +e
+        ( set -e; cmd_up )
+        echo "rc=$?"
+        set -e
+    ) 2>&1
+}
+out="$(up_half up-half v3.2.0)"
+has "up: a half-switched install is refused" "rc=1" "$out"
+lacks "up: a half-switched install starts nothing" "STARTED" "$out"
+has "up: the refusal names the release in .env and the linked one" "names v3.1.0, but ${TMPROOT}/up-half/arm/.armctl/current points at v3.2.0" "$out"
+has "up: the refusal names armctl upgrade as the repair" "Run '${TMPROOT}/up-half/arm/armctl upgrade'" "$out"
+out="$(up_half up-agree v3.1.0)"
+has "up: .env and current agreeing starts the stack" "STARTED" "$out"
+
 # --- lock -------------------------------------------------------------------------
 if command -v flock >/dev/null 2>&1; then
     out="$( (new_install lock; acquire_lock; (unset ARMCTL_LOCK_HELD; acquire_lock) 2>&1 || true) )"
@@ -210,7 +240,12 @@ check "storage: a saved answer becomes the default" "/mnt/saved" \
 printf 'ARM_HOST_RAW_PATH=${PWD}/arm/raw\n' > "${ENV_FILE}"
 check "storage: the template's \${PWD} placeholder is not a saved answer" "${ARM_DIR}/raw" \
     "$(pick_storage "raw rips" "" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" </dev/null)"
-out="$( (pick_storage "raw rips" "not/absolute" ARM_HOST_RAW_PATH /x </dev/null) 2>&1 || true)"
+printf 'ARM_HOST_RAW_PATH=/mnt/a:b\n' > "${ENV_FILE}"
+set +e; out="$( ( set -e; pick_storage "raw rips" "" ARM_HOST_RAW_PATH "${ARM_DIR}/raw" 2>"${TMPROOT}/pick.err" ) </dev/null )"; rc=$?; set -e
+check "storage: an invalid saved path is not the default without a terminal" "${ARM_DIR}/raw" "$out"
+check "storage: an invalid saved path does not stop the run" "0" "$rc"
+has "storage: an invalid saved path is reported" "ignoring the saved ARM_HOST_RAW_PATH='/mnt/a:b'" "$(cat "${TMPROOT}/pick.err")"
+set +e; out="$( ( set -e; pick_storage "raw rips" "not/absolute" ARM_HOST_RAW_PATH /x ) </dev/null 2>&1 )"; rc=$?; set -e
 has "storage: a bad flag value is rejected" "must be a full path" "$out"
 ( prepare_storage "${ARM_DIR}/raw" )
 check "storage: a folder inside arm is created setgid, group-writable" "2775" "$(stat -c '%a' "${ARM_DIR}/raw")"
@@ -226,7 +261,12 @@ check "profile: ripper-only sets RIPPER_ONLY" "1" "$( (PROFILE_ARG=ripper-only; 
 check "profile: no terminal defaults to full" "full" "$( (PROFILE_ARG=""; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
 printf 'ARMCTL_PROFILE=offload\n' > "${ENV_FILE}"
 check "profile: no terminal keeps the saved profile" "offload" "$( (PROFILE_ARG=""; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
-out="$( (PROFILE_ARG=everything; choose_profile </dev/null) 2>&1 || true)"
+printf 'ARMCTL_PROFILE=everything\n' > "${ENV_FILE}"
+set +e; out="$( ( set -e; PROFILE_ARG=""; choose_profile >/dev/null 2>"${TMPROOT}/profile.err"; echo "${PROFILE}" ) </dev/null )"; rc=$?; set -e
+check "profile: an invalid saved profile falls back to full without a terminal" "full" "$out"
+check "profile: an invalid saved profile does not stop the run" "0" "$rc"
+has "profile: an invalid saved profile is reported" "ignoring the saved ARMCTL_PROFILE 'everything'" "$(cat "${TMPROOT}/profile.err")"
+set +e; out="$( ( set -e; PROFILE_ARG=everything; choose_profile ) </dev/null 2>&1 )"; set -e
 has "profile: an unknown profile is rejected" "must be full, ripper-only or offload" "$out"
 
 # --- config: host overlay (Review Focus 1: a path with spaces) ----------------------
@@ -258,7 +298,8 @@ env_case() {
         REMOTE_DOCKER_HOST="ssh://sam@192.168.0.92"; REMOTE_BACKEND_URL="https://192.168.0.68:8080"
         REMOTE_TRANSCODE_PUID=1001; REMOTE_TRANSCODE_PGID=1000
         REMOTE_GPUS='[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; REMOTE_RENDER_GID=""
-        detect_gpus() { printf '[]'; }
+        # A GPU is present, so ripper-only's empty list proves RIPPER_ONLY is honoured.
+        detect_gpus() { printf '[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; }
         detect_render_gid() { echo 993; }
         detect_cdrom_gid() { printf 24; }
         DETECTED_GPUS_SET=0
@@ -285,6 +326,7 @@ has "env: amd variant is pinned" "ARM_TRANSCODE_IMAGE_VAAPI=docker.io/automaticr
 has "env: UI origin is allowed" "ARM_ALLOWED_ORIGINS=https://localhost:8081" "$e"
 has "env: cdrom gid is detected" "CDROM_GID=24" "$e"
 has "env: render gid is detected" "ARM_RENDER_GID=993" "$e"
+has "env: a full box records the detected GPUs" 'ARM_GPUS=[{"vendor":"nvenc"' "$e"
 lacks "env: no offload keys on a full box" "ARM_TRANSCODE_DOCKER_HOST=" "$(grep -v '^#' <<<"$e")"
 
 e="$(env_case env-ripper ripper-only)"
@@ -297,10 +339,14 @@ has "env: offload points transcoder certs at the remote path" "ARM_HOST_CERTS_PA
 has "env: offload keeps rippers on the local certs" "ARM_RIPPER_CERTS_PATH=${TMPROOT}/env-offload/arm/certs" "$e"
 has "env: offload records the remote GPUs" 'ARM_GPUS=[{"vendor":"nvenc"' "$e"
 
-pw_before="$(env_case env-rerun full | grep '^POSTGRES_PASSWORD=')"
+e="$(env_case env-rerun full)"
+pw_before="$(grep '^POSTGRES_PASSWORD=' <<<"$e")"
+token_before="$(grep '^ARM_SERVICE_TOKEN=' <<<"$e")"
 echo 'NEW_SETTING=7' >> "${REL}/.env.example"
 e="$(env_case env-rerun full keep)"
 check "env: a re-run keeps the database password" "$pw_before" "$(grep '^POSTGRES_PASSWORD=' <<<"$e")"
+check "env: a re-run keeps the service token" "$token_before" "$(grep '^ARM_SERVICE_TOKEN=' <<<"$e")"
+lacks "env: the service token is generated" "change-me" "$token_before"
 has "env: a re-run adds settings the new release introduced" "NEW_SETTING=7" "$e"
 env_case env-switch offload >/dev/null
 e="$(env_case env-switch full keep)"
@@ -436,6 +482,28 @@ check "ensure_docker: another distro stops even with --yes" "1" "$rc"
 lacks "ensure_docker: another distro is never automated" "APT" "$out"
 has "ensure_docker: another distro gets the docs link" "docs.docker.com/engine/install" "$out"
 has "ensure_docker: the reason is stated" "too old" "$out"
+# A service that was just started can take a moment to accept connections.
+# edocker_seq <states, one per docker_state call>
+edocker_seq() {
+    (
+        new_install edocker-seq
+        printf '%s\n' "$@" > "${TMPROOT}/dstates"
+        ARMCTL_ASSUME=yes; SKIPPED=()
+        docker_state() { local first; first="$(head -n 1 "${TMPROOT}/dstates")"; if [[ "$(wc -l < "${TMPROOT}/dstates")" -gt 1 ]]; then sed -i 1d "${TMPROOT}/dstates"; fi; printf '%s' "${first}"; }
+        sudo() { echo "SUDO $*"; }
+        sleep() { echo SLEEP; }
+        set +e
+        ( set -e; ensure_docker ) </dev/null
+        echo "rc=$?"
+        set -e
+    ) 2>&1
+}
+out="$(edocker_seq daemon-down daemon-down daemon-down ok)"
+has "ensure_docker: a started service is asked again until it answers" "Docker is ready" "$out"
+has "ensure_docker: the retry exits 0" "rc=0" "$out"
+out="$(edocker_seq daemon-down daemon-down)"
+has "ensure_docker: the retries are bounded" "Docker is still not usable (daemon-down)" "$out"
+check "ensure_docker: at most three waits" "3" "$(grep -c '^SLEEP' <<<"$out")"
 
 # --- PATH link ---------------------------------------------------------------------
 # plink <case name> <PATH has ~/.local/bin: yes|no> <ARMCTL_ASSUME> [pre-existing: foreign|own]
@@ -464,6 +532,9 @@ plink() {
 out="$(plink local yes ask)"
 has "path link: ~/.local/bin on the PATH gets the link, no sudo, no question" "LINK=${TMPROOT}/plink-local/arm/armctl" "$out"
 has "path link: the short command is advertised" "CMD=armctl" "$out"
+out="$(plink local-no yes no)"
+has "path link: --no-host-changes makes no ~/.local/bin link" "LINK=none" "$out"
+has "path link: --no-host-changes records the skip" "SKIPPED=armctl on the PATH (declined by --no-host-changes)" "$out"
 out="$(plink sys-yes no yes)"
 has "path link: the system folder is used with consent" "LINK=${TMPROOT}/plink-sys-yes/arm/armctl" "$out"
 out="$(plink sys-ask no ask)"
@@ -487,7 +558,7 @@ chmod -R u+w "${TMPROOT}/plink-lnfail" 2>/dev/null || true
 
 # --- install flow ----------------------------------------------------------------------
 echo v3.1.0 > "${REL}/VERSION"
-FLOW_STEPS=(ensure_docker acquire_lock ensure_layout choose_storage ensure_ca write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
+FLOW_STEPS=(ensure_docker refuse_second_stack acquire_lock ensure_layout choose_storage ensure_ca write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
 # flow <install name> [install args...]: run cmd_install with every stage
 # replaced by a recorder; print the order, then the parsed answers.
 flow() {
@@ -507,14 +578,17 @@ flow() {
         offload_remote_run_init() { :; }
         hostname() { echo testhost; }
         ARMCTL_ARGV=(install "$@")
-        cmd_install "$@" </dev/null >/dev/null 2>&1
-        echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"
-        echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}"
+        # Standalone, with errexit on: errexit is ignored in any conditional
+        # context, which would hide a failing stage.
+        set +e
+        ( set -e; cmd_install "$@"; echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"; echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}" ) </dev/null >"${TMPROOT}/flow.out" 2>&1
+        echo "rc=$?" >> "${log_file}"
+        set -e
         tr '\n' ';' < "${log_file}"
     )
 }
 check "install: full box runs every stage in order" \
-    "banner v3.1.0;choose_profile full;ensure_docker;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;" \
+    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
     "$(flow flow-full)"
 out="$(flow flow-offload --profile offload)"
 has "install: offload runs the walkthrough after storage" "choose_storage;setup_remote_offload;ensure_ca;" "$out"
@@ -533,12 +607,43 @@ out="$(flow flow-flags --yes --raw-path /r --media-path=/m --image-prefix ghcr.i
 has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
 out="$(flow flow-decline --no-host-changes)"
 has "install: --no-host-changes declines host changes" "ASSUME=no " "$out"
-out="$( (new_install flow-bad; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --bogus) 2>&1 || true)"
+set +e; out="$( (set -e; new_install flow-bad; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --bogus) 2>&1 )"; set -e
 has "install: an unknown option is rejected" "unknown option for install: --bogus" "$out"
-out="$( (new_install flow-noval; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --raw-path) 2>&1 || true)"
+set +e; out="$( (set -e; new_install flow-noval; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --raw-path) 2>&1 )"; set -e
 has "install: an option without its value is rejected" "--raw-path needs a value" "$out"
-out="$( (new_install flow-nover; ARMCTL_RELEASE_DIR="${TMPROOT}/empty-rel"; mkdir -p "${ARMCTL_RELEASE_DIR}"; ARMCTL_ARGV=(install); cmd_install) 2>&1 || true)"
+set +e; out="$( (set -e; new_install flow-nover; ARMCTL_RELEASE_DIR="${TMPROOT}/empty-rel"; mkdir -p "${ARMCTL_RELEASE_DIR}"; ARMCTL_ARGV=(install); cmd_install) 2>&1 )"; set -e
 has "install: a bundle without VERSION is rejected" "no VERSION file" "$out"
+# A re-run (an .env exists) is not checked for another stack.
+out="$( flow_rerun() { ( ARM_DIR="${TMPROOT}/flow-rerun/arm"; mkdir -p "${ARM_DIR}/.armctl"; : > "${ARM_DIR}/.armctl/.env"; armctl_settings
+        refuse_second_stack() { echo SECOND_STACK_CHECKED; }
+        for fn in "${FLOW_STEPS[@]}"; do [[ "${fn}" == refuse_second_stack ]] || eval "${fn}() { :; }"; done
+        ARMCTL_RELEASE_DIR="${REL}"; choose_profile() { PROFILE=full; }; write_env() { :; }; make_leaf() { :; }; banner() { :; }
+        hostname() { echo testhost; }; ARMCTL_ARGV=(install)
+        set +e; ( set -e; cmd_install ) </dev/null 2>&1; set -e ); }; flow_rerun )"
+lacks "install: a re-run does not check for another stack" "SECOND_STACK_CHECKED" "$out"
+flow flow-rotate --rotate-ca --yes >/dev/null
+has "install: --rotate-ca says a running stack needs a restart for the new certificates" "keeps serving the old certificates until it is restarted" "$(cat "${TMPROOT}/flow.out")"
+
+# Another armv3 stack on this host: a fresh install stops before writing anything.
+second_stack() {  # second_stack <names docker ps -a prints> [docker rc]
+    (
+        STUB_NAMES="$1"; STUB_RC="${2:-0}"
+        docker() { printf '%s\n' "${STUB_NAMES}"; return "${STUB_RC}"; }
+        set +e
+        ( set -e; refuse_second_stack; echo CONTINUED )
+        echo "rc=$?"
+        set -e
+    ) 2>&1
+}
+out="$(second_stack $'armv3-db\narmv3-backend\nsomething-else')"
+has "second stack: a fresh install stops" "rc=1" "$out"
+lacks "second stack: nothing after the check runs" "CONTINUED" "$out"
+has "second stack: the message names the fixed project name" "a stack with the project name armv3 already runs on this host" "$out"
+has "second stack: the containers are listed" "armv3-db armv3-backend" "$out"
+out="$(second_stack $'other-app\nmy-armv3-thing')"
+has "second stack: other containers are fine" "CONTINUED" "$out"
+out="$(second_stack "" 1)"
+has "second stack: an unanswered docker ps does not stop the install" "CONTINUED" "$out"
 has "install: --help lists the options" "--offload-backend-url" "$(install_usage)"
 
 # Unattended offload install, configure only, through the real flow: profile,
@@ -595,6 +700,17 @@ has "unattended offload install, open pipe: the completion table shows the failu
 new_install layout; ( ensure_layout )
 check "layout: certs folder is private" "700" "$(stat -c '%a' "${ARM_DIR}/certs")"
 check "layout: state folder is private" "700" "$(stat -c '%a' "${ARM_STATE_DIR}")"
+check "layout: backups folder is private (dumps hold secrets)" "700" "$(stat -c '%a' "${ARM_DIR}/backups")"
+# backup_db, shared with setup-dev: the folder it writes to is made private too.
+out="$( (
+    new_install backup-mode; mkdir -p "${ARM_DIR}/backups"; chmod 755 "${ARM_DIR}/backups"
+    NO_BACKUP=0; BACKUP_MIN_BYTES=1
+    compose() { case "$1" in ps) echo arm-db ;; exec) printf -- '-- dump\n-- PostgreSQL database dump complete\n' ;; esac; }
+    set +e; ( set -e; backup_db ) >/dev/null 2>&1; echo "rc=$?"; set -e
+    echo "MODE=$(stat -c '%a' "${ARM_DIR}/backups")"
+) )"
+has "backup: the dump succeeds" "rc=0" "$out"
+has "backup: the backups folder is made private" "MODE=700" "$out"
 check "layout: logs folder is setgid, group-writable" "2775" "$(stat -c '%a' "${ARM_DIR}/logs")"
 for d in db backups scripts iso-library; do
     check "layout: ${d} exists" "yes" "$( [[ -d "${ARM_DIR}/${d}" ]] && echo yes || echo no )"
@@ -653,6 +769,48 @@ has "udev, no sudo: command to reload the rules" "sudo udevadm control --reload-
 has "udev, no sudo: command to trigger the block subsystem" "sudo udevadm trigger --subsystem-match=block" "$out"
 lacks "udev, no sudo: no heredoc to paste" "<<'RULE'" "$out"
 
+# --- prompt_valid at end of input ------------------------------------------------------
+# errexit off, as in the $(...) the walkthrough calls it from.
+( set +e; prompt_valid "Host" valid_https_url "https://host:port" ) </dev/null >"${TMPROOT}/pv.out" 2>&1 &
+pid=$!
+waited=0
+while kill -0 "${pid}" 2>/dev/null && (( waited < 50 )); do sleep 0.1; waited=$(( waited + 1 )); done
+if kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null || true
+    rc="loops"
+else
+    set +e; wait "${pid}"; rc=$?; set -e
+fi
+check "prompt_valid: end of input (Ctrl-D) stops instead of asking forever" "1" "${rc}"
+has "prompt_valid: end of input is reported" "end of input" "$(cat "${TMPROOT}/pv.out")"
+
+# --- remote GPU detection over ssh -------------------------------------------------------
+# ssh's stderr is discarded by the function, so the stub records its arguments in a file.
+out="$( (
+    ssh() { cat >/dev/null; echo "ARGS $*" > "${TMPROOT}/ssh.args"; printf '[]\n\n'; }
+    remote_detect_gpus ssh://sam@192.168.0.92:2222 /k/id >/dev/null
+    cat "${TMPROOT}/ssh.args"
+) )"
+has "remote GPUs: the endpoint's port is passed with -p" "-p 2222 sam@192.168.0.92 bash -s" "$out"
+lacks "remote GPUs: the port is not part of the destination" "192.168.0.92:2222" "$out"
+out="$( ( ssh() { cat >/dev/null; echo "ARGS $*" > "${TMPROOT}/ssh.args"; printf '[]\n\n'; }; remote_detect_gpus ssh://sam@h /k/id >/dev/null; cat "${TMPROOT}/ssh.args" ) )"
+has "remote GPUs: the destination without a port" "accept-new sam@h bash -s" "$out"
+lacks "remote GPUs: no -p without a port" " -p " "$out"
+
+# --- CA: a run stopped half way ------------------------------------------------------------
+if command -v openssl >/dev/null 2>&1; then
+    out="$( (
+        ARM_CERTS_DIR="${TMPROOT}/half-ca"; mkdir -p "${ARM_CERTS_DIR}"
+        echo partial > "${ARM_CERTS_DIR}/arm-ca.key"; chmod 400 "${ARM_CERTS_DIR}/arm-ca.key"
+        set +e; ( set -e; ensure_ca ) >/dev/null 2>&1; echo "rc=$?"; set -e
+        openssl x509 -noout -subject -in "${ARM_CERTS_DIR}/arm-ca.crt" 2>/dev/null || true
+    ) )"
+    has "CA: a half-written key from a stopped run is replaced" "rc=0" "$out"
+    has "CA: a CA is generated after a stopped run" "ARM v3 Local CA" "$out"
+else
+    echo "skip - openssl not available"
+fi
+
 # --- NVIDIA container toolkit -----------------------------------------------------------
 # nv_case: an NVIDIA GPU on an apt host. NV_* variables shape docker and curl.
 # Run standalone with errexit live, as in armctl, then report what was called.
@@ -672,7 +830,7 @@ nv_case() {
         docker() {
             case "$1" in
                 info) printf '%s\n' "${NV_INFO:-}"; return "${NV_INFO_RC:-0}" ;;
-                ps) if [[ "$*" == *label=* ]]; then printf '%s' "${NV_SPAWNED:-}"; else printf '%s\n' "${NV_NAMES:-}"; fi ;;
+                ps) if [[ "$*" == *label=* ]]; then printf '%s' "${NV_SPAWNED:-}"; else printf '%s\n' "${NV_NAMES:-}"; fi; return "${NV_PS_RC:-0}" ;;
             esac
         }
         curl() { echo "curl" >> "${nvlog}"; [[ "${NV_CURL:-ok}" == ok ]] && echo DATA; }
@@ -695,6 +853,10 @@ out="$(NV_NAMES="armv3-backend" nv_case)"
 lacks "nvidia: the ARM stack running, nothing is installed (it restarts Docker)" "sudo " "$out"
 has "nvidia: the ARM stack running, the skip says to stop ARM first" "run '/x/arm/armctl down', then '/x/arm/armctl install' again" "$out"
 has "nvidia: the ARM stack running, the install carries on" "CONTINUED" "$out"
+out="$(NV_PS_RC=1 nv_case)"
+lacks "nvidia: docker ps failing, nothing is installed" "sudo " "$out"
+has "nvidia: docker ps failing, the skip says Docker could not be queried" "Docker could not be queried" "$out"
+lacks "nvidia: docker ps failing, the user is not told to stop ARM" "armctl down" "$out"
 out="$(NV_NAMES="someone-else" NV_SPAWNED="0123abcd" nv_case)"
 lacks "nvidia: a spawned ripper or transcoder running, nothing is installed" "sudo " "$out"
 out="$(NV_CURL=fail nv_case)"
@@ -773,6 +935,36 @@ out="$(UPG_ENV_TAG=v3.2.0 upgrade_case upg-half-env v3.2.0 ok)"
 lacks "upgrade: .env and current disagreeing is not 'already on'" "already on" "$out"
 has "upgrade: .env ahead of current fetches the missing bundle" "fetch v3.2.0 []" "$out"
 has "upgrade: .env ahead of current runs apply from the linked release" "apply-upgrade --from v3.1.0 --to v3.2.0" "$out"
+
+# A half switch where the resolved target is .env's own release: the run goes
+# back, and says it is reverting, not finishing.
+out="$(UPG_LINK=v3.2.0 UPG_HAVE=v3.2.0 upgrade_case upg-revert v3.1.0 ok)"
+has "upgrade: a half switch back to .env's release says it reverts" "reverting the unfinished upgrade to v3.2.0: going back to v3.1.0" "$out"
+lacks "upgrade: a revert does not claim to finish the upgrade" "again to finish it" "$out"
+has "upgrade: a revert runs apply from the linked release" "apply-upgrade --from v3.2.0 --to v3.1.0" "$out"
+# An explicit --bundle is not silently ignored when the target is unpacked.
+out="$(UPG_LINK=v3.2.0 UPG_HAVE=v3.2.0 upgrade_case upg-half-bundle v3.2.0 ok --version v3.2.0 --bundle /tmp/b.tar.gz)"
+has "upgrade: a half switch with --bundle is refused" "rc=2" "$out"
+has "upgrade: the --bundle refusal says why" "--bundle is not used" "$out"
+lacks "upgrade: the --bundle refusal hands nothing over" "handover" "$out"
+
+# Never an implicit move to an older release.
+for pair in "v3.0.0 v3.1.0 yes" "v3.1.0 v3.0.0 no" "v3.0.0-rc3 v3.0.0 yes" "v3.0.0 v3.0.0-rc3 no" \
+            "v3.1.0-rc1 v3.1.0-rc2 yes" "v3.1.0 v3.1.0 no" "v3.10.0 v3.9.0 no"; do
+    read -r a b want <<<"${pair}"
+    check "version_older ${a} ${b}" "${want}" "$(version_older "${a}" "${b}" && echo yes || echo no)"
+done
+out="$(UPG_ENV_TAG=v3.0.0-rc3 UPG_LINK=v3.0.0-rc3 upgrade_case upg-rc-stable v3.0.0 ok)"
+has "upgrade: a pre-release moves up to its stable release" "apply-upgrade --from v3.0.0-rc3 --to v3.0.0" "$out"
+out="$(upgrade_case upg-down v3.0.0 ok)"
+has "upgrade: an implicit move to an older release is refused" "rc=1" "$out"
+has "upgrade: the downgrade refusal names --version" "upgrade --version v3.0.0" "$out"
+lacks "upgrade: a refused downgrade fetches nothing" "fetch " "$out"
+out="$(upgrade_case upg-down-explicit v3.2.0 ok --version v3.0.0)"
+has "upgrade: an explicit --version may go down" "apply-upgrade --from v3.1.0 --to v3.0.0" "$out"
+out="$(upgrade_case upg-down-rc v3.1.0-rc2 ok)"
+has "upgrade: an implicit move to a pre-release of the installed version is refused" "rc=1" "$out"
+lacks "upgrade: that refusal hands nothing over" "handover" "$out"
 
 # --- upgrade: the new release applies it ----------------------------------------------
 # apply_case <name> <FAIL_AT step or ''> [<setup code> [apply-upgrade args...]]
@@ -857,6 +1049,15 @@ has "apply: a failed .env replace says the install is still on the old release" 
 has "apply: a failed .env replace leaves no temporary link" "TMPLINK=none;" "$out"
 lacks "apply: a failed .env replace starts nothing" "remove_spawned_containers" "$out"
 
+# The same failure in a run that finishes an interrupted switch: `current`
+# already named the new release, so nothing is put back and the message says so.
+# shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
+out="$(apply_case apply-heal-envfail '' 'ln -sfn releases/v3.2.0 "${ARM_STATE_DIR}/current"; mv() { if [[ "$1" == *.env.next ]]; then return 1; fi; command mv "$@"; }')"
+has "apply, heal: a failed .env replace stops the upgrade" "rc=1;" "$out"
+has "apply, heal: current stays on the new release" "TAG=v3.1.0;RIPPER=reg/arm-ripper:v3.1.0;CURRENT=releases/v3.2.0;" "$out"
+has "apply, heal: the message describes the real state" "still names v3.1.0, while ${TMPROOT}/apply-heal-envfail/arm/.armctl/current points at v3.2.0" "$out"
+lacks "apply, heal: it does not claim the install is on the old release" "the install is still on v3.1.0" "$out"
+
 # A failed start after the switch is reported like an unhealthy backend.
 # The real go_live, with only `compose up` failing: it must stop right there.
 # shellcheck disable=SC2016  # evaluated inside apply_case, on purpose
@@ -890,5 +1091,6 @@ lacks "upgrade: a path-like --version fetches nothing" "fetch " "$out"
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"
 has "help lists the commands" "upgrade" "$(armctl_main help)"
+has "help lists --no-pull" "--no-pull" "$(armctl_main help)"
 
 exit "$fail"

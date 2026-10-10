@@ -101,6 +101,9 @@ backup_db() {
     fi
     local dir="${ARM_DIR}/backups" ts file tmp size tail_txt
     mkdir -p "${dir}"
+    # The dumps hold plaintext secrets. Best effort: a folder this user does
+    # not own still takes the dump.
+    chmod 700 "${dir}" 2>/dev/null || true
     ts="$(date -u +%Y%m%dT%H%M%SZ)"
     file="${dir}/pg-backup-${ts}.sql.gz"
     tmp="${file}.partial"

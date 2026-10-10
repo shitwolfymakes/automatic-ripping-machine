@@ -23,6 +23,7 @@ Usage: armctl <command> [options]
   up and upgrade:
     --force          go ahead even while a rip or transcode is running (kills it)
     --no-backup      skip the database backup
+    --no-pull        use the images already on this host; pull nothing
   down:
     --force          stop even while a rip or transcode is running (kills it)
 
@@ -198,7 +199,8 @@ verify_images_present() {
         arm_sub "${svc}"
     done
     arm_sub "Nothing has been changed; the running stack is untouched."
-    arm_sub "Check the network and ARM_IMAGE_TAG in ${ENV_FILE}, then run the command again."
+    # Name the live .env: during an upgrade ENV_FILE is the throwaway candidate.
+    arm_sub "Check the network and ARM_IMAGE_TAG in ${ARM_STATE_DIR}/.env, then run the command again."
     exit 1
 }
 
@@ -238,6 +240,29 @@ finish_up() {
     arm_say "open ${ui_url}"
 }
 
+# linked_release: the release the `current` link names (empty when there is no
+# link). It names the same release as .env's ARM_IMAGE_TAG unless an upgrade
+# stopped in the middle of the switch.
+linked_release() {
+    local link
+    link="$(readlink "${ARM_STATE_DIR}/current" 2>/dev/null || true)"
+    printf '%s' "${link##*/}"
+}
+
+# An upgrade that stopped between repointing `current` and replacing .env
+# leaves the new release's compose files with the old release's image pins.
+# Starting that mix is wrong; `armctl upgrade` is what finishes the switch.
+refuse_half_switch() {
+    local tag linked
+    tag="$(env_file_value ARM_IMAGE_TAG)"
+    linked="$(linked_release)"
+    if [[ -n "${tag}" && -n "${linked}" && "${tag}" != "${linked}" ]]; then
+        arm_err "an upgrade stopped part way: ${ENV_FILE} names ${tag}, but ${ARM_STATE_DIR}/current points at ${linked}."
+        arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade' to repair the install, then '${ARMCTL_CMD} up' if it is not running."
+        exit 1
+    fi
+}
+
 cmd_up() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -249,6 +274,7 @@ cmd_up() {
         shift
     done
     require_installed
+    refuse_half_switch
     load_profile
     ARM_HINT_FORCE_CMD="${ARMCTL_CMD} up --force"
     ARM_HINT_IMAGES_READY="Images are pulled"
@@ -343,13 +369,43 @@ switch_release() {
     if mv "${env_next}" "${live_env}"; then
         return 0
     fi
-    if [[ -n "${old_link}" ]] && link_current "${old_link}"; then
+    if [[ "${old_link}" == "releases/${to}" ]]; then
+        # A run that finishes an interrupted switch: `current` already named
+        # <to> before this run, so there is nothing to put back.
+        arm_err "could not replace ${live_env}; it still names ${from}, while ${ARM_STATE_DIR}/current points at ${to}."
+        arm_sub "Nothing was started. Run '${ARMCTL_CMD} upgrade --version ${to}' again to finish the upgrade."
+    elif [[ -n "${old_link}" ]] && link_current "${old_link}"; then
         arm_err "could not replace ${live_env}; the install is still on ${from}"
     else
         arm_err "could not replace ${live_env}, and could not point ${ARM_STATE_DIR}/current back at ${from}."
         arm_sub "Run '${ARMCTL_CMD} upgrade --version ${to}' again to finish the upgrade."
     fi
     return 1
+}
+
+# version_older <a> <b>: true when release tag a is older than b. A leading v
+# is ignored, cores compare with sort -V, and a pre-release of a core
+# (v3.1.0-rc1) is older than the core itself (v3.1.0).
+version_older() {
+    local a="${1#v}" b="${2#v}" a_core b_core a_pre="" b_pre="" lower
+    a_core="${a%%-*}"; b_core="${b%%-*}"
+    [[ "${a}" == *-* ]] && a_pre="${a#*-}"
+    [[ "${b}" == *-* ]] && b_pre="${b#*-}"
+    if [[ "${a_core}" != "${b_core}" ]]; then
+        lower="$(printf '%s\n%s\n' "${a_core}" "${b_core}" | sort -V | head -n 1)"
+        [[ "${lower}" == "${a_core}" ]]
+        return
+    fi
+    # Same core: a release outranks any of its pre-releases.
+    if [[ -z "${a_pre}" ]]; then
+        return 1
+    fi
+    if [[ -z "${b_pre}" ]]; then
+        return 0
+    fi
+    [[ "${a_pre}" != "${b_pre}" ]] || return 1
+    lower="$(printf '%s\n%s\n' "${a_pre}" "${b_pre}" | sort -V | head -n 1)"
+    [[ "${lower}" == "${a_pre}" ]]
 }
 
 # Runs in the release that is currently installed: pick the target, download
@@ -389,24 +445,36 @@ cmd_upgrade() {
     else
         target="$(bootstrap_resolve_tag)" || exit 1
     fi
+    # Never move to an older release by default: its backend cannot run on a
+    # database a newer one has migrated. --version is the explicit way.
+    if [[ -z "${version}" ]] && version_older "${target}" "${current}"; then
+        arm_err "the latest stable release, ${target}, is older than the installed ${current}. Nothing was changed."
+        arm_sub "To move to it anyway, run: ${ARMCTL_CMD} upgrade --version ${target}"
+        arm_sub "An older release may not run on a database that a newer one has already migrated."
+        exit 1
+    fi
     new_dir="${ARM_STATE_DIR}/releases/${target}"
-    # The release the `current` link points at. It names the same release as
-    # .env's ARM_IMAGE_TAG unless an upgrade stopped in the middle of the switch.
-    linked="$(readlink "${ARM_STATE_DIR}/current" 2>/dev/null || true)"
-    linked="${linked##*/}"
+    linked="$(linked_release)"
     if [[ -n "${linked}" && "${linked}" != "${current}" ]]; then
         arm_warn "found an unfinished upgrade: ${ENV_FILE} names ${current}, but ${ARM_STATE_DIR}/current points at ${linked}"
         # The upgrade is run again from the release that is not the target.
         if [[ "${target}" == "${current}" ]]; then
             from="${linked}"
+            # Nothing was started on ${linked} (the stop came before .env was
+            # replaced), so going back is safe; say that it is a revert.
+            arm_say "reverting the unfinished upgrade to ${linked}: going back to ${target}"
         else
             from="${current}"
+            arm_say "running the upgrade to ${target} again to finish it"
         fi
-        arm_say "running the upgrade to ${target} again to finish it"
         # The target's bundle is already here when the stop came after the
         # fetch; do not replace the folder this command may be running from.
         if [[ ! -f "${new_dir}/armctl.sh" || "$(cat "${new_dir}/VERSION" 2>/dev/null || true)" != "${target}" ]]; then
             bootstrap_fetch_bundle "${target}" "${new_dir}" "${bundle}"
+        elif [[ -n "${bundle}" ]]; then
+            arm_err "--bundle is not used: ${new_dir} is already unpacked from the interrupted upgrade. Nothing was changed."
+            arm_sub "Run the command again without --bundle to finish with that copy."
+            exit 2
         fi
     else
         if [[ "${target}" == "${current}" ]]; then

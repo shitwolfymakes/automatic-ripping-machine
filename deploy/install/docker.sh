@@ -120,7 +120,7 @@ fix_docker_group() {
 
 # Install-time: diagnose Docker and fix what can be fixed, each fix with consent.
 ensure_docker() {
-    local state family
+    local state family tries
     state="$(docker_state)"
     case "${state}" in
         ok)
@@ -148,6 +148,14 @@ ensure_docker() {
             docker_apt_install "${family}" ;;
     esac
     state="$(docker_state)"
+    # A service that was just started or installed can take a moment to accept
+    # connections; ask again a few times before giving up.
+    tries=1
+    while [[ "${state}" == daemon-down && "${tries}" -lt 4 ]]; do
+        sleep 2
+        state="$(docker_state)"
+        tries=$(( tries + 1 ))
+    done
     case "${state}" in
         ok)       okline "Docker is ready" ;;
         no-group) fix_docker_group ;;

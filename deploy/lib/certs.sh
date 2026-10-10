@@ -13,6 +13,9 @@ ensure_ca() {
         return 0
     fi
     arm_say "generating CA (EC P-384, 10y)"
+    # A run stopped half way can leave a 0400 key and no certificate behind;
+    # openssl cannot overwrite that key.
+    rm -f "$ca_key" "$ca_crt"
     run_quiet openssl ecparam -name secp384r1 -genkey -noout -out "$ca_key"
     chmod 400 "$ca_key"
     run_quiet openssl req -x509 -new -nodes -key "$ca_key" -sha384 -days 3650 \

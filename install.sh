@@ -8,7 +8,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/install.sh | bash
 #   curl -fsSL <same url> | bash -s -- --version v3.1.0   # options through the pipe
-#   bash install.sh                    # install into ~/arm
+#   bash install.sh                      # install into ~/arm
 #   bash install.sh --prefix /srv        # install into /srv/arm
 #   bash install.sh --version v3.1.0     # a specific release
 #   bash install.sh --profile ripper-only --yes     # unattended; see below
@@ -250,6 +250,7 @@ bootstrap_main() {
 # Test seam, and how `armctl upgrade` reuses the functions above: source with
 # ARM_INSTALL_SOURCE_ONLY=1 to define them without running an install. The
 # sourced-ness check makes a leaked env var harmless when the file is executed.
-[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+# Under `curl | bash` BASH_SOURCE is empty, so it is read with a default.
+[[ -n "${ARM_INSTALL_SOURCE_ONLY:-}" && -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 bootstrap_main "$@"

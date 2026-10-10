@@ -44,6 +44,11 @@ place_link() {
 link_armctl() {
     local src="${ARM_DIR}/armctl" local_bin="${HOME}/.local/bin" sys_dest="${ARMCTL_SYSTEM_BIN}/armctl"
     if path_has "${local_bin}"; then
+        # Outside the arm folder, so --no-host-changes leaves it alone too.
+        if [[ "${ARMCTL_ASSUME}" == no ]]; then
+            SKIPPED+=("armctl on the PATH (declined by --no-host-changes)")
+            return 0
+        fi
         mkdir -p "${local_bin}"
         if place_link "${local_bin}/armctl" "${src}" ""; then
             ARMCTL_CMD="armctl"
