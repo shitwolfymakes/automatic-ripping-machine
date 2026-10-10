@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
 import SessionsHub from '../SessionsHub.svelte';
 
-const j = (id: string, name: string, mt: string, tc: string | null, builtin = false) => ({ id, name, media_type: mt, is_builtin: builtin, rip_preset_id: 'r1', transcode_preset_id: tc, output_path_template: 'x/{title}.{ext}', overrides_json: null, ripPreset: { id: 'r1', name: 'Rip', track_selection: 'main_feature', output_mode: 'tracks' }, transcodePreset: tc ? { id: tc, name: 'TC', container: 'mkv', codec: 'h265', hw_preference: 'any' } : undefined } as any);
+const j = (id: string, name: string, mt: string, tc: string | null, builtin = false) => ({ id, name, media_type: mt, is_builtin: builtin, rip_preset_id: 'r1', transcode_preset_id: tc, output_path_template: 'x/{title}.{ext}', overrides_json: null, ripPreset: { id: 'r1', name: 'Rip', track_selection: 'main_feature', output_mode: 'tracks' }, transcodePreset: tc ? { id: tc, name: 'TC', container: 'mkv', encoder: 'any_h265' } : undefined } as any);
 const props = (over = {}) => ({ sessions: [j('s1', 'Alpha', 'movie', 't1'), j('s2', 'Beta', 'movie', null), j('s3', 'Gamma', 'tv', 't2', true)], typeCounts: { all: 3, movie: 2, tv: 1, music: 0, data: 0, iso: 0 }, loading: false, onedit: vi.fn(), onclone: vi.fn(), ondelete: vi.fn(), onnew: vi.fn(), ...over });
 
 afterEach(cleanup);

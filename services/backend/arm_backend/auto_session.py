@@ -30,7 +30,13 @@ from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.path_template import TemplateValidationError
-from arm_backend.transcode_apply import compute_outputs, find_collisions, is_passthrough_preset, transcode_enabled_now
+from arm_backend.transcode_apply import (
+    compute_outputs,
+    encoder_available,
+    find_collisions,
+    is_passthrough_preset,
+    transcode_enabled_now,
+)
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -49,6 +55,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
+from arm_common.encoders import get_encoder
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
@@ -67,6 +74,23 @@ _NO_OUTPUTS_DETAIL = (
 _TRANSCODE_DISABLED_DETAIL = (
     "transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied"
 )
+_ENCODER_UNAVAILABLE_DETAIL = "no enabled device has verified {encoder}; re-probe or enable it in Settings > GPUs"
+
+
+def _encoder_unavailable_detail(preset: TranscodePreset) -> str:
+    """Human-readable detail for `skipped_reason="encoder_unavailable"`.
+
+    Call only after `encoder_available` has already returned False for
+    `preset.encoder`. Distinguishes a catalog id that no longer exists (a
+    stale row from a removed encoder, same failure mode the dispatcher's
+    `_claim_gpu_for_task` guards against) from a known, vendor-pinned id
+    with no currently-eligible device.
+    """
+    try:
+        get_encoder(preset.encoder)
+    except ValueError:
+        return f"preset {preset.id} has unknown encoder {preset.encoder!r}"
+    return _ENCODER_UNAVAILABLE_DETAIL.format(encoder=preset.encoder)
 
 
 def _media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
@@ -258,6 +282,25 @@ async def _apply_session_internal(
             skipped_reason="transcode_disabled",
             error_detail=_TRANSCODE_DISABLED_DETAIL,
         )
+
+    # Vendor-pinned encoders (catalog kind "gpu") need a currently-eligible
+    # device; refuse the apply up front rather than let it queue a task the
+    # dispatcher can only fail once it reaches the front of the line. Runs
+    # after the transcode_disabled gate above so a deployment with
+    # transcoding off reports that reason even when the encoder would also
+    # be unavailable. `is_passthrough_preset` returning False guarantees
+    # `transcode_preset` is not None.
+    if not is_passthrough_preset(transcode_preset):
+        assert transcode_preset is not None
+        if not await encoder_available(db, transcode_preset.encoder):
+            return ApplySessionOutcome(
+                application=None,
+                tasks=[],
+                collisions=[],
+                idempotent=False,
+                skipped_reason="encoder_unavailable",
+                error_detail=_encoder_unavailable_detail(transcode_preset),
+            )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
     # In practice this only happens via the manual route. A placeholder rip
@@ -661,6 +704,19 @@ async def fan_out_waiting_identify_applications(
                 )
             )
             continue
+
+        if not is_passthrough_preset(transcode_preset):
+            assert transcode_preset is not None
+            if not await encoder_available(db, transcode_preset.encoder):
+                outcomes.append(
+                    ResolveFanOutOutcome(
+                        application=app,
+                        tasks=[],
+                        skipped_reason="encoder_unavailable",
+                        error_detail=_encoder_unavailable_detail(transcode_preset),
+                    )
+                )
+                continue
 
         try:
             outcome = await _fan_out_tasks_for_application(

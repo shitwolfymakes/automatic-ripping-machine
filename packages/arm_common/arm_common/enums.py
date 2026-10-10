@@ -164,11 +164,6 @@ class ContainerFormat(StrEnum):
     NONE = "none"
 
 
-class HwPreference(StrEnum):
-    CPU_ONLY = "cpu_only"
-    ANY = "any"
-
-
 class RetentionPolicy(StrEnum):
     KEEP_FOREVER = "keep_forever"
     PRUNE_AFTER_SESSION = "prune_after_session"

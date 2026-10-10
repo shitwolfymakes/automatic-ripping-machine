@@ -6,7 +6,7 @@ const joined = (over = {}) => ({
 	id: 's1', name: 'Movies: Archive', media_type: 'movie', is_builtin: false,
 	rip_preset_id: 'r1', transcode_preset_id: 't1', output_path_template: 'movies/{title} ({year}).{ext}', overrides_json: null,
 	ripPreset: { id: 'r1', name: 'Movie: Main Feature', track_selection: 'main_feature', output_mode: 'tracks' },
-	transcodePreset: { id: 't1', name: 'H.265 MKV', container: 'mkv', codec: 'h265', hw_preference: 'any' },
+	transcodePreset: { id: 't1', name: 'H.265 MKV', container: 'mkv', encoder: 'any_h265' },
 	...over
 } as any);
 

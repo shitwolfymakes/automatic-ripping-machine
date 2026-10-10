@@ -8,7 +8,7 @@ ffmpeg against the raw input, writes the output through the
 
 ## Image contents
 
-`python:3.14-slim-bookworm` plus:
+`python:3.14-slim-trixie` plus:
 
 - `tini` — PID 1; reaps the encoder subprocess.
 - `gosu` — drops to PUID/PGID before exec.
@@ -19,6 +19,19 @@ ffmpeg against the raw input, writes the output through the
 - `ffmpeg`, `flac` — audio re-encoder for music sessions.
 - `arm_transcode` (this package) — claim/heartbeat client + encoder
   wrappers.
+
+The Dockerfile builds three runtime targets from that common `base`:
+
+| target  | tag (dev)                    | adds on top of `base`                                                              | used for                     |
+|---------|------------------------------|------------------------------------------------------------------------------------|------------------------------|
+| `base`  | `arm-transcode:latest`       | nothing: CPU encoders + NVENC (`libnvidia-encode` is injected by the host toolkit) | CPU, NVENC, and the fallback |
+| `intel` | `arm-transcode:latest-intel` | `intel-media-va-driver-non-free`, `i965-va-driver`, `libvpl2`, `libmfx-gen1.2`     | QSV (Intel)                  |
+| `amd`   | `arm-transcode:latest-amd`   | `mesa-va-drivers`                                                                  | VAAPI (AMD)                  |
+
+The Backend spawns the variant matching the GPU's vendor when that image exists
+and falls back to `base` otherwise. `ARM_TRANSCODE_IMAGE_QSV`,
+`ARM_TRANSCODE_IMAGE_VAAPI` and `ARM_TRANSCODE_IMAGE_NVENC` override the image
+per vendor. A plain `docker build` with no `--target` produces `base`.
 
 `abcde` is **not** in the transcode image — that's a ripping tool, used
 by `arm-ripper` to pull a CD into `track_NN.wav` files. The transcoder
@@ -58,7 +71,14 @@ spawns short-lived containers from it on demand. To (re)build just this image:
 
 ```sh
 docker compose build arm-transcode
+docker compose build arm-transcode-intel   # Intel QSV variant
+docker compose build arm-transcode-amd     # AMD VAAPI variant
 ```
+
+`bash devtools/setup-dev.sh up` always builds `arm-transcode` and builds the
+`-intel` / `-amd` variants only when it detects an Intel / AMD GPU on the host
+(none with `--ripper-only`; neither variant when `ARM_TRANSCODE_DOCKER_HOST`
+points at a remote transcode host, which builds its own).
 
 The dispatcher picks the image up by name. In dev it's built locally and tagged
 `arm-transcode:latest` (never pulled); production overrides `ARM_TRANSCODE_IMAGE`
@@ -99,11 +119,12 @@ install time** (`devtools/setup-dev.sh` / `install.sh`) and handed to the
 Backend as the `ARM_GPUS` JSON env var; the Backend just parses it at lifespan
 startup to fill the `gpus` table (`arm_backend/gpu_probe.py:load_configured_gpus`).
 
-The only container that touches a GPU is the **ephemeral transcoder**. This
-image is the fat, multi-vendor HW image: the VAAPI/QSV userspace (`libva`,
-`mesa-va-drivers`, `intel-media-va-driver-non-free`, `i965-va-driver`, oneVPL)
-is baked in; NVENC's `libnvidia-encode` is injected at runtime by the host's
-nvidia-container-toolkit. The dispatcher passes the matching device into each
+The only container that touches a GPU is the **ephemeral transcoder**. The
+vendor VAAPI/QSV userspace is baked into the matching image target (see
+[Image contents](#image-contents)): Intel's drivers + oneVPL into `intel`,
+`mesa-va-drivers` into `amd`; every target carries the `libva` loader. NVENC's
+`libnvidia-encode` is injected at runtime by the host's
+nvidia-container-toolkit, so NVENC runs from `base`. The dispatcher passes the matching device into each
 spawned container — `devices=/dev/dri/renderD*` for VAAPI/QSV, `runtime: nvidia`
 + `device_requests` for NVENC (`transcode_dispatcher.py:_inject_gpu_run_kwargs`).
 
@@ -111,41 +132,54 @@ NVIDIA hosts need nvidia-container-toolkit installed + registered with docker
 (`nvidia-ctk runtime configure`); `install.sh` offers to set this up on apt
 hosts. Re-run the installer after a GPU/driver change to refresh `ARM_GPUS`.
 
-`ARM_GPUS` is a JSON array; each entry mirrors a `gpus` row:
+`ARM_GPUS` is a JSON array; each entry seeds one `gpus` row, detected host-side:
 
-| vendor | detected host-side from | encoders advertised |
-|--------|-------------------------|---------------------|
-| QSV    | `/dev/dri/renderD*` + `/sys vendor=0x8086` | h264, h265 |
-| VAAPI  | `/dev/dri/renderD*` + `/sys vendor=0x1002` | h264, h265 |
-| NVENC  | `nvidia-smi -L` (per GPU) | h264, h265 |
+| vendor | detected host-side from |
+|--------|-------------------------|
+| QSV    | `/dev/dri/renderD*` + `/sys vendor=0x8086` |
+| VAAPI  | `/dev/dri/renderD*` + `/sys vendor=0x1002` |
+| NVENC  | `nvidia-smi -L` (per GPU) |
 
-Each `transcode_presets.codec` (h264 / h265 / av1 / NULL) is matched
-against the GPU's `encoder_kinds` array. AV1 is intentionally not on
-this list yet — encoder support varies by silicon generation; treat any
-AV1 preset as CPU-only for Phase 7b.
+A seeded row's `encoder_kinds` is only a hint (empty array, `probed_at: NULL`);
+the Backend's per-device probe (`gpu_probe_runner.py`) spawns this image's
+`--probe-device` mode against the real device to find out what it can
+actually encode, and that result, not the seed, is what the dispatcher's
+claim reads.
 
-`hw_preference` semantics:
+A transcode preset names a catalog **encoder** id (`arm_common.encoders`,
+for example `qsv_h265`, `any_h265`, `cpu_h265`), not a codec plus a
+`hw_preference` switch. The dispatcher resolves the id to a GPU claim (or a
+CPU spawn) and injects `ARM_TRANSCODE_ENCODER=<id>` into this container;
+`ARM_GPU_VENDOR`, `ARM_GPU_DEVICE` and `ARM_GPU_CODEC` are also set for a
+GPU claim. They are a harmless fallback, not an upgrade path: an image older
+than `--probe-device` can never verify a row, so it is never handed a GPU in
+the first place. This worker reads `ARM_TRANSCODE_ENCODER`; to upgrade a
+host, rebuild or pull the transcode image. See
+[docs/arch/02-job-lifecycle.md § Encoder claim and apply-time refusal](../../docs/arch/02-job-lifecycle.md#encoder-claim-and-apply-time-refusal)
+for the full claim, queue and refusal rules.
 
-| value     | matching GPU available | matching GPU busy | no matching GPU on host |
-|-----------|------------------------|-------------------|-------------------------|
-| `cpu_only`| CPU                    | CPU               | CPU                     |
-| `any`     | GPU                    | CPU               | CPU                     |
-| `NULL` (default) | GPU             | queue → GPU when free | CPU                |
-
-The dispatcher injects `ARM_GPU_VENDOR`, `ARM_GPU_DEVICE`, and
-`ARM_GPU_CODEC` env vars; `arm_transcode/handbrake.py` maps them to
-HandBrake's HW encoder ID and appends `--encoder <id>`. The IDs are
-`qsv_h264`/`qsv_h265` (Intel), `nvenc_h264`/`nvenc_h265` (NVIDIA), and
-`vce_h264`/`vce_h265` (AMD — HandBrake has no generic "vaapi" encoder, so the
-`vaapi` vendor token from the probe bridges to `vce_*`). Verify with the
-spawned container's logs:
+Engine dispatch reads the catalog id: `qsv_*` and `nvenc_*` run through
+HandBrake with `--encoder <engine_encoder>` appended after `--preset`;
+`vaapi_*` runs through the ffmpeg VAAPI engine
+(`arm_transcode/engines/ffmpeg_vaapi.py`) instead. HandBrakeCLI is in fact
+compiled with its own AMD encoder (VCE/AMF) built in, same as QSV and
+NVENC, but it can't run in any of these images: AMD's proprietary AMF
+runtime isn't packaged for Debian, so it's not installed anywhere.
+Supporting it is deferred pending hardware testing (a catalog and image
+change only, no claim/model change). That gap is exactly why AMD is routed
+through ffmpeg's VAAPI encoder on Mesa instead. Verify with the spawned
+container's logs:
 
 ```sh
-docker compose logs arm-transcode-<id> | grep "HandBrakeCLI launching"
+docker compose logs arm-transcode-<id> | grep -iE "HandBrakeCLI launching|ffmpeg_vaapi start"
 ```
 
-These encoders are built into the image (see `services/transcode/Dockerfile`,
-HandBrakeCLI compiled with `--enable-qsv/nvenc/vce`). HandBrake only *lists* an
-encoder when it can initialize the device, so `HandBrakeCLI --help` shows the HW
-IDs only with the GPU passed in. There's no silent CPU fallback at the encoder
-layer — GPU is only chosen when Backend successfully claimed a `gpus` row.
+The QSV/NVENC/AMD encoders are all built into HandBrakeCLI itself (see
+`services/transcode/Dockerfile`, compiled with
+`--enable-qsv --enable-nvenc --enable-vce`); whether QSV or NVENC actually
+initializes depends on the matching vendor image variant
+being present (`intel` / `base`, see [Image contents](#image-contents)) and
+the device being passed through. There is no silent CPU fallback at the
+encoder layer for a vendor-pinned encoder: a GPU is only chosen when the
+Backend's claim, backed by a real per-device probe result, hands one to this
+container.

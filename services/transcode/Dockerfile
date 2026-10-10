@@ -5,9 +5,12 @@
 # x265/SVT-AV1 software), so we compile HandBrakeCLI from source with the HW
 # encoders enabled: --enable-nvenc (NVIDIA), --enable-qsv (Intel), --enable-vce
 # (AMD VCN). The runtime stage below copies this binary over Debian's, reusing
-# Debian's dependency closure. Bookworm builder so sonames match the runtime.
+# Debian's dependency closure. Trixie builder so sonames match the runtime
+# (both stages move together: bookworm's intel-media-va-driver-non-free 23.1 /
+# libmfx-gen 23.x predate Intel Arc Battlemage (B580); trixie ships 25.2.3 /
+# 25.1.4, which support it).
 # Pinned to a release tag; bump HANDBRAKE_VERSION to upgrade.
-FROM debian:bookworm AS handbrake-builder
+FROM debian:trixie AS handbrake-builder
 ARG HANDBRAKE_VERSION=1.11.1
 # nv-codec-headers pin. HandBrake 1.11.x defaults to 13.0.19.0, whose NVENC API
 # (13.0) demands NVIDIA driver >= 570. Stable distros lag: Debian 13 (trixie)
@@ -57,8 +60,12 @@ RUN ./configure --launch-jobs="$(nproc)" --launch --disable-gtk \
         --enable-qsv --enable-nvenc --enable-vce \
     && strip build/HandBrakeCLI
 
-# ---- runtime image --------------------------------------------------------
-FROM python:3.14-slim-bookworm
+# ---- runtime image: base --------------------------------------------------
+# `base` carries everything except the vendor VAAPI/QSV drivers; the `intel`
+# and `amd` targets at the bottom layer those on. `base` is the CPU + NVENC
+# image (NVENC needs nothing baked in, see below) and the fallback the backend
+# uses for a vendor whose variant image is absent.
+FROM python:3.14-slim-trixie AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -71,30 +78,34 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # handbrake-cli + ffmpeg + flac are the encoder toolchain. util-linux pulls in
 # `flock` for the atomic-rename safety net.
 #
-# Phase 7b — this is the fat, multi-vendor HW-transcode image (published to
-# Docker Hub; the dispatcher spawns it ephemerally per task and injects the
-# right device access). It bakes in the VAAPI/QSV *userspace*:
+# The dispatcher spawns this image ephemerally per task and injects the right
+# device access. `base` bakes in only the vendor-neutral VAAPI loader:
 #   - libva2 / libva-drm2 / vainfo — the VAAPI loader + a probe tool.
-#   - mesa-va-drivers           — AMD (VAAPI/VCN).
-#   - intel-media-va-driver-non-free + i965-va-driver — Intel QSV (modern +
-#     legacy iGPUs). The newer driver lives in Debian `non-free`.
-#   - libvpl2 + libmfx-gen1.2   — oneVPL dispatcher (libvpl2) AND the modern
-#     oneVPL GPU runtime (libmfx-gen). The GPU runtime is REQUIRED on Gen12+
-#     Intel (Alder Lake / N-series, iHD 23.x): without it, oneVPL falls back to
-#     the legacy Media SDK (libmfxhw64) which dies with "Error setting child
-#     device handle: -17" → rc=3 on that silicon. Verified on an N97.
+# The vendor drivers live in the `intel` / `amd` targets below.
 # We apt-install `handbrake-cli` for its full runtime dependency closure, then
 # (further down) overwrite the binary with our HW-enabled build from the builder
 # stage. NVENC needs nothing baked here: `libnvidia-encode` is injected at
 # runtime by the host's NVIDIA Container Toolkit. The kernel device nodes
 # (/dev/dri/*, /dev/nvidia*) are passed in per-container by the dispatcher.
 #
-# `python:3.14-slim-bookworm` ships its base sources in deb822 format with an
-# explicit `Signed-By:` directive; legacy lines we add must carry the matching
-# `[signed-by=…]` option or apt errors with "Conflicting values ... Signed-By".
-RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware' \
-        > /etc/apt/sources.list.d/non-free.list \
-    && apt-get update \
+# `python:3.14-slim-trixie` ships its base sources in deb822 format, split
+# into a trixie/trixie-updates stanza and a trixie-security stanza, each with
+# `Components: main` only. Intel's QSV/VAAPI userspace (installed by the
+# `intel` target, which inherits these sources from `base`) lives in `contrib`,
+# `non-free` and `non-free-firmware`, so widen every stanza's Components line
+# in place (preserving the image's own URIs/Suites/Signed-By) rather than
+# appending a hand-written legacy sources.list line: a legacy line would need
+# a matching `[signed-by=…]` option to avoid a "Conflicting values ...
+# Signed-By" apt error against this file's `Signed-By:` directive. The `test`
+# below asserts the rewrite touched every `Components:` stanza in the file, so
+# a future base-image change that reshapes debian.sources fails the build
+# loudly instead of silently apt-installing from `main` only.
+RUN set -eux; \
+    sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+        /etc/apt/sources.list.d/debian.sources; \
+    test "$(grep -c '^Components: main contrib non-free non-free-firmware$' /etc/apt/sources.list.d/debian.sources)" \
+        = "$(grep -c '^Components:' /etc/apt/sources.list.d/debian.sources)"
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
         gosu \
@@ -107,11 +118,6 @@ RUN echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://
         libva2 \
         libva-drm2 \
         vainfo \
-        mesa-va-drivers \
-        intel-media-va-driver-non-free \
-        i965-va-driver \
-        libvpl2 \
-        libmfx-gen1.2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Replace Debian's HW-less HandBrakeCLI with the HW-enabled build (NVENC/QSV/VCE).
@@ -146,3 +152,32 @@ WORKDIR /app/services/transcode
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["python", "-m", "arm_transcode.main"]
+
+# ---- runtime image: intel -------------------------------------------------
+# Intel QSV/VAAPI userspace on top of `base`:
+#   - intel-media-va-driver-non-free + i965-va-driver: Intel VAAPI drivers
+#     (modern + legacy iGPUs). The newer driver lives in Debian `non-free`.
+#     Trixie ships intel-media-va-driver-non-free 25.2.3 / libmfx-gen 25.1.4,
+#     which add support for Intel Arc Battlemage (B580); bookworm's 23.1 / 23.x
+#     predate it.
+#   - libvpl2 + libmfx-gen1.2: oneVPL dispatcher (libvpl2) AND the modern
+#     oneVPL GPU runtime (libmfx-gen). The GPU runtime is REQUIRED on Gen12+
+#     Intel (Alder Lake / N-series, iHD 23.x): without it, oneVPL falls back to
+#     the legacy Media SDK (libmfxhw64) which dies with "Error setting child
+#     device handle: -17" (rc=3) on that silicon. Verified on an N97.
+FROM base AS intel
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        intel-media-va-driver-non-free i965-va-driver libvpl2 libmfx-gen1.2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- runtime image: amd ---------------------------------------------------
+# mesa-va-drivers: the AMD VAAPI driver (VCN encode) on top of `base`.
+FROM base AS amd
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends mesa-va-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- default target -------------------------------------------------------
+# Last stage, so a plain `docker build` (no --target) produces the base image.
+FROM base AS default

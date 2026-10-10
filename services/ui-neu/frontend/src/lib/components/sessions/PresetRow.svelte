@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
 
 	type RipKind = { kind: 'rip'; preset: RipPresetView };
 	type TranscodeKind = { kind: 'transcode'; preset: TranscodePresetView };
@@ -15,6 +17,10 @@
 	}
 
 	let { kind, preset, usedBy, onview, onedit, onclone, ondelete }: Props = $props();
+
+	onMount(() => {
+		encodersStore.load();
+	});
 
 	// ── Humanise helpers ─────────────────────────────────────────────────────
 
@@ -80,23 +86,6 @@
 		}
 	}
 
-	function humanizeCodec(v: string | null | undefined): string {
-		switch (v) {
-			case 'h264': return 'H.264';
-			case 'h265': return 'H.265';
-			case 'av1': return 'AV1';
-			default: return v ?? '-';
-		}
-	}
-
-	function humanizeHw(v: string | null | undefined): string {
-		switch (v) {
-			case 'cpu_only': return 'CPU only';
-			case 'any': return 'Any (HW)';
-			default: return v ?? '';
-		}
-	}
-
 	// ── Derived values ────────────────────────────────────────────────────────
 
 	let summary = $derived(
@@ -107,7 +96,7 @@
 			})()
 			: (() => {
 				const p = preset as TranscodePresetView;
-				return [humanizeTool(p.tool), humanizeContainer(p.container), p.codec ? humanizeCodec(p.codec) : '', humanizeHw(p.hw_preference)]
+				return [humanizeTool(p.tool), humanizeContainer(p.container), encoderLabel(p.encoder)]
 					.filter((v) => !!v)
 					.join(' | ');
 			})()

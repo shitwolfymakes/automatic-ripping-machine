@@ -71,6 +71,24 @@ async def test_tick_runs_sweep_and_spawn() -> None:
     await _disp(db)._tick()  # no rows → both helpers no-op cleanly
 
 
+async def test_tick_refreshes_enabled_gpu_vendors_with_empty_queue() -> None:
+    """`probe()`'s missing-variant note depends on `_enabled_gpu_vendors`
+    being populated even when nothing is queued (a fresh process, or a
+    quiet host) -- otherwise the diagnostic can never fire until a job
+    happens to queue and claim a GPU. A disabled row's vendor must not
+    count (the dispatcher never claims a disabled device)."""
+    db = FakeSession()
+    db.rows["transcode_tasks"] = []
+    db.rows["gpus"] = [
+        Gpu(id="gpu_enabled", vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", enabled=True),
+        Gpu(id="gpu_disabled", vendor=GpuVendor.VAAPI, device_path="/dev/dri/renderD129", enabled=False),
+    ]
+    d = _disp(db)
+    assert d._enabled_gpu_vendors == set()
+    await d._tick()
+    assert d._enabled_gpu_vendors == {GpuVendor.QSV}
+
+
 async def test_spawn_pending_no_slots() -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [
@@ -256,8 +274,7 @@ async def test_spawn_pending_cpu_path_no_gpu() -> None:
             tool=TranscodeTool.HANDBRAKE,
             preset_ref="H.265 MKV 1080p30",
             container=ContainerFormat.MKV,
-            codec=None,
-            hw_preference=None,
+            encoder="preset",
         )
     ]
     db.rows["gpus"] = []

@@ -15,8 +15,13 @@ ERROR: Failure to initialise thread 'FFMPEG encoder (libavcodec)'
 Encode failed (error 3).
 ```
 
-The task ends `rc=3`, and (with `hw_preference=any`) the job falls back to a CPU
-software encode — which on small fanless Intel boxes can peg all cores for hours.
+The task ends `rc=3`. Today this is caught before it ever reaches a real job:
+the backend's per-device probe test-encodes with QSV before advertising the
+row as eligible, so a Gen12+ device stuck this way simply verifies nothing
+and an `any_h265`-style preset runs on CPU from the start, rather than a
+job failing mid-transcode and falling back. On small fanless Intel boxes a
+CPU software encode can still peg all cores for hours, so the fix below is
+worth applying either way.
 
 ## Root cause
 

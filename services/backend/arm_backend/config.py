@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     # default only applies in tests.
     ARM_TRANSCODE_IMAGE: str = "arm-transcode:latest"
 
+    # Per-vendor image overrides (the transcode image split: a slimmer image
+    # per GPU vendor instead of one fat multi-vendor build). Empty (default):
+    # the dispatcher derives "<ARM_TRANSCODE_IMAGE>-intel" / "-amd" from the
+    # base image's tag for a QSV/VAAPI claim and uses it when that image
+    # exists on the docker host, else falls back to the base image; NVENC
+    # and CPU spawns always use the base image. Set one of these to pin an
+    # exact image instead of deriving it (a differently-tagged or
+    # differently-named build, or a registry reference the derivation can't
+    # express, such as a digest).
+    ARM_TRANSCODE_IMAGE_QSV: str = ""
+    ARM_TRANSCODE_IMAGE_VAAPI: str = ""
+    ARM_TRANSCODE_IMAGE_NVENC: str = ""
+
     # Stale-claim sweep tunables. 90 s = 3× heartbeat interval (the
     # transcoder POSTs heartbeat every 30 s). After MAX_ATTEMPTS stale resets
     # the task is hard-failed with `last_error="exceeded retry limit ..."`.

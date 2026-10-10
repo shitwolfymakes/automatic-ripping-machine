@@ -28,7 +28,6 @@ from arm_backend.routers import jobs as jobs_router  # noqa: E402
 from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
-    HwPreference,
     IdentificationMode,
     Job,
     JobStatus,
@@ -103,7 +102,7 @@ def _seed(
             is_builtin=True,
             tool=TranscodeTool.HANDBRAKE,
             container=ContainerFormat.MKV,
-            hw_preference=HwPreference.CPU_ONLY,
+            encoder="preset",
         )
     ]
     sessions = [

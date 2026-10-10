@@ -13,11 +13,12 @@ non-greedy `\\{.*?\\}` regex stops at the first inner `}` instead of the
 outer one — `json.loads` then fails on truncated input and progress
 silently never advances). Text mode is naturally one-liner per tick.
 
-Phase 7b: when `ARM_GPU_VENDOR` and `ARM_GPU_CODEC` are set in the env
-(populated by the Backend dispatcher on spawn), `_hw_encoder_args()`
-appends `--encoder <vendor>_<codec>` *after* `--preset` so HandBrake's
-preset-driven encoder is overridden. `extra_args` from the user-defined
-preset still appends last (escape hatch).
+The caller (`main._run_encoder`) resolves the encoder via the engine seam
+(`arm_transcode.engines.selected_encoder` + `.engines.handbrake_engine.
+encoder_args`) and passes the resulting `--encoder <id>` pair in as
+`encoder_args`, appended *after* `--preset` so HandBrake's preset-driven
+encoder is overridden. `extra_args` from the user-defined preset still
+appends last (escape hatch).
 """
 
 from __future__ import annotations
@@ -25,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -55,48 +55,13 @@ _PROGRESS_LINE_RE = re.compile(
 )
 
 
-# Vendor + codec → HandBrake `--encoder` ID. These match the HW encoder IDs in
-# our source-built HandBrakeCLI (services/transcode/Dockerfile, built with
-# --enable-qsv/nvenc/vce). NOTE: HandBrake has no generic "vaapi" encoder — AMD
-# is exposed as `vce_*`. The GPU probe tags AMD render nodes with the `vaapi`
-# vendor (GpuVendor.VAAPI), so we bridge that vendor token to HandBrake's `vce_*`
-# IDs here. AV1 is intentionally absent — Phase 7b's matrix is h264 + h265 only.
-_HW_ENCODER_TABLE: dict[tuple[str, str], str] = {
-    ("vaapi", "h264"): "vce_h264",
-    ("vaapi", "h265"): "vce_h265",
-    ("qsv", "h264"): "qsv_h264",
-    ("qsv", "h265"): "qsv_h265",
-    ("nvenc", "h264"): "nvenc_h264",
-    ("nvenc", "h265"): "nvenc_h265",
-}
-
-
-def _hw_encoder_args() -> list[str]:
-    """Return `["--encoder", "<vendor>_<codec>"]` if the dispatcher injected
-    a GPU into the env, else `[]`. Unknown combinations also yield `[]` so
-    HandBrake falls back to the preset's CPU encoder.
-    """
-    vendor = os.environ.get("ARM_GPU_VENDOR")
-    codec = os.environ.get("ARM_GPU_CODEC")
-    if not vendor or not codec:
-        return []
-    encoder = _HW_ENCODER_TABLE.get((vendor, codec))
-    if encoder is None:
-        logger.warning(
-            "no HandBrake encoder mapping for vendor=%s codec=%s; falling back to preset",
-            vendor,
-            codec,
-        )
-        return []
-    return ["--encoder", encoder]
-
-
 async def transcode_handbrake(
     *,
     input_path: Path,
     output_path: Path,
     preset_ref: str,
     extra_args: str | None,
+    encoder_args: list[str],
     progress_callback: ProgressCallback,
 ) -> int:
     """Run HandBrakeCLI; stream text progress; return final file size in bytes.
@@ -113,7 +78,7 @@ async def transcode_handbrake(
         "--preset",
         preset_ref,
     ]
-    cmd.extend(_hw_encoder_args())
+    cmd.extend(encoder_args)
     if extra_args:
         cmd.extend(extra_args.split())
 

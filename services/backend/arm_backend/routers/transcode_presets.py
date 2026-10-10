@@ -6,7 +6,8 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_common import MediaType, Session, TranscodePreset, User
+from arm_common import MediaType, Session, TranscodePreset, TranscodeTool, User
+from arm_common.encoders import encoder_allowed_for_tool, get_encoder
 from arm_common.schemas import (
     TranscodePresetCreateRequest,
     TranscodePresetUpdateRequest,
@@ -14,6 +15,19 @@ from arm_common.schemas import (
 )
 
 router = APIRouter(prefix="/api/transcode-presets", tags=["transcode-presets"])
+
+
+def _validate_encoder(encoder: str, tool: TranscodeTool) -> None:
+    """422 unless `encoder` is a catalog id the preset's tool can run."""
+    try:
+        get_encoder(encoder)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if not encoder_allowed_for_tool(encoder, tool):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"encoder {encoder!r} is not valid for tool {tool.value}; only 'preset' is",
+        )
 
 
 @router.get("", response_model=list[TranscodePresetView])
@@ -47,6 +61,7 @@ async def create_transcode_preset(
     user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodePreset:
+    _validate_encoder(req.encoder, req.tool)
     row = TranscodePreset(
         name=req.name,
         media_type=req.media_type,
@@ -55,7 +70,7 @@ async def create_transcode_preset(
         preset_ref=req.preset_ref,
         preset_json=req.preset_json,
         container=req.container,
-        hw_preference=req.hw_preference,
+        encoder=req.encoder,
         extra_args=req.extra_args,
         created_by_user_id=user.id,
     )
@@ -76,11 +91,19 @@ async def update_transcode_preset(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_preset_id: {preset_id}")
 
-    fields = req.model_dump(exclude_unset=True)
+    # `encoder` is NOT NULL: an explicit null means "leave it as is".
+    fields = {k: v for k, v in req.model_dump(exclude_unset=True).items() if not (k == "encoder" and v is None)}
     if row.is_builtin and set(fields.keys()) - {"name"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="built-in transcode preset: only `name` can be edited",
+        )
+    if req.encoder is not None or req.tool is not None:
+        # Validate the pair the row will hold after the patch, so switching the
+        # tool away from HandBrake cannot strand a codec encoder on it.
+        _validate_encoder(
+            req.encoder if req.encoder is not None else row.encoder,
+            req.tool if req.tool is not None else row.tool,
         )
 
     for key, value in fields.items():

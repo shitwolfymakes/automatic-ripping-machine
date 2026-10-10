@@ -10,7 +10,7 @@ import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 import { createSessionsData } from '../sessionsData.svelte';
 
 const rip = (id: string, media_type = 'movie') => ({ id, name: `rip ${id}`, media_type, is_builtin: false, track_selection: 'main_feature', identification_mode: 'required', output_mode: 'tracks', track_filters_json: null } as any);
-const tc = (id: string, media_type = 'movie') => ({ id, name: `tc ${id}`, media_type, is_builtin: false, tool: 'handbrake', container: 'mkv', codec: 'h265', hw_preference: 'any', preset_ref: null, preset_json: null, extra_args: null } as any);
+const tc = (id: string, media_type = 'movie') => ({ id, name: `tc ${id}`, media_type, is_builtin: false, tool: 'handbrake', container: 'mkv', encoder: 'any_h265', preset_ref: null, preset_json: null, extra_args: null } as any);
 const ses = (id: string, ripId: string, tcId: string | null, media_type = 'movie') => ({ id, name: `ses ${id}`, media_type, is_builtin: false, rip_preset_id: ripId, transcode_preset_id: tcId, output_path_template: 'movies/{title}.{ext}', overrides_json: null } as any);
 
 beforeEach(() => {

@@ -1,19 +1,22 @@
 """Backend GPU inventory — populates the `gpus` table at lifespan startup.
 
-The backend no longer probes hardware. GPU detection happens **host-side at
-install time** (`install.sh` / `devtools/setup-dev.sh` enumerate `/dev/dri`
+The backend never touches GPU hardware itself. Device discovery happens
+**host-side at install time** (`install.sh` / `devtools/setup-dev.sh` enumerate `/dev/dri`
 render nodes and `nvidia-smi`), and the result is handed to the backend as a
 JSON descriptor in the `ARM_GPUS` env var. This keeps the backend image
 GPU-free (no `nvidia-smi`, no `/dev/dri` mount, no NVIDIA runtime) — the only
 container that needs GPU access is the ephemeral transcoder, and the dispatcher
-injects that per-task.
+injects that per-task (and per-probe: `gpu_probe_runner` verifies each
+device's encoders in a short-lived transcode container).
 
 `ARM_GPUS` is a JSON array of objects matching `ProbedGpu`:
 
     [{"vendor": "qsv",   "device_path": "/dev/dri/renderD128", "encoder_kinds": ["h264", "h265"]},
      {"vendor": "nvenc", "device_path": "nvidia://0",          "encoder_kinds": ["h264", "h265"]}]
 
-`encoder_kinds` is optional per entry and defaults to `["h264", "h265"]`.
+`encoder_kinds` is optional per entry and is a hint only: seeded rows start
+with no verified encoders and unprobed, and the backend's own per-device probe
+(`gpu_probe_runner`) fills them. A missing or malformed hint parses to `[]`.
 Parsing degrades to an empty list on any malformed input — a misconfigured
 descriptor yields "no GPU" (CPU transcoding) rather than a crash.
 """
@@ -27,12 +30,6 @@ from typing import NamedTuple
 from arm_common.enums import GpuVendor
 
 logger = logging.getLogger("arm_backend.gpu_probe")
-
-# encoder_kinds is set per-device at install time by probing the transcode
-# image's HandBrake (see install.sh detect_gpus). This default is the fallback
-# used only when an ARM_GPUS entry omits encoder_kinds (older configs / probe
-# failure): h264 + h265, the universally-safe baseline.
-_DEFAULT_ENCODER_KINDS: list[str] = ["h264", "h265"]
 
 
 class ProbedGpu(NamedTuple):
@@ -85,6 +82,6 @@ def _parse_entry(entry: object) -> ProbedGpu | None:
         logger.warning("ARM_GPUS entry (vendor=%s) missing device_path, skipping", vendor.value)
         return None
     encoder_kinds = entry.get("encoder_kinds")
-    if not (isinstance(encoder_kinds, list) and all(isinstance(k, str) for k in encoder_kinds) and encoder_kinds):
-        encoder_kinds = list(_DEFAULT_ENCODER_KINDS)
+    if not (isinstance(encoder_kinds, list) and all(isinstance(k, str) for k in encoder_kinds)):
+        encoder_kinds = []
     return ProbedGpu(vendor=vendor, device_path=device_path, encoder_kinds=encoder_kinds)

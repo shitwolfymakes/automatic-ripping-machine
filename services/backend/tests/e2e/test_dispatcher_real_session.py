@@ -236,6 +236,154 @@ async def test_persistently_failing_encode_spawn_does_not_abort_passthrough(tmp_
         _restore_column_types(saved_types)
 
 
+async def test_unrunnable_encode_task_fails_and_passthrough_still_runs(tmp_path: Path) -> None:
+    """An encode task whose preset pins an encoder no device has verified is
+    terminal-failed before spawn (its own commit), and the passthrough task
+    queued behind it still runs in the same tick against a real session."""
+    saved_types = _retype_pg_columns_to_json()
+    try:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/x.db")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(SQLModel.metadata.create_all)
+            session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+            raw = tmp_path / "raw" / "p.mkv"
+            raw.parent.mkdir(parents=True)
+            raw.write_bytes(b"passthrough-data")
+            now = datetime.now(UTC)
+
+            async with session_factory() as db:
+                db.add_all(
+                    [
+                        TranscodePreset(
+                            id="tpr_enc",
+                            name="enc",
+                            media_type=MediaType.MOVIE,
+                            is_builtin=True,
+                            tool=TranscodeTool.HANDBRAKE,
+                            preset_ref="x",
+                            container=ContainerFormat.MKV,
+                            encoder="qsv_h265",
+                        ),
+                        TranscodePreset(
+                            id="tpr_none",
+                            name="none",
+                            media_type=MediaType.MOVIE,
+                            is_builtin=True,
+                            tool=TranscodeTool.NONE,
+                            preset_ref="",
+                            container=ContainerFormat.MKV,
+                        ),
+                        Session(
+                            id="ses_enc",
+                            name="Movie to Plex",
+                            media_type=MediaType.MOVIE,
+                            is_builtin=True,
+                            rip_preset_id="rpr",
+                            transcode_preset_id="tpr_enc",
+                            output_path_template="{title}.mkv",
+                        ),
+                        Session(
+                            id="ses_pt",
+                            name="ISO dump",
+                            media_type=MediaType.MOVIE,
+                            is_builtin=True,
+                            rip_preset_id="rpr",
+                            transcode_preset_id="tpr_none",
+                            output_path_template="{title}.mkv",
+                        ),
+                        SessionApplication(
+                            id="sap_enc",
+                            session_id="ses_enc",
+                            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+                            status=SessionApplicationStatus.QUEUED,
+                            overwrite=False,
+                        ),
+                        SessionApplication(
+                            id="sap_pt",
+                            session_id="ses_pt",
+                            job_id="job_01JZXR7K3M5Q8N4VWA00000002",
+                            status=SessionApplicationStatus.QUEUED,
+                            overwrite=False,
+                        ),
+                        Track(
+                            id="trk_p",
+                            job_id="job_01JZXR7K3M5Q8N4VWA00000002",
+                            kind=TrackKind.VIDEO_TITLE,
+                            index=1,
+                            source_ref="t0",
+                            output_path=str(raw),
+                        ),
+                        TranscodeTask(
+                            id="txt_enc",
+                            session_application_id="sap_enc",
+                            source_track_id="trk_e",
+                            status=TranscodeTaskStatus.QUEUED,
+                            attempts=0,
+                            progress_pct=0,
+                            output_path="Movie (2020)/Movie.mkv",
+                            created_at=now,
+                        ),
+                        TranscodeTask(
+                            id="txt_pt",
+                            session_application_id="sap_pt",
+                            source_track_id="trk_p",
+                            status=TranscodeTaskStatus.QUEUED,
+                            attempts=0,
+                            progress_pct=0,
+                            output_path="Docs/p.mkv",
+                            created_at=now + timedelta(seconds=1),
+                        ),
+                    ]
+                )
+                await db.commit()
+
+            settings = Settings.model_construct(
+                DATABASE_URL="x",
+                ARM_SERVICE_TOKEN="tok-service",
+                MAX_PARALLEL_TRANSCODES=2,
+                ARM_TRANSCODE_IMAGE="arm-transcode:latest",
+                ARM_HOST_RAW_PATH="/raw",
+                ARM_HOST_MEDIA_PATH="/media",
+                ARM_HOST_LOGS_PATH="/logs",
+                ARM_HOST_CERTS_PATH="/certs",
+                ARM_DOCKER_NETWORK="armv3_default",
+                ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS=5,
+                MEDIA_ROOT=str(tmp_path / "media"),
+                ARM_TRANSCODE_DOCKER_HOST="",
+                ARM_TRANSCODE_BACKEND_URL="",
+                ARM_LOG_LEVEL="INFO",
+                ARM_TRANSCODE_PUID="",
+                ARM_TRANSCODE_PGID="",
+                ARM_RENDER_GID="",
+            )
+            docker = MagicMock()
+            disp = TranscodeDispatcher(settings, session_factory, docker, WSHub())
+
+            async with session_factory() as db:
+                assert await disp.spawn_pending(db) == 0  # must not raise
+
+            docker.containers.run.assert_not_called()
+            async with session_factory() as db:
+                enc = (await db.execute(select(TranscodeTask).where(TranscodeTask.id == "txt_enc"))).scalar_one()
+                pt = (await db.execute(select(TranscodeTask).where(TranscodeTask.id == "txt_pt"))).scalar_one()
+                sap = (
+                    await db.execute(select(SessionApplication).where(SessionApplication.id == "sap_enc"))
+                ).scalar_one()
+
+            assert enc.status == TranscodeTaskStatus.FAILED
+            assert enc.last_error == (
+                "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+            )
+            assert sap.status == SessionApplicationStatus.FAILED
+            assert pt.status == TranscodeTaskStatus.DONE
+        finally:
+            await engine.dispose()
+    finally:
+        _restore_column_types(saved_types)
+
+
 async def test_failed_per_task_commit_does_not_abort_tick(tmp_path: Path) -> None:
     """A REAL failed flush/commit inside one passthrough task's
     `execute_passthrough_task` must not abort the tick.

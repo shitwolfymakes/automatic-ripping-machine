@@ -21,7 +21,6 @@ from arm_common import (  # noqa: E402
     ContainerFormat,
     Drive,
     DriveStatus,
-    HwPreference,
     IdentificationMode,
     MediaType,
     OutputMode,
@@ -67,7 +66,7 @@ def _movie_transcode_preset() -> TranscodePreset:
         is_builtin=True,
         tool=TranscodeTool.HANDBRAKE,
         container=ContainerFormat.MKV,
-        hw_preference=HwPreference.CPU_ONLY,
+        encoder="preset",
     )
 
 
@@ -91,7 +90,7 @@ def _tv_transcode_preset() -> TranscodePreset:
         is_builtin=True,
         tool=TranscodeTool.HANDBRAKE,
         container=ContainerFormat.MKV,
-        hw_preference=HwPreference.CPU_ONLY,
+        encoder="preset",
     )
 
 
