@@ -21,13 +21,12 @@ The install script (see "Install" below) drops everything under a single prefix,
 ```
 ~/arm/
 ├── .env                            # 0600 — generated; user edits optional fields
-├── docker-compose.yml              # 0644 — generated per host (one ripper service per detected drive)
+├── docker-compose.yml              # 0644 — generated per host
 ├── certs/                          # 0700
 │   ├── arm-ca.key                  # 0400 — CA private key; NEVER mounted into a container
 │   ├── arm-ca.crt                  # 0444 — mounted read-only into every service
 │   ├── arm-backend.{key,crt}       # leaf for Backend
-│   ├── arm-ui.{key,crt}            # leaf for UI nginx
-│   └── arm-ripper-sr{N}.{key,crt}  # one leaf per detected optical drive
+│   └── arm-ui.{key,crt}            # leaf for UI nginx
 ├── db/                             # Postgres data (bind-mount)
 ├── logs/                           # shared logs (PUID:PGID)
 ├── raw/                            # rip output (PUID:PGID, 2775 setgid)
@@ -123,35 +122,44 @@ services:
       - ./certs/arm-ui.crt:/etc/ssl/arm/tls.crt:ro
       - ./certs/arm-ui.key:/etc/ssl/arm/tls.key:ro
 
-  arm-ripper-sr0:
-    image: docker.io/automaticrippingmachine/arm-ripper:v3.0.0
-    container_name: armv3-ripper-sr0
-    restart: unless-stopped
-    depends_on: [arm-backend]
-    devices:
-      - "/dev/sr0:/dev/sr0"
-      - "/dev/sgN:/dev/sgN"  # matching SCSI-generic node — see "SCSI-generic pairing" below
-    group_add:
-      - "${CDROM_GID:-44}"   # host's optical group GID so PUID-dropped process can read /dev/sr0
-    environment:
-      ARM_DRIVE_DEV: /dev/sr0
-      ARM_BACKEND_URL: https://arm-backend:8443
-      ARM_SERVICE_TOKEN: ${ARM_SERVICE_TOKEN}
-      ARM_LOG_LEVEL: ${ARM_LOG_LEVEL:-info}
-      PUID: ${PUID:-1000}
-      PGID: ${PGID:-1000}
-    volumes:
-      - ./raw:/raw
-      - ./logs:/logs
-      - ./certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
-      - ./certs/arm-ripper-sr0.crt:/etc/ssl/arm/tls.crt:ro
-      - ./certs/arm-ripper-sr0.key:/etc/ssl/arm/tls.key:ro
-
-  # One arm-ripper-srN block per detected drive — emitted by the installer,
-  # not hand-edited. Rerun install.sh after adding a new drive.
+  arm-ripper:
+    image: ${ARM_RIPPER_IMAGE:-docker.io/automaticrippingmachine/arm-ripper:v3.0.0}
+    build:
+      context: .
+      dockerfile: services/ripper/Dockerfile
+    deploy:
+      replicas: 0   # built by `docker compose up -d --build`; never started here
 ```
 
-The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects.
+The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects. One exception: containers the backend creates for enrolled drives (see below) are named `arm-ripper-<serial>` without the `armv3-` prefix — they're created over the docker socket, not by compose, so they sit outside the `armv3` compose project namespace.
+
+### Rippers are created by the backend, not by compose
+
+There is no per-drive compose service. `docker compose up -d --build` builds the
+`arm-ripper` image (the service has `deploy.replicas: 0`, like `arm-transcode`)
+and starts nothing from it. On boot the backend scans `/sys/class/block/sr*` +
+`/dev/disk/by-id` (mounted read-only at `/host-disk`) and lists every optical
+drive on the **Drives** page as *detected*. Enrolling a drive there makes the
+backend create one durable container `arm-ripper-<serial>` for it over the
+docker socket:
+
+- label `arm.drive_id=<id>` (the tracking key), `restart: unless-stopped`;
+- `device_cgroup_rules: ["b 11:* rmw", "c 21:* rmw"]` — the ripper's entrypoint
+  pre-creates `/dev/sr0..7` and `/dev/sg0..15` itself, so there is no `devices:`
+  bind and the container survives unplug/replug and renumbering;
+- env `ARM_DRIVE_ID`, `ARM_DRIVE_BY_ID` (the udev by-id link it follows),
+  `ARM_DRIVE_DEV` (current node — a hint), backend URL + service token,
+  `PUID/PGID/CDROM_GID`, and any `ARM_RIPPER_*` tunables from `.env`;
+- mounts the `ARM_HOST_RAW_PATH` / `ARM_HOST_LOGS_PATH` host paths (which the
+  install layout resolves to `./arm/raw`, `./arm/logs`), `arm-ca.crt:ro`,
+  `/dev/disk:/host-disk:ro`.
+
+Unenroll stops and removes the container. On every backend boot the `drives`
+table is reconciled against the labelled containers: missing → created, exited
+→ started, orphan → removed, and a container running an image that no longer
+matches `ARM_RIPPER_IMAGE` is recreated when the drive is idle. These
+containers are **outside the compose project** — `docker compose down` leaves
+them; `bash devtools/ripper-containers.sh {list|stop|remove}` manages them.
 
 Each service container, on startup, copies the mounted `/etc/ssl/arm/arm-ca.crt` into `/usr/local/share/ca-certificates/` and runs `update-ca-certificates`. This merges the per-install internal CA with the base image's Mozilla root bundle, so outbound HTTPS (TMDB, OMDB, Apprise) verifies against public roots and inbound/intra-compose HTTPS verifies against the internal CA — all via the default system trust store, no per-client `verify=` plumbing in application code. See [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls) for the full cert layout and rationale.
 
@@ -169,36 +177,30 @@ The pairing isn't lexicographic — `sr0` does **not** automatically pair with `
 ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
 ```
 
-The installer ([install.sh](../../install.sh)) auto-detects this per drive and emits the right `devices:` entries. For contributors running from a checkout, [devtools/setup-dev.sh](../../devtools/setup-dev.sh) does the same: it copies the committed [docker-compose.yml.example](../../docker-compose.yml.example) template to a gitignored `docker-compose.yml` (same split as `.env` / `.env.example`) and splices the ripper services into its generated region (between the `>>>/<<< arm-ripper services` sentinels), using `lsscsi -g` to read the `/dev/srN ↔ /dev/sgM` pairing — one `arm-ripper-srN` service per drive. The region is regenerated on every run (idempotent — a no-op when your drives are unchanged); re-run `setup-dev.sh` after attaching or removing a drive rather than hand-editing the pairing.
+Rippers no longer need this pairing done for them: the `arm-ripper-<serial>` container's entrypoint pre-creates `/dev/sr0..7` and `/dev/sg0..15` itself (via `device_cgroup_rules`, not per-node `devices:` binds), so it can follow the kernel's own `sr`↔`sg` pairing at runtime instead of a compose author working it out at install time — see [§ Rippers are created by the backend, not by compose](#rippers-are-created-by-the-backend-not-by-compose) above.
 
 ### Host-side auto-mount must be disabled
 
 Desktop hosts (any with a GNOME / KDE / XFCE session) run `udisks2` + `gvfs` to auto-mount removable media as soon as the kernel sees a new disc. That host-side mount holds `/dev/srN` exclusively — the ripper container can scan and rip (`makemkvcon` opens the SCSI generic node, not the block device), but **post-rip `eject` fails with "Device or resource busy"** because the container can't reach the host's mount namespace to unmount first. The ripper logs `eject /dev/srN failed after 4 attempts; check host auto-mount config` and the disc stays in the drive until the user manually ejects.
 
-Server / headless installs do not have this problem (no `udisks2` running, no `gvfs`). Desktop hosts need a one-time host config change to disable auto-mount for the ARM drive(s) **only** — leaving every other drive untouched. The canonical udisks2 knob for this is `UDISKS_AUTO=0` ([udisks(8)](https://manpages.debian.org/trixie/udisks2/udisks.8.en.html)) — the drive stays visible in Files / Nautilus and the user can still mount it on demand, but the desktop's auto-mounter skips it on insert.
+Server / headless installs do not have this problem (no `udisks2` running, no `gvfs`). Desktop hosts need a one-time host config change to disable auto-mount for optical drives (non-optical media untouched; other optical drives stay visible and manually mountable). The canonical udisks2 knob for this is `UDISKS_AUTO=0` ([udisks(8)](https://manpages.debian.org/trixie/udisks2/udisks.8.en.html)) — the drive stays visible in Files / Nautilus and the user can still mount it on demand, but the desktop's auto-mounter skips it on insert.
 
-Match the rule to the specific drive by `ID_PATH` or `ID_SERIAL` so it doesn't disable auto-mount on every optical drive on the host:
+The rule is host-wide rather than scoped to a specific drive by `ID_PATH`/`ID_SERIAL`, because drives are hot-plugged and enrolled from the UI *after* install — there is no fixed drive list at install time to scope the rule to. ARM owns the optical drives on its host, so the installer (and `devtools/setup-dev.sh` for contributors) writes one rule that covers every `sr*` node:
 
 ```sh
-# Discover the drive's stable identifier first:
-udevadm info /dev/sr0 | grep -E 'ID_PATH=|ID_SERIAL='
-
 # /etc/udev/rules.d/99-arm-no-automount.rules
-# Replace ID_PATH with the value from the udevadm output above.
-SUBSYSTEM=="block", KERNEL=="sr[0-9]*", \
-    ENV{ID_PATH}=="pci-0000:00:14.0-ata-3", \
-    ENV{UDISKS_AUTO}="0"
+SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{UDISKS_AUTO}="0"
 ```
 
-Reload with `sudo udevadm control --reload-rules && sudo udevadm trigger`. After this, eject from inside the ripper container succeeds normally. Phase 13's installer auto-discovers `ID_PATH` for each enrolled drive and writes the rule alongside the compose file.
+Reload with `sudo udevadm control --reload-rules && sudo udevadm trigger`. After this, eject from inside the ripper container succeeds normally.
 
 Why `UDISKS_AUTO=0` and not `UDISKS_IGNORE=1`: the latter hides the drive from the udisks2 device tree entirely (no entry in Files, no `udisksctl status` row), which is friendlier to set-it-and-forget-it server installs but breaks the desktop user's expectation that they can still browse the disc manually. `UDISKS_AUTO=0` is the documented per-device "skip auto-mount" toggle. Why a host-side rule instead of bind-mounting the host's DBus into the container: DBus passthrough adds a runtime dependency that fails open on headless hosts (no `udisks2` running) and ties container behaviour to the host's session bus — fragile across distros and reboots. Why not raw SCSI eject through `/dev/sgM`: `udisks2` sets PREVENT MEDIUM REMOVAL on mount, the drive firmware refuses STOP UNIT until ALLOW is sent, and even on success the host's `/media/<label>/` mountpoint stays stale and races the next disc insertion. Multiple containerized rip projects ([jlesage/docker-makemkv #84](https://github.com/jlesage/docker-makemkv/issues/84), [#138](https://github.com/jlesage/docker-makemkv/issues/138), [ARM v2 #1558](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/1558)) hit this same wall and none of them solve it in-container — the host-udev approach is the converged industry pattern.
 
-## Why one ripper service per drive
+## Why one ripper container per drive
 
-Ripper-per-drive is explicit and declarative: users see which drives they have by reading compose, device pass-through is one line per service, and a failing ripper doesn't take down its siblings. Each ripper watches its own drive via a 2s `ioctl(CDROM_DRIVE_STATUS)` poll — no udev rules on host or in container, no distro-specific wiring. This is the trade-off we accepted vs. dynamic ripper spawning — one line of config per drive is a small price for "it's all visible in one file."
+One drive is one process is one crash domain: a failing ripper doesn't take down its siblings, and each container holds its own MakeMKV SCSI handle on its own device rather than multiplexing several drives through one process. Logs stay per-drive too — one JSONL stream per container, not an interleaved shared one. Each ripper watches its own drive via a 2s `ioctl(CDROM_DRIVE_STATUS)` poll.
 
-If a user has drives `sr0` and `sr1` they duplicate the ripper block twice. There is no "cluster of interchangeable rippers" — each ripper owns one physical device.
+The container itself isn't declared in compose, though — it's created by the backend when a drive is enrolled, not hand-written per drive. See [§ Rippers are created by the backend, not by compose](#rippers-are-created-by-the-backend-not-by-compose) above.
 
 ## Environment file
 
@@ -265,6 +267,8 @@ curl -fsSL https://raw.githubusercontent.com/automatic-ripping-machine/automatic
 ```
 
 (Or `bash -c "$(curl -fsSL ...)"` for users who want a TTY; `install.sh --prefix /srv/arm` to override the default path.)
+
+> `install.sh` predates the drive-lifecycle model and still emits per-drive services; it is scheduled for a rewrite before release — use [devtools/setup-dev.sh](../../devtools/setup-dev.sh) (which follows the model above) meanwhile.
 
 **What the installer does, in order:**
 
