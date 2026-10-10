@@ -19,6 +19,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import pytest  # noqa: E402
+from paramiko.ssh_exception import SSHException  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
 from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
@@ -90,6 +91,35 @@ def _app_with_one_task(status: TranscodeTaskStatus, **task_kwargs: Any) -> FakeS
     fields.update(task_kwargs)
     db.rows["transcode_tasks"] = [TranscodeTask(**fields)]
     return db
+
+
+def test_is_transport_death_detects_direct_eof_error() -> None:
+    """Fix 76-9: paramiko commonly surfaces a dead transport as a raw
+    EOFError (not just SSHException/ConnectionResetError/BrokenPipeError)."""
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    assert _is_transport_death(EOFError("EOF"))
+
+
+def test_is_transport_death_detects_eof_error_nested_in_cause_chain() -> None:
+    """docker-py wraps the underlying transport error; walk __cause__ to
+    find an EOFError root cause, same as the existing SSHException path."""
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    inner = EOFError("EOF")
+    try:
+        try:
+            raise inner
+        except EOFError as e:
+            raise RuntimeError("docker APIError wrapper") from e
+    except RuntimeError as wrapped:
+        assert _is_transport_death(wrapped)
+
+
+def test_is_transport_death_rejects_unrelated_error() -> None:
+    from arm_backend.transcode_dispatcher import _is_transport_death
+
+    assert not _is_transport_death(ValueError("not a transport error"))
 
 
 def _orphan_db(
@@ -347,6 +377,170 @@ async def test_spawn_continues_after_one_failure() -> None:
     spawned = await disp.spawn_pending(db)
     assert spawned == 1  # second task succeeded; first logged + skipped
     assert docker.containers.run.call_count == 2
+
+
+async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fix 76-4: `_spawn_container` does a blocking docker call (and, on the
+    SSH-rebuild path, a blocking TCP+SSH handshake that can take tens of
+    seconds against a black-holed host) — it must run off the event loop via
+    `asyncio.to_thread`, not synchronously inline in `spawn_pending`. Pin the
+    mechanism with a pass-through recorder standing in for `to_thread`:
+    running the loop under pytest-asyncio makes `to_thread` transparent, so
+    this only proves the call site is used, not concurrency itself."""
+    import asyncio
+
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+
+    calls: list[tuple[Any, ...]] = []
+    real_to_thread = asyncio.to_thread
+
+    async def _recording_to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
+        calls.append((func, args, kwargs))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "to_thread", _recording_to_thread)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 1
+    assert len(calls) == 1
+    assert calls[0][0] == disp._spawn_container
+
+
+async def test_spawn_rebuilds_docker_client_on_dead_ssh_transport(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # First containers.run raises paramiko SSHException("SSH session not
+    # active"); the dispatcher must rebuild via the factory and retry once,
+    # and the retry (on the freshly-built client) succeeds.
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+    fresh = MagicMock()
+    factory_calls: list[int] = []
+
+    def factory() -> MagicMock:
+        factory_calls.append(1)
+        return fresh
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=factory)
+
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+        spawned = await disp.spawn_pending(db)
+
+    assert factory_calls == [1]
+    dead.containers.run.assert_called_once()
+    fresh.containers.run.assert_called_once()  # retry happened on the fresh client
+    assert spawned == 1  # task ended up spawned, not failed
+    assert disp._docker is fresh
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED  # spawn_pending doesn't flip status itself
+    assert any("transport dead" in r.message for r in caplog.records)
+
+
+async def test_spawn_retry_does_not_loop() -> None:
+    # If the rebuilt client ALSO fails, the task follows the existing
+    # failure path (no infinite retry): exactly one rebuild attempt, and
+    # containers.run is called exactly twice total (original + one retry).
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+    still_dead = MagicMock()
+    still_dead.containers.run.side_effect = SSHException("SSH session not active")
+    factory_calls: list[int] = []
+
+    def factory() -> MagicMock:
+        factory_calls.append(1)
+        return still_dead
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=factory)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert factory_calls == [1]  # rebuilt exactly once, no infinite retry
+    dead.containers.run.assert_called_once()
+    still_dead.containers.run.assert_called_once()
+    assert spawned == 0  # second failure follows the existing failure path
+    assert disp._docker is still_dead
+
+
+async def test_spawn_no_retry_without_factory() -> None:
+    # No docker_client_factory configured (local-socket deployments) —
+    # a transport-death-shaped error still just follows the plain failure
+    # path; no rebuild is attempted.
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    docker = MagicMock()
+    docker.containers.run.side_effect = SSHException("SSH session not active")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 0
+    docker.containers.run.assert_called_once()
+    assert disp._docker is docker
+
+
+async def test_spawn_factory_returns_none_keeps_old_client(caplog: pytest.LogCaptureFixture) -> None:
+    """I2: `_build_docker_client` (main.py) returns None on any factory
+    failure, not an exception. Assigning `self._docker = None` would make
+    every LATER spawn raise AttributeError instead of following the
+    transport-death path — permanently wedging the dispatcher. The old
+    (dead) client must be kept instead, this tick's task follows the normal
+    failure path, and a LATER spawn attempt must trigger another rebuild
+    (proving the dispatcher isn't wedged)."""
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+    factory_calls: list[int] = []
+
+    def factory() -> None:
+        factory_calls.append(1)
+        return None
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=factory)
+
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+        spawned = await disp.spawn_pending(db)
+
+    assert spawned == 0  # task follows the existing failure path
+    assert disp._docker is dead  # old client kept, not wedged to None
+    assert factory_calls == [1]
+    assert any("rebuild returned None" in r.message for r in caplog.records)
+
+    # A LATER spawn attempt (e.g. next dispatcher tick) still detects
+    # transport death and re-attempts the rebuild — proving the dispatcher
+    # was not permanently wedged.
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.QUEUED
+    db.rows["transcode_tasks"][0].claimed_by = None
+    spawned_again = await disp.spawn_pending(db)
+    assert spawned_again == 0
+    assert factory_calls == [1, 1]
+
+
+async def test_spawn_successful_rebuild_closes_old_client() -> None:
+    """I2: when the factory returns a working client, the old (dead) client
+    is best-effort closed so its resources (e.g. the SSH transport) don't
+    leak."""
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.containers.run.side_effect = SSHException("SSH session not active")
+    fresh = MagicMock()
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=lambda: fresh)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 1
+    assert disp._docker is fresh
+    dead.close.assert_called_once()
 
 
 # ---- stale-claim sweep -------------------------------------------------------

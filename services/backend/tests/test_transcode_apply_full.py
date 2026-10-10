@@ -152,6 +152,39 @@ async def test_find_collisions_existing_task(tmp_path: Path) -> None:
     cols = await find_collisions(db, ["a.flac"], tmp_path)  # type: ignore[arg-type]
     assert cols[0].reason == "existing_task"
     assert cols[0].existing_task_id == "txt_live"
+    # No session_applications row seeded for sap_1 — defensive: leaves None
+    # rather than raising.
+    assert cols[0].existing_job_id is None
+
+
+async def test_find_collisions_existing_task_populates_job_id(tmp_path: Path) -> None:
+    """`existing_job_id` is resolved via task -> session_application -> job_id,
+    batched (one extra query, not one per collision)."""
+    from arm_common import SessionApplication, SessionApplicationStatus
+
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_live",
+            session_application_id="sap_owner",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="a.flac",
+            progress_pct=0,
+            attempts=0,
+        )
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_owner",
+            session_id="ses_owner",
+            job_id="job_owner",
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
+    cols = await find_collisions(db, ["a.flac"], tmp_path)  # type: ignore[arg-type]
+    assert cols[0].existing_job_id == "job_owner"
 
 
 async def test_find_collisions_on_disk(tmp_path: Path) -> None:
@@ -159,11 +192,13 @@ async def test_find_collisions_on_disk(tmp_path: Path) -> None:
     cols = await find_collisions(FakeSession(), ["b.flac"], tmp_path)  # type: ignore[arg-type]
     assert cols[0].reason == "on_disk"
     assert cols[0].on_filesystem is True
+    assert cols[0].existing_job_id is None
 
 
 async def test_find_collisions_duplicate_in_request(tmp_path: Path) -> None:
     cols = await find_collisions(FakeSession(), ["dup.flac", "dup.flac"], tmp_path)  # type: ignore[arg-type]
     assert [c.reason for c in cols] == ["duplicate_in_request"]
+    assert cols[0].existing_job_id is None
 
 
 async def test_find_collisions_existing_task_then_duplicate(tmp_path: Path) -> None:
