@@ -103,6 +103,7 @@ def _to_view(cfg: Config) -> ConfigView:
         makemkv_key_valid=cfg.makemkv_key_valid,
         makemkv_key_state=cfg.makemkv_key_state,
         makemkv_key_checked_at=cfg.makemkv_key_checked_at,
+        makemkv_key_checked_by_drive_id=cfg.makemkv_key_checked_by_drive_id,
         updated_by_user_id=cfg.updated_by_user_id,
         updated_at=cfg.updated_at,
     )

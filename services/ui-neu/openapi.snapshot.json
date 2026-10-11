@@ -161,9 +161,25 @@
           "ripper"
         ],
         "summary": "Get Ripper Config",
-        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\n(setup spec 2026-10-01 D1). Rippers that omit it get the global value.",
         "operationId": "get_ripper_config_api_ripper_config_get",
         "parameters": [
+          {
+            "name": "drive_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drive Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -8455,6 +8471,397 @@
         }
       }
     },
+    "/api/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Setup Status",
+        "description": "Public: the login page and the first-run guard read it before anyone\nsigns in. `first_run` is false once setup is completed or deferred (\"Finish\nlater\" holds for every browser, not just the one that clicked it). Fails\nclosed to first_run=false, so a backend or DB hiccup never traps the UI in\n/setup.",
+        "operationId": "setup_status_api_setup_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatusPublic"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Get Setup",
+        "operationId": "get_setup_api_setup_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/steps/{step}": {
+      "put": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Put Step",
+        "operationId": "put_step_api_setup_steps__step__put",
+        "parameters": [
+          {
+            "name": "step",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Step"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupStepUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/complete": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Complete Setup",
+        "operationId": "complete_setup_api_setup_complete_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/restart": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Restart Setup",
+        "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.",
+        "operationId": "restart_setup_api_setup_restart_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/defer": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Defer Setup",
+        "description": "The walkthrough's Finish later: stop the first-run redirect for every browser and sign-in\n(the dashboard checklist still lists what is left). Settings > \"Run setup\nagain\" (`/restart`) picks it back up.",
+        "operationId": "defer_setup_api_setup_defer_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/checklist/dismiss": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Dismiss Checklist",
+        "operationId": "dismiss_checklist_api_setup_checklist_dismiss_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/setup/disc-routes": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Disc Routes",
+        "description": "What each kind of disc gets with no drive default and no per-rip choice:\nthe session route for that media type, else the first built-in session of\nthat type by name (what an operator picking by type would get). Read-only.",
+        "operationId": "disc_routes_api_setup_disc_routes_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DiscRouteSummary"
+                  },
+                  "title": "Response Disc Routes Api Setup Disc Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/roots": {
       "get": {
         "tags": [
@@ -9945,6 +10352,61 @@
               }
             ],
             "title": "Enum Requires"
+          },
+          "setup_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Step"
+          },
+          "setup_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Order"
+          },
+          "signup_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signup Url"
+          },
+          "widget": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widget"
+          },
+          "part_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Of"
           }
         },
         "type": "object",
@@ -10453,6 +10915,17 @@
             ],
             "title": "Makemkv Key Checked At"
           },
+          "makemkv_key_checked_by_drive_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makemkv Key Checked By Drive Id"
+          },
           "updated_by_user_id": {
             "anyOf": [
               {
@@ -10527,6 +11000,36 @@
           "none"
         ],
         "title": "ContainerFormat"
+      },
+      "DiagnosticDetail": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "ok"
+        ],
+        "title": "DiagnosticDetail",
+        "description": "One sub-check row (e.g. docker socket vs image) under a diagnostics check."
       },
       "DiagnosticsResponse": {
         "properties": {
@@ -10657,6 +11160,74 @@
           "value"
         ],
         "title": "DiscFingerprintView"
+      },
+      "DiscRouteSummary": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/MediaType"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "session_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Name"
+          },
+          "rip_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip Summary"
+          },
+          "transcode_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Summary"
+          },
+          "output_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Template"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "DiscRouteSummary",
+        "description": "What one kind of disc gets with no drive default and no per-rip choice."
       },
       "DiscType": {
         "type": "string",
@@ -11616,6 +12187,22 @@
                 "type": "null"
               }
             ]
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "usb",
+                  "sata",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection"
           },
           "kind": {
             "$ref": "#/components/schemas/DriveKind",
@@ -13691,6 +14278,17 @@
               }
             ],
             "title": "Detail"
+          },
+          "drive_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Id"
           }
         },
         "type": "object",
@@ -15304,6 +15902,39 @@
           "writable": {
             "type": "boolean",
             "title": "Writable"
+          },
+          "host_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Path"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid"
+          },
+          "gid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gid"
           }
         },
         "type": "object",
@@ -16626,6 +17257,134 @@
         "title": "SettingsSchemaResponse",
         "description": "Render metadata for the settings page \u2014 grouped field classification.\nStatic (derived from CONFIG_FIELD_META); values come from /api/config and\n/api/settings/infra."
       },
+      "SetupStatusPublic": {
+        "properties": {
+          "first_run": {
+            "type": "boolean",
+            "title": "First Run"
+          },
+          "arm_version": {
+            "type": "string",
+            "title": "Arm Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_run",
+          "arm_version"
+        ],
+        "title": "SetupStatusPublic",
+        "description": "Unauthenticated: the login page and the first-run guard read it."
+      },
+      "SetupStep": {
+        "type": "string",
+        "enum": [
+          "account",
+          "system",
+          "drives",
+          "makemkv",
+          "metadata",
+          "discs",
+          "transcoding",
+          "notifications",
+          "finish"
+        ],
+        "title": "SetupStep",
+        "description": "First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).\n\nStored as VARCHAR keys inside Config.setup_progress JSON, validated in the app."
+      },
+      "SetupStepProgress": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/SetupStepState"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "SetupStepProgress"
+      },
+      "SetupStepState": {
+        "type": "string",
+        "enum": [
+          "done",
+          "skipped",
+          "attention"
+        ],
+        "title": "SetupStepState"
+      },
+      "SetupStepUpdate": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/SetupStepState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "SetupStepUpdate"
+      },
+      "SetupView": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "progress": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SetupStepProgress"
+            },
+            "type": "object",
+            "title": "Progress"
+          },
+          "current_step": {
+            "$ref": "#/components/schemas/SetupStep"
+          },
+          "admin_default_password": {
+            "type": "boolean",
+            "title": "Admin Default Password"
+          },
+          "checklist_dismissed": {
+            "type": "boolean",
+            "title": "Checklist Dismissed"
+          },
+          "deferred": {
+            "type": "boolean",
+            "title": "Deferred",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "completed_at",
+          "progress",
+          "current_step",
+          "admin_default_password",
+          "checklist_dismissed"
+        ],
+        "title": "SetupView"
+      },
       "SourceClaims": {
         "properties": {
           "run_at": {
@@ -16853,6 +17612,36 @@
               }
             ],
             "title": "Detail"
+          },
+          "details": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticDetail"
+            },
+            "type": "array",
+            "title": "Details",
+            "default": []
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "remote_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Host"
           }
         },
         "type": "object",

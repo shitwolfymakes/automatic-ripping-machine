@@ -8,7 +8,6 @@ export const features = {
 	settings: true,
 	transcoder: true, // additionally gated at runtime by transcoderEnabled
 	files: true,
-	setup: false, // setup-status/complete API MISSING in v3
 	// In-screen flags (not in ROUTE_FLAGS): they hide entry points inside a screen.
 	maintenance: false // Files orphan folders + transcoder job cleanup: APIs MISSING in v3
 } as const;
@@ -19,8 +18,7 @@ const ROUTE_FLAGS: Record<string, keyof typeof features> = {
 	'/logs': 'logs',
 	'/settings': 'settings',
 	'/transcoder': 'transcoder',
-	'/files': 'files',
-	'/setup': 'setup'
+	'/files': 'files'
 };
 
 // Map a route path to its flag; unknown routes default to enabled.

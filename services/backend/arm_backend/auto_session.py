@@ -40,6 +40,7 @@ from arm_backend.transcode_apply import (
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
+    DiscType,
     Drive,
     Job,
     JobStatus,
@@ -1061,10 +1062,15 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
     if job.media_type is None:
         return None
 
-    routes = (
-        (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == job.media_type))).scalars().all()
-    )
-    exact = next((r for r in routes if r.disc_type == job.disc_type), None)
+    return await route_session_id_for(db, job.media_type, job.disc_type)
+
+
+async def route_session_id_for(db: AsyncSession, media_type: MediaType, disc_type: DiscType | None) -> str | None:
+    """SessionRoute lookup: the exact (media_type, disc_type) route, then the
+    (media_type, NULL) wildcard. Shared by job routing and the setup
+    walkthrough's read-only disc-routes summary."""
+    routes = (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == media_type))).scalars().all()
+    exact = next((r for r in routes if r.disc_type == disc_type), None)
     if exact is not None:
         return exact.session_id
     wildcard = next((r for r in routes if r.disc_type is None), None)

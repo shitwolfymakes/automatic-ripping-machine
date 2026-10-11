@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, LargeBinary, String
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import enum_column, updated_at_column
@@ -126,6 +127,22 @@ class Config(SQLModel, table=True):
     # 0035_session_routes_seed_marker for why it defaults true on any
     # already-deployed Postgres DB.
     session_routes_seeded: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
+    # First-run setup walkthrough (setup spec 2026-10-01 §6.1). NULL completed_at
+    # = the walkthrough is active; migration 0042 backfills it for installs in use.
+    setup_completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    # {step_id: {"state": "done"|"skipped"|"attention", "at": iso}}; ids and
+    # states are validated in the app (SetupStep / SetupStepState), never PG enums.
+    setup_progress: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}")
+    )
+    setup_checklist_dismissed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    # "Finish later": the walkthrough stops redirecting, for every browser,
+    # until Settings > "Run setup again" (restart) or completing it clears it.
+    setup_deferred_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Which drive's ripper last reported the MakeMKV key status (setup "checked by").
+    makemkv_key_checked_by_drive_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     updated_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     )

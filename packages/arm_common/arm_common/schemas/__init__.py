@@ -173,10 +173,18 @@ from arm_common.schemas.system import (
     PathStatus,
     StatsResponse,
     StorageRoot,
+    DiagnosticDetail,
     SystemDiagnosticCheck,
     SystemDiagnosticsResponse,
     SystemResourcesResponse,
     SystemVersionResponse,
+)
+from arm_common.schemas.setup import (
+    DiscRouteSummary,
+    SetupStatusPublic,
+    SetupStepProgress,
+    SetupStepUpdate,
+    SetupView,
 )
 from arm_common.schemas.settings import (
     SettingsGroup,
@@ -325,6 +333,7 @@ __all__ = [
     "NamingVariablesResponse",
     "PasswordChangeRequest",
     "PathStatus",
+    "DiagnosticDetail",
     "SystemDiagnosticCheck",
     "SystemDiagnosticsResponse",
     "RegisterRequest",
@@ -363,6 +372,11 @@ __all__ = [
     "SessionUpdateRequest",
     "SessionView",
     "SettingsGroup",
+    "DiscRouteSummary",
+    "SetupStatusPublic",
+    "SetupStepProgress",
+    "SetupStepUpdate",
+    "SetupView",
     "SettingsSchemaResponse",
     "StatsResponse",
     "StorageRoot",

@@ -35,3 +35,38 @@ export function driveStatusLabel(d: DriveView): string {
 export function serialLabel(d: DriveView): { text: string; warn: boolean } {
 	return d.serial ? { text: d.serial, warn: false } : { text: NO_SERIAL_LABEL, warn: true };
 }
+
+/** The name an operator recognises: their friendly name, else vendor + model, else the node. */
+export function driveTitle(d: DriveView): string {
+	return d.display_name || [d.vendor, d.model].filter(Boolean).join(' ') || d.device_path;
+}
+
+/** What the tray holds, from the ripper's heartbeat. The disc type isn't known until a scan. */
+export function mediaLabel(d: DriveView): string {
+	switch (d.media_status) {
+		case 'loaded':
+			return 'Disc in drive';
+		case 'no_disc':
+			return 'No disc';
+		case 'tray_open':
+			return 'Tray open';
+		case 'not_ready':
+			return 'Not ready';
+		default:
+			return 'Unknown';
+	}
+}
+
+/** The bus chip (USB / SATA), derived server-side from the by-id prefix. */
+export function connectionLabel(d: DriveView): string | null {
+	switch (d.connection) {
+		case 'usb':
+			return 'USB';
+		case 'sata':
+			return 'SATA';
+		case 'other':
+			return 'Other';
+		default:
+			return null;
+	}
+}

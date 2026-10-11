@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DriveLifecycleLists from './DriveLifecycleLists.svelte';
 import type { DriveView } from '$lib/types/api.gen';
 vi.mock('$lib/api/drives', () => ({
@@ -113,11 +113,11 @@ describe('DriveLifecycleLists', () => {
 			props: { detected: [], ignored: [drive({ id: 'drv_i', lifecycle: 'ignored' })], onchanged: vi.fn() }
 		});
 		const toggle = screen.getByTestId('ignored-toggle');
-		expect(toggle).toHaveTextContent('Ignored (1) ▸');
+		expect(toggle).toHaveTextContent('Ignored (1)');
 		expect(toggle).toHaveAttribute('aria-expanded', 'false');
 		expect(screen.queryByTestId('ignored-row-drv_i')).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
-		expect(screen.getByTestId('ignored-toggle')).toHaveTextContent('Ignored (1) ▾');
+		expect(screen.getByTestId('ignored-toggle')).toHaveTextContent('Ignored (1)');
 		expect(screen.getByTestId('unignore-drv_i')).toBeInTheDocument();
 		expect(screen.getByTestId('enroll-drv_i')).toBeInTheDocument();
 		await fireEvent.click(screen.getByTestId('unignore-drv_i'));
@@ -130,6 +130,65 @@ describe('DriveLifecycleLists', () => {
 			props: { detected: [drive({ id: 'drv_d' })], ignored: [], onchanged: vi.fn() }
 		});
 		await fireEvent.click(screen.getByTestId('enroll-drv_d'));
-		await waitFor(() => expect(screen.getByTestId('lifecycle-error')).toHaveTextContent('ImageNotFound'));
+		await waitFor(() => expect(screen.getByTestId('lifecycle-error-drv_d')).toHaveTextContent('ImageNotFound'));
+	});
+
+	it('shows Starting ripper while enrolling, then a per-drive error with Retry', async () => {
+		let reject!: (e: Error) => void;
+		vi.mocked(enrollDrive).mockImplementationOnce(() => new Promise((_, r) => (reject = r)));
+		renderComponent(DriveLifecycleLists, {
+			props: { detected: [drive({ id: 'a' }), drive({ id: 'b' })], ignored: [], onchanged: vi.fn() }
+		});
+		await fireEvent.click(screen.getByTestId('enroll-a'));
+		expect(within(screen.getByTestId('detected-row-a')).getByText('Starting ripper...')).toBeInTheDocument();
+		expect(screen.getByTestId('enroll-b')).not.toBeDisabled();
+		reject(new Error('device /dev/sr2 is busy'));
+		await waitFor(() => expect(screen.getByTestId('lifecycle-error-a')).toHaveTextContent('device /dev/sr2 is busy'));
+		expect(screen.getByTestId('lifecycle-error-a')).toHaveTextContent('Other drives are not affected.');
+		expect(screen.getByTestId('enroll-a')).toHaveTextContent('Retry');
+		expect(screen.queryByTestId('lifecycle-error-b')).toBeNull();
+	});
+
+	it('shows a backend last_error as a failed enroll', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: { detected: [drive({ id: 'a', last_error: 'ImageNotFound' })], ignored: [], onchanged: vi.fn() }
+		});
+		expect(screen.getByTestId('lifecycle-error-a')).toHaveTextContent('ImageNotFound');
+	});
+
+	it('disables Enroll with a reason', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: {
+				detected: [drive({ id: 'a' })],
+				ignored: [],
+				onchanged: vi.fn(),
+				enrollDisabledReason: 'Fix the ripper service first.'
+			}
+		});
+		expect(screen.getByTestId('enroll-a')).toBeDisabled();
+		expect(screen.getByTestId('enroll-disabled-reason')).toHaveTextContent('Fix the ripper service first.');
+	});
+
+	it('renders connection and media chips', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: {
+				detected: [drive({ id: 'a', connection: 'usb', media_status: 'loaded' } as Partial<DriveView>)],
+				ignored: [],
+				onchanged: vi.fn()
+			}
+		});
+		const row = screen.getByTestId('detected-row-a');
+		expect(row).toHaveTextContent('USB');
+		expect(row).toHaveTextContent('Disc in drive');
+		expect(row).toHaveTextContent('PIONEER BD-RW BDR-S12JX');
+	});
+
+	it('flags a drive that appears after the first render as New', async () => {
+		const { rerender } = renderComponent(DriveLifecycleLists, {
+			props: { detected: [drive({ id: 'a' })], ignored: [], onchanged: vi.fn() }
+		});
+		expect(within(screen.getByTestId('detected-row-a')).queryByText('New')).toBeNull();
+		await rerender({ detected: [drive({ id: 'a' }), drive({ id: 'b' })], ignored: [], onchanged: vi.fn() });
+		expect(within(screen.getByTestId('detected-row-b')).getByText('New')).toBeInTheDocument();
 	});
 });

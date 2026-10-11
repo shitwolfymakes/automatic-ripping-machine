@@ -502,7 +502,8 @@
 		</div>
 	</div>
 {/if}
-{#if $uiPrefs.showStats}
+<!-- The setup walkthrough is a focused shell: no resource footer (setup spec §5.0). -->
+{#if $uiPrefs.showStats && !isSetupPage}
 	<BottomStatsBar />
 {/if}
 

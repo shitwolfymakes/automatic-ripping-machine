@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import ConfigSchemaField from '../ConfigSchemaField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
@@ -151,5 +151,50 @@ describe('ConfigSchemaField', () => {
 		});
 		expect(screen.getByText('TVmaze, TMDb')).toBeInTheDocument();
 		expect(screen.queryByRole('list')).not.toBeInTheDocument();
+	});
+});
+
+describe('ConfigSchemaField key rows (setup spec §7.3)', () => {
+	it('links to the signup page and shows a saved secret as Saved', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'tmdb_api_key',
+					type: 'string',
+					tier: 'secret',
+					label: 'TMDb key',
+					signup_url: 'https://example.test/k'
+				}),
+				value: '<hidden>'
+			}
+		});
+		const link = screen.getByRole('link', { name: /get a free key/i });
+		expect(link).toHaveAttribute('href', 'https://example.test/k');
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(screen.getByText('Saved')).toBeInTheDocument();
+	});
+
+	it('toggles a secret between hidden and visible', async () => {
+		renderComponent(ConfigSchemaField, {
+			props: { field: f({ key: 'tmdb_api_key', type: 'string', tier: 'secret', label: 'TMDb key' }), value: 'abc' }
+		});
+		const input = screen.getByLabelText('TMDb key') as HTMLInputElement;
+		expect(input.type).toBe('password');
+		await fireEvent.click(screen.getByRole('button', { name: /show hidden value/i }));
+		expect(input.type).toBe('text');
+	});
+
+	it('Remove clears the value and reports it', async () => {
+		const onclear = vi.fn();
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({ key: 'tmdb_api_key', type: 'string', tier: 'secret', label: 'TMDb key' }),
+				value: '<hidden>',
+				onclear
+			}
+		});
+		await fireEvent.click(screen.getByRole('button', { name: /remove/i }));
+		expect(onclear).toHaveBeenCalled();
+		expect(screen.getByText('Will be removed')).toBeInTheDocument();
 	});
 });

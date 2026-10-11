@@ -86,8 +86,13 @@ export function lintSource(src, filename) {
 	}
 	// 4d. utilities inside string literals in <script> blocks: a token counts only
 	// when it looks class-shaped (contains '-' or ':'), so prose is never flagged.
+	// Comments are stripped first: an apostrophe or backtick in a comment
+	// ("the walkthrough's step", `gpu.probed`) would otherwise open a false
+	// literal that swallows real code up to the next quote. A `//` preceded
+	// by ':' is a URL inside a string, not a comment.
 	for (const script of src.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) {
-		for (const lit of script[1].matchAll(/['"`]([^'"`]*)['"`]/g)) {
+		const code = script[1].replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`])\/\/[^\n]*/gm, '$1');
+		for (const lit of code.matchAll(/['"`]([^'"`]*)['"`]/g)) {
 			const tokens = lit[1].split(/\s+/).filter(Boolean);
 			for (const t of tokens) {
 				if (!/[-:]/.test(t)) continue;

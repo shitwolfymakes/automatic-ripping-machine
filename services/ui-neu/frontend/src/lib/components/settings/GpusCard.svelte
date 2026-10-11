@@ -13,6 +13,17 @@
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
+	import StatusStrip from '$lib/components/StatusStrip.svelte';
+
+	// Shared by Settings > Transcoding and the setup walkthrough's Transcoding
+	// step. A probe is a real test encode run in a container (10-60 s); its
+	// result arrives as a `gpu.probed` event, so each device shows its own
+	// in-progress state until that event (or a 2-minute timeout).
+	let { location = null }: { location?: { label: string } | null } = $props();
+
+	const VENDOR_LABEL: Record<string, string> = { nvenc: 'NVENC', qsv: 'Quick Sync', vaapi: 'VAAPI' };
+	const PROBE_TIMEOUT_MS = 120_000;
 
 	let gpus = $state<GpuView[]>([]);
 	let loaded = $state(false);
@@ -20,6 +31,31 @@
 	let pending = $state<Set<string>>(new Set());
 	let probingAll = $state(false);
 	let confirmTarget = $state<GpuView | null>(null);
+	let probing = $state<Record<string, ReturnType<typeof setTimeout>>>({});
+	let probeTimedOut = $state<Record<string, boolean>>({});
+
+	function startProbing(ids: string[]) {
+		const next = { ...probing };
+		const timedOut = { ...probeTimedOut };
+		for (const id of ids) {
+			if (next[id]) clearTimeout(next[id]);
+			delete timedOut[id];
+			next[id] = setTimeout(() => {
+				const { [id]: _t, ...rest } = probing;
+				probing = rest;
+				probeTimedOut = { ...probeTimedOut, [id]: true };
+			}, PROBE_TIMEOUT_MS);
+		}
+		probing = next;
+		probeTimedOut = timedOut;
+	}
+
+	function stopProbing(id: string) {
+		if (!probing[id]) return;
+		clearTimeout(probing[id]);
+		const { [id]: _t, ...rest } = probing;
+		probing = rest;
+	}
 
 	async function load() {
 		try {
@@ -47,6 +83,7 @@
 		pending = new Set(pending).add(g.id);
 		try {
 			await probeGpu(g.id);
+			startProbing([g.id]);
 			error = null;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Re-probe failed.';
@@ -62,6 +99,7 @@
 		probingAll = true;
 		try {
 			await probeAllGpus();
+			startProbing(gpus.filter((g) => g.enabled).map((g) => g.id));
 			error = null;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Re-probe failed.';
@@ -114,10 +152,19 @@
 
 	onMount(() => {
 		load();
-		return wsClient.subscribe('transcode.events', (env: WSEnvelope) => {
+		// Start the socket ourselves: on the setup walkthrough no other store has.
+		wsClient.start();
+		const unsubscribe = wsClient.subscribe('transcode.events', (env: WSEnvelope) => {
 			// The encoders store follows gpu.probed itself.
-			if (env.event_type === 'gpu.probed') load();
+			if (env.event_type !== 'gpu.probed') return;
+			const id = (env.payload as { gpu_id?: string }).gpu_id;
+			if (id) stopProbing(id);
+			load();
 		});
+		return () => {
+			unsubscribe?.();
+			for (const t of Object.values(probing)) clearTimeout(t);
+		};
 	});
 </script>
 
@@ -125,11 +172,16 @@
 	<div class="gpus-card-head">
 		<h3 class="eyebrow">Transcode GPUs</h3>
 		{#if $isAdmin && gpus.length > 0}
-			<button type="button" class="btn btn-ghost btn-sm" disabled={probingAll} onclick={reprobeAll}>
-				Re-probe all
+			<button type="button" class="btn btn-sm" disabled={probingAll} onclick={reprobeAll}>
+				<Glyph name="refresh" class="h-3.5 w-3.5" /> Test encoders
 			</button>
 		{/if}
 	</div>
+	{#if location}
+		<p class="gpus-card-location">
+			<Glyph name="cpu" /> Encoding runs on <span class="chip chip-sm chip-info">{location.label}</span>
+		</p>
+	{/if}
 	{#if error}
 		<div class="alert alert-danger" role="alert">{error}</div>
 	{/if}
@@ -137,8 +189,8 @@
 		<p class="gpus-card-note">Loading GPU inventory...</p>
 	{:else if gpus.length === 0}
 		<p class="gpus-card-note" data-testid="gpus-empty">
-			No GPUs configured. Transcodes run on CPU. The inventory seeds from the host probe (ARM_GPUS) when this list is
-			empty and the backend restarts.
+			ARM will encode on the CPU. It works, just slower. The inventory seeds from the host probe (ARM_GPUS) when this
+			list is empty and the backend restarts.
 		</p>
 	{:else}
 		<div class="stack stack-sm">
@@ -146,16 +198,18 @@
 				<div class="panel-section gpus-card-row-wrap" data-testid="gpu-row-{g.id}">
 					<div class="gpus-card-row">
 						<span class="status-dot" data-status={dotStatus(g)} aria-hidden="true"></span>
-						<span class="badge gpus-card-vendor">{g.vendor.toUpperCase()}</span>
+						<span class="badge gpus-card-vendor">{VENDOR_LABEL[g.vendor] ?? g.vendor.toUpperCase()}</span>
 						<span class="gpus-card-device" title={g.device_path}>{g.device_path}</span>
 						<span class="gpus-card-kinds">
 							{#if !g.probed_at}
-								<span class="chip chip-sm">Never probed</span>
+								<span class="chip chip-sm"><Glyph name="clock" class="h-3 w-3" />Not tested</span>
 							{:else if g.encoder_kinds.length === 0}
-								<span class="chip chip-sm">Verified nothing</span>
+								<span class="chip chip-sm chip-danger"><Glyph name="x" class="h-3 w-3" />Nothing verified</span>
 							{:else}
 								{#each g.encoder_kinds as kind (kind)}
-									<span class="chip">{kind}</span>
+									<span class="chip chip-sm chip-success"
+										><Glyph name="check" class="h-3 w-3" />{kind.toUpperCase()} available</span
+									>
 								{/each}
 							{/if}
 						</span>
@@ -186,8 +240,13 @@
 							</button>
 						{/if}
 					</div>
+					{#if probing[g.id]}
+						<StatusStrip tone="busy" title="Testing encoders..." detail="Takes 10 to 60 seconds" progress />
+					{:else if probeTimedOut[g.id]}
+						<StatusStrip tone="danger" title="Couldn't test" detail="No result after 2 minutes. Try Re-probe." />
+					{/if}
 					{#if g.probe_error}
-						<p class="field-error" data-testid="gpu-probe-error-{g.id}">{g.probe_error}</p>
+						<p class="mono field-error" data-testid="gpu-probe-error-{g.id}">{g.probe_error}</p>
 					{/if}
 				</div>
 			{/each}
@@ -242,6 +301,7 @@
 	}
 	.gpus-card-kinds {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.25rem;
 		flex-shrink: 0;
 	}
@@ -250,6 +310,14 @@
 		color: var(--color-text-muted);
 		flex-shrink: 0;
 		width: 4.5rem;
+	}
+	.gpus-card-location {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--color-text);
 	}
 	.gpus-card-note {
 		font-size: 0.8125rem;

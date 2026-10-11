@@ -553,6 +553,26 @@ export type ConfigFieldMeta = {
     enum_requires?: {
         [key: string]: string;
     } | null;
+    /**
+     * Setup Step
+     */
+    setup_step?: string | null;
+    /**
+     * Setup Order
+     */
+    setup_order?: number | null;
+    /**
+     * Signup Url
+     */
+    signup_url?: string | null;
+    /**
+     * Widget
+     */
+    widget?: string | null;
+    /**
+     * Part Of
+     */
+    part_of?: string | null;
 };
 
 /**
@@ -797,6 +817,10 @@ export type ConfigView = {
      */
     makemkv_key_checked_at?: string | null;
     /**
+     * Makemkv Key Checked By Drive Id
+     */
+    makemkv_key_checked_by_drive_id?: string | null;
+    /**
      * Updated By User Id
      */
     updated_by_user_id: string | null;
@@ -810,6 +834,26 @@ export type ConfigView = {
  * ContainerFormat
  */
 export type ContainerFormat = 'mkv' | 'mp4' | 'webm' | 'flac' | 'mp3' | 'ogg' | 'iso' | 'none';
+
+/**
+ * DiagnosticDetail
+ *
+ * One sub-check row (e.g. docker socket vs image) under a diagnostics check.
+ */
+export type DiagnosticDetail = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Message
+     */
+    message?: string | null;
+};
 
 /**
  * DiagnosticsResponse
@@ -901,6 +945,35 @@ export type DiscFingerprintView = {
      * Created At
      */
     created_at?: string | null;
+};
+
+/**
+ * DiscRouteSummary
+ *
+ * What one kind of disc gets with no drive default and no per-rip choice.
+ */
+export type DiscRouteSummary = {
+    kind: MediaType;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
+    /**
+     * Session Name
+     */
+    session_name?: string | null;
+    /**
+     * Rip Summary
+     */
+    rip_summary?: string | null;
+    /**
+     * Transcode Summary
+     */
+    transcode_summary?: string | null;
+    /**
+     * Output Template
+     */
+    output_template?: string | null;
 };
 
 /**
@@ -1334,6 +1407,10 @@ export type DriveView = {
      */
     last_error: string | null;
     current_job?: DriveCurrentJobView | null;
+    /**
+     * Connection
+     */
+    connection?: 'usb' | 'sata' | 'other' | null;
     kind?: DriveKind;
     source_kind?: DriveSourceKind | null;
     /**
@@ -2498,6 +2575,10 @@ export type MakemkvKeyStatusReport = {
      * Detail
      */
     detail?: string | null;
+    /**
+     * Drive Id
+     */
+    drive_id?: string | null;
 };
 
 /**
@@ -3378,6 +3459,18 @@ export type PathStatus = {
      * Writable
      */
     writable: boolean;
+    /**
+     * Host Path
+     */
+    host_path?: string | null;
+    /**
+     * Uid
+     */
+    uid?: number | null;
+    /**
+     * Gid
+     */
+    gid?: number | null;
 };
 
 /**
@@ -4115,6 +4208,83 @@ export type SettingsSchemaResponse = {
 };
 
 /**
+ * SetupStatusPublic
+ *
+ * Unauthenticated: the login page and the first-run guard read it.
+ */
+export type SetupStatusPublic = {
+    /**
+     * First Run
+     */
+    first_run: boolean;
+    /**
+     * Arm Version
+     */
+    arm_version: string;
+};
+
+/**
+ * SetupStep
+ *
+ * First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+ *
+ * Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
+ */
+export type SetupStep = 'account' | 'system' | 'drives' | 'makemkv' | 'metadata' | 'discs' | 'transcoding' | 'notifications' | 'finish';
+
+/**
+ * SetupStepProgress
+ */
+export type SetupStepProgress = {
+    state: SetupStepState;
+    /**
+     * At
+     */
+    at?: string | null;
+};
+
+/**
+ * SetupStepState
+ */
+export type SetupStepState = 'done' | 'skipped' | 'attention';
+
+/**
+ * SetupStepUpdate
+ */
+export type SetupStepUpdate = {
+    state: SetupStepState;
+};
+
+/**
+ * SetupView
+ */
+export type SetupView = {
+    /**
+     * Completed At
+     */
+    completed_at: string | null;
+    /**
+     * Progress
+     */
+    progress: {
+        [key: string]: SetupStepProgress;
+    };
+    current_step: SetupStep;
+    /**
+     * Admin Default Password
+     */
+    admin_default_password: boolean;
+    /**
+     * Checklist Dismissed
+     */
+    checklist_dismissed: boolean;
+    /**
+     * Deferred
+     */
+    deferred?: boolean;
+};
+
+/**
  * SourceClaims
  */
 export type SourceClaims = {
@@ -4273,6 +4443,18 @@ export type SystemDiagnosticCheck = {
      * Detail
      */
     detail?: string | null;
+    /**
+     * Details
+     */
+    details?: Array<DiagnosticDetail>;
+    /**
+     * Location
+     */
+    location?: string | null;
+    /**
+     * Remote Host
+     */
+    remote_host?: string | null;
 };
 
 /**
@@ -5133,7 +5315,12 @@ export type GetRipperConfigApiRipperConfigGetData = {
         authorization?: string | null;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Drive Id
+         */
+        drive_id?: string | null;
+    };
     url: '/api/ripper/config';
 };
 
@@ -9926,6 +10113,246 @@ export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
 };
 
 export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponse = ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses];
+
+export type SetupStatusApiSetupStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/setup/status';
+};
+
+export type SetupStatusApiSetupStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupStatusPublic;
+};
+
+export type SetupStatusApiSetupStatusGetResponse = SetupStatusApiSetupStatusGetResponses[keyof SetupStatusApiSetupStatusGetResponses];
+
+export type GetSetupApiSetupGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup';
+};
+
+export type GetSetupApiSetupGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSetupApiSetupGetError = GetSetupApiSetupGetErrors[keyof GetSetupApiSetupGetErrors];
+
+export type GetSetupApiSetupGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type GetSetupApiSetupGetResponse = GetSetupApiSetupGetResponses[keyof GetSetupApiSetupGetResponses];
+
+export type PutStepApiSetupStepsStepPutData = {
+    body: SetupStepUpdate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Step
+         */
+        step: string;
+    };
+    query?: never;
+    url: '/api/setup/steps/{step}';
+};
+
+export type PutStepApiSetupStepsStepPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutStepApiSetupStepsStepPutError = PutStepApiSetupStepsStepPutErrors[keyof PutStepApiSetupStepsStepPutErrors];
+
+export type PutStepApiSetupStepsStepPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type PutStepApiSetupStepsStepPutResponse = PutStepApiSetupStepsStepPutResponses[keyof PutStepApiSetupStepsStepPutResponses];
+
+export type CompleteSetupApiSetupCompletePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/complete';
+};
+
+export type CompleteSetupApiSetupCompletePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CompleteSetupApiSetupCompletePostError = CompleteSetupApiSetupCompletePostErrors[keyof CompleteSetupApiSetupCompletePostErrors];
+
+export type CompleteSetupApiSetupCompletePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type CompleteSetupApiSetupCompletePostResponse = CompleteSetupApiSetupCompletePostResponses[keyof CompleteSetupApiSetupCompletePostResponses];
+
+export type RestartSetupApiSetupRestartPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/restart';
+};
+
+export type RestartSetupApiSetupRestartPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestartSetupApiSetupRestartPostError = RestartSetupApiSetupRestartPostErrors[keyof RestartSetupApiSetupRestartPostErrors];
+
+export type RestartSetupApiSetupRestartPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type RestartSetupApiSetupRestartPostResponse = RestartSetupApiSetupRestartPostResponses[keyof RestartSetupApiSetupRestartPostResponses];
+
+export type DeferSetupApiSetupDeferPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/defer';
+};
+
+export type DeferSetupApiSetupDeferPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeferSetupApiSetupDeferPostError = DeferSetupApiSetupDeferPostErrors[keyof DeferSetupApiSetupDeferPostErrors];
+
+export type DeferSetupApiSetupDeferPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type DeferSetupApiSetupDeferPostResponse = DeferSetupApiSetupDeferPostResponses[keyof DeferSetupApiSetupDeferPostResponses];
+
+export type DismissChecklistApiSetupChecklistDismissPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/checklist/dismiss';
+};
+
+export type DismissChecklistApiSetupChecklistDismissPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DismissChecklistApiSetupChecklistDismissPostError = DismissChecklistApiSetupChecklistDismissPostErrors[keyof DismissChecklistApiSetupChecklistDismissPostErrors];
+
+export type DismissChecklistApiSetupChecklistDismissPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SetupView;
+};
+
+export type DismissChecklistApiSetupChecklistDismissPostResponse = DismissChecklistApiSetupChecklistDismissPostResponses[keyof DismissChecklistApiSetupChecklistDismissPostResponses];
+
+export type DiscRoutesApiSetupDiscRoutesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/setup/disc-routes';
+};
+
+export type DiscRoutesApiSetupDiscRoutesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscRoutesApiSetupDiscRoutesGetError = DiscRoutesApiSetupDiscRoutesGetErrors[keyof DiscRoutesApiSetupDiscRoutesGetErrors];
+
+export type DiscRoutesApiSetupDiscRoutesGetResponses = {
+    /**
+     * Response Disc Routes Api Setup Disc Routes Get
+     *
+     * Successful Response
+     */
+    200: Array<DiscRouteSummary>;
+};
+
+export type DiscRoutesApiSetupDiscRoutesGetResponse = DiscRoutesApiSetupDiscRoutesGetResponses[keyof DiscRoutesApiSetupDiscRoutesGetResponses];
 
 export type RootsApiFilesRootsGetData = {
     body?: never;

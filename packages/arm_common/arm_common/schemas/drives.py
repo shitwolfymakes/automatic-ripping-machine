@@ -6,6 +6,7 @@ PATCH endpoint and any future helpers can share validation rules.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,6 +60,9 @@ class DriveView(BaseModel):
     model: str | None
     last_error: str | None
     current_job: DriveCurrentJobView | None = None
+    # Bus the drive hangs off, derived from by_id_name's prefix; not stored
+    # (setup spec 2026-10-01 §6.6). "usb" | "sata" | "other" | None.
+    connection: Literal["usb", "sata", "other"] | None = None
     kind: DriveKind = DriveKind.OPTICAL
     source_kind: DriveSourceKind | None = None
     source_path: str | None = None

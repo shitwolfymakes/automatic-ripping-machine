@@ -2,6 +2,7 @@
 
 **Getting Started**
   - [Getting Started](Getting-Started)
+  - [Setup walkthrough](Setup-Walkthrough)
   - [Configuration](Configuring-ARM)
   - [Upgrading](Upgrading)
   - [Uninstall](Uninstall)

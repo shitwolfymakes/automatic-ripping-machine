@@ -96,3 +96,69 @@ describe('Login page Continue as Guest', () => {
 		expect(screen.queryByText('Continue as Guest')).not.toBeInTheDocument();
 	});
 });
+
+describe('Login page on first run (setup spec §5.1)', () => {
+	function firstRunFetch(firstRun: boolean) {
+		fetchMock.mockImplementation((url: string) =>
+			Promise.resolve(
+				url === '/api/setup/status'
+					? { ok: true, json: () => Promise.resolve({ first_run: firstRun, arm_version: '3.1.0' }) }
+					: { ok: true }
+			)
+		);
+	}
+
+	afterEach(async () => {
+		cleanup();
+		gotoMock.mockClear();
+		fetchMock.mockReset();
+		vi.unstubAllGlobals();
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setAuthenticated: (a: boolean) => void };
+		auth.__setAuthenticated(true);
+	});
+
+	it('says where the first-boot password is and hides Continue as Guest', async () => {
+		firstRunFetch(true);
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setAuthenticated: (a: boolean) => void };
+		auth.__setAuthenticated(false);
+		renderComponent(LoginPage);
+		expect(await screen.findByTestId('login-first-run')).toHaveTextContent(/first time\?/i);
+		expect(screen.getByText('docker exec armv3-backend cat /logs/first-boot.log')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /continue as guest/i })).toBeNull();
+	});
+
+	it('sends the admin into setup after signing in', async () => {
+		firstRunFetch(true);
+		const { login } = await import('$lib/api/auth');
+		vi.mocked(login).mockResolvedValue({
+			access_token: 't',
+			expires_at: '',
+			password_must_change: true,
+			role: 'admin'
+		});
+		renderComponent(LoginPage);
+		await screen.findByTestId('login-first-run');
+		await fireEvent.input(screen.getByLabelText(/username/i), { target: { value: 'admin' } });
+		await fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'admin' } });
+		await fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/setup'));
+	});
+
+	it('keeps the forced password change when setup is already done', async () => {
+		firstRunFetch(false);
+		const { login } = await import('$lib/api/auth');
+		vi.mocked(login).mockResolvedValue({
+			access_token: 't',
+			expires_at: '',
+			password_must_change: true,
+			role: 'admin'
+		});
+		renderComponent(LoginPage);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/setup/status'));
+		await fireEvent.input(screen.getByLabelText(/username/i), { target: { value: 'admin' } });
+		await fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'x' } });
+		await fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/change-password'));
+		expect(screen.queryByTestId('login-first-run')).toBeNull();
+	});
+});

@@ -112,3 +112,15 @@ test('--report prints exactly one line: a JSON object with files, violations, by
 	assert.ok(parsed.violations > 0);
 	assert.equal(typeof parsed.byKind, 'object');
 });
+
+test('quotes inside script comments never open a false string literal', () => {
+	const src = [
+		'<script>',
+		"\t// Shared by Settings and the setup walkthrough's step; a `gpu.probed` event",
+		"\t/** No Save row: the parent saves through `save()` (the walkthrough's Continue). */",
+		"\tconst u = 'https://example.test/a';",
+		'\tpending = { ...pending, [id]: true, [fieldKey]: false };',
+		'</script>'
+	].join('\n');
+	assert.deepEqual(lintSource(src, 'x.svelte'), []);
+});

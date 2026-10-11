@@ -1,10 +1,22 @@
 from pydantic import BaseModel
 
 
+class DiagnosticDetail(BaseModel):
+    """One sub-check row (e.g. docker socket vs image) under a diagnostics check."""
+
+    label: str
+    ok: bool
+    message: str | None = None
+
+
 class SystemDiagnosticCheck(BaseModel):
     name: str
     status: str  # "ok" | "warning" | "error"
     detail: str | None = None
+    details: list[DiagnosticDetail] = []
+    # transcoder only: where encode containers run ("local" | "remote" | "none")
+    location: str | None = None
+    remote_host: str | None = None
 
 
 class PathStatus(BaseModel):
@@ -12,6 +24,11 @@ class PathStatus(BaseModel):
     path: str
     exists: bool
     writable: bool
+    # Host-side bind source (ARM_HOST_*_PATH) and the backend's effective ids,
+    # so the UI can print the exact `chown` fix (setup spec §6.3).
+    host_path: str | None = None
+    uid: int | None = None
+    gid: int | None = None
 
 
 class SystemDiagnosticsResponse(BaseModel):

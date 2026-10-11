@@ -140,9 +140,8 @@ describe('SchemaConfigForm', () => {
 
 describe('SchemaConfigForm key-check button', () => {
 	function tmdbCheckButton() {
-		// testid div -> .flex-1 wrapper -> the "flex items-end gap-2" row that
-		// also holds the Check button as a sibling.
-		return screen.getByTestId('setting-tmdb_api_key').parentElement!.parentElement!.querySelector('button')!;
+		// The Test button sits in the key field's own control row.
+		return within(screen.getByTestId('setting-tmdb_api_key')).getByRole('button', { name: /^test(ing\.\.\.)?$/i });
 	}
 
 	it('calls checkApiKey with the unsaved value when the user typed a new key', async () => {
@@ -171,9 +170,9 @@ describe('SchemaConfigForm key-check button', () => {
 		);
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		await fireEvent.click(tmdbCheckButton());
-		expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled();
+		expect(screen.getByRole('button', { name: /testing/i })).toBeDisabled();
 		resolve({ name: 'tmdb', status: 'ok', detail: null, checked_at: '2026-09-05T00:00:00Z' });
-		await waitFor(() => expect(screen.getByTestId('key-check-tmdb_api_key')).toHaveTextContent(/valid/i));
+		await waitFor(() => expect(screen.getByTestId('key-check-tmdb_api_key')).toHaveTextContent(/works/i));
 	});
 
 	it('renders the invalid result with its detail', async () => {
@@ -261,7 +260,7 @@ describe('SchemaConfigForm key-check button', () => {
 		expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('');
 	});
 
-	it('shows the detail beside Valid when the backend sends one', async () => {
+	it('shows the detail beside Works when the backend sends one', async () => {
 		checkApiKey.mockResolvedValue({
 			name: 'makemkv',
 			status: 'ok',
@@ -269,9 +268,9 @@ describe('SchemaConfigForm key-check button', () => {
 			checked_at: null
 		});
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
-		await fireEvent.click(screen.getAllByRole('button', { name: /check api key/i })[1]);
+		await fireEvent.click(within(screen.getByTestId('setting-makemkv_key')).getByRole('button', { name: /^test$/i }));
 		await waitFor(() =>
-			expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('Valid, using the monthly beta key')
+			expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent('Works, using the monthly beta key')
 		);
 	});
 });
@@ -298,7 +297,9 @@ describe('SchemaConfigForm save feedback', () => {
 	it('shows a check-circle glyph beside a successful save', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-		await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText('Saved', { selector: '.schema-config-form-feedback' })).toBeInTheDocument()
+		);
 		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 	});
 });
@@ -478,5 +479,70 @@ describe('SchemaConfigForm TV episodes section', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0]).toEqual({ episode_sources: ['tvmaze', 'tmdb', 'tvdb'] });
+	});
+});
+
+describe('SchemaConfigForm setup walkthrough modes (setup spec §7.3)', () => {
+	type FormApi = { save(): Promise<boolean>; isDirty(): boolean; isSet(key: string): boolean };
+
+	it('deferred + bare: no title or Save row; save() writes the same payload Settings would', async () => {
+		const { component } = renderComponent(SchemaConfigForm, {
+			props: { group: GROUP, config: { ...CONFIG, tmdb_api_key: null }, deferred: true, bare: true }
+		});
+		expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();
+		expect(screen.queryByRole('heading', { name: 'Metadata' })).toBeNull();
+		const form = component as unknown as FormApi;
+		expect(form.isDirty()).toBe(false);
+		expect(form.isSet('tmdb_api_key')).toBe(false);
+		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'abc' } });
+		expect(form.isDirty()).toBe(true);
+		expect(form.isSet('tmdb_api_key')).toBe(true);
+		expect(await form.save()).toBe(true);
+		expect(saveArmConfig).toHaveBeenCalledWith({ tmdb_api_key: 'abc' });
+	});
+
+	it('deferred save() resolves false and shows the error inline', async () => {
+		saveArmConfig.mockRejectedValueOnce(new ApiError(400, 'bad key', { detail: 'bad key' }));
+		const { component } = renderComponent(SchemaConfigForm, {
+			props: { group: GROUP, config: CONFIG, deferred: true, bare: true }
+		});
+		expect(await (component as unknown as FormApi).save()).toBe(false);
+		expect(await screen.findByRole('alert')).toHaveTextContent('bad key');
+	});
+
+	it('Remove on a saved secret sends null and the field reads as not set', async () => {
+		const { component } = renderComponent(SchemaConfigForm, {
+			props: { group: GROUP, config: CONFIG, deferred: true }
+		});
+		const form = component as unknown as FormApi;
+		expect(form.isSet('tmdb_api_key')).toBe(true);
+		await fireEvent.click(within(screen.getByTestId('setting-tmdb_api_key')).getByRole('button', { name: /remove/i }));
+		expect(screen.getByText('Will be removed')).toBeInTheDocument();
+		expect(form.isSet('tmdb_api_key')).toBe(false);
+		await form.save();
+		expect(saveArmConfig).toHaveBeenCalledWith({ tmdb_api_key: null });
+	});
+
+	it('Test is disabled when there is no key to test', () => {
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: { ...CONFIG, tmdb_api_key: null } } });
+		expect(within(screen.getByTestId('setting-tmdb_api_key')).getByRole('button', { name: /^test$/i })).toBeDisabled();
+	});
+
+	it("names the result: Key rejected / Couldn't reach {service}, with the server detail in mono", async () => {
+		checkApiKey.mockImplementation((name: string) =>
+			Promise.resolve(
+				name === 'tmdb'
+					? { name, status: 'invalid', detail: 'HTTP 401', checked_at: null }
+					: { name, status: 'error', detail: 'dial tcp: i/o timeout', checked_at: null }
+			)
+		);
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
+		await fireEvent.click(within(screen.getByTestId('setting-tmdb_api_key')).getByRole('button', { name: /^test$/i }));
+		await fireEvent.click(within(screen.getByTestId('setting-makemkv_key')).getByRole('button', { name: /^test$/i }));
+		await waitFor(() => expect(screen.getByTestId('key-check-tmdb_api_key')).toHaveTextContent('Key rejected'));
+		expect(screen.getByText('HTTP 401')).toHaveClass('mono');
+		await waitFor(() =>
+			expect(screen.getByTestId('key-check-makemkv_key')).toHaveTextContent("Couldn't reach MakeMKV")
+		);
 	});
 });

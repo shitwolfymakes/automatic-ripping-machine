@@ -16,7 +16,21 @@ export type GlyphName =
 	| 'refresh'
 	| 'gear'
 	| 'folder'
-	| 'disc-3';
+	| 'disc-3'
+	| 'copy'
+	| 'key'
+	| 'eye'
+	| 'eye-off'
+	| 'lock'
+	| 'hard-drive'
+	| 'cpu'
+	| 'bell'
+	| 'loader'
+	| 'external-link'
+	| 'minus-circle'
+	| 'download'
+	| 'sun'
+	| 'moon';
 
 export const GLYPH_PATHS: Record<GlyphName, string> = {
 	check: 'M5 13l4 4L19 7',
@@ -53,5 +67,23 @@ export const GLYPH_PATHS: Record<GlyphName, string> = {
 	folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
 	// "Rip from ISO" picker + ISO source chip: the disc-3 lucide glyph,
 	// flattened to one path in Glyph's stroke style.
-	'disc-3': 'M12 21a9 9 0 100-18 9 9 0 000 18zm0-7a2 2 0 100-4 2 2 0 000 4zM6 12a6 6 0 016-6m6 6a6 6 0 01-6 6'
+	'disc-3': 'M12 21a9 9 0 100-18 9 9 0 000 18zm0-7a2 2 0 100-4 2 2 0 000 4zM6 12a6 6 0 016-6m6 6a6 6 0 01-6 6',
+	// First-run setup walkthrough + shared Settings parts (setup spec 2026-10-01).
+	copy: 'M8 10a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H10a2 2 0 01-2-2V10zM4 16a2 2 0 01-2-2V4a2 2 0 012-2h10a2 2 0 012 2',
+	key: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z',
+	eye: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
+	'eye-off':
+		'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21',
+	lock: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+	'hard-drive':
+		'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01',
+	cpu: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z',
+	bell: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
+	// A 3/4 arc; pair with `.spin` for an in-progress indicator.
+	loader: 'M21 12a9 9 0 11-6.219-8.56',
+	'external-link': 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14',
+	'minus-circle': 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z',
+	download: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
+	sun: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z',
+	moon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z'
 };

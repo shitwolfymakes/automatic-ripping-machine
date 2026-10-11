@@ -20,6 +20,16 @@ class ConfigFieldMeta(BaseModel):
     enum_labels: dict[str, str] | None = None
     # Ranked only: value -> the secret config key it needs before it can run.
     enum_requires: dict[str, str] | None = None
+    # First-run walkthrough: which step renders this field, and in what order
+    # (setup spec 2026-10-01 §7.2). Settings and setup share this one registry.
+    setup_step: str | None = None
+    setup_order: int | None = None
+    # "Get a free key" link for API key fields.
+    signup_url: str | None = None
+    # Custom renderer id for ConfigSchemaField ("makemkv_key", "disc_handling").
+    widget: str | None = None
+    # Key of the field whose widget renders this one; forms skip it on its own.
+    part_of: str | None = None
 
 
 CONFIG_FIELD_META: list[ConfigFieldMeta] = [
@@ -28,11 +38,14 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         key="metadata_provider",
         group="Metadata",
         tier="operator",
-        label="Default metadata provider",
-        help="Provider for title identify (search + detail).",
+        label="Look up titles with",
+        help="The service ARM searches when it identifies a disc.",
         type="enum",
         editable=True,
         enum_values=["tmdb", "omdb"],
+        enum_labels={"tmdb": "TMDb", "omdb": "OMDb"},
+        setup_step="metadata",
+        setup_order=4,
     ),
     ConfigFieldMeta(
         key="tmdb_api_key",
@@ -42,6 +55,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="The Movie Database API key (free; recommended).",
         type="string",
         editable=True,
+        setup_step="metadata",
+        setup_order=1,
+        signup_url="https://www.themoviedb.org/settings/api",
     ),
     ConfigFieldMeta(
         key="omdb_api_key",
@@ -51,6 +67,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Open Movie Database API key (1000 req/day free tier).",
         type="string",
         editable=True,
+        setup_step="metadata",
+        setup_order=2,
+        signup_url="https://www.omdbapi.com/apikey.aspx",
     ),
     ConfigFieldMeta(
         key="tvdb_api_key",
@@ -60,6 +79,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Needed for the TVDB episode source.",
         type="string",
         editable=True,
+        setup_step="metadata",
+        setup_order=3,
+        signup_url="https://thetvdb.com/api-information",
     ),
     ConfigFieldMeta(
         key="makemkv_key",
@@ -69,15 +91,20 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="MakeMKV registration key (purchased perma-key or beta key).",
         type="string",
         editable=True,
+        setup_step="makemkv",
+        setup_order=1,
+        widget="makemkv_key",
     ),
     ConfigFieldMeta(
         key="thediscdb_enabled",
         group="Metadata",
         tier="operator",
-        label="TheDiscDB disc matching",
+        label="Match discs against TheDiscDB",
         help="Match discs against the local TheDiscDB snapshot to label titles, pick the main feature, and name extras/episodes.",
         type="bool",
         editable=True,
+        setup_step="metadata",
+        setup_order=5,
     ),
     ConfigFieldMeta(
         key="thediscdb_refresh_days",
@@ -147,6 +174,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Start ripping automatically when a disc is detected.",
         type="bool",
         editable=True,
+        setup_step="discs",
+        setup_order=1,
+        widget="disc_handling",
     ),
     ConfigFieldMeta(
         key="block_on_miss",
@@ -161,22 +191,24 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         key="community_keydb_enabled",
         group="Ripping",
         tier="operator",
-        label="Community keydb (FindVUK)",
-        help="Auto-download community AACS VUK keys so MakeMKV can decrypt "
-        "Blu-rays its own key server no longer covers.",
+        label="Download community decryption keys (KEYDB)",
+        help="Opens Blu-rays MakeMKV can't decrypt on its own, using keys shared by other users (FindVUK).",
         type="bool",
         editable=True,
+        setup_step="makemkv",
+        setup_order=2,
     ),
     ConfigFieldMeta(
         key="makemkv_sdf_enabled",
         group="Ripping",
         tier="operator",
-        label="MakeMKV SDF refresh",
-        help="Auto-download MakeMKV's SDF decryption data file so protected "
-        "discs scan instead of timing out. A baseline SDF ships in the image; "
-        "this keeps it current.",
+        label="Use MakeMKV's disc format updates (SDF)",
+        help="Keeps MakeMKV able to read disc formats released after this version. "
+        "A baseline ships in the image; this keeps it current.",
         type="bool",
         editable=True,
+        setup_step="makemkv",
+        setup_order=3,
     ),
     ConfigFieldMeta(
         key="ripping_paused",
@@ -197,6 +229,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         "auto-starts when the countdown ends (unless rips are paused).",
         type="bool",
         editable=True,
+        part_of="auto_rip_on_insert",
     ),
     ConfigFieldMeta(
         key="manual_wait_seconds",
@@ -231,6 +264,8 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         "sessions (plain file moves into the library) keep working either way.",
         type="bool",
         editable=True,
+        setup_step="transcoding",
+        setup_order=1,
     ),
     ConfigFieldMeta(
         key="transcode_capable",
@@ -311,6 +346,8 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Concurrent transcode containers. Applies from the next dispatcher tick; the MAX_PARALLEL_TRANSCODES env value only seeds this once.",
         type="int",
         editable=True,
+        setup_step="transcoding",
+        setup_order=2,
     ),
     # Drive-lifecycle scanner tunables (spec 2026-09-03 §2) — exposed while the
     # cadence is being dialled in on real hardware.

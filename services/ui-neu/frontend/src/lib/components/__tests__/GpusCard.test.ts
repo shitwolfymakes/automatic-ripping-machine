@@ -22,9 +22,11 @@ vi.mock('$lib/stores/encoders.svelte', () => ({
 }));
 
 const subscribeMock = vi.fn();
+const startMock = vi.fn();
 let wsHandler: ((env: WSEnvelope) => void) | null = null;
 vi.mock('$lib/api/ws', () => ({
 	wsClient: {
+		start: () => startMock(),
 		subscribe: (topic: string, handler: (env: WSEnvelope) => void) => {
 			wsHandler = handler;
 			return subscribeMock(topic, handler);
@@ -77,10 +79,10 @@ describe('GpusCard', () => {
 	it('renders inventory rows with vendor, device and encoder kinds', async () => {
 		mockFetchGpus.mockResolvedValue([qsv, { ...qsv, id: 'gpu_2', vendor: 'vaapi', enabled: false }]);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByText('QSV')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Quick Sync')).toBeInTheDocument());
 		expect(screen.getByText('VAAPI')).toBeInTheDocument();
 		expect(screen.getAllByText('/dev/dri/renderD128')).toHaveLength(2);
-		expect(screen.getAllByText('h265')).toHaveLength(2);
+		expect(screen.getAllByText('H265 available')).toHaveLength(2);
 		expect(screen.getByText('disabled')).toBeInTheDocument();
 	});
 
@@ -91,16 +93,16 @@ describe('GpusCard', () => {
 		expect(screen.getByTestId('gpus-empty').textContent).toContain('CPU');
 	});
 
-	it('shows "Never probed" when probed_at is null', async () => {
+	it('shows "Not tested" when probed_at is null', async () => {
 		mockFetchGpus.mockResolvedValue([{ ...qsv, probed_at: null }]);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByText('Never probed')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Not tested')).toBeInTheDocument());
 	});
 
-	it('shows "Verified nothing" when probed with an empty encoder_kinds list', async () => {
+	it('shows "Nothing verified" when probed with an empty encoder_kinds list', async () => {
 		mockFetchGpus.mockResolvedValue([{ ...qsv, encoder_kinds: [] }]);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByText('Verified nothing')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Nothing verified')).toBeInTheDocument());
 	});
 
 	it('shows the probe_error text when set', async () => {
@@ -163,7 +165,7 @@ describe('GpusCard', () => {
 		const confirm = await screen.findByRole('button', { name: 'Delete' });
 		await fireEvent.click(confirm);
 		await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('in use by a running transcode'));
-		expect(screen.getByText('QSV')).toBeInTheDocument();
+		expect(screen.getByText('Quick Sync')).toBeInTheDocument();
 		expect(mockRefreshEncoders).not.toHaveBeenCalled();
 	});
 
@@ -176,12 +178,12 @@ describe('GpusCard', () => {
 		await waitFor(() => expect(mockProbeGpu).toHaveBeenCalledWith('gpu_1'));
 	});
 
-	it('Re-probe all calls probeAllGpus', async () => {
+	it('Test encoders calls probeAllGpus', async () => {
 		mockFetchGpus.mockResolvedValue([qsv]);
 		mockProbeAllGpus.mockResolvedValue(undefined);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByRole('button', { name: 'Re-probe all' })).toBeInTheDocument());
-		await fireEvent.click(screen.getByRole('button', { name: 'Re-probe all' }));
+		await waitFor(() => expect(screen.getByRole('button', { name: /test encoders/i })).toBeInTheDocument());
+		await fireEvent.click(screen.getByRole('button', { name: /test encoders/i }));
 		await waitFor(() => expect(mockProbeAllGpus).toHaveBeenCalled());
 	});
 
@@ -199,7 +201,7 @@ describe('GpusCard', () => {
 	it('a gpu.probed WS event for a row triggers a refetch', async () => {
 		mockFetchGpus.mockResolvedValue([qsv]);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByText('QSV')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Quick Sync')).toBeInTheDocument());
 		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
 
 		mockFetchGpus.mockResolvedValue([{ ...qsv, encoder_kinds: ['h264', 'h265', 'av1'] }]);
@@ -214,7 +216,7 @@ describe('GpusCard', () => {
 	it('a transcode.events envelope with a different event_type does not trigger a refetch', async () => {
 		mockFetchGpus.mockResolvedValue([qsv]);
 		render(GpusCard);
-		await waitFor(() => expect(screen.getByText('QSV')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Quick Sync')).toBeInTheDocument());
 		expect(mockFetchGpus).toHaveBeenCalledTimes(1);
 
 		expect(wsHandler).not.toBeNull();
@@ -232,5 +234,46 @@ describe('GpusCard', () => {
 		await waitFor(() => expect(subscribeMock).toHaveBeenCalledWith('transcode.events', expect.any(Function)));
 		unmount();
 		expect(unsub).toHaveBeenCalledTimes(1);
+	});
+
+	describe('setup walkthrough additions', () => {
+		it('starts the socket itself', async () => {
+			mockFetchGpus.mockResolvedValue([]);
+			render(GpusCard);
+			await waitFor(() => expect(startMock).toHaveBeenCalled());
+		});
+
+		it('says the CPU will encode when there are no GPUs', async () => {
+			mockFetchGpus.mockResolvedValue([]);
+			render(GpusCard);
+			expect(await screen.findByText(/ARM will encode on the CPU\. It works, just slower\./)).toBeInTheDocument();
+		});
+
+		it('lists verified encoders as available chips', async () => {
+			mockFetchGpus.mockResolvedValue([{ ...qsv, probed_at: '2026-10-01T00:00:00Z', encoder_kinds: ['h264', 'h265'] }]);
+			render(GpusCard);
+			expect(await screen.findByText('H264 available')).toBeInTheDocument();
+			expect(screen.getByText('H265 available')).toBeInTheDocument();
+		});
+
+		it('shows Testing encoders until that device reports, and names where encoding runs', async () => {
+			mockFetchGpus.mockResolvedValue([qsv]);
+			mockProbeAllGpus.mockResolvedValue(undefined);
+			render(GpusCard, { props: { location: { label: 'This server' } } });
+			expect(await screen.findByText('This server')).toBeInTheDocument();
+			await fireEvent.click(await screen.findByRole('button', { name: /test encoders/i }));
+			expect(await screen.findByText('Testing encoders...')).toBeInTheDocument();
+			wsHandler?.({
+				op: 'event',
+				event_id: 'evt_1',
+				event_type: 'gpu.probed',
+				emitted_at: '2026-10-01T00:00:00Z',
+				topic: 'transcode.events',
+				job_id: null,
+				track_id: null,
+				payload: { gpu_id: 'gpu_1' }
+			});
+			await waitFor(() => expect(screen.queryByText('Testing encoders...')).toBeNull());
+		});
 	});
 });
