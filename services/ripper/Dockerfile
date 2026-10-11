@@ -90,6 +90,7 @@ RUN apt-get update \
         libexpat1 \
         libssl3 \
         udftools \
+        7zip \
         libtesseract5 \
         liblept5 \
     && rm -rf /var/lib/apt/lists/*
