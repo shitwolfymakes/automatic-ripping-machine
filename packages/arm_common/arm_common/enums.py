@@ -107,8 +107,7 @@ class JobStatus(StrEnum):
     # identification never landed (metadata_json["unidentified"]): transcode
     # is gated on identity, so the after-rip hooks wait for resolve, which
     # promotes this to RIPPED (not IDENTIFIED). Resolvable via the
-    # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
-    # path sets this yet.
+    # /resolve endpoint just like AWAITING_USER_ID.
     RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"
     ABANDONED = "abandoned"
     FAILED = "failed"

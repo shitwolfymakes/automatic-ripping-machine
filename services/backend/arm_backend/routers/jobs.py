@@ -1056,7 +1056,7 @@ async def resolve(
     if "media_type" in fields_set:
         job.media_type = req.media_type
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
-    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0031
+    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
     # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
     # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
     # over the placeholder status — see rip-complete) but has just as much

@@ -18,7 +18,7 @@ The bag holds four kinds of content, and this module gives each a home:
 in this bag is gone (removed in the job-identity-columns branch; the UIs now
 read the `pending_session_id` job column). `extra="allow"` is kept
 deliberately for one more release as a grace period for rows written before
-migration 0031, so a validate/dump round-trip on old data doesn't drop
+migration 0032, so a validate/dump round-trip on old data doesn't drop
 whatever was there; tighten to `forbid` once those rows are confirmed gone.
 """
 
@@ -102,7 +102,7 @@ class JobMetadata(BaseModel):
 
 def flag_is_set(metadata_json: dict[str, Any] | None, name: str) -> bool:
     """Read a job flag: the `flags` section is authoritative, the old
-    top-level key is the fallback for rows from before migration 0031."""
+    top-level key is the fallback for rows from before migration 0032."""
     md = metadata_json or {}
     flags = md.get("flags")
     if isinstance(flags, dict) and name in flags:
