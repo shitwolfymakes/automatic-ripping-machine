@@ -18,10 +18,8 @@ import {
 	resolveJob,
 	applySession,
 	// MISSING in v3
-	toggleMultiTitle,
 	tvdbMatch,
-	fetchTvdbEpisodes,
-	updateJobNaming
+	fetchTvdbEpisodes
 } from '../api/jobs';
 
 beforeEach(() => mockFetch.mockReset());
@@ -216,10 +214,8 @@ describe('applySession', () => {
 
 describe('MISSING in v3', () => {
 	it.each([
-		['toggleMultiTitle', () => toggleMultiTitle('job_1', true)],
 		['tvdbMatch', () => tvdbMatch('job_1', { season: 2, apply: true })],
-		['fetchTvdbEpisodes', () => fetchTvdbEpisodes('job_1', 1)],
-		['updateJobNaming', () => updateJobNaming('job_1', { title_pattern_override: '{title}' })]
+		['fetchTvdbEpisodes', () => fetchTvdbEpisodes('job_1', 1)]
 	])('%s rejects with /not yet available in v3/', async (_name, call) => {
 		await expect(call()).rejects.toThrow(/not yet available in v3/);
 		expect(mockFetch).not.toHaveBeenCalled();

@@ -677,6 +677,11 @@ describe('Settings Page', () => {
 				expect(screen.getByTestId('gpus-card')).toBeInTheDocument();
 			});
 			expect(fetchGpus).toHaveBeenCalled();
+			// The GPU card sits above the Transcoding form's Save button.
+			const save = screen.getByRole('button', { name: 'Save' });
+			expect(
+				screen.getByTestId('gpus-card').compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING
+			).toBeTruthy();
 			// transcode_capable is a non-editable bool (an infra fact, not a
 			// setting) - it must render read-only, not as a clickable checkbox
 			// that silently no-ops on save.

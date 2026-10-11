@@ -34,8 +34,19 @@ The architectural goals that defined v3 are in place:
 - **Ripping from an `.iso` source** (vs a physical disc) — designed but not yet
   built as a user feature. Design doc:
   [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
+  The UI's **Import** wizard (browse the ingress folder, scan a folder or `.iso`,
+  create the job) is built and waits on this backend, so it stays hidden until
+  then.
 - **TV-series-aware ripping** (episode detection and naming conventions) and
-  further session ergonomics, building on the sessions/presets foundation.
+  further session ergonomics, building on the sessions/presets foundation. The
+  UI already has **TVDB episode matching** for mapping titles to episodes; it
+  needs a v3 episode-lookup endpoint before it is switched on.
+- **Maintenance tools**: find and remove orphaned media folders and log files,
+  clean up finished transcode jobs, and clear the raw rip area from the UI. The
+  buttons are hidden until these endpoints exist in v3.
+- **First-run setup wizard**: a guided first boot (drive scan, readiness
+  checks, settings review). Built in the UI, switched off until the v3 setup
+  status endpoints land.
 
 ## Where to follow along
 

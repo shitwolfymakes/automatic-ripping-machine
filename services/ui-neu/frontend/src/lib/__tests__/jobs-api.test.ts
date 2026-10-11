@@ -19,19 +19,8 @@ import {
 	updateJobTitle,
 	updateJobConfig,
 	triggerManual,
-	// MISSING in v3
-	cancelWaitingJob,
 	startWaitingJob,
-	pauseWaitingJob,
-	fixJobPermissions,
-	skipAndFinalize,
-	forceComplete,
-	submitToCrcDb,
-	fetchCrcLookup,
-	fetchJobProgress,
-	updateJobTranscodeConfig,
-	retranscodeJob,
-	setJobTracks
+	pauseWaitingJob
 } from '../api/jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);
@@ -146,24 +135,6 @@ describe('job/track edits via bulk-PATCH (EXISTS in v3)', () => {
 			method: 'PATCH',
 			body: JSON.stringify({ poster_url_manual: null })
 		});
-	});
-});
-
-describe('MISSING in v3 — reject before any fetch', () => {
-	it.each([
-		['cancelWaitingJob', () => cancelWaitingJob('job_1')],
-		['fixJobPermissions', () => fixJobPermissions('job_1')],
-		['skipAndFinalize', () => skipAndFinalize('job_1')],
-		['forceComplete', () => forceComplete('job_1')],
-		['submitToCrcDb', () => submitToCrcDb('job_1')],
-		['fetchCrcLookup', () => fetchCrcLookup('job_1')],
-		['fetchJobProgress', () => fetchJobProgress('job_1')],
-		['updateJobTranscodeConfig', () => updateJobTranscodeConfig('job_1', {})],
-		['retranscodeJob', () => retranscodeJob('job_1')],
-		['setJobTracks', () => setJobTracks('job_1', [])]
-	])('%s rejects with /not yet available in v3/', async (_name, call) => {
-		await expect(call()).rejects.toThrow(/not yet available in v3/);
-		expect(mockApiFetch).not.toHaveBeenCalled();
 	});
 });
 

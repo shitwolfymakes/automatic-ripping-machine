@@ -644,14 +644,20 @@ async def inbox_dismiss_all(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
+    # Same effect as dismissing each row (PATCH seen + cleared), so dismissed
+    # rows leave the inbox and become purgeable either way.
     rows = list((await db.execute(select(NotificationInbox))).scalars().all())
     now = datetime.now(UTC)
     updated = 0
     for r in rows:
+        if r.cleared:
+            continue
         if not r.seen:
             r.seen = True
             r.seen_at = now
-            updated += 1
+        r.cleared = True
+        r.cleared_at = now
+        updated += 1
     await db.commit()
     return {"updated": updated}
 

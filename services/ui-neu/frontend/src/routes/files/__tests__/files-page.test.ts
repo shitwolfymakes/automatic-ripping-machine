@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import FilesPage from '../+page.svelte';
 import { createFileEntry, createFolderEntry } from '$lib/components/__fixtures__/files';
@@ -16,6 +16,17 @@ vi.mock('$lib/stores/auth', async () => {
 
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
 import { fetchOrphanFolders } from '$lib/api/maintenance';
+import { features } from '$lib/features';
+
+// Mutable copy so a suite can exercise the maintenance UI the shipped flag hides.
+vi.mock('$lib/features', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features')>();
+	return { ...actual, features: { ...actual.features } };
+});
+
+function setMaintenance(on: boolean) {
+	(features as { maintenance: boolean }).maintenance = on;
+}
 
 vi.mock('$app/stores', async () => {
 	const { readable } = await import('svelte/store');
@@ -173,6 +184,9 @@ describe('Files Page', () => {
 	});
 
 	describe('orphan folders', () => {
+		beforeEach(() => setMaintenance(true));
+		afterEach(() => setMaintenance(false));
+
 		it('shows orphan folders button in toolbar', async () => {
 			renderComponent(FilesPage);
 			await waitFor(() => {
@@ -335,6 +349,9 @@ describe('Files Page', () => {
 	});
 
 	describe('transcoder cleanup', () => {
+		beforeEach(() => setMaintenance(true));
+		afterEach(() => setMaintenance(false));
+
 		it('shows transcoder cleanup button in toolbar', async () => {
 			renderComponent(FilesPage);
 			await waitFor(() => {
@@ -357,8 +374,22 @@ describe('Files Page', () => {
 		});
 	});
 
+	describe('maintenance flag off', () => {
+		it('hides the orphan folders and transcoder cleanup buttons, even for admins', async () => {
+			renderComponent(FilesPage);
+			await waitFor(() => {
+				expect(screen.getByText('movie.mkv')).toBeInTheDocument();
+			});
+			expect(screen.getByTitle('New folder')).toBeInTheDocument();
+			expect(screen.queryByTitle('Orphan folders')).not.toBeInTheDocument();
+			expect(screen.queryByTitle('Clean up transcoder jobs')).not.toBeInTheDocument();
+		});
+	});
+
 	describe('guest write-control gating', () => {
+		beforeEach(() => setMaintenance(true));
 		afterEach(async () => {
+			setMaintenance(false);
 			const auth = (await import('$lib/stores/auth')) as unknown as {
 				__setRole: (r: string | null) => void;
 			};

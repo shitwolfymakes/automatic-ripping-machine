@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
@@ -9,11 +10,14 @@
 	let {
 		group,
 		config,
-		onsaved
+		onsaved,
+		beforeSave
 	}: {
 		group: SettingsGroup;
 		config: Record<string, unknown>;
 		onsaved?: (payload: Record<string, unknown>) => void;
+		/** Extra content rendered after the sections, above the Save row. */
+		beforeSave?: Snippet;
 	} = $props();
 
 	const HIDDEN = '<hidden>';
@@ -171,6 +175,8 @@
 			</div>
 		{/each}
 	</section>
+
+	{#if beforeSave}{@render beforeSave()}{/if}
 
 	{#if editable.length > 0}
 		<div class="flex items-center gap-3">

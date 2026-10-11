@@ -24,6 +24,7 @@
 	import FileRow from '$lib/components/FileRow.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { features } from '$lib/features';
 	import SortIndicator from '$lib/components/SortIndicator.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 
@@ -566,7 +567,7 @@
 						Delete {selectedKeys.size}
 					</button>
 				{/if}
-				{#if $isAdmin}
+				{#if $isAdmin && features.maintenance}
 					<!-- Orphan folders -->
 					<button
 						type="button"
@@ -809,18 +810,20 @@
 />
 
 <!-- Transcoder cleanup confirmation -->
-<ConfirmDialog
-	open={transcoderCleanupOpen}
-	title="Clean Up Transcoder"
-	message="Delete all completed and failed transcoder jobs from the transcoder database?"
-	confirmLabel="Clean Up"
-	variant="danger"
-	onconfirm={handleCleanupTranscoder}
-	oncancel={() => (transcoderCleanupOpen = false)}
-/>
+{#if features.maintenance}
+	<ConfirmDialog
+		open={transcoderCleanupOpen}
+		title="Clean Up Transcoder"
+		message="Delete all completed and failed transcoder jobs from the transcoder database?"
+		confirmLabel="Clean Up"
+		variant="danger"
+		onconfirm={handleCleanupTranscoder}
+		oncancel={() => (transcoderCleanupOpen = false)}
+	/>
+{/if}
 
 <!-- Orphan folders modal -->
-{#if orphanFoldersOpen}
+{#if features.maintenance && orphanFoldersOpen}
 	<div class="modal">
 		<button
 			type="button"
