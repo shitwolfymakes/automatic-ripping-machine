@@ -92,7 +92,7 @@ async def transcode_stats(
         key = t.status.value if hasattr(t.status, "value") else str(t.status)
         by_status[key] = by_status.get(key, 0) + 1
     gpus = list((await db.execute(select(Gpu))).scalars().all())
-    gpus_available = len([g for g in gpus if g.status == GpuStatus.AVAILABLE])
+    gpus_available = len([g for g in gpus if g.enabled and g.status == GpuStatus.AVAILABLE])
     return TranscodeStatsView(
         tasks_by_status=by_status,
         total_tasks=len(tasks),

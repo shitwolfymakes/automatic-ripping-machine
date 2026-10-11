@@ -253,6 +253,20 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     assert body["max_parallel"] == settings.MAX_PARALLEL_TRANSCODES
 
 
+def test_stats_disabled_gpu_is_not_available(signing_key: bytes) -> None:
+    db = FakeSession()
+    disabled = _gpu("gpu_off", status=GpuStatus.AVAILABLE)
+    disabled.enabled = False
+    db.rows["gpus"] = [_gpu("gpu_on", status=GpuStatus.AVAILABLE), disabled]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["gpus_total"] == 2
+    assert body["gpus_available"] == 1
+
+
 def test_stats_empty_db_all_zero(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
