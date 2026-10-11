@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/Glyph.svelte';
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
@@ -47,7 +48,7 @@
 
 <div class="stack">
 	<div>
-		<a href="/logs" class="btn btn-link">&lt;- All logs</a>
+		<a href="/logs" class="btn inline-flex items-center gap-1"><Glyph name="arrow-left" /> All logs</a>
 		<h1 class="page-title">Job log</h1>
 		<p class="mono log-detail-page-id">{jobId}</p>
 	</div>
