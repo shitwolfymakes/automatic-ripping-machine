@@ -1,4 +1,5 @@
 import type {
+	ExternalIds,
 	JobView,
 	JobDetailView,
 	TrackEditRequest,
@@ -18,7 +19,6 @@ import type {
 	ManualTriggerResponse
 } from '$lib/types/api.gen';
 import { apiFetch, post } from './client';
-import { notAvailable } from './_stub';
 
 // ---------------------------------------------------------------------------
 // Job listing / detail (EXISTS in v3)
@@ -117,6 +117,11 @@ export function updateJobTitle(jobId: string, data: { poster_url_manual?: string
 	return patchJob(jobId, { poster_url_manual: data.poster_url_manual ?? null });
 }
 
+// Header Movie | TV switch: the type alone; ids and title stay (spec 3.2).
+export function setJobMediaType(jobId: string, mediaType: 'movie' | 'tv'): Promise<JobView> {
+	return patchJob(jobId, { media_type: mediaType });
+}
+
 export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<JobView> {
 	return patchJob(jobId, data);
 }
@@ -145,6 +150,7 @@ export function resolveJob(
 		disc_total?: number | null;
 		media_type?: MediaType | null;
 		music?: MusicMeta;
+		external_ids?: ExternalIds | null;
 	}
 ): Promise<ResolveResponse> {
 	const payload: Record<string, unknown> = {
@@ -159,6 +165,9 @@ export function resolveJob(
 	}
 	payload.media_type = body.media_type;
 	payload.music = body.music;
+	if (body.external_ids !== undefined) {
+		payload.external_ids = body.external_ids;
+	}
 	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, payload);
 }
 
@@ -285,26 +294,4 @@ export function startWaitingJob(id: string): Promise<JobView> {
 // countdown; paused=false resumes with a fresh countdown.
 export function pauseWaitingJob(id: string, paused = true): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/review-pause?paused=${paused}`, { method: 'POST' });
-}
-
-// ---------------------------------------------------------------------------
-// MISSING in v3: no TVDB matching endpoint. TvdbMatch/EpisodeMatch are not
-// mounted yet; these reject before any fetch so a hidden path fails loudly.
-// ---------------------------------------------------------------------------
-
-export async function tvdbMatch(
-	_jobId: string,
-	_opts?: {
-		season?: number | null;
-		tolerance?: number | null;
-		apply?: boolean;
-		disc_number?: number | null;
-		disc_total?: number | null;
-	}
-): Promise<never> {
-	notAvailable('TVDB episode matching');
-}
-
-export async function fetchTvdbEpisodes(_jobId: string, _season: number): Promise<never> {
-	notAvailable('TVDB episode listing');
 }

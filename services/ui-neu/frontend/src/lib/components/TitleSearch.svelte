@@ -14,10 +14,26 @@
 	interface Props {
 		job: JobView;
 		onapply?: () => void;
-		onepisodes?: () => void;
+		onseries?: () => void;
+		initialType?: 'movie' | 'tv';
 	}
 
-	let { job, onapply, onepisodes }: Props = $props();
+	let { job, onapply, onseries, initialType }: Props = $props();
+
+	// Search type: the caller's hint, else the job's known type, else TV for a
+	// disc that looks episodic.
+	let searchType = $state<'movie' | 'tv'>(
+		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
+	);
+
+	function setSearchType(t: 'movie' | 'tv') {
+		if (t === searchType) return;
+		searchType = t;
+		results = [];
+		selected = null;
+		detail = null;
+		searchError = null;
+	}
 
 	let query = $state(job.title || '');
 	let yearInput = $state(job.year != null ? String(job.year) : '');
@@ -31,7 +47,7 @@
 	let loadingDetail = $state(false);
 
 	let applying = $state(false);
-	let feedback = $state<{ type: 'success' | 'error'; message: string; showEpisodes?: boolean } | null>(null);
+	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
 	// Editable metadata fields, populated from the selected candidate. On a
 	// resolvable job, Apply identifies the movie via resolveJob (title/year +
@@ -81,7 +97,7 @@
 		selected = null;
 		detail = null;
 		try {
-			const resp = await searchMetadata(query.trim());
+			const resp = await searchMetadata(query.trim(), searchType);
 			results = resp.candidates;
 			if (results.length === 0) {
 				searchError = 'No results found. Try a different search term.';
@@ -115,12 +131,19 @@
 		const year = Number.isFinite(parsedYear as number) ? parsedYear : null;
 		const poster = editPosterUrl.trim() || null;
 		const isSeries = editType === 'series';
+		// Only send the candidate's ids when the form's type still matches its kind.
+		const candidateIsSeries = selected?.kind === 'series' || selected?.kind === 'tv';
+		const candidateIds = selected && candidateIsSeries === isSeries ? selected.external_ids : null;
+		// Resolve reads an explicit null as "clear this id": send only the ids the candidate has.
+		const presentIds = Object.entries(candidateIds ?? {}).filter(([, v]) => v != null);
+		const externalIds = presentIds.length ? Object.fromEntries(presentIds) : undefined;
 		try {
 			if (canResolve) {
 				await resolveJob(job.id, {
 					title,
 					year,
-					media_type: editType === 'series' ? 'tv' : 'movie'
+					media_type: isSeries ? 'tv' : 'movie',
+					external_ids: externalIds
 				});
 				let message = 'Identified';
 				if (poster !== (job.poster_url_manual ?? null)) {
@@ -130,13 +153,15 @@
 						message = 'Identified; poster not saved';
 					}
 				}
-				feedback = { type: 'success', message, showEpisodes: isSeries };
+				feedback = { type: 'success', message };
 			} else {
 				// Non-resolvable status (created/ripping/failed/abandoned): poster only.
 				await updateJobTitle(job.id, { poster_url_manual: poster });
-				feedback = { type: 'success', message: 'Poster updated', showEpisodes: isSeries };
+				feedback = { type: 'success', message: 'Poster updated' };
 			}
-			onapply?.();
+			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
+			if (isSeries && canResolve) onseries?.();
+			else onapply?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };
 		} finally {
@@ -179,6 +204,20 @@
 			placeholder="IMDb ID (tt...)"
 			class="field-control w-36"
 		/>
+		<div class="tabs tabs-pills" role="radiogroup" aria-label="Search type">
+			{#each [{ id: 'movie', label: 'Movie' }, { id: 'tv', label: 'TV' }] as opt (opt.id)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={searchType === opt.id}
+					data-selected={searchType === opt.id}
+					onclick={() => setSearchType(opt.id as 'movie' | 'tv')}
+					class="tabs-tab"
+				>
+					{opt.label}
+				</button>
+			{/each}
+		</div>
 		<button
 			onclick={handleSearch}
 			disabled={searching || (!query.trim() && !imdbInput.trim())}
@@ -298,9 +337,6 @@
 						<span in:reveal class="title-search-feedback" data-tone={feedback.type}>
 							{feedback.message}
 						</span>
-						{#if feedback.showEpisodes && onepisodes}
-							<button onclick={onepisodes} class="btn btn-primary title-search-action-btn"> Match Episodes </button>
-						{/if}
 					{/if}
 				</div>
 			</div>

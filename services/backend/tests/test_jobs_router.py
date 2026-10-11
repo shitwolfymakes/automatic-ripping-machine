@@ -1896,3 +1896,78 @@ def test_resolve_null_disc_fields_on_empty_job_record_nothing(signing_key: bytes
     job = db.rows["jobs"][0]
     assert "identity_claims" not in job.metadata_json
     assert job.identity_provenance is None
+
+
+def _kind_job() -> Job:
+    return _job(
+        status=JobStatus.IDENTIFIED,
+        meta={"identity": {"provider": "tmdb", "external_ids": {"tmdb": "1749913", "tmdb_kind": "movie"}}},
+    )
+
+
+def test_resolve_stores_the_picked_series_ids_and_kind(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _kind_job()
+    db.rows["jobs"] = [job]
+    app.state.episode_stage = _StageRunner()
+    body = {
+        "title": "Kolchak: The Night Stalker",
+        "year": 1974,
+        "media_type": "tv",
+        "external_ids": {"tmdb": "5084", "imdb": "tt0071003", "tvdb": "77170", "tmdb_kind": "tv"},
+    }
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/resolve", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    ids = {k: v for k, v in r.json()["job"]["metadata_json"]["identity"]["external_ids"].items() if v is not None}
+    assert ids == {"tmdb": "5084", "imdb": "tt0071003", "tvdb": "77170", "tmdb_kind": "tv"}
+
+
+def test_resolve_with_a_new_tmdb_and_no_kind_drops_the_old_kind(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _kind_job()
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{job.id}/resolve",
+            json={"title": "X", "external_ids": {"tmdb": "5084"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    ids = r.json()["job"]["metadata_json"]["identity"]["external_ids"]
+    assert ids.get("tmdb") == "5084" and ids.get("tmdb_kind") is None
+
+
+def test_resolve_show_change_clears_the_old_kind(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _kind_job()
+    job.metadata_json["identity"]["external_ids"]["imdb"] = "tt1"
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{job.id}/resolve",
+            json={"title": "X", "external_ids": {"imdb": "tt9"}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    ids = r.json()["job"]["metadata_json"]["identity"]["external_ids"]
+    assert ids.get("imdb") == "tt9" and ids.get("tmdb") is None and ids.get("tmdb_kind") is None
+
+
+def test_patch_switches_media_type_and_reschedules_matching(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _kind_job()
+    job.media_type = MediaType.MOVIE
+    db.rows["jobs"] = [job]
+    runner = _StageRunner()
+    app.state.episode_stage = runner
+    with TestClient(app) as client:
+        r = client.patch(f"/api/jobs/{job.id}", json={"media_type": "tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["media_type"] == "tv"
+    assert r.json()["metadata_json"]["identity"]["external_ids"]["tmdb"] == "1749913"  # ids kept
+    assert runner.scheduled == [job.id]

@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from arm_common.schemas.job_metadata import ExternalIds
+
 MetadataProvider = Literal["omdb", "tmdb", "tvdb", "makemkv"]
 
 
@@ -16,6 +18,9 @@ class MetadataCandidate(BaseModel):
     country: str | None = None
     status: str | None = None
     track_count: int | None = None
+    # Every id this result carries (tmdb with its kind, imdb, tvdb), so
+    # applying it stores the identity that was picked (spec 3.4).
+    external_ids: ExternalIds | None = None
 
 
 class MetadataReleaseTrack(BaseModel):

@@ -76,7 +76,7 @@ describe('TitleSearch', () => {
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
-				expect(mockSearchMetadata).toHaveBeenCalledWith('Test');
+				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', 'movie');
 				expect(screen.getByText('Result 1')).toBeInTheDocument();
 			});
 		});
@@ -176,7 +176,8 @@ describe('TitleSearch', () => {
 				expect(mockResolve).toHaveBeenCalledWith('job_7', {
 					title: 'The Matrix',
 					year: 1999,
-					media_type: 'movie'
+					media_type: 'movie',
+					external_ids: undefined
 				});
 				expect(mockUpdateTitle).toHaveBeenCalledWith('job_7', { poster_url_manual: 'https://img/m.jpg' });
 			});
@@ -320,6 +321,131 @@ describe('TitleSearch', () => {
 			await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
 			await fireEvent.click(screen.getByText('The Matrix'));
 			expect(screen.getByRole('button', { name: 'Apply' })).toBeInTheDocument();
+		});
+	});
+
+	describe('Movie / TV toggle', () => {
+		it('defaults to TV for an episodic disc and searches TV', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ title: 'kolchak', media_type: null, looks_episodic: true }) }
+			});
+			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'true');
+			await fireEvent.click(screen.getByText('Search'));
+			expect(mockSearchMetadata).toHaveBeenCalledWith('kolchak', 'tv');
+		});
+
+		it('changing the toggle clears results', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Result 1' })] });
+			renderComponent(TitleSearch, { props: { job: createJob({ title: 'x' }) } });
+			await fireEvent.click(screen.getByText('Search'));
+			await screen.findByText('Result 1');
+			await fireEvent.click(screen.getByRole('radio', { name: 'TV' }));
+			expect(screen.queryByText('Result 1')).not.toBeInTheDocument();
+			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'true');
+		});
+
+		it('applying a series sends its ids and opens episode matching', async () => {
+			const ids = { tmdb: '5084', imdb: 'tt0071003', tvdb: '77170', tmdb_kind: 'tv' as const };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [
+					createCandidate({ title: 'Kolchak: The Night Stalker', year: 1974, kind: 'tv', external_ids: ids })
+				]
+			});
+			const onseries = vi.fn();
+			const onapply = vi.fn();
+			renderComponent(TitleSearch, {
+				props: {
+					job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak', media_type: 'tv' }),
+					onseries,
+					onapply
+				}
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak: The Night Stalker'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() =>
+				expect(mockResolve).toHaveBeenCalledWith('job_9', {
+					title: 'Kolchak: The Night Stalker',
+					year: 1974,
+					media_type: 'tv',
+					external_ids: ids
+				})
+			);
+			expect(onseries).toHaveBeenCalled();
+			expect(onapply).not.toHaveBeenCalled();
+		});
+
+		it('strips null ids from the candidate before resolving (null means clear)', async () => {
+			const ids = { tmdb: '5084', imdb: null, tvdb: null, tmdb_kind: 'tv' as const };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak', media_type: 'tv' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toEqual({ tmdb: '5084', tmdb_kind: 'tv' });
+		});
+
+		it('sends no ids when every candidate id is null', async () => {
+			const ids = { tmdb: null, imdb: null, tvdb: null, tmdb_kind: null };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak', media_type: 'tv' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toBeUndefined();
+		});
+
+		it('does not send a TV candidate ids when the form type is switched to Movie', async () => {
+			const ids = { tmdb: '5084', tmdb_kind: 'tv' as const };
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+			});
+			const onseries = vi.fn();
+			const onapply = vi.fn();
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_9', status: 'ripped', title: 'kolchak' }), onseries, onapply }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'movie' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].external_ids).toBeUndefined();
+			expect(mockResolve.mock.calls[0][1].media_type).toBe('movie');
+			expect(onapply).toHaveBeenCalled();
+			expect(onseries).not.toHaveBeenCalled();
+		});
+
+		it('a poster-only apply on a TV job does not start episode matching', async () => {
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv' })]
+			});
+			const onseries = vi.fn();
+			const onapply = vi.fn();
+			renderComponent(TitleSearch, {
+				props: {
+					job: createJob({ id: 'job_9', status: 'ripping', title: 'kolchak', media_type: 'tv' }),
+					onseries,
+					onapply
+				}
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await fireEvent.click(await screen.findByText('Kolchak'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Apply Poster' }));
+			await waitFor(() => expect(onapply).toHaveBeenCalled());
+			expect(mockResolve).not.toHaveBeenCalled();
+			expect(onseries).not.toHaveBeenCalled();
 		});
 	});
 });

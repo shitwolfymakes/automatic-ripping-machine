@@ -989,11 +989,15 @@ async def resolve(
             for name in _SHOW_ID_FIELDS
         )
         if show_changed:
-            for name in ("tvmaze", *_SHOW_ID_FIELDS):
+            for name in ("tvmaze", "tmdb_kind", *_SHOW_ID_FIELDS):
                 if name not in ids_set:
                     setattr(existing_ids, name, None)
         if "imdb" in ids_set:
             existing_ids.imdb = req.external_ids.imdb
+        if "tmdb_kind" in ids_set:
+            existing_ids.tmdb_kind = req.external_ids.tmdb_kind
+        elif "tmdb" in ids_set and req.external_ids.tmdb != existing_ids.tmdb:
+            existing_ids.tmdb_kind = None  # a new TMDb id of unknown kind
         if "tmdb" in ids_set:
             existing_ids.tmdb = req.external_ids.tmdb
         if "tvdb" in ids_set:

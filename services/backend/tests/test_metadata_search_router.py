@@ -601,3 +601,58 @@ def test_music_detail_maps_enriched_fields(signing_key: bytes) -> None:
     assert body["track_count"] == 1
     assert body["tracks"][0]["length_ms"] == 259000
     assert body["tracks"][0]["disc_number"] == 1
+
+
+def _present(ids: dict[str, str | None]) -> dict[str, str]:
+    return {k: v for k, v in ids.items() if v is not None}
+
+
+@respx.mock
+def test_tv_search_candidates_carry_all_ids(signing_key: bytes) -> None:
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(
+        return_value=httpx.Response(
+            200,
+            json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]},
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "kolchak", "type": "tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    [cand] = r.json()["candidates"]
+    assert _present(cand["external_ids"]) == {
+        "tmdb": "5084",
+        "imdb": "tt0071003",
+        "tvdb": "77170",
+        "tmdb_kind": "tv",
+    }
+
+
+@respx.mock
+def test_omdb_candidates_carry_imdb_without_tmdb_kind(signing_key: bytes) -> None:
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [{"Title": "Blade Runner", "Year": "1982", "imdbID": "tt0083658", "Type": "movie"}],
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db, omdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "blade runner", "type": "movie", "provider": "omdb"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    [cand] = r.json()["candidates"]
+    assert _present(cand["external_ids"]) == {"imdb": "tt0083658"}

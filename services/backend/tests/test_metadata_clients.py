@@ -1289,3 +1289,45 @@ async def test_tmdb_find_by_imdb_id_tv_missing_title_raises(http_client) -> None
     )
     with _pytest.raises(MetaLookupError, match="missing title"):
         await TMDBClient("k", http_client).find_by_imdb_id("tt0000007")
+
+
+@respx.mock
+async def test_tmdb_external_id_map_has_imdb_and_tvdb(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    )
+    ids = await TMDBClient("k", http_client).get_external_id_map(5084, "tv")
+    assert ids == {"imdb_id": "tt0071003", "tvdb_id": "77170"}
+
+
+@respx.mock
+async def test_tmdb_external_id_map_empty_on_failure(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/tv/1/external_ids").mock(return_value=httpx.Response(500))
+    assert await TMDBClient("k", http_client).get_external_id_map(1, "tv") == {}
+
+
+@respx.mock
+async def test_tmdb_external_id_map_string_tvdb_and_null_values(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/tv/2/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": None, "tvdb_id": "99"})
+    )
+    respx.get("https://api.themoviedb.org/3/tv/3/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "", "tvdb_id": None})
+    )
+    client = TMDBClient("k", http_client)
+    assert await client.get_external_id_map(2, "tv") == {"tvdb_id": "99"}
+    assert await client.get_external_id_map(3, "tv") == {}
+
+
+@respx.mock
+async def test_tmdb_tv_candidates_carry_tvdb_id(http_client) -> None:
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]}
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    )
+    [hit] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
+    assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")

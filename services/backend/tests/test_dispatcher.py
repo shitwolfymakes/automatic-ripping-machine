@@ -530,3 +530,93 @@ async def test_call_stamps_canonical_provider() -> None:
 
     assert await dispatcher._call("tmdb_movie", _miss()) is None
     await dispatcher.aclose()
+
+
+@respx.mock
+async def test_identify_enriches_the_tmdb_tv_hit_with_imdb_and_tvdb():
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]}
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    )
+    async with httpx.AsyncClient() as client:
+        scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK")
+        hit = await MetadataDispatcher(client).identify(
+            scan, _config(omdb_api_key=None), title_hint="kolchak", title_hint_is_tv=True
+        )
+    assert hit is not None and hit.provider == "tmdb"
+    assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
+
+
+@respx.mock
+async def test_identify_keeps_the_hit_when_enrichment_fails():
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"id": 603, "title": "The Matrix", "release_date": "1999-03-31"}]}
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/movie/603/external_ids").mock(return_value=httpx.Response(500))
+    async with httpx.AsyncClient() as client:
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_MATRIX_1999")
+        hit = await MetadataDispatcher(client).identify(scan, _config())
+    assert hit is not None and hit.title == "The Matrix" and "tvdb_id" not in hit.payload
+
+
+@respx.mock
+async def test_identify_from_imdb_keeps_the_known_imdb_and_adds_tvdb():
+    respx.get("https://api.themoviedb.org/3/find/tt0071003").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "movie_results": [],
+                "tv_results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}],
+            },
+        )
+    )
+    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
+        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    )
+    async with httpx.AsyncClient() as client:
+        hit = await MetadataDispatcher(client).identify_from_imdb("tt0071003", _config())
+    assert hit is not None and hit.kind == "tv"
+    assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
+
+
+async def test_with_tmdb_ids_skips_non_tmdb_keyless_and_idless_hits():
+    from arm_backend.metadata.base import MetadataResult
+
+    async with httpx.AsyncClient() as client:
+        d = MetadataDispatcher(client)
+        omdb = MetadataResult(provider="omdb", kind="movie", title="X", year=1999, payload={"imdbID": "tt1"})
+        assert await d._with_tmdb_ids(None, _config()) is None
+        assert await d._with_tmdb_ids(omdb, _config()) is omdb
+        tmdb_hit = MetadataResult(provider="tmdb", kind="movie", title="X", year=1999, payload={"id": 1})
+        assert await d._with_tmdb_ids(tmdb_hit, _config(tmdb_api_key=None)) is tmdb_hit
+        assert "imdb_id" not in tmdb_hit.payload
+        idless = MetadataResult(provider="tmdb", kind="movie", title="X", year=1999, payload={})
+        assert await d._with_tmdb_ids(idless, _config()) is idless
+        assert idless.payload == {}
+
+
+async def test_with_tmdb_ids_timeout_keeps_the_hit(monkeypatch):
+    """A slow `external_ids` call is bounded by PROVIDER_TIMEOUT_SECONDS; on
+    timeout the hit is returned unchanged."""
+    import asyncio
+
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    async def slow(self, tmdb_id, kind):
+        await asyncio.sleep(10)
+        return {"imdb_id": "tt9"}
+
+    monkeypatch.setattr(TMDBClient, "get_external_id_map", slow)
+    monkeypatch.setattr(dispatcher_mod, "PROVIDER_TIMEOUT_SECONDS", 0.01)
+    async with httpx.AsyncClient() as client:
+        hit = MetadataResult(provider="tmdb", kind="tv", title="X", year=1999, payload={"id": 1})
+        assert await MetadataDispatcher(client)._with_tmdb_ids(hit, _config()) is hit
+    assert hit.payload == {"id": 1}
