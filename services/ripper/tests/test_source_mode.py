@@ -85,7 +85,6 @@ def test_settings_allow_missing_drive_dev_with_source(monkeypatch):
 
     assert s.ARM_DRIVE_DEV is None
     assert s.ARM_SOURCE_PATH == "/source/sintel.iso"
-    assert s.ARM_SOURCE_KIND == "iso"
     assert s.ARM_SOURCE_SESSION_ID is None
 
 

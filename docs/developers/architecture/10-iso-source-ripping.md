@@ -65,9 +65,9 @@ container differs from an optical one in exactly what it needs to:
 - **Mount:** only the chosen ISO, read-only, at `/source/<file name>`
   (`drive.device_path`). No `/dev/disk` bind, no device cgroup rules, no
   CDROM group.
-- **Env:** `ARM_DRIVE_ID`, `ARM_SOURCE_PATH=/source/<file name>`,
-  `ARM_SOURCE_KIND` (`iso`), and `ARM_SOURCE_SESSION_ID` when the operator
-  picked a session at create time. No `ARM_DRIVE_DEV` or `ARM_DRIVE_BY_ID`.
+- **Env:** `ARM_DRIVE_ID`, `ARM_SOURCE_PATH=/source/<file name>`, and
+  `ARM_SOURCE_SESSION_ID` when the operator picked a session at create time.
+  No `ARM_DRIVE_DEV` or `ARM_DRIVE_BY_ID`.
 - **Labels:** `arm.drive_id` (the usual one) plus `arm.virtual=1`.
 - **Restart policy:** `no`. A one-shot container is meant to exit; the
   backend watchdog (below) does the cleanup, not Docker's restart logic.
@@ -140,9 +140,10 @@ again.
 
 The ripper's `ARM_MANUAL_TRIGGER_ISO` test hook is gone. In its place:
 
-- **`ARM_SOURCE_PATH`** (the in-container ISO path) and **`ARM_SOURCE_KIND`**
-  (`iso`) select source mode. `ARM_DRIVE_DEV` becomes optional when
-  `ARM_SOURCE_PATH` is set; `ARM_DRIVE_ID` is still required either way.
+- **`ARM_SOURCE_PATH`** (the in-container ISO or disc-folder path) selects
+  source mode; the ripper tells the two apart from the path itself.
+  `ARM_DRIVE_DEV` becomes optional when `ARM_SOURCE_PATH` is set;
+  `ARM_DRIVE_ID` is still required either way.
 - **`ARM_SOURCE_SESSION_ID`** carries the session the operator picked at
   create time, if any. When unset, the usual automatic session selection
   applies.
