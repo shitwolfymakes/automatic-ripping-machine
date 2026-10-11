@@ -321,9 +321,15 @@ authority. Allowed in markup:
 - flex/grid arrangement: `flex-row/col/wrap/nowrap/1/auto/none`, `grow/shrink`,
   `items-*/justify-*/self-*/place-*`, `col-span-*/row-span-*/order-*`,
   `grid-cols-<n>/grid-rows-<n>` (digits only)
-- sizing: `w-full/h-full/min-w-0/min-h-0/max-w-*/w-auto/h-auto`
+- sizing: `w-full/h-full/min-w-0/min-h-0/max-w-*/w-auto/h-auto`, and the fixed
+  steps already used for icons and avatars: `w-<n>/h-<n>/size-<n>`
+  (`h-3.5 w-3.5`), fractions (`w-2/5`), `w-screen/h-screen`,
+  `min-/max-w-0|full|screen`
+- image and box fit: `object-cover/contain/center/fill`, `aspect-square/video`,
+  `line-clamp-<n>`, `basis-full/auto/<n>/<m>`, `flex-shrink(-0)`, `flex-grow(-0)`
 - text behaviour: `truncate/whitespace-*/break-*/overflow-*`
-- `sr-only`; positioning: `relative/absolute/inset-0/…-0`
+- `sr-only`; positioning: `relative/absolute/fixed/sticky/static`,
+  `inset-*/top-*/right-*/bottom-*/left-*` (a number or `px`, `-top-1` allowed)
 - responsive prefixes `sm:/md:/lg:/xl:` on any of the above
 
 Banned: every colour/type/border/radius/shadow/effect family, `dark:`,

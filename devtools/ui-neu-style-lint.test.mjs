@@ -57,6 +57,13 @@ test('variant-prefixed utilities are checked and flagged', () => {
 	assert.equal(v.length, 2);
 });
 
+test('sizing and positioning utilities in use are allowed, banned families still are not', () => {
+	const ok = '<svg class="h-3.5 w-3.5 flex-shrink-0"></svg><div class="fixed bottom-6 right-6 -top-1 h-screen w-2/5 basis-full aspect-square line-clamp-2 object-cover max-w-0"></div>';
+	assert.deepEqual(lintSource(ok, 'x.svelte'), []);
+	const bad = lintSource('<div class="w-4 rounded-md bg-red-500"></div>', 'x.svelte');
+	assert.deepEqual(bad.map((v) => v.kind), ['banned-utility:rounded-md', 'banned-utility:bg-red-500']);
+});
+
 test('responsive prefixes on allowed utilities are not flagged', () => {
 	assert.deepEqual(lintSource('<div class="sm:gap-4 md:hidden"></div>', 'x.svelte'), []);
 });
