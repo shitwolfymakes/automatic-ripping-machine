@@ -166,10 +166,9 @@ POST_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
 )
 # Jobs whose parked applications are re-drained when transcoding is re-enabled:
 # the rip is done and identity is known, so the only thing that held an encode
-# application parked was the toggle.
-REDRAIN_JOB_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW}
-)
+# application parked was the toggle. Pre-rip jobs (identified, awaiting review)
+# are left out: their applications stay parked until rip-complete drains them.
+REDRAIN_JOB_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
 
 
 class TrackStatus(StrEnum):
