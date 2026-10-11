@@ -30,3 +30,5 @@
 - [hifi verification method](project_hifi_verification_method.md) — temp admin via DB + argon2, ISO rips as the disc path, log-capture loop, SQL quoting and image gotchas (2026-10-03 register verification)
 - [Subagents stay in their worktree](feedback_subagents_stay_in_worktree.md) — implementers given a worktree also edited the main checkout (2026-10-04); forbid it in dispatches and check the main checkout status after each task
 - [Docs describe the current state](feedback_docs_describe_current_state.md) — docs, memory, comments and CLAUDE.md say what is true now; replace an old description instead of annotating it ("DONE", "no longer", "used to"); history lives in git, spec/plan and CHANGELOG
+- [No em dashes or unicode symbols in UI copy](feedback_no_em_dashes_in_ui_copy.md) — correct the characters (em-dash, ✓ ✗ ⚠ → · … ≥ ▾ ○); do not reword or change what is shown.
+- [Glyph icons, not emoji](feedback_glyph_icons_not_emoji.md) — status/indicator icons are the inline SVG glyphs ui-neu already uses, never emoji or unicode symbols.
