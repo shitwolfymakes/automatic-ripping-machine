@@ -453,7 +453,12 @@ describe('Job detail page (v3)', () => {
 
 	it('shows a Transcode badge when the track has a transcode_status', async () => {
 		mockFetchJob.mockResolvedValueOnce({
-			job: createJob({ id: 'job_42', status: 'ripped' }),
+			job: createJob({
+				id: 'job_42',
+				status: 'ripped',
+				// Not live: a live job opens the log panel, which has its own "Transcode" label.
+				transcode_progress: { state: 'done', tasks_total: 1, tasks_done: 1, tasks_failed: 0, percent: 100 }
+			}),
 			tracks: [
 				createTrack({ id: 'trk_1', source_ref: 'title_01.mkv', status: 'done', transcode_status: 'failed' } as any)
 			],

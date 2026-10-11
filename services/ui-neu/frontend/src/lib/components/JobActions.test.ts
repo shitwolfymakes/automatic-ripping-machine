@@ -35,6 +35,11 @@ describe('JobActions', () => {
 			expect(screen.getByText('Abandon')).toBeInTheDocument();
 		});
 
+		it('offers Abandon on a held review disc', () => {
+			renderComponent(JobActions, { props: { job: createJob({ status: 'awaiting_review' }) } });
+			expect(screen.getByRole('button', { name: /Abandon/ })).toBeInTheDocument();
+		});
+
 		it('shows Delete button for completed jobs', () => {
 			renderComponent(JobActions, {
 				props: { job: createJob({ status: 'ripped' }) }

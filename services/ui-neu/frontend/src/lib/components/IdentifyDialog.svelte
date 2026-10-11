@@ -2,6 +2,7 @@
 	import { resolveJob } from '$lib/api/jobs';
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import { driveLabel } from '$lib/utils/drive-name';
+	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
 
 	let {
 		job,
@@ -25,7 +26,7 @@
 	// case (status awaiting_user_id / ripped_awaiting_identify) from the
 	// "auto-identify landed wrong metadata, correct it" case (post-rip
 	// status). The submit endpoint is the same; only the copy differs.
-	const isEditMode = $derived(!['awaiting_user_id', 'ripped_awaiting_identify'].includes(job.status));
+	const isEditMode = $derived(!isAwaitingIdentity(job.status));
 
 	// CD-only: per-track count comes from the preserved scan_result on the
 	// job's metadata_json. If it's absent we skip the per-track inputs and

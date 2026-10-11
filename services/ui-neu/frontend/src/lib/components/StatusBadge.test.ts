@@ -7,8 +7,12 @@ describe('StatusBadge', () => {
 
 	it.each([
 		['ripping', 'Ripping', 'active'],
-		['SUCCESS', 'Success', 'success'],
-		['copying', 'Copying', 'finishing'],
+		['COMPLETE', 'Complete', 'success'],
+		['in_progress', 'In Progress', 'unknown'],
+		['running', 'Running', 'unknown'],
+		['done_partial', 'Done (partial)', 'error'],
+		['waiting_identify', 'Waiting to identify', 'warning'],
+		['awaiting_review', 'Ready: review', 'warning'],
 		// Unmapped statuses humanize (proper-cased) rather than leaking raw text.
 		['something_new', 'Something New', 'unknown']
 	])('renders status=%s as "%s" with data-status %s', (status, expectedText, expectedDataStatus) => {

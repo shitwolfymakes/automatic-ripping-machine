@@ -97,6 +97,11 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
+		it('offers Apply session on a held disc', async () => {
+			renderWidget({ status: 'awaiting_review' });
+			await waitFor(() => expect(screen.getByRole('button', { name: /Apply session/ })).toBeInTheDocument());
+		});
+
 		it('shows Start rip on an awaiting_user_id job (review-card start)', async () => {
 			renderWidget({ status: 'awaiting_user_id' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
@@ -397,6 +402,30 @@ describe('DiscReviewWidget', () => {
 			);
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText(/^Session: sess_0123456789\.\.\.$/)).toBeInTheDocument());
+		});
+
+		it('shows a parked session on a held disc', async () => {
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValueOnce([
+				{ id: 'ses_a', name: 'Plex 1080p', media_type: 'movie' } as never
+			]);
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', parked_session_ids: ['ses_a'] }));
+			renderWidget({ status: 'awaiting_review', parked_session_ids: ['ses_a'] });
+			await waitFor(() =>
+				expect(screen.getByText('Session: Plex 1080p, applies when the rip finishes')).toBeInTheDocument()
+			);
+		});
+
+		it('falls back to the pending session when nothing is parked', async () => {
+			const { fetchSessions } = await import('$lib/api/sessions');
+			vi.mocked(fetchSessions).mockResolvedValueOnce([
+				{ id: 'ses_a', name: 'Plex 1080p', media_type: 'movie' } as never
+			]);
+			mockFetchJob.mockResolvedValueOnce(
+				detail({ status: 'identified', parked_session_ids: [], pending_session_id: 'ses_a' })
+			);
+			renderWidget({ status: 'identified' });
+			await waitFor(() => expect(screen.getByText('Session: Plex 1080p')).toBeInTheDocument());
 		});
 
 		it('shows no session chip when none is pinned', async () => {

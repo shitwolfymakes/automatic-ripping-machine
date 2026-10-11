@@ -13569,6 +13569,35 @@
         ],
         "title": "Job"
       },
+      "JobActions": {
+        "properties": {
+          "can_resolve": {
+            "type": "boolean",
+            "title": "Can Resolve"
+          },
+          "can_apply": {
+            "type": "boolean",
+            "title": "Can Apply"
+          },
+          "can_abandon": {
+            "type": "boolean",
+            "title": "Can Abandon"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_resolve",
+          "can_apply",
+          "can_abandon",
+          "can_delete"
+        ],
+        "title": "JobActions",
+        "description": "Operator actions the backend will accept for a job in its current status.\n\nDerived from the same status groups the endpoints enforce, so a UI button\ngated on these flags cannot offer an action its endpoint rejects. Role\n(admin/guest) gating stays in the UI."
+      },
       "JobClaim": {
         "properties": {
           "season": {
@@ -13989,6 +14018,14 @@
             ],
             "title": "Pending Session Id"
           },
+          "parked_session_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parked Session Ids",
+            "default": []
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -14076,6 +14113,10 @@
                 "type": "null"
               }
             ]
+          },
+          "actions": {
+            "$ref": "#/components/schemas/JobActions",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -14087,7 +14128,8 @@
           "title",
           "year",
           "metadata_json",
-          "resumed_from_crash"
+          "resumed_from_crash",
+          "actions"
         ],
         "title": "JobView"
       },

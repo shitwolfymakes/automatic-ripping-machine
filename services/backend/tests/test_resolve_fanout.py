@@ -56,6 +56,13 @@ def signing_key() -> bytes:
     return secrets.token_bytes(32)
 
 
+# Resolve only fans parked applications out once the rip is done: a pre-rip
+# resolve (AWAITING_USER_ID -> IDENTIFIED) leaves them parked until
+# rip-complete. Fan-out outcome tests therefore resolve a ripped placeholder,
+# which promotes to RIPPED and runs the after-rip drain.
+_RIPPED_PLACEHOLDER = JobStatus.RIPPED_AWAITING_IDENTIFY
+
+
 def _seed(
     db: FakeSession,
     *,
@@ -211,7 +218,7 @@ def _auth(token: str) -> dict[str, str]:
 def test_resolve_promotes_waiting_identify_to_queued(signing_key: bytes, tmp_path: Path) -> None:
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db)
+    _seed(db, job_status=_RIPPED_PLACEHOLDER)
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
@@ -221,7 +228,7 @@ def test_resolve_promotes_waiting_identify_to_queued(signing_key: bytes, tmp_pat
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert body["job"]["title"] == "Iron Man"
 
     assert len(body["fan_out"]) == 1
@@ -254,7 +261,7 @@ def test_resolve_promotes_waiting_identify_to_queued(signing_key: bytes, tmp_pat
 def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: bytes, tmp_path: Path) -> None:
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db, extra_sessions=2)
+    _seed(db, job_status=_RIPPED_PLACEHOLDER, extra_sessions=2)
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
@@ -302,7 +309,7 @@ def test_resolve_fan_out_template_error_returns_outcome_not_500(signing_key: byt
     raise a 500. Identify itself still succeeds."""
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db, template="{album}/{title}.mkv")
+    _seed(db, job_status=_RIPPED_PLACEHOLDER, template="{album}/{title}.mkv")
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(
@@ -312,7 +319,7 @@ def test_resolve_fan_out_template_error_returns_outcome_not_500(signing_key: byt
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert len(body["fan_out"]) == 1
     out = body["fan_out"][0]
     assert out["status"] == "waiting_identify"
@@ -333,7 +340,7 @@ def test_resolve_fan_out_collision_returns_outcome_not_409(signing_key: bytes, t
     response surfaces `skipped_reason='collisions'`, no exception."""
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db)
+    _seed(db, job_status=_RIPPED_PLACEHOLDER)
     db.rows["transcode_tasks"] = [
         TranscodeTask(
             id="tsk_existing",
@@ -354,7 +361,7 @@ def test_resolve_fan_out_collision_returns_outcome_not_409(signing_key: bytes, t
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert len(body["fan_out"]) == 1
     out = body["fan_out"][0]
     assert out["status"] == "waiting_identify"
@@ -370,7 +377,7 @@ def test_resolve_partial_fan_out_mixed_success_and_failure(signing_key: bytes, t
     promoted with tasks; the broken one stays parked with skipped_reason."""
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db)
+    _seed(db, job_status=_RIPPED_PLACEHOLDER)
     # Add a second session with a broken template, parked on the same job.
     db.rows["sessions"].append(
         Session(
@@ -401,7 +408,7 @@ def test_resolve_partial_fan_out_mixed_success_and_failure(signing_key: bytes, t
         )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job"]["status"] == "identified"
+    assert body["job"]["status"] == "ripped"
     assert len(body["fan_out"]) == 2
     by_id = {o["session_application_id"]: o for o in body["fan_out"]}
     assert by_id["sap_x"]["status"] == "queued"
@@ -484,7 +491,7 @@ def test_resolve_fan_out_session_without_transcode_preset(signing_key: bytes, tm
     branch in `fan_out_waiting_identify_applications`."""
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db, template="{title} ({year})/{title}.mkv")
+    _seed(db, job_status=_RIPPED_PLACEHOLDER, template="{title} ({year})/{title}.mkv")
     # Strip transcode_preset_id from the session so the fan-out skips the lookup.
     db.rows["sessions"][0].transcode_preset_id = None
     app, token = _make_app(signing_key, db, tmp_path, hub)
@@ -553,6 +560,41 @@ def test_resolve_before_rip_keeps_application_parked(signing_key: bytes, tmp_pat
     assert out["task_count"] == 0
     assert out["skipped_reason"] == "no_tracks"
     assert out["error_detail"] is not None and "rip" in out["error_detail"]
+
+    app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
+    assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+    assert not any(e["event_type"] == "session.queued" for e in hub.events)
+
+
+def test_resolve_on_held_disc_with_review_tracks_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
+    """Resolve on a disc held at the review gate. Identify already persisted
+    review Track rows (hold_for_review), so tracks exist, but nothing has been
+    ripped: the parked application must stay `waiting_identify` with no tasks
+    until rip-complete drains it. Rip state, not track presence, decides."""
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.AWAITING_REVIEW, job_title="Iron Man")
+    for track in db.rows["tracks"]:
+        track.status = TrackStatus.QUEUED
+    assert db.rows["tracks"], "review tracks must be present for this regression"
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["job"]["status"] == "awaiting_review"
+
+    assert len(body["fan_out"]) == 1
+    out = body["fan_out"][0]
+    assert out["session_application_id"] == "sap_x"
+    assert out["status"] == "waiting_identify"
+    assert out["task_count"] == 0
+    assert out["skipped_reason"] == "no_tracks"
 
     app_row = next(a for a in db.rows["session_applications"] if a.id == "sap_x")
     assert app_row.status == SessionApplicationStatus.WAITING_IDENTIFY

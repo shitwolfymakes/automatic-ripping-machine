@@ -105,36 +105,6 @@ export function getVideoTypeConfig(videoType: string | null | undefined, disctyp
 	return FALLBACK_CONFIG;
 }
 
-// Source of truth: v3 JobStatus (generated in `$lib/types/api.gen`).
-// isJobActive() is only ever called with Job.status values
-// (ActiveJobRow / JobCard / JobRow / JobActions / job-fields / jobs/[id]),
-// so this set deliberately tracks JobStatus's non-terminal members and
-// nothing else. Transcode-task TaskStatus ('processing', 'pending') and
-// TrackStatus ('pending') are intentionally absent - they never reach
-// isJobActive in current code paths.
-//
-// v2.0.0 disambiguation: 'ripping' split into 'video_ripping'/'audio_ripping',
-// 'waiting' split into 'manual_paused'/'makemkv_throttled'. Old strings kept
-// as defensive fallbacks for in-flight jobs observed mid-deploy.
-const ACTIVE_STATUSES = new Set([
-	// v3 JobStatus non-terminal members.
-	'created',
-	'awaiting_user_id',
-	'identified',
-	'identifying',
-	'ready',
-	'ripping', // legacy pre-v2.0.0
-	'video_ripping',
-	'audio_ripping',
-	'copying',
-	'ejecting',
-	'transcoding',
-	'waiting', // legacy pre-v2.0.0
-	'manual_paused',
-	'makemkv_throttled',
-	'waiting_transcode'
-]);
-
 const DISC_TYPE_LABELS: Record<string, string> = {
 	dvd: 'DVD',
 	bluray: 'Blu-ray',
@@ -148,9 +118,4 @@ const DISC_TYPE_LABELS: Record<string, string> = {
 export function discTypeLabel(disctype: string | null | undefined): string {
 	if (!disctype) return 'Unknown';
 	return DISC_TYPE_LABELS[disctype.toLowerCase()] ?? disctype;
-}
-
-export function isJobActive(status: string | null | undefined): boolean {
-	if (!status) return false;
-	return ACTIVE_STATUSES.has(status.toLowerCase());
 }

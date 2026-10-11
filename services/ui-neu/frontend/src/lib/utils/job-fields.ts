@@ -1,6 +1,7 @@
 import type { JobView } from '$lib/types/api.gen';
 import { statusLabel } from '$lib/utils/format';
-import { discTypeLabel, isJobActive } from '$lib/utils/job-type';
+import { discTypeLabel } from '$lib/utils/job-type';
+import { isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 import { driveLabel } from '$lib/utils/drive-name';
 
 export interface MetadataField {
@@ -108,8 +109,27 @@ export function videoTypeLabel(vt: string | null | undefined): string {
 // (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
 // tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
 // v3 equivalent, so those fields are dropped here rather than synthesized.
-export function buildMetadataFields(job: JobView, driveNames?: Record<string, string> | null): MetadataField[] {
-	const active = isJobActive(job.status);
+function shortSessionId(id: string): string {
+	return id.length > 15 ? `${id.slice(0, 15)}...` : id;
+}
+
+/** "Name[, Name], applies when the rip finishes" pre-rip, "..., waiting" post-rip; null if none parked. */
+export function parkedSessionLine(
+	job: Pick<JobView, 'parked_session_ids' | 'status'>,
+	names: Map<string, string>
+): string | null {
+	const ids = job.parked_session_ids ?? [];
+	if (ids.length === 0) return null;
+	const label = ids.map((id) => names.get(id) ?? shortSessionId(id)).join(', ');
+	return `${label}, ${isPostRipStatus(job.status) ? 'waiting' : 'applies when the rip finishes'}`;
+}
+
+export function buildMetadataFields(
+	job: JobView,
+	driveNames?: Record<string, string> | null,
+	sessionNames?: Map<string, string>
+): MetadataField[] {
+	const active = isLive(job);
 
 	const fields: MetadataField[] = [];
 
@@ -134,6 +154,8 @@ export function buildMetadataFields(job: JobView, driveNames?: Record<string, st
 	} else {
 		fields.push({ label: 'State', value: 'Finished' });
 	}
+	const parked = parkedSessionLine(job, sessionNames ?? new Map());
+	if (parked) fields.push({ label: 'Session', value: parked });
 
 	// --- Promoted real JobView columns ---
 	if (job.disc_number != null) {

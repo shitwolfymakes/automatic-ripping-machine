@@ -734,6 +734,77 @@ def test_apply_to_identified_unripped_job_parks_as_waiting_identify(signing_key:
     assert db.rows["transcode_tasks"] == []
 
 
+def _as_review_tracks(db: FakeSession) -> None:
+    """Make the seeded Track rows look like identify's hold_for_review rows:
+    persisted from the scan (so the review card can list titles) but not
+    ripped yet."""
+    for track in db.rows["tracks"]:
+        track.status = TrackStatus.QUEUED
+
+
+def test_apply_to_held_review_disc_parks_as_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
+    """A disc held at the review gate already has review Track rows (identify
+    persists them under hold_for_review), but it has not been ripped. Apply
+    parks the session (fanned out at rip-complete) instead of 409ing or
+    queuing tasks against unripped titles."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.AWAITING_REVIEW)
+    _as_review_tracks(db)
+    assert db.rows["tracks"], "review tracks must be present for this regression"
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["session_application"]["status"] == "waiting_identify"
+    assert db.rows["transcode_tasks"] == []
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+def test_apply_to_identified_job_with_tracks_parks_as_waiting_identify(signing_key: bytes, tmp_path: Path) -> None:
+    """Rip state, not track presence, decides: an `identified` job that
+    already has Track rows (review tracks from a hold that was released, or a
+    rip that has not started) still parks until rip-complete."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.IDENTIFIED)
+    _as_review_tracks(db)
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session_application"]["status"] == "waiting_identify"
+    assert body["tasks"] == []
+    assert db.rows["transcode_tasks"] == []
+
+
+def test_apply_to_held_disc_without_year_parks_instead_of_422(signing_key: bytes, tmp_path: Path) -> None:
+    """Pre-rip applies never resolve output paths: a held disc with review
+    tracks but no year parks (the strict {year} is checked at drain time)
+    rather than 422ing on a template it cannot fill yet."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.AWAITING_REVIEW)
+    _as_review_tracks(db)
+    db.rows["jobs"][0].year = None
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["session_application"]["status"] == "waiting_identify"
+    assert db.rows["transcode_tasks"] == []
+
+
 def test_apply_records_the_operator(signing_key: bytes, tmp_path: Path) -> None:
     """G-07: a manual apply stamps created_by_user_id with the caller, so
     the audit trail can say who queued a transcode (auto stays None)."""

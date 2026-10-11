@@ -2,27 +2,29 @@
 	import { onDestroy } from 'svelte';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
 	import { createJobLog } from '$lib/stores/jobLog.svelte';
-	import { isJobActive } from '$lib/utils/job-type';
+	import { isLive } from '$lib/utils/job-status-groups';
+	import type { JobView } from '$lib/types/api.gen';
 	import LogView from '$lib/components/LogView.svelte';
 
 	interface Props {
 		jobId: string;
-		status: string | null;
+		job: Pick<JobView, 'status' | 'transcode_progress'>;
 		defaultOpen?: boolean;
 	}
 
-	let { jobId, status, defaultOpen }: Props = $props();
+	let { jobId, job, defaultOpen }: Props = $props();
 
 	const log = createJobLog(jobId, { limit: 200 });
 
-	let open = $state(defaultOpen ?? isJobActive(status));
+	let open = $state(defaultOpen ?? isLive(job));
 
 	// Lifecycle: fetch once always; subscribe to the live feed only while the
-	// job is active, and tear the subscription down the moment it goes
-	// terminal (status prop changing, or unmount).
+	// job is live (this includes an in-flight transcode), and tear the
+	// subscription down the moment it stops being live (job prop changing, or
+	// unmount).
 	let started = false;
 	$effect(() => {
-		const active = isJobActive(status);
+		const active = isLive(job);
 		if (active && !started) {
 			started = true;
 			log.start();

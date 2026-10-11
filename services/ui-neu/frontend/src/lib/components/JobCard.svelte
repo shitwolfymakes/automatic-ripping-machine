@@ -4,8 +4,9 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { jobPoster } from '$lib/utils/poster';
-	import { getVideoTypeConfig, isJobActive, discTypeLabel } from '$lib/utils/job-type';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { isInProgress } from '$lib/utils/job-status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';
@@ -19,12 +20,12 @@
 	let { job, progress = null, progressStage = null }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// Use the EFFECTIVE status so the stepper shows while a job is genuinely
-	// in-flight (ripping OR transcoding) and hides once it is terminal. A
-	// transcoding job (raw `ripped` + transcode_progress.state 'transcoding')
-	// reads effective 'transcoding' (active); a finished one reads 'complete'
-	// (not active) so a done job shows no in-progress stepper.
-	let active = $derived(job ? isJobActive(effectiveJobStatus(job)) : false);
+	// The stepper shows only while work is actually happening. isInProgress
+	// is isLive minus the idle post-rip statuses (ripped, ripped_partial,
+	// ripped_awaiting_identify): a job waiting on the operator is still live
+	// but shows no stepper, a transcoding job (effective 'transcoding') does,
+	// and a finished one (effective 'complete') does not.
+	let active = $derived(job ? isInProgress(job) : false);
 </script>
 
 {#if !job}

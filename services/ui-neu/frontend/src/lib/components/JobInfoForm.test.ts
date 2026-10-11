@@ -16,7 +16,9 @@ vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn()
 }));
 import { resolveJob } from '$lib/api/jobs';
+import type { JobStatus } from '$lib/types/api.gen';
 import JobInfoForm from './JobInfoForm.svelte';
+import { actionsFor } from './__fixtures__/job';
 
 const mockResolve = vi.mocked(resolveJob);
 
@@ -26,6 +28,7 @@ function job(overrides: Record<string, unknown> = {}) {
 		drive_id: 'drv_1',
 		disc_type: 'dvd',
 		status: 'awaiting_user_id',
+		actions: actionsFor((overrides.status as JobStatus | undefined) ?? 'awaiting_user_id'),
 		title: 'Star Knight',
 		year: 1985,
 		disc_number: null,

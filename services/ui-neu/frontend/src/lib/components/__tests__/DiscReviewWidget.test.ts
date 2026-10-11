@@ -126,11 +126,11 @@ describe('DiscReviewWidget', () => {
 			expect(screen.getByText('View details')).toBeInTheDocument();
 		});
 
-		it('shows Start rip, Apply session, Cancel for admins', async () => {
+		it('shows Start rip and Cancel for admins (Apply session follows job.actions.can_apply)', async () => {
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
-			expect(screen.getByText(/Apply session/)).toBeInTheDocument();
 			expect(screen.getByText('Cancel')).toBeInTheDocument();
+			expect(screen.getByText(/Apply session/)).toBeInTheDocument();
 		});
 	});
 

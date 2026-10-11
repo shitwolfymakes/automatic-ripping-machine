@@ -24,45 +24,35 @@ describe('formatBytes', () => {
 
 describe('statusColor', () => {
 	it.each<[string | null, string]>([
-		// JobState (arm-neu Job.status) - v2.0.0 disambiguated members
-		['success', 'status-success'],
-		['fail', 'status-error'],
-		// status-finishing is a distinct theme token (introduced alongside
-		// statusAccentVar) to highlight the copying/ejecting wind-down phase
-		// separately from the warning-tinted waiting bucket.
-		['copying', 'status-finishing'],
-		['ejecting', 'status-finishing'],
-		['manual_paused', 'status-warning'],
-		['makemkv_throttled', 'status-warning'],
-		['waiting_transcode', 'status-warning'],
-		['identifying', 'status-scanning'],
-		['ready', 'status-active'],
-		['video_ripping', 'status-active'],
-		['audio_ripping', 'status-active'],
-		['transcoding', 'status-processing'],
-		// JobState legacy pre-v2.0.0 wire strings (kept as defensive fallbacks
-		// for in-flight jobs observed mid-deploy)
+		// v3 JobStatus
+		['created', 'status-scanning'],
+		['awaiting_user_id', 'status-warning'],
+		['awaiting_review', 'status-warning'],
+		['identified', 'status-active'],
 		['ripping', 'status-active'],
-		['waiting', 'status-warning'],
-		// JobStatus (transcoder TranscodeJob.status)
-		['completed', 'status-success'],
-		['failed', 'status-error'], // also TrackStatus.failed (v2.0.0+)
-		['pending', 'status-warning'],
-		['processing', 'status-processing'],
-		// TrackStatus (Track.status)
-		['transcoded', 'status-success'],
-		// effectiveJobStatus() rollup for a fully-transcoded job — must read as
-		// success (green), not gray. Was a deliberate `status-unknown` before the
-		// transcode_progress feature gave `complete` real meaning on the dashboard.
+		['ripped', 'status-success'],
+		['ripped_partial', 'status-warning'],
+		['ripped_awaiting_identify', 'status-warning'],
+		['abandoned', 'status-unknown'],
+		['failed', 'status-error'],
+		// effective statuses
+		['transcoding', 'status-processing'],
 		['complete', 'status-success'],
-		// Locally-generated literals
-		['importing', 'status-active'],
-		['skipped', 'status-unknown'],
+		['transcode_failed', 'status-error'],
+		// task / track / application statuses
+		['done', 'status-success'],
+		['queued', 'status-unknown'],
+		['in_progress', 'status-unknown'],
+		['running', 'status-unknown'],
+		['cancelled', 'status-unknown'],
+		['waiting_identify', 'status-warning'],
+		['done_partial', 'status-error'],
 		// Fallthrough
 		['unknown', 'status-unknown'],
 		[null, 'status-unknown'],
-		// Removed legacy synonyms - now fall through to status-unknown
-		['active', 'status-unknown'],
+		// Removed v2 names now fall through to status-unknown
+		['video_ripping', 'status-unknown'],
+		['success', 'status-unknown'],
 		['error', 'status-unknown']
 	])('statusColor(%s) = %s', (input, expected) => {
 		expect(statusColor(input)).toBe(expected);
@@ -71,23 +61,22 @@ describe('statusColor', () => {
 
 describe('statusLabel', () => {
 	it.each<[string | null, string]>([
-		['identifying', 'Scanning'],
-		// v2.0.0 disambiguated JobState members
-		['video_ripping', 'Ripping'],
-		['audio_ripping', 'Ripping'],
-		['manual_paused', 'Paused'],
-		['makemkv_throttled', 'Throttled'],
-		// Legacy pre-v2.0.0 fallbacks (in-flight jobs mid-deploy)
+		['created', 'Created'],
+		['awaiting_review', 'Ready: review'],
 		['ripping', 'Ripping'],
-		['waiting', 'Waiting'],
-		['success', 'Success'],
-		['fail', 'Failed'],
+		['failed', 'Failed'],
 		['transcoding', 'Transcoding'],
-		['info', 'Scanning'],
+		['complete', 'Complete'],
+		['transcode_failed', 'Transcode failed'],
 		// TrackStatus / TranscodeTaskStatus
 		['queued', 'Queued'],
 		['in_progress', 'In Progress'],
 		['done', 'Done'],
+		['running', 'Running'],
+		['waiting_identify', 'Waiting to identify'],
+		['done_partial', 'Done (partial)'],
+		// Unmapped statuses humanize
+		['video_ripping', 'Video Ripping'],
 		[null, 'Unknown']
 	])('statusLabel(%s) = %s', (input, expected) => {
 		expect(statusLabel(input)).toBe(expected);
@@ -131,18 +120,20 @@ describe('elapsedTime', () => {
 
 describe('statusAccentVar', () => {
 	it.each<[string | null | undefined, string]>([
+		['created', 'var(--color-status-scanning)'],
 		['ripping', 'var(--color-status-ripping)'],
-		['identifying', 'var(--color-status-scanning)'],
+		['identified', 'var(--color-status-ripping)'],
 		['transcoding', 'var(--color-status-transcoding)'],
-		['processing', 'var(--color-status-transcoding)'],
-		['copying', 'var(--color-status-finishing)'],
-		['ejecting', 'var(--color-status-finishing)'],
-		['waiting', 'var(--color-status-waiting)'],
-		['waiting_transcode', 'var(--color-status-waiting)'],
-		['success', 'var(--color-status-success)'],
-		['transcoded', 'var(--color-status-success)'],
-		['fail', 'var(--color-status-error)'],
+		['awaiting_review', 'var(--color-status-waiting)'],
+		['waiting_identify', 'var(--color-status-waiting)'],
+		['complete', 'var(--color-status-success)'],
+		['ripped', 'var(--color-status-success)'],
+		['done', 'var(--color-status-success)'],
 		['failed', 'var(--color-status-error)'],
+		['transcode_failed', 'var(--color-status-error)'],
+		['done_partial', 'var(--color-status-error)'],
+		['in_progress', 'var(--color-primary)'],
+		['running', 'var(--color-primary)'],
 		[null, 'var(--color-primary)'],
 		[undefined, 'var(--color-primary)'],
 		['something-new', 'var(--color-primary)']
