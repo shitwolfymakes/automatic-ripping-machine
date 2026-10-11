@@ -236,5 +236,5 @@ it('renders per-GPU inventory rows with status and a manage link', async () => {
 	expect(rows.textContent).toContain('busy');
 	expect(rows.textContent).toContain('VAAPI');
 	expect(rows.textContent).toContain('disabled');
-	expect(screen.getByText('Manage GPUs in Settings')).toBeInTheDocument();
+	expect(screen.getByText('Manage GPUs in Settings')).toHaveAttribute('href', '/settings#transcoding');
 });

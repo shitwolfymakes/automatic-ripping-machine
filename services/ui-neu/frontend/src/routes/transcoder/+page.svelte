@@ -281,7 +281,7 @@
 									</span>
 								</div>
 							{/each}
-							<a href="/settings" class="transcoder-page-gpu-manage">Manage GPUs in Settings</a>
+							<a href="/settings#transcoding" class="transcoder-page-gpu-manage">Manage GPUs in Settings</a>
 						</div>
 					{/if}
 					{#if w.length > 0}
