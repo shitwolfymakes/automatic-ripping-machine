@@ -129,6 +129,8 @@ refresh_arm_gpus() {
         detect_gpus_once
         value="${DETECTED_GPUS}"
     fi
+    local previous
+    previous="$(env_file_value ARM_GPUS)"
     if grep -q '^ARM_GPUS=' "${ENV_FILE}"; then
         sed -i "s|^ARM_GPUS=.*|ARM_GPUS=${value}|" "${ENV_FILE}"
     else
@@ -138,5 +140,11 @@ refresh_arm_gpus() {
         arm_say "${ARM_HINT_RIPPER_ONLY}: skipping GPU detection, ARM_GPUS=[]"
     else
         arm_say "detected GPU(s) for ARM_GPUS: ${value}"
+    fi
+    # The backend reads ARM_GPUS only while the gpus table is empty. A list that
+    # was non-empty before holds rows in that table, so a changed list needs them
+    # deleted (Settings > GPUs) before the next backend start re-seeds it.
+    if [[ -n "${previous}" && "${previous}" != "[]" && "${previous}" != "${value}" ]]; then
+        arm_say "ARM_GPUS changed. The backend only reads it while the GPU list is empty: delete the rows in Settings > GPUs, then restart the backend to re-seed."
     fi
 }

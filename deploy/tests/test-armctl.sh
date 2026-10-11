@@ -385,6 +385,22 @@ out="$( ENV_FILE="${gpu_env}"; RIPPER_ONLY=0; DETECTED_GPUS_SET=0
 has "gpus: a hand-set list survives a refresh" 'ARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD129"' "$(cat "${gpu_env}")"
 has "gpus: the refresh says it kept the list" "ARM_GPUS_MANUAL" "$out"
 has "gpus: image selection follows the hand-set list" 'DETECTED=[{"vendor":"qsv"' "$out"
+
+# A changed, previously non-empty list needs the stale rows deleted to re-seed.
+gpu_changed='[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'
+gpu_refresh() {  # gpu_refresh <initial ARM_GPUS value>
+    gpu_env="${TMPROOT}/gpu-reseed.env"
+    printf 'ARM_GPUS=%s\n' "$1" > "${gpu_env}"
+    ( ENV_FILE="${gpu_env}"; RIPPER_ONLY=0; DETECTED_GPUS_SET=0
+      detect_gpus() { printf '%s' "${gpu_changed}"; }
+      refresh_arm_gpus ) 2>&1
+}
+out="$(gpu_refresh '[{"vendor":"qsv","device_path":"/dev/dri/renderD128","encoder_kinds":[]}]')"
+has "gpus: a changed list says how to re-seed" "delete the rows in Settings > GPUs" "$out"
+out="$(gpu_refresh "${gpu_changed}")"
+lacks "gpus: an unchanged list stays quiet" "delete the rows in Settings > GPUs" "$out"
+out="$(gpu_refresh '[]')"
+lacks "gpus: a first detection stays quiet" "delete the rows in Settings > GPUs" "$out"
 out="$( (write_image_pins "" "$pin") 2>&1 || true)"
 has "pins: an empty version is refused" "no release version" "$out"
 
