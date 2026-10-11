@@ -270,7 +270,7 @@ DEFAULT_PRUNE_DAYS = 7
 
 async def _tunables(session: AsyncSession) -> tuple[int, int]:
     """(interval_seconds, prune_days) from the Config singleton; defaults when
-    the row is missing or a column is None (in-memory rows predating 0029)."""
+    the row is missing or a column is None (in-memory rows predating 0030)."""
     cfg = (await session.execute(select(Config))).scalars().first()
     interval_v = getattr(cfg, "drive_scan_interval_seconds", None)
     prune_v = getattr(cfg, "drive_detected_prune_days", None)

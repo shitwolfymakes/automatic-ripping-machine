@@ -18,7 +18,7 @@ _DRIVE_COLS = ("by_id_name", "sysfs_port", "identity_kind", "lifecycle", "presen
 _CONFIG_COLS = ("drive_scan_interval_seconds", "drive_detected_prune_days")
 
 
-def test_0029_upgrade_adds_every_column() -> None:
+def test_0030_upgrade_adds_every_column() -> None:
     sql = _render_sql(_PARENT, _REV)
     for name in _DRIVE_COLS:
         assert f"ALTER TABLE drives ADD COLUMN {name} " in sql, name
@@ -31,7 +31,7 @@ def test_0029_upgrade_adds_every_column() -> None:
     assert "UNIQUE (by_id_name)" in sql
 
 
-def test_0029_downgrade_drops_every_column() -> None:
+def test_0030_downgrade_drops_every_column() -> None:
     sql = _render_sql(_REV, _PARENT, downgrade=True)
     for name in _DRIVE_COLS:
         assert f"ALTER TABLE drives DROP COLUMN {name}" in sql, name
@@ -39,7 +39,7 @@ def test_0029_downgrade_drops_every_column() -> None:
         assert f"ALTER TABLE config DROP COLUMN {name}" in sql, name
 
 
-def test_0029_matches_the_models() -> None:
+def test_0030_matches_the_models() -> None:
     """Model↔migration parity: NOT NULL + server_default must agree, or the
     app queries a shape the schema doesn't have — a boot failure, not a test one."""
     for name in ("lifecycle", "present"):
