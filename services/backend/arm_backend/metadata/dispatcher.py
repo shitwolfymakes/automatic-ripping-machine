@@ -87,6 +87,7 @@ class MetadataDispatcher:
         *,
         title_hint: str | None = None,
         title_hint_is_tv: bool = False,
+        prefer_tv: bool = False,
     ) -> MetadataResult | None:
         if scan.disc_type in (DiscType.DATA, DiscType.UNKNOWN):
             return None
@@ -94,7 +95,9 @@ class MetadataDispatcher:
         if scan.disc_type == DiscType.CD:
             return await self._identify_cd(scan)
 
-        hit = await self._identify_video(scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv)
+        hit = await self._identify_video(
+            scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv, prefer_tv=prefer_tv
+        )
         return await self._with_tmdb_ids(hit, cfg)
 
     async def _identify_cd(self, scan: ScanResult) -> MetadataResult | None:
@@ -110,6 +113,7 @@ class MetadataDispatcher:
         *,
         title_hint: str | None = None,
         title_hint_is_tv: bool = False,
+        prefer_tv: bool = False,
     ) -> MetadataResult | None:
         # 1337server first when we have a DVD CRC64. This is the
         # community-maintained crc64 → title DB; a hit beats fuzzy
@@ -149,14 +153,43 @@ class MetadataDispatcher:
         if label_title:
             candidates.append((label_title, label_year, False))
         seen: set[str] = set()
+        unique: list[tuple[str, int | None, bool]] = []
         for title, year, tv_first in candidates:
             key = title.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
+            if key not in seen:
+                seen.add(key)
+                unique.append((title, year, tv_first))
+        if prefer_tv:
+            # The disc itself is TV-shaped (identity.disc_shape): search TV for
+            # every candidate before any movie, so one candidate's movie
+            # fallback (e.g. a TMDb placeholder "Collection" movie) can't win
+            # while another candidate would have found the series.
+            for kind in ("tv", "movie"):
+                for title, year, _ in unique:
+                    hit = await self._search_kind(title, year, cfg, kind)
+                    if hit is not None:
+                        return hit
+            return None
+        for title, year, tv_first in unique:
             hit = await self._search_title(title, year, cfg, tv_first=tv_first)
             if hit is not None:
                 return hit
+        return None
+
+    async def _search_kind(
+        self, title: str, year: int | None, cfg: Config, kind: Literal["movie", "tv"]
+    ) -> MetadataResult | None:
+        """One kind only: TMDb (movie or TV) when keyed, then OMDb of that kind."""
+        if cfg.tmdb_api_key:
+            tmdb = TMDBClient(cfg.tmdb_api_key, self._http)
+            search = tmdb.search_tv(title) if kind == "tv" else tmdb.search_movie(title, year)
+            hit = await self._call(f"tmdb_{kind}", search)
+            if hit is not None:
+                return hit
+        omdb_key = self._omdb_api_key_override or cfg.omdb_api_key
+        if omdb_key:
+            omdb = OMDBClient(omdb_key, self._http)
+            return await self._call(f"omdb_{kind}", omdb.lookup_by_title(title, year, kind=kind))
         return None
 
     async def _search_title(

@@ -620,3 +620,21 @@ def test_paths_without_skipped_tokens_are_untouched() -> None:
     )
     resolved = compute_outputs(job, [track], sess, tp)
     assert resolved[0].output_path == "Arrival (2016)/Arrival (2016)  -  plex-1080p-h-265.mkv"
+
+
+def test_bonus_title_with_an_empty_optional_year() -> None:
+    # Both empty-token rules at once: the optional {year?} drops with its
+    # brackets, and the bonus title's empty episode tokens are tidied away.
+    template = "{show} ({year?})/Season {season}/{show} - S{season}E{episode} - {episode_title}.{ext}"
+    job = _tv_job(title="Show", year=None)  # type: ignore[arg-type]
+    tracks = [
+        _tv_track(1, role=TrackRole.EPISODE, episode_number=1, episode_name="Pilot"),
+        _tv_track(2, role=TrackRole.EXTRA),
+    ]
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
+    assert out == {
+        "trk_1": "Show/Season 01/Show - S01E01 - Pilot.mkv",
+        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+    }

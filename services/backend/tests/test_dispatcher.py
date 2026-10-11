@@ -532,6 +532,76 @@ async def test_call_stamps_canonical_provider() -> None:
     await dispatcher.aclose()
 
 
+async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypatch):
+    """An episodic disc (prefer_tv) searches TMDb TV before movie for the hint
+    AND the label candidate. Kolchak: TMDb's movie search returns a placeholder
+    "Kolchak: The Night Stalker Collection" entry; TV finds the 1974 series."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    calls: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            calls.append(f"movie:{title}")
+            return MetadataResult(title="Kolchak: The Night Stalker Collection", year=None, kind="movie", payload={})
+
+        async def search_tv(self, title):
+            calls.append(f"tv:{title}")
+            if title == "kolchak the night stalker":
+                return None  # the hint misses on TV; the label candidate must still try TV first
+            return MetadataResult(title="Kolchak: The Night Stalker", year=1974, kind="tv", payload={"id": 5084})
+
+        async def get_external_id_map(self, tmdb_id, kind):
+            return {}
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK_NIGHT_STALKER")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None), title_hint="kolchak the night stalker", prefer_tv=True
+        )
+    assert result is not None and result.kind == "tv" and result.year == 1974
+    # TV across every candidate before any movie search: the hint's movie
+    # fallback (the placeholder) must never be reached while TV can still hit.
+    assert calls[0] == "tv:kolchak the night stalker"
+    assert len(calls) == 2 and calls[1].startswith("tv:")
+
+
+async def test_identify_prefer_tv_omdb_only_searches_series_then_movie(monkeypatch):
+    """No TMDb key: an episodic disc asks OMDb for a series before a movie."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+
+    kinds: list[str] = []
+
+    class FakeOMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def lookup_by_title(self, title, year, kind):
+            kinds.append(kind)
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "OMDBClient", FakeOMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
+        result = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key="k"), prefer_tv=True)
+    assert result is None
+    assert kinds == ["tv", "movie"]
+
+
+async def test_identify_prefer_tv_with_no_provider_finds_nothing(monkeypatch):
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
+        assert await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None), prefer_tv=True) is None
+
+
 @respx.mock
 async def test_identify_enriches_the_tmdb_tv_hit_with_imdb_and_tvdb():
     respx.get("https://api.themoviedb.org/3/search/tv").mock(
