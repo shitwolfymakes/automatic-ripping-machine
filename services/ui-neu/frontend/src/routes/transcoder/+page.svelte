@@ -16,6 +16,7 @@
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { isAdmin } from '$lib/stores/auth';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
+	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 
 	const emptyJobs: TranscodeTaskView[] = [];
 
@@ -260,26 +261,7 @@
 				     with the management card one link away in Settings. -->
 						<div class="stack stack-sm transcoder-page-gpu-rows" data-testid="gpu-rows">
 							{#each gpuRows as g (g.id)}
-								<div class="transcoder-page-gpu-row">
-									<span
-										class="status-dot"
-										data-status={!g.enabled ? 'off' : g.status === 'available' ? 'ok' : 'warn'}
-										aria-hidden="true"
-									></span>
-									<span class="badge">{g.vendor.toUpperCase()}</span>
-									<span class="transcoder-page-gpu-device" title={g.device_path}>{g.device_path}</span>
-									<span class="transcoder-page-gpu-state">
-										{#if !g.enabled}
-											disabled
-										{:else if g.status === 'available'}
-											available
-										{:else if g.claimed_by_task_id}
-											busy
-										{:else}
-											{g.status}
-										{/if}
-									</span>
-								</div>
+								<GpuInventoryRow gpu={g} />
 							{/each}
 							<a href="/settings#transcoding" class="transcoder-page-gpu-manage">Manage GPUs in Settings</a>
 						</div>
@@ -711,23 +693,6 @@
 
 	.transcoder-page-gpu-rows {
 		margin-bottom: 0.75rem;
-	}
-	.transcoder-page-gpu-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.8125rem;
-	}
-	.transcoder-page-gpu-device {
-		font-family: var(--font-mono);
-		color: var(--color-text-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
-	}
-	.transcoder-page-gpu-state {
-		color: var(--color-text-muted);
 	}
 	.transcoder-page-gpu-manage {
 		font-size: 0.8125rem;
