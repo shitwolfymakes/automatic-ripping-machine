@@ -179,6 +179,7 @@ describe('IsoPicker', () => {
 		renderComponent(IsoPicker, { props: defaultProps() });
 
 		await waitFor(() => expect(screen.getByText('Set up your ISO library first')).toBeInTheDocument());
+		expect(screen.getByText(/armctl up/)).toBeInTheDocument();
 		expect(screen.getByText(/bash devtools\/setup-dev\.sh up/)).toBeInTheDocument();
 		expect(screen.getByText('Open Rip from ISO again and pick a file.')).toBeInTheDocument();
 		expect(screen.getByText('Nothing to pick until the library is set up.')).toBeInTheDocument();
