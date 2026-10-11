@@ -200,6 +200,24 @@ def test_detected_and_ignored_rows(signing_key, tmp_path) -> None:
     assert by_id["drv_i"] == {**by_id["drv_i"], "healthy": True, "notes": ["ignored"], "container": None}
 
 
+def test_ignored_port_identity_drive_is_healthy_with_notes(signing_key, tmp_path) -> None:
+    """An ignored drive with no by-id link carries a note but is not unhealthy;
+    the UI relies on `healthy`, not on the notes, to flag an issue."""
+    now = datetime.now(timezone.utc)
+    db = FakeSession()
+    db.rows["drives"] = [
+        _drive(DriveLifecycle.IGNORED, id="drv_ip", identity_kind=DriveIdentityKind.PORT, serial=None, by_id_name=None)
+    ]
+    (tmp_path / "by-id").mkdir()
+    client, auth = _app(
+        db, signing_key, scanner=_StubScanner(last_scan_at=now, disk_root=tmp_path), manager=_StubManager()
+    )
+    with client:
+        d = _get(client, auth)["drives"][0]
+    assert d["healthy"] is True
+    assert d["notes"][0] == "ignored" and len(d["notes"]) == 2
+
+
 def test_detected_never_connected_uses_not_connected(signing_key, tmp_path) -> None:
     now = datetime.now(timezone.utc)
     db = FakeSession()
