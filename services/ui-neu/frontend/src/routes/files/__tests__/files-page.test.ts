@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import FilesPage from '../+page.svelte';
 import { createFileEntry, createFolderEntry } from '$lib/components/__fixtures__/files';
 
@@ -100,6 +100,16 @@ describe('Files Page', () => {
 				const matches = screen.getAllByText('Completed');
 				expect(matches.length).toBeGreaterThanOrEqual(1);
 			});
+		});
+
+		it('exposes the root tabs as a labelled group of toggle buttons, not role-less ARIA', async () => {
+			renderComponent(FilesPage);
+			const group = await screen.findByRole('group', { name: 'File root tabs' });
+			const pressed = within(group)
+				.getAllByRole('button')
+				.filter((b) => b.getAttribute('aria-pressed') === 'true');
+			expect(pressed).toHaveLength(1);
+			expect(pressed[0]).toHaveAttribute('data-selected', 'true');
 		});
 
 		it('renders tabs in rootOrder: Raw before Completed', async () => {

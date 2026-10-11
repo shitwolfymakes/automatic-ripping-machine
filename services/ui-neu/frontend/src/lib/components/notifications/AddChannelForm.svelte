@@ -107,7 +107,7 @@
 			<fieldset class="add-channel-form-types">
 				<legend class="sr-only">Delivery type</legend>
 				{#each types as t (t.key)}
-					<label class="channel-type-option" aria-checked={type === t.key}>
+					<label class="channel-type-option" data-selected={type === t.key}>
 						<input
 							type="radio"
 							name="delivery"
@@ -240,7 +240,8 @@
 
 	/* channel-type-option: a selectable card, one per delivery type. No block
 	   covers this shape (a bordered card wrapping a hidden radio input, with
-	   an aria-checked state on the label carrying the selected look). */
+	   a data-selected state on the label carrying the selected look; the radio
+	   itself carries the checked state for assistive tech). */
 	.channel-type-option {
 		position: relative;
 		display: flex;
@@ -252,7 +253,7 @@
 		padding: 1rem;
 		cursor: pointer;
 	}
-	.channel-type-option[aria-checked='true'] {
+	.channel-type-option[data-selected='true'] {
 		border-color: var(--color-primary);
 		background: var(--color-primary-tint-2);
 	}
