@@ -311,7 +311,7 @@
 					</div>
 					{#if section.advanced.length > 0}
 						<hr class="schema-config-form-advanced-divider" />
-						<span class="schema-config-form-advanced-label">Advanced</span>
+						<span class="label-caps schema-config-form-advanced-label">Advanced</span>
 						<div class="stack">
 							{#each section.advanced as field (field.key)}
 								{@render fieldRow(field)}
@@ -389,17 +389,9 @@
 		border: none;
 		border-top: 1px solid var(--color-border);
 	}
-	/* the session-card-recipe-label look (SessionCard.svelte), restated here
-	   since this is its only other consumer - not yet a shared block. */
 	.schema-config-form-advanced-label {
 		display: block;
 		margin-bottom: 0.5rem;
-		font-size: 0.75rem;
-		line-height: calc(1 / 0.75);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: var(--color-text-faint);
 	}
 	.schema-config-form-key-check {
 		font-size: 0.875rem;
