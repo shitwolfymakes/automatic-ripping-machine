@@ -75,6 +75,18 @@ describe('buildMetadataFields', () => {
 			expect(findField(fields, 'State')?.value).toBe('Finished');
 		});
 
+		it('shows Waiting for session for an idle ripped job', () => {
+			const fields = buildMetadataFields(createJob({ status: 'ripped', transcode_progress: null }));
+			expect(findField(fields, 'State')?.value).toBe('Waiting for session');
+			const partial = buildMetadataFields(createJob({ status: 'ripped_partial', transcode_progress: null }));
+			expect(findField(partial, 'State')?.value).toBe('Waiting for session');
+		});
+
+		it('shows Waiting for identity for a ripped placeholder disc', () => {
+			const fields = buildMetadataFields(createJob({ status: 'ripped_awaiting_identify', transcode_progress: null }));
+			expect(findField(fields, 'State')?.value).toBe('Waiting for identity');
+		});
+
 		it('shows In progress for a ripped job that is transcoding', () => {
 			const fields = buildMetadataFields(
 				createJob({

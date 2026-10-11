@@ -1,7 +1,7 @@
 import type { JobView } from '$lib/types/api.gen';
 import { statusLabel } from '$lib/utils/format';
 import { discTypeLabel } from '$lib/utils/job-type';
-import { isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
+import { isAwaitingIdentity, isInProgress, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 import { driveLabel } from '$lib/utils/drive-name';
 
 export interface MetadataField {
@@ -136,8 +136,6 @@ export function buildMetadataFields(
 	driveNames?: Record<string, string> | null,
 	sessionNames?: Map<string, string>
 ): MetadataField[] {
-	const active = isLive(job);
-
 	const fields: MetadataField[] = [];
 
 	// --- Always-present base fields ---
@@ -156,11 +154,12 @@ export function buildMetadataFields(
 	}
 
 	// --- Time field based on job state ---
-	if (active) {
-		fields.push({ label: 'State', value: 'In progress' });
-	} else {
-		fields.push({ label: 'State', value: 'Finished' });
-	}
+	// A ripped job that is waiting for the operator is live (it can still change)
+	// but nothing is running, so it is neither "In progress" nor "Finished".
+	let stateLabel = 'Finished';
+	if (isInProgress(job)) stateLabel = 'In progress';
+	else if (isLive(job)) stateLabel = isAwaitingIdentity(job.status) ? 'Waiting for identity' : 'Waiting for session';
+	fields.push({ label: 'State', value: stateLabel });
 	const parked = parkedSessionLine(job, sessionNames ?? new Map());
 	if (parked) fields.push({ label: 'Session', value: parked });
 
