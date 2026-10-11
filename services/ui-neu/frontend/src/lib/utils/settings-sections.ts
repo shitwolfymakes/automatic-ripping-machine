@@ -111,6 +111,12 @@ export function stepGroup(groups: SettingsGroup[], step: string): SettingsGroup 
 	return { name: `setup:${step}`, fields: stepFields(groups, step) };
 }
 
+/** The Settings tab (a `#<tab>` hash) that renders a schema group: the config
+ *  groups keep their own name, the others fold into their lower-case screen tab. */
+export function settingsTabFor(groupName: string): string {
+	return groupName === 'Metadata' || groupName === 'Ripping' ? groupName : groupName.toLowerCase();
+}
+
 export function groupBlurb(group: string): string | undefined {
 	return GROUP_BLURBS[group];
 }

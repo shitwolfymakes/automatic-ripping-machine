@@ -18,7 +18,8 @@
 		action,
 		config = {},
 		context = {},
-		onclear
+		onclear,
+		keyTab
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
@@ -26,6 +27,8 @@
 		config?: Record<string, unknown>;
 		context?: Record<string, unknown>;
 		onclear?: () => void;
+		/** Settings tab holding a required key's field, for ranked-list deep links. */
+		keyTab?: (key: string) => string;
 	} = $props();
 
 	const HIDDEN = '<hidden>';
@@ -72,7 +75,7 @@
 	{:else if field.type === 'ranked'}
 		<div class="field-label">{field.label}</div>
 		{#if field.editable}
-			<RankedListField {field} bind:value {config} {helpId} />
+			<RankedListField {field} bind:value {config} {helpId} {keyTab} />
 		{:else}
 			<div class="mono config-schema-field-value">
 				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}

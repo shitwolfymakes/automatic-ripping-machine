@@ -3,7 +3,13 @@
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
-	import { groupBlurb, sectionFields, KEY_CHECK_NAMES, KEY_SERVICE_LABEL } from '$lib/utils/settings-sections';
+	import {
+		groupBlurb,
+		sectionFields,
+		settingsTabFor,
+		KEY_CHECK_NAMES,
+		KEY_SERVICE_LABEL
+	} from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
 	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
@@ -35,6 +41,9 @@
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
 	const blurb = $derived(groupBlurb(group.name));
+	// A required key's field lives in this form's group when it has one; the API
+	// keys otherwise sit with the metadata settings.
+	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : 'Metadata');
 
 	let values = $state<Record<string, unknown>>({});
 
@@ -236,6 +245,7 @@
 			bind:value={values[field.key]}
 			config={values}
 			context={config}
+			{keyTab}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		/>
 	{/if}

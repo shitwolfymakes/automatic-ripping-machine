@@ -7,12 +7,15 @@
 		field,
 		value = $bindable(),
 		config = {},
-		helpId
+		helpId,
+		keyTab = () => 'Metadata'
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
 		config?: Record<string, unknown>;
 		helpId?: string;
+		/** The Settings tab that holds the field for a required key, for the "Needs ... key" deep link. */
+		keyTab?: (key: string) => string;
 	} = $props();
 
 	const known = $derived(field.enum_values ?? []);
@@ -88,7 +91,7 @@
 				<div id={rankId(v)} class="ranked-list-field-rank">
 					<span>{isOn ? `Rank ${rank + 1}` : 'Not used'}</span>
 					{#if missing}
-						<a class="chip chip-warning chip-sm" href="#Metadata/{missing}">
+						<a class="chip chip-warning chip-sm" href="#{keyTab(missing)}/{missing}">
 							<Glyph name="warning" />
 							Needs {labelOf(v)} key
 						</a>
