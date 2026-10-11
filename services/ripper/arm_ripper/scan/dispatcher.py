@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from arm_common import DiscType, IsoPreparePhase
@@ -28,7 +29,8 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
         result = None
     if result is None or not result.titles:
         logger.warning("extracted image %s has no titles either; dropping the extraction", device_path)
-        iso_extract.discard_all()
+        # A multi-GB tree: removing it must not block the event loop.
+        await asyncio.to_thread(iso_extract.discard_all)
         return None
     # MakeMKV names a folder source after the folder; the image's own volume
     # label is what a directly-read ISO (or the disc) would have reported.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import os
 import shutil
+import threading
 from collections import namedtuple
 from pathlib import Path
 
@@ -135,7 +136,7 @@ def _patch_scan(
 ) -> dict[str, list[str]]:
     """MakeMKV fails on the image itself (`iso:`); the rescan (once the image
     is extracted, so the source URL is `file:`) answers `rescan`."""
-    seen: dict[str, list[str]] = {"urls": [], "discarded": []}
+    seen: dict[str, list[str]] = {"urls": [], "discarded": [], "discard_threads": []}
 
     async def _makemkv(device_path: str) -> ScanResult:
         url = makemkv_source_url(device_path)
@@ -159,6 +160,7 @@ def _patch_scan(
 
     def _discard() -> None:
         seen["discarded"].append("all")
+        seen["discard_threads"].append(threading.current_thread().name)
         real_discard()
 
     monkeypatch.setattr(scan_dispatcher, "scan_makemkv", _makemkv)
@@ -201,6 +203,8 @@ async def test_scan_discards_an_extraction_that_still_has_no_titles(
     assert result.titles == []
     assert result.disc_type == DiscType.BLURAY  # falls through to scan_data, as before
     assert seen["discarded"] == ["all"]
+    # Removing a multi-GB extraction runs in a worker thread, not on the event loop.
+    assert seen["discard_threads"] and "MainThread" not in seen["discard_threads"]
     assert makemkv_source_url(str(iso)) == f"iso:{iso}"
 
 
