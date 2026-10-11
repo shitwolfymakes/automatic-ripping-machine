@@ -7,7 +7,10 @@
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:main-<sha>
 # arm-transcode also publishes its GPU-vendor variants (Dockerfile targets
 # `intel` / `amd`) with an -intel / -amd suffix on every tag (:latest-intel,
-# :main-<sha>-amd, ...); the unsuffixed tags are the base target.
+# :main-<sha>-amd, ...); the unsuffixed tags are the base target (CPU + NVENC),
+# which is also tagged with a -nvidia suffix (:latest-nvidia, :main-<sha>-nvidia)
+# so the three vendors are named alike. The unsuffixed and -nvidia tags are
+# the same image (one build, one digest, two tags).
 #
 # `:latest` therefore tracks `main` HEAD — bleeding edge, NOT a support target
 # (see SECURITY.md: only the newest stable `v3.*` tag is supported). Tagged
@@ -54,7 +57,7 @@ jobs:
         include:
           - {service: backend, target: "", suffix: ""}
           - {service: ripper, target: "", suffix: ""}
-          - {service: transcode, target: base, suffix: ""}
+          - {service: transcode, target: base, suffix: "", alias: "-nvidia"}
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
           - {service: ui, dir: ui-neu, target: "", suffix: ""}
@@ -89,9 +92,13 @@ jobs:
         with:
           images: docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-${{ matrix.service }}
           flavor: suffix=${{ matrix.suffix }}
+          # `alias` (base transcode only) adds the -nvidia tags for the same
+          # build: :latest-nvidia and :main-<sha>-nvidia.
           tags: |
             type=raw,value=latest
             type=sha,prefix=main-,format=short
+            type=raw,value=latest,suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
+            type=sha,prefix=main-,format=short,suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
 
       # Nightly cron rebuilds without cache to pull fresh base + apt indices;
       # ordinary trunk pushes reuse the gha cache for speed.

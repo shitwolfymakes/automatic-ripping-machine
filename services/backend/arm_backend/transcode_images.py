@@ -9,7 +9,9 @@ available on the docker host (present, or pulled on demand), and falls back
 to the base image otherwise. NVENC and CPU spawns always use the base image:
 NVENC needs nothing baked in beyond the HandBrake build, because the host's
 NVIDIA Container Toolkit injects `libnvidia-encode` at run time, so there is
-no NVENC variant to derive.
+no NVENC variant to derive. The registry does publish the base image under a
+`-nvidia` tag as well (same digest), only so the three vendors are named
+alike; nothing here derives it.
 
 An explicit `ARM_TRANSCODE_IMAGE_QSV` / `_VAAPI` / `_NVENC` override always
 wins over the derived name, for a differently-named or differently-tagged

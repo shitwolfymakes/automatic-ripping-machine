@@ -318,7 +318,7 @@ Folder permissions: `certs` and `.armctl` are 0700; `logs` is 2775 (setgid, grou
 
 It also passes the project directory (the folder containing `arm`) and the `.env` path, and uses `up --no-build`.
 
-The ripper and transcode images are already variables in the template (`ARM_RIPPER_IMAGE`, `ARM_TRANSCODE_IMAGE`, `ARM_TRANSCODE_IMAGE_QSV`, `ARM_TRANSCODE_IMAGE_VAAPI`, `ARM_TRANSCODE_IMAGE_NVENC`). The installer writes them to `.env` from the prefix and tag. Variant tags follow `release.yml`: `arm-transcode:<tag>`, `arm-transcode:<tag>-intel`, `arm-transcode:<tag>-amd`.
+The ripper and transcode images are already variables in the template (`ARM_RIPPER_IMAGE`, `ARM_TRANSCODE_IMAGE`, `ARM_TRANSCODE_IMAGE_QSV`, `ARM_TRANSCODE_IMAGE_VAAPI`, `ARM_TRANSCODE_IMAGE_NVENC`). The installer writes them to `.env` from the prefix and tag. Variant tags follow `release.yml`: `arm-transcode:<tag>`, `arm-transcode:<tag>-intel`, `arm-transcode:<tag>-amd`. The registry also publishes the base image as `arm-transcode:<tag>-nvidia`, an alias of `arm-transcode:<tag>` (same digest); the installer pins the unsuffixed tag.
 
 **Why this needs no translation.** A new environment variable, mount or setting added to the template reaches production on the next release with no further work, because production runs the template itself. One residual case: a brand-new service that dev builds from source needs one `image:` line in the release overlay. `deploy/tests/test-stack-contract.sh` fails if any service in the layered production config has no release image.
 

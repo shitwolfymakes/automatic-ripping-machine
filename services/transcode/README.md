@@ -24,7 +24,7 @@ The Dockerfile builds three runtime targets from that common `base`:
 
 | target  | tag (dev)                    | adds on top of `base`                                                              | used for                     |
 |---------|------------------------------|------------------------------------------------------------------------------------|------------------------------|
-| `base`  | `arm-transcode:latest`       | nothing: CPU encoders + NVENC (`libnvidia-encode` is injected by the host toolkit) | CPU, NVENC, and the fallback |
+| `base`  | `arm-transcode:latest` (also `:latest-nvidia`) | nothing: CPU encoders + NVENC (`libnvidia-encode` is injected by the host toolkit) | CPU, NVENC, and the fallback |
 | `intel` | `arm-transcode:latest-intel` | `intel-media-va-driver-non-free`, `i965-va-driver`, `libvpl2`, `libmfx-gen1.2`     | QSV (Intel)                  |
 | `amd`   | `arm-transcode:latest-amd`   | `mesa-va-drivers`                                                                  | VAAPI (AMD)                  |
 
