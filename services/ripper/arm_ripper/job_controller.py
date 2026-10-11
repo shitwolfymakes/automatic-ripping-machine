@@ -16,7 +16,7 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
+from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, TransferStats
 from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.source import is_file_source
@@ -840,17 +840,24 @@ class JobController:
                     )
                     logger.warning("track %s failed err=%s", track.id, result.error)
 
-        async def on_track_progress(track: TrackView, fraction: float) -> None:
+        async def on_track_progress(track: TrackView, fraction: float, stats: TransferStats | None = None, /) -> None:
             with with_log_context(track_id=track.id):
                 logger.debug("track %s progress=%.2f", track.id, fraction)
                 if self._ws is not None:
+                    payload: dict[str, object] = {
+                        "track_id": track.id,
+                        "progress_pct": round(fraction * 100, 1),
+                    }
+                    if stats is not None:
+                        # Byte detail for a copy (the full-disc dump): the UI shows
+                        # "X of Y GB at R MB/s" and derives the ETA from the rate.
+                        payload["bytes_done"] = stats["bytes_done"]
+                        payload["bytes_total"] = stats["bytes_total"]
+                        payload["rate_bps"] = round(stats["rate_bps"]) if stats["rate_bps"] is not None else None
                     await self._ws.publish(
                         topic=f"ripper.progress.{job_id}",
                         event_type="ripper.progress",
-                        payload={
-                            "track_id": track.id,
-                            "progress_pct": round(fraction * 100, 1),
-                        },
+                        payload=payload,
                     )
 
         await rip_all(

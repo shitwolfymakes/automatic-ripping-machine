@@ -310,3 +310,37 @@ async def test_per_job_log_records_hub_self_lines(tmp_path: Path) -> None:
     per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
     assert per_job.is_file()
     assert "hub self log" in per_job.read_text()
+
+
+@pytest.mark.asyncio
+async def test_filesystem_work_never_runs_on_the_event_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """/logs is usually a network share: a saturated share made every stat,
+    scan and per-job append block the whole backend for seconds at a time.
+    The directory scan and the per-job append must run in worker threads."""
+    import threading
+
+    on_loop: list[str] = []
+    real_scan = LogTailer._discover_files_sync
+    real_append = LogTailer._append_per_job_log
+
+    def scan(self: LogTailer) -> None:
+        if threading.current_thread() is threading.main_thread():
+            on_loop.append("scan")
+        real_scan(self)
+
+    def append(self: LogTailer, job_id: str, line: str) -> None:
+        if threading.current_thread() is threading.main_thread():
+            on_loop.append("append")
+        real_append(self, job_id, line)
+
+    monkeypatch.setattr(LogTailer, "_discover_files_sync", scan)
+    monkeypatch.setattr(LogTailer, "_append_per_job_log", append)
+    log_path = tmp_path / "arm-backend.log"
+    log_path.touch()
+    tailer = LogTailer(_FakeHub(subscriptions={}), log_dir=str(tmp_path))  # type: ignore[arg-type]
+    await tailer.tick()
+    _append(log_path, _record())
+    await tailer.tick()
+
+    assert (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").is_file()
+    assert on_loop == []

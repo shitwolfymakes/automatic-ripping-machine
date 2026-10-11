@@ -119,6 +119,11 @@ async def ws_endpoint(
     signing_key: bytes | None = getattr(websocket.app.state, "signing_key", None)
     try:
         principal = await _do_auth(websocket, x_arm_hostname, x_arm_task_id, signing_key)
+    except _ClientGone:
+        # The browser closed the socket before authenticating (a page
+        # navigation or reload mid-handshake): nothing to answer, nothing to log.
+        logger.debug("ws client disconnected before auth")
+        return
     except _AuthFailure as e:
         await _send_error(websocket, e.code, e.reason)
         await websocket.close(code=e.code, reason=e.reason)
@@ -133,6 +138,10 @@ async def ws_endpoint(
         pass
     finally:
         await hub.disconnect(websocket)
+
+
+class _ClientGone(Exception):
+    """The peer disconnected before sending its auth message."""
 
 
 class _AuthFailure(Exception):
@@ -151,6 +160,8 @@ async def _do_auth(
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError as e:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "auth timeout") from e
+    except WebSocketDisconnect as e:
+        raise _ClientGone from e
     except Exception as e:
         raise _AuthFailure(CLOSE_BAD_MESSAGE, "auth message must be JSON") from e
 

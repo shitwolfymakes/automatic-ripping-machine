@@ -358,6 +358,7 @@
 								{job}
 								progress={ripProgress.value[job.id]?.progress_pct ?? null}
 								eta={ripProgress.value[job.id]?.eta_seconds ?? null}
+								live={ripProgress.value[job.id] ?? null}
 								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
 								isoKind={job.drive_id ? (dash.iso_source_kinds?.[job.drive_id] ?? 'iso') : 'iso'}
 							/>

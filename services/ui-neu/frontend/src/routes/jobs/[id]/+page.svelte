@@ -27,6 +27,8 @@
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { ripProgress, reconcileSubscriptions, startWS, formatEta, formatTransfer } from '$lib/stores/rips.svelte';
+	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 
@@ -224,8 +226,19 @@
 		}
 	});
 
+	// Live rip progress for this job (the same ripper.progress feed the
+	// dashboard uses): subscribed only while the job is ripping.
+	let ripping = $derived(detail?.job.status === 'ripping');
+	let liveProgress = $derived(detail ? (ripProgress.value[detail.job.id] ?? null) : null);
+	let liveTransfer = $derived(formatTransfer(liveProgress));
+	$effect(() => {
+		const id = detail?.job.id;
+		reconcileSubscriptions(ripping && id ? [id] : []);
+	});
+
 	onMount(() => {
 		let stopped = false;
+		startWS();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
 			.catch(() => {});
@@ -257,6 +270,7 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
+			reconcileSubscriptions([]);
 			if (matchingTimer) clearTimeout(matchingTimer);
 		};
 	});
@@ -459,6 +473,27 @@
 			<div class="job-detail-lifecycle-card">
 				<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
 			</div>
+
+			{#if ripping}
+				<section class="job-detail-lifecycle-card stack job-detail-rip" data-testid="job-rip-progress">
+					<div class="flex items-center justify-between gap-2">
+						<h2 class="job-detail-section-title">Ripping</h2>
+						{#if liveProgress?.eta_seconds != null}
+							<span class="job-detail-rip-meta">{formatEta(liveProgress.eta_seconds)} left</span>
+						{/if}
+					</div>
+					{#if liveProgress}
+						<div class="flex items-center gap-2">
+							<div class="flex-1"><ProgressBar value={liveProgress.progress_pct} /></div>
+						</div>
+						{#if liveTransfer}
+							<div class="job-detail-rip-meta mono">{liveTransfer}</div>
+						{/if}
+					{:else}
+						<p class="job-detail-rip-meta">Waiting for the first progress report from the ripper.</p>
+					{/if}
+				</section>
+			{/if}
 
 			<!-- Tracks -->
 			{#if tracks.length > 0}
@@ -910,6 +945,10 @@
 	.job-detail-panel-content {
 		border-top: 1px solid var(--color-border);
 		padding: 1.25rem;
+	}
+	.job-detail-rip-meta {
+		font-size: 0.8125rem;
+		color: var(--color-text-muted);
 	}
 	.job-detail-lifecycle-card {
 		border: 1px solid var(--color-border);

@@ -176,6 +176,25 @@ def test_auth_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
             assert "timeout" in err["reason"]
 
 
+def test_client_closing_before_auth_is_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A browser that navigates away mid-handshake closes the socket before its
+    auth message: the server must not try to answer it (that raised on the
+    closed socket and logged a full traceback per page navigation)."""
+    from arm_backend.ws import router as ws_router
+
+    sent: list[tuple[int, str]] = []
+
+    async def _record(_ws, code: int, reason: str) -> None:  # type: ignore[no-untyped-def]
+        sent.append((code, reason))
+
+    monkeypatch.setattr(ws_router, "_send_error", _record)
+    app = _make_app(FakeSession(), _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.close()
+    assert sent == []
+
+
 def test_auth_non_json_first_message(monkeypatch: pytest.MonkeyPatch) -> None:
     app = _make_app(FakeSession(), _Hub(), monkeypatch)
     with TestClient(app) as client:
