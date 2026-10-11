@@ -2554,7 +2554,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the pre-existing heartbeat-freshness counts so the UI's\nonline/stale badge is unchanged. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
+        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
           {

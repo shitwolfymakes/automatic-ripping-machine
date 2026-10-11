@@ -584,6 +584,28 @@ def test_rescan_runs_the_scanner_and_reports_counts(signing_key: bytes) -> None:
     assert "online" in body and "stale" in body
 
 
+def test_rescan_stale_counts_only_enrolled_drives(signing_key: bytes) -> None:
+    from datetime import datetime, timezone
+
+    from arm_backend.drive_scanner import ScanSummary
+
+    db = FakeSession()
+    _seed(db)
+    fresh = _drive(id="drv_up", lifecycle=DriveLifecycle.ENROLLED)
+    fresh.media_status_at = datetime.now(timezone.utc)
+    db.rows["drives"] = [
+        fresh,
+        _drive(id="drv_old", lifecycle=DriveLifecycle.ENROLLED),
+        _drive(id="drv_new", lifecycle=DriveLifecycle.DETECTED),
+        _drive(id="drv_off", lifecycle=DriveLifecycle.IGNORED),
+    ]
+    app, token = _make_app(signing_key, db)
+    app.state.drive_scanner = _StubScanner(ScanSummary(detected=1, ignored=1, enrolled=2, absent=0, pruned=0))
+    with TestClient(app) as client:
+        body = client.post("/api/drives/rescan", headers=_auth(token)).json()
+    assert (body["online"], body["stale"]) == (1, 1)
+
+
 def test_rescan_without_scanner_is_503(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
