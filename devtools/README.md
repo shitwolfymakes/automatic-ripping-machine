@@ -19,7 +19,7 @@ What it does (idempotent — safe to re-run):
 5. Creates `docker-compose.yml` from the template — no drive enumeration; enroll drives from the UI.
 6. Writes a host-wide udev rule (`KERNEL=="sr[0-9]*"`, `UDISKS_AUTO=0`).
 
-After it finishes: `docker compose up -d --build`.
+`bash devtools/setup-dev.sh up` runs the same setup and then builds and starts the stack.
 
 Certificates come from `deploy/lib/certs.sh`, the same code the production installer uses. `setup-dev.sh` and `deploy/armctl.sh` share `deploy/lib/`: host detection, the udev rule and the lifecycle safety steps have one definition. See [../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls) for the full cert design.
 
@@ -75,7 +75,7 @@ bash devtools/seed-test-data.sh            # clean-then-seed (idempotent; safe t
 bash devtools/seed-test-data.sh --clean    # remove the seed rows and exit
 ```
 
-Requires the dev stack running (`docker compose up -d` — needs `arm-db` for the
+Requires the dev stack running (`bash devtools/setup-dev.sh up` — needs `arm-db` for the
 inserts and `arm-backend` to mint valid ULID ids). Seed rows are tagged
 `metadata_json {"seed":true}` (the drive by its display_name); `--clean` and
 re-runs key off those, so it never touches real jobs. Dev-only — not invoked by
