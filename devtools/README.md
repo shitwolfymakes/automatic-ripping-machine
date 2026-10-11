@@ -14,14 +14,26 @@ What it does (idempotent — safe to re-run):
 
 1. Checks that `uv`, `docker`, `docker compose`, and `openssl` are available.
 2. Runs `uv sync` to create `.venv/` with all workspace members.
-3. Calls `bash install.sh --certs-only --no-env --no-compose --no-udev` if `certs/arm-ca.crt` isn't already present.
+3. Generates the CA and leaf certificates under `certs/` if `certs/arm-ca.crt` isn't already present.
 4. Creates `.env` from `.env.example` if missing, filling in a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`, and detecting `PUID`/`PGID`/`CDROM_GID` from the host. An existing `.env` is left untouched.
 5. Creates `docker-compose.yml` from the template — no drive enumeration; enroll drives from the UI.
 6. Writes a host-wide udev rule (`KERNEL=="sr[0-9]*"`, `UDISKS_AUTO=0`).
 
 After it finishes: `docker compose up -d --build`.
 
-Cert generation is delegated to [install.sh](../install.sh) — the end-user installer is the single source of truth for the CA + leaves under `certs/`. See [../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls) for the full cert design.
+Certificates come from `deploy/lib/certs.sh`, the same code the production installer uses. `setup-dev.sh` and `deploy/armctl.sh` share `deploy/lib/`: host detection, the udev rule and the lifecycle safety steps have one definition. See [../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls) for the full cert design.
+
+## install-drill.sh
+
+End-to-end drill of the production installer against images built from this checkout. Manual, not in CI.
+
+```bash
+bash devtools/install-drill.sh
+```
+
+It installs into a throwaway folder with the ripper-only profile, starts the stack, checks the backend's health, runs `armctl down`, and removes what it created. No host changes are made (`--no-host-changes`).
+
+Run it on a host that has no ARM v3 stack: the stack's container names and its data volume are fixed (`armv3-*`, `armv3_arm-data`), so a drill beside a dev stack or a real install would collide with it. The script refuses if it finds either.
 
 ## ripper-containers.sh
 
@@ -84,8 +96,8 @@ bash devtools/trust-ca.sh --untrust  # remove the CA from the trust store(s)
 Installs into the Linux trust store (`update-ca-certificates`, needs `sudo`) and —
 when running under WSL — the **Windows CurrentUser Root** store (`certutil.exe`, no
 UAC) so Chrome/Edge on Windows trust it too. Idempotent (remove-then-add), so it's
-safe to re-run after `install.sh --rotate-ca`. Dev-only — not run by `setup-dev.sh`
-or CI. `install.sh` owns CA *generation*; this only *trusts* an existing CA. See
+safe to re-run after `armctl install --rotate-ca`. Dev-only — not run by `setup-dev.sh`
+or CI. `deploy/lib/certs.sh` owns CA *generation*; this only *trusts* an existing CA. See
 [../docs/developers/architecture/05-cross-cutting.md § Transport (TLS)](../docs/developers/architecture/05-cross-cutting.md#transport-tls).
 
 ## regen-openapi-snapshot.sh

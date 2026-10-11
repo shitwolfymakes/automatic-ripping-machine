@@ -21,7 +21,7 @@ ARG HANDBRAKE_VERSION=1.11.1
 # accepts (its floor is `ffnvcodec >= 12.1.14.0`) and (b) requires only driver
 # >= 530.41.03. NVENC is backward-compatible, so the binary still runs on 570+
 # hosts; we just forgo 13.0-only features ARM doesn't use (h264/h265 only).
-# Keep ARM_NVENC_MIN_DRIVER (install.sh / devtools/setup-dev.sh) in sync with the
+# Keep ARM_NVENC_MIN_DRIVER (deploy/lib/detect.sh) in sync with the
 # driver floor of whatever version is pinned here. Re-verify both the FFmpeg floor
 # and the driver requirement when bumping HANDBRAKE_VERSION.
 ARG NVCODEC_VERSION=12.1.14.0

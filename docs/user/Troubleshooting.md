@@ -4,12 +4,11 @@ Start here when something misbehaves. ARM v3 is a set of containers, so the
 single most useful command is almost always the logs:
 
 ```bash
-cd ~/arm
-docker compose ps                     # is every service up?
-docker compose logs -f arm-backend    # or arm-ripper-sr0, arm-ui, arm-db
+armctl compose ps                     # is every service up?
+armctl compose logs -f arm-backend    # or arm-ui, arm-db
 ```
 
-Set `ARM_LOG_LEVEL=debug` in `~/arm/.env` and `docker compose up -d` before
+Set `ARM_LOG_LEVEL=debug` in `~/arm/.armctl/.env` and run `armctl up` before
 reproducing a problem — the logs get much more detailed. Logs are also written as
 JSONL under `~/arm/logs/`, with a `job_id` on each line for correlation.
 
@@ -20,14 +19,14 @@ JSONL under `~/arm/logs/`, with a `job_id` on each line for correlation.
 The ripper polls its drive every ~2 seconds (no udev events needed), so a disc
 should show up within a few seconds of the drive spinning up.
 
-1. **Is the ripper running?** `docker compose ps` should list
-   `armv3-ripper-srN` as up. If it's missing, the drive wasn't enrolled — rerun
-   `install.sh` and `docker compose up -d`.
-2. **Is the drive in the compose file?** Each drive needs **both** its block
-   device and its SCSI-generic node passed in. Rerunning `install.sh` detects
-   and wires these automatically.
+1. **Is the ripper running?** `docker ps` should list
+   `armv3-ripper-srN` as up. If it's missing, the drive wasn't enrolled — enroll
+   it in the UI; the backend then starts its ripper.
+2. **Does the ripper have the drive?** Each drive needs **both** its block
+   device and its SCSI-generic node passed in. The backend's drive scanner
+   pairs them when it starts the ripper.
 3. **Check the ripper log** while inserting a disc:
-   `docker compose logs -f arm-ripper-sr0`. A brief `DRIVE_NOT_READY` while the
+   `docker logs -f armv3-ripper-sr0`. A brief `DRIVE_NOT_READY` while the
    drive reads the table of contents is **normal** — ARM keeps polling.
 
 ## Every disc "looks unidentifiable"
@@ -42,8 +41,10 @@ does not necessarily pair with `sg0`. Find the right node:
 ls /sys/class/block/sr0/device/scsi_generic/    # e.g. -> sg5
 ```
 
-The installer detects and wires this for you — rerun `install.sh` and
-`docker compose up -d` to fix it.
+The backend's drive scanner pairs the two nodes when it starts a drive's
+ripper. If MakeMKV still reports zero titles, compare the pairing from the
+command above with the devices the ripper container was given
+(`docker inspect armv3-ripper-sr0`).
 
 ## Disc won't eject after a rip
 
@@ -72,7 +73,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ## Files have the wrong owner, or the container exits at startup
 
-ARM writes everything as `PUID:PGID` from `~/arm/.env`, and it **never**
+ARM writes everything as `PUID:PGID` from `~/arm/.armctl/.env`, and it **never**
 `chown -R`s your mounted volumes. If `raw/` or `media/` is owned by someone
 else at startup, the container logs a clear ownership error and **exits** rather
 than rewriting your files.
@@ -109,20 +110,20 @@ automatically, so opening the UI by any hostname, LAN IP or port works out of
 the box; when live updates are down the UI shows a "Live updates unavailable"
 banner while it retries. If the banner persists and you are fronting ARM with
 your own reverse proxy on a different origin, add that origin to
-`ARM_ALLOWED_ORIGINS` in `~/arm/.env`, e.g.:
+`ARM_ALLOWED_ORIGINS` in `~/arm/.armctl/.env`, e.g.:
 
 ```bash
 ARM_ALLOWED_ORIGINS=https://arm.example.com
 ```
 
-Then `docker compose up -d`.
+Then `armctl up`.
 
 ## GPU isn't detected
 
-1. Check `ARM_GPUS` in `~/arm/.env`. The installer writes it from host-side
-   detection; if it's `[]`, nothing was found. Re-run `install.sh` (or
-   `devtools/setup-dev.sh`) after fixing drivers/toolkit — detection only happens
-   at install time.
+1. Check `ARM_GPUS` in `~/arm/.armctl/.env`. The installer writes it from host-side
+   detection and `armctl up` refreshes it; if it's `[]`, nothing was found. Run
+   `armctl up` (or `devtools/setup-dev.sh` in a dev checkout) after fixing
+   drivers/toolkit.
 2. **NVIDIA:** install the NVIDIA Container Toolkit on the host (the installer
    offers to do this on apt hosts) — see
    [Hardware Transcoding § NVIDIA](Hardware-Transcoding#nvidia-the-container-toolkit).
@@ -130,7 +131,7 @@ Then `docker compose up -d`.
    Confirm the runtime is registered: `docker info | grep -i nvidia`.
 3. **Intel/AMD:** `/dev/dri/renderD*` must exist on the host. If it's missing,
    the kernel driver for your GPU isn't loaded.
-4. Check what the backend loaded: `docker compose logs arm-backend | grep -i gpu`.
+4. Check what the backend loaded: `armctl compose logs arm-backend | grep -i gpu`.
 
 A host with no detectable GPU still transcodes on CPU — this is a speed issue,
 not a broken stack.
@@ -140,7 +141,7 @@ not a broken stack.
 `App key incorrect`, `MSG:5021 application version too old`, or Blu-rays failing
 while DVDs work — all covered on the [MakeMKV](MakeMKV) page.
 
-## `docker compose pull` returns 404
+## The image pull returns 404
 
 During the alpha, registry images may not exist for every tag yet. Build the
 images locally from a checkout — see
@@ -148,7 +149,7 @@ images locally from a checkout — see
 
 ## Still stuck?
 
-Open an issue with the **service name**, the relevant `docker compose logs`
+Open an issue with the **service name**, the relevant `armctl compose logs`
 output captured at `ARM_LOG_LEVEL=debug`, and the disc/hardware involved:
 <https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues/new/choose>.
 Because ARM drives MakeMKV and HandBrake, it's also worth trying the underlying

@@ -45,8 +45,8 @@ leave alone. After enrolling you can give it a friendly name and say whether it
 reads 4K UHD discs.
 
 No drive at all? ARM can rip ISO image files. Set
-`ARM_HOST_ISO_LIBRARY_PATH=/path/to/your/isos` in `.env`, add the mount, and
-restart ARM. Later: **Settings, Drives**.
+`ARM_HOST_ISO_LIBRARY_PATH=/path/to/your/isos` in `~/arm/.armctl/.env` and run
+`armctl up`; ARM mounts that folder read-only for you. Later: **Settings, Drives**.
 
 ## 4. MakeMKV
 

@@ -70,9 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      # Zero-infra unit test that sources install.sh via its
-      # ARM_INSTALL_SOURCE_ONLY seam — no docker, no root, <1s.
-      - name: Installer walkthrough suite
+      # Zero-infra unit test for the remote-offload walkthrough and the
+      # production output helpers in deploy/install (no docker, no root, <1s).
+      - name: Offload walkthrough suite
         run: bash devtools/test-install-walkthrough.sh
       # Zero-infra unit test that sources docker-entrypoint.sh via its
       # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
@@ -85,6 +85,17 @@ jobs:
       # longer enumerate drives (drive lifecycle §5).
       - name: setup-dev / compose template suite
         run: bash devtools/test-setup-dev.sh
+      # Zero-infra suites for the production installer: the armctl launcher,
+      # the install.sh bootstrap, the release bundle, and the layered compose
+      # stack production runs (docker compose config; the runner has docker).
+      - name: armctl suite
+        run: bash deploy/tests/test-armctl.sh
+      - name: Installer bootstrap suite
+        run: bash deploy/tests/test-bootstrap.sh
+      - name: Release bundle suite
+        run: bash deploy/tests/test-bundle.sh
+      - name: Production stack contract suite
+        run: bash deploy/tests/test-stack-contract.sh
       # Zero-infra unit test that sources docker-entrypoint.sh via its
       # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Entrypoint render-access suite
