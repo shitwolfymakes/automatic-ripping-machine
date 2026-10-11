@@ -381,3 +381,53 @@ def test_tv_tokens_prefer_job_columns_over_metadata(tmp_path) -> None:
     )
     resolved = compute_outputs(job, [track], sess, tp)
     assert resolved[0].output_path.startswith("Battlestar Galactica (2004)/Season 01/S01D02T03 - ")
+
+
+def test_season_token_prefers_track_season() -> None:
+    """Track's season (from disc map or episode match) overrides job.season."""
+    job = Job(
+        id="job_season_track",
+        drive_id="drv_x",
+        disc_type=DiscType.DVD,
+        title="Show",
+        year=2020,
+        status=JobStatus.RIPPED,
+        season=1,
+    )
+    sess = _tv_session("{show} ({year})/Season {season}/{show} S{season}E{track} - {transcode_slug}.{ext}")
+    tp = _tv_preset()
+    track = Track(
+        id="trk_1",
+        job_id="job_season_track",
+        kind=TrackKind.VIDEO_TITLE,
+        index=1,
+        source_ref="1",
+        season=3,
+    )
+    resolved = compute_outputs(job, [track], sess, tp)
+    assert resolved[0].output_path.startswith("Show (2020)/Season 03/Show S03E01 - ")
+
+
+def test_season_token_falls_back_to_job_season() -> None:
+    """Track's season=None → fall back to job.season."""
+    job = Job(
+        id="job_season_fallback",
+        drive_id="drv_x",
+        disc_type=DiscType.DVD,
+        title="Show",
+        year=2020,
+        status=JobStatus.RIPPED,
+        season=2,
+    )
+    sess = _tv_session("{show} ({year})/Season {season}/{show} S{season}E{track} - {transcode_slug}.{ext}")
+    tp = _tv_preset()
+    track = Track(
+        id="trk_1",
+        job_id="job_season_fallback",
+        kind=TrackKind.VIDEO_TITLE,
+        index=1,
+        source_ref="1",
+        season=None,
+    )
+    resolved = compute_outputs(job, [track], sess, tp)
+    assert resolved[0].output_path.startswith("Show (2020)/Season 02/Show S02E01 - ")

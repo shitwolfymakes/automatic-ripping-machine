@@ -331,7 +331,7 @@ describe('Job detail page (v3)', () => {
 				createTrack({
 					id: 'trk_1',
 					status: 'done',
-					video_type: 'series',
+					role: 'episode',
 					episode_number: 3,
 					episode_name: 'The One With The Test'
 				})
@@ -349,6 +349,28 @@ describe('Job detail page (v3)', () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
 			tracks: [createTrack({ id: 'trk_1', status: 'done' })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.queryByRole('columnheader', { name: 'Episode' })).not.toBeInTheDocument();
+	});
+
+	it('shows the Episode column for a TV job whose tracks have no role and no episode_number yet', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped', media_type: 'tv' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', role: null })],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
+	});
+
+	it('omits the Episode column for a TV job whose only track is role main', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped', media_type: 'tv' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', role: 'main' })],
 			fingerprints: []
 		});
 		renderComponent(Page);

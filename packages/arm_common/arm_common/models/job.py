@@ -57,6 +57,9 @@ class Job(SQLModel, table=True):
     # corrected later via PATCH. No Postgres enum — plain nullable ints.
     disc_number: int | None = Field(sa_column=Column(Integer, nullable=True))
     disc_total: int | None = Field(sa_column=Column(Integer, nullable=True))
+    # Which identity source set season / disc_number / disc_total
+    # ({attribute: source_id}); see arm_backend.identity.resolver.
+    identity_provenance: dict[str, str] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     # Poster shown in the UI. `poster_url` is computed at identify time
     # (TMDB / OMDB / Cover Art Archive). `poster_url_manual` is a user
     # override editable from JobDetail; the UI prefers it when set.

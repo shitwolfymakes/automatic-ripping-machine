@@ -167,8 +167,14 @@ class FakeSession:
     def add(self, obj: Any) -> None:
         self.added.append(obj)
         # Auto-extend the relevant table so subsequent reads see the new row.
+        # Idempotent by identity (mirrors SQLAlchemy's identity map): re-adding
+        # an object already tracked here — e.g. a resolver re-querying then
+        # re-adding tracks a caller just added_all'd — must not duplicate the
+        # row a later select() would return.
         tbl = obj.__class__.__tablename__
-        self.rows.setdefault(tbl, []).append(obj)
+        bucket = self.rows.setdefault(tbl, [])
+        if not any(r is obj for r in bucket):
+            bucket.append(obj)
 
     def add_all(self, objs: list[Any]) -> None:
         for o in objs:

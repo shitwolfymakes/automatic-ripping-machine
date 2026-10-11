@@ -134,7 +134,7 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
 async def _thediscdb_refresh_loop(app: FastAPI) -> None:
     """Daily check; refresh the snapshot when absent or older than
     cfg.thediscdb_refresh_days. Failures keep the previous index."""
-    from arm_backend.thediscdb.snapshot import refresh as thediscdb_refresh
+    from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
 
     while True:
         try:
@@ -197,7 +197,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
 
-    from arm_backend.thediscdb.snapshot import SnapshotStore
+    from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore
 
     app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
     thediscdb_refresh_task = asyncio.create_task(_thediscdb_refresh_loop(app))

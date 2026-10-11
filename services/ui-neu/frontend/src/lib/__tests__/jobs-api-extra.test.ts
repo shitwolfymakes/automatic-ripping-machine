@@ -43,8 +43,8 @@ describe('updateTrackTitle (bulk-PATCH wrap)', () => {
 	});
 });
 
-describe('clearTrackTitle (bulk-PATCH wrap, null=clear)', () => {
-	it('PATCHes /api/jobs/{id} clearing override fields to null', async () => {
+describe('clearTrackTitle (bulk-PATCH wrap, title reverts to automatic sources)', () => {
+	it('PATCHes /api/jobs/{id} reverting title and clearing the other override fields', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
 		await clearTrackTitle('job_1', 'trk_3');
 		expect(mockFetch).toHaveBeenCalledWith(
@@ -52,7 +52,7 @@ describe('clearTrackTitle (bulk-PATCH wrap, null=clear)', () => {
 			expect.objectContaining({
 				method: 'PATCH',
 				body: JSON.stringify({
-					tracks: [{ track_id: 'trk_3', title: null, year: null, imdb_id: null, poster_url: null }]
+					tracks: [{ track_id: 'trk_3', year: null, imdb_id: null, poster_url: null, revert_fields: ['title'] }]
 				})
 			})
 		);
