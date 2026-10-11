@@ -44,9 +44,9 @@ The architectural goals that defined v3 are in place:
 - **TV-series-aware ripping**: episode matching and the **Match Episodes** tab
   are built (see the Web UI page); naming conventions and further session
   ergonomics, building on the sessions/presets foundation, are still to come.
-- **Maintenance tools**: find and remove orphaned media folders and log files,
-  clean up finished transcode jobs, and clear the raw rip area from the UI. The
-  buttons are hidden until these endpoints exist in v3.
+- **Maintenance tools**: find and remove orphaned media folders and clean up
+  finished transcode jobs from the Files page. The buttons are hidden until
+  these endpoints exist in v3.
 - **First-run setup wizard**: a guided first boot (drive scan, readiness
   checks, settings review). Built in the UI, switched off until the v3 setup
   status endpoints land.
