@@ -31,6 +31,10 @@ The architectural goals that defined v3 are in place:
   and runs it through the normal scan, identify, rip and transcode pipeline.
   See
   [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
+- **Ripping from an extracted disc folder** (a `BDMV` or `VIDEO_TS` folder
+  already on disk, rather than an `.iso` file). The gear menu's **Rip from
+  folder** picker lists the disc folders in the same library and runs the
+  chosen one through the same virtual-ripper pipeline.
 
 ## In progress / ahead
 
@@ -46,9 +50,6 @@ The architectural goals that defined v3 are in place:
 - **First-run setup wizard**: a guided first boot (drive scan, readiness
   checks, settings review). Built in the UI, switched off until the v3 setup
   status endpoints land.
-- **Extracted disc folders as a rip source** (a `BDMV` or `VIDEO_TS` folder
-  already on disk, rather than an `.iso` file). Next up for the ISO-source
-  picker; see the non-goals in the design doc linked above.
 
 ## Where to follow along
 
