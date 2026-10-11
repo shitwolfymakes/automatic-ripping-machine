@@ -206,7 +206,12 @@ describe('TitleSearch', () => {
 			});
 			renderComponent(TitleSearch, {
 				props: {
-					job: createJob({ id: 'job_7', status: 'identified', title: 'matrix', poster_url_manual: 'https://same/p.jpg' })
+					job: createJob({
+						id: 'job_7',
+						status: 'identified',
+						title: 'matrix',
+						poster_url_manual: 'https://same/p.jpg'
+					})
 				}
 			});
 			await fireEvent.click(screen.getByText('Search'));
@@ -252,7 +257,9 @@ describe('TitleSearch', () => {
 
 		it('shows the no-results message without a "Set manually" button', async () => {
 			mockSearchMetadata.mockResolvedValue({ candidates: [] } as any);
-			renderComponent(TitleSearch, { props: { job: createJob({ id: 'job_1', status: 'awaiting_user_id', title: '', year: null }) } });
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ id: 'job_1', status: 'awaiting_user_id', title: '', year: null }) }
+			});
 			await fireEvent.input(screen.getByPlaceholderText('Title...'), { target: { value: 'Nope' } });
 			await fireEvent.click(screen.getByRole('button', { name: /search/i }));
 			await waitFor(() => expect(screen.getByText(/No results found/i)).toBeInTheDocument());

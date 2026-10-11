@@ -46,9 +46,7 @@ describe('readJobMetadata', () => {
 	});
 
 	it('derives titleCount from scan_result.titles length', () => {
-		expect(
-			readJobMetadata({ scan_result: { titles: [{ index: 0 }, { index: 1 }] } })
-		).toEqual({ titleCount: 2 });
+		expect(readJobMetadata({ scan_result: { titles: [{ index: 0 }, { index: 1 }] } })).toEqual({ titleCount: 2 });
 	});
 
 	it('omits titleCount when scan_result has no titles array', () => {
@@ -134,24 +132,30 @@ describe('buildMetadataFields — promoted fields', () => {
 	it('adds Titles count only when rip_progress is absent', () => {
 		const scanned = buildMetadataFields(
 			createJob({
-			rip_progress: null,
-			metadata_json: {
-				scan_result: {
-					disc_type: 'bluray',
-					titles: [
-						{ index: 0, duration_seconds: 0 },
-						{ index: 1, duration_seconds: 0 },
-						{ index: 2, duration_seconds: 0 }
-					]
+				rip_progress: null,
+				metadata_json: {
+					scan_result: {
+						disc_type: 'bluray',
+						titles: [
+							{ index: 0, duration_seconds: 0 },
+							{ index: 1, duration_seconds: 0 },
+							{ index: 2, duration_seconds: 0 }
+						]
+					}
 				}
-			}
-		})
+			})
 		);
 		expect(fieldByLabel(scanned, 'Titles')?.value).toBe('3');
 
 		const ripping = buildMetadataFields(
 			createJob({
-				rip_progress: { tracks_done: 1, tracks_total: 3, tracks_failed: 0, current_track_id: null, current_track_index: null },
+				rip_progress: {
+					tracks_done: 1,
+					tracks_total: 3,
+					tracks_failed: 0,
+					current_track_id: null,
+					current_track_index: null
+				},
 				metadata_json: {
 					scan_result: {
 						disc_type: 'bluray',
@@ -178,7 +182,6 @@ describe('buildMetadataFields — promoted fields', () => {
 		expect(fields.length % 4).toBe(0);
 	});
 });
-
 
 describe('readJobMetadata typed sections (step 2 §3.4)', () => {
 	it('reads external ids / video_type / multi_title / source_type / music from the typed sections', () => {
@@ -216,10 +219,9 @@ describe('readJobMetadata — video_type falls back to job.media_type', () => {
 	});
 
 	it('prefers provider_raw.arm_server.video_type over job.media_type when both are present', () => {
-		const out = readJobMetadata(
-			{ provider_raw: { arm_server: { video_type: 'movie' } } },
-			{ media_type: 'tv' } as never
-		);
+		const out = readJobMetadata({ provider_raw: { arm_server: { video_type: 'movie' } } }, {
+			media_type: 'tv'
+		} as never);
 		expect(out.video_type).toBe('movie');
 	});
 

@@ -15,16 +15,11 @@ export function fetchTranscodePreset(id: string): Promise<TranscodePresetView> {
 	return get<TranscodePresetView>(`/api/transcode-presets/${id}`);
 }
 
-export function createTranscodePreset(
-	body: TranscodePresetCreateRequest
-): Promise<TranscodePresetView> {
+export function createTranscodePreset(body: TranscodePresetCreateRequest): Promise<TranscodePresetView> {
 	return post<TranscodePresetView>('/api/transcode-presets', body);
 }
 
-export function updateTranscodePreset(
-	id: string,
-	body: TranscodePresetUpdateRequest
-): Promise<TranscodePresetView> {
+export function updateTranscodePreset(id: string, body: TranscodePresetUpdateRequest): Promise<TranscodePresetView> {
 	return patch<TranscodePresetView>(`/api/transcode-presets/${id}`, body);
 }
 

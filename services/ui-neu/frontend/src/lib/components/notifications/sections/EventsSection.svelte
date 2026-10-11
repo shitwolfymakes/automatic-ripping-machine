@@ -15,8 +15,12 @@
 		inputs?: ScriptInput[];
 	} = $props();
 
-	function selectAll() { selected = eventTypes.map((e) => e.key); }
-	function clear() { selected = []; }
+	function selectAll() {
+		selected = eventTypes.map((e) => e.key);
+	}
+	function clear() {
+		selected = [];
+	}
 </script>
 
 <div class="panel-section events-section">
@@ -32,12 +36,32 @@
 </div>
 
 <style>
-	.events-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
-	.events-section-title { margin-bottom: 0; }
-	.events-section-actions { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
+	.events-section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.75rem;
+	}
+	.events-section-title {
+		margin-bottom: 0;
+	}
+	.events-section-actions {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
 	/* .btn-link inherits .btn's 0.875rem/500/1.25rem; these actions were the
 	   surrounding text-xs muted colour, not link-styled buttons. */
-	.events-section-actions .btn-link { font-size: 0.75rem; font-weight: 400; line-height: 1rem; color: inherit; }
-	.events-section-actions .btn-link:hover { color: var(--color-primary); }
-	.events-section-sep { margin: 0 0.25rem; }
+	.events-section-actions .btn-link {
+		font-size: 0.75rem;
+		font-weight: 400;
+		line-height: 1rem;
+		color: inherit;
+	}
+	.events-section-actions .btn-link:hover {
+		color: var(--color-primary);
+	}
+	.events-section-sep {
+		margin: 0 0.25rem;
+	}
 </style>

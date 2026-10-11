@@ -27,18 +27,62 @@
 		color: var(--color-primary-text);
 		white-space: nowrap;
 	}
-	.badge-sm { padding: 0 0.375rem; font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; border-radius: var(--radius-sm); }
-	.badge-danger { background: var(--color-danger); color: var(--color-on-primary); }
-	.badge-warning { background: var(--color-warning); color: var(--color-on-primary); }
-	.badge-success { background: var(--color-success); color: var(--color-on-primary); }
-	.badge-info { background: var(--color-info); color: var(--color-on-primary); }
-	.badge-status { color: var(--color-on-primary); background: var(--color-text-faint); }
-	.badge-status[data-status="scanning"] { background: var(--color-status-scanning); }
-	.badge-status[data-status="ripping"], .badge-status[data-status="active"] { background: var(--color-status-ripping); }
-	.badge-status[data-status="transcoding"], .badge-status[data-status="processing"] { background: var(--color-status-transcoding); }
-	.badge-status[data-status="finishing"] { background: var(--color-status-finishing); }
-	.badge-status[data-status="waiting"], .badge-status[data-status="warning"] { background: var(--color-status-waiting); }
-	.badge-status[data-status="success"], .badge-status[data-status="completed"] { background: var(--color-status-success); }
-	.badge-status[data-status="error"], .badge-status[data-status="failed"] { background: var(--color-status-error); }
-	.badge-imdb { background: var(--color-warning); color: var(--color-on-frame-accent); font-weight: 700; }
+	.badge-sm {
+		padding: 0 0.375rem;
+		font-size: 0.625rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		border-radius: var(--radius-sm);
+	}
+	.badge-danger {
+		background: var(--color-danger);
+		color: var(--color-on-primary);
+	}
+	.badge-warning {
+		background: var(--color-warning);
+		color: var(--color-on-primary);
+	}
+	.badge-success {
+		background: var(--color-success);
+		color: var(--color-on-primary);
+	}
+	.badge-info {
+		background: var(--color-info);
+		color: var(--color-on-primary);
+	}
+	.badge-status {
+		color: var(--color-on-primary);
+		background: var(--color-text-faint);
+	}
+	.badge-status[data-status='scanning'] {
+		background: var(--color-status-scanning);
+	}
+	.badge-status[data-status='ripping'],
+	.badge-status[data-status='active'] {
+		background: var(--color-status-ripping);
+	}
+	.badge-status[data-status='transcoding'],
+	.badge-status[data-status='processing'] {
+		background: var(--color-status-transcoding);
+	}
+	.badge-status[data-status='finishing'] {
+		background: var(--color-status-finishing);
+	}
+	.badge-status[data-status='waiting'],
+	.badge-status[data-status='warning'] {
+		background: var(--color-status-waiting);
+	}
+	.badge-status[data-status='success'],
+	.badge-status[data-status='completed'] {
+		background: var(--color-status-success);
+	}
+	.badge-status[data-status='error'],
+	.badge-status[data-status='failed'] {
+		background: var(--color-status-error);
+	}
+	.badge-imdb {
+		background: var(--color-warning);
+		color: var(--color-on-frame-accent);
+		font-weight: 700;
+	}
 }

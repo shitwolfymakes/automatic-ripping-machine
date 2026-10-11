@@ -26,7 +26,10 @@ const mockDetail = vi.mocked(fetchMusicDetail);
 const mockResolve = vi.mocked(resolveJob);
 const mockPatchJob = vi.mocked(patchJob);
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => {
+	cleanup();
+	vi.clearAllMocks();
+});
 
 it('seeds the album/artist inputs from metadata_json.music (typed section, not a bare key)', async () => {
 	mockSearch.mockResolvedValue({ candidates: [] });
@@ -63,13 +66,18 @@ it('searches with track_count when "match track count" is on and discTracks pres
 	);
 });
 
-it('multi-disc apply writes only the held disc\'s tracks', async () => {
+it("multi-disc apply writes only the held disc's tracks", async () => {
 	mockSearch.mockResolvedValue({
 		candidates: [{ title: 'The Wall', year: 1979, kind: 'music', poster_url: null, provider_id: 'rel-2' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-2', title: 'The Wall', artist: 'Pink Floyd', year: 1979,
-		poster_url: null, disc_count: 2, track_count: 4,
+		release_id: 'rel-2',
+		title: 'The Wall',
+		artist: 'Pink Floyd',
+		year: 1979,
+		poster_url: null,
+		disc_count: 2,
+		track_count: 4,
 		tracks: [
 			{ position: 1, title: 'In the Flesh?', length_ms: 213000, disc_number: 1 },
 			{ position: 2, title: 'The Thin Ice', length_ms: 151000, disc_number: 1 },
@@ -81,10 +89,7 @@ it('multi-disc apply writes only the held disc\'s tracks', async () => {
 	renderComponent(MusicSearch, {
 		props: {
 			job: createJob({ id: 'job_wall', disc_type: 'cd', title: 'The Wall', disc_number: 2 }),
-			discTracks: [
-				createTrack({ id: 'trk_d2_1', index: 0 }),
-				createTrack({ id: 'trk_d2_2', index: 1 })
-			],
+			discTracks: [createTrack({ id: 'trk_d2_1', index: 0 }), createTrack({ id: 'trk_d2_2', index: 1 })],
 			onapply
 		}
 	});
@@ -94,7 +99,10 @@ it('multi-disc apply writes only the held disc\'s tracks', async () => {
 	await waitFor(() => screen.getByText('Hey You'));
 	await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 	await waitFor(() => {
-		const [, payload] = mockResolve.mock.calls[0] as unknown as [string, { music: { tracks: Array<{ title: string; disc_number: number | null }> } }];
+		const [, payload] = mockResolve.mock.calls[0] as unknown as [
+			string,
+			{ music: { tracks: Array<{ title: string; disc_number: number | null }> } }
+		];
 		const titles = payload.music.tracks.map((t) => t.title);
 		expect(titles).toEqual(['Hey You', 'Is There Anybody Out There?']);
 		expect(titles).not.toContain('In the Flesh?');
@@ -166,8 +174,13 @@ it('flips a result card to show its tracklist', async () => {
 		]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-flip', title: 'Greatest Hits', artist: 'Metronomy', year: 2025,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-flip',
+		title: 'Greatest Hits',
+		artist: 'Metronomy',
+		year: 2025,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'The Look', length_ms: 213000, disc_number: 1 },
 			{ position: 2, title: 'The Bay', length_ms: 244000, disc_number: 1 }
@@ -195,8 +208,13 @@ it('shows Disc Length + Match Length columns and a Total row when disc tracks ar
 		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-cmp' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-cmp', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-cmp',
+		title: 'Abbey Road',
+		artist: 'The Beatles',
+		year: 1969,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 },
 			{ position: 2, title: 'Something', length_ms: 182000, disc_number: 1 }
@@ -225,8 +243,13 @@ it('warns before applying a total-duration mismatch and applies on confirm', asy
 		candidates: [{ title: 'Wrong Release', year: 2000, kind: 'music', poster_url: null, provider_id: 'rel-mis' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-mis', title: 'Wrong Release', artist: 'Someone', year: 2000,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-mis',
+		title: 'Wrong Release',
+		artist: 'Someone',
+		year: 2000,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'Track A', length_ms: 400000, disc_number: 1 },
 			{ position: 2, title: 'Track B', length_ms: 400000, disc_number: 1 }
@@ -257,8 +280,13 @@ it('applies directly when totals match (no warning)', async () => {
 		candidates: [{ title: 'Right Release', year: 2000, kind: 'music', poster_url: null, provider_id: 'rel-ok' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-ok', title: 'Right Release', artist: 'Someone', year: 2000,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-ok',
+		title: 'Right Release',
+		artist: 'Someone',
+		year: 2000,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'Track A', length_ms: 100000, disc_number: 1 },
 			{ position: 2, title: 'Track B', length_ms: 100000, disc_number: 1 }
@@ -287,8 +315,13 @@ it('previews the disc→release title mapping before applying', async () => {
 		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-map' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-map', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-map',
+		title: 'Abbey Road',
+		artist: 'The Beatles',
+		year: 1969,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 },
 			{ position: 2, title: 'Something', length_ms: 182000, disc_number: 1 }
@@ -319,8 +352,13 @@ it('writes release titles onto the disc track rows on confirm', async () => {
 		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-map2' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-map2', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-		poster_url: null, disc_count: 1, track_count: 2,
+		release_id: 'rel-map2',
+		title: 'Abbey Road',
+		artist: 'The Beatles',
+		year: 1969,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 2,
 		tracks: [
 			{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 },
 			{ position: 2, title: 'Something', length_ms: 182000, disc_number: 1 }
@@ -345,12 +383,15 @@ it('writes release titles onto the disc track rows on confirm', async () => {
 	await fireEvent.click(await screen.findByRole('button', { name: 'Apply titles' }));
 	await waitFor(() => {
 		expect(mockResolve).toHaveBeenCalledTimes(1);
-		expect(mockPatchJob).toHaveBeenCalledWith('job_map2', expect.objectContaining({
-			tracks: expect.arrayContaining([
-				expect.objectContaining({ track_id: 'trk_0', title: 'Come Together' }),
-				expect.objectContaining({ track_id: 'trk_1', title: 'Something' })
-			])
-		}));
+		expect(mockPatchJob).toHaveBeenCalledWith(
+			'job_map2',
+			expect.objectContaining({
+				tracks: expect.arrayContaining([
+					expect.objectContaining({ track_id: 'trk_0', title: 'Come Together' }),
+					expect.objectContaining({ track_id: 'trk_1', title: 'Something' })
+				])
+			})
+		);
 		expect(onapply).toHaveBeenCalled();
 	});
 });
@@ -360,8 +401,13 @@ it('still applies identity when there are no disc tracks (no mapping step)', asy
 		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-nomap' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-nomap', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-		poster_url: null, disc_count: 1, track_count: 1,
+		release_id: 'rel-nomap',
+		title: 'Abbey Road',
+		artist: 'The Beatles',
+		year: 1969,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 1,
 		tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
 	});
 	const onapply = vi.fn();
@@ -384,8 +430,13 @@ it('loads detail and applies the chosen release via resolveJob', async () => {
 		candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
 	});
 	mockDetail.mockResolvedValue({
-		release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-		poster_url: null, disc_count: 1, track_count: 1,
+		release_id: 'rel-1',
+		title: 'Abbey Road',
+		artist: 'The Beatles',
+		year: 1969,
+		poster_url: null,
+		disc_count: 1,
+		track_count: 1,
 		tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
 	});
 	const onapply = vi.fn();
@@ -398,10 +449,13 @@ it('loads detail and applies the chosen release via resolveJob', async () => {
 	await waitFor(() => screen.getByText('Come Together'));
 	await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 	await waitFor(() => {
-		expect(mockResolve).toHaveBeenCalledWith('job_9', expect.objectContaining({
-			title: 'Abbey Road',
-			music: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
-		}));
+		expect(mockResolve).toHaveBeenCalledWith(
+			'job_9',
+			expect.objectContaining({
+				title: 'Abbey Road',
+				music: expect.objectContaining({ artist: 'The Beatles', album: 'Abbey Road' })
+			})
+		);
 		expect(onapply).toHaveBeenCalled();
 	});
 });
@@ -425,8 +479,13 @@ describe('guest write-control gating', () => {
 			candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
 		});
 		mockDetail.mockResolvedValue({
-			release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-			poster_url: null, disc_count: 1, track_count: 1,
+			release_id: 'rel-1',
+			title: 'Abbey Road',
+			artist: 'The Beatles',
+			year: 1969,
+			poster_url: null,
+			disc_count: 1,
+			track_count: 1,
 			tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
 		});
 		renderComponent(MusicSearch, {
@@ -444,8 +503,13 @@ describe('guest write-control gating', () => {
 			candidates: [{ title: 'Abbey Road', year: 1969, kind: 'music', poster_url: null, provider_id: 'rel-1' }]
 		});
 		mockDetail.mockResolvedValue({
-			release_id: 'rel-1', title: 'Abbey Road', artist: 'The Beatles', year: 1969,
-			poster_url: null, disc_count: 1, track_count: 1,
+			release_id: 'rel-1',
+			title: 'Abbey Road',
+			artist: 'The Beatles',
+			year: 1969,
+			poster_url: null,
+			disc_count: 1,
+			track_count: 1,
 			tracks: [{ position: 1, title: 'Come Together', length_ms: 259000, disc_number: 1 }]
 		});
 		renderComponent(MusicSearch, {

@@ -90,15 +90,9 @@
 	let assignments = $state<Record<string, number | null>>({});
 
 	// Derived — v3 tracks carry `index` / `duration_seconds`.
-	let mainTracks = $derived(
-		tracks
-			.filter((t) => (t.duration_seconds ?? 0) >= 120)
-			.sort((a, b) => a.index - b.index)
-	);
+	let mainTracks = $derived(tracks.filter((t) => (t.duration_seconds ?? 0) >= 120).sort((a, b) => a.index - b.index));
 	let shortTracks = $derived(tracks.filter((t) => (t.duration_seconds ?? 0) < 120));
-	let matchCount = $derived(
-		Object.values(assignments).filter((v) => v !== null && v !== undefined).length
-	);
+	let matchCount = $derived(Object.values(assignments).filter((v) => v !== null && v !== undefined).length);
 	let unmatched = $derived(mainTracks.length - matchCount);
 
 	function formatDuration(seconds: number | null | undefined): string {
@@ -135,6 +129,7 @@
 			}));
 		} catch {
 			if (fallbackMatches?.length) {
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup set, never stored
 				const seen = new Set<number>();
 				const fallback: TvdbEpisode[] = [];
 				for (const m of fallbackMatches) {
@@ -298,45 +293,20 @@
 	<div class="flex flex-wrap items-center gap-3 panel-section episode-match-controls">
 		<div class="flex items-center gap-1.5">
 			<span class="eyebrow episode-match-label">Season</span>
-			<input
-				type="number"
-				bind:value={seasonInput}
-				min="1"
-				class="w-12 episode-match-mini-input"
-			/>
+			<input type="number" bind:value={seasonInput} min="1" class="w-12 episode-match-mini-input" />
 		</div>
 		<div class="flex items-center gap-1.5">
 			<span class="eyebrow episode-match-label">Disc</span>
-			<input
-				type="number"
-				bind:value={discInput}
-				min="1"
-				class="w-12 episode-match-mini-input"
-			/>
+			<input type="number" bind:value={discInput} min="1" class="w-12 episode-match-mini-input" />
 			<span class="episode-match-of">of</span>
-			<input
-				type="number"
-				bind:value={discTotalInput}
-				min="1"
-				class="w-12 episode-match-mini-input"
-			/>
+			<input type="number" bind:value={discTotalInput} min="1" class="w-12 episode-match-mini-input" />
 		</div>
 		<div class="flex items-center gap-1.5">
 			<span class="eyebrow episode-match-label">Tolerance</span>
-			<input
-				type="number"
-				bind:value={toleranceInput}
-				min="60"
-				step="60"
-				class="w-16 episode-match-mini-input"
-			/>
+			<input type="number" bind:value={toleranceInput} min="60" step="60" class="w-16 episode-match-mini-input" />
 			<span class="episode-match-sec">sec</span>
 		</div>
-		<button
-			onclick={runMatch}
-			disabled={loading}
-			class="btn btn-primary episode-match-run-btn"
-		>
+		<button onclick={runMatch} disabled={loading} class="btn btn-primary episode-match-run-btn">
 			{loading ? 'Matching...' : 'Match'}
 		</button>
 		{#if matches.length > 0}
@@ -384,7 +354,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each mainTracks as track}
+					{#each mainTracks as track (track.id)}
 						{@const tn = String(track.index)}
 						{@const ep = getEpisodeForTrack(tn)}
 						<tr class="table-row">
@@ -404,7 +374,7 @@
 									}}
 								>
 									<option value="">- None -</option>
-									{#each [...episodes].sort((a, b) => a.number - b.number) as episode}
+									{#each [...episodes].sort((a, b) => a.number - b.number) as episode (episode.number)}
 										<option value={episode.number}>
 											E{episode.number} - {episode.name} ({episode.runtime}m)
 										</option>
@@ -415,7 +385,10 @@
 								{namingPreviews[tn]?.rendered_title || ep?.name || '-'}
 							</td>
 							<td class="table-cell episode-match-right episode-match-runtime">{ep ? `${ep.runtime}m` : '-'}</td>
-							<td class="table-cell episode-match-right episode-match-delta" data-tone={deltaTone(track.duration_seconds, ep?.runtime ?? null)}>
+							<td
+								class="table-cell episode-match-right episode-match-delta"
+								data-tone={deltaTone(track.duration_seconds, ep?.runtime ?? null)}
+							>
 								{deltaText(track.duration_seconds, ep?.runtime ?? null)}
 							</td>
 						</tr>
@@ -442,24 +415,23 @@
 				>
 					{applying ? 'Applying...' : 'Apply Matches'}
 				</button>
-				<button
-					in:reveal
-					onclick={clearAll}
-					class="btn episode-match-clear-btn episode-match-wide-btn"
-				>
+				<button in:reveal onclick={clearAll} class="btn episode-match-clear-btn episode-match-wide-btn">
 					Clear All
 				</button>
 			{/if}
-			<span class="ml-auto episode-match-hint">
-				Change season/disc and re-match to try different assignments.
-			</span>
+			<span class="ml-auto episode-match-hint"> Change season/disc and re-match to try different assignments. </span>
 		</div>
 	{:else if loading}
 		<div class="flex items-center justify-center py-8">
 			<div class="flex items-center gap-2 episode-match-loading">
 				<svg class="h-5 w-5 episode-match-spinner" fill="none" viewBox="0 0 24 24">
-					<circle class="episode-match-spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-					<path class="episode-match-spinner-arc" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					<circle class="episode-match-spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
+					></circle>
+					<path
+						class="episode-match-spinner-arc"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+					></path>
 				</svg>
 				Matching episodes...
 			</div>
@@ -478,48 +450,167 @@
 </div>
 
 <style>
-	.episode-match-controls { background: var(--color-primary-tint-1); }
-	.episode-match-label { color: var(--color-text-muted); }
-	.episode-match-mini-input { border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); padding: 0.125rem 0.375rem; text-align: center; font-size: 0.75rem; line-height: 1rem; color: var(--color-text); }
-	.episode-match-of { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.episode-match-sec { font-size: 10px; color: var(--color-text-faint); }
-	.episode-match-summary { font-size: 0.75rem; line-height: 1rem; }
-	.episode-match-summary-tone[data-tone="success"] { color: var(--color-success); }
-	.episode-match-summary-tone[data-tone="warning"] { color: var(--color-on-warning-soft); }
-	.episode-match-dot { color: var(--color-text-muted); }
-	.episode-match-table { table-layout: fixed; }
-	.episode-match-table col:nth-child(1) { width: 25%; }
-	.episode-match-table col:nth-child(2) { width: 8%; }
-	.episode-match-table col:nth-child(3) { width: 28%; }
-	.episode-match-table col:nth-child(4) { width: 23%; }
-	.episode-match-table col:nth-child(5) { width: 8%; }
-	.episode-match-table col:nth-child(6) { width: 8%; }
-	.episode-match-right { text-align: right; }
-	.episode-match-center { text-align: center; }
-	.episode-match-track-num { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.episode-match-source-ref { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.episode-match-duration { color: var(--color-text-secondary); }
-	.episode-match-select { border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); padding: 0.125rem 0.375rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
-	.episode-match-select[data-assigned="true"] { color: var(--color-success); }
-	.episode-match-title { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-secondary); }
-	.episode-match-runtime { color: var(--color-text-faint); }
-	.episode-match-delta { font-size: inherit; }
-	.episode-match-delta[data-tone="success"] { color: var(--color-success); }
-	.episode-match-delta[data-tone="warning"] { color: var(--color-on-warning-soft); }
-	.episode-match-delta[data-tone="danger"] { color: var(--color-danger); }
-	.episode-match-skip-note { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-muted); }
-	.episode-match-success-btn { border: 0; background: var(--color-success); color: var(--color-on-primary); }
-	.episode-match-clear-btn { box-shadow: 0 0 0 1px var(--color-border-strong); color: var(--color-text-muted); }
+	.episode-match-controls {
+		background: var(--color-primary-tint-1);
+	}
+	.episode-match-label {
+		color: var(--color-text-muted);
+	}
+	.episode-match-mini-input {
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		padding: 0.125rem 0.375rem;
+		text-align: center;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text);
+	}
+	.episode-match-of {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.episode-match-sec {
+		font-size: 10px;
+		color: var(--color-text-faint);
+	}
+	.episode-match-summary {
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
+	.episode-match-summary-tone[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.episode-match-summary-tone[data-tone='warning'] {
+		color: var(--color-on-warning-soft);
+	}
+	.episode-match-dot {
+		color: var(--color-text-muted);
+	}
+	.episode-match-table {
+		table-layout: fixed;
+	}
+	.episode-match-table col:nth-child(1) {
+		width: 25%;
+	}
+	.episode-match-table col:nth-child(2) {
+		width: 8%;
+	}
+	.episode-match-table col:nth-child(3) {
+		width: 28%;
+	}
+	.episode-match-table col:nth-child(4) {
+		width: 23%;
+	}
+	.episode-match-table col:nth-child(5) {
+		width: 8%;
+	}
+	.episode-match-table col:nth-child(6) {
+		width: 8%;
+	}
+	.episode-match-right {
+		text-align: right;
+	}
+	.episode-match-center {
+		text-align: center;
+	}
+	.episode-match-track-num {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.episode-match-source-ref {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.episode-match-duration {
+		color: var(--color-text-secondary);
+	}
+	.episode-match-select {
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		padding: 0.125rem 0.375rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
+	.episode-match-select[data-assigned='true'] {
+		color: var(--color-success);
+	}
+	.episode-match-title {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-secondary);
+	}
+	.episode-match-runtime {
+		color: var(--color-text-faint);
+	}
+	.episode-match-delta {
+		font-size: inherit;
+	}
+	.episode-match-delta[data-tone='success'] {
+		color: var(--color-success);
+	}
+	.episode-match-delta[data-tone='warning'] {
+		color: var(--color-on-warning-soft);
+	}
+	.episode-match-delta[data-tone='danger'] {
+		color: var(--color-danger);
+	}
+	.episode-match-skip-note {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-muted);
+	}
+	.episode-match-success-btn {
+		border: 0;
+		background: var(--color-success);
+		color: var(--color-on-primary);
+	}
+	.episode-match-clear-btn {
+		box-shadow: 0 0 0 1px var(--color-border-strong);
+		color: var(--color-text-muted);
+	}
 	/* the original Match button was px-3 py-1 (0.75rem/0.25rem); Apply
 	   Matches / Clear All were px-4 py-1.5 (1rem/0.375rem) */
-	.episode-match-run-btn { padding: 0.25rem 0.75rem; }
-	.episode-match-wide-btn { padding: 0.375rem 1rem; }
-	.episode-match-success-btn:hover { filter: brightness(0.9); }
-	.episode-match-hint { font-size: 11px; color: var(--color-text-faint); }
-	.episode-match-loading { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
-	.episode-match-spinner { animation: episode-match-spin 1s linear infinite; }
-	.episode-match-spinner-track { opacity: 0.25; }
-	.episode-match-spinner-arc { opacity: 0.75; }
-	@keyframes episode-match-spin { to { transform: rotate(360deg); } }
-	.episode-match-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.episode-match-run-btn {
+		padding: 0.25rem 0.75rem;
+	}
+	.episode-match-wide-btn {
+		padding: 0.375rem 1rem;
+	}
+	.episode-match-success-btn:hover {
+		filter: brightness(0.9);
+	}
+	.episode-match-hint {
+		font-size: 11px;
+		color: var(--color-text-faint);
+	}
+	.episode-match-loading {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
+	.episode-match-spinner {
+		animation: episode-match-spin 1s linear infinite;
+	}
+	.episode-match-spinner-track {
+		opacity: 0.25;
+	}
+	.episode-match-spinner-arc {
+		opacity: 0.75;
+	}
+	@keyframes episode-match-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.episode-match-empty {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
 </style>

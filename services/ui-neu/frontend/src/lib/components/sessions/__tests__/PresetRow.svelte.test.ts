@@ -34,7 +34,7 @@ const ripPreset = (over = {}) => ({
 	created_by_user_id: null,
 	created_at: null,
 	updated_at: null,
-	...over,
+	...over
 });
 
 const transcodePreset = (over = {}) => ({
@@ -51,7 +51,7 @@ const transcodePreset = (over = {}) => ({
 	created_by_user_id: null,
 	created_at: null,
 	updated_at: null,
-	...over,
+	...over
 });
 
 afterEach(cleanup);
@@ -65,7 +65,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByText('Movie: Main Feature')).toBeInTheDocument();
 		expect(screen.getByText('r1')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByText(/used by 0/i)).toBeInTheDocument();
 	});
@@ -94,7 +94,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		// The pill span contains "Movie" (exact, not partial match on the name)
 		expect(screen.getAllByText(/movie/i).length).toBeGreaterThan(0);
@@ -108,7 +108,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /^view$/i })).not.toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		const del = screen.getByRole('button', { name: /delete/i }) as HTMLButtonElement;
 		expect(del.disabled).toBe(false);
@@ -137,7 +137,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit,
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		await fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 		expect(onedit).toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone,
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		await fireEvent.click(screen.getByRole('button', { name: /clone/i }));
 		expect(onclone).toHaveBeenCalled();
@@ -167,7 +167,7 @@ describe('PresetRow — rip preset (custom)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete,
+			ondelete
 		});
 		await fireEvent.click(screen.getByRole('button', { name: /delete/i }));
 		expect(ondelete).toHaveBeenCalled();
@@ -176,12 +176,20 @@ describe('PresetRow — rip preset (custom)', () => {
 	it('disables delete for in-use preset with reason', () => {
 		renderComponent(PresetRow, {
 			kind: 'rip',
-			preset: { id: 'r1', name: 'Rip', media_type: 'movie', is_builtin: false, track_selection: 'main_feature', identification_mode: 'required', output_mode: 'tracks' },
+			preset: {
+				id: 'r1',
+				name: 'Rip',
+				media_type: 'movie',
+				is_builtin: false,
+				track_selection: 'main_feature',
+				identification_mode: 'required',
+				output_mode: 'tracks'
+			},
 			usedBy: 2,
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		const del = screen.getByRole('button', { name: /delete/i }) as HTMLButtonElement;
 		expect(del.disabled).toBe(true);
@@ -198,7 +206,7 @@ describe('PresetRow — rip preset (builtin)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByText('BUILT-IN')).toBeInTheDocument();
 	});
@@ -211,7 +219,7 @@ describe('PresetRow — rip preset (builtin)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByRole('button', { name: /^view$/i })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument();
@@ -227,7 +235,7 @@ describe('PresetRow — rip preset (builtin)', () => {
 			onview,
 			onedit,
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
 		expect(onview).toHaveBeenCalled();
@@ -242,7 +250,7 @@ describe('PresetRow — rip preset (builtin)', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		const del = screen.getByRole('button', { name: /delete/i }) as HTMLButtonElement;
 		expect(del.disabled).toBe(true);
@@ -259,7 +267,7 @@ describe('PresetRow — transcode preset', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByText('H.265 MKV')).toBeInTheDocument();
 		expect(screen.getByText('t1')).toBeInTheDocument();
@@ -273,14 +281,12 @@ describe('PresetRow — transcode preset', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
-		await waitFor(() =>
-			expect(screen.getByText(/handbrake.*mkv.*any gpu h\.265/i)).toBeInTheDocument()
-		);
+		await waitFor(() => expect(screen.getByText(/handbrake.*mkv.*any gpu h\.265/i)).toBeInTheDocument());
 	});
 
-	it('omits the encoder part when the preset uses the tool\'s own encoder', () => {
+	it("omits the encoder part when the preset uses the tool's own encoder", () => {
 		renderComponent(PresetRow, {
 			kind: 'transcode',
 			preset: transcodePreset({ encoder: 'preset' }),
@@ -288,7 +294,7 @@ describe('PresetRow — transcode preset', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		// A passthrough preset reads as tool and container only: no dangling separators.
 		expect(screen.queryByText(/\| - \|/)).toBeNull();
@@ -305,7 +311,7 @@ describe('PresetRow — transcode preset', () => {
 			onview: vi.fn(),
 			onedit: vi.fn(),
 			onclone: vi.fn(),
-			ondelete: vi.fn(),
+			ondelete: vi.fn()
 		});
 		expect(screen.getByText(/used by 3/i)).toBeInTheDocument();
 	});

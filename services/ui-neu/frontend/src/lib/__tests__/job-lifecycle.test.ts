@@ -1,16 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import {
-	deriveLifecycle,
-	isFolderImport,
-	lifecycleColorVar
-} from '$lib/utils/job-lifecycle';
+import { deriveLifecycle, isFolderImport, lifecycleColorVar } from '$lib/utils/job-lifecycle';
 
 describe('deriveLifecycle - disc rip 5-step', () => {
 	it('waiting -> first stage active, rest pending', () => {
 		const nodes = deriveLifecycle('waiting', 'disc');
-		expect(nodes.map((n) => n.id)).toEqual([
-			'waiting', 'identifying', 'ripping', 'transcoding', 'complete'
-		]);
+		expect(nodes.map((n) => n.id)).toEqual(['waiting', 'identifying', 'ripping', 'transcoding', 'complete']);
 		expect(nodes[0].state).toBe('active');
 		expect(nodes.slice(1).every((n) => n.state === 'pending')).toBe(true);
 	});
@@ -92,9 +86,7 @@ describe('deriveLifecycle - failure', () => {
 		const nodes = deriveLifecycle('fail', 'folder');
 		// folder imports share the disc 5-stage lifecycle (folder_ripper still
 		// runs a MakeMKV remux that drives VIDEO_RIPPING)
-		expect(nodes.map((n) => n.id)).toEqual([
-			'waiting', 'identifying', 'ripping', 'transcoding', 'complete'
-		]);
+		expect(nodes.map((n) => n.id)).toEqual(['waiting', 'identifying', 'ripping', 'transcoding', 'complete']);
 		expect(nodes[3].state).toBe('failed'); // transcoding, the last reachable non-complete
 	});
 });
@@ -109,9 +101,7 @@ describe('deriveLifecycle - paused', () => {
 describe('deriveLifecycle - folder imports', () => {
 	it('folder source uses the same 5-stage lifecycle as disc', () => {
 		const nodes = deriveLifecycle('transcoding', 'folder');
-		expect(nodes.map((n) => n.id)).toEqual([
-			'waiting', 'identifying', 'ripping', 'transcoding', 'complete'
-		]);
+		expect(nodes.map((n) => n.id)).toEqual(['waiting', 'identifying', 'ripping', 'transcoding', 'complete']);
 		expect(nodes[3].state).toBe('active');
 	});
 
@@ -159,9 +149,7 @@ describe('isFolderImport', () => {
 
 describe('lifecycleColorVar', () => {
 	it('maps each state to a distinct CSS var', () => {
-		const colors = ['completed', 'active', 'paused', 'failed', 'pending'].map(
-			(s) => lifecycleColorVar(s as never)
-		);
+		const colors = ['completed', 'active', 'paused', 'failed', 'pending'].map((s) => lifecycleColorVar(s as never));
 		// All distinct
 		expect(new Set(colors).size).toBe(colors.length);
 	});

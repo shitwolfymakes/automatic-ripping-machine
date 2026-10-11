@@ -50,7 +50,10 @@ describe('ConfigSchemaField', () => {
 
 	it('renders an editable:false field as read-only (no input)', () => {
 		renderComponent(ConfigSchemaField, {
-			props: { field: f({ key: 'RAW_ROOT', type: 'string', tier: 'infra', editable: false, label: 'Raw root' }), value: '/raw' }
+			props: {
+				field: f({ key: 'RAW_ROOT', type: 'string', tier: 'infra', editable: false, label: 'Raw root' }),
+				value: '/raw'
+			}
 		});
 		expect(screen.getByText('/raw')).toBeInTheDocument();
 		expect(screen.queryByRole('textbox', { name: /raw root/i })).not.toBeInTheDocument();

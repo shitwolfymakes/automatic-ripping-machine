@@ -23,6 +23,6 @@ export function portal(node: HTMLElement, target: HTMLElement | string = documen
 		},
 		destroy() {
 			node.parentNode?.removeChild(node);
-		},
+		}
 	};
 }

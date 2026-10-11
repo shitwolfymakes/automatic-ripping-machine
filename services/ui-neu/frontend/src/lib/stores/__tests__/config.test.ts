@@ -68,8 +68,13 @@ describe('config store', () => {
 	it('hydrateConfig falls back to true for both flags on fetch failure', async () => {
 		globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('network')) as unknown as typeof fetch;
 
-		const { transcoderEnabled, transcodeRuntimeEnabled, hydrateConfig, setTranscoderEnabled, setTranscodeRuntimeEnabled } =
-			await import('../config');
+		const {
+			transcoderEnabled,
+			transcodeRuntimeEnabled,
+			hydrateConfig,
+			setTranscoderEnabled,
+			setTranscodeRuntimeEnabled
+		} = await import('../config');
 		setTranscoderEnabled(false);
 		setTranscodeRuntimeEnabled(false);
 		await hydrateConfig();

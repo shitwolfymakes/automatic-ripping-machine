@@ -84,14 +84,22 @@
 			data-testid="system-health-summary"
 		>
 			<span class="alert-title">
-				{allOk ? 'All OK' : `${issues.length + pathIssues.length} issue${issues.length + pathIssues.length === 1 ? '' : 's'} found`}
+				{allOk
+					? 'All OK'
+					: `${issues.length + pathIssues.length} issue${issues.length + pathIssues.length === 1 ? '' : 's'} found`}
 			</span>
-			<span class="panel-hint system-health-summary-count">{result.checks.length} checks, {result.paths.length} paths</span>
+			<span class="panel-hint system-health-summary-count"
+				>{result.checks.length} checks, {result.paths.length} paths</span
+			>
 		</div>
 
 		<ul class="mt-3">
 			{#each result.checks as check (check.name)}
-				<li class="list-row list-row-compact system-health-row" data-testid="system-health-check" data-status={check.status}>
+				<li
+					class="list-row list-row-compact system-health-row"
+					data-testid="system-health-check"
+					data-status={check.status}
+				>
 					<span class="status-dot" data-status={check.status}></span>
 					<span class="system-health-row-label">{label(check.name)}</span>
 					<span class="system-health-row-detail">{check.detail ?? (check.status === 'ok' ? 'OK' : check.status)}</span>
@@ -115,27 +123,68 @@
 	/* the original "Last run" note was text-xs text-gray-400 (a shade
 	   fainter than panel-hint's --color-text-muted). */
 	/* the original panel was p-6 (1.5rem), not .panel's own p-4 (1rem) default. */
-	.system-health-panel { padding: 1.5rem; }
+	.system-health-panel {
+		padding: 1.5rem;
+	}
 	/* the original button was a tinted fill (bg-primary/15, no border), not
 	   .btn's default outlined look. */
-	.system-health-run-btn { border: 0; background: var(--color-primary-tint-3); color: var(--color-primary-text); }
-	.system-health-run-btn:hover { background: color-mix(in srgb, var(--color-primary) 25%, transparent); }
+	.system-health-run-btn {
+		border: 0;
+		background: var(--color-primary-tint-3);
+		color: var(--color-primary-text);
+	}
+	.system-health-run-btn:hover {
+		background: color-mix(in srgb, var(--color-primary) 25%, transparent);
+	}
 	/* text-base font-semibold text-gray-900 - a plain heading, not
 	   panel-title's uppercase eyebrow look. */
-	.system-health-title { font-size: 1rem; line-height: 1.5rem; font-weight: 600; color: var(--color-text); }
-	.system-health-last-run { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.system-health-title {
+		font-size: 1rem;
+		line-height: 1.5rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.system-health-last-run {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
 	/* list-row is a grid whose column template the owning list sets; these
 	   rows are a simple inline label/status/detail line, not a data grid. */
-	.system-health-row { display: flex; align-items: flex-start; gap: 0.5rem; cursor: default; }
-	.system-health-row-label { width: 10rem; flex-shrink: 0; color: var(--color-text); font-size: 0.875rem; }
+	.system-health-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		cursor: default;
+	}
+	.system-health-row-label {
+		width: 10rem;
+		flex-shrink: 0;
+		color: var(--color-text);
+		font-size: 0.875rem;
+	}
 	/* the original detail text inherited the list's own text-sm (0.875rem)
 	   context, not panel-hint's smaller 0.75rem. */
-	.system-health-row-detail { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.system-health-summary-count { margin-top: 0; }
+	.system-health-row-detail {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.system-health-summary-count {
+		margin-top: 0;
+	}
 	/* the header blurb and "Click Run Checks" placeholder were both text-sm
 	   (0.875rem/1.25rem), not panel-hint's 0.75rem - but at different
 	   shades: the blurb was text-gray-500 (muted), the placeholder
 	   text-gray-400 (faint). */
-	.system-health-description { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.system-health-placeholder { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-faint); }
+	.system-health-description {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.system-health-placeholder {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-faint);
+	}
 </style>

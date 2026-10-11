@@ -15,7 +15,10 @@ const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
 
 // Mock window.confirm
-vi.stubGlobal('confirm', vi.fn(() => true));
+vi.stubGlobal(
+	'confirm',
+	vi.fn(() => true)
+);
 
 describe('JobActions', () => {
 	afterEach(() => {
@@ -97,7 +100,6 @@ describe('JobActions', () => {
 				expect(mockDelete).toHaveBeenCalledWith('job_1');
 			});
 		});
-
 
 		it('shows success feedback after action', async () => {
 			renderComponent(JobActions, {

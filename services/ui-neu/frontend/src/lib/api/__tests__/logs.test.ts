@@ -33,8 +33,24 @@ describe('fetchJobLog', () => {
 			expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }) })
 		);
 		expect(entries).toEqual([
-			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'arm', event: 'start', job_id: 'job_a', label: null, service: 'arm-backend' },
-			{ timestamp: '2026-06-19T00:00:02Z', level: 'error', logger: 'ripper', event: 'boom', job_id: 'job_a', label: null, service: 'arm-backend' }
+			{
+				timestamp: '2026-06-19T00:00:01Z',
+				level: 'info',
+				logger: 'arm',
+				event: 'start',
+				job_id: 'job_a',
+				label: null,
+				service: 'arm-backend'
+			},
+			{
+				timestamp: '2026-06-19T00:00:02Z',
+				level: 'error',
+				logger: 'ripper',
+				event: 'boom',
+				job_id: 'job_a',
+				label: null,
+				service: 'arm-backend'
+			}
 		]);
 	});
 
@@ -50,12 +66,22 @@ describe('fetchJobLog', () => {
 		mockFetch.mockResolvedValue(textResponse(ndjson));
 		const entries = await fetchJobLog('job_x');
 		expect(entries).toEqual([
-			{ timestamp: '2026-06-19T00:00:01Z', level: 'info', logger: 'a', event: 'ok', job_id: null, label: null, service: 'x' }
+			{
+				timestamp: '2026-06-19T00:00:01Z',
+				level: 'info',
+				logger: 'a',
+				event: 'ok',
+				job_id: null,
+				label: null,
+				service: 'x'
+			}
 		]);
 	});
 
 	it('falls back to service when extra.logger is absent', async () => {
-		mockFetch.mockResolvedValue(textResponse('{"ts":"t","level":"info","service":"arm-backend","msg":"m","extra":{}}\n'));
+		mockFetch.mockResolvedValue(
+			textResponse('{"ts":"t","level":"info","service":"arm-backend","msg":"m","extra":{}}\n')
+		);
 		const [e] = await fetchJobLog('job_x');
 		expect(e.logger).toBe('arm-backend');
 		expect(e.event).toBe('m');

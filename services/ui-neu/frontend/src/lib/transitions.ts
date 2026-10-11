@@ -1,8 +1,7 @@
 import type { TransitionConfig } from 'svelte/transition';
 import { cubicOut } from 'svelte/easing';
 
-const reducedMotion =
-	globalThis.window?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const reducedMotion = globalThis.window?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 // Page / panel content appears in place. Never animate geometry (translate,
 // scale, height) for content arriving on load: the element is already in

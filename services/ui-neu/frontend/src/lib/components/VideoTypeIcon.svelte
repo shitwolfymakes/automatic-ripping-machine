@@ -13,7 +13,7 @@
 		tv: Tv,
 		music: Music,
 		database: Database,
-		disc: Disc3,
+		disc: Disc3
 	};
 
 	let IconComponent = $derived(icons[icon] ?? Disc3);

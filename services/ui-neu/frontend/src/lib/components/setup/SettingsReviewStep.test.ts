@@ -13,11 +13,17 @@ const mockConfig = {
 };
 
 function stubSettings(data = mockConfig) {
-	vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(data) })));
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(data) }))
+	);
 }
 
 describe('SettingsReviewStep', () => {
-	afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+	afterEach(() => {
+		cleanup();
+		vi.restoreAllMocks();
+	});
 
 	it('renders heading and config values', async () => {
 		stubSettings();
@@ -41,7 +47,10 @@ describe('SettingsReviewStep', () => {
 	});
 
 	it('shows error when settings fail to load', async () => {
-		vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('fail'))));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() => Promise.reject(new Error('fail')))
+		);
 		renderComponent(SettingsReviewStep);
 		await waitFor(() => expect(screen.getByText('Could not load settings.')).toBeInTheDocument());
 	});

@@ -165,7 +165,13 @@ describe('createJobLog', () => {
 	it('orders the snapshot by timestamp across services, keeping undated lines in place', async () => {
 		fetchJobLogMock.mockResolvedValueOnce([
 			{ timestamp: '2026-09-05T15:47:01Z', level: 'info', logger: 'x', event: 'backend spawn', service: 'arm-backend' },
-			{ timestamp: '2026-09-05T15:46:57Z', level: 'info', logger: 'x', event: 'transcode rename', service: 'arm-transcode-1' },
+			{
+				timestamp: '2026-09-05T15:46:57Z',
+				level: 'info',
+				logger: 'x',
+				event: 'transcode rename',
+				service: 'arm-transcode-1'
+			},
 			{ timestamp: null, level: 'info', logger: 'x', event: 'undated', service: 'arm-ripper-a' }
 		] as never);
 		const { createJobLog } = await import('../jobLog.svelte');

@@ -34,5 +34,7 @@
 	/* the original select auto-sized to its content (no width utility); the
 	   shared .field-control forces width: 100%, which would stretch it across
 	   the whole filter row since it is the only child here */
-	.job-filter-bar-select { width: auto; }
+	.job-filter-bar-select {
+		width: auto;
+	}
 </style>

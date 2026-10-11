@@ -8,8 +8,7 @@ const startMock = vi.fn();
 const stopMock = vi.fn();
 vi.mock('$lib/api/ws', () => ({
 	wsClient: {
-		subscribe: (topic: string, handler: (env: WSEnvelope) => void) =>
-			subscribeMock(topic, handler),
+		subscribe: (topic: string, handler: (env: WSEnvelope) => void) => subscribeMock(topic, handler),
 		start: () => startMock(),
 		stop: () => stopMock()
 	}

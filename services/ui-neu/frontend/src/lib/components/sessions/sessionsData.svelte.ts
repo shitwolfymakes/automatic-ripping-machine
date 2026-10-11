@@ -17,7 +17,9 @@ export function createSessionsData() {
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- lookup map rebuilt by $derived, never mutated
 	const ripById = $derived(new Map(rips.map((p) => [p.id, p])));
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- lookup map rebuilt by $derived, never mutated
 	const tcById = $derived(new Map(tcs.map((p) => [p.id, p])));
 
 	const joined = $derived<JoinedSession[]>(

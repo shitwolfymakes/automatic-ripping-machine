@@ -4,21 +4,12 @@
 
 	interface Props {
 		entries: LogEntry[];
-		loading?: boolean;
 		error?: Error | null;
-		live?: boolean;
 		search?: boolean;
 		maxHeightClass?: string;
 	}
 
-	let {
-		entries,
-		loading = false,
-		error = null,
-		live = false,
-		search = false,
-		maxHeightClass = 'max-h-96'
-	}: Props = $props();
+	let { entries, error = null, search = false, maxHeightClass = 'max-h-96' }: Props = $props();
 
 	type Level = 'all' | 'error' | 'warning' | 'info' | 'debug';
 
@@ -144,7 +135,7 @@
 <div class="flex flex-col gap-3">
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="log-view-segment-group" role="radiogroup" aria-label="Log filter">
-			{#each SERVICE_FILTERS as f}
+			{#each SERVICE_FILTERS as f (f.key)}
 				<button
 					type="button"
 					role="radio"
@@ -153,12 +144,12 @@
 					onclick={() => {
 						serviceFilter = f.key;
 					}}
-					class="log-view-segment"
-				>{f.label}</button>
+					class="log-view-segment">{f.label}</button
+				>
 			{/each}
 		</div>
 		<div class="log-view-segment-group" role="radiogroup" aria-label="Log level filter">
-			{#each LEVEL_FILTERS as f}
+			{#each LEVEL_FILTERS as f (f.key)}
 				<button
 					type="button"
 					role="radio"
@@ -167,8 +158,8 @@
 					onclick={() => {
 						levelFilter = f.key;
 					}}
-					class="log-view-segment"
-				>{f.label}</button>
+					class="log-view-segment">{f.label}</button
+				>
 			{/each}
 		</div>
 		{#if search}
@@ -194,12 +185,7 @@
 		<p class="log-view-message">No log lines for this job yet.</p>
 	{:else}
 		<div class="relative">
-			<div
-				bind:this={viewEl}
-				onscroll={onScroll}
-				data-testid="job-log-view"
-				class="{maxHeightClass} log-view-terminal"
-			>
+			<div bind:this={viewEl} onscroll={onScroll} data-testid="job-log-view" class="{maxHeightClass} log-view-terminal">
 				{#each filtered as entry, i (i)}
 					{@const svc = logService(entry.service)}
 					<div class="flex items-start gap-2 py-0.5" data-testid="job-log-line" data-service={svc}>
@@ -226,30 +212,90 @@
 </div>
 
 <style>
-	.log-view-segment-group { display: flex; gap: 0.25rem; border-radius: var(--radius-lg); background: var(--color-primary-tint-1); padding: 0.25rem; }
-	.log-view-segment { border-radius: var(--radius-md); padding: 0.375rem 0.75rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); background: transparent; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
-	.log-view-segment:hover { background: var(--color-primary-tint-2); }
-	.log-view-segment[aria-checked="true"] { background: var(--color-primary); color: var(--color-on-primary); }
-	.log-view-search { width: auto; }
-	.log-view-message { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
-	.log-view-message[data-tone="error"] { color: var(--color-danger); }
+	.log-view-segment-group {
+		display: flex;
+		gap: 0.25rem;
+		border-radius: var(--radius-lg);
+		background: var(--color-primary-tint-1);
+		padding: 0.25rem;
+	}
+	.log-view-segment {
+		border-radius: var(--radius-md);
+		padding: 0.375rem 0.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+		background: transparent;
+		transition:
+			background-color var(--motion-fast) var(--ease),
+			color var(--motion-fast) var(--ease);
+	}
+	.log-view-segment:hover {
+		background: var(--color-primary-tint-2);
+	}
+	.log-view-segment[aria-checked='true'] {
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+	}
+	.log-view-search {
+		width: auto;
+	}
+	.log-view-message {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
+	.log-view-message[data-tone='error'] {
+		color: var(--color-danger);
+	}
 	/* the original terminal background was an unqualified bg-black/90 (same
 	   in both modes); --color-on-frame-accent is the only mode-independent
 	   pure-black token, composed here via color-mix for the 90% opacity */
-	.log-view-terminal { overflow-y: auto; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-on-frame-accent) 90%, transparent); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1rem; }
+	.log-view-terminal {
+		overflow-y: auto;
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-on-frame-accent) 90%, transparent);
+		padding: 0.75rem;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		line-height: 1rem;
+	}
 	/* the terminal surface is fixed near-black in both modes (see
 	   .log-view-terminal above); its text must stay a fixed light shade too,
 	   not the theme-flipping --color-text-* roles - --color-on-primary is
 	   the only mode-independent pure-white token, composed via color-mix for
 	   each line's original grayscale/tone shade */
-	.log-view-time { color: color-mix(in srgb, var(--color-on-primary) 62%, transparent); }
+	.log-view-time {
+		color: color-mix(in srgb, var(--color-on-primary) 62%, transparent);
+	}
 	/* Tailwind's arbitrary text-[10px] still carries its own default
 	   line-height ratio (1.3333, i.e. 4/3 - not the ancestor's inherited
 	   1rem/16px); dropping the utility silently lost that, shrinking the
 	   chip (and with it every log row's height) by a few px per row. */
-	.log-view-chip { border-radius: var(--radius-sm); padding: 0.125rem 0.375rem; font-size: 10px; line-height: 1.3333333333333333; font-weight: 600; background: var(--chip-bg); color: var(--chip-text); }
-	.log-view-line { color: color-mix(in srgb, var(--color-on-primary) 82%, transparent); }
-	.log-view-line[data-tone="warning"] { color: var(--color-warning); }
-	.log-view-line[data-tone="danger"] { color: var(--color-danger); }
-	.log-view-jump { position: absolute; bottom: 0.75rem; right: 0.75rem; box-shadow: var(--shadow-2); }
+	.log-view-chip {
+		border-radius: var(--radius-sm);
+		padding: 0.125rem 0.375rem;
+		font-size: 10px;
+		line-height: 1.3333333333333333;
+		font-weight: 600;
+		background: var(--chip-bg);
+		color: var(--chip-text);
+	}
+	.log-view-line {
+		color: color-mix(in srgb, var(--color-on-primary) 82%, transparent);
+	}
+	.log-view-line[data-tone='warning'] {
+		color: var(--color-warning);
+	}
+	.log-view-line[data-tone='danger'] {
+		color: var(--color-danger);
+	}
+	.log-view-jump {
+		position: absolute;
+		bottom: 0.75rem;
+		right: 0.75rem;
+		box-shadow: var(--shadow-2);
+	}
 </style>

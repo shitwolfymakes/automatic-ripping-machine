@@ -25,7 +25,7 @@
 		onsaved,
 		oncancel,
 		preselectRipId,
-		preselectTranscodeId,
+		preselectTranscodeId
 	}: Props = $props();
 
 	const MEDIA_TYPES: { value: MediaType; label: string }[] = [
@@ -33,7 +33,7 @@
 		{ value: 'tv', label: 'TV' },
 		{ value: 'music', label: 'Music' },
 		{ value: 'data', label: 'Data' },
-		{ value: 'iso', label: 'ISO' },
+		{ value: 'iso', label: 'ISO' }
 	];
 
 	// Form state
@@ -124,7 +124,7 @@
 					rip_preset_id: ripId,
 					transcode_preset_id: tcId || null,
 					output_path_template: template,
-					overrides_json: parsedOverrides,
+					overrides_json: parsedOverrides
 				});
 			} else {
 				result = await createSession({
@@ -133,7 +133,7 @@
 					rip_preset_id: ripId,
 					transcode_preset_id: tcId || null,
 					output_path_template: template,
-					overrides_json: parsedOverrides,
+					overrides_json: parsedOverrides
 				});
 			}
 			onsaved(result);
@@ -145,19 +145,10 @@
 	}
 </script>
 
-<div
-	role="dialog"
-	aria-modal="true"
-	aria-label={isEdit ? 'Edit session' : 'Create session'}
-	class="stack stack-lg"
->
+<div role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit session' : 'Create session'} class="stack stack-lg">
 	<form onsubmit={handleSubmit} class="stack stack-lg">
 		{#if readOnly}
-			<div
-				class="alert alert-warning"
-				data-testid="sb-builtin-note"
-				role="status"
-			>
+			<div class="alert alert-warning" data-testid="sb-builtin-note" role="status">
 				This is a built-in session and can't be edited. Clone it to make an editable copy.
 			</div>
 		{/if}
@@ -196,13 +187,7 @@
 		<!-- Rip preset -->
 		<label for="sb-rip" class="field">
 			<span class="field-label">Rip preset <span class="session-builder-required">*</span></span>
-			<select
-				id="sb-rip"
-				value={ripId}
-				onchange={handleRipChange}
-				disabled={readOnly}
-				required
-			>
+			<select id="sb-rip" value={ripId} onchange={handleRipChange} disabled={readOnly} required>
 				<option value="">Select a rip preset</option>
 				{#each ripOptions as rp (rp.id)}
 					<option value={rp.id}>{rp.name}</option>
@@ -214,12 +199,7 @@
 		<!-- Transcode preset (optional) -->
 		<label for="sb-tc" class="field">
 			<span class="field-label">Transcode preset <span class="session-builder-optional">(optional)</span></span>
-			<select
-				id="sb-tc"
-				value={tcId}
-				onchange={handleTcChange}
-				disabled={readOnly}
-			>
+			<select id="sb-tc" value={tcId} onchange={handleTcChange} disabled={readOnly}>
 				<option value="">No transcode, rip only</option>
 				{#each tcOptions as tc (tc.id)}
 					<option value={tc.id}>{tc.name}</option>
@@ -234,8 +214,10 @@
 			<OutputPathField
 				id="sb-path"
 				value={template}
-				mediaType={mediaType}
-				onchange={(v) => { template = v; }}
+				{mediaType}
+				onchange={(v) => {
+					template = v;
+				}}
 				has_transcode_preset={!!tcId}
 				disabled={readOnly}
 			/>
@@ -243,21 +225,16 @@
 
 		<!-- Advanced (collapsed) -->
 		<details class="session-builder-advanced">
-			<summary class="session-builder-advanced-summary">
-				Advanced
-			</summary>
+			<summary class="session-builder-advanced-summary"> Advanced </summary>
 			<div class="stack stack-sm session-builder-advanced-body">
-				<label for="sb-overrides" class="field-label session-builder-overrides-label">
-					Overrides JSON
-				</label>
+				<label for="sb-overrides" class="field-label session-builder-overrides-label"> Overrides JSON </label>
 				<textarea
 					id="sb-overrides"
 					class="mono field-control"
 					rows="4"
 					bind:value={overridesJson}
 					placeholder={`{"key": "value"}`}
-					disabled={readOnly}
-				></textarea>
+					disabled={readOnly}></textarea>
 				{#if jsonError}
 					<p class="field-error">{jsonError}</p>
 				{/if}
@@ -276,19 +253,11 @@
 				{/if}
 			</div>
 			<div class="cluster">
-				<button
-					type="button"
-					onclick={oncancel}
-					class="btn"
-				>
+				<button type="button" onclick={oncancel} class="btn">
 					{readOnly ? 'Close' : 'Cancel'}
 				</button>
 				{#if !readOnly}
-					<button
-						type="submit"
-						disabled={!canSubmit || submitting}
-						class="btn btn-primary session-builder-submit-btn"
-					>
+					<button type="submit" disabled={!canSubmit || submitting} class="btn btn-primary session-builder-submit-btn">
 						{isEdit ? 'Save changes' : 'Create session'}
 					</button>
 				{/if}
@@ -303,34 +272,92 @@
 	   shift the original never had; kept anyway per the migration reference's
 	   own ruling (row 38: "red-600 reads fine as both fill and text") since no
 	   mode-independent danger role exists in spec 5.1. */
-	.session-builder-required { margin-left: 0.25rem; color: var(--color-danger); }
+	.session-builder-required {
+		margin-left: 0.25rem;
+		color: var(--color-danger);
+	}
 	/* original: ml-1 text-xs text-gray-400 dark:text-gray-500 - text-faint
 	   already flips gray-400/gray-500 across modes, matching exactly. */
-	.session-builder-optional { margin-left: 0.25rem; font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.session-builder-optional {
+		margin-left: 0.25rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
 	/* original media-type chips: rounded-md border px-3 py-1 text-sm
 	   font-medium - chip's own radius (--radius-sm), padding (0.125rem
 	   0.375rem) and size (0.75rem) are tuned for the tighter filter-pill look,
 	   so the segmented-control metrics are restated here on top of chip's
 	   base cursor/transition/selected-state colours. */
-	.session-builder-media-chip { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-raised); padding: 0.25rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
-	.session-builder-media-chip:hover { background: var(--color-primary-tint-1); }
-	.session-builder-media-chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
-	.session-builder-media-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+	.session-builder-media-chip {
+		border: 1px solid var(--color-border-strong);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-raised);
+		padding: 0.25rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.session-builder-media-chip:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.session-builder-media-chip[aria-pressed='true'] {
+		border-color: var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+	}
+	.session-builder-media-chip:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 	/* original: rounded-md border border-gray-200 dark:border-gray-700 - a
 	   plain neutral-bordered disclosure with no equivalent block. */
-	.session-builder-advanced { border: 1px solid var(--color-border); border-radius: var(--radius-md); }
-	.session-builder-advanced-summary { cursor: pointer; user-select: none; padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 500; color: var(--color-text-secondary); }
-	.session-builder-advanced-body { padding: 0.5rem 0.75rem 0.75rem; }
+	.session-builder-advanced {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+	}
+	.session-builder-advanced-summary {
+		cursor: pointer;
+		user-select: none;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.session-builder-advanced-body {
+		padding: 0.5rem 0.75rem 0.75rem;
+	}
 	/* original: text-xs font-medium text-gray-600 dark:text-gray-400
 	   (12px/16px) - field-label's own default is 0.875rem/1.25rem/600, tuned
 	   for a top-level field label, not this smaller nested-textarea caption. */
-	.session-builder-overrides-label { font-size: 0.75rem; line-height: 1rem; font-weight: 500; color: var(--color-text-secondary); }
-	.session-builder-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 1rem; }
-	.session-builder-footer-note { font-size: 0.75rem; line-height: 1rem; color: var(--color-text-faint); }
+	.session-builder-overrides-label {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.session-builder-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		border-top: 1px solid var(--color-border);
+		padding-top: 1rem;
+	}
+	.session-builder-footer-note {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		color: var(--color-text-faint);
+	}
 	/* original submit button: rounded-md bg-primary ... - no border/ring class
 	   at all. .btn-primary's own 1px border is invisible (same colour as the
 	   fill) but still occupies 2px of layout height, and its default radius
 	   is --radius-lg, not the original's smaller --radius-md (Task 9/10
 	   finding: a bare fill button with no border class needs border: 0). */
-	.session-builder-submit-btn { border: 0; border-radius: var(--radius-md); }
+	.session-builder-submit-btn {
+		border: 0;
+		border-radius: var(--radius-md);
+	}
 </style>

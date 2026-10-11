@@ -1,18 +1,28 @@
 @layer utilities {
-	.tabular { font-variant-numeric: tabular-nums; }
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
 	/* replaces the banned inline `animate-spin` utility (spec 6.4) for the
 	   handful of loading-spinner SVGs across the app (Task 11: setup
 	   readiness checks, files orphan-folders/move-picker modals) */
-	.spin { animation: spin 1s linear infinite; }
+	.spin {
+		animation: spin 1s linear infinite;
+	}
 	/* the classic two-part spinner icon markup (a faint full-circle track
 	   plus an opaque quarter-circle fill) - replaces the banned inline
 	   opacity-25/opacity-75 utilities on its <circle>/<path> */
-	.spinner-track { opacity: 0.25; }
-	.spinner-fill { opacity: 0.75; }
+	.spinner-track {
+		opacity: 0.25;
+	}
+	.spinner-fill {
+		opacity: 0.75;
+	}
 }
 
 @keyframes spin {
-	to { transform: rotate(360deg); }
+	to {
+		transform: rotate(360deg);
+	}
 }
 
 /* responsive-table (table.css's own modifier - stacks a .table to
@@ -58,13 +68,15 @@
 			padding: 0.5rem 0.75rem;
 			border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 15%, transparent);
 		}
-		.responsive-table tr:last-child { border-bottom: 0; }
+		.responsive-table tr:last-child {
+			border-bottom: 0;
+		}
 		.responsive-table td {
 			padding: 0.25rem 0;
 			border: 0;
 			max-width: 100%;
 		}
-		.responsive-table td[data-label]:not([data-label=""])::before {
+		.responsive-table td[data-label]:not([data-label=''])::before {
 			content: attr(data-label);
 			display: block;
 			color: color-mix(in srgb, currentColor 55%, transparent);
@@ -79,6 +91,10 @@
 
 /* Safe-area insets for mobile browsers */
 @layer utilities {
-	.safe-bottom { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
-	.safe-top    { padding-top:    max(0.5rem, env(safe-area-inset-top));    }
+	.safe-bottom {
+		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+	}
+	.safe-top {
+		padding-top: max(0.5rem, env(safe-area-inset-top));
+	}
 }

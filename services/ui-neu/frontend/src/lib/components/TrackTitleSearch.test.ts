@@ -12,9 +12,8 @@ vi.mock('$lib/api/jobs', () => ({
 	updateTrack: vi.fn(() => Promise.resolve())
 }));
 
-import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
+import { searchMetadata, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 const mockSearchMetadata = vi.mocked(searchMetadata);
-const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTrackTitle = vi.mocked(updateTrackTitle);
 const mockClearTrackTitle = vi.mocked(clearTrackTitle);
 const mockUpdateTrack = vi.mocked(updateTrack);
@@ -61,7 +60,9 @@ describe('TrackTitleSearch', () => {
 
 	describe('interactions', () => {
 		it('calls searchMetadata on search', async () => {
-			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Found Title', provider_id: 'tt2222' })] });
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Found Title', provider_id: 'tt2222' })]
+			});
 			renderComponent(TrackTitleSearch, {
 				props: { jobId: 'job_1', track: createTrack() }
 			});
@@ -95,7 +96,9 @@ describe('TrackTitleSearch', () => {
 		});
 
 		it('shows detail editor when result is selected', async () => {
-			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked', provider_id: 'tt3333' })] });
+			mockSearchMetadata.mockResolvedValue({
+				candidates: [createCandidate({ title: 'Picked', provider_id: 'tt3333' })]
+			});
 			renderComponent(TrackTitleSearch, {
 				props: { jobId: 'job_1', track: createTrack() }
 			});
@@ -153,7 +156,11 @@ describe('TrackTitleSearch', () => {
 			await fireEvent.click(screen.getByText('Picked'));
 			await fireEvent.click(screen.getByText('Apply'));
 			await waitFor(() => {
-				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ title: 'Picked', year: 2021 }));
+				expect(mockUpdateTrackTitle).toHaveBeenCalledWith(
+					'job_3',
+					'trk_5',
+					expect.objectContaining({ title: 'Picked', year: 2021 })
+				);
 			});
 		});
 

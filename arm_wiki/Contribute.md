@@ -54,9 +54,14 @@ rules in
 
 ```bash
 uv run pytest                       # all backend/ripper/transcode suites; zero infra
-uv run pre-commit run --all-files   # ruff, mypy, shellcheck
+uv run pre-commit run --all-files   # ruff, mypy, eslint + prettier (UI), shellcheck
 cd services/ui-neu/frontend && npm run check && npx vitest run   # UI: svelte-check + tests
+cd services/ui-neu/frontend && npm run lint && npm run format    # UI: ESLint + Prettier
 ```
+
+The UI hooks need `npm ci --prefix services/ui-neu/frontend` once
+(`devtools/setup-dev.sh` does it). To keep the one-time Prettier reformat out of
+`git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 
 If you change a backend router or an `arm_common` schema that affects the API,
 regenerate the OpenAPI artifacts (CI's `openapi-drift` job gates on this) and

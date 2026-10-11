@@ -33,9 +33,10 @@ export function classifyJsonValue(value: unknown): ClassifiedJson {
 		};
 	}
 	if (typeof value === 'object') {
-		const entries: JsonEntry[] = Object.entries(value as Record<string, unknown>).map(
-			([key, v]) => ({ key, value: v })
-		);
+		const entries: JsonEntry[] = Object.entries(value as Record<string, unknown>).map(([key, v]) => ({
+			key,
+			value: v
+		}));
 		return {
 			kind: 'object',
 			isContainer: entries.length > 0,

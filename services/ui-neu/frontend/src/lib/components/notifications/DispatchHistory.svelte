@@ -31,14 +31,39 @@
 {/if}
 
 <style>
-	.dispatch-history-empty { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.dispatch-history-empty {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	/* Tailwind's space-y-1 (0.25rem) is tighter than .stack-sm (0.5rem). */
-	.dispatch-history-list { gap: 0.25rem; }
-	.dispatch-history-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-secondary); }
-	.dispatch-history-icon { color: var(--color-text-faint); }
-	.dispatch-history-row[data-status="success"] .dispatch-history-icon { color: var(--color-status-success); }
-	.dispatch-history-row[data-status="failed"] .dispatch-history-icon { color: var(--color-status-error); }
-	.dispatch-history-key { font-weight: 500; }
-	.dispatch-history-time { color: var(--color-text-faint); }
-	.dispatch-history-error { color: var(--color-status-error); }
+	.dispatch-history-list {
+		gap: 0.25rem;
+	}
+	.dispatch-history-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-secondary);
+	}
+	.dispatch-history-icon {
+		color: var(--color-text-faint);
+	}
+	.dispatch-history-row[data-status='success'] .dispatch-history-icon {
+		color: var(--color-status-success);
+	}
+	.dispatch-history-row[data-status='failed'] .dispatch-history-icon {
+		color: var(--color-status-error);
+	}
+	.dispatch-history-key {
+		font-weight: 500;
+	}
+	.dispatch-history-time {
+		color: var(--color-text-faint);
+	}
+	.dispatch-history-error {
+		color: var(--color-status-error);
+	}
 </style>

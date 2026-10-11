@@ -30,7 +30,7 @@
 		onview,
 		onedit,
 		onclone,
-		ondelete,
+		ondelete
 	}: Props = $props();
 
 	// ── Media-type filter ─────────────────────────────────────────────────────
@@ -54,7 +54,7 @@
 		{ key: 'tv', label: 'TV' },
 		{ key: 'music', label: 'Music' },
 		{ key: 'data', label: 'Data' },
-		{ key: 'iso', label: 'ISO' },
+		{ key: 'iso', label: 'ISO' }
 	];
 
 	// Derive preset counts per media type for the active kind only
@@ -81,8 +81,8 @@
 <div class="stack stack-lg">
 	<!-- Reusable note -->
 	<p class="preset-library-note">
-		Presets are reusable building blocks: each preset can be used by multiple sessions, and changing
-		one affects every session that references it.
+		Presets are reusable building blocks: each preset can be used by multiple sessions, and changing one affects every
+		session that references it.
 	</p>
 
 	<!-- Search + filter container: same structure as the Sessions root -->
@@ -95,7 +95,9 @@
 				aria-label="Search {noun}"
 				class="field-control preset-library-search"
 				value={search}
-				oninput={(e) => { search = (e.currentTarget as HTMLInputElement).value; }}
+				oninput={(e) => {
+					search = (e.currentTarget as HTMLInputElement).value;
+				}}
 			/>
 
 			<span class="eyebrow">Refine</span>
@@ -104,7 +106,9 @@
 				aria-label="Filter by source"
 				class="field-control preset-library-source"
 				value={sourceFilter}
-				onchange={(e) => { sourceFilter = (e.currentTarget as HTMLSelectElement).value as typeof sourceFilter; }}
+				onchange={(e) => {
+					sourceFilter = (e.currentTarget as HTMLSelectElement).value as typeof sourceFilter;
+				}}
 			>
 				<option value="all">All sources</option>
 				<option value="builtin">Built-in only</option>
@@ -117,30 +121,28 @@
 		<!-- Bottom row: TYPE chips + New preset -->
 		<div class="cluster">
 			<span class="eyebrow">Type</span>
-			{#each MEDIA_TYPES as chip}
+			{#each MEDIA_TYPES as chip (chip.key)}
 				{@const count = presetTypeCounts[chip.key] ?? 0}
 				<button
 					type="button"
 					aria-pressed={typeFilter === chip.key}
 					class="chip preset-library-type-chip"
-					onclick={() => { typeFilter = chip.key; }}
+					onclick={() => {
+						typeFilter = chip.key;
+					}}
 				>
-					{chip.label} {count}
+					{chip.label}
+					{count}
 				</button>
 			{/each}
 
 			{#if kind === 'rip'}
-				<button
-					type="button"
-					onclick={onnewrip}
-					class="btn btn-primary preset-library-new-btn"
-				>+ New rip preset</button>
+				<button type="button" onclick={onnewrip} class="btn btn-primary preset-library-new-btn">+ New rip preset</button
+				>
 			{:else}
-				<button
-					type="button"
-					onclick={onnewtranscode}
-					class="btn btn-primary preset-library-new-btn"
-				>+ New transcode preset</button>
+				<button type="button" onclick={onnewtranscode} class="btn btn-primary preset-library-new-btn"
+					>+ New transcode preset</button
+				>
 			{/if}
 		</div>
 	</div>
@@ -148,7 +150,7 @@
 	{#if loading}
 		<!-- Loading skeletons -->
 		<div class="stack stack-sm">
-			{#each Array(SKELETON_COUNT) as _}
+			{#each Array(SKELETON_COUNT) as _, i (i)}
 				<div data-testid="preset-skeleton" class="skeleton preset-library-skeleton"></div>
 			{/each}
 		</div>
@@ -158,9 +160,7 @@
 			<h3 class="sr-only">Rip presets</h3>
 
 			{#if visibleRip.length === 0}
-				<p class="preset-library-empty">
-					No rip presets match the current filters.
-				</p>
+				<p class="preset-library-empty">No rip presets match the current filters.</p>
 			{:else}
 				<div class="stack stack-sm">
 					{#each visibleRip as preset (preset.id)}
@@ -183,9 +183,7 @@
 			<h3 class="sr-only">Transcode presets</h3>
 
 			{#if visibleTranscode.length === 0}
-				<p class="preset-library-empty">
-					No transcode presets match the current filters.
-				</p>
+				<p class="preset-library-empty">No transcode presets match the current filters.</p>
 			{:else}
 				<div class="stack stack-sm">
 					{#each visibleTranscode as preset (preset.id)}
@@ -206,26 +204,65 @@
 </div>
 
 <style>
-	.preset-library-note { font-size: 0.875rem; line-height: 1.25rem; color: var(--color-text-muted); }
+	.preset-library-note {
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	/* the original bar was px-4 py-3 (1rem/0.75rem); .panel-compact is
 	   0.75rem all round, close but not identical on the horizontal axis. */
-	.preset-library-bar { padding: 0.75rem 1rem; }
-	.preset-library-search { min-width: 0; flex: 1 1 0%; }
+	.preset-library-bar {
+		padding: 0.75rem 1rem;
+	}
+	.preset-library-search {
+		min-width: 0;
+		flex: 1 1 0%;
+	}
 	/* the divider's own border-primary/15 maps to --color-border; hr's
 	   default border-top plus browser margin is overridden to the original's
 	   my-3 (0.75rem) spacing, height 1px. */
-	.preset-library-divider { margin: 0.75rem 0; border: 0; border-top: 1px solid var(--color-border); }
+	.preset-library-divider {
+		margin: 0.75rem 0;
+		border: 0;
+		border-top: 1px solid var(--color-border);
+	}
 	/* chip's default modifiers are all solid-tone; the TYPE filter pills are
 	   a plain bordered toggle (border-gray-300 bg-white, selected =
 	   border-primary bg-primary), not chip's tinted-background look, so the
 	   shape is redrawn here on top of chip's base sizing/cursor/transition. */
-	.preset-library-type-chip { border: 1px solid var(--color-border-strong); border-radius: 9999px; background: var(--color-surface-raised); padding: 0.125rem 0.75rem; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
-	.preset-library-type-chip:hover { background: var(--color-primary-tint-1); }
-	.preset-library-type-chip[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
-	.preset-library-new-btn { margin-left: auto; flex-shrink: 0; }
-	.preset-library-empty { padding: 1rem 0; text-align: center; font-size: 0.875rem; color: var(--color-text-faint); }
+	.preset-library-type-chip {
+		border: 1px solid var(--color-border-strong);
+		border-radius: 9999px;
+		background: var(--color-surface-raised);
+		padding: 0.125rem 0.75rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--color-text-secondary);
+	}
+	.preset-library-type-chip:hover {
+		background: var(--color-primary-tint-1);
+	}
+	.preset-library-type-chip[aria-pressed='true'] {
+		border-color: var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+	}
+	.preset-library-new-btn {
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+	.preset-library-empty {
+		padding: 1rem 0;
+		text-align: center;
+		font-size: 0.875rem;
+		color: var(--color-text-faint);
+	}
 	/* original: h-16 rounded-lg border border-primary/20 bg-gray-100 - taller,
 	   more-rounded, and bordered compared to .skeleton-block's 2.5rem/radius-sm/
 	   no border. */
-	.preset-library-skeleton { height: 4rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border); }
+	.preset-library-skeleton {
+		height: 4rem;
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-border);
+	}
 </style>

@@ -29,6 +29,15 @@
 </div>
 
 <style>
-	.progress-bar-row { display: flex; align-items: center; gap: 0.5rem; }
-	.progress-bar-label { min-width: 3ch; text-align: right; font-size: 0.75rem; color: var(--color-text-muted); }
+	.progress-bar-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.progress-bar-label {
+		min-width: 3ch;
+		text-align: right;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+	}
 </style>

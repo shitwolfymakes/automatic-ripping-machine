@@ -20,16 +20,12 @@ describe('posterSrc', () => {
 
 	it('proxies https URL through backend', () => {
 		const url = 'https://m.media-amazon.com/images/poster.jpg';
-		expect(posterSrc(url)).toBe(
-			`/api/images/proxy?url=${encodeURIComponent(url)}`
-		);
+		expect(posterSrc(url)).toBe(`/api/images/proxy?url=${encodeURIComponent(url)}`);
 	});
 
 	it('proxies https URL from tmdb through backend', () => {
 		const url = 'https://image.tmdb.org/t/p/w500/poster.jpg';
-		expect(posterSrc(url)).toBe(
-			`/api/images/proxy?url=${encodeURIComponent(url)}`
-		);
+		expect(posterSrc(url)).toBe(`/api/images/proxy?url=${encodeURIComponent(url)}`);
 	});
 
 	it('returns path-only strings unchanged', () => {

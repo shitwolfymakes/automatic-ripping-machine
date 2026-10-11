@@ -1,9 +1,4 @@
-import type {
-	JobView,
-	JobStatus,
-	TranscodeTaskView,
-	ConfigView
-} from '$lib/types/api.gen';
+import type { JobView, JobStatus, TranscodeTaskView, ConfigView } from '$lib/types/api.gen';
 import { apiFetch } from './client';
 import { notAvailable } from './_stub';
 import { fetchDrives } from './drives';
@@ -47,10 +42,7 @@ export interface DashboardData {
 
 // JobView.status values that mean "in-flight" (non-terminal). v3 GET /api/jobs
 // has no "all active" status_filter, so we fetch the full list and filter here.
-const TERMINAL_JOB_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>([
-	'abandoned',
-	'failed'
-]);
+const TERMINAL_JOB_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>(['abandoned', 'failed']);
 
 function isActiveJob(job: JobView): boolean {
 	// `ripped` is a completed rip but still pre-transcode/finalize, so keep it
@@ -70,21 +62,9 @@ function fetchConfig(): Promise<ConfigView> {
  * `transcoder_online` are derived from which fetches settled.
  */
 export async function fetchDashboard(): Promise<DashboardData> {
-	const [
-		configRes,
-		jobsRes,
-		drivesRes,
-		transcodesRes,
-		transcoderStatsRes,
-		notificationsRes
-	] = await Promise.allSettled([
-		fetchConfig(),
-		fetchJobs(),
-		fetchDrives(),
-		fetchTranscoderJobs(),
-		fetchTranscoderStats(),
-		fetchNotificationCount()
-	]);
+	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes] = await Promise.allSettled(
+		[fetchConfig(), fetchJobs(), fetchDrives(), fetchTranscoderJobs(), fetchTranscoderStats(), fetchNotificationCount()]
+	);
 
 	const config = configRes.status === 'fulfilled' ? configRes.value : null;
 	const jobs = jobsRes.status === 'fulfilled' ? jobsRes.value : null;
@@ -104,9 +84,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		driveNames[d.id] = d.display_name ?? d.device_path;
 	}
 
-	const activeTranscodes = (transcodes ?? []).filter((t) =>
-		IN_PROGRESS_TRANSCODE_STATUSES.has(t.status)
-	);
+	const activeTranscodes = (transcodes ?? []).filter((t) => IN_PROGRESS_TRANSCODE_STATUSES.has(t.status));
 
 	return {
 		// db_available stands in for "backend config read succeeded" — the

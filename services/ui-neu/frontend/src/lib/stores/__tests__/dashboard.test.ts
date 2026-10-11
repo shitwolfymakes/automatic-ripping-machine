@@ -94,7 +94,7 @@ describe('dashboard store sticky merge', () => {
 		const { dashboard } = await import('../dashboard');
 		await dashboard.refresh();
 		await dashboard.refresh();
-		expect(get(dashboard).transcoder_online).toBe(true);  // blip absorbed
+		expect(get(dashboard).transcoder_online).toBe(true); // blip absorbed
 		await dashboard.refresh();
 		expect(get(dashboard).transcoder_online).toBe(false); // real outage
 	});

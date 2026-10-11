@@ -51,10 +51,7 @@ export function elapsedTime(startTime: string | null | undefined): string {
  * Capped at 24h+ to avoid printing absurd estimates from sub-1%
  * progress values that haven't yet stabilised.
  */
-export function etaTime(
-	startTime: string | null | undefined,
-	progressPct: number | null | undefined
-): string | null {
+export function etaTime(startTime: string | null | undefined, progressPct: number | null | undefined): string | null {
 	if (!startTime || progressPct == null) return null;
 	if (progressPct <= 0 || progressPct >= 100) return null;
 	const start = new Date(startTime);
@@ -92,7 +89,7 @@ export function statusAccentVar(status: string | null | undefined): string {
 		case 'identified': // v3 JobStatus — queued to rip
 		case 'ready':
 		case 'active':
-		case 'ripping':         // legacy pre-v2.0.0
+		case 'ripping': // legacy pre-v2.0.0
 		case 'video_ripping':
 		case 'audio_ripping':
 		case 'importing':
@@ -114,7 +111,7 @@ export function statusAccentVar(status: string | null | undefined): string {
 		case 'failed':
 		case 'error':
 			return 'var(--color-status-error)';
-		case 'waiting':         // legacy pre-v2.0.0
+		case 'waiting': // legacy pre-v2.0.0
 		case 'manual_paused':
 		case 'makemkv_throttled':
 		case 'waiting_transcode':
@@ -159,7 +156,7 @@ export function statusColor(status: string | null | undefined): string {
 			return 'status-warning';
 		case 'identified': // v3 JobStatus — identified, queued/ready to rip
 		case 'ready':
-		case 'ripping':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
+		case 'ripping': // legacy pre-v2.0.0; in-flight jobs mid-deploy
 		case 'video_ripping':
 		case 'audio_ripping':
 		case 'importing': // locally generated when isFolderImport && status='ripping'
@@ -183,7 +180,7 @@ export function statusColor(status: string | null | undefined): string {
 		case 'failed': // TaskStatus (transcode task) terminal AND TrackStatus.failed (v2.0.0+)
 		case 'transcode_failed': // effectiveJobStatus() rollup — ripped OK but some/all tracks failed to transcode
 			return 'status-error';
-		case 'waiting':         // legacy pre-v2.0.0; in-flight jobs mid-deploy
+		case 'waiting': // legacy pre-v2.0.0; in-flight jobs mid-deploy
 		case 'manual_paused':
 		case 'makemkv_throttled':
 		case 'waiting_transcode':
@@ -211,7 +208,7 @@ const STATUS_LABELS: Record<string, string> = {
 	identifying: 'Scanning',
 	ready: 'Ready',
 	active: 'Active',
-	ripping: 'Ripping',           // legacy pre-v2.0.0; in-flight jobs mid-deploy
+	ripping: 'Ripping', // legacy pre-v2.0.0; in-flight jobs mid-deploy
 	video_ripping: 'Ripping',
 	audio_ripping: 'Ripping',
 	importing: 'Processing',
@@ -226,7 +223,7 @@ const STATUS_LABELS: Record<string, string> = {
 	failed: 'Failed',
 	transcode_failed: 'Transcode failed',
 	error: 'Error',
-	waiting: 'Waiting',           // legacy pre-v2.0.0; in-flight jobs mid-deploy
+	waiting: 'Waiting', // legacy pre-v2.0.0; in-flight jobs mid-deploy
 	manual_paused: 'Paused',
 	makemkv_throttled: 'Throttled',
 	waiting_transcode: 'Waiting to Transcode',
@@ -238,7 +235,7 @@ const STATUS_LABELS: Record<string, string> = {
 	// TrackStatus / TranscodeTaskStatus (per-track + per-task rows)
 	queued: 'Queued',
 	in_progress: 'In Progress',
-	done: 'Done',
+	done: 'Done'
 };
 
 export function statusLabel(status: string | null | undefined): string {

@@ -75,10 +75,7 @@ describe('TranscodePresetForm encoder catalog loading and failure', () => {
 		await fireEvent.click(screen.getByTestId('tp-submit'));
 
 		await waitFor(() =>
-			expect(updateMock).toHaveBeenCalledWith(
-				'tpr_5',
-				expect.objectContaining({ encoder: 'any_h265' })
-			)
+			expect(updateMock).toHaveBeenCalledWith('tpr_5', expect.objectContaining({ encoder: 'any_h265' }))
 		);
 	});
 });

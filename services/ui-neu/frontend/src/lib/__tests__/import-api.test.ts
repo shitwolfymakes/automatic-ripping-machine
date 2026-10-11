@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-	scanFolder, createFolderJob, createIsoJob, fetchIngressDirectory, fetchIngressRoot
-} from '../api/import-jobs';
+import { scanFolder, createFolderJob, createIsoJob, fetchIngressDirectory, fetchIngressRoot } from '../api/import-jobs';
 
 // Folder import + ingress browser + ISO job creation are MISSING in v3 — these
 // functions are stubs that reject before any fetch. The Import wizard screen is

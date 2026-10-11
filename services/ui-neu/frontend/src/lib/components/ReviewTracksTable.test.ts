@@ -11,9 +11,15 @@ const mockUpdateTrack = vi.mocked(updateTrack);
 
 function track(overrides: Record<string, unknown> = {}) {
 	return {
-		id: 'trk_1', index: 1, title: null, year: null,
-		episode_number: null, excluded: false,
-		duration_seconds: 3600, output_path: null, source_ref: 't00',
+		id: 'trk_1',
+		index: 1,
+		title: null,
+		year: null,
+		episode_number: null,
+		excluded: false,
+		duration_seconds: 3600,
+		output_path: null,
+		source_ref: 't00',
 		...overrides
 	} as any;
 }
@@ -42,7 +48,13 @@ function scanTitle(overrides: Record<string, unknown> = {}) {
 describe('ReviewTracksTable', () => {
 	it('renders a row per track', () => {
 		renderComponent(ReviewTracksTable, {
-			props: { job, tracks: [track(), track({ id: 'trk_2', index: 2 })], isVideo: true, isMusic: false, onrefresh: vi.fn() }
+			props: {
+				job,
+				tracks: [track(), track({ id: 'trk_2', index: 2 })],
+				isVideo: true,
+				isMusic: false,
+				onrefresh: vi.fn()
+			}
 		});
 		expect(screen.getByText('Tracks (2)')).toBeInTheDocument();
 	});

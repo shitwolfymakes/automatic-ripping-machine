@@ -2,37 +2,52 @@ import { describe, it, expect } from 'vitest';
 import { effectiveJobStatus, isPartialComplete, reviewPhaseBadge, hasTitleMatch } from '$lib/utils/job-status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
-const job = (status: string, transcode_progress: TP = null) =>
-	({ status, transcode_progress }) as any;
+const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
 
 describe('effectiveJobStatus', () => {
 	it('ripped + no session stays ripped (awaiting action)', () => {
 		expect(effectiveJobStatus(job('ripped', null))).toBe('ripped');
 	});
 	it('ripped + transcoding -> transcoding', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'transcoding', tasks_total: 2, tasks_done: 1, percent: 50 }))).toBe('transcoding');
+		expect(
+			effectiveJobStatus(job('ripped', { state: 'transcoding', tasks_total: 2, tasks_done: 1, percent: 50 }))
+		).toBe('transcoding');
 	});
 	it('ripped + done -> complete', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe('complete');
+		expect(effectiveJobStatus(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe(
+			'complete'
+		);
 	});
 	it('ripped + done_partial -> transcode_failed (not complete — some tracks failed)', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))).toBe('transcode_failed');
+		expect(
+			effectiveJobStatus(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))
+		).toBe('transcode_failed');
 	});
 	it('ripped + failed -> transcode_failed (all tracks failed; rip itself was fine)', () => {
-		expect(effectiveJobStatus(job('ripped', { state: 'failed', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe('transcode_failed');
+		expect(effectiveJobStatus(job('ripped', { state: 'failed', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe(
+			'transcode_failed'
+		);
 	});
 	it('ripped_partial + done -> complete', () => {
-		expect(effectiveJobStatus(job('ripped_partial', { state: 'done', tasks_total: 1, tasks_done: 1, percent: 100 }))).toBe('complete');
+		expect(
+			effectiveJobStatus(job('ripped_partial', { state: 'done', tasks_total: 1, tasks_done: 1, percent: 100 }))
+		).toBe('complete');
 	});
 	it('non-post-rip status is unchanged even with a summary', () => {
-		expect(effectiveJobStatus(job('ripping', { state: 'transcoding', tasks_total: 1, tasks_done: 0, percent: 0 }))).toBe('ripping');
+		expect(
+			effectiveJobStatus(job('ripping', { state: 'transcoding', tasks_total: 1, tasks_done: 0, percent: 0 }))
+		).toBe('ripping');
 	});
 });
 
 describe('isPartialComplete', () => {
 	it('true only for done_partial', () => {
-		expect(isPartialComplete(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))).toBe(true);
-		expect(isPartialComplete(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe(false);
+		expect(
+			isPartialComplete(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))
+		).toBe(true);
+		expect(isPartialComplete(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe(
+			false
+		);
 		expect(isPartialComplete(job('ripped', null))).toBe(false);
 	});
 });
@@ -93,15 +108,27 @@ describe('transcodeColumnStatus', () => {
 		expect(transcodeColumnStatus(tp('done', 4, 4, 0))).toEqual({ label: 'Complete', badgeStatus: 'complete' });
 	});
 	it('done_partial -> Transcode failed (red)', () => {
-		expect(transcodeColumnStatus(tp('done_partial', 4, 2, 2))).toEqual({ label: 'Transcode failed', badgeStatus: 'transcode_failed' });
+		expect(transcodeColumnStatus(tp('done_partial', 4, 2, 2))).toEqual({
+			label: 'Transcode failed',
+			badgeStatus: 'transcode_failed'
+		});
 	});
 	it('failed -> Transcode failed (red)', () => {
-		expect(transcodeColumnStatus(tp('failed', 4, 0, 4))).toEqual({ label: 'Transcode failed', badgeStatus: 'transcode_failed' });
+		expect(transcodeColumnStatus(tp('failed', 4, 0, 4))).toEqual({
+			label: 'Transcode failed',
+			badgeStatus: 'transcode_failed'
+		});
 	});
 	it('transcoding + tasks_failed>0 -> Failed — retrying (red, never green/blue)', () => {
-		expect(transcodeColumnStatus(tp('transcoding', 4, 1, 1))).toEqual({ label: 'Failed, retrying 1/4', badgeStatus: 'transcode_failed' });
+		expect(transcodeColumnStatus(tp('transcoding', 4, 1, 1))).toEqual({
+			label: 'Failed, retrying 1/4',
+			badgeStatus: 'transcode_failed'
+		});
 	});
 	it('transcoding + no failures -> Transcoding N/M (blue)', () => {
-		expect(transcodeColumnStatus(tp('transcoding', 4, 2, 0))).toEqual({ label: 'Transcoding 2/4', badgeStatus: 'transcoding' });
+		expect(transcodeColumnStatus(tp('transcoding', 4, 2, 0))).toEqual({
+			label: 'Transcoding 2/4',
+			badgeStatus: 'transcoding'
+		});
 	});
 });

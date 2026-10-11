@@ -1,33 +1,35 @@
-@import "tailwindcss";
-@import "./lib/styles/tokens.css";
-@import "./lib/styles/base.css";
-@import "./lib/styles/layout.css";
-@import "./lib/styles/utilities.css";
-@import "./lib/styles/components/alert.css";
-@import "./lib/styles/components/badge.css";
-@import "./lib/styles/components/button.css";
-@import "./lib/styles/components/card.css";
-@import "./lib/styles/components/chip.css";
-@import "./lib/styles/components/code-block.css";
-@import "./lib/styles/components/field.css";
-@import "./lib/styles/components/flyout.css";
-@import "./lib/styles/components/glyph.css";
-@import "./lib/styles/components/list-row.css";
-@import "./lib/styles/components/modal.css";
-@import "./lib/styles/components/nav.css";
-@import "./lib/styles/components/panel.css";
-@import "./lib/styles/components/progress.css";
-@import "./lib/styles/components/section-frame.css";
-@import "./lib/styles/components/skeleton.css";
-@import "./lib/styles/components/slide-over.css";
-@import "./lib/styles/components/stat.css";
-@import "./lib/styles/components/status-dot.css";
-@import "./lib/styles/components/table.css";
-@import "./lib/styles/components/tabs.css";
-@import "./lib/styles/components/text.css";
-@import "./lib/styles/components/toast.css";
-@import "./lib/styles/components/toggle.css";
+@import 'tailwindcss';
+@import './lib/styles/tokens.css';
+@import './lib/styles/base.css';
+@import './lib/styles/layout.css';
+@import './lib/styles/utilities.css';
+@import './lib/styles/components/alert.css';
+@import './lib/styles/components/badge.css';
+@import './lib/styles/components/button.css';
+@import './lib/styles/components/card.css';
+@import './lib/styles/components/chip.css';
+@import './lib/styles/components/code-block.css';
+@import './lib/styles/components/field.css';
+@import './lib/styles/components/flyout.css';
+@import './lib/styles/components/glyph.css';
+@import './lib/styles/components/list-row.css';
+@import './lib/styles/components/modal.css';
+@import './lib/styles/components/nav.css';
+@import './lib/styles/components/panel.css';
+@import './lib/styles/components/progress.css';
+@import './lib/styles/components/section-frame.css';
+@import './lib/styles/components/skeleton.css';
+@import './lib/styles/components/slide-over.css';
+@import './lib/styles/components/stat.css';
+@import './lib/styles/components/status-dot.css';
+@import './lib/styles/components/table.css';
+@import './lib/styles/components/tabs.css';
+@import './lib/styles/components/text.css';
+@import './lib/styles/components/toast.css';
+@import './lib/styles/components/toggle.css';
 
 /* FOUC prevention: overrides the inline visibility:hidden in app.html.
    Must be unlayered so it beats the unlayered inline <style>. */
-body { visibility: visible; }
+body {
+	visibility: visible;
+}

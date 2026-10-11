@@ -4,11 +4,16 @@ import ChannelRow from '../ChannelRow.svelte';
 import type { Channel } from '$lib/types/notifications';
 
 const ch: Channel = {
-	id: 1, type: 'apprise', name: 'Discord', enabled: true,
+	id: 1,
+	type: 'apprise',
+	name: 'Discord',
+	enabled: true,
 	config: { type: 'apprise', url: 'discord://a/b' },
-	subscribed_events: ['job.started', 'job.failed'], templates: {},
+	subscribed_events: ['job.started', 'job.failed'],
+	templates: {},
 	last_fired_at: new Date(Date.now() - 10 * 60000).toISOString(),
-	last_success_at: null, last_error: null
+	last_success_at: null,
+	last_error: null
 };
 
 describe('ChannelRow', () => {
@@ -38,7 +43,9 @@ describe('ChannelRow', () => {
 	it('has an Edit button that calls onedit and shows the script for bash rows', async () => {
 		const onedit = vi.fn();
 		const bashChannel: Channel = {
-			...ch, type: 'bash', config: { type: 'bash', script: 'plex.sh' }
+			...ch,
+			type: 'bash',
+			config: { type: 'bash', script: 'plex.sh' }
 		};
 		renderComponent(ChannelRow, { props: { channel: bashChannel, serviceName: 'bash', onedit } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));

@@ -9,7 +9,13 @@ import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
 import { setTranscodeRuntimeEnabled } from '$lib/stores/config';
-import type { SessionView, ApplySessionResponse, CollisionInfo, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+import type {
+	SessionView,
+	ApplySessionResponse,
+	CollisionInfo,
+	RipPresetView,
+	TranscodePresetView
+} from '$lib/types/api.gen';
 
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn()
@@ -97,7 +103,13 @@ describe('ApplySessionDialog', () => {
 			job_output_dir: 'MysterySuspense',
 			job_output_name: 'MysterySuspense',
 			items: [
-				{ track_id: 'trk_1', track_number: 1, output_path: 'MysterySuspense/MysterySuspense - Track 01.mkv', output_dir: 'MysterySuspense', output_name: 'MysterySuspense - Track 01.mkv' }
+				{
+					track_id: 'trk_1',
+					track_number: 1,
+					output_path: 'MysterySuspense/MysterySuspense - Track 01.mkv',
+					output_dir: 'MysterySuspense',
+					output_name: 'MysterySuspense - Track 01.mkv'
+				}
 			]
 		});
 	});
@@ -400,7 +412,9 @@ describe('ApplySessionDialog', () => {
 			expect(screen.getByTestId('recipe-rip-preset')).toHaveTextContent('MakeMKV All Titles');
 			expect(screen.getByTestId('recipe-transcode-preset')).toHaveTextContent('H.265 1080p');
 			// The real resolver's answer for this job + session, not a sample.
-			expect(screen.getByTestId('recipe-output-path')).toHaveTextContent('MysterySuspense/MysterySuspense - Track 01.mkv');
+			expect(screen.getByTestId('recipe-output-path')).toHaveTextContent(
+				'MysterySuspense/MysterySuspense - Track 01.mkv'
+			);
 		});
 		expect(fetchNamingPreviewMock).toHaveBeenCalledWith('job_1', 'ses_movie');
 	});
@@ -421,7 +435,12 @@ describe('ApplySessionDialog', () => {
 
 	it('explains a missing token in plain words and blocks Apply', async () => {
 		fetchSessionsMock.mockResolvedValue([
-			createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie', output_path_template: '{title} ({year})/{title}.mkv' })
+			createSession({
+				id: 'ses_movie',
+				name: 'Movie MKV',
+				media_type: 'movie',
+				output_path_template: '{title} ({year})/{title}.mkv'
+			})
 		]);
 		fetchNamingPreviewMock.mockRejectedValue(
 			new Error("track index=0: token {year} resolved empty against the job's metadata")
@@ -432,7 +451,9 @@ describe('ApplySessionDialog', () => {
 		await waitFor(() => expect(screen.getByText(/Movie MKV/)).toBeInTheDocument());
 		await fireEvent.change(screen.getByTestId('apply-session-select'), { target: { value: 'ses_movie' } });
 		await waitFor(() => {
-			expect(screen.getByTestId('recipe-output-problem')).toHaveTextContent('This job has no year, so {year} in the output path cannot be filled.');
+			expect(screen.getByTestId('recipe-output-problem')).toHaveTextContent(
+				'This job has no year, so {year} in the output path cannot be filled.'
+			);
 		});
 		expect(screen.getByTestId('apply-session-apply')).toBeDisabled();
 	});
@@ -533,7 +554,10 @@ describe('ApplySessionDialog', () => {
 			]);
 			let resolvePresets!: (v: TranscodePresetView[]) => void;
 			fetchTranscodePresetsMock.mockImplementation(
-				() => new Promise<TranscodePresetView[]>((resolve) => { resolvePresets = resolve; })
+				() =>
+					new Promise<TranscodePresetView[]>((resolve) => {
+						resolvePresets = resolve;
+					})
 			);
 			const job = createJob({ id: 'job_1', disc_type: 'bluray' });
 			renderComponent(ApplySessionDialog, {
@@ -543,9 +567,7 @@ describe('ApplySessionDialog', () => {
 			// Sessions have resolved (mocked immediately) but presets are still
 			// pending: the picker must show a loading affordance, not an empty
 			// filtered list indistinguishable from "no passthrough sessions".
-			await waitFor(() =>
-				expect(screen.getByTestId('apply-session-presets-loading')).toBeInTheDocument()
-			);
+			await waitFor(() => expect(screen.getByTestId('apply-session-presets-loading')).toBeInTheDocument());
 			expect(screen.queryByTestId('apply-session-select')).not.toBeInTheDocument();
 			expect(screen.queryByTestId('apply-session-passthrough-hint')).not.toBeInTheDocument();
 

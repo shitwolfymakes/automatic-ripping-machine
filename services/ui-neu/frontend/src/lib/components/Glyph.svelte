@@ -1,7 +1,3 @@
-<script module lang="ts">
-	export type { GlyphName } from './glyph-names';
-</script>
-
 <script lang="ts">
 	import { GLYPH_PATHS, type GlyphName } from './glyph-names';
 
@@ -27,13 +23,10 @@
 		viewBox="0 0 24 24"
 		role="img"
 		aria-label={label}
-	><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={GLYPH_PATHS[name]} /></svg>
+		><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={GLYPH_PATHS[name]} /></svg
+	>
 {:else}
-	<svg
-		class="shrink-0 {sizeClass} {className}"
-		fill="none"
-		stroke="currentColor"
-		viewBox="0 0 24 24"
-		aria-hidden="true"
-	><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={GLYPH_PATHS[name]} /></svg>
+	<svg class="shrink-0 {sizeClass} {className}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
+		><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={GLYPH_PATHS[name]} /></svg
+	>
 {/if}

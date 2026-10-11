@@ -14,9 +14,7 @@ export const discordCatalog: Catalog = {
 				{ key: 'webhook_id', label: 'Webhook ID', type: 'string', private: true, required: true },
 				{ key: 'webhook_token', label: 'Webhook Token', type: 'string', private: true, required: true }
 			],
-			advanced_fields: [
-				{ key: 'thread', label: 'Thread', type: 'string', private: false, required: false }
-			]
+			advanced_fields: [{ key: 'thread', label: 'Thread', type: 'string', private: false, required: false }]
 		}
 	]
 };

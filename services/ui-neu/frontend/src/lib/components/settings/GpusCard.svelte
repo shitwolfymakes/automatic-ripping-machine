@@ -43,6 +43,7 @@
 	}
 
 	async function reprobe(g: GpuView) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			await probeGpu(g.id);
@@ -50,6 +51,7 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Re-probe failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;
@@ -69,6 +71,7 @@
 	}
 
 	async function toggle(g: GpuView, next: boolean) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			const updated = await updateGpu(g.id, next);
@@ -78,6 +81,7 @@
 		} catch {
 			error = 'Saving the GPU switch failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;
@@ -88,6 +92,7 @@
 		const g = confirmTarget;
 		confirmTarget = null;
 		if (!g) return;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 		pending = new Set(pending).add(g.id);
 		try {
 			await deleteGpu(g.id);
@@ -100,6 +105,7 @@
 				? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
 				: 'Deleting the GPU failed.';
 		} finally {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);
 			p.delete(g.id);
 			pending = p;
@@ -119,12 +125,7 @@
 	<div class="gpus-card-head">
 		<h3 class="eyebrow">Transcode GPUs</h3>
 		{#if $isAdmin && gpus.length > 0}
-			<button
-				type="button"
-				class="btn btn-ghost btn-sm"
-				disabled={probingAll}
-				onclick={reprobeAll}
-			>
+			<button type="button" class="btn btn-ghost btn-sm" disabled={probingAll} onclick={reprobeAll}>
 				Re-probe all
 			</button>
 		{/if}
@@ -136,8 +137,8 @@
 		<p class="gpus-card-note">Loading GPU inventory...</p>
 	{:else if gpus.length === 0}
 		<p class="gpus-card-note" data-testid="gpus-empty">
-			No GPUs configured. Transcodes run on CPU. The inventory seeds from the host probe (ARM_GPUS)
-			when this list is empty and the backend restarts.
+			No GPUs configured. Transcodes run on CPU. The inventory seeds from the host probe (ARM_GPUS) when this list is
+			empty and the backend restarts.
 		</p>
 	{:else}
 		<div class="stack stack-sm">
@@ -192,8 +193,8 @@
 			{/each}
 		</div>
 		<p class="gpus-card-note">
-			Rows come from device discovery; each device's encoders are verified by a per-device probe.
-			Use Re-probe to re-verify a device without restarting the backend.
+			Rows come from device discovery; each device's encoders are verified by a per-device probe. Use Re-probe to
+			re-verify a device without restarting the backend.
 		</p>
 	{/if}
 </section>

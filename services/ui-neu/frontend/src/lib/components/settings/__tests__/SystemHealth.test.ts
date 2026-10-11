@@ -5,7 +5,10 @@ import SystemHealth from '../SystemHealth.svelte';
 const fetchSystemDiagnostics = vi.fn();
 vi.mock('$lib/api/system', () => ({ fetchSystemDiagnostics: () => fetchSystemDiagnostics() }));
 
-afterEach(() => { cleanup(); fetchSystemDiagnostics.mockReset(); });
+afterEach(() => {
+	cleanup();
+	fetchSystemDiagnostics.mockReset();
+});
 
 describe('SystemHealth', () => {
 	it('runs GET /api/system/diagnostics on click and lists every check with its detail', async () => {
