@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
-    ARM_DRIVE_DEV: str
+    # Required for an optical drive; unset (None) when ARM_SOURCE_PATH is set
+    # instead — a virtual (ISO-source) ripper has no device node.
+    ARM_DRIVE_DEV: str | None = None
     # Identity handed down by the backend when it spawns this ripper.
     # ARM_DRIVE_ID is the Drive row this container serves (registration and
     # heartbeats are keyed to it from Plan 3 on). Required — the backend
@@ -36,14 +38,18 @@ class Settings(BaseSettings):
     # sends a non-null value in `RipStartResponse.min_length_seconds`,
     # the ripper uses that instead of this baseline.
     ARM_MIN_LENGTH_SECONDS: int = 120
-    # Manual-trigger ISO mode. When set, the ripper skips its poll loop,
-    # treats the path as the bound device everywhere (registering it as
-    # such with the backend), and runs the scan → identify → rip
-    # pipeline against the file exactly once. After the pipeline returns
-    # the container idles so the WS subscription stays open for
-    # cancellation. Intended for local smoke tests against the
-    # matrix256-corpus ISOs; production deployments leave this unset.
-    ARM_MANUAL_TRIGGER_ISO: str | None = None
+    # Source mode. When ARM_SOURCE_PATH is set, the ripper skips its poll
+    # loop, treats the path as the bound device everywhere (registering it
+    # as such with the backend), and runs the scan → identify → rip
+    # pipeline against the file exactly once, then exits (the backend's
+    # virtual-drive watchdog does the cleanup — see spec §5/§6.2). The
+    # backend spawns one such container per ISO rip; it sets no
+    # ARM_DRIVE_DEV for these. ARM_SOURCE_KIND selects the MakeMKV source
+    # scheme ("iso" for now; "folder" is a later addition). ARM_SOURCE_SESSION_ID
+    # carries the operator's chosen session, when one was picked explicitly.
+    ARM_SOURCE_PATH: str | None = None
+    ARM_SOURCE_KIND: str = "iso"
+    ARM_SOURCE_SESSION_ID: str | None = None
     # Tier-4: how often the ripper re-probes makemkv key validity (daily default).
     MAKEMKV_KEYCHECK_INTERVAL_SECONDS: int = 86400
     # Tier-4: consecutive NOT_READY polls before re-arming insert detection.

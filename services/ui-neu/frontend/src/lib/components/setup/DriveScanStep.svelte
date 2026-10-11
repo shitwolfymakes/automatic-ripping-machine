@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { onMount } from 'svelte';
+	import { opticalOnly } from '$lib/utils/drives';
 
 	let drives = $state<Drive[]>([]);
 	let loading = $state(true);
@@ -12,7 +13,7 @@
 		try {
 			const resp = await fetch('/api/drives');
 			if (resp.ok) {
-				drives = await resp.json();
+				drives = opticalOnly(await resp.json());
 			} else {
 				error = 'Failed to load drives';
 			}

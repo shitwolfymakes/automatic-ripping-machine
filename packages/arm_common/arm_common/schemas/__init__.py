@@ -55,6 +55,16 @@ from arm_common.schemas.identity_api import (
     SourceSummary,
     TrackIdentityView,
 )
+from arm_common.schemas.iso import (
+    IsoFolderEntry,
+    IsoFolderListing,
+    IsoLibraryEntry,
+    IsoLibraryListing,
+    IsoPrepareReport,
+    IsoPrepareView,
+    IsoRipCreated,
+    IsoRipRequest,
+)
 from arm_common.schemas.job_metadata import (
     ExternalIds,
     JobFlags,
@@ -268,6 +278,14 @@ __all__ = [
     "IdentifyRequest",
     "IdentityClaims",
     "InAppChannelConfig",
+    "IsoFolderEntry",
+    "IsoFolderListing",
+    "IsoLibraryEntry",
+    "IsoLibraryListing",
+    "IsoPrepareReport",
+    "IsoPrepareView",
+    "IsoRipCreated",
+    "IsoRipRequest",
     "JOB_CLAIM_FIELDS",
     "JobClaim",
     "JobCompleteRequest",

@@ -64,6 +64,9 @@ services:
       # for this project is always the repo root. Override in `.env` only if
       # you've moved the data out of the repo tree.
       ARM_HOST_RAW_PATH: ${ARM_HOST_RAW_PATH:-${PWD}/arm/raw}
+      # Rip from ISO (optional): empty (the default) means the feature
+      # reports "not configured". See ARM_HOST_ISO_LIBRARY_PATH in .env.example.
+      ARM_HOST_ISO_LIBRARY_PATH: ${ARM_HOST_ISO_LIBRARY_PATH:-}
       ARM_HOST_MEDIA_PATH: ${ARM_HOST_MEDIA_PATH:-${PWD}/arm/media}
       ARM_HOST_LOGS_PATH: ${ARM_HOST_LOGS_PATH:-${PWD}/arm/logs}
       ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH:-${PWD}/arm/certs}
@@ -102,6 +105,9 @@ services:
       - ./arm/logs:/logs
       - ./arm/media:/media
       - ./arm/raw:/raw
+      # Rip from ISO (optional): read-only; the backend browses it and mounts
+      # only the chosen .iso into each one-shot ripper it spawns.
+      - ${ARM_HOST_ISO_LIBRARY_PATH:-./arm/iso-library}:/ingress:ro
       # Bash hook scripts (Settings > Notifications > Bash script). Read-only:
       # the backend runs them, operators edit them on the host.
       - ./arm/scripts:/scripts:ro

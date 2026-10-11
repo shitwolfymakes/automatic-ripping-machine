@@ -156,6 +156,11 @@ present "backend forwards ripper poll tunable"  'ARM_RIPPER_POLL_INTERVAL_SECOND
 present "template has the arm-data-init service" '^  arm-data-init:$'        "${TEMPLATE}"
 present "backend waits for arm-data-init"      'condition: service_completed_successfully' "${TEMPLATE}"
 
+# --- compose template: ISO library mount ------------------------------------
+present "backend mounts the ISO library read-only" 'ARM_HOST_ISO_LIBRARY_PATH:-\./arm/iso-library\}:/ingress:ro' "${TEMPLATE}"
+present "backend receives ARM_HOST_ISO_LIBRARY_PATH" 'ARM_HOST_ISO_LIBRARY_PATH: \$\{ARM_HOST_ISO_LIBRARY_PATH:-\}' "${TEMPLATE}"
+present "setup-dev creates the iso-library dir" 'iso-library' "${SETUP}"
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     envfile="$(mktemp)"
     printf 'POSTGRES_USER=a\nPOSTGRES_PASSWORD=b\nPOSTGRES_DB=c\nARM_SERVICE_TOKEN=t\n' > "${envfile}"
@@ -194,13 +199,12 @@ else
     echo "skip - docker compose not available; template checked by grep only"
 fi
 
-# --- iso-smoke.sh: register-by-id -------------------------------------------------
+# --- iso-smoke.sh: ISO-rip API, not a borrowed drive ------------------------
 SMOKE="${ROOT}/devtools/iso-smoke.sh"
 absent  "iso-smoke no longer mounts per-ripper certs" 'arm-ripper-sr0\.(crt|key)' "${SMOKE}"
 absent  "iso-smoke has no arm-ripper-sr0 service"     'RIPPER_SERVICE="arm-ripper-sr0"' "${SMOKE}"
-present "iso-smoke passes ARM_DRIVE_ID"               '-e ARM_DRIVE_ID=' "${SMOKE}"
-present "iso-smoke pauses the managed ripper by label" 'label=arm.drive_id=' "${SMOKE}"
-present "iso-smoke uses the arm/ data dirs"           'ROOT_DIR\}/arm/raw:/raw' "${SMOKE}"
+absent  "iso-smoke no longer borrows a drive"         'pause_managed_ripper|ARM_MANUAL_TRIGGER_ISO' "${SMOKE}"
+present "iso-smoke uses the ISO rip API"              '/api/iso/rips' "${SMOKE}"
 rc=0; bash -n "${SMOKE}" || rc=$?
 check "iso-smoke parses" 0 "${rc}"
 

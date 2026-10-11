@@ -5,7 +5,15 @@ from sqlalchemy import Boolean, JSON, Column, DateTime, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import DriveIdentityKind, DriveLifecycle, DriveMediaStatus, DriveMode, DriveStatus
+from arm_common.enums import (
+    DriveIdentityKind,
+    DriveKind,
+    DriveLifecycle,
+    DriveMediaStatus,
+    DriveMode,
+    DriveSourceKind,
+    DriveStatus,
+)
 from arm_common.ulid import new_id
 
 
@@ -45,6 +53,17 @@ class Drive(SQLModel, table=True):
         default=DriveLifecycle.ENROLLED,
         sa_column=enum_column(DriveLifecycle, "drive_lifecycle", server_default=DriveLifecycle.ENROLLED.value),
     )
+    # PR iso-source-rip: optical drives are hardware; virtual drives are one
+    # ISO rip each (created enrolled, retired when the rip ends).
+    kind: DriveKind = Field(
+        default=DriveKind.OPTICAL,
+        sa_column=enum_column(DriveKind, "drive_kind", server_default=DriveKind.OPTICAL.value),
+    )
+    source_kind: DriveSourceKind | None = Field(
+        default=None, sa_column=enum_column(DriveSourceKind, "drive_source_kind", nullable=True)
+    )
+    # Relative to the ISO library; never an absolute or host path.
+    source_path: str | None = Field(default=None, nullable=True)
     # Hardware here right now. Scanner-owned for detected/ignored rows;
     # heartbeat-owned (DETACHED → False) for enrolled rows.
     present: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))

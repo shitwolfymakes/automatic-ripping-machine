@@ -32,6 +32,15 @@ describe('fetchDrives', () => {
 		expect(mockFetch).toHaveBeenCalledWith('/api/drives', expect.objectContaining({ method: 'GET' }));
 		expect(result).toEqual([{ id: 'drv_1' }]);
 	});
+
+	it('adds include_retired=true when asked', async () => {
+		mockFetch.mockResolvedValue(jsonResponse([]));
+		await fetchDrives({ includeRetired: true });
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/drives?include_retired=true',
+			expect.objectContaining({ method: 'GET' })
+		);
+	});
 });
 
 describe('updateDrive', () => {

@@ -9,7 +9,16 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 import pytest  # noqa: E402
 
 from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError, reconcile_enrolled_rippers  # noqa: E402
-from arm_common import DiscType, Drive, DriveLifecycle, DriveStatus, Job, JobStatus  # noqa: E402
+from arm_common import (  # noqa: E402
+    DiscType,
+    Drive,
+    DriveKind,
+    DriveLifecycle,
+    DriveSourceKind,
+    DriveStatus,
+    Job,
+    JobStatus,
+)
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -19,6 +28,14 @@ class _StubManager:
         self._summary = summary
         self.seen: list[list[str]] = []
         self.busy: frozenset[str] = frozenset()
+        self.removed: list[str] = []
+
+    def container_statuses(self, drive_ids):  # sync, like the real one
+        return {i: ("exited", None) for i in drive_ids}
+
+    def remove(self, drive_id):
+        self.removed.append(drive_id)
+        return 1
 
     def reconcile(self, enrolled, *, busy=frozenset()):  # sync, like the real one (runs under to_thread)
         self.seen.append([d.id for d in enrolled])
@@ -26,6 +43,14 @@ class _StubManager:
         if isinstance(self._summary, Exception):
             raise self._summary
         return self._summary
+
+
+class _StubHub:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    async def emit(self, topic, event_type, payload, *, persist=True, job_id=None, track_id=None, session=None):
+        self.events.append(event_type)
 
 
 def _row(drive_id: str, lifecycle: DriveLifecycle, last_error: str | None = None) -> Drive:
@@ -57,7 +82,7 @@ async def test_boot_reconcile_passes_only_enrolled_rows_and_writes_last_error() 
     db.rows["drives"] = [ok, bad, detected, error_row]
     manager = _StubManager(ReconcileSummary(adopted=["drv_ok", "drv_err"], failed={"drv_bad": "ImageNotFound: nope"}))
 
-    summary = await reconcile_enrolled_rippers(manager, _factory(db))  # type: ignore[arg-type]
+    summary = await reconcile_enrolled_rippers(manager, _factory(db), hub=_StubHub())  # type: ignore[arg-type]
 
     assert summary is not None and summary.adopted == ["drv_ok", "drv_err"]
     assert manager.seen == [["drv_ok", "drv_bad", "drv_err"]]
@@ -79,7 +104,7 @@ async def test_boot_reconcile_logs_and_returns_none_when_the_daemon_is_unlistabl
     db.rows["drives"] = [_row("drv_ok", DriveLifecycle.ENROLLED)]
     manager = _StubManager(RipperManagerError("DockerException: no socket"))
     with caplog.at_level(logging.ERROR, logger="arm_backend.ripper_manager"):
-        assert await reconcile_enrolled_rippers(manager, _factory(db)) is None  # type: ignore[arg-type]
+        assert await reconcile_enrolled_rippers(manager, _factory(db), hub=_StubHub()) is None  # type: ignore[arg-type]
     assert "no socket" in caplog.text
 
 
@@ -92,5 +117,26 @@ async def test_boot_reconcile_passes_ripping_drives_as_busy() -> None:
         Job(id="job_2", drive_id="drv_b", status=JobStatus.RIPPED, disc_type=DiscType.DVD),
     ]
     manager = _StubManager(ReconcileSummary(adopted=["drv_a", "drv_b"]))
-    await reconcile_enrolled_rippers(manager, _factory(db))  # type: ignore[arg-type]
+    await reconcile_enrolled_rippers(manager, _factory(db), hub=_StubHub())  # type: ignore[arg-type]
     assert manager.busy == frozenset({"drv_a"})
+
+
+@pytest.mark.asyncio
+async def test_boot_sweep_runs_before_reconcile() -> None:
+    """A finished ISO rip's drive is retired by the boot sweep, so reconcile
+    never sees it and never respawns its container (spec 6.2 ordering)."""
+    db = FakeSession()
+    optical = _row("drv_sr0", DriveLifecycle.ENROLLED)
+    done = _row("drv_iso_done", DriveLifecycle.ENROLLED)
+    done.kind, done.source_kind, done.source_path = DriveKind.VIRTUAL, DriveSourceKind.ISO, "a.iso"
+    db.rows["drives"] = [optical, done]
+    db.rows["jobs"] = [Job(id="job_1", drive_id="drv_iso_done", status=JobStatus.RIPPED, disc_type=DiscType.DVD)]
+    manager = _StubManager(ReconcileSummary(adopted=["drv_sr0"]))
+    hub = _StubHub()
+
+    await reconcile_enrolled_rippers(manager, _factory(db), hub=hub)  # type: ignore[arg-type]
+
+    assert done.lifecycle is DriveLifecycle.RETIRED
+    assert manager.removed == ["drv_iso_done"]
+    assert manager.seen == [["drv_sr0"]]
+    assert hub.events == []

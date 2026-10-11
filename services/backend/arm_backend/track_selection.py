@@ -1,4 +1,4 @@
-from arm_common import DiscType, RipPreset, Track, TrackKind, TrackSelection
+from arm_common import TrackStatus, DiscType, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
 
 MAIN_FEATURE_MIN_SECONDS = 45 * 60
@@ -104,6 +104,8 @@ def select_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[
                 kind=TrackKind.DATA_DUMP,
                 index=0,
                 source_ref="full",
+                status=TrackStatus.QUEUED,
+                attempts=0,
             )
         ]
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")

@@ -20,8 +20,10 @@ from arm_common import (  # noqa: E402
     ContainerFormat,
     DiscType,
     Drive,
+    DriveKind,
     DriveLifecycle,
     DriveMode,
+    DriveSourceKind,
     DriveStatus,
     IdentificationMode,
     Job,
@@ -117,6 +119,94 @@ def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _drive(
+    *,
+    id: str = "drv_v",
+    kind: DriveKind = DriveKind.OPTICAL,
+    lifecycle: DriveLifecycle = DriveLifecycle.DETECTED,
+    source_kind: DriveSourceKind | None = None,
+    source_path: str | None = None,
+    hostname: str = "scan-drv_v",
+    device_path: str = "/dev/sr0",
+    present: bool = True,
+) -> Drive:
+    return Drive(
+        id=id,
+        hostname=hostname,
+        device_path=device_path,
+        status=DriveStatus.ONLINE,
+        lifecycle=lifecycle,
+        kind=kind,
+        source_kind=source_kind,
+        source_path=source_path,
+        present=present,
+    )
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/api/drives/{id}/enroll"),
+        ("post", "/api/drives/{id}/ignore"),
+        ("post", "/api/drives/{id}/unignore"),
+        ("post", "/api/drives/{id}/unenroll"),
+        ("patch", "/api/drives/{id}"),
+        ("delete", "/api/drives/{id}"),
+    ],
+)
+def test_virtual_drive_refused_by_optical_endpoints(signing_key: bytes, method: str, path: str) -> None:
+    db = FakeSession()
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    drive = _drive(
+        id="drv_iso",
+        kind=DriveKind.VIRTUAL,
+        lifecycle=DriveLifecycle.ENROLLED,
+        source_kind=DriveSourceKind.ISO,
+        source_path="Movies/x.iso",
+        hostname="iso-abc",
+        device_path="/source/x.iso",
+    )
+    db.rows["drives"] = [drive]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        kwargs: dict[str, object] = {"headers": _auth(token)}
+        if method == "patch":
+            kwargs["json"] = {}
+        r = getattr(client, method)(path.format(id=drive.id), **kwargs)
+    assert r.status_code == 409, r.text
+    assert "ISO rip drive" in r.json()["detail"]
+
+
+def test_list_hides_retired_unless_asked(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["users"] = [User(id="usr_admin", username="admin", password_hash="x", password_must_change=False)]
+    live = _drive(
+        id="drv_live",
+        kind=DriveKind.VIRTUAL,
+        lifecycle=DriveLifecycle.ENROLLED,
+        source_kind=DriveSourceKind.ISO,
+        source_path="a.iso",
+        hostname="iso-a",
+        device_path="/source/a.iso",
+    )
+    gone = _drive(
+        id="drv_gone",
+        kind=DriveKind.VIRTUAL,
+        lifecycle=DriveLifecycle.RETIRED,
+        source_kind=DriveSourceKind.ISO,
+        source_path="b.iso",
+        hostname="iso-b",
+        device_path="/source/b.iso",
+    )
+    db.rows["drives"] = [live, gone]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        ids = {d["id"] for d in client.get("/api/drives", headers=_auth(token)).json()}
+        assert ids == {live.id}
+        ids = {d["id"] for d in client.get("/api/drives?include_retired=true", headers=_auth(token)).json()}
+        assert ids == {live.id, gone.id}
 
 
 def test_patch_display_name_only(signing_key: bytes) -> None:

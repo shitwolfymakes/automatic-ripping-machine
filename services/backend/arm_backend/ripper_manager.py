@@ -19,24 +19,31 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import docker.errors  # type: ignore[import-untyped]
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
-from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus
+from arm_backend.iso_library import iso_host_path
+from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus, Job, JobStatus
+
+if TYPE_CHECKING:
+    from arm_backend.ws.hub import WSHub
 
 logger = logging.getLogger("arm_backend.ripper_manager")
 
 DOCKER_LABEL_KEY = "arm.drive_id"
+VIRTUAL_LABEL_KEY = "arm.virtual"
 # Seconds docker waits for the ripper to exit on SIGTERM before SIGKILL.
 # A rip in flight is refused at the router (unenroll while RIPPING), so
 # this only ever interrupts idle polling.
 _STOP_TIMEOUT_SECONDS = 30
 _DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors (spec §3)
 _HOST_DISK_MOUNT = "/host-disk"
+# Optical-only env: a virtual (ISO) ripper has no device, no /dev/disk and no cdrom group.
+_OPTICAL_ONLY_ENV = ("ARM_DRIVE_DEV", "ARM_HOST_DISK_ROOT", "ARM_DRIVE_BY_ID", "CDROM_GID")
 
 # backend Settings name -> env name the ripper/entrypoint reads
 _TUNABLE_ENV: dict[str, str] = {
@@ -94,7 +101,10 @@ class RipperManager:
         """`arm-ripper-<serial slug>` — a stable slot label; srN is not in the
         name because the node moves. Falls back to the drive-id suffix when
         the drive has no serial. Lower-cased `[a-z0-9-]` so it is valid both
-        as a docker name and as a hostname."""
+        as a docker name and as a hostname. A virtual (ISO) drive is
+        `arm-ripper-iso-<drive-id suffix>`."""
+        if drive.kind == DriveKind.VIRTUAL:
+            return f"arm-ripper-iso-{drive.id[-12:].lower()}"
         raw = drive.serial or drive.id[-12:]
         slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-") or drive.id[-12:].lower()
         return f"arm-ripper-{slug}"
@@ -130,7 +140,7 @@ class RipperManager:
             str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
             "/dev/disk": {"bind": _HOST_DISK_MOUNT, "mode": "ro"},
         }
-        return {
+        spec: dict[str, Any] = {
             "image": s.ARM_RIPPER_IMAGE,
             "name": name,
             "hostname": name,
@@ -142,6 +152,36 @@ class RipperManager:
             "restart_policy": {"Name": "unless-stopped"},
             "detach": True,
         }
+        if drive.kind == DriveKind.VIRTUAL:
+            return self._virtual_spec(drive, spec)
+        return spec
+
+    def _virtual_spec(self, drive: Drive, spec: dict[str, Any]) -> dict[str, Any]:
+        """Turn the optical spec into a one-shot ISO ripper's (spec 6.1): only
+        the chosen ISO is mounted, read-only, at the drive's device_path
+        (`/source/<file name>`); no /dev/disk, no device cgroup rules, no
+        cdrom group; restart policy "no" (the watchdog cleans up)."""
+        assert drive.source_path is not None, "a virtual drive always has a source_path"
+        source = drive.device_path
+        env = {k: v for k, v in spec["environment"].items() if k not in _OPTICAL_ONLY_ENV}
+        env["ARM_SOURCE_PATH"] = source
+        env["ARM_SOURCE_KIND"] = (drive.source_kind or DriveSourceKind.ISO).value
+        session_id = (drive.rip_params_json or {}).get("session_id")
+        if session_id:
+            env["ARM_SOURCE_SESSION_ID"] = str(session_id)
+        volumes = dict(spec["volumes"])
+        volumes.pop("/dev/disk")
+        library_host = self._settings.ARM_HOST_ISO_LIBRARY_PATH
+        volumes[iso_host_path(drive.source_path, library_host=library_host)] = {"bind": source, "mode": "ro"}
+        virtual = {
+            **spec,
+            "environment": env,
+            "volumes": volumes,
+            "labels": {DOCKER_LABEL_KEY: drive.id, VIRTUAL_LABEL_KEY: "1"},
+            "restart_policy": {"Name": "no"},
+        }
+        virtual.pop("device_cgroup_rules")
+        return virtual
 
     # --- operations ------------------------------------------------------------
 
@@ -310,12 +350,23 @@ class RipperManager:
         return summary
 
 
-async def reconcile_enrolled_rippers(manager: RipperManager, session_factory: Any) -> ReconcileSummary | None:
+async def reconcile_enrolled_rippers(
+    manager: RipperManager, session_factory: Any, *, hub: WSHub
+) -> ReconcileSummary | None:
     """Lifespan hook: reconcile containers against the `enrolled` rows and
     persist per-drive outcomes in `last_error` (cleared on success). Returns
     None — after logging — when the daemon itself cannot be listed; boot
-    must not fail because docker is down."""
+    must not fail because docker is down.
+
+    The virtual-drive sweep runs FIRST (spec 6.2): a finished ISO rip's drive
+    is retired before the enrolled list is loaded, so its container is never
+    recreated and the ISO never ripped twice. `hub` carries the sweep's
+    `rip.failed` for a job whose ripper died while the backend was down."""
+    # Local import: iso_rips imports this module (RipperManagerError).
+    from arm_backend.iso_rips import sweep_virtual_drives
+
     async with session_factory() as db:
+        await sweep_virtual_drives(db, manager, hub)
         enrolled = list(
             (await db.execute(select(Drive).where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED))).scalars().all()
         )

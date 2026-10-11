@@ -26,4 +26,9 @@ describe('toast store', () => {
 		vi.advanceTimersByTime(4200);
 		expect(toasts.value.find((t) => t.id === id)).toBeUndefined();
 	});
+
+	it('carries an optional link through', () => {
+		const id = addToast({ tone: 'success', title: 'Done', link: { href: '/', label: 'View card' } });
+		expect(toasts.value.find((t) => t.id === id)?.link).toEqual({ href: '/', label: 'View card' });
+	});
 });

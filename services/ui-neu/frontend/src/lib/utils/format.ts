@@ -85,6 +85,7 @@ export function statusAccentVar(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
 		case 'identifying':
 		case 'created': // v3 JobStatus
+		case 'preparing': // ISO rip scanning / unpacking its image, no job yet
 			return 'var(--color-status-scanning)';
 		case 'identified': // v3 JobStatus — queued to rip
 		case 'ready':
@@ -149,6 +150,7 @@ export function statusColor(status: string | null | undefined): string {
 	switch (status?.toLowerCase()) {
 		case 'identifying':
 		case 'created': // v3 JobStatus — disc inserted, not yet identified
+		case 'preparing': // ISO rip scanning / unpacking its image, no job yet
 			return 'status-scanning';
 		case 'awaiting_user_id': // v3 JobStatus — needs manual identification
 		case 'awaiting_review': // v3 JobStatus — held for the timed review gate

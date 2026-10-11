@@ -92,6 +92,7 @@ def _to_view(cfg: Config) -> ConfigView:
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         max_parallel_transcodes=int(cfg.max_parallel_transcodes) if cfg.max_parallel_transcodes is not None else 1,
+        max_parallel_iso_rips=int(cfg.max_parallel_iso_rips or 1),
         # None-coerce covers rows/fixtures predating the column (NULL = enabled).
         transcode_enabled=cfg.transcode_enabled is not False,
         transcode_capable=effective_transcode_capable(settings),
@@ -160,6 +161,10 @@ async def update_config(
     for key in ("drive_scan_interval_seconds", "drive_detected_prune_days", "max_parallel_transcodes"):
         if key in fields and (fields[key] is None or fields[key] < 1):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
+    if "max_parallel_iso_rips" in fields:
+        cap = fields["max_parallel_iso_rips"]
+        if cap is None or isinstance(cap, bool) or not 1 <= cap <= 8:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_parallel_iso_rips must be 1 to 8")
     if "transcode_enabled" in fields and fields["transcode_enabled"] is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="transcode_enabled must be a boolean")
     for key, meta in _RANKED_META.items():

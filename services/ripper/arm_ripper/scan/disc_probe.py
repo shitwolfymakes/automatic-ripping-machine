@@ -4,7 +4,7 @@ The CRC64 is read via PyCdlib (pydvdid) and needs only read access to the
 disc — no mount, no CAP_SYS_ADMIN. A DVD's CRC64 feeds the 1337server lookup
 that runs before OMDb/TMDB. pydvdid returns None for anything without a
 /VIDEO_TS tree, so it's a cheap no-op on Blu-ray / CD, and it reads ISO
-sources (ARM_MANUAL_TRIGGER_ISO) directly with no loop-mount.
+sources (ARM_SOURCE_PATH) directly with no loop-mount.
 
 Disc-type classification is handled upstream by MakeMKV's CINFO:1 (see
 makemkv.scan_disc), so the probe no longer mounts the disc — which is why the
@@ -22,7 +22,7 @@ from arm_common.schemas import BdDiscMeta
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.scan.bd_meta import probe_bd_meta
 from arm_ripper.scan.thediscdb_hash import probe_thediscdb_hash
-from arm_ripper.source import is_iso_source
+from arm_ripper.source import is_file_source, is_folder_source
 
 logger = logging.getLogger("arm_ripper.scan.disc_probe")
 
@@ -49,11 +49,11 @@ async def await_device_ready(device_path: str) -> bool:
 
     Returns True once DISC_OK (probe is safe). Returns False on a genuine
     no-medium reading (NO_DISC / TRAY_OPEN) or if the readiness budget expires
-    while the device stays NOT_READY / NO_INFO. ISO sources are always ready.
+    while the device stays NOT_READY / NO_INFO. ISO and disc-folder sources are always ready.
     Never raises — read_drive_status's OSError (e.g. ENOMEDIUM on the re-settling
     device) is caught here and treated as not-ready.
     """
-    if is_iso_source(device_path):
+    if is_file_source(device_path):
         return True
     from arm_ripper.config import settings  # lazy: avoid import-time Settings() construction
 
@@ -94,6 +94,9 @@ async def probe_disc(device_path: str, *, bluray: bool = False) -> DiscProbe:
     unready device degrades to crc64=None and thediscdb=None without racing
     either probe. Never raises.
     """
+    if is_folder_source(device_path):
+        # pydvdid and PyCdlib read a device or an image, not a folder.
+        return DiscProbe(crc64=None, thediscdb=None)
     if not await await_device_ready(device_path):
         return DiscProbe(crc64=None, thediscdb=None)
     crc64 = await asyncio.to_thread(_compute_crc, device_path)

@@ -18,7 +18,7 @@ from arm_backend.ripper_manager import (  # noqa: E402
     RipperManager,
     RipperManagerError,
 )
-from arm_common import Drive, DriveLifecycle, DriveStatus  # noqa: E402
+from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus  # noqa: E402
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -49,6 +49,10 @@ def _drive(
     serial: str | None = "AAAABBBB000E",
     by_id_name: str | None = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0",
     device_path: str = "/dev/sr0",
+    kind: DriveKind = DriveKind.OPTICAL,
+    source_kind: DriveSourceKind | None = None,
+    source_path: str | None = None,
+    rip_params_json: dict[str, Any] | None = None,
 ) -> Drive:
     return Drive(
         id=drive_id,
@@ -58,6 +62,10 @@ def _drive(
         lifecycle=DriveLifecycle.ENROLLED,
         serial=serial,
         by_id_name=by_id_name,
+        kind=kind,
+        source_kind=source_kind,
+        source_path=source_path,
+        rip_params_json=rip_params_json or {},
     )
 
 
@@ -162,6 +170,60 @@ def test_container_spec_prefers_the_local_ripper_certs_path() -> None:
     m, _ = _manager(ARM_RIPPER_CERTS_PATH="/local/certs")
     volumes = m.container_spec(_drive())["volumes"]
     assert "/local/certs/arm-ca.crt" in volumes and "/host/certs/arm-ca.crt" not in volumes
+
+
+# --- virtual (ISO) spec ------------------------------------------------------
+
+
+def _iso_drive(**overrides: Any) -> Drive:
+    base: dict[str, Any] = {
+        "kind": DriveKind.VIRTUAL,
+        "source_kind": DriveSourceKind.ISO,
+        "source_path": "Movies/Blade Runner.iso",
+        "device_path": "/source/Blade Runner.iso",
+        "serial": None,
+        "by_id_name": None,
+    }
+    base.update(overrides)
+    return _drive(**base)
+
+
+def test_virtual_container_name_uses_the_iso_prefix() -> None:
+    m, _ = _manager()
+    assert m.container_name(_iso_drive()) == "arm-ripper-iso-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
+
+
+def test_virtual_container_spec_mounts_only_the_iso() -> None:
+    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso", PUID="1001", PGID="1000", CDROM_GID="24")
+    d = _iso_drive(by_id_name="should-not-leak")
+    spec = m.container_spec(d)
+    assert spec["volumes"]["/mnt/nas/iso/Movies/Blade Runner.iso"] == {"bind": "/source/Blade Runner.iso", "mode": "ro"}
+    assert "/dev/disk" not in spec["volumes"]
+    assert spec["volumes"]["/host/raw"] == {"bind": "/raw", "mode": "rw"}
+    assert spec["volumes"]["/host/logs"] == {"bind": "/logs", "mode": "rw"}
+    assert spec["volumes"]["/host/certs/arm-ca.crt"] == {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"}
+    assert "device_cgroup_rules" not in spec
+    assert spec["restart_policy"] == {"Name": "no"}
+    env = spec["environment"]
+    assert env["ARM_SOURCE_PATH"] == "/source/Blade Runner.iso" and env["ARM_SOURCE_KIND"] == "iso"
+    assert "ARM_DRIVE_DEV" not in env and "ARM_DRIVE_BY_ID" not in env and "CDROM_GID" not in env
+    assert "ARM_HOST_DISK_ROOT" not in env and "ARM_SOURCE_SESSION_ID" not in env
+    assert env["ARM_DRIVE_ID"] == d.id and env["ARM_SERVICE_TOKEN"] == "tok-service"
+    assert (env["PUID"], env["PGID"]) == ("1001", "1000")
+    assert spec["labels"] == {"arm.drive_id": d.id, "arm.virtual": "1"}
+    assert spec["name"].startswith("arm-ripper-iso-") and spec["hostname"] == spec["name"]
+    assert spec["image"] == "arm-ripper:test" and spec["network"] == "armv3_default" and spec["detach"] is True
+
+
+def test_virtual_container_spec_carries_session() -> None:
+    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
+    env = m.container_spec(_iso_drive(rip_params_json={"session_id": "ses_01ABC"}))["environment"]
+    assert env["ARM_SOURCE_SESSION_ID"] == "ses_01ABC"
+
+
+def test_virtual_container_spec_defaults_the_source_kind_to_iso() -> None:
+    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
+    assert m.container_spec(_iso_drive(source_kind=None))["environment"]["ARM_SOURCE_KIND"] == "iso"
 
 
 def test_host_paths_set_accepts_a_ripper_certs_path_alone() -> None:

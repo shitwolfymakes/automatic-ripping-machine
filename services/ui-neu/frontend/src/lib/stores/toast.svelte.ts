@@ -1,10 +1,17 @@
 export type ToastTone = 'success' | 'error' | 'info';
 
+export interface ToastLink {
+	href: string;
+	label: string;
+}
+
 export interface Toast {
 	id: number;
 	tone: ToastTone;
 	title: string;
 	body?: string;
+	/** Optional call-to-action link rendered under the body (e.g. "View card"). */
+	link?: ToastLink;
 }
 
 const AUTO_DISMISS_MS = 4200;

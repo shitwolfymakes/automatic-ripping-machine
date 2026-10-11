@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from arm_common import DiscType
+from arm_common.enums import TrackKind
 from arm_common.schemas import TrackView
 
 from arm_ripper.rip.abcde_rip import rip_cd
@@ -46,6 +47,11 @@ async def rip_all(
       then emit DONE/FAILED per track from the bulk result.
     - DATA: a single dd dump assigned to the first (only) track.
     """
+    if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
+        # A full-disc dump is a dump whatever the scan called the disc: an
+        # operator can pick the full-disc dump session for a bluray/dvd ISO,
+        # and makemkvcon must not be asked to rip it.
+        disc_type = DiscType.DATA
     if disc_type in (DiscType.DVD, DiscType.BLURAY):
         await _rip_optical(
             device_path=device_path,

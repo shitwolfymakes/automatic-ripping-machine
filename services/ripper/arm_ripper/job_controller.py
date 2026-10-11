@@ -19,7 +19,7 @@ from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
-from arm_ripper.source import is_iso_source
+from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
@@ -93,6 +93,16 @@ RAW_ROOT = Path("/raw")
 SCAN_NOT_READY_MAX_ATTEMPTS = 5
 SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3, 3→4, 4→5
 
+# Sentinel distinguishing "resolution_timeout not passed" (defer to
+# whatever RESOLUTION_WAIT_TIMEOUT_SECONDS currently is) from an explicit
+# `resolution_timeout=None` (wait forever). A plain
+# `resolution_timeout: float | None = RESOLUTION_WAIT_TIMEOUT_SECONDS`
+# default would bind to that module constant's value once, at import time —
+# invisible to a caller (or test) that reads/patches the live module
+# attribute afterward, which is how every existing wait test already
+# configures the timeout.
+_RESOLUTION_TIMEOUT_UNSET = object()
+
 
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
@@ -105,6 +115,7 @@ class JobController:
         ws: WSClient | None = None,
         device_path: str | DriveHandle | None = None,
         default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+        resolution_timeout: float | None = _RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
         self._keydb_tasks: set[asyncio.Task[None]] = set()
@@ -129,6 +140,13 @@ class JobController:
         # `main.py` from `ARM_MIN_LENGTH_SECONDS`; tests get the dispatcher
         # default (600).
         self._default_min_length_seconds = default_min_length_seconds
+        # Ceiling on an AWAITING_USER_ID / AWAITING_REVIEW park, in seconds.
+        # None means wait indefinitely — source mode's one-shot container must
+        # not exit (and have the backend watchdog mark the job FAILED) while
+        # the operator is still reviewing; see `_wait_for_resolution`.
+        self._resolution_timeout: float | None = (
+            RESOLUTION_WAIT_TIMEOUT_SECONDS if resolution_timeout is _RESOLUTION_TIMEOUT_UNSET else resolution_timeout
+        )
         # job_id → asyncio.Event signalled when an `identify.resolved`
         # arrives over WS. Populated by `_await_resolution`, drained by
         # `on_ws_command`.
@@ -269,7 +287,7 @@ class JobController:
         """True when the drive currently reports a seated disc (DISC_OK) —
         guards abandon-eject so abandoning an old job from history with an
         empty (or already-ejected) drive doesn't pop the tray."""
-        if self._device_path is None or is_iso_source(self._device_path):
+        if self._device_path is None or is_file_source(self._device_path):
             return False
         try:
             return read_drive_status(self._device_path) == DriveState.DISC_OK
@@ -421,6 +439,13 @@ class JobController:
             if result.titles:
                 return result
 
+            # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl
+            # below is invalid on a regular file (ENOTTY) and would crash the
+            # one-shot source pipeline. Zero titles from a file is final.
+            if is_file_source(device_path):
+                logger.warning("scan: 0 titles from ISO source %s — nothing to retry", device_path)
+                return result
+
             state = read_drive_status(device_path)
             if state != DriveState.DISC_OK:
                 logger.info(
@@ -548,9 +573,12 @@ class JobController:
                 return None
 
         # Long wait: WS-driven, with periodic REST sanity polls so we
-        # don't hang forever on a torn WS connection.
-        deadline = asyncio.get_event_loop().time() + RESOLUTION_WAIT_TIMEOUT_SECONDS
-        while asyncio.get_event_loop().time() < deadline:
+        # don't hang forever on a torn WS connection. `deadline is None`
+        # means wait indefinitely (source mode): the periodic POLL_MAX_SECONDS
+        # sanity poll below still runs unchanged, just with no ceiling on it.
+        timeout = self._resolution_timeout
+        deadline = None if timeout is None else asyncio.get_event_loop().time() + timeout
+        while deadline is None or asyncio.get_event_loop().time() < deadline:
             woke_via_ws = True
             try:
                 await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
@@ -572,7 +600,7 @@ class JobController:
             if woke_via_ws:
                 event.clear()
 
-        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, RESOLUTION_WAIT_TIMEOUT_SECONDS)
+        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, timeout)
         return None
 
     async def _review_countdown_expired(self, view: JobView) -> bool:
@@ -875,7 +903,7 @@ class JobController:
         # ISO sources have no tray to eject. probe_disc reads the file
         # directly via PyCdlib and makemkvcon opens it read-only; nothing
         # mounts it, so there's nothing to umount or eject.
-        if is_iso_source(device_path):
+        if is_file_source(device_path):
             logger.info("eject skipped: source is ISO file %s", device_path)
             return
         await self._run_command("umount", device_path, log_failure=False)

@@ -34,6 +34,7 @@ never touch; the ones you might are flagged **editable** below.
 | `ARM_IMAGE_PREFIX` / `ARM_IMAGE_TAG` | Registry path + image tag. **Bump `ARM_IMAGE_TAG` to upgrade** — see [Upgrading](Upgrading). |
 | `ARM_TRANSCODE_IMAGE` | The base image the backend spawns for CPU/NVENC work. Its `-intel` / `-amd` tag variants serve QSV / VAAPI GPUs automatically; see [Hardware Transcoding § Image variants](Hardware-Transcoding#image-variants) for the naming convention and the per-vendor override vars. |
 | `ARM_HOST_*_PATH` | Host paths (`raw`/`media`/`logs`/`certs`) the backend hands to the Docker daemon when spawning transcoders. Default to `${PWD}/...`; only change if you move data out of the prefix. |
+| `ARM_HOST_ISO_LIBRARY_PATH` | **Editable.** Host folder of `.iso` files you want to rip from, e.g. `./iso-library` or a NAS mount. Set it to enable the gear menu's **Rip from ISO** picker (`GET /api/iso/library`); the backend mounts it read-only. Leave it unset and the picker reports the feature as not configured. See [10-iso-source-ripping.md](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md). |
 | `ARM_DOCKER_NETWORK` | The compose network a spawned transcoder joins to reach the backend (`armv3_default`). |
 | `COMPOSE_FILE` | **Editable, commented out by default.** Uncomment to auto-load the GPU overlay — see [Hardware Transcoding](Hardware-Transcoding). |
 | `MAKEMKV_KEY` | **Editable (add it yourself), fallback only.** A permanent/operator MakeMKV key. Prefer setting this in the UI (**Config → MakeMKV key**), which overrides this var and survives a recreate; this env var is used only when the UI key is blank. When both are unset, the ripper scrapes the monthly free beta. See [MakeMKV](MakeMKV). |
@@ -73,6 +74,7 @@ keys at all, but TMDb/OMDb dramatically improve naming hit rates.
 | **Auto-transcode on idle** | off | Automatically queue a transcode session when the stack is idle, vs. waiting for you to start one. |
 | **Transcoding** | on | Master switch for encode work (Settings → Transcoding). Turning it off holds any queued encode sessions instead of dropping them, and lets already-running transcodes finish; passthrough (no-preset) sessions keep running either way. Can only be switched on if the deployment is transcode-capable, see `ARM_TRANSCODE_CAPABLE` above and [Ripper-only installs](#ripper-only-installs) below. |
 | **Default retention policy** | keep raw | What happens to the intermediate `raw/` files after a session — keep them or prune. |
+| **Max parallel ISO rips** | 1 | How many ISO-source rips (Settings → Ripping) may run at once, 1 to 8. Only matters when `ARM_HOST_ISO_LIBRARY_PATH` is set. |
 
 ### Notifications
 

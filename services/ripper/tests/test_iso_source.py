@@ -1,4 +1,4 @@
-"""ARM_MANUAL_TRIGGER_ISO mode tests.
+"""ARM_SOURCE_PATH (source mode) tests.
 
 Covers the five code paths the iso-source helper flips:
 

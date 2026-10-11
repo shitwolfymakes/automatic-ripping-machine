@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     # channel stores a file name inside this directory, never a path.
     ARM_SCRIPTS_ROOT: str = "/scripts"
 
-    # Sandbox root for ISO-import scanning (kept for the diagnostics path
-    # check; the iso-scan endpoint itself was dropped upstream in favor of
-    # the ephemeral-worker design).
+    # The ISO library: the backend's read-only mount of ARM_HOST_ISO_LIBRARY_PATH.
+    # The ISO picker browses it (file root "ISO", read-only) and "Rip from ISO"
+    # stores each chosen ISO's path relative to it. Also checked by diagnostics.
     ISO_INGRESS_ROOT: str = "/ingress"
 
     # Disk cache for the image-proxy router (GET /api/images/proxy). Posters
@@ -125,6 +125,10 @@ class Settings(BaseSettings):
     ARM_HOST_MEDIA_PATH: str = ""
     ARM_HOST_LOGS_PATH: str = ""
     ARM_HOST_CERTS_PATH: str = ""
+    # Host path of the ISO library (mounted read-only at ISO_INGRESS_ROOT).
+    # A virtual ripper bind-mounts `<this>/<relative ISO path>`; empty means
+    # "Rip from ISO" is not configured.
+    ARM_HOST_ISO_LIBRARY_PATH: str = ""
 
     # Drive scanner roots (spec §2). /sys is the container's own sysfs mount
     # (host-wide); /host-disk is the read-only bind of the host's /dev/disk —

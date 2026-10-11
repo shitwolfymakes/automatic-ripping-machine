@@ -489,10 +489,12 @@
 	   horizontally with single-line tabs */
 	/* the original tab strip was gap-1 (0.25rem), not .tabs' own 1rem
 	   default (tuned for the wider Settings tab strip); no overflow-x-auto
-	   either, so the row shrinks and wraps rather than scrolling */
+	   either, so the row shrinks and wraps rather than scrolling. Both axes
+	   are reset: .tabs hides overflow-y, and a hidden y axis would turn a
+	   visible x axis back into auto. */
 	.transcoder-page-tabs {
 		gap: 0.25rem;
-		overflow-x: visible;
+		overflow: visible;
 	}
 	/* the original buttons were px-4 py-2 (1rem/0.5rem), not .tabs-tab's own
 	   0.25rem/0.625rem default, and had no whitespace-nowrap */

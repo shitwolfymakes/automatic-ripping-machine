@@ -362,6 +362,57 @@ async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eje
     assert client.rip_complete_calls == []
 
 
+# --- resolution_timeout: source mode's indefinite wait ----------------------
+
+
+async def test_resolution_timeout_default_still_times_out(stub_scan, stub_eject):
+    """No override passed to the constructor: the wait still honours
+    RESOLUTION_WAIT_TIMEOUT_SECONDS exactly as before (the `fast_polls` fixture
+    patches it to 1.0s, POLL_MAX_SECONDS to 0.01s, so a job stuck parked forever
+    gives up quickly instead of actually waiting 30 minutes)."""
+
+    async def _always_parked(job_id: str) -> JobView:
+        return _view(JobStatus.AWAITING_USER_ID)
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    client.get_job = _always_parked  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+
+
+async def test_resolution_timeout_none_waits_past_old_deadline_then_proceeds(stub_scan, stub_eject, monkeypatch):
+    """`resolution_timeout=None` (source mode) keeps waiting well past the
+    point where the default RESOLUTION_WAIT_TIMEOUT_SECONDS would have given
+    up, and still proceeds with the rip once the job resolves."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    poll_count = 0
+
+    async def _resolves_after_old_deadline(job_id: str) -> JobView:
+        nonlocal poll_count
+        poll_count += 1
+        # POLL_MAX_SECONDS is patched to 0.01s, so 20 ticks is ~0.2s — well
+        # past the 0.05s default deadline a timed-out wait would have used.
+        if poll_count < 20:
+            return _view(JobStatus.AWAITING_USER_ID)
+        return _view(JobStatus.IDENTIFIED, title="Resolved")
+
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    client.get_job = _resolves_after_old_deadline  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test", resolution_timeout=None)
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert poll_count >= 20
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
 async def test_rip_start_ws_command_wakes_review_waiter():
     """A `rip.start` WS command sets the per-job wait Event (the review-gate
     analogue of identify.resolved)."""
@@ -833,6 +884,30 @@ async def test_scan_retry_exhausts_and_logs_marker(monkeypatch, caplog):
         out = await controller._scan_with_ready_retry("/dev/sr0")
     assert not out.titles
     assert "DISC_UNREADABLE_AFTER_RETRIES" in caplog.text
+
+
+async def test_scan_retry_iso_source_never_touches_drive_ioctl(monkeypatch, tmp_path):
+    """An ISO source that scans to zero titles returns at once: the drive-status
+    ioctl is meaningless on a regular file (ENOTTY) and must not be attempted."""
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _noop_async)
+    iso = tmp_path / "movie.iso"
+    iso.write_bytes(b"\0" * 16)
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _empty_scan()
+
+    def _ioctl_on_file(_p):
+        raise OSError(25, "Inappropriate ioctl for device")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _scan)
+    monkeypatch.setattr(jc_module, "read_drive_status", _ioctl_on_file)
+
+    controller = JobController(FakeClient(), "drv_iso")
+    out = await controller._scan_with_ready_retry(str(iso))
+    assert not out.titles
+    assert calls["n"] == 1
 
 
 async def test_scan_retry_stops_when_disc_pulled(monkeypatch):

@@ -21,13 +21,11 @@ describe('features', () => {
 		expect(isScreenEnabled('/')).toBe(true);
 	});
 
-	it('disables in-screen features whose v3 backend is MISSING (import, maintenance)', () => {
-		expect(features.import).toBe(false);
+	it('disables in-screen features whose v3 backend is MISSING (maintenance)', () => {
 		expect(features.maintenance).toBe(false);
 	});
 
 	it('in-screen flags are not route flags', () => {
-		expect(isScreenEnabled('/import')).toBe(true);
 		expect(isScreenEnabled('/maintenance')).toBe(true);
 	});
 
