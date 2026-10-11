@@ -137,3 +137,43 @@ def test_review_data_disc_delegates_to_single_dump():
     tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _preset(TrackSelection.ALL_TRACKS))
     assert len(tracks) == 1
     assert tracks[0].kind == TrackKind.DATA_DUMP
+
+
+# --- ISO output mode: a full-disc dump whatever the disc holds ---
+
+
+def _iso_preset() -> RipPreset:
+    return RipPreset(
+        id="rpr_builtin_iso_dump",
+        name="ISO: Full-disc dump",
+        media_type=MediaType.ISO,
+        is_builtin=True,
+        track_selection=TrackSelection.ALL_TRACKS,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.ISO,
+    )
+
+
+@pytest.mark.parametrize("disc_type", [DiscType.BLURAY, DiscType.DVD])
+def test_iso_preset_dumps_a_video_disc_that_has_titles(disc_type: DiscType):
+    """The ISO preset copies the disc whole. Titles in the scan must not turn
+    it into a MakeMKV rip of those titles."""
+    scan = ScanResult(
+        disc_type=disc_type,
+        titles=[ScanTitle(index=i, duration_seconds=d) for i, d in enumerate([7200, 1800, 300])],
+    )
+    tracks = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _iso_preset())
+    assert [(t.kind, t.source_ref) for t in tracks] == [(TrackKind.DATA_DUMP, "full")]
+
+
+def test_iso_preset_dumps_a_video_disc_without_titles():
+    scan = ScanResult(disc_type=DiscType.BLURAY)
+    tracks = select_tracks("job_01JZXR7K3M5Q8N4VWA00000001", scan, _iso_preset())
+    assert [t.kind for t in tracks] == [TrackKind.DATA_DUMP]
+
+
+def test_review_iso_preset_persists_the_single_dump():
+    """The review gate shows the one dump, not every title marked excluded."""
+    scan = _scan(7200, 1800)
+    tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _iso_preset())
+    assert [(t.kind, t.excluded) for t in tracks] == [(TrackKind.DATA_DUMP, False)]

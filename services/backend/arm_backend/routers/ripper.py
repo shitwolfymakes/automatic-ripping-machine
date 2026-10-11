@@ -41,7 +41,6 @@ from arm_common import (
     DriveStatus,
     Job,
     JobStatus,
-    OutputMode,
     MakemkvKeyState,
     RipPreset,
     Session,
@@ -841,12 +840,10 @@ async def rip_start(
     if preset is None:
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
+    # An ISO preset gives one full-disc dump track whatever the scan found
+    # (track_selection._dumps_whole_disc), so it never lands in the
+    # no-titles handling below.
     new_tracks = select_tracks(job.id, scan, preset)
-    if not new_tracks and preset.output_mode == OutputMode.ISO:
-        # A full-disc dump copies the image whole and needs no titles; the
-        # operator picked it, so honour it whatever the scan found.
-        # select_tracks synthesises the single dump track for DATA discs.
-        new_tracks = select_tracks(job.id, scan.model_copy(update={"disc_type": DiscType.DATA}), preset)
     virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
     if virtual is not None:
         # MakeMKV found nothing in the image (not even once it was unpacked,
