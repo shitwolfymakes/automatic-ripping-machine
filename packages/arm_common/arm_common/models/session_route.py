@@ -22,7 +22,7 @@ class SessionRoute(SQLModel, table=True):
     for a `media_type` (matches any disc type); an exact
     `(media_type, disc_type)` row is preferred over the wildcard.
 
-    Unique on `(media_type, disc_type)` — see migration 0033's docstring for
+    Unique on `(media_type, disc_type)` — see migration 0034_session_routes's docstring for
     how NULL-distinctness is handled so at most one wildcard row can exist
     per media_type.
     """
