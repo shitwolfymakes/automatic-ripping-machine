@@ -108,7 +108,7 @@ Options:
   --iso=sintel|bbb    Pick the fixture ISO (default: sintel — DVD,
                       ~3.7 GB). Use bbb for the Blu-ray fixture
                       (~8 GB) — that's the cutover-readiness criterion
-                      at docs/arch/08-v2-isolation-and-cutover.md
+                      at docs/developers/architecture/08-v2-isolation-and-cutover.md
                       § Readiness line 200.
   --no-transcode      Stop after rip-complete; skip the transcode
                       chain and the live-ripper restart. The ISO

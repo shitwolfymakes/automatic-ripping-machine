@@ -155,7 +155,7 @@ GPU claim. They are a harmless fallback, not an upgrade path: an image older
 than `--probe-device` can never verify a row, so it is never handed a GPU in
 the first place. This worker reads `ARM_TRANSCODE_ENCODER`; to upgrade a
 host, rebuild or pull the transcode image. See
-[docs/arch/02-job-lifecycle.md § Encoder claim and apply-time refusal](../../docs/arch/02-job-lifecycle.md#encoder-claim-and-apply-time-refusal)
+[docs/developers/architecture/02-job-lifecycle.md § Encoder claim and apply-time refusal](../../docs/developers/architecture/02-job-lifecycle.md#encoder-claim-and-apply-time-refusal)
 for the full claim, queue and refusal rules.
 
 Engine dispatch reads the catalog id: `qsv_*` and `nvenc_*` run through

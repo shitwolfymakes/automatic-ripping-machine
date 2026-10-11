@@ -1,5 +1,5 @@
 /* LCARS. Retargeted onto the block vocabulary and the semantic tokens
-   (docs/ui-neu-theming.md). Every rule below selects either a block class,
+   (docs/developers/ui/ui-neu-theming.md). Every rule below selects either a block class,
    a state attribute the block contract publishes, a real element, or one of
    this theme's own decorative pseudo-elements. Nothing selects a
    component-local class.
@@ -13,7 +13,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
    Tokens.
 
-   NOTE ON PRECEDENCE (see docs/ui-neu-theming.md): the roles a scheme lists
+   NOTE ON PRECEDENCE (see docs/developers/ui/ui-neu-theming.md): the roles a scheme lists
    in its COLOR_SCHEMES `tokens` map are written as an INLINE style on
    <html>, which outranks every selector here. For lcars that map already
    owns --color-primary, --color-primary-hover, --color-primary-text,

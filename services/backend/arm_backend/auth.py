@@ -12,7 +12,7 @@ The two are mutually exclusive: `require_jwt` rejects values that match
 the service token, and `require_service_token` rejects values that look
 like a JWT (3 dot-separated segments). This enforces the
 "UI endpoints reject service token, ripper endpoints reject UI JWT" rule
-from [05-cross-cutting.md § Authorization rules](../../../docs/arch/05-cross-cutting.md#authorization-rules).
+from [05-cross-cutting.md § Authorization rules](../../../docs/developers/architecture/05-cross-cutting.md#authorization-rules).
 """
 
 import jwt

@@ -1,8 +1,8 @@
 # ARM v3 — Master Implementation Plan
 
-This plan sequences the work required to turn the walking skeleton into a v3.0 release that can pass the [cutover readiness criteria](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover). It is a living document: phases may reorder if dependencies surface, and PR-sized milestones will be broken out into separate planning docs as they're picked up.
+This plan sequences the work required to turn the walking skeleton into a v3.0 release that can pass the [cutover readiness criteria](../developers/architecture/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover). It is a living document: phases may reorder if dependencies surface, and PR-sized milestones will be broken out into separate planning docs as they're picked up.
 
-Architecture it implements: [v3/docs/arch/](../arch/). Every line below is a "how do we build what those docs describe" — not a re-specification.
+Architecture it implements: [v3/docs/developers/architecture/](../developers/architecture/). Every line below is a "how do we build what those docs describe" — not a re-specification.
 
 ## How to read this document
 
@@ -13,11 +13,11 @@ Architecture it implements: [v3/docs/arch/](../arch/). Every line below is a "ho
 
 ## Guiding principles
 
-Pulled straight from [00-vision.md](../arch/00-vision.md) — repeated here because they drive ordering:
+Pulled straight from [00-vision.md](../developers/architecture/00-vision.md) — repeated here because they drive ordering:
 
 1. **Bits first, metadata second, transcode third.** Get raw files on disk before worrying about Apprise, GPU probing, or UI polish.
 2. **Every phase ships a demoable slice.** No "foundation-only" phases — if a phase can't be demonstrated end-to-end, it's split.
-3. **v2 stays untouched.** Every deliverable is strictly additive under `v3/`. See [08-v2-isolation-and-cutover.md](../arch/08-v2-isolation-and-cutover.md).
+3. **v2 stays untouched.** Every deliverable is strictly additive under `v3/`. See [08-v2-isolation-and-cutover.md](../developers/architecture/08-v2-isolation-and-cutover.md).
 4. **Schemas before endpoints.** Every wire contract lands first in [packages/arm_common/](../../packages/arm_common/) Pydantic; producers and consumers import the same types.
 
 ---
@@ -49,7 +49,7 @@ Captured here so later phases can reference what's already running.
 
 Realignment landed alongside the data model:
 
-- SQLModel classes live in [packages/arm_common/arm_common/models/](../../packages/arm_common/arm_common/models/) per [04-data-model.md § Schema definition and migrations](../arch/04-data-model.md#schema-definition-and-migrations) — moved out of `arm_backend` so future ripper/transcode services can reuse them without depending on the backend package.
+- SQLModel classes live in [packages/arm_common/arm_common/models/](../../packages/arm_common/arm_common/models/) per [04-data-model.md § Schema definition and migrations](../developers/architecture/04-data-model.md#schema-definition-and-migrations) — moved out of `arm_backend` so future ripper/transcode services can reuse them without depending on the backend package.
 - All 0001/0002/0003 migrations from the Phase 0 walking skeleton were collapsed into a single consolidated [0001_initial](../../services/backend/migrations/versions/0001_initial.py); no production DB to migrate.
 
 **Verified end-to-end on a fresh DB.** Alembic upgrade clean, banner logged, `\dt` shows 13 tables, seed counts match (users=1, config=1, rip_presets=7, transcode_presets=8, sessions=8), backend restart is idempotent.
@@ -68,7 +68,7 @@ Realignment landed alongside the data model:
 6. Ripper Dockerfile multistage build that ports v2's signed-tarball MakeMKV install and runtime `update_key.sh` (env `MAKEMKV_PERMA_KEY` or scraped monthly beta) wired into the shared entrypoint. `libdvd-pkg` reconfigured non-interactively at image build time; `abcde`/`flac`/`cdparanoia` for CDs; `python-discid` for MusicBrainz disc-id computation.
 7. Tests: 16 backend tests (metadata clients via `respx`, dispatcher routing rules) + 7 ripper tests (`makemkvcon` parser fixtures, JobController behaviour with a fake backend) — all passing under `uv run pytest`.
 
-`disc_fingerprint` / `aacs_disc_id` columns remain null per [04-data-model.md](../arch/04-data-model.md). Live DB integration tests for `/identify` and `/resolve` deferred to a future phase that brings up testcontainers; manual verification via real DVD documented in [v3/docs/ops/makemkv.md](../ops/makemkv.md).
+`disc_fingerprint` / `aacs_disc_id` columns remain null per [04-data-model.md](../developers/architecture/04-data-model.md). Live DB integration tests for `/identify` and `/resolve` deferred to a future phase that brings up testcontainers; manual verification via real DVD documented in [v3/docs/user/MakeMKV-Ripper.md](../user/MakeMKV-Ripper.md).
 
 **Depends on:** Phase 1.
 
@@ -84,7 +84,7 @@ Realignment landed alongside the data model:
    - `POST /jobs/{job_id}/rip-start` — hardcoded preset by `disc_type` (DVD/BD → `rpr_builtin_movie_archive`, CD → `rpr_builtin_music_standard`, DATA → `rpr_builtin_data_copy`); reads `metadata_json["scan_result"]`; selects tracks; transitions `IDENTIFIED → RIPPING`. Idempotent.
    - `PATCH /tracks/{track_id}` — validates legal `queued → in_progress → done|failed` transitions; writes `output_path`/`size_bytes`/`sha256`/`duration_seconds`/`last_error`.
    - `POST /jobs/{job_id}/rip-complete` — aggregates track outcomes into `RIPPED` / `RIPPED_PARTIAL` / `FAILED`.
-4. Drive-scoping via `X-ARM-Hostname` header. New `require_drive_owner_by_job` / `require_drive_owner_by_track` deps load the row's drive and 403 on mismatch ([05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules)). `register` and `identify` stay bearer-only (no `drive_id` available at call time). Per-drive defaults in `Drive.default_session_id` arrive in Phase 8.
+4. Drive-scoping via `X-ARM-Hostname` header. New `require_drive_owner_by_job` / `require_drive_owner_by_track` deps load the row's drive and 403 on mismatch ([05-cross-cutting.md § Authorization rules](../developers/architecture/05-cross-cutting.md#authorization-rules)). `register` and `identify` stay bearer-only (no `drive_id` available at call time). Per-drive defaults in `Drive.default_session_id` arrive in Phase 8.
 5. Identify handler now persists `scan_result` into `metadata_json["scan_result"]` so rip-start can re-derive the title list without requiring the ripper to re-send it.
 6. Ripper rip stack at [services/ripper/arm_ripper/rip/](../../services/ripper/arm_ripper/rip/):
    - `makemkv_rip.rip_disc` shells `makemkvcon mkv ... all <outdir> --minlength=N` exactly once per disc (Phase 15.5 reverted from per-title invocations — see § Phase 15.5 below), streams PRGV/PRGT/MSG records, attributes per-title outcomes from `MSG:5018`/`MSG:5003` + post-exit output-dir walk, captures `title_tNN.mkv` size + SHA-256 per surviving title.
@@ -107,8 +107,8 @@ Realignment landed alongside the data model:
 
 **Delivered** on `wolfy/v3-improvments`:
 
-1. New `arm_common.schemas.ws` — discriminated-union message types for `auth`, `subscribe`, `unsubscribe`, `publish`, plus the outbound `WSEnvelope` / `WSAck` / `WSError` frames. The `publish` op extends what 03-protocol.md documents — the hub builds the envelope server-side (`event_id`, `emitted_at`), clients never set those themselves; documented in the new "Implementation notes" section of [03-protocol.md](../arch/03-protocol.md).
-2. New `services/backend/arm_backend/ws/` package: `principal.py` (`ServicePrincipal`/`UIPrincipal` with `resolve_principal(token, hostname)` lifting the token-compare out of the FastAPI dep so the same check runs in REST and WS paths), `authz.py` (`can_subscribe`/`can_publish` enforcing the per-principal topic matrix from [05-cross-cutting.md § WebSocket security](../arch/05-cross-cutting.md#websocket-security)), `hub.py` (in-memory `WSHub` with 1 Hz/track progress throttle and 2s per-recipient send timeout that evicts slow subscribers), `router.py` (`/ws` endpoint with origin allowlist, service-token-subprotocol skip, 5s unauth timeout, message dispatch loop).
+1. New `arm_common.schemas.ws` — discriminated-union message types for `auth`, `subscribe`, `unsubscribe`, `publish`, plus the outbound `WSEnvelope` / `WSAck` / `WSError` frames. The `publish` op extends what 03-protocol.md documents — the hub builds the envelope server-side (`event_id`, `emitted_at`), clients never set those themselves; documented in the new "Implementation notes" section of [03-protocol.md](../developers/architecture/03-protocol.md).
+2. New `services/backend/arm_backend/ws/` package: `principal.py` (`ServicePrincipal`/`UIPrincipal` with `resolve_principal(token, hostname)` lifting the token-compare out of the FastAPI dep so the same check runs in REST and WS paths), `authz.py` (`can_subscribe`/`can_publish` enforcing the per-principal topic matrix from [05-cross-cutting.md § WebSocket security](../developers/architecture/05-cross-cutting.md#websocket-security)), `hub.py` (in-memory `WSHub` with 1 Hz/track progress throttle and 2s per-recipient send timeout that evicts slow subscribers), `router.py` (`/ws` endpoint with origin allowlist, service-token-subprotocol skip, 5s unauth timeout, message dispatch loop).
 3. Backend lifespan attaches `app.state.ws_hub`; `/ws` route registered. New `ARM_ALLOWED_ORIGINS` setting (comma-separated, empty-by-default per Phase 4 — service-token only until the UI ships in Phase 5).
 4. Typed events emitted from REST handlers: `rip.needs_user_input` (identify lands `awaiting_user_id`), `rip.started` (rip-start), `track.completed` / `track.failed` (PATCH track), `rip.completed` / `rip.partial` / `rip.failed` (rip-complete), `identify.resolved` (resolve, fanned out on both `ripper.events` and the per-drive `ripper.commands.{drive_id}` command topic). Every typed event also writes an `events` row in the same transaction; `ripper.progress.*` bypasses persistence.
 5. Resolve handler now preserves `metadata_json["scan_result"]` when overwriting metadata, so post-resolve rip-start can still find the scan list.
@@ -126,8 +126,8 @@ Realignment landed alongside the data model:
 
 **Delivered** on `wolfy/v3-improvments`:
 
-1. **JWT plumbing** — new [arm_backend/jwt_utils.py](../../services/backend/arm_backend/jwt_utils.py) issues / verifies HS256 access tokens (7-day TTL, no refresh per [05-cross-cutting.md § Authentication model](../arch/05-cross-cutting.md#authentication-model)) signed with `config.session_signing_key`. The signing key is cached on `app.state.signing_key` during the lifespan startup; rotation requires a backend restart (the documented "log out everywhere" lever).
-2. **Two-direction auth split** — [arm_backend/auth.py](../../services/backend/arm_backend/auth.py) gains `require_jwt` (loads the User row from a verified JWT, 403s a `password_must_change=true` user on every UI route except `/api/auth/password` + `/api/auth/logout`) and tightens `require_service_token` to reject JWT-shaped tokens. UI routes use `Depends(require_jwt)`; ripper routes use `Depends(require_service_token)`. The "UI endpoints reject service token, ripper endpoints reject UI JWT" rule from [05-cross-cutting.md § Authorization rules](../arch/05-cross-cutting.md#authorization-rules) is now enforced at dependency choice, not runtime branching.
+1. **JWT plumbing** — new [arm_backend/jwt_utils.py](../../services/backend/arm_backend/jwt_utils.py) issues / verifies HS256 access tokens (7-day TTL, no refresh per [05-cross-cutting.md § Authentication model](../developers/architecture/05-cross-cutting.md#authentication-model)) signed with `config.session_signing_key`. The signing key is cached on `app.state.signing_key` during the lifespan startup; rotation requires a backend restart (the documented "log out everywhere" lever).
+2. **Two-direction auth split** — [arm_backend/auth.py](../../services/backend/arm_backend/auth.py) gains `require_jwt` (loads the User row from a verified JWT, 403s a `password_must_change=true` user on every UI route except `/api/auth/password` + `/api/auth/logout`) and tightens `require_service_token` to reject JWT-shaped tokens. UI routes use `Depends(require_jwt)`; ripper routes use `Depends(require_service_token)`. The "UI endpoints reject service token, ripper endpoints reject UI JWT" rule from [05-cross-cutting.md § Authorization rules](../developers/architecture/05-cross-cutting.md#authorization-rules) is now enforced at dependency choice, not runtime branching.
 3. **Auth router** — `POST /api/auth/login` (verifies argon2id, transparently rehashes if the cost factor is stale, surfaces `password_must_change` on the response), `POST /api/auth/logout` (no-op; client drops the token), `POST /api/auth/password` (verifies current password, rotates the hash, clears `password_must_change` — does NOT issue a new JWT, since no claims changed).
 4. **UI-only REST routers** — `GET /api/jobs` (paginated + status/drive filters), `GET /api/jobs/{id}` (returns `JobDetailView` = job + tracks in one round-trip), `GET /api/drives`, `GET /api/sessions` (read-only; CRUD lands in Phase 6), `GET/PATCH /api/config` (server-side strips `session_signing_key` from every response — secret never wire-exposed), `GET /api/diagnostics` (Phase 5 ships backend's `ARM_LOG_LEVEL` only; per-service introspection is Phase 12). The existing `POST /api/jobs/{job_id}/resolve` is now gated behind `require_jwt`, dropping the Phase-2 `# Phase 5:` marker.
 5. **WS UI JWT principal** — [arm_backend/ws/principal.py](../../services/backend/arm_backend/ws/principal.py) `resolve_principal` extends to verify UI JWTs against the cached signing key, returning `UIPrincipal(user_id, username)`. The Phase 4 `AuthError("UI JWT auth not yet supported")` stub is gone. UI doesn't open a WS in Phase 5, but the wire is hot — verified live from the ripper container.
@@ -137,7 +137,7 @@ Realignment landed alongside the data model:
 9. **Tests** — 26 new backend tests (`test_jwt_utils.py`, `test_jwt_split.py`, `test_auth_router.py`, `test_ws_principal_jwt.py`) covering issue/verify round-trip, signature/expiry/`sub`-missing rejection, the eight-way require_jwt × require_service_token × wrong-token-shape × must-change-flag matrix, and full TestClient round-trips on login/password/logout. 8 new frontend Vitest tests covering auth-store hydrate/login/logout/401-reset and four router-guard cases. Backend total: 80 → 80+18 ripper = 98 tests, all green; mypy strict and ruff clean. Frontend `npm test` + `npm run build` both clean.
 10. **Live verification** — `docker compose up -d`; browser-equivalent curl flow exercised: login (200 + `must_change=true`) → `GET /api/jobs` (403, "password change required") → `POST /api/auth/password` (200) → same JWT now unblocks `/api/jobs` (200 + 6 jobs). UI endpoint with service token → 401 ("UI endpoint requires user JWT, not service token"); ripper endpoint with UI JWT → 401 ("service endpoint requires service token, not UI JWT"). WS connection from inside the ripper container with the UI JWT: auth ack → subscribe `ripper.events` ack → subscribe `ripper.commands.drv_xxx` rejected with code 4403.
 
-Visual UI verification deferred to manual click-through; per [05-cross-cutting.md § Testing strategy](../arch/05-cross-cutting.md#testing-strategy) we do not ship Playwright. Phase 13 (installer) auto-detects host SANs; today the bootstrap script hardcodes `localhost` + `hostname -f`. Snapshot-drift CI lands in Phase 14.
+Visual UI verification deferred to manual click-through; per [05-cross-cutting.md § Testing strategy](../developers/architecture/05-cross-cutting.md#testing-strategy) we do not ship Playwright. Phase 13 (installer) auto-detects host SANs; today the bootstrap script hardcodes `localhost` + `hostname -f`. Snapshot-drift CI lands in Phase 14.
 
 **Depends on:** Phase 1 (`users`, `config`), Phase 3 (jobs exist), Phase 4 (WS hub stub for UIPrincipal already in place).
 
@@ -147,7 +147,7 @@ Visual UI verification deferred to manual click-through; per [05-cross-cutting.m
 
 **Goal.** The CRUD layer for user-authored sessions. Creating a session application against a ripped job produces `transcode_tasks` rows in `queued` state — but nothing transcodes them yet (Phase 7).
 
-**Exit criteria — met.** A user can clone a built-in session, tweak it, apply it to a ripped job via `POST /api/jobs/{job_id}/transcode`, and see the resulting `session_applications` + `transcode_tasks` rows. Path-template validation rejects templates that produce empty required tokens. Cross-session and cross-job collisions surface the dialog described in [02-job-lifecycle.md § Concurrent write safety](../arch/02-job-lifecycle.md#concurrent-write-safety).
+**Exit criteria — met.** A user can clone a built-in session, tweak it, apply it to a ripped job via `POST /api/jobs/{job_id}/transcode`, and see the resulting `session_applications` + `transcode_tasks` rows. Path-template validation rejects templates that produce empty required tokens. Cross-session and cross-job collisions surface the dialog described in [02-job-lifecycle.md § Concurrent write safety](../developers/architecture/02-job-lifecycle.md#concurrent-write-safety).
 
 **Deliverables:**
 1. **REST CRUD** for sessions, rip presets, and transcode presets. `POST /api/sessions/{id}/clone` is a first-class endpoint that copies a built-in into a user-owned non-builtin row. `is_builtin=true` rows are name-only-editable; `DELETE` is refused with a useful message. `DELETE /api/rip-presets/{id}` and `DELETE /api/transcode-presets/{id}` 409 with the names of any sessions still referencing the preset.
@@ -228,7 +228,7 @@ No DB migration was required — [drive.py:31-33](../../packages/arm_common/arm_
 
 ## Phase 9 — Crash recovery
 
-**Goal.** The top-2 pain point that motivated v3 ([00-vision.md](../arch/00-vision.md)). Five queued rips + simulated power cut mid-batch resumes cleanly.
+**Goal.** The top-2 pain point that motivated v3 ([00-vision.md](../developers/architecture/00-vision.md)). Five queued rips + simulated power cut mid-batch resumes cleanly.
 
 **Exit criteria — met.** A backend restart while one rip is in flight resets the job's tracks to `queued`, increments their `attempts`, and stamps `resumed_from_crash=true`; the UI shows a "resumed from crash" badge alongside the status. A ripper-only restart with the disc still in the tray detects the in-flight job, wipes `/raw/<job_id>/` locally, calls `POST /resume`, and re-rips. The UI badge clears automatically when the job reaches a terminal status.
 
@@ -278,7 +278,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 3. **`Event.notified_at: datetime | None` watermark** ([event.py:34](../../packages/arm_common/arm_common/models/event.py)). Migration [0003_notifications.py](../../services/backend/migrations/versions/0003_notifications.py) adds the column + index, backfills `notified_at = emitted_at` on existing rows (avoids dumping the historical event log on first deploy), and adds `notifications_enabled` to `config` with `server_default=false`.
 4. **Server-side URL validation** in [routers/config.py](../../services/backend/arm_backend/routers/config.py) — `_first_invalid_apprise_url` runs each pasted URL through a fresh `apprise.Apprise().add(url)`. Failure returns 400 with a redacted detail (`"invalid apprise URL: <scheme>://****"`) so a 400 response is safe to paste into a bug report. Validation runs whether `notifications_enabled` is True or False.
 5. **Scheme-only redaction** via `redact_apprise_url(url) → "<scheme>://****"`. Apprise stashes credentials in netloc/path/query depending on the provider, so surgical masking is fragile. The dispatcher logs only redacted URLs; the config router logs nothing about config bodies. Asserted by a `caplog`-based test that ensures no raw credential token (`"AAA"` / `"BBB"`) ever appears in a log line.
-6. **Notifiable event types** are a frozen set: `rip.{completed,failed,partial}` + `session.{completed,failed,partial}`. Existing emit sites are untouched; payload shapes are frozen per [03-protocol.md § Versioning](../arch/03-protocol.md#versioning).
+6. **Notifiable event types** are a frozen set: `rip.{completed,failed,partial}` + `session.{completed,failed,partial}`. Existing emit sites are untouched; payload shapes are frozen per [03-protocol.md § Versioning](../developers/architecture/03-protocol.md#versioning).
 7. **Best-effort semantics.** `notified_at` is set whether or not Apprise succeeded — a permanently-broken URL drops one notification rather than logspamming forever. Empty URL list and disabled state both still mark `notified_at` so events do not pile up while notifications are off.
 8. **Tests:** 20 new (`test_notification_dispatcher.py` × 9 covering disabled/enabled/empty/non-notifiable/already-notified/raises/multi-event/redaction; `test_notification_format.py` × 5 for title and body shapes; `test_config_apprise_validation.py` × 6 for round-trip and 400 redaction). 252 backend / 30 ripper / 23 UI; ruff format + ruff lint clean; mypy clean on the touched files (pre-existing test-file errors are unchanged); OpenAPI snapshot regenerated.
 
@@ -296,7 +296,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 **What shipped:**
 
-1. **Shared structured-logging helper** at [packages/arm_common/arm_common/logging.py](../../packages/arm_common/arm_common/logging.py) — `configure_service_logging(service_name)` installs a `JsonFormatter` on stdout *and* a `RotatingFileHandler(/logs/<service>.log, 10 MB × 5)`. Each line carries `{ts, level, service, job_id, track_id, session_application_id, msg, extra}` per [05-cross-cutting.md § Logging](../arch/05-cross-cutting.md#logging). Backend / ripper / transcode all replaced their `logging.basicConfig` blocks with one call. The file handler is best-effort — outside a container `/logs` may be unwritable, in which case stdout still carries every line so the openapi-snapshot regen and tests don't blow up.
+1. **Shared structured-logging helper** at [packages/arm_common/arm_common/logging.py](../../packages/arm_common/arm_common/logging.py) — `configure_service_logging(service_name)` installs a `JsonFormatter` on stdout *and* a `RotatingFileHandler(/logs/<service>.log, 10 MB × 5)`. Each line carries `{ts, level, service, job_id, track_id, session_application_id, msg, extra}` per [05-cross-cutting.md § Logging](../developers/architecture/05-cross-cutting.md#logging). Backend / ripper / transcode all replaced their `logging.basicConfig` blocks with one call. The file handler is best-effort — outside a container `/logs` may be unwritable, in which case stdout still carries every line so the openapi-snapshot regen and tests don't blow up.
 2. **`with_log_context(job_id=..., track_id=..., session_application_id=...)`** uses `contextvars` so async work inside the block stamps the correlation IDs without ceremony at every `logger.*` call site. Wrapped at the operation entry points: ripper `JobController.handle_disc_inserted` + per-track callbacks + `resume_inflight_job`; transcoder `amain` after register; `auto_session.apply_session_internal`; `transcode_dispatcher.spawn_pending` and `sweep_stale_claims` per-task; `notification_dispatcher._tick` per-event. Documented gotcha: `loop.run_in_executor` does NOT copy contextvars — wrap with `contextvars.copy_context().run(...)` at the executor boundary.
 3. **Per-task transcode log filename** — dispatcher injects `ARM_SERVICE_NAME=arm-transcode-{task_id_short}` at spawn so parallel transcoders don't clobber a shared `/logs/arm-transcode.log` rotation. Same convention as the existing container hostname.
 4. **Singleton `LogTailer`** at [services/backend/arm_backend/log_tailer.py](../../services/backend/arm_backend/log_tailer.py) — one asyncio task started in lifespan. Per drain it scandirs `/logs`, follows every `*.log` in append mode (seek-to-end on open so historical lines aren't replayed), parses each appended line as JSON, gates on `hub.subscriber_count(f"logs.{job_id}")`, and emits `log.line` envelopes via `hub.emit(persist=False, ...)`. Detects rotation via `st_ino` mismatch, drains the freshly-opened file in the same tick. Loop guard skips records whose `extra.logger` starts with `arm_backend.ws.hub` so the hub's own emit-failure logs don't feed back.
@@ -311,7 +311,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 ## Phase 13 — Installer (install.sh) (shipped)
 
-**Goal.** The one-command bootstrap in [06-deployment.md § Install](../arch/06-deployment.md#install). Replaces the `v3/devtools/bootstrap-certs.sh` + manual `.env` + manual compose-up sequence that the walking skeleton used.
+**Goal.** The one-command bootstrap in [06-deployment.md § Install](../developers/architecture/06-deployment.md#install). Replaces the `v3/devtools/bootstrap-certs.sh` + manual `.env` + manual compose-up sequence that the walking skeleton used.
 
 **Exit criteria.** Fresh host with Docker ≥ 24 runs the `curl | bash` one-liner and lands at `https://host:8081/` login screen in under 5 minutes.
 
@@ -322,7 +322,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 3. **Per-drive `UDISKS_AUTO=0` udev rule** — same `ID_PATH`-scoped logic that `setup-dev.sh:67-122` uses, lifted into `install.sh`. Full rewrite each run; gated on sudo (the cert/compose/env steps don't need root). If sudo isn't available the script prints the rule for manual install rather than silently skipping.
 4. **Flags** — `--prefix <path>` (default `~/arm`), `--rotate-ca` (with confirmation prompt), `--start` (run `docker compose pull && docker compose up -d` after install). Plus `--certs-only / --no-env / --no-compose / --no-udev` for `setup-dev.sh` and unattended-install integration.
 5. **Idempotent rerun** — `.env` preserved (only `PUID`/`PGID`/`CDROM_GID` re-derived); CA preserved unless `--rotate-ca`; leaves regenerated every run (cheap, self-heals stale/corrupted leaves, picks up new SANs); compose **fully rewritten** each run (clobbering hand-edits — call-out via `# Generated by install.sh — do not edit` header) from the union of (currently-detected drives) ∪ (drive names already in the existing compose). Previously-removed drives keep their service-block name in the file (stamped `sg-missing-sr<N>` so a `docker compose config` flags it).
-6. **Generated compose: image-based, not build-based.** End users pull `${ARM_IMAGE_PREFIX}/arm-<svc>:${ARM_IMAGE_TAG}` (defaults `docker.io/automaticrippingmachine` and `v3.0.0-alpha-1`). Dev compose at [v3/docker-compose.yml](../../docker-compose.yml) keeps its `build:` blocks for developers. Two compose files describing the same stack — converging on the doc-spec at [06-deployment.md:80-153](../arch/06-deployment.md). Phase 14 (CI + image release) is the registry-availability dependency; the installer prints a "alpha tag — `docker compose pull` may 404" warning so this isn't surprising.
+6. **Generated compose: image-based, not build-based.** End users pull `${ARM_IMAGE_PREFIX}/arm-<svc>:${ARM_IMAGE_TAG}` (defaults `docker.io/automaticrippingmachine` and `v3.0.0-alpha-1`). Dev compose at [v3/docker-compose.yml](../../docker-compose.yml) keeps its `build:` blocks for developers. Two compose files describing the same stack — converging on the doc-spec at [06-deployment.md:80-153](../developers/architecture/06-deployment.md). Phase 14 (CI + image release) is the registry-availability dependency; the installer prints a "alpha tag — `docker compose pull` may 404" warning so this isn't surprising.
 7. **GPU overlay** — `~/arm/docker-compose.gpu.yml` is generated alongside the base file; users with GPUs run `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d` per the next-steps message. Same content as [v3/docker-compose.gpu.yml](../../docker-compose.gpu.yml) verbatim.
 8. **`bootstrap-certs.sh` retired** — deleted from `v3/devtools/`. `setup-dev.sh:36-44` now invokes `install.sh --prefix "$V3_DIR" --certs-only --no-env --no-compose --no-udev` so cert-gen has one source of truth. `v3/devtools/README.md` and the Phase 5 compose-mount reference at [MASTER_IMPLEMENTATION_PLAN.md:135] updated to point at `install.sh`.
 9. **shellcheck pre-commit hook** — `koalaman/shellcheck-precommit@v0.10.0` against `^v3/.+\.sh$`. Catches obvious bash bugs in `install.sh` and `setup-dev.sh` without running them. Both clean (one `SC2012` info-level suppression for a sysfs `ls` where `find` would be overkill).
@@ -359,7 +359,7 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 - Rename `.github/workflows/v3-*.yml` → `.github/workflows/*.yml` (drop prefix); strip `paths: v3/**` filter; rename `branches: [main, 'wolfy/**']` → `[main]`.
 - Flip `vars.DOCKERHUB_NAMESPACE` from fork value to `automaticrippingmachine`.
 - Remove v2 dependabot entries; rebase v3 entries from `/v3/...` → `/...`.
-- Delete v2 workflow files (per [08-v2-isolation-and-cutover.md § Cutover step 5](../arch/08-v2-isolation-and-cutover.md#5-retire-v2-ci-workflows)).
+- Delete v2 workflow files (per [08-v2-isolation-and-cutover.md § Cutover step 5](../developers/architecture/08-v2-isolation-and-cutover.md#5-retire-v2-ci-workflows)).
 - Add `cosign verify ...` block to README.md.
 
 ---
@@ -368,13 +368,13 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 **Goal.** Big Buck Bunny ISO end-to-end rip + transcode on a developer's machine, plus the crash-recovery exercise, plus one real BD/DVD/CD rip done on a contributor's machine.
 
-**Exit criteria.** Every checkbox in [08-v2-isolation-and-cutover.md § Readiness criteria](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is ticked.
+**Exit criteria.** Every checkbox in [08-v2-isolation-and-cutover.md § Readiness criteria](../developers/architecture/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is ticked.
 
 **What shipped:**
 
 1. **Crash drill — `devtools/crash-drill.sh`** ([../../devtools/crash-drill.sh](../../devtools/crash-drill.sh)) — bash drill that injects a synthetic `ripping` job + `in_progress` track via psql, force-kills `armv3-backend` (`docker kill -s KILL`), brings it back via `docker compose up -d`, and asserts the lifespan-startup sweep flipped the track to `queued`/`attempts=1` and stamped `resumed_from_crash=true`. Idempotent cleanup via `trap EXIT`. Prompts before destructive action; `--yes` skips. Drill **passed live** against the dev stack on first proper run.
 2. **OpenAPI snapshot regen — `devtools/regen-openapi-snapshot.sh`** ([../../devtools/regen-openapi-snapshot.sh](../../devtools/regen-openapi-snapshot.sh)) — formalizes the path the CI `openapi-drift` job's failure message points at. Imports `arm_backend.main:app`, dumps `app.openapi()` to `services/ui/openapi.snapshot.json`, then `npm run openapi-types` if the UI's `node_modules` is present. Smoke-tested clean (no diff → snapshot already current).
-3. **Real-disc smoke checklist — `docs/contributors/real-disc-smoke.md`** ([../contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md)) — host prep, fresh-install vs dev-stack run paths, what to verify (detection / identification / rip / transcode / terminal status / logs zip), what to capture for the PR, known gotchas (MakeMKV beta key rotation, copy-protected discs, slow MusicBrainz, lazy transcode-image pull), and the BD/DVD/CD results table that gates cutover.
+3. **Real-disc smoke checklist — `docs/developers/contributing/real-disc-smoke.md`** ([../developers/contributing/real-disc-smoke.md](../developers/contributing/real-disc-smoke.md)) — host prep, fresh-install vs dev-stack run paths, what to verify (detection / identification / rip / transcode / terminal status / logs zip), what to capture for the PR, known gotchas (MakeMKV beta key rotation, copy-protected discs, slow MusicBrainz, lazy transcode-image pull), and the BD/DVD/CD results table that gates cutover.
 4. **Contract test surface** — OpenAPI drift detection ships in `v3-ci.yml` (Phase 14) as the `openapi-drift` job; the regen helper above closes the loop. The "Contract test suite" deliverable per the original plan is largely covered by this drift check plus the existing pytest in `services/backend/tests/` (which exercises router shapes via `TestClient`); a separate framework was not added.
 5. **ISO-fixture smoke rig — `ARM_MANUAL_TRIGGER_ISO` + [`devtools/iso-smoke.sh`](../../devtools/iso-smoke.sh)** — resolves the BBB-ISO blocker that the original plan deferred to v3.1 (`read_drive_status`'s SCSI ioctl fails on `/dev/loop*`). The ripper now reads `ARM_MANUAL_TRIGGER_ISO`, bypasses the poll loop, and runs scan → identify → rip exactly once against an `.iso` ([job_controller.py](../../services/ripper/arm_ripper/job_controller.py) + [main.py](../../services/ripper/arm_ripper/main.py)). `iso-smoke.sh` pulls the SHA-256-pinned `sintel.iso` / `big_buck_bunny.iso` from the [matrix256-corpus](https://github.com/shitwolfymakes/matrix256-corpus) image and drives the full flow. DVD fingerprint CRC64 is computed device-side (`fd372371`) so the path runs **unprivileged**. This satisfies the readiness criterion "produces a transcoded file using the Big Buck Bunny ISO fixture."
 
@@ -386,15 +386,15 @@ No DB migration was required — `Job.resumed_from_crash` ([job.py:34](../../pac
 
 **Real-disc smoke matrix — complete (contributor hardware):**
 
-- **BD + DVD + CD have each completed a real end-to-end rip on contributor hardware**, satisfying the readiness criterion "at least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine." The BD/DVD/CD results table in [docs/contributors/real-disc-smoke.md](../contributors/real-disc-smoke.md) is the system of record. Combined with the ISO-fixture rig (item 5) and the dev-stack validation above, the integration-rig and disc-smoke readiness gates are now met.
+- **BD + DVD + CD have each completed a real end-to-end rip on contributor hardware**, satisfying the readiness criterion "at least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine." The BD/DVD/CD results table in [docs/developers/contributing/real-disc-smoke.md](../developers/contributing/real-disc-smoke.md) is the system of record. Combined with the ISO-fixture rig (item 5) and the dev-stack validation above, the integration-rig and disc-smoke readiness gates are now met.
 
 **Outstanding (one non-code cutover gate):**
 
 The disc-smoke, BBB-ISO, **and platform gates are all cleared**; a single human gate remains:
 
-- **Maintainer sign-off** — the final "v3 is ready to replace v2" agreement. Every other criterion in [08-v2-isolation-and-cutover.md § Readiness](../arch/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is now satisfied.
+- **Maintainer sign-off** — the final "v3 is ready to replace v2" agreement. Every other criterion in [08-v2-isolation-and-cutover.md § Readiness](../developers/architecture/08-v2-isolation-and-cutover.md#readiness-criteria-for-cutover) is now satisfied.
 
-**Platform scope narrowed (2026-06-05):** v3.0 supports **only Linux + Docker Compose** — Unraid/Synology/NAS-appliance targets are out of scope (see [06-deployment.md § Supported targets](../arch/06-deployment.md#supported-targets)). That collapses the old "platform matrix" to a single distro-agnostic target, covered by green `ci.yml` (all 10 jobs — lint ×3 / test ×2 / openapi-drift / build ×4 — on every push to `origin/main`) plus the end-to-end dev-stack validation above. No manual cross-platform smoke remains.
+**Platform scope narrowed (2026-06-05):** v3.0 supports **only Linux + Docker Compose** — Unraid/Synology/NAS-appliance targets are out of scope (see [06-deployment.md § Supported targets](../developers/architecture/06-deployment.md#supported-targets)). That collapses the old "platform matrix" to a single distro-agnostic target, covered by green `ci.yml` (all 10 jobs — lint ×3 / test ×2 / openapi-drift / build ×4 — on every push to `origin/main`) plus the end-to-end dev-stack validation above. No manual cross-platform smoke remains.
 
 Once sign-off lands, the mechanical Phase 16 cutover PR follows.
 
@@ -428,7 +428,7 @@ Once sign-off lands, the mechanical Phase 16 cutover PR follows.
 
 ## Phase 16 — Cutover PR
 
-Mechanical. Follows [08-v2-isolation-and-cutover.md § The cutover PR](../arch/08-v2-isolation-and-cutover.md#the-cutover-pr) step-for-step. Not a design phase.
+Mechanical. Follows [08-v2-isolation-and-cutover.md § The cutover PR](../developers/architecture/08-v2-isolation-and-cutover.md#the-cutover-pr) step-for-step. Not a design phase.
 
 **Depends on:** Phase 15 (all readiness criteria met).
 
@@ -444,11 +444,11 @@ These can proceed alongside the critical path once their entry condition is met.
 
 ### Track B — Observability beyond logs (deferred v3.0)
 - Entry: Phase 12.
-- Explicitly not shipping in v3.0 per [05-cross-cutting.md § Observability](../arch/05-cross-cutting.md#observability-beyond-logs). Keep the track here so it's not forgotten — add to v3.1 backlog.
+- Explicitly not shipping in v3.0 per [05-cross-cutting.md § Observability](../developers/architecture/05-cross-cutting.md#observability-beyond-logs). Keep the track here so it's not forgotten — add to v3.1 backlog.
 
 ### Track C — Platform verification (descoped 2026-06-05)
 - Entry: Phase 13 (installer exists).
-- v3.0 supports **only Linux + Docker Compose** (Unraid/Synology dropped — see [06-deployment.md § Supported targets](../arch/06-deployment.md#supported-targets)). Container deployment is distro-agnostic, so this track collapses to "the stack runs on a Linux host via `install.sh` + `docker compose`" — covered by the Phase 15 end-to-end dev-stack validation and green `ci.yml`. No separate per-platform matrix remains for v3.0.
+- v3.0 supports **only Linux + Docker Compose** (Unraid/Synology dropped — see [06-deployment.md § Supported targets](../developers/architecture/06-deployment.md#supported-targets)). Container deployment is distro-agnostic, so this track collapses to "the stack runs on a Linux host via `install.sh` + `docker compose`" — covered by the Phase 15 end-to-end dev-stack validation and green `ci.yml`. No separate per-platform matrix remains for v3.0.
 
 ### Track D — Community DB plumbing
 - Entry: Phase 2.
@@ -481,6 +481,6 @@ Key realizations from this graph:
 ## Open risks to this plan
 
 - **OQ-1 (queue mechanism) stays deferred.** The plan assumes DB-as-queue throughout. If a bottleneck appears during Phase 7 testing, the state machine is designed to swap in Redis/RQ/NATS without reshaping services — but a pivot would still insert a Phase 7.5.
-- **MakeMKV licensing** may block CI (noted in [05-cross-cutting.md § Integration rig](../arch/05-cross-cutting.md#integration-rig--big-buck-bunny)). Phase 15 plans a loopback `dd`-based stub as fallback; verify early.
+- **MakeMKV licensing** may block CI (noted in [05-cross-cutting.md § Integration rig](../developers/architecture/05-cross-cutting.md#integration-rig--big-buck-bunny)). Phase 15 plans a loopback `dd`-based stub as fallback; verify early.
 - **Transcode container startup latency** may make the "ephemeral one-per-task" model feel sluggish. If measured startup > ~3s per task becomes a problem, a long-running transcode worker with a task-per-invocation contract is the escape hatch — same state machine, different container lifetime.
 - **Browser-facing TLS UX.** Every LAN client needs to trust `arm-ca.crt` once or click through a warning forever. Phase 13 installer should print the import instructions prominently; otherwise the first-run UX degrades.

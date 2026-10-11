@@ -16,7 +16,7 @@ does NOT copy the current context — wrap with
 Explicit `extra={"job_id": ...}` on a single call site overrides the
 ambient contextvar (record `__dict__` wins).
 
-JSONL shape pinned by `docs/arch/05-cross-cutting.md § Logging`:
+JSONL shape pinned by `docs/developers/architecture/05-cross-cutting.md § Logging`:
 `{ts, level, service, job_id, track_id, session_application_id, msg, extra}`.
 """
 

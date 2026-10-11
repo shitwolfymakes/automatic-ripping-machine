@@ -34,14 +34,25 @@
 **/dist/
 **/.vite/
 **/*.tsbuildinfo
+# docs site build output; the ui-neu docs stage rebuilds it
+site/build/
+site/.cache/
+# host-side `npm run docs` dev bundle; the ui-neu docs stage builds its own
+# and this would otherwise get copied into the image build and merged
+# under the real bundle
+services/ui-neu/frontend/static/docs-data/
 
 # ---- Environment / secrets -------------------------------------------
 **/.env
 **/.env.*
-!**/.env.example
+# Name each kept example by path: a `**` exception makes BuildKit walk every
+# excluded directory looking for matches, including arm/'s unreadable
+# Postgres data dir, which fails the whole-context COPY in the ui-neu docs stage.
+!.env.example
+!services/ui-neu/.env.example
 
 # Stray key/cert material — defense in depth. No v3 image bakes certs in;
-# they are always bind-mounted at runtime. See docs/arch/06-deployment.md.
+# they are always bind-mounted at runtime. See docs/developers/architecture/06-deployment.md.
 **/*.key
 **/*.pem
 **/*.crt
@@ -50,6 +61,10 @@
 **/*.pfx
 
 # ---- Persistent host state (compose bind-mounts these at runtime) ----
+# arm/ is setup-dev.sh's data dir inside the checkout (live Postgres data,
+# certs, pg_dump backups). The ui-neu docs stage copies the whole context, so
+# without this every dev build ships the database into the build.
+arm/
 certs/
 db/
 raw/
@@ -57,17 +72,18 @@ media/
 logs/
 
 # ---- Repo metadata never read inside an image ------------------------
-docs/
+# docs/, devtools/ and .pre-commit-config.yaml stay OUT of this block: the
+# ui-neu docs stage (services/ui-neu/Dockerfile) renders docs/ into the
+# /docs-data bundle and its link checker resolves relative links from those
+# pages into devtools/ and .pre-commit-config.yaml, so all three must reach
+# the build context even though only ui-neu's Dockerfile actually reads them.
 test_fixtures/
-devtools/
 install.sh
 docker-compose*.yml
-.pre-commit-config.yaml
 .editorconfig
-# Claude Code memory + settings and the GitHub wiki mirror — pure repo
-# metadata, tracked in git but never copied into any image.
+# Claude Code memory + settings: pure repo metadata, tracked in git but
+# never copied into any image.
 .claude/
-arm_wiki/
 # Repo-root favicon is decoration; the UI image ships its own assets and
 # no build COPYs this.
 favicon.ico
@@ -80,9 +96,10 @@ favicon.ico
 **/__tests__/
 
 # ---- Markdown docs (not referenced by any build step) ----------------
-**/README.md
-**/CHANGELOG.md
-**/CONTRIBUTING.md
+# README.md, CONTRIBUTING.md and the root CHANGELOG.md are excluded from
+# this exclusion (see the comment above test_fixtures/): docs/developers/architecture/README.md
+# is dev-section page content, CONTRIBUTING.md is both a page and a link
+# target from it, and docs/user/Upgrading.md links straight to CHANGELOG.md.
 **/CODE_OF_CONDUCT.md
 **/SECURITY.md
 **/CLAUDE.md

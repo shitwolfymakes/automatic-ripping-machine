@@ -1,4 +1,4 @@
-# TODO(v3-release): pin by @sha256:<digest> — see docs/arch/06-deployment.md
+# TODO(v3-release): pin by @sha256:<digest> — see docs/developers/architecture/06-deployment.md
 FROM python:3.14-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \

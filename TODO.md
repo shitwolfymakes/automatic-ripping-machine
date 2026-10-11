@@ -24,7 +24,7 @@ release**, rather than `:latest`.
 First-class "rip from an `.iso` as a source" — distinct from the existing
 `output_mode='iso'` (which produces an ISO *from* a disc).
 
-- Design proposal: [docs/arch/10-iso-source-ripping.md](docs/arch/10-iso-source-ripping.md).
+- Design proposal: [docs/developers/architecture/10-iso-source-ripping.md](docs/developers/architecture/10-iso-source-ripping.md).
 - Implement as **ephemeral, backend-spawned worker containers** (the
   transcode-dispatcher model), **not** a long-running service.
 - Eventual front door is UI file upload.

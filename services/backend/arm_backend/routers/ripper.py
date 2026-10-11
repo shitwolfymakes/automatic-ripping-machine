@@ -1083,7 +1083,7 @@ async def rip_complete(
     elif failed == 0:
         # A placeholder rip (identify missed, block_on_miss=false) parks at
         # RIPPED_AWAITING_IDENTIFY: transcode is gated on identity, so the
-        # after-rip hooks wait for resolve (G-09; docs/arch/02 § placeholder
+        # after-rip hooks wait for resolve (G-09; docs/developers/architecture/02 § placeholder
         # rips). A PARTIAL unidentified rip stays RIPPED_PARTIAL — the enum
         # has no partial+unidentified value and losing partiality would hide
         # failed tracks; it remains resolvable (PRESERVE) either way.

@@ -15,7 +15,7 @@ SCAN_TIMEOUT_SECONDS = 300.0
 # MakeMKV emits this when its hard-coded 60-day beta kill-switch has fired.
 # No registration key overrides it; the binary refuses all protected-disc
 # work and the only fix is rebuilding against a fresher upstream tarball.
-# See docs/ops/makemkv.md § Failure modes.
+# See docs/user/MakeMKV-Ripper.md § Failure modes.
 _MAKEMKV_EXPIRED_PREFIX = b"MSG:5021,"
 
 _DURATION_RE = re.compile(r"^(\d+):(\d{1,2}):(\d{1,2})$")
@@ -301,7 +301,7 @@ async def scan_disc(device_path: str) -> ScanResult:
             "binaries carry a 60-day kill-switch from release date that "
             "no registration key overrides; the only fix is rebuilding the "
             "ripper image after upstream ships a fresher tarball. See "
-            "docs/ops/makemkv.md § Failure modes."
+            "docs/user/MakeMKV-Ripper.md § Failure modes."
         )
 
     if proc.returncode != 0:

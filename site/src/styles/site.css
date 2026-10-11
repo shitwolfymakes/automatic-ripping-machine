@@ -1,0 +1,43 @@
+/* Docs site chrome: page grid, header, sidebar drawer, toc, footer. Values
+   come from ui-neu tokens only; rendered content is styled by ui-neu's
+   docs-prose block, imported ahead of this file by write-site.mjs. */
+@layer components {
+	.docs-body { margin: 0; min-height: 100vh; }
+	.docs-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 0.5rem; height: 3.5rem; padding: 0 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+	.docs-brand { font-family: var(--font-display); font-weight: 700; font-size: 1.375rem; letter-spacing: 0.04em; color: var(--color-text); white-space: nowrap; }
+	.docs-brand span { color: var(--color-primary-text); }
+	.docs-search { position: relative; flex: 1; max-width: 28rem; margin-left: auto; }
+	.docs-search .field-control { width: 100%; }
+	.docs-search-results { position: absolute; top: calc(100% + 0.25rem); left: 0; right: 0; z-index: 30; max-height: 60vh; overflow-y: auto; box-shadow: var(--shadow-2); }
+	.docs-search-result { display: block; padding: 0.375rem 0.5rem; border-radius: var(--radius-md); font-size: 0.875rem; color: var(--color-text); }
+	.docs-search-result:hover, .docs-search-result[data-active="true"] { background: var(--color-primary-tint-2); }
+	.docs-search-empty { padding: 0.375rem 0.5rem; font-size: 0.875rem; color: var(--color-text-muted); }
+	.docs-shell { display: grid; grid-template-columns: 16rem minmax(0, 1fr) 14rem; max-width: 90rem; margin: 0 auto; }
+	.docs-sidebar { position: sticky; top: 3.5rem; height: calc(100vh - 3.5rem); overflow-y: auto; padding: 1rem 0.75rem; border-right: 1px solid var(--color-border); }
+	.docs-nav-section + .docs-nav-section { margin-top: 1.25rem; }
+	.docs-nav-heading { margin: 0 0 0.25rem; padding: 0 0.75rem; }
+	.docs-nav-group { margin: 0.75rem 0 0.25rem; padding: 0 0.75rem; font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); }
+	.docs-main { min-width: 0; padding: 2rem 2.5rem 4rem; }
+	.docs-main .docs-prose { max-width: 75ch; }
+	.docs-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; max-width: 75ch; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text-muted); }
+	.docs-toc-col { position: sticky; top: 3.5rem; height: calc(100vh - 3.5rem); overflow-y: auto; padding: 2rem 1rem; }
+	.docs-toc { display: flex; flex-direction: column; gap: 0.125rem; }
+	.docs-toc-link { padding: 0.125rem 0 0.125rem 0.75rem; border-left: 2px solid var(--color-border); font-size: 0.8125rem; color: var(--color-text-muted); }
+	.docs-toc-link[data-depth="3"] { padding-left: 1.5rem; }
+	.docs-toc-link:hover { color: var(--color-text); }
+	.docs-toc-link[data-active="true"] { border-left-color: var(--color-primary); color: var(--color-primary-text); }
+	.docs-nav-toggle { display: none; }
+
+	@media (max-width: 80rem) {
+		.docs-shell { grid-template-columns: 16rem minmax(0, 1fr); }
+		.docs-toc-col { display: none; }
+	}
+	@media (max-width: 64rem) {
+		.docs-shell { grid-template-columns: minmax(0, 1fr); }
+		.docs-nav-toggle { display: inline-flex; }
+		.docs-brand span { display: none; }
+		.docs-sidebar { position: fixed; top: 3.5rem; bottom: 0; left: 0; z-index: 15; width: min(18rem, 85vw); height: auto; background: var(--color-surface); transform: translateX(-100%); transition: transform var(--motion-fast) var(--ease); }
+		.docs-body[data-nav-open="true"] .docs-sidebar { transform: none; box-shadow: var(--shadow-2); }
+		.docs-main { padding: 1.5rem 1rem 3rem; }
+	}
+}

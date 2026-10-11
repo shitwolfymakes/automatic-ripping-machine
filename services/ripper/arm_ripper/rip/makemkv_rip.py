@@ -129,7 +129,7 @@ class _ParserState:
     # Set when MakeMKV emits MSG:5021 (the binary's hard-coded 60-day
     # beta kill-switch). The streamer kills the subprocess as soon as
     # this is seen so a 6-hour RIP_TIMEOUT_SECONDS doesn't run out.
-    # See docs/ops/makemkv.md § Failure modes.
+    # See docs/user/MakeMKV-Ripper.md § Failure modes.
     binary_expired: bool = False
 
 
@@ -318,7 +318,7 @@ async def _stream_output(
         # Hard-coded 60-day kill-switch in the makemkv-bin blob. Kill the
         # subprocess so the 6-hour RIP_TIMEOUT_SECONDS doesn't fire — the
         # caller checks state.binary_expired to surface a distinct error.
-        # See docs/ops/makemkv.md § Failure modes.
+        # See docs/user/MakeMKV-Ripper.md § Failure modes.
         if not state.binary_expired and line.startswith("MSG:5021,"):
             state.binary_expired = True
             state.diagnostics.append(line)
@@ -586,7 +586,7 @@ async def rip_disc(
                 "makemkvcon refused: binary is past its hard-coded expiry "
                 "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
                 "rebuild the ripper image after upstream ships a fresher tarball. "
-                "See docs/ops/makemkv.md § Failure modes.",
+                "See docs/user/MakeMKV-Ripper.md § Failure modes.",
                 state.diagnostics,
             ),
             titles={},

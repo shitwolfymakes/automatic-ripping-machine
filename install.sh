@@ -20,7 +20,7 @@
 #   --no-compose        Skip docker-compose.yml generation.
 #   --no-udev           Skip host udev rule.
 #
-# See docs/arch/06-deployment.md for the full design.
+# See docs/developers/architecture/06-deployment.md for the full design.
 
 set -euo pipefail
 
@@ -306,7 +306,7 @@ ensure_prefix() {
     log "ensuring install prefix at $PREFIX"
     mkdir -p "$PREFIX"/{certs,raw,media,logs,db}
     chmod 700 "$PREFIX/certs"
-    # 2775 = setgid + group-writable. Per docs/arch/06-deployment.md: lets
+    # 2775 = setgid + group-writable. Per docs/developers/architecture/06-deployment.md: lets
     # ARM-created subdirs inherit the parent group automatically.
     chmod 2775 "$PREFIX/raw" "$PREFIX/media" "$PREFIX/logs"
 }
@@ -1470,7 +1470,7 @@ build_udev_rule_content() {
 # Managed by install.sh — do not edit by hand.
 # Disables host auto-mount for ARM-managed optical drives so the ripper
 # container can eject after a rip. See:
-#   docs/arch/06-deployment.md#host-side-auto-mount-must-be-disabled
+#   docs/developers/architecture/06-deployment.md#host-side-auto-mount-must-be-disabled
 HEADER
     printf '%s\n' "${rule_lines[@]}"
 }
