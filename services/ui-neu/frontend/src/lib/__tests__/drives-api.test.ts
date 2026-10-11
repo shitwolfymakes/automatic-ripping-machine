@@ -14,7 +14,6 @@ function emptyResponse() {
 import {
 	fetchDrives,
 	updateDrive,
-	deleteDrive,
 	rescanDrives,
 	fetchDriveDiagnostic,
 	enrollDrive,
@@ -55,14 +54,6 @@ describe('updateDrive', () => {
 			})
 		);
 		expect(result).toEqual({ id: 'drv_x', display_name: 'New Name' });
-	});
-});
-
-describe('deleteDrive', () => {
-	it('DELETEs /api/drives/:id', async () => {
-		mockFetch.mockResolvedValue(emptyResponse());
-		await expect(deleteDrive('drv_x')).resolves.toBeUndefined();
-		expect(mockFetch).toHaveBeenCalledWith('/api/drives/drv_x', expect.objectContaining({ method: 'DELETE' }));
 	});
 });
 
