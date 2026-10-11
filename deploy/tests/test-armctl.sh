@@ -249,6 +249,11 @@ set +e; out="$( ( set -e; pick_storage "raw rips" "not/absolute" ARM_HOST_RAW_PA
 has "storage: a bad flag value is rejected" "must be a full path" "$out"
 ( prepare_storage "${ARM_DIR}/raw" )
 check "storage: a folder inside arm is created setgid, group-writable" "2775" "$(stat -c '%a' "${ARM_DIR}/raw")"
+( prepare_iso_library "${TMPROOT}/new-iso-library" )
+check "storage: a missing ISO library is created" "yes" "$( [[ -d "${TMPROOT}/new-iso-library" ]] && echo yes || echo no )"
+iso_ro="${TMPROOT}/iso-readonly"; mkdir -p "${iso_ro}"; chmod 555 "${iso_ro}"
+rc=0; ( prepare_iso_library "${iso_ro}" ) >/dev/null 2>&1 || rc=$?
+check "storage: a read-only ISO library is accepted" "0" "$rc"
 ro="${TMPROOT}/readonly"; mkdir -p "$ro"; chmod 555 "$ro"
 out="$( (prepare_storage "$ro") 2>&1 || true)"
 has "storage: an unwritable folder is an error" "is not writable" "$out"
@@ -294,7 +299,7 @@ env_case() {
         ARMCTL_RELEASE_DIR="${REL}"
         PROFILE="$2"; RIPPER_ONLY=0
         if [[ "$2" == ripper-only ]]; then RIPPER_ONLY=1; fi
-        RAW_PATH="/r"; MEDIA_PATH="/m"; ARM_IMAGE_TAG_DEFAULT="v3.1.0"; IMAGE_PREFIX_ARG=""
+        RAW_PATH="/r"; MEDIA_PATH="/m"; ISO_PATH="/i"; ARM_IMAGE_TAG_DEFAULT="v3.1.0"; IMAGE_PREFIX_ARG=""
         REMOTE_DOCKER_HOST="ssh://sam@192.168.0.92"; REMOTE_BACKEND_URL="https://192.168.0.68:8080"
         REMOTE_TRANSCODE_PUID=1001; REMOTE_TRANSCODE_PGID=1000
         REMOTE_GPUS='[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; REMOTE_RENDER_GID=""
@@ -314,6 +319,7 @@ has "env: readable by the owner only" "MODE=600" "$e"
 has "env: profile is recorded" "ARMCTL_PROFILE=full" "$e"
 has "env: full box is transcode-capable" "ARM_TRANSCODE_CAPABLE=true" "$e"
 has "env: raw path is absolute" "ARM_HOST_RAW_PATH=/r" "$e"
+has "env: ISO library path is absolute" "ARM_HOST_ISO_LIBRARY_PATH=/i" "$e"
 has "env: logs path is absolute" "ARM_HOST_LOGS_PATH=${TMPROOT}/env-full/arm/logs" "$e"
 has "env: certs path is the local folder" "ARM_HOST_CERTS_PATH=${TMPROOT}/env-full/arm/certs" "$e"
 # shellcheck disable=SC2016 # the literal ${PWD} is what must be absent
@@ -597,14 +603,14 @@ flow() {
         # Standalone, with errexit on: errexit is ignored in any conditional
         # context, which would hide a failing stage.
         set +e
-        ( set -e; cmd_install "$@"; echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"; echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}" ) </dev/null >"${TMPROOT}/flow.out" 2>&1
+        ( set -e; cmd_install "$@"; echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} ISO=${ISO_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"; echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}" ) </dev/null >"${TMPROOT}/flow.out" 2>&1
         echo "rc=$?" >> "${log_file}"
         set -e
         tr '\n' ';' < "${log_file}"
     )
 }
 check "install: full box runs every stage in order" \
-    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
+    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
     "$(flow flow-full)"
 out="$(flow flow-offload --profile offload)"
 has "install: offload runs the walkthrough after storage" "choose_storage;setup_remote_offload;ensure_ca;" "$out"
@@ -619,8 +625,8 @@ lacks "install: no second banner after the docker group restart" "banner" "$(ARM
 out="$(flow flow-nostart --no-start)"
 lacks "install: --no-start does not start the stack" "stack_up" "$out"
 has "install: --no-start still configures" "write_env;write_host_overlay;" "$out"
-out="$(flow flow-flags --yes --raw-path /r --media-path=/m --image-prefix ghcr.io/fork)"
-has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
+out="$(flow flow-flags --yes --raw-path /r --media-path=/m --iso-library-path /i --image-prefix ghcr.io/fork)"
+has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m ISO=/i PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
 out="$(flow flow-decline --no-host-changes)"
 has "install: --no-host-changes declines host changes" "ASSUME=no " "$out"
 set +e; out="$( (set -e; new_install flow-bad; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --bogus) 2>&1 )"; set -e

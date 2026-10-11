@@ -12,9 +12,11 @@ ARM_IMAGE_TAG_DEFAULT=""
 PROFILE_ARG=""
 RAW_ARG=""
 MEDIA_ARG=""
+ISO_ARG=""
 IMAGE_PREFIX_ARG=""
 RAW_PATH=""
 MEDIA_PATH=""
+ISO_PATH=""
 
 valid_profile() {
     [[ "$1" == full || "$1" == ripper-only || "$1" == offload ]]
@@ -121,13 +123,28 @@ prepare_storage() {
     fi
 }
 
+# The ISO library is only ever read (the backend mounts it read-only), so unlike
+# the other folders it need not be writable: a read-only NAS share is fine.
+prepare_iso_library() {
+    local dir="$1"
+    if [[ ! -d "${dir}" ]]; then
+        mkdir -p "${dir}" 2>/dev/null \
+            || err "cannot create ${dir}. Create it yourself, readable by $(id -un), then run the installer again."
+    fi
+    [[ -r "${dir}" && -x "${dir}" ]] \
+        || err "${dir} is not readable by $(id -un). Fix its permissions or choose another folder, then run the installer again."
+}
+
 choose_storage() {
     RAW_PATH="$(pick_storage "raw rips" "${RAW_ARG}" ARM_HOST_RAW_PATH "${ARM_DIR}/raw")"
     MEDIA_PATH="$(pick_storage "finished media" "${MEDIA_ARG}" ARM_HOST_MEDIA_PATH "${ARM_DIR}/media")"
+    ISO_PATH="$(pick_storage "ISO library" "${ISO_ARG}" ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library")"
     prepare_storage "${RAW_PATH}"
     prepare_storage "${MEDIA_PATH}"
+    prepare_iso_library "${ISO_PATH}"
     okline "raw rips:       ${RAW_PATH}"
     okline "finished media: ${MEDIA_PATH}"
+    okline "ISO library:    ${ISO_PATH}"
 }
 
 # env_merge_new_keys <example> <env>: append every KEY=value line of the
@@ -209,6 +226,7 @@ write_env() {
     # in. armctl can be run from anywhere, so they are always written in full.
     env_set ARM_HOST_RAW_PATH "${RAW_PATH}"
     env_set ARM_HOST_MEDIA_PATH "${MEDIA_PATH}"
+    env_set ARM_HOST_ISO_LIBRARY_PATH "${ISO_PATH}"
     env_set ARM_HOST_LOGS_PATH "${ARM_DIR}/logs"
     if [[ -z "$(env_file_value ARM_ALLOWED_ORIGINS)" ]]; then
         env_set ARM_ALLOWED_ORIGINS "https://localhost:8081"
