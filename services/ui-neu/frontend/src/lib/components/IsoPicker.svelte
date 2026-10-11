@@ -15,6 +15,7 @@
 	import LoadState from './LoadState.svelte';
 	import Glyph from './Glyph.svelte';
 	import { pathTailTruncate } from '$lib/utils/truncate';
+	import { formatBytes } from '$lib/utils/format';
 
 	interface Props {
 		open: boolean;
@@ -95,11 +96,7 @@
 	}
 
 	function formatSize(bytes: number | null | undefined): string {
-		if (bytes == null) return '--';
-		if (bytes === 0) return '0 B';
-		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(1024));
-		return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+		return bytes == null ? '--' : formatBytes(bytes);
 	}
 
 	function formatDate(modified: string | null | undefined): string {
