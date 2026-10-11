@@ -1,4 +1,4 @@
-/* stat: a labelled number tile (StatStrip, JobStatsPanel).
+/* stat: a labelled number tile (StatStrip, the transcoder page).
    Elements: stat-label (eyebrow), stat-value.
    Modifiers: stat-danger, stat-warning, stat-success, stat-info (value colour),
    stat-muted (neutral value colour, for a count with no tone of its own). */
