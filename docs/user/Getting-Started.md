@@ -170,8 +170,7 @@ it works". Each step saves when you press Continue, so you can close the tab and
 pick up where you left off.
 
 1. **Secure your account.** Set your own admin password (the rest of ARM stays
-   locked until you do) and choose whether guests on your network can look
-   around without signing in.
+   locked until you do).
 2. **System check.** ARM checks the folders and services it was installed with.
    A folder it can't write to comes with the exact `chown` command to run.
 3. **Drives.** Enroll each optical drive you want to rip with, and ignore the
