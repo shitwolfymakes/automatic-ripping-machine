@@ -22,6 +22,7 @@ more churn than the import itself.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -83,7 +84,28 @@ async def upsert_session_route(
 
     row = SessionRoute(media_type=req.media_type, disc_type=req.disc_type, session_id=req.session_id)
     db.add(row)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent PUT for the same (media_type, disc_type) inserted first and
+        # tripped the NULLS-NOT-DISTINCT unique constraint. Fold into an update of
+        # the winner's row, the same result as the sequential upsert.
+        await db.rollback()
+        winner_rows = (
+            (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == req.media_type)))
+            .scalars()
+            .all()
+        )
+        winner = next((r for r in winner_rows if r.disc_type == req.disc_type), None)
+        if winner is None:
+            # The conflict was something else (the session vanished mid-request).
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="the route changed concurrently; retry"
+            ) from None
+        winner.session_id = req.session_id
+        await db.commit()
+        await db.refresh(winner)
+        return winner
     await db.refresh(row)
     return row
 
