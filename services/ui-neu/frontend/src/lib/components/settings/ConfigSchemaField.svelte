@@ -1,8 +1,17 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
+	import RankedListField from './RankedListField.svelte';
 
-	let { field, value = $bindable(), action }: { field: ConfigFieldMeta; value: unknown; action?: Snippet } = $props();
+	// `config` (the live form values, keyed by field key) lets a field type
+	// read a sibling's value - the `ranked` branch below uses it to flag a
+	// source whose required API key isn't set.
+	let {
+		field,
+		value = $bindable(),
+		action,
+		config = {}
+	}: { field: ConfigFieldMeta; value: unknown; action?: Snippet; config?: Record<string, unknown> } = $props();
 
 	const HIDDEN = '<hidden>';
 	const isSecret = $derived(field.tier === 'secret');
@@ -10,6 +19,7 @@
 	const boolValue = $derived(Boolean(value));
 	const displayValue = $derived(isHiddenSecret ? '' : (value ?? ''));
 	const placeholder = $derived(isHiddenSecret ? '******** (set, leave blank to keep)' : '');
+	const helpId = $derived(field.help ? `setting-help-${field.key}` : undefined);
 </script>
 
 <div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
@@ -32,6 +42,15 @@
 				<span class="field-label">{field.label}</span>
 			</label>
 		{/if}
+	{:else if field.type === 'ranked'}
+		<div class="field-label">{field.label}</div>
+		{#if field.editable}
+			<RankedListField {field} bind:value {config} {helpId} />
+		{:else}
+			<div class="mono config-schema-field-value">
+				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}
+			</div>
+		{/if}
 	{:else}
 		<div class="field-label">{field.label}</div>
 		{#if !field.editable}
@@ -48,9 +67,26 @@
 						class="field-control w-full"
 					>
 						{#each field.enum_values ?? [] as opt (opt)}
-							<option value={opt}>{opt}</option>
+							<option value={opt}>{field.enum_labels?.[opt] ?? opt}</option>
 						{/each}
 					</select>
+				{:else if field.type === 'int'}
+					<!-- Compact: an int field reads as a short number, not a full-width
+					     text box. Emits a number (or null when emptied), never a string -
+					     no min/max here, the backend's 400 on an out-of-range value is
+					     the validation (see SchemaConfigForm's save-error alert). -->
+					<input
+						type="number"
+						step="1"
+						inputmode="numeric"
+						aria-label={field.label}
+						value={value ?? ''}
+						oninput={(e) => {
+							const raw = (e.currentTarget as HTMLInputElement).value;
+							value = raw === '' ? null : Number(raw);
+						}}
+						class="field-control config-schema-field-number"
+					/>
 				{:else}
 					<input
 						type={isSecret ? 'password' : 'text'}
@@ -66,7 +102,7 @@
 		{/if}
 	{/if}
 	{#if field.help}
-		<p class="field-help">{field.help}</p>
+		<p class="field-help" id={helpId}>{field.help}</p>
 	{/if}
 </div>
 
@@ -87,5 +123,9 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
+	}
+	/* an int field is a short number, not a full-width text box. */
+	.config-schema-field-number {
+		width: 8rem;
 	}
 </style>

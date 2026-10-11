@@ -9,6 +9,27 @@ export interface SettingsSection {
 	title: string;
 	blurb?: string;
 	keys: string[];
+	/** Groups of keys rendered side by side on desktop (each group's own
+	 *  keys stack vertically); the whole grid collapses to one column on a
+	 *  narrow panel. Keys named here are not repeated in `fields`. */
+	columns?: string[][];
+	/** Keys rendered last, under a muted "Advanced" divider. Not repeated
+	 *  in `fields`. */
+	advanced?: string[];
+	/** A named summary component rendered under the section blurb. An
+	 *  unrecognised name (or none) renders nothing. */
+	summary?: 'tv-episodes';
+}
+
+/** The section shape `sectionFields()` hands the form: keys already split
+ *  into their layout buckets, none repeated across buckets. */
+export interface SectionFieldGroups {
+	title: string;
+	blurb?: string;
+	summary?: 'tv-episodes';
+	columns: ConfigFieldMeta[][];
+	fields: ConfigFieldMeta[];
+	advanced: ConfigFieldMeta[];
 }
 
 const GROUP_BLURBS: Record<string, string> = {
@@ -23,6 +44,14 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			title: 'Lookup',
 			blurb: 'Which service identifies a disc, and whether TheDiscDB matching is used.',
 			keys: ['metadata_provider', 'thediscdb_enabled', 'thediscdb_refresh_days']
+		},
+		{
+			title: 'TV episodes',
+			blurb: 'How ARM works out season and episode numbers for TV discs.',
+			summary: 'tv-episodes',
+			keys: ['disc_hint_sources', 'episode_sources', 'episode_auto_apply', 'episode_match_tolerance_seconds'],
+			columns: [['disc_hint_sources'], ['episode_sources']],
+			advanced: ['episode_match_tolerance_seconds']
 		},
 		{
 			title: 'API keys',
@@ -63,20 +92,41 @@ export function groupBlurb(group: string): string | undefined {
 }
 
 /** Split `fields` into the sections declared for `group`, in declared order,
- *  dropping empty sections and appending unmapped fields under the group name. */
-export function sectionFields(
-	group: string,
-	fields: ConfigFieldMeta[]
-): Array<SettingsSection & { fields: ConfigFieldMeta[] }> {
+ *  dropping empty sections and appending unmapped fields under the group
+ *  name. Each section's own keys are further split into `columns`,
+ *  `advanced` and the remaining `fields`, so a key named in `columns` or
+ *  `advanced` is never repeated in `fields`. */
+export function sectionFields(group: string, fields: ConfigFieldMeta[]): SectionFieldGroups[] {
 	const byKey = new Map(fields.map((f) => [f.key, f]));
 	const placed = new Set<string>();
-	const out: Array<SettingsSection & { fields: ConfigFieldMeta[] }> = [];
+	const out: SectionFieldGroups[] = [];
 	for (const section of SECTIONS[group] ?? []) {
 		const own = section.keys.map((k) => byKey.get(k)).filter((f): f is ConfigFieldMeta => f !== undefined);
+		if (own.length === 0) continue;
 		own.forEach((f) => placed.add(f.key));
-		if (own.length > 0) out.push({ ...section, fields: own });
+
+		const columns = (section.columns ?? [])
+			.map((col) => col.map((k) => byKey.get(k)).filter((f): f is ConfigFieldMeta => f !== undefined))
+			.filter((col) => col.length > 0);
+		const columnKeys = new Set(columns.flat().map((f) => f.key));
+
+		const advanced = (section.advanced ?? [])
+			.map((k) => byKey.get(k))
+			.filter((f): f is ConfigFieldMeta => f !== undefined);
+		const advancedKeys = new Set(advanced.map((f) => f.key));
+
+		const plainFields = own.filter((f) => !columnKeys.has(f.key) && !advancedKeys.has(f.key));
+
+		out.push({
+			title: section.title,
+			blurb: section.blurb,
+			summary: section.summary,
+			columns,
+			fields: plainFields,
+			advanced
+		});
 	}
 	const rest = fields.filter((f) => !placed.has(f.key));
-	if (rest.length > 0) out.push({ title: group, keys: rest.map((f) => f.key), fields: rest });
+	if (rest.length > 0) out.push({ title: group, columns: [], fields: rest, advanced: [] });
 	return out;
 }

@@ -27,6 +27,15 @@ export class ApiError extends Error {
 	}
 }
 
+// Shown when a request never reaches the server (fetch itself throws - the
+// network is down, TLS failed, and so on) rather than the server answering
+// with a non-2xx status. Kept here (a plain .ts module, not a .svelte
+// <script> block) rather than inline at the call site: the straight
+// apostrophe in "didn't" is indistinguishable from a string delimiter to
+// ui-neu-style-lint's script-literal scan, which would otherwise mis-pair
+// quotes for the rest of that file and flag unrelated code past it.
+export const NETWORK_ERROR_MESSAGE = "The server didn't respond. Your changes are still here, so try Save again.";
+
 let on401: () => void = () => {};
 
 export function setUnauthorizedHandler(fn: () => void): void {
@@ -62,10 +71,20 @@ async function handle<T>(res: Response): Promise<T> {
 		let body: unknown = null;
 		try {
 			body = await res.json();
-			// Only a string detail becomes the message; object detail stays on .body.
+			// A string detail becomes the message as-is; a Pydantic 422's detail is
+			// instead a list of {msg, loc, ...} error objects, so join their `msg`
+			// strings into one readable message. Any other shape keeps the
+			// status-text default, and the full body is always on .body.
 			const detail = (body as { detail?: unknown } | null)?.detail;
 			if (typeof detail === 'string') {
 				message = detail;
+			} else if (Array.isArray(detail) && detail.length > 0) {
+				const msgs = detail
+					.map((item) => (item as { msg?: unknown } | null)?.msg)
+					.filter((msg): msg is string => typeof msg === 'string');
+				if (msgs.length > 0) {
+					message = msgs.join('; ');
+				}
 			}
 		} catch {
 			/* use default message */

@@ -2,10 +2,15 @@
 	import type { Snippet } from 'svelte';
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
+	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import { groupBlurb, sectionFields, KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
+	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import TvEpisodesSummary, { tvEpisodesEmptyNote } from './TvEpisodesSummary.svelte';
+
+	const SECTION_SUMMARIES = { 'tv-episodes': TvEpisodesSummary };
 
 	let {
 		group,
@@ -26,21 +31,40 @@
 	const blurb = $derived(groupBlurb(group.name));
 
 	let values = $state<Record<string, unknown>>({});
+
+	// Each key this form has itself saved, merged over `config` to form the
+	// real baseline for change detection (buildPayload). Without this, a
+	// revert-then-resave in one visit diffs against the original `config`
+	// prop (never refreshed by the parent) and silently drops the second
+	// change. Reset whenever `config` itself changes identity (e.g. the
+	// parent reloads settings), since the new prop is then the ground truth.
+	let savedOverrides = $state<Record<string, unknown>>({});
+	let configRef: Record<string, unknown> | null = null;
+
 	$effect(() => {
 		const next: Record<string, unknown> = {};
 		for (const f of group.fields) next[f.key] = config[f.key];
 		values = next;
+		if (config !== configRef) {
+			configRef = config;
+			savedOverrides = {};
+		}
 	});
 
 	let saving = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
+	function baseline(): Record<string, unknown> {
+		return { ...config, ...savedOverrides };
+	}
+
 	function buildPayload(): Record<string, unknown> {
+		const base = baseline();
 		const out: Record<string, unknown> = {};
 		for (const f of editable) {
 			const v = values[f.key];
 			if (f.tier === 'secret' && (v === HIDDEN || v === '' || v == null)) continue;
-			if (v === config[f.key]) continue;
+			if (unchanged(v, base[f.key])) continue;
 			out[f.key] = v;
 		}
 		return out;
@@ -52,10 +76,30 @@
 		try {
 			const payload = buildPayload();
 			await saveArmConfig(payload as never);
+			const mergedOverrides = { ...savedOverrides };
+			const mergedValues = { ...values };
+			for (const key of Object.keys(payload)) {
+				const field = group.fields.find((f) => f.key === key);
+				if (field?.tier === 'secret') {
+					// Never keep the raw secret around as a comparison baseline (or
+					// on screen) once it is saved - both fall back to the masked
+					// sentinel, same as an untouched secret on load.
+					mergedOverrides[key] = HIDDEN;
+					mergedValues[key] = HIDDEN;
+				} else {
+					mergedOverrides[key] = payload[key];
+				}
+			}
+			savedOverrides = mergedOverrides;
+			values = mergedValues;
 			feedback = { type: 'success', message: 'Saved' };
 			onsaved?.(payload);
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Save failed' };
+			// An ApiError message is already the 400 backend detail (or a
+			// generic "API {status}: {statusText}"); anything else (fetch itself
+			// throwing) means the request never reached the server.
+			const message = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
+			feedback = { type: 'error', message };
 		} finally {
 			saving = false;
 		}
@@ -98,6 +142,61 @@
 	}
 </script>
 
+{#snippet fieldRow(field: ConfigFieldMeta)}
+	{#if field.key in KEY_CHECK_NAMES}
+		<ConfigSchemaField {field} bind:value={values[field.key]} config={values}>
+			{#snippet action()}
+				<button
+					type="button"
+					onclick={() => runKeyCheck(field.key)}
+					disabled={keyCheckRunning[field.key]}
+					class="btn schema-config-form-key-check-btn"
+				>
+					{keyCheckRunning[field.key] ? 'Checking...' : 'Check API key'}
+				</button>
+			{/snippet}
+		</ConfigSchemaField>
+		<div
+			class="schema-config-form-key-check"
+			data-testid="key-check-{field.key}"
+			data-empty={!keyCheckResult[field.key]}
+		>
+			{#if keyCheckResult[field.key]}
+				{@const result = keyCheckResult[field.key]}
+				{#if result?.status === 'ok'}
+					<span class="flex items-center gap-1.5 schema-config-form-key-check-success">
+						<Glyph name="check-circle" class="shrink-0" />
+						Valid{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1">&middot;</span
+							>checked {formatDateTime(result.checked_at)}{/if}
+					</span>
+				{:else if result?.status === 'invalid'}
+					<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
+						<Glyph name="x-circle" class="shrink-0" />
+						{result.detail}
+					</span>
+				{:else if result?.status === 'missing'}
+					<span class="flex items-center gap-1.5 schema-config-form-key-check-muted">
+						<Glyph name="info" class="shrink-0" />
+						No key set
+					</span>
+				{:else if result?.status === 'unknown'}
+					<span class="flex items-center gap-1.5 schema-config-form-key-check-warning">
+						<Glyph name="question-circle" class="shrink-0" />
+						{result.detail}
+					</span>
+				{:else if result}
+					<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
+						<Glyph name="x-circle" class="shrink-0" />
+						{result.detail}
+					</span>
+				{/if}
+			{/if}
+		</div>
+	{:else}
+		<ConfigSchemaField {field} bind:value={values[field.key]} config={values} />
+	{/if}
+{/snippet}
+
 <div class="flex flex-col gap-6">
 	<div>
 		<h2 class="schema-config-form-title">{group.name}</h2>
@@ -115,63 +214,43 @@
 				{:else}
 					<div class="schema-config-form-section-blurb"></div>
 				{/if}
+				{#if section.summary}
+					{@const Summary = SECTION_SUMMARIES[section.summary]}
+					{#if Summary}
+						<Summary {values} fields={group.fields} />
+					{/if}
+				{/if}
+				{#if section.columns.length > 0}
+					<div class="schema-config-form-columns" data-testid="settings-section-columns">
+						{#each section.columns as columnFields, i (i)}
+							<div class="stack">
+								{#each columnFields as field (field.key)}
+									{@render fieldRow(field)}
+								{/each}
+							</div>
+						{/each}
+					</div>
+				{/if}
+				{#if section.summary === 'tv-episodes'}
+					{@const emptyNote = tvEpisodesEmptyNote(values)}
+					{#if emptyNote}
+						<p class="schema-config-form-description mb-4" data-testid="tv-episodes-empty-note">{emptyNote}</p>
+					{/if}
+				{/if}
 				<div class="stack">
 					{#each section.fields as field (field.key)}
-						{#if field.key in KEY_CHECK_NAMES}
-							<ConfigSchemaField {field} bind:value={values[field.key]}>
-								{#snippet action()}
-									<button
-										type="button"
-										onclick={() => runKeyCheck(field.key)}
-										disabled={keyCheckRunning[field.key]}
-										class="btn schema-config-form-key-check-btn"
-									>
-										{keyCheckRunning[field.key] ? 'Checking...' : 'Check API Key'}
-									</button>
-								{/snippet}
-							</ConfigSchemaField>
-							<div
-								class="schema-config-form-key-check"
-								data-testid="key-check-{field.key}"
-								data-empty={!keyCheckResult[field.key]}
-							>
-								{#if keyCheckResult[field.key]}
-									{@const result = keyCheckResult[field.key]}
-									{#if result?.status === 'ok'}
-										<span class="flex items-center gap-1.5 schema-config-form-key-check-success">
-											<Glyph name="check-circle" class="shrink-0" />
-											Valid{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1"
-													>&middot;</span
-												>checked {formatDateTime(result.checked_at)}{/if}
-										</span>
-									{:else if result?.status === 'invalid'}
-										<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
-											<Glyph name="x-circle" class="shrink-0" />
-											{result.detail}
-										</span>
-									{:else if result?.status === 'missing'}
-										<span class="flex items-center gap-1.5 schema-config-form-key-check-muted">
-											<Glyph name="info" class="shrink-0" />
-											No key set
-										</span>
-									{:else if result?.status === 'unknown'}
-										<span class="flex items-center gap-1.5 schema-config-form-key-check-warning">
-											<Glyph name="question-circle" class="shrink-0" />
-											{result.detail}
-										</span>
-									{:else if result}
-										<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
-											<Glyph name="x-circle" class="shrink-0" />
-											{result.detail}
-										</span>
-									{/if}
-								{/if}
-							</div>
-						{:else}
-							<ConfigSchemaField {field} bind:value={values[field.key]} />
-						{/if}
+						{@render fieldRow(field)}
 					{/each}
 				</div>
+				{#if section.advanced.length > 0}
+					<hr class="schema-config-form-advanced-divider" />
+					<span class="schema-config-form-advanced-label">Advanced</span>
+					<div class="stack">
+						{#each section.advanced as field (field.key)}
+							{@render fieldRow(field)}
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/each}
 	</section>
@@ -183,8 +262,16 @@
 			<button onclick={save} disabled={saving} class="btn btn-primary">
 				{saving ? 'Saving...' : 'Save'}
 			</button>
-			{#if feedback}
-				<span class="schema-config-form-feedback" data-error={feedback.type === 'error'}>{feedback.message}</span>
+			{#if feedback?.type === 'error'}
+				<div class="alert alert-danger flex items-center gap-1.5" role="alert">
+					<Glyph name="x-circle" class="shrink-0" />
+					<span><strong>Couldn't save settings.</strong> {feedback.message}</span>
+				</div>
+			{:else if feedback}
+				<span class="schema-config-form-feedback flex items-center gap-1.5">
+					<Glyph name="check-circle" class="shrink-0" />
+					{feedback.message}
+				</span>
 			{/if}
 		</div>
 	{/if}
@@ -220,6 +307,32 @@
 	.schema-config-form-section-blurb {
 		margin-bottom: 1rem;
 	}
+	/* columns: side by side on desktop, stacked on mobile - the fit-width
+	   minimum (18rem) is what collapses the grid to one column on a narrow
+	   panel without a media query. */
+	.schema-config-form-columns {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 1rem;
+	}
+	.schema-config-form-advanced-divider {
+		margin: 0.5rem 0 1rem;
+		border: none;
+		border-top: 1px solid var(--color-border);
+	}
+	/* the session-card-recipe-label look (SessionCard.svelte), restated here
+	   since this is its only other consumer - not yet a shared block. */
+	.schema-config-form-advanced-label {
+		display: block;
+		margin-bottom: 0.5rem;
+		font-size: 0.75rem;
+		line-height: calc(1 / 0.75);
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: var(--color-text-faint);
+	}
 	.schema-config-form-key-check {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
@@ -245,12 +358,11 @@
 	.schema-config-form-key-check-muted {
 		color: var(--color-text-muted);
 	}
+	/* success only now - a rejected save renders the alert-danger block above
+	   instead. */
 	.schema-config-form-feedback {
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
-	}
-	.schema-config-form-feedback[data-error='true'] {
-		color: var(--color-danger);
 	}
 	/* the original was px-3 py-2 text-sm - .btn's own default size, not
 	   .btn-sm's compact one, but at a 0.75rem horizontal padding rather

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import ConfigSchemaField from '../ConfigSchemaField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
@@ -65,5 +65,91 @@ describe('ConfigSchemaField', () => {
 		});
 		expect(screen.getByText('My Field')).toBeInTheDocument();
 		expect(screen.getByText('Some guidance')).toBeInTheDocument();
+	});
+
+	it('gives the help text a stable id keyed to the field, for a ranked list to describe itself by', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({ key: 'episode_sources', label: 'Episode sources', help: 'Tried top to bottom.' }),
+				value: 'x'
+			}
+		});
+		expect(screen.getByText('Tried top to bottom.')).toHaveAttribute('id', 'setting-help-episode_sources');
+	});
+
+	it('wires the ranked list to the help text via aria-describedby', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					help: 'Tried top to bottom.',
+					enum_values: ['tmdb', 'tvmaze'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze' }
+				}),
+				value: ['tmdb']
+			}
+		});
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toHaveAttribute(
+			'aria-describedby',
+			'setting-help-episode_sources'
+		);
+	});
+
+	it('renders an int field as a compact number input that emits numbers', async () => {
+		renderComponent(ConfigSchemaField, {
+			props: { field: f({ type: 'int', label: 'Match tolerance (seconds)' }), value: 300 }
+		});
+		const input = screen.getByRole('spinbutton', { name: 'Match tolerance (seconds)' });
+		expect(input).toHaveClass('field-control', 'config-schema-field-number');
+		expect(input).toHaveAttribute('step', '1');
+		await fireEvent.input(input, { target: { value: '120' } });
+		expect(input).toHaveValue(120);
+	});
+
+	it('shows enum labels while keeping raw values', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({ type: 'enum', enum_values: ['tmdb', 'omdb'], enum_labels: { tmdb: 'TMDb', omdb: 'OMDb' } }),
+				value: 'tmdb'
+			}
+		});
+		const option = screen.getByRole('option', { name: 'TMDb' }) as HTMLOptionElement;
+		expect(option.value).toBe('tmdb');
+	});
+
+	it('renders a ranked field as a labelled list', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' }
+				}),
+				value: ['tmdb']
+			}
+		});
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+	});
+
+	it('renders a ranked, non-editable field as plain text with no list', () => {
+		renderComponent(ConfigSchemaField, {
+			props: {
+				field: f({
+					key: 'episode_sources',
+					type: 'ranked',
+					label: 'Episode sources',
+					editable: false,
+					enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+					enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' }
+				}),
+				value: ['tvmaze', 'tmdb']
+			}
+		});
+		expect(screen.getByText('TVmaze, TMDb')).toBeInTheDocument();
+		expect(screen.queryByRole('list')).not.toBeInTheDocument();
 	});
 });

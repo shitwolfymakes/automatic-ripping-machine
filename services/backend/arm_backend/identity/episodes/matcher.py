@@ -27,6 +27,12 @@ FREE_START_WEIGHT = 1
 PLAY_ALL_PAIR_WINDOW_S = 10
 # A shifted mapping whose total delta is this close to the chosen one is as plausible.
 AMBIGUITY_WINDOW_S = 60
+# The operator's `episode_match_tolerance_seconds` setting is a ceiling, not the
+# window itself: the effective tolerance always narrows to a tenth of the
+# reference runtime, floored so short references (or runtime-less episodes)
+# still get a usable window.
+EFFECTIVE_TOL_FLOOR_S = 60
+EFFECTIVE_TOL_FRACTION = 10
 _INF = float("inf")
 
 
@@ -35,8 +41,9 @@ def _known(runtime: int | None) -> int | None:
 
 
 def _eff_tol(reference: int, tolerance: int) -> int:
-    """Effective tolerance: clamp to [60, tolerance] based on reference."""
-    return min(tolerance, max(60, reference // 10))
+    """Effective tolerance: clamp to [EFFECTIVE_TOL_FLOOR_S, tolerance], narrowed
+    to a tenth of the reference runtime."""
+    return min(tolerance, max(EFFECTIVE_TOL_FLOOR_S, reference // EFFECTIVE_TOL_FRACTION))
 
 
 def _is_play_all(

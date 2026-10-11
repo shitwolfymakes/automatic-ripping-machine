@@ -8,7 +8,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import pytest  # noqa: E402
 
-from arm_common import DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
 from arm_common.enums import TrackRole  # noqa: E402
 from arm_common.schemas import BdDiscMeta, ScanResult  # noqa: E402
 from arm_common.schemas.identity import SourceClaims, TrackClaim  # noqa: E402
@@ -49,6 +49,26 @@ async def test_resolve_job_idempotent_second_call_changes_nothing() -> None:
     assert (await resolve_job(db, job)).changed == 0  # type: ignore[arg-type]
 
 
+@pytest.mark.asyncio
+async def test_resolve_job_resets_when_config_disables_the_winning_source() -> None:
+    """End-to-end (PR 4): episodes_tmdb's claim applied the track's episode;
+    the operator's config then enables only tvmaze, and the next resolve_job
+    clears the field episodes_tmdb no longer gets to hold."""
+    db = FakeSession()
+    job = Job(id="job_3", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.IDENTIFIED, metadata_json={})
+    track = Track(id="trk_3", job_id="job_3", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [track]
+    put_source(job, "episodes_tmdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
+    await resolve_job(db, job)  # type: ignore[arg-type]
+    assert track.episode_number == 3
+
+    db.rows["config"] = [Config(id=1, episode_sources=["tvmaze"])]
+    await resolve_job(db, job)  # type: ignore[arg-type]
+
+    assert track.episode_number is None
+
+
 def test_run_disc_hints_records_both_sources_and_skips() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
     scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
@@ -64,6 +84,31 @@ def test_hint_title_prefers_bd_title() -> None:
     scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="WW_S3D2", bd_meta=BdDiscMeta(name="The West Wing"))
     run_disc_hints(job, scan, now=NOW)
     assert hint_title(job) == "the west wing"
+
+
+def test_run_disc_hints_sources_param_limits_which_sources_run() -> None:
+    """PR 4: `sources` narrows run_disc_hints to the operator's enabled
+    disc-hint sources -- an unlisted source is neither run nor recorded."""
+    from arm_backend.identity.sources.registry import LABEL
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name="The West Wing"))
+    run_disc_hints(job, scan, now=NOW, sources=(LABEL,))
+    sources = claims_of(job).sources
+    assert set(sources) == {"label"}
+    assert sources["label"].status == "ok"
+
+
+def test_hint_title_sources_param_ignores_other_stored_entries() -> None:
+    """PR 4: hint_title only reads the passed `sources`, so a stored bd_title
+    entry (from a prior, differently-configured run) is not consulted."""
+    from arm_backend.identity.sources.registry import LABEL
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name="The West Wing"))
+    run_disc_hints(job, scan, now=NOW)
+    assert hint_title(job) == "the west wing"  # bd_title outranks label by default
+    assert hint_title(job, (LABEL,)) == "lost"
 
 
 def test_hint_title_none_without_hints() -> None:
@@ -88,6 +133,18 @@ def test_hint_is_tv_false_for_cd() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
     run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
     assert hint_is_tv(job) is False
+
+
+def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
+    """PR 4: hint_is_tv only consults the passed `sources` -- a label claim with
+    a season (stored from a prior, differently-configured run) does not make
+    the job TV-shaped when `sources` narrows to bd_title alone."""
+    from arm_backend.identity.sources.registry import BD_TITLE, LABEL
+
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW, sources=(LABEL,))
+    assert claims_of(job).sources["label"].job.season == 2
+    assert hint_is_tv(job, (BD_TITLE,)) is False
 
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:

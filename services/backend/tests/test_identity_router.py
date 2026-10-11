@@ -391,19 +391,16 @@ def test_match_apply_expires_before_the_fresh_reselect(signing_key: bytes) -> No
     assert db.call_log[expire_idx + 1] == "execute"  # ordered right before the fresh re-select
 
 
-def test_match_apply_with_source_pins_and_survives_forced_suggestion(
-    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_match_apply_with_source_pins_and_survives_forced_suggestion(signing_key: bytes) -> None:
     """F4/F5: force every computed outcome to `suggestion=True`
-    (`EPISODE_AUTO_APPLY` off) and prove pinning still applies it -- the
+    (`episode_auto_apply` off) and prove pinning still applies it -- the
     RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
     through. The stored claims AND the response both keep the computed
     `suggestion=True` unchanged; the proof that it was actually applied
     (not merely proposed) is the track's `episode_number`."""
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
-    db = _db(job, tracks=tracks)
+    db = _db(job, tracks=tracks, cfg=Config(id=1, episode_auto_apply=False))
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
     hub = _Hub()
     runner = _FakeStageRunner([provider])
@@ -428,17 +425,14 @@ def test_match_apply_with_source_pins_and_survives_forced_suggestion(
     assert outcome["suggestion"] is True
 
 
-def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(
-    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(signing_key: bytes) -> None:
     """End to end (Task 9 F4 round 2): pin-apply a forced suggestion via
     `/identity/match`, then `DELETE /identity/pin`. Nothing else claims these
     tracks, so they revert immediately (episode_number cleared), and
     `track.updated` fires for every track the resolver reverted."""
-    monkeypatch.setattr(episode_stage, "EPISODE_AUTO_APPLY", False)
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
-    db = _db(job, tracks=tracks)
+    db = _db(job, tracks=tracks, cfg=Config(id=1, episode_auto_apply=False))
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
     hub = _Hub()
     runner = _FakeStageRunner([provider])
