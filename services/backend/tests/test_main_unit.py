@@ -188,3 +188,67 @@ async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.
     assert [r for r in db.added if type(r).__name__ == "Gpu"] == []
     assert db.rows["gpus"][0].enabled is False  # operator switch untouched
     assert hub.events == []
+
+
+async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    """With the feature enabled and no local index, the loop refreshes once,
+    stamps thediscdb_refreshed_at on the singleton Config, commits, then
+    parks on its daily sleep."""
+    import asyncio
+    from pathlib import Path
+
+    from fastapi import FastAPI
+
+    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_common import Config, RetentionPolicy
+
+    from tests._fakes import FakeSession
+
+    cfg = Config(
+        id=CONFIG_SINGLETON_ID,
+        auto_transcode_on_idle=False,
+        auto_rip_on_insert=True,
+        block_on_miss=True,
+        community_keydb_enabled=True,
+        makemkv_sdf_enabled=True,
+        hold_for_review=False,
+        ripping_paused=False,
+        thediscdb_enabled=True,
+        thediscdb_refresh_days=7,
+        thediscdb_refreshed_at=None,
+        manual_wait_seconds=60,
+        default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+    )
+    db = FakeSession()
+    db.rows["config"] = [cfg]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+
+    calls: list[tuple[object, Path]] = []
+
+    async def _fake_refresh(http: object, path: Path) -> int:
+        calls.append((http, path))
+        return 3
+
+    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+
+    real_sleep = asyncio.sleep
+
+    async def _sleep(delay: float, *a: object, **k: object) -> None:
+        if delay >= 24 * 3600:  # the loop's daily park: end the test here
+            raise asyncio.CancelledError
+        await real_sleep(delay, *a, **k)
+
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
+
+    app = FastAPI()
+    app.state.http = object()
+    app.state.thediscdb = snap.SnapshotStore(Path(str(tmp_path)))  # no index on disk → stale
+
+    with pytest.raises(asyncio.CancelledError):
+        await main_mod._thediscdb_refresh_loop(app)
+
+    assert calls == [(app.state.http, Path(str(tmp_path)))]
+    assert cfg.thediscdb_refreshed_at is not None
+    assert cfg in db.added

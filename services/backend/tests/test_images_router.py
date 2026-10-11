@@ -434,3 +434,20 @@ def test_no_fallback_param_404_unchanged(client, monkeypatch):
     r = client.get("/api/images/proxy", params={"url": _RELEASE_URL})
     assert r.status_code == 404
     assert not any("/release-group/" in u for u in requested)
+
+
+def test_host_allowed_rejects_empty_hostname() -> None:
+    # urlparse yields hostname=None for e.g. "https:///x" — never allowlisted.
+    assert images_router._host_allowed(None) is False
+    assert images_router._host_allowed("") is False
+
+
+def test_redirect_without_location_is_unavailable(client, monkeypatch):
+    # A 3xx with no Location header cannot be followed: abandon with a 404
+    # rather than retrying the same URL.
+    _patch_fetch_chain(monkeypatch, [(307, "")])
+    r = client.get(
+        "/api/images/proxy",
+        params={"url": "https://coverartarchive.org/release/mbid-x/front"},
+    )
+    assert r.status_code == 404

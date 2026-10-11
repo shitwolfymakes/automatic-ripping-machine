@@ -346,3 +346,11 @@ def test_enabling_on_a_host_that_cannot_probe_still_succeeds() -> None:
         assert r.status_code == 200, r.text
         assert db.rows["gpus"][0].enabled is True
         assert runner is None or runner.started == []
+
+
+def test_delete_unknown_gpu_404() -> None:
+    app, token, _db = _app([])
+    with TestClient(app) as c:
+        r = c.delete("/api/gpus/gpu_missing", headers=_auth(token))
+    assert r.status_code == 404
+    assert r.json()["detail"] == "gpu not found"

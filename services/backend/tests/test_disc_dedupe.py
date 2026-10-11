@@ -84,3 +84,14 @@ async def test_multi_algo_any_match():
         db, drive_id="drv_1", fingerprints=[("crc64", "nomatch"), ("aacs", "xyz")]
     )
     assert decision is not None and decision.action == "reuse"
+
+
+@pytest.mark.asyncio
+async def test_blank_algo_or_value_fingerprints_short_circuit() -> None:
+    """Entries with an empty algo or value are discarded before any query; if
+    nothing usable remains the lookup returns None without touching the DB."""
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_a", drive_id="drv_1", status=JobStatus.RIPPING)]
+    db.rows["disc_fingerprints"] = [_fp("job_a", "crc64", "abc")]
+    decision = await find_reusable_job_for_disc(db, drive_id="drv_1", fingerprints=[("", "abc"), ("crc64", "")])
+    assert decision is None

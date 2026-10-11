@@ -211,3 +211,10 @@ def test_expand_template_without_drop_is_byte_identical() -> None:
     # No optional token dropped: no collapse, no trimming.
     assert expand_template(" /{title}  /x/", {"title": "X", "year": "2008"}) == " /X  /x/"
     assert expand_template("{title} ({year?}) /", {"title": "X", "year": "2008"}) == "X (2008) /"
+
+
+def test_expand_template_malformed_braces_raise() -> None:
+    # An unterminated `{` is a str.format error, not an unknown token — it is
+    # wrapped as a validation error so callers get one exception type.
+    with pytest.raises(TemplateValidationError, match="malformed template"):
+        expand_template("{title", {"title": "x"})

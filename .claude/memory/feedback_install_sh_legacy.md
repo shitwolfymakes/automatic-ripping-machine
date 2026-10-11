@@ -13,6 +13,9 @@ installer half was cut for this reason.
 **Why:** effort spent on the legacy script is thrown away by the rewrite, and
 installer hunks are the main source of cross-PR merge conflicts.
 
+Owner confirmed again 2026-09-24 ("for the most part install.sh is
+deprecated and install_dev is the one" - i.e. `devtools/setup-dev.sh`).
+
 **How to apply:** put installer fixes/notes in
 `../arm-ai/arm-v3/docs/installer-rewrite-carryover.md` instead. `devtools/setup-dev.sh`
 is the model the rewrite follows (no drive enumeration, build-only `arm-ripper`,
