@@ -11129,7 +11129,7 @@
           "value"
         ],
         "title": "DiscFingerprintInput",
-        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).\nFree-form to permit new algos without a schema bump."
+        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (matrix256v1\nstructural hash), `thediscdb` (TheDiscDB content hash).\nFree-form to permit new algos without a schema bump."
       },
       "DiscFingerprintView": {
         "properties": {
