@@ -137,7 +137,7 @@ The user-facing composition: a named bundle of (rip preset, transcode preset, ou
 - `is_builtin` (bool)
 - `rip_preset_id` (FK → `rip_presets.id`)
 - `transcode_preset_id` (FK → `transcode_presets.id`, **nullable**) — null for ISO / data-copy sessions where no transcode stage runs.
-- `output_path_template` (text — tokenized path, **relative to the media-type library root**. Example for `media_type=movie`: `{title} ({year})/{title} ({year}) - {transcode_slug}.{ext}`. See [02-job-lifecycle.md § Output paths and naming](02-job-lifecycle.md#output-paths-and-naming) for defaults and token list.)
+- `output_path_template` (text — tokenized path, **relative to the media-type library root**. Example for `media_type=movie`: `{title} ({year?})/{title} ({year?}) - {transcode_slug}.{ext}`. See [02-job-lifecycle.md § Output paths and naming](02-job-lifecycle.md#output-paths-and-naming) for defaults and token list.)
 - `overrides_json` (jsonb, nullable — per-session tweaks applied on top of the referenced presets, e.g. "use this preset but force CRF 22 instead of 20." Keeps users from having to clone a whole preset for one-field changes.)
 - `created_by_user_id` (nullable FK — null for built-ins)
 - `created_at`, `updated_at`
