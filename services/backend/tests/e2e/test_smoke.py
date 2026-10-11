@@ -15,6 +15,13 @@ def test_health_no_auth(app_client: object) -> None:
     assert resp.json() == {"status": "ok"}
 
 
+def test_drive_scanner_reads_an_isolated_tree(app_client: object, tmp_path: object) -> None:
+    """The booted DriveScanner must not look at the host's /sys."""
+    scanner = app_client.app.state.drive_scanner  # type: ignore[attr-defined]
+    assert scanner._sysfs_root.parent == tmp_path
+    assert scanner._disk_root.parent == tmp_path
+
+
 def test_login_flow_and_must_change_gate(app_client: object) -> None:
     """Seeded admin can log in but is 403'd off normal routes until the
     password is changed (the real must-change enforcement in `require_jwt`)."""
