@@ -253,6 +253,16 @@ async def test_api_key_never_appears_in_a_url(provider):
 
 
 @respx.mock
+async def test_remoteid_search_escapes_the_imdb_id_in_the_path(provider):
+    _login_route()
+    route = respx.get(url__startswith=f"{BASE}/search/remoteid/").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    await provider.resolve_show_id(ExternalIds(imdb="tt0944947/../login"))
+    assert route.calls.last.request.url.raw_path == b"/v4/search/remoteid/tt0944947%2F..%2Flogin"
+
+
+@respx.mock
 async def test_bearer_header_sent_on_authed_calls(provider):
     _login_route()
     route = respx.get(f"{BASE}/series/1/extended").mock(

@@ -8,6 +8,8 @@ reaches a URL or a log line (see `SourceHttp`, which never logs headers).
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from arm_common import Config
 from arm_common.schemas import ExternalIds
 
@@ -49,7 +51,7 @@ class TmdbEpisodes:
 
     async def _find(self, external_id: str, external_source: str) -> str | None:
         body = await self.http.get_json(
-            f"{settings.ARM_TMDB_BASE_URL}/find/{external_id}",
+            f"{settings.ARM_TMDB_BASE_URL}/find/{quote(external_id, safe='')}",
             params={"external_source": external_source},
             headers=self._headers,
         )
