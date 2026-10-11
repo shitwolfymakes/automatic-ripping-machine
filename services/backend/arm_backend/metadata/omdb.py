@@ -8,6 +8,11 @@ from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
 
 logger = logging.getLogger("arm_backend.metadata.omdb")
 
+# Our `kind` vocabulary ("movie"/"tv", shared with TMDb) isn't OMDb's own
+# `type=` values (movie/series/episode — "tv" is invalid and 400s), so every
+# call site maps through this before it hits the wire.
+_OMDB_TYPE: dict[Literal["movie", "tv"], str] = {"movie": "movie", "tv": "series"}
+
 
 def _base_url() -> str:
     return settings.ARM_OMDB_BASE_URL
@@ -57,7 +62,7 @@ class OMDBClient:
         year: int | None = None,
         kind: Literal["movie", "tv"] = "movie",
     ) -> MetadataResult:
-        params: dict[str, Any] = {"t": title, "type": kind}
+        params: dict[str, Any] = {"t": title, "type": _OMDB_TYPE[kind]}
         if year is not None:
             params["y"] = year
 
@@ -84,7 +89,7 @@ class OMDBClient:
         OMDB's `s=` returns at most 10 results per page; `limit` is applied
         client-side on top of that, so the effective cap is min(limit, 10).
         """
-        body = await self._get_json({"s": title, "type": kind})
+        body = await self._get_json({"s": title, "type": _OMDB_TYPE[kind]})
         if body.get("Response") != "True":
             return []  # "Movie not found!" etc. — a real empty result, not an error
         out: list[MetadataResult] = []

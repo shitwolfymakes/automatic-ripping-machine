@@ -250,6 +250,31 @@ export type BashScriptSummary = {
 };
 
 /**
+ * BdDiscMeta
+ *
+ * Blu-ray disc title from BDMV/META/DL/bdmt_<lang>.xml (studio-authored).
+ * Optional on the wire: older rippers never send it.
+ */
+export type BdDiscMeta = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Set Number
+     */
+    set_number?: number | null;
+    /**
+     * Num Sets
+     */
+    num_sets?: number | null;
+    /**
+     * Language
+     */
+    language?: string | null;
+};
+
+/**
  * Body_upload_theme_api_themes_post
  */
 export type BodyUploadThemeApiThemesPost = {
@@ -3038,22 +3063,24 @@ export type ResolveFanOutOutcomeView = {
  *
  * POST /api/jobs/{id}/resolve body.
  *
- * title/year/disc_number/disc_total are the full identity statement: every
- * resolve restates them, so there is no "omitted" case for these four --
- * whatever value is sent (including null) is exactly what lands.
+ * title/year are the full identity statement: every resolve restates them,
+ * so there is no "omitted" case for these two -- whatever value is sent
+ * (including null) is exactly what lands.
  *
- * media_type/season are classifications, not part of that statement, and
- * follow different semantics: **omitted = keep** the stored value (a
- * title-only fix must not wipe them), **explicit null = clear** it (the
- * operator saying "this isn't a season" / "clear the kind"). The same
- * omitted=keep / explicit-null=clears rule applies per-field inside
- * `external_ids`: sending `external_ids` at all starts an identity edit,
- * and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release) that
- * is explicitly present -- even as `null` -- clears that one id, while a
- * member field left out of the payload keeps its previously stored value.
- * Distinguishing "sent null" from "not sent" requires Pydantic's
- * `model_fields_set`, not an `is not None` check, since both collapse to
- * the same `None` once parsed.
+ * media_type/season/disc_number/disc_total are classifications, not part of
+ * that statement, and follow different semantics: **omitted = keep** the
+ * stored value (a title-only fix -- e.g. picking a title in the identify
+ * dialog after a disc-hint source already filled disc_number/disc_total --
+ * must not wipe them), **explicit null = clear** it (the operator saying
+ * "this isn't a season" / "clear the kind" / "clear the disc position").
+ * The same omitted=keep / explicit-null=clears rule applies per-field
+ * inside `external_ids`: sending `external_ids` at all starts an identity
+ * edit, and each of its member fields (imdb/tmdb/tvdb/musicbrainz_release)
+ * that is explicitly present -- even as `null` -- clears that one id,
+ * while a member field left out of the payload keeps its previously
+ * stored value. Distinguishing "sent null" from "not sent" requires
+ * Pydantic's `model_fields_set`, not an `is not None` check, since both
+ * collapse to the same `None` once parsed.
  */
 export type ResolveRequest = {
     /**
@@ -3313,6 +3340,7 @@ export type ScanResult = {
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintInput>;
+    bd_meta?: BdDiscMeta | null;
     /**
      * Raw
      */

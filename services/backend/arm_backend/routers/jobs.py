@@ -3,7 +3,7 @@ import os
 import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -1002,10 +1002,18 @@ async def resolve(
     # run AFTER job.metadata_json = new_metadata above -- record_manual_job
     # writes into metadata_json too, and assigning new_metadata first would
     # wipe the claim it just wrote.
-    manual_job = {"disc_number": req.disc_number, "disc_total": req.disc_total}
-    if "season" in fields_set:
-        manual_job["season"] = req.season
-    record_manual_job(job, manual_job)
+    #
+    # disc_number/disc_total/season are now classifications like media_type
+    # (Review Focus 5): omitted keeps the stored value (a title-only fix in
+    # the identify dialog must not wipe a disc-hint-filled disc_number), an
+    # EXPLICIT null is the operator clearing it. model_fields_set is the
+    # only way to tell "sent null" from "not sent" here.
+    manual_job: dict[str, Any] = {}
+    for name in ("disc_number", "disc_total", "season"):
+        if name in fields_set:
+            manual_job[name] = getattr(req, name)
+    if manual_job:
+        record_manual_job(job, manual_job)
     await resolve_job(session, job)
     session.add(job)
 

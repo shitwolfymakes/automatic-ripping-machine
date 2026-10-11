@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_common import Job, Track
+from arm_common.schemas import ScanResult
+from arm_common.schemas.identity import SourceClaims
 
-from arm_backend.identity.proposals import claims_of
+from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.resolver import apply_resolution, resolve
-from arm_backend.identity.sources.registry import SOURCE_TIERS
+from arm_backend.identity.sources.base import JobContext
+from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS, HINT_SOURCES
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,7 @@ async def resolve_job(session: AsyncSession, job: Job) -> int:
     """Apply every stored proposal to the job and its tracks. Idempotent;
     returns the number of attributes changed."""
     tracks = list((await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
-    changed = apply_resolution(job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS))
+    changed = apply_resolution(job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS))
     for track in tracks:
         session.add(track)
     session.add(job)
@@ -28,3 +32,53 @@ async def resolve_job(session: AsyncSession, job: Job) -> int:
     if changed:
         logger.info("identity: resolved job_id=%s changed=%d", job.id, changed)
     return changed
+
+
+def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
+    """Record every disc-hint source's proposals (or why it was skipped)."""
+    ctx = JobContext(job=job, scan=scan, now=now)
+    for source in HINT_SOURCES:
+        try:
+            reason = source.applies_to(ctx)
+        except Exception as e:
+            logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
+            claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
+            put_source(job, source.id, claims)
+            continue
+        if reason is None:
+            try:
+                claims = source.run(ctx)
+            except Exception as e:
+                logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
+                claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
+        else:
+            claims = SourceClaims(run_at=now, status="skipped", detail=reason)
+        put_source(job, source.id, claims)
+
+
+def hint_title(job: Job) -> str | None:
+    """The cleaned search title from the best-ranked disc-hint source, if any."""
+    sources = claims_of(job).sources
+    for source in HINT_SOURCES:
+        entry = sources.get(source.id)
+        if entry is not None and entry.status == "ok" and entry.job.title:
+            return entry.job.title
+    return None
+
+
+def hint_is_tv(job: Job) -> bool:
+    """True when any ok disc-hint source proposed a `season` — the hint title
+    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
+    first, not movie-first (a movie label ending in a season-shaped number,
+    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+    sources = claims_of(job).sources
+    for source in HINT_SOURCES:
+        entry = sources.get(source.id)
+        if (
+            entry is not None
+            and entry.status == "ok"
+            and "season" in entry.job.model_fields_set
+            and entry.job.season is not None
+        ):
+            return True
+    return False

@@ -92,6 +92,7 @@ from arm_common.schemas.naming import (
     NamingVariablesResponse,
 )
 from arm_common.schemas.ripper import (
+    BdDiscMeta,
     DiscFingerprintInput,
     IdentifyRequest,
     JobCompleteRequest,
@@ -201,6 +202,7 @@ from arm_common.schemas.ws import (
 __all__ = [
     "AbandonJobRequest",
     "AppriseChannelConfig",
+    "BdDiscMeta",
     "BashChannelConfig",
     "BashPreviewRequest",
     "BashPreviewResult",

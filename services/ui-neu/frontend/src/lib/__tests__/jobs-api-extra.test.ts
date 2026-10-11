@@ -158,7 +158,7 @@ describe('resolveJob', () => {
 			'/api/jobs/job_1/resolve',
 			expect.objectContaining({
 				method: 'POST',
-				body: JSON.stringify({ title: 'X', year: 2020, disc_number: null, disc_total: null })
+				body: JSON.stringify({ title: 'X', year: 2020 })
 			})
 		);
 	});
@@ -173,10 +173,33 @@ describe('resolveJob', () => {
 				body: JSON.stringify({
 					title: 'Album',
 					year: null,
-					disc_number: null,
-					disc_total: null,
 					music: { artist: 'A', tracks: [{ title: 'T1' }] }
 				})
+			})
+		);
+	});
+
+	// Review Focus 5 (identity-disc-hints PR2, Task 6): a disc-hint source can
+	// fill job.disc_number/disc_total before the operator ever opens the
+	// identify dialog. resolveJob must not send those keys unless the caller
+	// actually passed them, or every hint-filled disc number would be wiped
+	// by a manual null the instant the operator picks a title.
+	it('omits disc_number/disc_total from the body when the caller does not pass them', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_3' }, fan_out: [] }));
+		await resolveJob('job_3', { title: 'Lost', year: 2004 });
+		const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+		expect(body).not.toHaveProperty('disc_number');
+		expect(body).not.toHaveProperty('disc_total');
+	});
+
+	it('sends disc_number: null / disc_total: null when the caller passes null explicitly', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_4' }, fan_out: [] }));
+		await resolveJob('job_4', { title: 'Lost', year: 2004, disc_number: null, disc_total: null });
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/jobs/job_4/resolve',
+			expect.objectContaining({
+				method: 'POST',
+				body: JSON.stringify({ title: 'Lost', year: 2004, disc_number: null, disc_total: null })
 			})
 		);
 	});
