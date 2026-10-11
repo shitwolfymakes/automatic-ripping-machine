@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate services/ui-neu/frontend/src/lib/types/api.gen.ts from the v3
-# Backend's committed OpenAPI snapshot (services/ui/openapi.snapshot.json),
+# Backend's committed OpenAPI snapshot (services/ui-neu/openapi.snapshot.json),
 # then run the Node generator. Pre-commit hook and CI codegen-check invoke this.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # v3 owns the contract: generate from the Backend's committed OpenAPI snapshot,
 # NOT the old BFF app.
-V3_SNAPSHOT="$REPO_ROOT/services/ui/openapi.snapshot.json"
+V3_SNAPSHOT="$REPO_ROOT/services/ui-neu/openapi.snapshot.json"
 if [ ! -f "$V3_SNAPSHOT" ]; then
     echo "v3 OpenAPI snapshot not found at $V3_SNAPSHOT" >&2
     exit 1

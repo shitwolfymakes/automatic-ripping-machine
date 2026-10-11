@@ -49,13 +49,15 @@ jobs:
         # only one that matters for single-image services); `suffix` is
         # appended to every tag. The transcode image publishes three
         # variants: base (CPU + NVENC), -intel (QSV) and -amd (VAAPI).
+        # `dir` (default: the service name) is the services/ subdirectory
+        # holding the Dockerfile; the arm-ui image is built from ui-neu.
         include:
           - {service: backend, target: "", suffix: ""}
           - {service: ripper, target: "", suffix: ""}
           - {service: transcode, target: base, suffix: ""}
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
-          - {service: ui, target: "", suffix: ""}
+          - {service: ui, dir: ui-neu, target: "", suffix: ""}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
@@ -98,7 +100,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          file: services/${{ matrix.service }}/Dockerfile
+          file: services/${{ matrix.dir || matrix.service }}/Dockerfile
           target: ${{ matrix.target }}
           push: true
           no-cache: ${{ github.event_name == 'schedule' }}

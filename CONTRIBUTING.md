@@ -2,7 +2,7 @@
 
 Thank you for contributing to the Automatic Ripping Machine.
 
-This is **ARM v3** — a greenfield rebuild (FastAPI backend, Vue UI, Postgres, a
+This is **ARM v3** — a greenfield rebuild (FastAPI backend, SvelteKit UI, Postgres, a
 ripper-per-drive and an ephemeral transcoder). The architecture is documented
 under [docs/arch/](docs/arch/); start at [docs/arch/README.md](docs/arch/README.md).
 ARM v2 is frozen — no new work targets it. Its code remains in the
@@ -51,9 +51,9 @@ always-releasable.
   share a PR.
 - **Rebase before review** so your branch is current with `main`; we squash-merge
   to keep the trunk linear.
-- **CI must pass** (`.github/workflows/ci.yml`): ruff format/lint, mypy and
-  `vue-tsc` type checks, the per-service `pytest` suites, and the OpenAPI
-  drift check.
+- **CI must pass** (`.github/workflows/ci.yml`): ruff format/lint, mypy, the
+  UI's `svelte-check` and vitest suites, the per-service `pytest` suites, and the
+  OpenAPI and UI codegen drift checks.
 - Update affected docs / `README.md` in the same PR.
 
 ## Local development
@@ -95,8 +95,9 @@ uv run pre-commit install              # install the git hook once
 uv run pre-commit run --all-files      # run everything manually
 ```
 
-Hooks: `ruff-format` + `ruff` and `mypy` on Python; ESLint, Prettier and
-`vue-tsc` on the UI; `shellcheck` on shell scripts. Line length is **120**.
+Hooks: `ruff-format` + `ruff` and `mypy` on Python; `shellcheck` on shell
+scripts. Line length is **120**. The UI (`services/ui-neu/frontend`) is checked
+with `npm run check` (svelte-check) and `npx vitest run`.
 
 ## Wire contract (OpenAPI)
 
@@ -105,8 +106,8 @@ job fails if they diverge. If you change a backend router or an `arm_common`
 schema that affects the API:
 
 ```bash
-bash devtools/regen-openapi-snapshot.sh   # refresh services/ui/openapi.snapshot.json
-cd services/ui && npm run openapi-types    # regenerate the TypeScript types
+bash devtools/regen-openapi-snapshot.sh   # refresh services/ui-neu/openapi.snapshot.json
+bash services/ui-neu/scripts/codegen.sh   # regenerate the TypeScript types (api.gen.ts)
 ```
 
 Commit both regenerated artifacts with your change.

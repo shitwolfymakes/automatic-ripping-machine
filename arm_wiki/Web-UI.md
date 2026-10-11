@@ -1,6 +1,6 @@
 # Web UI
 
-The v3 UI is a Vue 3 single-page app served over HTTPS by nginx at
+The v3 UI is a SvelteKit (Svelte 5) single-page app served over HTTPS by nginx at
 **`https://<host>:8081`**. It talks to the backend over REST and a WebSocket, so
 job progress and drive state update live without refreshing.
 
@@ -18,51 +18,43 @@ job progress and drive state update live without refreshing.
 
 ## Dashboard
 
-**`/dashboard`** is the landing page after login: an at-a-glance view of your
-drives, in-flight jobs, and recent activity, updated live over the WebSocket.
+**`/`** is the landing page after login: your drives, in-flight rips and
+transcodes, and the job list (card or table view, filterable by status and
+type), updated live over the WebSocket. Each drive card shows its state (idle,
+reading, ripping, tray open), toggles the drive between **Auto** and **Manual**
+rip mode, and has a **Start rip** button for a disc already in the tray (how you
+rip when auto-rip is off, optionally pinning a session for that disc).
 
 ## Jobs
 
-- **`/jobs`** — the list of rip/transcode jobs, past and present, with status
-  and progress.
-- **`/jobs/:id`** — one job in detail: the disc that was identified, its tracks,
-  per-track rip progress, and any transcode sessions applied to it. From here
-  you can act on a job (e.g. resolve an unidentified disc, or abandon it).
-- **`/jobs/manual`** — start a rip by hand against a drive that already has a
-  disc in the tray. This is how you rip when **Auto-rip on insert** is off, or
-  when you want to pick a specific session for this disc.
-
-## Drives
-
-**`/drives`** lists the optical drives ARM knows about — one per
-`arm-ripper-srN` container — with their current state (idle, reading, ripping,
-tray open) and the job each is working. Each drive is enrolled when its ripper
-container registers with the backend at startup; you add a drive by attaching it
-and rerunning `install.sh`, then `docker compose up -d`.
-
-## Sessions and presets
-
-These pages let you control *how* discs are ripped and transcoded. Built-in
-presets are seeded on first boot, so you can ignore all of this until you want
-to customize output.
-
-- **`/sessions`**, **`/sessions/new`**, **`/sessions/:id/edit`** — **sessions**
-  are named bundles of transcode work you apply to a job. A drive can have a
-  default session so finished rips transcode automatically.
-- **`/rip-presets`** (+ new/edit) — **rip presets** control how titles are
-  pulled off the disc (which MakeMKV behaviour, or a full-disc ISO dump).
-- **`/transcode-presets`** (+ new/edit) — **transcode presets** are the
-  HandBrake/abcde profiles (e.g. *H.265 1080p*, *music → FLAC*, *music → MP3*).
+**`/jobs/:id`** is one job in detail: the disc that was identified, its tracks,
+per-track rip progress, and any transcode sessions applied to it. From here you
+can act on a job (e.g. resolve an unidentified disc, or abandon it).
+**`/logs`** and **`/logs/:job_id`** show the structured logs; **`/files`**,
+**`/notifications`** and **`/transcoder`** cover the file browser, the
+notification history and the transcode queue.
 
 ## Settings
 
-**`/config`** is the Settings page — API keys, rip/transcode behaviour
-(auto-rip, block-on-miss, auto-transcode, retention), and notifications. Every
-field is documented in [Configuration § The UI Settings page](Configuring-ARM#the-ui-settings-page).
+**`/settings`** is the Settings page, split into tabs:
+
+- **Metadata** and **Ripping**: API keys and rip behaviour. Every field is documented in
+  [Configuration § The UI Settings page](Configuring-ARM#the-ui-settings-page).
+- **Sessions**: **sessions** are named bundles of transcode work you apply to a
+  job (a drive can have a default session so finished rips transcode
+  automatically), plus the **rip presets** (how titles are pulled off the disc:
+  which MakeMKV behaviour, or a full-disc ISO dump) and **transcode presets**
+  (the HandBrake/abcde profiles, e.g. *H.265 1080p*, *music → FLAC*). Built-in
+  presets are seeded on first boot, so you can ignore all of this until you want
+  to customize output.
+- **Drives**: the optical drives ARM knows about. Enroll a drive here to give
+  it an `arm-ripper-<serial>` container.
+- **Transcoding**, **Notifications**, **Interface**, **Themes**, **Users** and
+  **System**.
 
 ## Diagnostics
 
-**`/diagnostics`** surfaces health and log information for support — service
-status and recent log output, useful when filing a bug. For deeper digging,
+**Settings → System** includes a read-only diagnostics section (service status
+and log levels), useful when filing a bug. For deeper digging,
 `docker compose logs <service>` on the host is still the authoritative source
 (set `ARM_LOG_LEVEL=debug` first).

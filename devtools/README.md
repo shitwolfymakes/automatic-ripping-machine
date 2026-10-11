@@ -90,4 +90,4 @@ or CI. `install.sh` owns CA *generation*; this only *trusts* an existing CA. See
 
 ## regen-openapi-snapshot.sh
 
-Regenerates `services/ui/openapi.snapshot.json` from the live FastAPI app. The CI `openapi-drift` job points at this script in its failure message.
+Regenerates `services/ui-neu/openapi.snapshot.json` from the live FastAPI app, then reruns `services/ui-neu/scripts/codegen.sh` (when the UI's `node_modules` is installed) so `api.gen.ts` follows. The CI `openapi-drift` job points at this script in its failure message.

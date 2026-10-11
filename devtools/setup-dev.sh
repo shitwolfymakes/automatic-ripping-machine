@@ -112,7 +112,7 @@ ARM_DIR="${ROOT_DIR}/arm"
 # `compose`, so COMPOSE_FILE overlays and a repointed data prefix still apply.
 DB_SERVICE="arm-db"
 BACKEND_SERVICE="arm-backend"
-UI_SERVICE="arm-ui-neu"
+UI_SERVICE="arm-ui"
 
 require() {
     local bin="$1"
@@ -151,10 +151,33 @@ remove_spawned_containers() {
     fi
 }
 
+# Compose services an earlier version of this stack defined and this one no
+# longer does. `compose up` leaves their containers running, still holding
+# their host ports (the old arm-ui-neu kept the UI port, so the new arm-ui
+# failed to bind). Remove exactly these by project + service label; a blanket
+# `up --remove-orphans` is unsafe because backend-spawned containers carry the
+# stack's project label too.
+RETIRED_SERVICES=(arm-ui-neu)
+remove_retired_services() {
+    local project svc ids
+    project="$(compose config 2>/dev/null | sed -n 's/^name: //p' | head -n 1)"
+    [[ -n "${project}" ]] || return 0
+    for svc in "${RETIRED_SERVICES[@]}"; do
+        ids="$(docker ps -aq --filter "label=com.docker.compose.project=${project}" \
+                            --filter "label=com.docker.compose.service=${svc}")"
+        if [[ -n "${ids}" ]]; then
+            echo "==> removing the retired ${svc} container (no longer part of the stack)"
+            # shellcheck disable=SC2086  # ids is a list of container ids by design
+            docker rm -f ${ids} >/dev/null
+        fi
+    done
+}
+
 if [[ "${ACTION}" == "down" ]]; then
     require docker "Install docker first."
     require_compose
     remove_spawned_containers
+    remove_retired_services
     echo "==> stopping the compose stack"
     compose down
     exit 0
@@ -163,13 +186,13 @@ fi
 # Load nvm if the user manages Node that way. nvm only wires `node`/`npm` onto
 # PATH in interactive shells, so a non-interactive `bash devtools/setup-dev.sh`
 # wouldn't see them; sourcing nvm.sh here fixes that and pins the version to
-# services/ui/.nvmrc so the host toolchain matches the container build.
+# services/ui-neu/frontend/.nvmrc so the host toolchain matches the container build.
 load_nvm() {
     local nvm_sh="${NVM_DIR:-${HOME}/.nvm}/nvm.sh"
     [[ -s "${nvm_sh}" ]] || return 0   # no nvm install — fall through to PATH + require
-    echo "==> nvm detected — loading Node from services/ui/.nvmrc"
+    echo "==> nvm detected; loading Node from services/ui-neu/frontend/.nvmrc"
     local want
-    want="$(cat "${ROOT_DIR}/services/ui/.nvmrc" 2>/dev/null || true)"
+    want="$(cat "${ROOT_DIR}/services/ui-neu/frontend/.nvmrc" 2>/dev/null || true)"
     # nvm.sh isn't written for `set -eu`; relax around the load + select, then restore.
     set +eu
     # shellcheck disable=SC1090
@@ -621,17 +644,17 @@ if [[ "${ACTION}" == "setup" ]]; then
     # nvm users: pull Node onto PATH (and pin it to .nvmrc) before the checks below.
     load_nvm
 
-    require node    "install Node 22 (matches services/ui/.nvmrc / Dockerfile): https://nodejs.org/ — or 'nvm install' if you use nvm"
+    require node    "install Node 26 (matches services/ui-neu/frontend/.nvmrc / Dockerfile): https://nodejs.org/ (or 'nvm install' if you use nvm)"
     require npm     "npm ships with Node — reinstall Node, or run 'nvm use', if it's missing"
 
     echo "==> syncing host venv via uv"
     ( cd "${ROOT_DIR}" && uv sync )
 
-    # UI deps from the committed lockfile (same as services/ui/Dockerfile, which
-    # builds on node:22). npm ci wipes node_modules and reinstalls exactly what
+    # UI deps from the committed lockfile (same as services/ui-neu/Dockerfile, which
+    # builds on node:26). npm ci wipes node_modules and reinstalls exactly what
     # package-lock.json pins, so guard it: npm writes node_modules/.package-lock.json
     # on install, and a `git pull` that updates the lockfile makes it newer again.
-    UI_DIR="${ROOT_DIR}/services/ui"
+    UI_DIR="${ROOT_DIR}/services/ui-neu/frontend"
     if [[ -d "${UI_DIR}/node_modules" \
           && "${UI_DIR}/node_modules/.package-lock.json" -nt "${UI_DIR}/package-lock.json" ]]; then
         echo "==> UI deps already current — skipping npm ci"
@@ -826,8 +849,10 @@ if [[ "${ACTION}" == "up" ]]; then
     # 4. Back up the running database before migrations can touch it.
     backup_db
 
-    # 5. Only now remove backend-spawned rippers/transcoders.
+    # 5. Only now remove backend-spawned rippers/transcoders, and containers of
+    #    services this stack no longer defines (they would hold their ports).
     remove_spawned_containers
+    remove_retired_services
 
     # 6. Start from the images built above (no --build). An explicit service
     #    list keeps `up` from building a skipped image that does not exist yet.
@@ -842,7 +867,7 @@ if [[ "${ACTION}" == "up" ]]; then
     wait_for_backend
 
     UI_URL="$(published_url "${UI_SERVICE}" 443)"
-    UI_URL="${UI_URL:-https://localhost:8082}"
+    UI_URL="${UI_URL:-https://localhost:8081}"
     cat <<EOF
 
 stack is up; ${HEALTH_RESULT}
@@ -860,7 +885,7 @@ cat <<EOF
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
                                      # (or: docker compose up -d --build; no backup or health wait)
-  then open https://localhost:8082 -> Drives -> Enroll each drive you want ARM to use
+  then open https://localhost:8081 -> Drives -> Enroll each drive you want ARM to use
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 
   optional — trust the local CA so browsers/curl skip the self-signed warning:

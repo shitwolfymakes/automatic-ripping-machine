@@ -6,7 +6,7 @@ web UI, one job per optical drive in parallel.
 
 This is the wiki for **ARM v3**, a greenfield rebuild. It shares nothing with
 the legacy v2 codebase: v3 is a multi-service Docker stack — a FastAPI backend,
-a Vue UI, Postgres, one ripper container per optical drive, and an ephemeral
+a SvelteKit UI, Postgres, one ripper container per optical drive, and an ephemeral
 transcoder spawned per job. There are **no native (non-Docker) installs** in v3
 and **no `arm.yaml`** — you install with a one-line script and configure from
 the UI.

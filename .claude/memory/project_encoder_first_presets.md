@@ -39,8 +39,7 @@ truthful source.
   `set_active_dispatcher(None)` is not in a `finally`; probe container removal
   stops at the first failure.
 - Found on the way, out of scope: cancelling an in-flight encode can be
-  swallowed (`CancelRequested` in consume_progress); the deprecated Vue preset
-  form silently creates `encoder="preset"`; a PATCH with an explicit null
+  swallowed (`CancelRequested` in consume_progress); a PATCH with an explicit null
   tool/container writes NULL; install.sh has no variant awareness.
 - Deferred: AMF (`vce_*`) on real AMD hardware; the backend + ripper trixie bump.
 - Migration 0038 downgrade does NOT restore `gpus.encoder_kinds`.

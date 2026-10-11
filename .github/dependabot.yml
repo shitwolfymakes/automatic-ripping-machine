@@ -25,7 +25,7 @@ updates:
 
   # UI npm deps.
   - package-ecosystem: "npm"
-    directory: "/services/ui"
+    directory: "/services/ui-neu/frontend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -52,7 +52,7 @@ updates:
       interval: "weekly"
     labels: ["dependencies"]
   - package-ecosystem: "docker"
-    directory: "/services/ui"
+    directory: "/services/ui-neu"
     schedule:
       interval: "weekly"
     labels: ["dependencies"]

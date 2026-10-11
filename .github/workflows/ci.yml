@@ -47,28 +47,6 @@ jobs:
             -p arm_ripper \
             -p arm_transcode
 
-  lint-ui:
-    name: lint (ui — eslint + prettier + vue-tsc)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/ui
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: services/ui/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      # Generate src/api/generated.ts (gitignored) from the snapshot before
-      # vue-tsc — types.ts imports it, so typecheck fails on a fresh checkout
-      # without it.
-      - run: npm run openapi-types
-      - run: npm run typecheck
-
   lint-shell:
     name: lint (shell — shellcheck)
     runs-on: ubuntu-latest
@@ -128,22 +106,6 @@ jobs:
       - run: uv run coverage run -m pytest -v
       - run: uv run coverage report
 
-  test-ui:
-    name: test (ui — vitest)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/ui
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: services/ui/package-lock.json
-      - run: npm ci
-      - run: npm test
-
   check-ui-neu:
     name: lint (ui-neu — svelte-check)
     runs-on: ubuntu-latest
@@ -199,13 +161,13 @@ jobs:
       - name: Fail if api.gen.ts drifted from the snapshot
         run: |
           if ! git diff --exit-code services/ui-neu/frontend/src/lib/types/api.gen.ts; then
-            echo "::error::ui-neu api.gen.ts is out of sync with services/ui/openapi.snapshot.json — run bash services/ui-neu/scripts/codegen.sh and commit."
+            echo "::error::ui-neu api.gen.ts is out of sync with services/ui-neu/openapi.snapshot.json; run bash services/ui-neu/scripts/codegen.sh and commit."
             exit 1
           fi
 
   openapi-drift:
     # Live OpenAPI from the FastAPI app must match the committed snapshot
-    # consumed by the UI's openapi-typescript codegen. Drift = stale types.
+    # consumed by the UI's codegen (services/ui-neu/scripts/codegen.sh). Drift = stale types.
     # Regenerate locally with: bash devtools/regen-openapi-snapshot.sh
     name: openapi snapshot drift
     runs-on: ubuntu-latest
@@ -230,10 +192,10 @@ jobs:
           ' > /tmp/openapi.live.json
       - name: Compare against snapshot
         run: |
-          jq -S . services/ui/openapi.snapshot.json > /tmp/snapshot.norm.json
-          jq -S . /tmp/openapi.live.json           > /tmp/live.norm.json
+          jq -S . services/ui-neu/openapi.snapshot.json > /tmp/snapshot.norm.json
+          jq -S . /tmp/openapi.live.json               > /tmp/live.norm.json
           if ! diff -u /tmp/snapshot.norm.json /tmp/live.norm.json; then
-            echo "::error::OpenAPI snapshot drift — regenerate services/ui/openapi.snapshot.json"
+            echo "::error::OpenAPI snapshot drift: regenerate services/ui-neu/openapi.snapshot.json"
             exit 1
           fi
 
@@ -245,7 +207,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, ripper, transcode, ui, ui-neu]
+        service: [backend, ripper, transcode, ui-neu]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0

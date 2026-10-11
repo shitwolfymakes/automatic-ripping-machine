@@ -10,7 +10,7 @@ The authoritative, per-phase plan lives in the repo at
 The architectural goals that defined v3 are in place:
 
 - **Service split.** The monolithic v2 container is gone. v3 is a FastAPI
-  backend, a Vue UI, Postgres, one ripper container per drive, and an ephemeral
+  backend, a SvelteKit UI, Postgres, one ripper container per drive, and an ephemeral
   per-job transcoder — wired together with `docker compose`.
 - **Database.** Moved off SQLite. v3 runs on **Postgres** (the v2 roadmap
   guessed MySQL; the rebuild landed on Postgres with async SQLAlchemy/Alembic).
