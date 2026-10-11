@@ -615,3 +615,149 @@ async def test_resolve_media_outputs_returns_empty_when_no_tasks(
 
     result = await jobs_router._resolve_media_outputs(db, "job_01JZXR7K3M5Q8N4VWA00000002")
     assert result == []
+
+
+def test_delete_job_files_removes_a_disc_backup_folder(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    (backup / "BDMV").mkdir(parents=True)
+    (backup / "BDMV" / "index.bdmv").write_bytes(b"i")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not backup.exists()
+    assert media_root.exists()
+
+
+def test_delete_job_files_keeps_a_sibling_jobs_file_in_the_backup_folder(tmp_path: Path) -> None:
+    """Movie templates also write into "{title} ({year?})/": deleting the
+    backup removes only its BDMV/ and CERTIFICATE/, never a sibling job's
+    .mkv, and the folder stays while it still holds something."""
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    (backup / "BDMV").mkdir(parents=True)
+    (backup / "BDMV" / "index.bdmv").write_bytes(b"i")
+    (backup / "CERTIFICATE").mkdir()
+    (backup / "CERTIFICATE" / "id.bdmv").write_bytes(b"c")
+    sibling = backup / "Iron Man (2008).mkv"
+    sibling.write_bytes(b"m")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not (backup / "BDMV").exists()
+    assert not (backup / "CERTIFICATE").exists()
+    assert sibling.read_bytes() == b"m"
+    assert counters["media_dirs_pruned"] == 0
+
+
+def test_delete_job_files_does_not_follow_a_symlinked_bdmv(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    backup = media_root / "Iron Man (2008)"
+    backup.mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "index.bdmv").write_bytes(b"i")
+    (backup / "BDMV").symlink_to(elsewhere, target_is_directory=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert (elsewhere / "index.bdmv").exists()
+    assert (backup / "BDMV").is_symlink()
+
+
+def test_delete_job_files_does_not_follow_a_symlinked_folder(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "BDMV").mkdir(parents=True)
+    (elsewhere / "BDMV" / "index.bdmv").write_bytes(b"i")
+    link = media_root / "Iron Man (2008)"
+    link.symlink_to(elsewhere, target_is_directory=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert (elsewhere / "BDMV" / "index.bdmv").exists()
+
+
+def test_delete_job_files_refuses_a_folder_outside_media_root(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    outside = tmp_path / "other" / "Iron Man (2008)"
+    (outside / "BDMV").mkdir(parents=True)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002",
+        [media_root / ".." / "other" / "Iron Man (2008)"],
+        raw_root=raw_root,
+        media_root=media_root,
+    )
+    assert counters["media_files_removed"] == 0
+    assert outside.exists()
+
+
+@pytest.mark.parametrize("spelling", ["root", "dotdot"])
+def test_delete_job_files_never_removes_media_root_itself(tmp_path: Path, spelling: str) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    (media_root / "sub").mkdir(parents=True)
+    keep = media_root / "keep.mkv"
+    keep.write_bytes(b"k")
+    target = media_root if spelling == "root" else media_root / "sub" / ".."
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [target], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert keep.exists()
+
+
+def test_delete_job_files_skips_a_dangling_symlink(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    link = media_root / "gone.mkv"
+    link.symlink_to(tmp_path / "missing.mkv")
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 0
+    assert link.is_symlink()
+
+
+def test_delete_job_files_unlinks_a_symlinked_file_but_keeps_its_target(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    target = tmp_path / "real.mkv"
+    target.write_bytes(b"r")
+    link = media_root / "link.mkv"
+    link.symlink_to(target)
+
+    counters = jobs_router._delete_job_files(
+        "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
+    )
+    assert counters["media_files_removed"] == 1
+    assert not link.is_symlink()
+    assert target.exists()

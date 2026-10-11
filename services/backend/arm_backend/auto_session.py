@@ -44,6 +44,7 @@ from arm_common import (
     Drive,
     Job,
     MediaType,
+    OutputMode,
     RipPreset,
     Session,
     SessionApplication,
@@ -53,6 +54,7 @@ from arm_common import (
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
+    TrackKind,
     with_log_context,
 )
 from arm_common.encoders import get_encoder
@@ -71,6 +73,7 @@ _NO_OUTPUTS_DETAIL = (
 _TRANSCODE_DISABLED_DETAIL = (
     "transcoding is disabled (Settings > Transcoding); only passthrough sessions can be applied"
 )
+_NO_BACKUP_TRACK_DETAIL = "the Blu-ray decrypted backup session files a disc backup; this job has no backup track"
 _ENCODER_UNAVAILABLE_DETAIL = "no enabled device has verified {encoder}; re-probe or enable it in Settings > GPUs"
 
 
@@ -343,6 +346,30 @@ async def _apply_session_internal(
     tracks = list(
         (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
     )
+
+    # A FOLDER (disc backup) session files the backup folder. On a job that was
+    # ripped as titles its template would file a title's .mkv as an
+    # extension-less "Title (Year)" file, so it is a mismatch, not a fan-out.
+    # Only once ripped: before the rip there is no backup track to look for yet.
+    if (
+        rip_preset.output_mode == OutputMode.FOLDER
+        and job.status in POST_RIP_JOB_STATUSES
+        and not any(t.kind == TrackKind.DISC_BACKUP and not t.excluded for t in tracks)
+    ):
+        logger.warning(
+            "apply: backup session on a job without a backup track session_id=%s job_id=%s source=%s",
+            sess.id,
+            job.id,
+            source,
+        )
+        return ApplySessionOutcome(
+            application=None,
+            tasks=[],
+            collisions=[],
+            idempotent=False,
+            skipped_reason="media_mismatch",
+            error_detail=_NO_BACKUP_TRACK_DETAIL,
+        )
 
     outcome = await _fan_out_tasks_for_application(
         db,

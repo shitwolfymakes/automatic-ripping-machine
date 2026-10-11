@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { humanizeOutputMode } from '$lib/utils/preset-labels';
 	import { onMount } from 'svelte';
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
@@ -29,19 +30,6 @@
 				return 'Archive';
 			case 'custom':
 				return 'Custom';
-			default:
-				return v ?? '-';
-		}
-	}
-
-	function humanizeOutputMode(v: string | null | undefined): string {
-		switch (v) {
-			case 'tracks':
-				return 'Tracks';
-			case 'iso':
-				return 'ISO image';
-			case 'data_copy':
-				return 'File copy';
 			default:
 				return v ?? '-';
 		}

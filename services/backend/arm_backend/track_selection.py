@@ -91,17 +91,19 @@ def _select_audio(scan: ScanResult, rip_preset: RipPreset, job_id: str) -> list[
     return [_audio_track(job_id, t) for t in scan.titles]
 
 
-def _full_dump(job_id: str) -> list[Track]:
-    return [
-        Track(
-            job_id=job_id,
-            kind=TrackKind.DATA_DUMP,
-            index=0,
-            source_ref="full",
-            status=TrackStatus.QUEUED,
-            attempts=0,
-        )
-    ]
+class DiscBackupNeedsBluray(TrackSelectionError):
+    """A FOLDER (decrypted backup) preset was applied to a disc that is not a Blu-ray."""
+
+
+def _whole_disc_track(job_id: str, kind: TrackKind) -> Track:
+    return Track(
+        job_id=job_id,
+        kind=kind,
+        index=0,
+        source_ref="full",
+        status=TrackStatus.QUEUED,
+        attempts=0,
+    )
 
 
 def _dumps_whole_disc(scan: ScanResult, rip_preset: RipPreset) -> bool:
@@ -112,10 +114,24 @@ def _dumps_whole_disc(scan: ScanResult, rip_preset: RipPreset) -> bool:
     return rip_preset.output_mode == OutputMode.ISO and scan.disc_type in (DiscType.DVD, DiscType.BLURAY)
 
 
+def _whole_disc_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track] | None:
+    """The single track for a preset that takes the disc whole, or None when
+    the preset selects titles. A FOLDER preset backs up a Blu-ray and refuses
+    any other disc."""
+    if rip_preset.output_mode == OutputMode.FOLDER:
+        if scan.disc_type != DiscType.BLURAY:
+            raise DiscBackupNeedsBluray(f"disc backup needs a Blu-ray, not disc_type={scan.disc_type.value}")
+        return [_whole_disc_track(job_id, TrackKind.DISC_BACKUP)]
+    if _dumps_whole_disc(scan, rip_preset):
+        return [_whole_disc_track(job_id, TrackKind.DATA_DUMP)]
+    return None
+
+
 def select_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
     """Apply rip-preset track-selection rules to a scan."""
-    if _dumps_whole_disc(scan, rip_preset):
-        return _full_dump(job_id)
+    whole = _whole_disc_tracks(job_id, scan, rip_preset)
+    if whole is not None:
+        return whole
     if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
         return _select_video(scan, rip_preset, job_id)
     if scan.disc_type == DiscType.CD:
@@ -132,11 +148,12 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
     the preset computes *defaults*, not membership. The kept set is whatever
     `select_tracks` would have produced, matched by `source_ref`. (spec §4.3)
 
-    A full-disc dump (a DATA disc, or the ISO preset) has no per-title list:
-    review persistence is the single dump Track `select_tracks` makes.
+    A whole-disc track (a DATA disc, the ISO dump, the FOLDER backup) has no
+    per-title list: review persistence is the single track `select_tracks` makes.
     """
-    if _dumps_whole_disc(scan, rip_preset):
-        return _full_dump(job_id)
+    whole = _whole_disc_tracks(job_id, scan, rip_preset)
+    if whole is not None:
+        return whole
 
     kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset)}
     is_cd = scan.disc_type == DiscType.CD

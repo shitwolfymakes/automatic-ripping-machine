@@ -900,3 +900,47 @@ async def test_rip_all_dump_progress_carries_transfer_stats(monkeypatch, tmp_pat
     assert [round(f, 2) for f, _s in ticks] == [0.25, 1.0]
     assert ticks[0][1]["bytes_done"] == 256 and ticks[0][1]["bytes_total"] == 1024
     assert ticks[-1][1]["rate_bps"] is None or ticks[-1][1]["rate_bps"] > 0
+
+
+async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
+    backup_calls: list[str] = []
+
+    async def fake_rip_backup(*, device_path, output_dir, on_progress=None):
+        backup_calls.append(device_path)
+        if on_progress is not None:
+            await on_progress(0.5)
+        return RipResult(ok=True, output_path=output_dir / "backup", size_bytes=7)
+
+    async def must_not_run(**_kwargs):
+        raise AssertionError("a disc backup must not reach rip_disc or rip_data")
+
+    monkeypatch.setattr(dispatcher_module, "rip_backup", fake_rip_backup)
+    monkeypatch.setattr(dispatcher_module, "rip_disc", must_not_run)
+    monkeypatch.setattr(dispatcher_module, "rip_data", must_not_run)
+    backup = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DISC_BACKUP})
+    events: list[tuple[str, Any]] = []
+
+    async def on_start(t):
+        events.append(("start", t.id))
+
+    async def on_progress(t, fraction, stats=None):
+        events.append(("progress", (t.id, fraction, stats)))
+
+    async def on_done(t, result):
+        events.append(("done", (t.id, result.ok, result.size_bytes)))
+
+    await dispatcher_module.rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[backup],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+    assert backup_calls == ["/dev/sr0"]
+    assert events == [
+        ("start", "trk_0"),
+        ("progress", ("trk_0", 0.5, None)),
+        ("done", ("trk_0", True, 7)),
+    ]

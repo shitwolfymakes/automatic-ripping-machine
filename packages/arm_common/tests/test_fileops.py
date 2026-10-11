@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from arm_common.fileops import INPROGRESS_SUFFIX, atomic_output, transcode_none
+from arm_common.fileops import INPROGRESS_SUFFIX, atomic_output, move_tree, transcode_none, tree_size
 
 
 def test_atomic_output_renames_on_clean_exit(tmp_path: Path) -> None:
@@ -93,3 +93,52 @@ def test_transcode_none_copy_fallback(tmp_path, monkeypatch):
     assert size == 32
     assert dst.read_bytes() == b"x" * 32
     assert not src.exists()
+
+
+def _backup_tree(root: Path) -> Path:
+    (root / "BDMV" / "STREAM").mkdir(parents=True)
+    (root / "BDMV" / "index.bdmv").write_bytes(b"i" * 10)
+    (root / "BDMV" / "STREAM" / "00000.m2ts").write_bytes(b"v" * 100)
+    (root / "CERTIFICATE").mkdir()
+    (root / "CERTIFICATE" / "id.bdmv").write_bytes(b"c" * 5)
+    return root
+
+
+def test_tree_size_sums_every_file(tmp_path: Path) -> None:
+    assert tree_size(_backup_tree(tmp_path / "backup")) == 115
+
+
+def test_tree_size_does_not_follow_symlinks(tmp_path: Path) -> None:
+    root = _backup_tree(tmp_path / "backup")
+    (tmp_path / "big").write_bytes(b"x" * 1000)
+    (root / "link").symlink_to(tmp_path / "big")
+    assert tree_size(root) == 115
+
+
+def test_move_tree_moves_the_folder_and_returns_its_size(tmp_path: Path) -> None:
+    src = _backup_tree(tmp_path / "raw" / "job" / "backup")
+    dst = tmp_path / "media" / "Iron Man (2008)"
+    assert move_tree(src, dst) == 115
+    assert (dst / "BDMV" / "STREAM" / "00000.m2ts").read_bytes() == b"v" * 100
+    assert not src.exists()
+
+
+def test_move_tree_refuses_an_existing_destination_and_leaves_it(tmp_path: Path) -> None:
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "Iron Man (2008)"
+    dst.mkdir(parents=True)
+    (dst / "keep.txt").write_text("mine")
+    with pytest.raises(FileExistsError):
+        move_tree(src, dst)
+    assert (dst / "keep.txt").read_text() == "mine"
+    assert sorted(p.name for p in dst.iterdir()) == ["keep.txt"]
+    assert src.exists()
+
+
+def test_move_tree_uses_shutil_move_for_cross_filesystem(tmp_path: Path) -> None:
+    """The cross-filesystem copy is shutil.move's; move_tree does not add its own."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    with patch("arm_common.fileops.shutil.move", wraps=__import__("shutil").move) as spy:
+        move_tree(src, dst)
+    spy.assert_called_once_with(src, dst)

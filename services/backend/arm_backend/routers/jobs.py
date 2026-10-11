@@ -541,15 +541,21 @@ async def review_pause(
 
 
 async def _resolve_media_outputs(db: AsyncSession, job_id: str) -> list[Path]:
-    """Return absolute paths of every transcode output recorded against this
-    job's tracks. `output_path` is relative; join to MEDIA_ROOT. Tasks with
-    no output yet (queued / failed before disk landing) are skipped."""
+    """Return absolute paths of every finished transcode output recorded
+    against this job's tracks. `output_path` is relative; join to MEDIA_ROOT.
+
+    Only DONE tasks count: `output_path` is recorded at fan-out, before the
+    output lands, so a queued, running, or failed task's path can name a file
+    or folder this job never wrote. A disc backup whose move was refused
+    because the destination already existed ends FAILED naming that folder,
+    which belongs to another job or the user."""
     media_root = Path(settings.MEDIA_ROOT)
     rows = (
         await db.execute(
             select(TranscodeTask.output_path)
             .join(Track, col(TranscodeTask.source_track_id) == col(Track.id))
             .where(col(Track.job_id) == job_id)
+            .where(col(TranscodeTask.status) == TranscodeTaskStatus.DONE)
             .where(col(TranscodeTask.output_path).is_not(None))
         )
     ).all()
@@ -578,6 +584,10 @@ def _prune_empty_dirs(leaf_parent: Path, root: Path) -> int:
     return pruned
 
 
+# What `makemkvcon backup` writes into a disc backup's title folder.
+_DISC_BACKUP_PARTS = ("BDMV", "CERTIFICATE")
+
+
 def _delete_job_files(
     job_id: str,
     media_outputs: Iterable[Path],
@@ -586,7 +596,10 @@ def _delete_job_files(
     media_root: Path,
 ) -> dict[str, int]:
     """Delete `raw_root/<job_id>/` and every file in `media_outputs`, then
-    prune emptied media parent dirs.
+    prune emptied media parent dirs. A media output that is a folder (the
+    Blu-ray decrypted backup) has its BDMV/ and CERTIFICATE/ removed, and is
+    itself removed only once empty, and only when it is a real directory
+    inside `media_root`.
 
     Per-file unlink (rather than rmtree of the title dir) because re-rips of
     the same disc land outputs in the same `media/<Title>/` parent — a sibling
@@ -617,11 +630,36 @@ def _delete_job_files(
         if not path.exists():
             continue
         try:
-            path.unlink()
+            if path.is_dir() and not path.is_symlink():
+                # A disc backup's output is its title folder. Only ever the
+                # recorded path itself, and only inside media_root.
+                resolved, root = path.resolve(), media_root.resolve()
+                if resolved == root or not resolved.is_relative_to(root):
+                    logger.warning("delete: refusing folder not strictly inside media_root path=%s", path)
+                    continue
+                # Movie templates also write into "{title} ({year?})/", so the
+                # folder can hold a sibling job's files: remove only the backup
+                # structure, then the folder only once nothing else is left.
+                removed = False
+                for part in _DISC_BACKUP_PARTS:
+                    sub = path / part
+                    if sub.is_dir() and not sub.is_symlink():
+                        shutil.rmtree(sub)
+                        removed = True
+                if not removed:
+                    logger.warning("delete: no disc backup structure to remove in folder path=%s", path)
+                    continue
+                if not any(path.iterdir()):
+                    path.rmdir()
+            elif path.is_symlink() and path.is_dir():
+                logger.warning("delete: refusing to follow symlinked folder path=%s", path)
+                continue
+            else:
+                path.unlink()
             files_removed += 1
             parents_seen.add(path.parent)
         except OSError as exc:
-            logger.warning("delete: media unlink failed path=%s err=%s", path, exc)
+            logger.warning("delete: media delete failed path=%s err=%s", path, exc)
 
     # Deepest-first so a leaf dir is checked for emptiness before its stem.
     dirs_pruned = 0

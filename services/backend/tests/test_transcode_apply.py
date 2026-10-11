@@ -638,3 +638,30 @@ def test_bonus_title_with_an_empty_optional_year() -> None:
         "trk_1": "Show/Season 01/Show - S01E01 - Pilot.mkv",
         "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
     }
+
+
+def _backup_session() -> Session:
+    return Session(
+        id="ses_builtin_bd_backup",
+        name="Blu-ray: Decrypted backup",
+        media_type=MediaType.ISO,
+        rip_preset_id="rpr_builtin_bd_backup",
+        transcode_preset_id=None,
+        output_path_template="{title} ({year?})",
+    )
+
+
+def _backup_track() -> Track:
+    return Track(
+        id="trk_bk", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=TrackKind.DISC_BACKUP, index=0, source_ref="full"
+    )
+
+
+def test_compute_outputs_files_a_disc_backup_as_the_title_folder() -> None:
+    resolved = compute_outputs(_job(), [_backup_track()], _backup_session(), None)
+    assert [r.output_path for r in resolved] == ["Iron Man (2008)"]
+
+
+def test_compute_outputs_disc_backup_without_a_year_drops_the_parentheses() -> None:
+    resolved = compute_outputs(_job(title="IRON_MAN", year=None), [_backup_track()], _backup_session(), None)
+    assert [r.output_path for r in resolved] == ["IRON_MAN"]

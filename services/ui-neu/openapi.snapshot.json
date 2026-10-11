@@ -15953,7 +15953,8 @@
         "enum": [
           "tracks",
           "iso",
-          "data_copy"
+          "data_copy",
+          "folder"
         ],
         "title": "OutputMode"
       },
@@ -18244,7 +18245,8 @@
         "enum": [
           "video_title",
           "audio_track",
-          "data_dump"
+          "data_dump",
+          "disc_backup"
         ],
         "title": "TrackKind"
       },

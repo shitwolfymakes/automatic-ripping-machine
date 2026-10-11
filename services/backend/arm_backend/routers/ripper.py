@@ -27,7 +27,7 @@ from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.registry import enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
 from arm_backend.identity.stage_runner import EpisodeStageRunner
-from arm_backend.track_selection import select_tracks, select_tracks_for_review
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -260,7 +260,12 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
         t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
     }
     added: list[Track] = []
-    for track in select_tracks_for_review(job.id, scan, preset):
+    try:
+        review_tracks = select_tracks_for_review(job.id, scan, preset)
+    except DiscBackupNeedsBluray as exc:
+        logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc)
+        return
+    for track in review_tracks:
         if track.source_ref in existing_refs:
             continue
         db.add(track)
@@ -840,10 +845,16 @@ async def rip_start(
     if preset is None:
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
 
-    # An ISO preset gives one full-disc dump track whatever the scan found
-    # (track_selection._dumps_whole_disc), so it never lands in the
-    # no-titles handling below.
-    new_tracks = select_tracks(job.id, scan, preset)
+    # A whole-disc preset (ISO dump, FOLDER backup) gives its one track
+    # whatever the scan found, so it never lands in the no-titles handling
+    # below; a FOLDER preset on anything but a Blu-ray is refused here.
+    try:
+        new_tracks = select_tracks(job.id, scan, preset)
+    except DiscBackupNeedsBluray as exc:
+        # Fail the job with the reason on its event: the ripper gives up on a
+        # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
+        await _fail_titleless_source(session, hub, job, str(exc))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
     if virtual is not None:
         # MakeMKV found nothing in the image (not even once it was unpacked,

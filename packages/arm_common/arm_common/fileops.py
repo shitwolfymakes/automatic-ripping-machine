@@ -15,6 +15,11 @@ share).
 No live progress — the operation is either instantaneous (rename) or
 limited by disk throughput (copy). The caller may still report a single
 100% heartbeat after success for UI consistency.
+
+`move_tree`: the folder counterpart of `transcode_none`, for the Blu-ray
+decrypted backup. `shutil.move` renames on the same filesystem and copies
+the tree then removes the source across filesystems; `move_tree` adds only
+the refusal to overwrite an existing destination and the size of the tree.
 """
 
 from __future__ import annotations
@@ -79,4 +84,26 @@ def transcode_none(input_path: Path, output_path: Path) -> int:
             logger.warning("post-copy unlink failed: %s (will leave source in /raw)", cleanup_exc)
     size = output_path.stat().st_size
     logger.info("passthrough wrote %s (%d bytes)", output_path, size)
+    return size
+
+
+def tree_size(root: Path) -> int:
+    """Total size of the regular files under `root`; symlinks are not followed."""
+    return sum(p.lstat().st_size for p in root.rglob("*") if p.is_file() and not p.is_symlink())
+
+
+def move_tree(src: Path, dst: Path) -> int:
+    """Move the folder `src` to `dst`. Returns the total size of its files.
+
+    Refuses to touch an existing `dst` (`FileExistsError`, an `OSError`, so a
+    caller that fails a task on `OSError` needs nothing extra). Unlike
+    `transcode_none`'s rename, it never overwrites: an existing destination is
+    always refused, whatever the session's overwrite flag.
+    """
+    if dst.exists() or dst.is_symlink():
+        raise FileExistsError(f"destination already exists: {dst}")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(src, dst)
+    size = tree_size(dst)
+    logger.info("passthrough moved folder to %s (%d bytes)", dst, size)
     return size

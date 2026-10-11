@@ -63,7 +63,7 @@ describe('RipPresetForm', () => {
 			expect(optionValues(mediaType)).toEqual(['movie', 'tv', 'music', 'data', 'iso']);
 			expect(optionValues(trackSelection)).toEqual(['main_feature', 'all_tracks', 'archive', 'custom']);
 			expect(optionValues(idMode)).toEqual(['required', 'skip', 'deferred_placeholder']);
-			expect(optionValues(outputMode)).toEqual(['tracks', 'iso', 'data_copy']);
+			expect(optionValues(outputMode)).toEqual(['tracks', 'iso', 'data_copy', 'folder']);
 		});
 
 		it('submits the full create body with track_filters_json null for non-custom', async () => {

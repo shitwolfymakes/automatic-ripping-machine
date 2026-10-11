@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { humanizeOutputMode } from '$lib/utils/preset-labels';
 	import { onMount } from 'svelte';
 	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
@@ -61,19 +62,6 @@
 				return 'ID skip';
 			case 'deferred_placeholder':
 				return 'ID deferred';
-			default:
-				return v ?? '-';
-		}
-	}
-
-	function humanizeOutputMode(v: string | null | undefined): string {
-		switch (v) {
-			case 'tracks':
-				return 'Tracks';
-			case 'iso':
-				return 'ISO image';
-			case 'data_copy':
-				return 'File copy';
 			default:
 				return v ?? '-';
 		}

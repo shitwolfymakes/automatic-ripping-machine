@@ -10,6 +10,7 @@ from arm_common.schemas import TrackView
 
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
+from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.makemkv_rip import RipResult, _output_files_in_rip_order, rip_disc
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -57,10 +58,23 @@ async def rip_all(
       below `min_length_seconds` are skipped by MakeMKV; if the user
       requested one of those, we report FAILED with a clear reason
       rather than silently ignoring it.
+    - Any disc whose tracks are all DISC_BACKUP: one `makemkvcon backup --decrypt` (`rip_backup`) for the first track.
     - CD: mark all tracks IN_PROGRESS, run abcde once for the whole disc,
       then emit DONE/FAILED per track from the bulk result.
     - DATA: a single dd dump assigned to the first (only) track.
     """
+    if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
+        backup = tracks[0]
+        await on_track_start(backup)
+
+        async def _on_backup_progress(fraction: float) -> None:
+            if on_track_progress is not None:
+                await on_track_progress(backup, fraction)
+
+        result = await rip_backup(device_path=device_path, output_dir=output_dir, on_progress=_on_backup_progress)
+        await on_track_done(backup, result)
+        return
+
     if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
         # A full-disc dump is a dump whatever the scan called the disc: an
         # operator can pick the full-disc dump session for a bluray/dvd ISO,

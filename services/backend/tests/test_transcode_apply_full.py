@@ -88,8 +88,8 @@ def test_track_kinds_for_media_all_types() -> None:
     assert _track_kinds_for_media(MediaType.MOVIE) == {TrackKind.VIDEO_TITLE}
     assert _track_kinds_for_media(MediaType.TV) == {TrackKind.VIDEO_TITLE}
     assert _track_kinds_for_media(MediaType.MUSIC) == {TrackKind.AUDIO_TRACK}
-    assert _track_kinds_for_media(MediaType.DATA) == {TrackKind.DATA_DUMP, TrackKind.VIDEO_TITLE}
-    assert _track_kinds_for_media(MediaType.ISO) == {TrackKind.DATA_DUMP, TrackKind.VIDEO_TITLE}
+    assert _track_kinds_for_media(MediaType.DATA) == {TrackKind.DATA_DUMP, TrackKind.DISC_BACKUP, TrackKind.VIDEO_TITLE}
+    assert _track_kinds_for_media(MediaType.ISO) == {TrackKind.DATA_DUMP, TrackKind.DISC_BACKUP, TrackKind.VIDEO_TITLE}
 
 
 def test_build_track_ctx_reads_music_title_and_preset() -> None:

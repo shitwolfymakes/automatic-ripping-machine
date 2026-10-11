@@ -3477,7 +3477,7 @@ export type NotificationTestResult = {
 /**
  * OutputMode
  */
-export type OutputMode = 'tracks' | 'iso' | 'data_copy';
+export type OutputMode = 'tracks' | 'iso' | 'data_copy' | 'folder';
 
 /**
  * PasswordChangeRequest
@@ -4748,7 +4748,7 @@ export type TrackIdentityView = {
 /**
  * TrackKind
  */
-export type TrackKind = 'video_title' | 'audio_track' | 'data_dump';
+export type TrackKind = 'video_title' | 'audio_track' | 'data_dump' | 'disc_backup';
 
 /**
  * TrackRole

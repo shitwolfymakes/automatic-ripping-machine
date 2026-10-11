@@ -234,6 +234,14 @@ RIP_PRESETS: list[dict[str, Any]] = [
         "identification_mode": IdentificationMode.SKIP,
         "output_mode": OutputMode.ISO,
     },
+    {
+        "id": "rpr_builtin_bd_backup",
+        "name": "Blu-ray: Decrypted backup",
+        "media_type": MediaType.ISO,
+        "track_selection": TrackSelection.ALL_TRACKS,
+        "identification_mode": IdentificationMode.SKIP,
+        "output_mode": OutputMode.FOLDER,
+    },
 ]
 
 
@@ -416,6 +424,14 @@ SESSIONS: list[dict[str, Any]] = [
         "rip_preset_id": "rpr_builtin_iso_dump",
         "transcode_preset_id": "tpr_builtin_iso_passthrough",
         "output_path_template": "{title} ({year?})/{title} ({year?}).iso",
+    },
+    {
+        "id": "ses_builtin_bd_backup",
+        "name": "Blu-ray: Decrypted backup",
+        "media_type": MediaType.ISO,
+        "rip_preset_id": "rpr_builtin_bd_backup",
+        "transcode_preset_id": "tpr_builtin_iso_passthrough",
+        "output_path_template": "{title} ({year?})",
     },
 ]
 
