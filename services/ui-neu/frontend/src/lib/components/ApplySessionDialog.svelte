@@ -136,7 +136,7 @@
 			previewProblem = `This session has no transcode preset, so {${previewToken}} in its output path cannot be filled. Give the session a transcode preset or choose another session.`;
 		} else if (previewToken) {
 			const what = (TOKEN_WORDS[previewToken] ?? `a value for {${previewToken}}`).replace(/^an? /, '');
-			previewProblem = `This job has no ${what}, so {${previewToken}} in the output path cannot be filled. Add it in the job's details, or choose a session whose output path does not use {${previewToken}}.`;
+			previewProblem = `This job has no ${what}, so {${previewToken}} in the output path cannot be filled. Add it in the job's details, or choose a session whose output path does not use it or marks it optional as {${previewToken}?}.`;
 		} else {
 			previewProblem = message;
 		}

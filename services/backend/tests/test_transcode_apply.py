@@ -96,6 +96,30 @@ def test_compute_outputs_empty_token_raises() -> None:
         compute_outputs(job, [_video_track(1)], sess, tp)
 
 
+def test_compute_outputs_drops_empty_optional_year() -> None:
+    job = _job(year=None)
+    sess = _movie_session("{title} ({year?})/{title} ({year?}).{ext}")
+    [task] = compute_outputs(job, [_video_track(1)], sess, _movie_preset())
+    assert task.output_path == "Iron Man/Iron Man.mkv"
+
+
+def test_compute_outputs_token_used_required_and_optional_stays_required() -> None:
+    job = _job(year=None)
+    sess = _movie_session("{title} ({year?})/{title} {year}.{ext}")
+    with pytest.raises(TemplateValidationError, match=r"token \{year\} resolved empty.*\{year\?\}"):
+        compute_outputs(job, [_video_track(1)], sess, _movie_preset())
+
+
+def test_compute_outputs_no_optional_hint_for_never_optional_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_backend import transcode_apply
+
+    monkeypatch.setattr(transcode_apply, "_build_track_ctx", lambda *a, **k: {"title": "Iron Man", "ext": ""})
+    sess = _movie_session("{title}.{ext}")
+    with pytest.raises(TemplateValidationError, match=r"token \{ext\} resolved empty") as exc:
+        compute_outputs(_job(), [_video_track(1)], sess, _movie_preset())
+    assert "optional" not in str(exc.value)
+
+
 def test_compute_outputs_iso_no_transcode_preset() -> None:
     job = _job()
     sess = Session(

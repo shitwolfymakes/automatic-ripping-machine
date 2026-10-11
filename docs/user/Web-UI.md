@@ -52,6 +52,23 @@ notification history and the transcode queue.
 - **Transcoding**, **Notifications**, **Interface**, **Themes**, **Users** and
   **System**.
 
+### Output path tokens
+
+A session's output path is a template such as
+`{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}`.
+Each `{token}` is filled from the job; the token chips under the field list the
+ones allowed for the session's media type.
+
+A token written with a trailing `?`, like `{year?}`, is **optional**. When the
+job has no value for it, ARM drops the token together with brackets that wrap
+only it and the space before it, so `Title ({year?})` becomes `Title`. A plain
+`{year}` is required: applying the session to a job without a year fails and
+asks you to add one. `{ext}` and `{transcode_slug}` can't be optional because
+they always have a value.
+
+The built-in sessions use `{year?}`. A session you cloned from a built-in
+before this change keeps `{year}`; edit its output path to add the `?`.
+
 ## Diagnostics
 
 **Settings → System** includes a read-only diagnostics section (service status

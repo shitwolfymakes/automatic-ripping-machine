@@ -339,7 +339,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265",
-        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_plex_1080p_gpu",
@@ -347,7 +347,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
-        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_plex_2160p",
@@ -355,7 +355,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_2160p_hevc",
-        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_archive",
@@ -363,7 +363,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_passthrough_mkv",
-        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
         # Same `rpr_builtin_movie_archive` (every title), but each track is
@@ -375,7 +375,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
-        "output_path_template": "{title} ({year})/{title} ({year}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_tv_plex_1080p",
@@ -383,7 +383,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.TV,
         "rip_preset_id": "rpr_builtin_tv_all_tracks",
         "transcode_preset_id": "tpr_builtin_tv_plex_1080p_h265",
-        "output_path_template": "{show} ({year})/Season {season}/{show} - S{season}D{disc}T{track} ({duration_human}) - {transcode_slug}.{ext}",
+        "output_path_template": "{show} ({year?})/Season {season}/{show} - S{season}D{disc}T{track} ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_music_flac",
@@ -415,7 +415,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.ISO,
         "rip_preset_id": "rpr_builtin_iso_dump",
         "transcode_preset_id": "tpr_builtin_iso_passthrough",
-        "output_path_template": "{title} ({year})/{title} ({year}).iso",
+        "output_path_template": "{title} ({year?})/{title} ({year?}).iso",
     },
 ]
 
@@ -474,16 +474,22 @@ async def _insert_missing(
     session: AsyncSession,
     model: type[_BuiltinRow],
     rows: Iterable[dict[str, Any]],
+    sync_fields: tuple[str, ...] = ("name",),
 ) -> None:
     """Insert built-in rows that are absent. An existing row is left alone
-    except for its name: built-ins are clone-to-edit, so the seeder owns the
-    name and corrects it when the shipped text changes (e.g. the 2026-09
-    special-character cleanup), without a migration."""
+    except for `sync_fields`: built-ins are clone-to-edit, so the seeder owns
+    those fields and corrects them when the shipped value changes (e.g. the
+    2026-09 special-character cleanup, or the {year?} template change),
+    without a migration."""
     for row in rows:
         existing = (await session.execute(select(model).where(col(model.id) == row["id"]))).scalar_one_or_none()
         if existing is not None:
-            if getattr(existing, "name", None) != row["name"]:
-                existing.name = row["name"]
+            changed = False
+            for field in sync_fields:
+                if getattr(existing, field, None) != row[field]:
+                    setattr(existing, field, row[field])
+                    changed = True
+            if changed:
                 session.add(existing)
             continue
         session.add(model(**row, is_builtin=True))
@@ -497,6 +503,6 @@ async def run_seeders(session: AsyncSession) -> None:
     await _seed_inapp_channel(session)
     await _insert_missing(session, RipPreset, RIP_PRESETS)
     await _insert_missing(session, TranscodePreset, TRANSCODE_PRESETS)
-    await _insert_missing(session, Session, SESSIONS)
+    await _insert_missing(session, Session, SESSIONS, sync_fields=("name", "output_path_template"))
     await _seed_session_routes(session)
     await session.commit()

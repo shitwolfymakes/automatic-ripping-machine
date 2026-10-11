@@ -232,3 +232,6 @@ class TemplatePreviewRequest(BaseModel):
 
 class TemplatePreviewResponse(BaseModel):
     expansion: str
+    # The same synthetic expansion with every optional ({token?}) token empty;
+    # None when the template has no optional tokens.
+    expansion_without_optional: str | None = None

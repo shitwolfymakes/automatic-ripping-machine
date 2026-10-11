@@ -12,7 +12,12 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_backend.path_template import TemplateValidationError, validate_template, validate_template_or_http
+from arm_backend.path_template import (
+    TemplateValidationError,
+    expand_without_optional,
+    validate_template,
+    validate_template_or_http,
+)
 from arm_common import Drive, RipPreset, Session, TranscodePreset, User
 from arm_common.schemas import (
     SessionCloneRequest,
@@ -237,4 +242,7 @@ async def preview_template(
     _: User = Depends(require_jwt),
 ) -> TemplatePreviewResponse:
     expansion = validate_template_or_http(req.template, req.media_type, req.has_transcode_preset)
-    return TemplatePreviewResponse(expansion=expansion)
+    return TemplatePreviewResponse(
+        expansion=expansion,
+        expansion_without_optional=expand_without_optional(req.template, req.media_type),
+    )

@@ -51,3 +51,8 @@ it('resolves a full TV template with no leftover tokens', () => {
 	expect(out).not.toMatch(/\{\w+\}/);
 	expect(out).toContain('Breaking Bad');
 });
+
+it('resolves optional {token?} markers with the sample value', () => {
+	expect(resolveSample('{title} ({year?})', 'movie')).toBe('Fight Club (1999)');
+	expect(resolveSample('{show} [{year?}]/S{season}', 'tv')).toBe('Breaking Bad [2008]/S01');
+});

@@ -146,5 +146,9 @@ async def naming_preview(
     # Caller-supplied variables override the synthetic stand-ins; omitted tokens
     # fall back to the demo values so a zero-variable preview still renders.
     ctx = {**synthetic_context(req.media_type), **req.variables}
-    rendered = expand_template(req.template, ctx)
+    try:
+        rendered = expand_template(req.template, ctx)
+    except TemplateValidationError as exc:
+        # e.g. caller-supplied empty values leave nothing once optional tokens are dropped.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     return NamingPreviewResponse(rendered=rendered)

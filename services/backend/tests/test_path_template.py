@@ -9,7 +9,10 @@ from arm_backend.path_template import (
     tokens_for_media,  # noqa: E402
     TemplateValidationError,
     expand_template,
+    expand_without_optional,
+    optional_tokens,
     referenced_tokens,
+    required_tokens,
     validate_template,
 )
 from arm_common import MediaType  # noqa: E402
@@ -124,3 +127,87 @@ def test_music_allows_disc_token() -> None:
         MediaType.MUSIC,
         has_transcode_preset=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("template", "ctx", "expected"),
+    [
+        # value present: "?" is just stripped
+        (
+            "{title} ({year?})/{title}.{ext}",
+            {"title": "Iron Man", "year": "2008", "ext": "mkv"},
+            "Iron Man (2008)/Iron Man.mkv",
+        ),
+        # empty: token, its () and one leading space go
+        (
+            "{title} ({year?})/{title} ({year?}).{ext}",
+            {"title": "Iron Man", "year": "", "ext": "mkv"},
+            "Iron Man/Iron Man.mkv",
+        ),
+        # [] brackets
+        ("{title} [{year?}].{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X.mkv"),
+        # bare optional token with no brackets
+        ("{title} {year?}.{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X.mkv"),
+        # empty segment collapses
+        ("{year?}/{title}.{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X.mkv"),
+        # brackets that wrap more than the token are left alone
+        ("{title} ({year?} cut).{ext}", {"title": "X", "year": "", "ext": "mkv"}, "X ( cut).mkv"),
+        # whitespace left at segment edges is trimmed once something was dropped
+        ("{title}  ({year?})/x", {"title": "X", "year": ""}, "X/x"),
+        ("({year?}) {title}", {"title": "X", "year": ""}, "X"),
+        ("{title} ({year?}) /x", {"title": "X", "year": ""}, "X/x"),
+        # values are never parsed as syntax
+        ("{title} ({year?})", {"title": "What? {year?}", "year": ""}, "What? {year?}"),
+    ],
+)
+def test_expand_template_optional_tokens(template: str, ctx: dict[str, str], expected: str) -> None:
+    assert expand_template(template, ctx) == expected
+
+
+def test_expand_template_all_empty_after_drop_raises() -> None:
+    with pytest.raises(TemplateValidationError, match="empty"):
+        expand_template("({year?})", {"year": ""})
+
+
+def test_expand_template_unknown_optional_token_raises() -> None:
+    with pytest.raises(TemplateValidationError, match="unknown token"):
+        expand_template("{nope?}", {})
+
+
+def test_token_sets() -> None:
+    t = "{title} ({year?})/{year} {track?}"
+    assert referenced_tokens(t) == {"title", "year", "track"}
+    assert optional_tokens(t) == {"year", "track"}
+    assert required_tokens(t) == {"title", "year"}
+
+
+@pytest.mark.parametrize("token", ["ext", "transcode_slug"])
+def test_validate_rejects_optional_on_always_filled_tokens(token: str) -> None:
+    with pytest.raises(TemplateValidationError, match=r"can't be optional"):
+        validate_template(f"{{title}} - {{{token}?}}", MediaType.MOVIE, has_transcode_preset=True)
+
+
+def test_validate_rejects_template_empty_without_optionals() -> None:
+    with pytest.raises(TemplateValidationError, match="empty"):
+        validate_template("({year?})", MediaType.MOVIE, has_transcode_preset=True)
+
+
+def test_validate_accepts_optional_year() -> None:
+    out = validate_template("{title} ({year?})/{title}.{ext}", MediaType.MOVIE, has_transcode_preset=True)
+    assert out == "Iron Man (2008)/Iron Man.mkv"
+
+
+def test_expand_without_optional() -> None:
+    assert expand_without_optional("{title} ({year?}).{ext}", MediaType.MOVIE) == "Iron Man.mkv"
+    assert expand_without_optional("{title}.{ext}", MediaType.MOVIE) is None
+
+
+def test_year_description_mentions_optional_marker() -> None:
+    year = next(t for t in tokens_for_media(MediaType.MOVIE) if t["token"] == "year")
+    assert "{year?}" in year["description"]
+
+
+def test_expand_template_without_drop_is_byte_identical() -> None:
+    # No optional token dropped: no collapse, no trimming.
+    assert expand_template(" /{title}  /x/", {"title": "X", "year": "2008"}) == " /X  /x/"
+    assert expand_template("{title} ({year?}) /", {"title": "X", "year": "2008"}) == "X (2008) /"
