@@ -29,7 +29,7 @@ All ripper routes are under `/api/ripper/`. The Ripper is the client.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/ripper/register` | Ripper startup handshake. Body: `{hostname, device_path, ripper_version, hw_caps}`. Response: `{drive_id, drive_config, service_token_verified}`. |
+| `POST` | `/api/ripper/register` | Ripper startup handshake, keyed on the `drive_id` of the row the Backend created for this container (`ARM_DRIVE_ID`). Body: `{drive_id, hostname, device_path, ripper_version, hw_caps, by_id_name?}`. Response: the full `Drive` row. `404` for an unknown `drive_id`; `409` when the drive is not enrolled, or when `by_id_name` differs from the row's by-id binding (the row then goes to `error` and the container is left running for diagnosis). |
 | `GET` | `/api/ripper/drives/{drive_id}/config` | Fetch rip parameters for this drive (MakeMKV flags, DVD decrypt settings, default rip profile). |
 | `POST` | `/api/ripper/identify` | Identify a disc. Body: `{drive_id, scan_result}` where `scan_result = {disc_type, volume_label, titles[], musicbrainz_disc_id, raw}` (the MakeMKV scan for DVD/BD, the MusicBrainz Disc ID for CD). Response: the full `Job` row — `status: "identified"` with metadata, or `status: "awaiting_user_id"`. This call **blocks** on the server side while external lookup runs (with a generous timeout). |
 | `GET` | `/api/ripper/jobs/{job_id}` | Poll job status (rarely needed; WS is preferred). |
