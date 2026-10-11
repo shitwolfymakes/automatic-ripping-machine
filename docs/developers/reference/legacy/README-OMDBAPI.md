@@ -26,7 +26,7 @@ NOTE: Patrons receive significantly more daily API requests. Please consider con
 
 ### TO USE YOUR NEW OMDBAPI KEY:
 
-Open the ARM web UI and navigate to **Settings** (`/config`). Under **Metadata / identification**,
+Open the ARM web UI and navigate to **Settings** (`/settings`). Under **Metadata / identification**,
 enter your key in the **OMDb API key** field and save. The key is stored in the database and takes
 effect immediately — no restart required.
 
