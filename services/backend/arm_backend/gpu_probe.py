@@ -1,8 +1,8 @@
 """Backend GPU inventory — populates the `gpus` table at lifespan startup.
 
 The backend never touches GPU hardware itself. Device discovery happens
-**host-side at install time** (`install.sh` / `devtools/setup-dev.sh` enumerate `/dev/dri`
-render nodes and `nvidia-smi`), and the result is handed to the backend as a
+**host-side at install time** (`armctl install` / `devtools/setup-dev.sh`, both via `deploy/lib/detect.sh`,
+enumerate `/dev/dri` render nodes and `nvidia-smi`), and the result is handed to the backend as a
 JSON descriptor in the `ARM_GPUS` env var. This keeps the backend image
 GPU-free (no `nvidia-smi`, no `/dev/dri` mount, no NVIDIA runtime) — the only
 container that needs GPU access is the ephemeral transcoder, and the dispatcher

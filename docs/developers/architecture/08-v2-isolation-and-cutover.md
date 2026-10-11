@@ -220,7 +220,7 @@ No git tag is created to preserve v2. It stays reachable two ways that don't dep
 We run the cutover PR only after v3 meets all of these:
 
 - All architecture decisions in this directory are either resolved or explicitly deferred with a known plug-in point (OQs from [07-open-questions.md](07-open-questions.md)).
-- A fresh-host install of v3 (via the install-script one-liner — see [06-deployment.md § Install](06-deployment.md#install)) lands at the login screen, accepts a disc, and produces a transcoded file using the Big Buck Bunny ISO fixture.
+- A fresh-host install of v3 (via the install-script one-liner — see [06-deployment.md § Install](06-deployment.md#installer)) lands at the login screen, accepts a disc, and produces a transcoded file using the Big Buck Bunny ISO fixture.
 - Crash-recovery exercise passes: five queued rips + simulated power cut mid-batch resumes cleanly without manual intervention.
 - At least one real Blu-ray, DVD, and audio CD rip have completed end-to-end on a contributor's machine.
 - `ci.yml` CI is green on `main`, and the full stack runs end-to-end on the **single supported target** — any Linux host running Docker Engine ≥ 24 + Compose v2. (Unraid/Synology/other NAS appliances are out of scope for v3.0 as of 2026-06-05; see [06-deployment.md § Supported targets](06-deployment.md#supported-targets).) Container deployment is distro-agnostic, so a green CI build plus end-to-end validation on the reference distro covers the matrix.

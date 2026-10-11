@@ -115,7 +115,7 @@ catches it via the WS subscription and SIGTERMs the encoder. After a
 
 There is **no GPU overlay** and the Backend is **GPU-free** — it ships no
 `nvidia-smi` and gets no GPU device access. GPUs are detected **host-side at
-install time** (`devtools/setup-dev.sh` / `install.sh`) and handed to the
+install time** (`devtools/setup-dev.sh` / `armctl install`) and handed to the
 Backend as the `ARM_GPUS` JSON env var; the Backend just parses it at lifespan
 startup to fill the `gpus` table (`arm_backend/gpu_probe.py:load_configured_gpus`).
 
@@ -129,7 +129,7 @@ spawned container — `devices=/dev/dri/renderD*` for VAAPI/QSV, `runtime: nvidi
 + `device_requests` for NVENC (`transcode_dispatcher.py:_inject_gpu_run_kwargs`).
 
 NVIDIA hosts need nvidia-container-toolkit installed + registered with docker
-(`nvidia-ctk runtime configure`); `install.sh` offers to set this up on apt
+(`nvidia-ctk runtime configure`); `armctl install` offers to set this up on apt
 hosts. Re-run the installer after a GPU/driver change to refresh `ARM_GPUS`.
 
 `ARM_GPUS` is a JSON array; each entry seeds one `gpus` row, detected host-side:

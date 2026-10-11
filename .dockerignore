@@ -79,6 +79,7 @@ logs/
 # the build context even though only ui-neu's Dockerfile actually reads them.
 test_fixtures/
 install.sh
+deploy/
 docker-compose*.yml
 .editorconfig
 # Claude Code memory + settings: pure repo metadata, tracked in git but

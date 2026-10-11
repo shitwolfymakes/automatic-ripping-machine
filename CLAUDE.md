@@ -35,6 +35,7 @@ Layout:
 - [services/transcode/](services/transcode/) — ephemeral, per-task transcoder spawned by the Backend (`arm_transcode`).
 - [services/ui-neu/](services/ui-neu/) - SvelteKit (Svelte 5) SPA served by nginx, published as the `arm-ui` image. Its TypeScript API types are generated from the committed OpenAPI snapshot ([services/ui-neu/openapi.snapshot.json](services/ui-neu/openapi.snapshot.json)).
 - [services/_common/](services/_common/) — shared container entrypoint (CA-merge + PUID drop + tini exec).
+- [deploy/](deploy/) — the production installer: `armctl.sh` (install, up, down, upgrade), `lib/` (shared with `devtools/setup-dev.sh`), `install/` (production-only steps), and `docker-compose.release.yml`. Root `install.sh` is only a bootstrap that downloads a release bundle of this folder.
 - [packages/arm_common/](packages/arm_common/) — shared Pydantic schemas, enums, SQLModel models, ULID helper, and structured-logging helpers, imported by every Python service.
 
 ### Database
@@ -71,6 +72,8 @@ containers (they are not compose services).
 uv run pytest                  # all backend / ripper / transcode suites — zero infra
 ```
 
+Shell suites (zero-infra): `bash devtools/test-setup-dev.sh`, `bash devtools/test-install-walkthrough.sh`, and `bash deploy/tests/test-{armctl,bootstrap,bundle,stack-contract}.sh`.
+
 The suite needs no Docker, Postgres, drives, or network (in-memory fake session + file-backed SQLite). See [docs/developers/architecture/09-testing.md](docs/developers/architecture/09-testing.md) for the two-tier design (fast fake-session unit tests + the real-DB e2e harness under `tests/e2e/`) and the Backend's 100%-statement-coverage policy. Heavier end-to-end drills live in `devtools/`: `bash devtools/iso-smoke.sh` (full scan → rip → transcode against an ISO fixture, no disc) and `bash devtools/crash-drill.sh` (backend crash recovery).
 
 ### Lint / format / types
@@ -95,5 +98,7 @@ Trunk-based: `main` is the trunk and always releasable; short-lived branches mer
 - **Ripper: one `makemkvcon` per disc, never per title.** A single `makemkvcon mkv … all` invocation rips every title; per-title invocations trigger USB-BD drive autosuspend / SCSI NOT_READY failures between titles.
 - **Tests stay zero-infra.** Tier-1 tests fake only the I/O boundary (DB session, docker socket, outbound HTTP, WS hub, clock). Don't pull a real service into the fast suite — un-run tests rot.
 - **uv workspace discipline.** Add Python deps to the right member's `pyproject.toml`; `arm_common` is consumed as a workspace package, not vendored.
+- **Production runs the dev compose template unchanged.** `docker-compose.yml.example` is shipped as is and layered with `deploy/docker-compose.release.yml`. Never add production-only branches to the template; a new service built from source needs one image line in the release overlay (`deploy/tests/test-stack-contract.sh` fails until it has one).
+- **`deploy/lib/` is shared.** A change there changes `setup-dev.sh` and production at once; `devtools/test-setup-dev.sh` pins the dev output text.
 
 The memory entries hold the detail behind several of these — read [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md) at session start.

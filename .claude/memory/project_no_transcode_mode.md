@@ -40,9 +40,7 @@ Known follow-ups (ledgered, PR body names the first):
    docstring still overclaims).
 3. Serial passthrough copies stall the tick for the batch; cancel of an
    in-process passthrough doesn't stop the copy.
-4. install.sh compose heredoc lacks `ARM_TRANSCODE_CAPABLE` passthrough
-   (carryover doc; [[install-sh-is-legacy]]).
-5. Stale-config merge bug pre-exists in Metadata/Ripping settings forms (fixed
+4. Stale-config merge bug pre-exists in Metadata/Ripping settings forms (fixed
    for Transcoding only; generic fix would round-trip secrets).
 
 Relates to [[project_transcode_offload_architecture]] (tier25 remote offload

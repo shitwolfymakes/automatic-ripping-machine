@@ -102,7 +102,7 @@
 				<p class="drives-step-help">To turn it on, add this line to .env:</p>
 				<CopyBlock text="ARM_HOST_ISO_LIBRARY_PATH=/path/to/your/isos" />
 				<p class="drives-step-help">
-					Then add the mount from the docs and restart ARM. <a href="/help">Read how</a>
+					Then restart ARM; it mounts that folder read-only for you. <a href="/help">Read how</a>
 				</p>
 			{/if}
 		</section>
