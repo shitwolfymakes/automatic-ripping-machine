@@ -245,6 +245,22 @@ def test_restart_clears_completion_and_dismissal_keeps_progress(signing_key, adm
     assert body["current_step"] == "system"
 
 
+def test_restart_after_a_finished_walkthrough_resumes_at_the_first_step(signing_key, admin_user, guest_user) -> None:
+    from arm_common.enums import SETUP_STEP_ORDER
+
+    db = _seeded(admin_user, guest_user)
+    cfg = db.rows["config"][0]
+    cfg.setup_completed_at = datetime.now(timezone.utc)
+    cfg.setup_progress = {s.value: {"state": "done", "at": None} for s in SETUP_STEP_ORDER}
+    with TestClient(_make_app(signing_key, db)) as c:
+        body = c.post("/api/setup/restart", headers=_auth(signing_key, admin_user)).json()
+        again = c.get("/api/setup", headers=_auth(signing_key, admin_user)).json()
+    assert body["current_step"] == "system"
+    assert again["current_step"] == "system"
+    assert "system" not in body["progress"] and "finish" not in body["progress"]
+    assert body["progress"]["drives"]["state"] == "done"
+
+
 def test_dismiss_checklist(signing_key, admin_user, guest_user) -> None:
     db = _seeded(admin_user, guest_user)
     with TestClient(_make_app(signing_key, db)) as c:

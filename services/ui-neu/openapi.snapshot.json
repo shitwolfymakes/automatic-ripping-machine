@@ -8665,7 +8665,7 @@
           "setup"
         ],
         "summary": "Restart Setup",
-        "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.",
+        "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.\n\nA finished walkthrough has every step recorded, so the current step would be\nFinish. Reopen the system check along with Finish so the walkthrough starts\nfrom its first step again, wherever the operator returns to /setup.",
         "operationId": "restart_setup_api_setup_restart_post",
         "parameters": [
           {

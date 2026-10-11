@@ -177,10 +177,15 @@ async def complete_setup(_: User = Depends(require_writer), db: AsyncSession = D
 
 @router.post("/restart", response_model=SetupView)
 async def restart_setup(_: User = Depends(require_writer), db: AsyncSession = Depends(get_session)) -> SetupView:
-    """Settings > System "Run setup again": keep what was recorded, reopen the walkthrough."""
+    """Settings > System "Run setup again": keep what was recorded, reopen the walkthrough.
+
+    A finished walkthrough has every step recorded, so the current step would be
+    Finish. Reopen the system check along with Finish so the walkthrough starts
+    from its first step again, wherever the operator returns to /setup."""
     cfg = await _config(db)
     progress = _progress(cfg)
     progress.pop(SetupStep.FINISH.value, None)
+    progress.pop(SetupStep.SYSTEM.value, None)
     cfg.setup_progress = progress
     cfg.setup_completed_at = None
     cfg.setup_checklist_dismissed_at = None
