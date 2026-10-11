@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Any
 
 import httpx
@@ -189,9 +188,9 @@ class BackendClient:
         """
         # drive_id lets the backend apply this drive's own auto-rip override
         # (Drive.drive_mode) over the global default (setup spec 2026-10-01 D1).
-        drive_id = os.environ.get("ARM_DRIVE_ID")
-        params = {"drive_id": drive_id} if drive_id else None
-        r = await self._client.get("/api/ripper/config", params=params)
+        from arm_ripper.config import settings  # lazy: avoid import-time Settings() construction
+
+        r = await self._client.get("/api/ripper/config", params={"drive_id": settings.ARM_DRIVE_ID})
         r.raise_for_status()
         return RipperConfigView.model_validate(r.json())
 
@@ -204,7 +203,9 @@ class BackendClient:
         return RipStartResponse.model_validate(r.json())
 
     async def report_makemkv_key_status(self, *, state: MakemkvKeyState, detail: str | None = None) -> None:
-        req = MakemkvKeyStatusReport(state=state, detail=detail, drive_id=os.environ.get("ARM_DRIVE_ID"))
+        from arm_ripper.config import settings  # lazy: avoid import-time Settings() construction
+
+        req = MakemkvKeyStatusReport(state=state, detail=detail, drive_id=settings.ARM_DRIVE_ID)
         r = await self._client.post("/api/ripper/makemkv-key-status", json=req.model_dump(mode="json"))
         r.raise_for_status()
 

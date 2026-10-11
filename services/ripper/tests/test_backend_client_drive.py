@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from arm_ripper.backend_client import BackendClient
+from arm_ripper.config import settings
 
 
 def _client(handler) -> BackendClient:
@@ -163,7 +164,7 @@ async def test_get_drive_parses_a_drive() -> None:
 
 async def test_get_ripper_config_sends_this_drive_id(monkeypatch) -> None:
     """The backend resolves the drive's own auto-rip override from drive_id (setup spec D1)."""
-    monkeypatch.setenv("ARM_DRIVE_ID", "drv_9")
+    monkeypatch.setattr(settings, "ARM_DRIVE_ID", "drv_9")
     seen = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -175,20 +176,8 @@ async def test_get_ripper_config_sends_this_drive_id(monkeypatch) -> None:
     assert cfg.auto_rip_on_insert is False
 
 
-async def test_get_ripper_config_without_drive_id_sends_no_param(monkeypatch) -> None:
-    monkeypatch.delenv("ARM_DRIVE_ID", raising=False)
-    seen = {}
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        seen["params"] = dict(req.url.params)
-        return httpx.Response(200, json={"auto_rip_on_insert": True})
-
-    await _client(handler).get_ripper_config()
-    assert seen["params"] == {}
-
-
 async def test_report_makemkv_key_status_names_this_drive(monkeypatch) -> None:
-    monkeypatch.setenv("ARM_DRIVE_ID", "drv_9")
+    monkeypatch.setattr(settings, "ARM_DRIVE_ID", "drv_9")
     seen = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
