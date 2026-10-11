@@ -62,10 +62,13 @@ function lintClassBody(body, filename, push) {
 export function lintSource(src, filename) {
 	const out = [];
 	const push = (kind, detail) => out.push({ file: filename, kind, detail });
-	// 1. style="..." string attributes
+	// 1. style="..." / style='...' string attributes and style={...} bindings
 	for (const m of src.matchAll(/\sstyle="([^"]*)"/g)) push('style-attr', m[1]);
-	// 2. style:prop directives
-	for (const m of src.matchAll(/\sstyle:([a-zA-Z-]+)=/g)) {
+	for (const m of src.matchAll(/\sstyle='([^']*)'/g)) push('style-attr', m[1]);
+	for (const m of src.matchAll(/\sstyle=\{([^}]*)/g)) push('style-attr', `{${m[1].trim().slice(0, 60)}}`);
+	// 2. style:prop directives, with a value or in the value-less shorthand
+	// (`style:width` means `style:width={width}`)
+	for (const m of src.matchAll(/\sstyle:([a-zA-Z-]+)(?=[\s=/>])/g)) {
 		const prop = m[1];
 		if (prop.startsWith('--')) continue;
 		if (/Flyout\.svelte$/.test(filename) && FLYOUT_ALLOW.has(prop)) continue;

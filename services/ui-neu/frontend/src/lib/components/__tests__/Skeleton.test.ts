@@ -12,11 +12,18 @@ describe('Skeleton', () => {
 		expect(div!.dataset.variant).toBe('rect');
 	});
 
-	it('applies width and height as inline styles', () => {
+	it('passes width and height through as custom properties the stylesheet sizes it from', () => {
 		const { container } = renderComponent(Skeleton, { props: { width: '60%', height: '1rem' } });
 		const div = container.querySelector('div') as HTMLElement;
-		expect(div.style.width).toBe('60%');
-		expect(div.style.height).toBe('1rem');
+		expect(div.style.getPropertyValue('--skeleton-width')).toBe('60%');
+		expect(div.style.getPropertyValue('--skeleton-height')).toBe('1rem');
+	});
+
+	it('sets no size properties when none is given', () => {
+		const { container } = renderComponent(Skeleton);
+		const div = container.querySelector('div') as HTMLElement;
+		expect(div.style.getPropertyValue('--skeleton-width')).toBe('');
+		expect(div.style.getPropertyValue('--skeleton-height')).toBe('');
 	});
 
 	it('merges the class prop onto the wrapper', () => {

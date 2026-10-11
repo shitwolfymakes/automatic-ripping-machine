@@ -8,14 +8,23 @@
 	let { variant = 'rect', width, height, class: cls = '' }: Props = $props();
 </script>
 
-<div class="skeleton-surface {cls}" data-variant={variant} style:width style:height aria-hidden="true"></div>
+<div
+	class="skeleton-surface {cls}"
+	data-variant={variant}
+	style:--skeleton-width={width}
+	style:--skeleton-height={height}
+	aria-hidden="true"
+></div>
 
 <style>
 	/* Skeleton.svelte takes arbitrary width/height (callers size it per use),
        so it doesn't fit the fixed-size skeleton-text/block/card modifiers in
        skeleton.css - it keeps its own scoped rule, on the same token those
-       use. */
+       use. The size arrives as custom properties (style:--skeleton-*), since
+       inline style properties are banned. */
 	.skeleton-surface {
+		width: var(--skeleton-width, auto);
+		height: var(--skeleton-height, auto);
 		border-radius: var(--radius-sm);
 		background: var(--color-primary-tint-2);
 	}

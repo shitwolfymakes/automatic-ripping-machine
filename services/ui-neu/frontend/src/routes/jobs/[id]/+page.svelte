@@ -367,13 +367,8 @@
 				<!-- Poster + Metadata grid -->
 				<div class="flex flex-col sm:flex-row items-start">
 					<!-- Poster -->
-					<div class="shrink-0 job-detail-poster-cell">
-						<PosterImage
-							url={jobPoster(job)}
-							alt={job.title ?? 'Poster'}
-							class="job-detail-poster"
-							style={`aspect-ratio: ${job.disc_type === 'cd' ? '1/1' : '2/3'}`}
-						/>
+					<div class="shrink-0 job-detail-poster-cell" data-disc-type={job.disc_type}>
+						<PosterImage url={jobPoster(job)} alt={job.title ?? 'Poster'} class="job-detail-poster" />
 					</div>
 
 					<!-- Metadata grid -->
@@ -870,9 +865,14 @@
 	/* :global: forwarded through PosterImage's class prop */
 	:global(.job-detail-poster) {
 		width: 120px;
+		aspect-ratio: 2 / 3;
 		border-radius: var(--radius-md);
 		object-fit: cover;
 		box-shadow: var(--shadow-1);
+	}
+	/* An audio CD's cover is square. :global: the poster is rendered by PosterImage. */
+	.job-detail-poster-cell[data-disc-type='cd'] :global(.job-detail-poster) {
+		aspect-ratio: 1 / 1;
 	}
 	.job-detail-metadata-cell {
 		border-bottom: 1px solid var(--color-border);

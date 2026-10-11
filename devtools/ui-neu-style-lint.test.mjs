@@ -24,6 +24,24 @@ test('flyout position directives are allowlisted', () => {
 	assert.equal(lintSource(src, 'src/lib/components/Other.svelte').length, 3);
 });
 
+test('style bindings and single-quoted style attributes are flagged', () => {
+	const v = lintSource("<div style={styleStr}></div><div style={`aspect-ratio: ${r}`}></div><p style='color: red'></p>", 'x.svelte');
+	assert.deepEqual(v.map((x) => x.kind), ['style-attr', 'style-attr', 'style-attr']);
+});
+
+test('value-less style:prop shorthand is flagged', () => {
+	const v = lintSource('<div class="a" style:width style:height aria-hidden="true"></div><i style:color/>', 'x.svelte');
+	assert.deepEqual(v.map((x) => x.detail), ['width', 'height', 'color']);
+});
+
+test('shorthand custom property directives are allowed', () => {
+	assert.deepEqual(lintSource('<div style:--w style:--h></div>', 'x.svelte'), []);
+});
+
+test('a <style> block and CSS properties are not style attributes', () => {
+	assert.deepEqual(lintSource('<style>\n.a {\n\tfont-style: italic;\n}\n</style>', 'x.svelte'), []);
+});
+
 test('custom property directives are always allowed', () => {
 	assert.deepEqual(lintSource('<div style:--progress="{p}%"></div>', 'x.svelte'), []);
 });

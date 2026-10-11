@@ -298,9 +298,11 @@ into it.
 
 ## 7. Dynamic values
 
-`style="..."` string attributes are banned. Dynamic styling flows through
+`style="..."` string attributes, `style={...}` bindings and the value-less
+`style:prop` shorthand are banned. Dynamic styling flows through
 custom properties: `style:--progress="{pct}%"`, `style:--jt-bg={...}`,
-`style:--frame-accent={...}` — the block or scoped rule reads the var.
+`style:--frame-accent={...}`, `style:--skeleton-width` — the block or scoped
+rule reads the var.
 The only non-custom-property `style:` allowlist is Flyout positioning
 (`top/left/right/bottom/max-height`).
 

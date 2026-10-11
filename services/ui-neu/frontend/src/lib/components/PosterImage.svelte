@@ -5,15 +5,9 @@
 		url: string | null | undefined;
 		alt?: string;
 		class?: string;
-		style?: string;
 	}
 
-	let {
-		url,
-		alt = '',
-		class: className = 'poster-image h-28 w-20 shrink-0 object-cover',
-		style: styleStr = ''
-	}: Props = $props();
+	let { url, alt = '', class: className = 'poster-image h-28 w-20 shrink-0 object-cover' }: Props = $props();
 
 	let errored = $state(false);
 	let lastUrl: string | null | undefined = url;
@@ -36,11 +30,7 @@
 {#if showFallback}
 	<!-- data-poster is the theme hook (same contract as data-progress-track):
 	     schemes decorate posters through it rather than component classes. -->
-	<div
-		data-poster
-		class="poster-image-fallback flex items-center justify-center {className}"
-		style={styleStr || undefined}
-	>
+	<div data-poster class="poster-image-fallback flex items-center justify-center {className}">
 		<svg
 			class="h-2/5 w-2/5"
 			fill="none"
@@ -56,15 +46,7 @@
 		</svg>
 	</div>
 {:else}
-	<img
-		data-poster
-		src={posterSrc(url)}
-		{alt}
-		class={className}
-		style={styleStr || undefined}
-		loading="lazy"
-		onerror={onError}
-	/>
+	<img data-poster src={posterSrc(url)} {alt} class={className} loading="lazy" onerror={onError} />
 {/if}
 
 <style>
