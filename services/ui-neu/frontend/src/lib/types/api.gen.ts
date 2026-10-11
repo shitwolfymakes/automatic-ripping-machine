@@ -4272,10 +4272,6 @@ export type SetupStatusPublic = {
      * First Run
      */
     first_run: boolean;
-    /**
-     * Arm Version
-     */
-    arm_version: string;
 };
 
 /**

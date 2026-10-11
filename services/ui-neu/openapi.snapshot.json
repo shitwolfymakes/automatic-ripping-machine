@@ -17354,16 +17354,11 @@
           "first_run": {
             "type": "boolean",
             "title": "First Run"
-          },
-          "arm_version": {
-            "type": "string",
-            "title": "Arm Version"
           }
         },
         "type": "object",
         "required": [
-          "first_run",
-          "arm_version"
+          "first_run"
         ],
         "title": "SetupStatusPublic",
         "description": "Unauthenticated: the login page and the first-run guard read it."

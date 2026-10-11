@@ -11,7 +11,6 @@ class SetupStatusPublic(BaseModel):
     """Unauthenticated: the login page and the first-run guard read it."""
 
     first_run: bool
-    arm_version: str
 
 
 class SetupStepProgress(BaseModel):

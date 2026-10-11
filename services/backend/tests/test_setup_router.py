@@ -80,8 +80,7 @@ def test_status_is_public_and_first_run_when_not_completed(signing_key, admin_us
     with TestClient(_make_app(signing_key, db)) as c:
         r = c.get("/api/setup/status")
     assert r.status_code == 200
-    assert r.json()["first_run"] is True
-    assert isinstance(r.json()["arm_version"], str)
+    assert r.json() == {"first_run": True}
 
 
 def test_status_false_when_completed(signing_key, admin_user, guest_user) -> None:

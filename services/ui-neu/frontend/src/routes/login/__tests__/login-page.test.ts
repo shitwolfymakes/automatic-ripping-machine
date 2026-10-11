@@ -101,9 +101,7 @@ describe('Login page on first run (setup spec §5.1)', () => {
 	function firstRunFetch(firstRun: boolean) {
 		fetchMock.mockImplementation((url: string) =>
 			Promise.resolve(
-				url === '/api/setup/status'
-					? { ok: true, json: () => Promise.resolve({ first_run: firstRun, arm_version: '3.1.0' }) }
-					: { ok: true }
+				url === '/api/setup/status' ? { ok: true, json: () => Promise.resolve({ first_run: firstRun }) } : { ok: true }
 			)
 		);
 	}
