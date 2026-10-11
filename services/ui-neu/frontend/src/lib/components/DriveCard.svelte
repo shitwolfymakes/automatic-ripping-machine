@@ -17,6 +17,7 @@
 	import SkeletonCard from './SkeletonCard.svelte';
 	import SlideOver from './SlideOver.svelte';
 	import Glyph from './Glyph.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { reveal } from '$lib/transitions';
 
 	interface Props {
@@ -252,16 +253,15 @@
 
 	let unenrolling = $state(false);
 	let unenrollError = $state<string | null>(null);
-	async function handleUnenroll() {
-		if (!drive) return;
+	let confirmUnenrollOpen = $state(false);
+	const unenrollName = $derived(drive ? drive.display_name || drive.model || drive.hostname : '');
+	function handleUnenroll() {
 		unenrollError = null;
-		const name = drive.display_name || drive.model || drive.hostname;
-		if (
-			!confirm(
-				`Unenroll ${name}? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.`
-			)
-		)
-			return;
+		confirmUnenrollOpen = true;
+	}
+	async function confirmUnenroll() {
+		confirmUnenrollOpen = false;
+		if (!drive) return;
 		unenrolling = true;
 		try {
 			await unenrollDrive(drive.id);
@@ -694,6 +694,16 @@
 			</div>
 		</SlideOver>
 	</div>
+
+	<ConfirmDialog
+		open={confirmUnenrollOpen}
+		title="Unenroll {unenrollName}?"
+		message="Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan."
+		confirmLabel="Unenroll"
+		variant="danger"
+		onconfirm={confirmUnenroll}
+		oncancel={() => (confirmUnenrollOpen = false)}
+	/>
 {/if}
 
 <style>
