@@ -10,8 +10,10 @@ that closes Phase 15.
 
 - Linux host with Docker ≥ 24, an optical drive, and the disc you're
   testing in the drive.
-- Either a fresh `~/arm/` install (preferred — exercises the installer
-  too) or a working dev stack at the repo root.
+- Either a fresh install made with `install.sh` from a checkout
+  (preferred — exercises the installer too) or a working dev stack at the
+  repo root. The installer refuses an `arm` folder that has files in it but
+  was not made by it, so use a new or empty location.
 
 ## One-time host prep
 
@@ -27,26 +29,67 @@ ls /sys/class/block/sr0/device/scsi_generic/   # expect e.g. sg0 or sg5
 ```
 
 If the SCSI-generic node is missing, MakeMKV will silently fall back to
-data-disc mode and produce no titles. The installer skips drives with
-no `scsi_generic` node and warns; the dev compose hardcodes one drive
-and offers no warning. Sanity check this first.
+data-disc mode and produce no titles. The installer does not look at
+drives: you enroll the drive from the UI, and the backend's drive scanner
+pairs each `sr` node with its `sg` node when it starts that drive's ripper.
+Sanity check the pairing yourself first.
 
 ## Run the test (fresh install path — preferred)
 
-Use a throwaway prefix so the test doesn't co-mingle with any
-in-progress real install.
+`--prefix` names the folder the `arm` folder goes in, so a throwaway
+location keeps the test apart from any real install. The install lands in
+`$TEST/arm` (unless `$TEST` itself ends in `arm`, in which case it is the
+install folder).
+
+A curl install needs a published release, so from a checkout run
+`install.sh` directly. It packs a bundle from the checkout, and the images
+are named by two separate settings:
+
+- **Tag**: the bundle's version, `v<VERSION>` (the repo's `VERSION` file)
+  from a checkout, or whatever `--version <tag>` names. A `--version` tag
+  must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+- **Prefix** (registry and namespace): `docker.io/automaticrippingmachine`
+  unless `--image-prefix <prefix>` is given. It does not change the tag.
+
+It starts the stack by default.
 
 ```bash
 TEST=/tmp/arm-smoke
+ARM="$TEST/arm"
 rm -rf "$TEST"
-bash install.sh --prefix "$TEST" --start
+bash install.sh --prefix "$TEST"
+
+# Stack commands go through the install's launcher:
+"$ARM/armctl" compose ps
 
 # Wait for backend healthy. First boot logs the admin password to a
 # file (in case the terminal scrollback is lost):
 docker exec armv3-backend cat /logs/first-boot.log
 
-# Visit https://localhost:8081, log in, change the password.
+# Visit https://localhost:8081, log in, change the password, then enroll
+# the drive from the UI (the installer does not detect drives).
 ```
+
+The images that must exist are `<prefix>/arm-backend:<tag>`,
+`<prefix>/arm-ui:<tag>` and `<prefix>/arm-ripper:<tag>` (the database uses
+`postgres:18`). Unless the profile is ripper-only, so is
+`<prefix>/arm-transcode:<tag>`, plus `<prefix>/arm-transcode:<tag>-intel`
+or `-amd` only when the host has that GPU vendor and transcodes are not
+offloaded.
+
+If those images are not published (a branch build), build and tag them
+locally as `<prefix>/arm-...:<tag>`, then install against them with both
+settings. [devtools/install-drill.sh](../../../devtools/install-drill.sh) is
+the worked example: it builds `arm-drill/arm-backend:drill`,
+`arm-ripper:drill` and `arm-ui:drill`, then runs
+`bash install.sh --prefix <dir> --bundle <bundle> --version drill --profile ripper-only --image-prefix arm-drill --no-host-changes --no-start`
+and `<arm>/armctl up --no-pull`. For a checkout, drop `--bundle` and give
+`--version <tag> --image-prefix <prefix> --no-start`, then run
+`"$ARM/armctl" up --no-pull`. Without `--version` the tag is `v<VERSION>`, and
+`up --no-pull` fails on images tagged anything else.
+
+The settings file is `$ARM/.armctl/.env`; after editing it, run
+`"$ARM/armctl" up`. Stop the stack with `"$ARM/armctl" down`.
 
 ## Run the test (dev stack path)
 
@@ -132,6 +175,8 @@ container exiting; `--no-cleanup` skips the script's own
 
 For each disc you test, fill in a row and capture the artifacts.
 
+`$ARM` below is the install folder from the fresh-install path (for a dev stack, use the repo's `arm/` folder).
+
 | Disc type | Title                             | Job ID                           | Identified                                                                                                | Tracks ripped | Transcoded                 | Final size | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 |-----------|-----------------------------------|----------------------------------|-----------------------------------------------------------------------------------------------------------|---------------|----------------------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | BD        | *Big Buck Bunny* (2008)           | `job_01KT5H0GB1M705C43Z91FX6WDG` | TMDB movie, hit clean                                                                                     | 6/6           | 6/6 H.265 1080p (NVENC)    | 1.8 GB     | First end-to-end Blu-ray smoke on the dev stack (LG BP50NB40 USB BD/CD drive). Rip 547 s, transcode 477 s, ~17 min insert→terminal. 6.6 GB raw → 1.8 GB transcoded (73 % reduction). `config.auto_rip_on_insert=false` on this dev box, so the rip was kicked via `POST /api/jobs/manual` rather than auto-fired by the poll loop — same code path as the UI's "Start rip" button. **Hardware transcode verified 2026-06-02:** dispatcher claimed `gpu=nvidia://0` (RTX 4070) for every task; spawned `arm-transcode-*` ran with `runtime=nvidia` + `device_requests: [{driver: nvidia, device_ids: [0], capabilities: [gpu, video]}]`; `nvidia-smi -L` visible inside the container; HandBrakeCLI invoked with `--encoder nvenc_h265` appended after `--preset "H.265 MKV 1080p30"`. The `hw_preference=None` `tpr_builtin_plex_1080p_h265` preset already engaged NVENC; re-running the `ses_builtin_movie_plex_1080p_gpu` sibling completed 6 tracks in 470 s wall-clock with identical visual output. Both outputs at `media/Big Buck Bunny (2008)/Big Buck Bunny (2008) - Track NN - plex-1080p-h-265{,-gpu-preferred}.mkv`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -148,11 +193,11 @@ For each, check:
    identification fails, the job sits at `awaiting_user_id` — resolve via
    the UI's "Identify manually" form.
 3. **Rip** — after `IDENTIFIED`, status moves to `ripping`. Tracks land
-   under `~/arm/raw/<job_id>/` (or your prefix). Track count matches
+   under `$ARM/raw/<job_id>/` (the `arm` folder you installed into). Track count matches
    what MakeMKV/abcde reports.
 4. **Transcode** — Backend dispatches transcode tasks; ephemeral
    `armv3-transcode-*` containers spawn. Final files land under
-   `~/arm/media/<title>/...`.
+   `$ARM/media/<title>/...`.
 5. **Status terminal** — UI shows `ripped` (or `ripped_partial` if some
    tracks failed). `/api/jobs/<id>` returns the same.
 6. **Logs zip** — the per-job log download link returns a non-empty
@@ -162,9 +207,9 @@ For each, check:
 
 Attach to the PR comment / issue:
 
-- Output of `docker compose ps` (proves all 4 services up).
-- `~/arm/raw/<job_id>/manifest.json` (or `tree -L 2 ~/arm/raw/<job_id>/`).
-- `~/arm/media/<title>/...` listing.
+- Output of `"$ARM/armctl" compose ps` (proves all 4 services up).
+- `$ARM/raw/<job_id>/manifest.json` (or `tree -L 2 $ARM/raw/<job_id>/`).
+- `$ARM/media/<title>/...` listing.
 - `docker exec armv3-backend cat /logs/arm-backend.log | grep -i error |
   tail -20` (or "(none)" if clean).
 - Total elapsed minutes from insert → terminal status.
@@ -173,7 +218,7 @@ Attach to the PR comment / issue:
 
 - **MakeMKV beta key expired** — MakeMKV's free beta key rotates every
   ~30 days. If `scan` fails with a licence error, refresh the key in
-  `~/arm/.env` (`MAKEMKV_KEY=…`).
+  `$ARM/.armctl/.env` (`MAKEMKV_KEY=…`) and run `"$ARM/armctl" up`.
 - **Audio CD identification can take 30–60s** — MusicBrainz lookups
   with rate-limiting are slow; don't assume the job is stuck.
 - **The transcode image is multi-GB.** In dev it's built locally up front

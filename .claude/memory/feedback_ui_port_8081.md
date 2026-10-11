@@ -17,12 +17,10 @@ Host ports for ARM v3 (all HTTPS):
 - **Backend API on `https://localhost:8080`** (health at `/api/health`).
 
 **Why:** When deployment values (ports, paths, hostnames) disagree across the
-repo, the **installer** is the source of truth: it produces the real,
-TLS-secured deployment users run. install.sh already generates `arm-ui` on
-`8081:443`, so publishing ui-neu under the `arm-ui` image name moved installed
-deployments to ui-neu with no installer change.
+repo, the **installer** (`armctl install`, in `deploy/`) is the source of
+truth: it produces the real, TLS-secured deployment users run, and it publishes
+`arm-ui` (ui-neu) on `8081:443`.
 
-**How to apply:** Reconcile *to* what `install.sh` generates, not away from it
-(install.sh itself is legacy and frozen). When a message or doc says "open the
-UI", it means ui-neu on 8081. Any 8082 left in the tree is an arbitrary example
+**How to apply:** Reconcile *to* what `armctl install` generates, not away from
+it. When a message or doc says "open the UI", it means ui-neu on 8081. Any 8082 left in the tree is an arbitrary example
 (e.g. test origins in `test_ws_origin.py`), not a UI port.

@@ -19,8 +19,8 @@ The architectural goals that defined v3 are in place:
 - **Sessions and presets.** Sessions, rip presets, and transcode presets are
   implemented and user-editable in the UI — including music to FLAC/MP3, data
   copy, and ISO dump from a disc. See [Web UI](Web-UI).
-- **One-command install.** A single `install.sh` generates the whole stack,
-  including TLS certs and per-drive service blocks. See
+- **One-command install.** A single `install.sh` sets up the whole stack,
+  including TLS certs and the `armctl` command that runs it. See
   [Getting Started](Getting-Started).
 - **Notifications** via Apprise, configured from the UI.
 - **GPU transcoding** for Intel QSV / AMD VAAPI / NVIDIA NVENC via an opt-in
