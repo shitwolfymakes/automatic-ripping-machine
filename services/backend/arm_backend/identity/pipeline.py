@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,24 +15,44 @@ from arm_common.schemas.identity import SourceClaims
 
 from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.resolver import apply_resolution, resolve
-from arm_backend.identity.sources.base import JobContext
+from arm_backend.identity.sources.base import JobContext, Source
 from arm_backend.identity.sources.registry import DEFAULT_RANKS, SOURCE_TIERS, HINT_SOURCES
 
 logger = logging.getLogger(__name__)
 
 
-async def resolve_job(session: AsyncSession, job: Job) -> int:
+@dataclass(frozen=True)
+class ResolveOutcome:
+    changed: int
+    track_ids: frozenset[str]
+
+
+async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
     """Apply every stored proposal to the job and its tracks. Idempotent;
-    returns the number of attributes changed."""
+    returns the number of attributes changed and which tracks changed."""
     tracks = list((await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
-    changed = apply_resolution(job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS))
+    changed_ids: set[str] = set()
+    changed = apply_resolution(
+        job, tracks, resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=DEFAULT_RANKS), changed_track_ids=changed_ids
+    )
     for track in tracks:
         session.add(track)
     session.add(job)
     await session.flush()
     if changed:
         logger.info("identity: resolved job_id=%s changed=%d", job.id, changed)
-    return changed
+    return ResolveOutcome(changed=changed, track_ids=frozenset(changed_ids))
+
+
+def _error_claims(source: Source, ctx: JobContext, e: Exception) -> SourceClaims:
+    """An error entry carrying the inputs the source would have used, so
+    put_source keeps the last good claims only when they are for the same inputs."""
+    logger.warning("identity: source %s failed job_id=%s: %s", source.id, ctx.job.id, e)
+    try:
+        inputs = source.inputs(ctx)
+    except Exception:
+        inputs = {}
+    return SourceClaims(run_at=ctx.now, status="error", inputs=inputs, detail=f"{type(e).__name__}: {e}"[:200])
 
 
 def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
@@ -41,16 +62,13 @@ def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime) -> None:
         try:
             reason = source.applies_to(ctx)
         except Exception as e:
-            logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
-            claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
-            put_source(job, source.id, claims)
+            put_source(job, source.id, _error_claims(source, ctx, e))
             continue
         if reason is None:
             try:
                 claims = source.run(ctx)
             except Exception as e:
-                logger.warning("identity: source %s failed job_id=%s: %s", source.id, job.id, e)
-                claims = SourceClaims(run_at=now, status="error", detail=f"{type(e).__name__}: {e}"[:200])
+                claims = _error_claims(source, ctx, e)
         else:
             claims = SourceClaims(run_at=now, status="skipped", detail=reason)
         put_source(job, source.id, claims)

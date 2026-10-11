@@ -19,8 +19,15 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import record_manual_job, record_manual_track, revert_manual_track
+from arm_backend.identity.proposals import (
+    forget_episode_show_ids,
+    record_manual_job,
+    record_manual_track,
+    revert_manual_track,
+)
+from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -33,6 +40,7 @@ from arm_common import (
     DriveMediaStatus,
     Job,
     JobStatus,
+    MediaType,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -77,6 +85,20 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
+
+
+def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
+    """None when `app.state` carries no runner (e.g. an existing router test
+    that never set one up) — callers then just skip scheduling."""
+    return getattr(request.app.state, "episode_stage", None)
+
+
+def _identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]]:
+    """`season`, `disc_number`, `media_type`, title and the show ids — the
+    fields the background episode stage cares about. Compared before/after a
+    mutating request to decide whether to (re)schedule it (Task 8; I4: an
+    ids change reschedules too)."""
+    return (job.season, job.disc_number, job.media_type, job.title, current_ids(job).model_dump())
 
 
 # Resolver-owned attributes on TrackEditRequest / JobUpdateRequest: an edit to
@@ -837,13 +859,17 @@ async def update_job(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> Job:
     """Edit user-controlled fields on a Job + optional per-track operator edits.
     Job title/year stay behind identify/resolve; track `status` stays ripper-owned
     (not in TrackEditRequest)."""
-    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    # M2: lock the job row (then its tracks) so a concurrent identity write
+    # (the episode stage's apply, /identity/match) serializes with this one.
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    before_identity = _identity_snapshot(job)
 
     job_fields = req.model_dump(exclude_unset=True, exclude={"tracks"})
     job_identity = {k: v for k, v in job_fields.items() if k in _IDENTITY_JOB_ATTRS}
@@ -857,8 +883,9 @@ async def update_job(
     if req.tracks is not None:
         rows = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
         by_id = {t.id: t for t in rows}
-        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr); a
-        # repeated track.updated event is benign. Callers needn't deduplicate.
+        # Duplicate track_ids in req.tracks → last-wins (idempotent setattr);
+        # track.updated is emitted once per track (de-duplicated below).
+        # Callers needn't deduplicate.
         for edit in req.tracks:
             track = by_id.get(edit.track_id)
             if track is None:
@@ -879,10 +906,16 @@ async def update_job(
             db.add(track)
             edited_track_ids.append(track.id)
 
+    resolver_track_ids: frozenset[str] = frozenset()
     if identity_touched:
-        await resolve_job(db, job)
+        outcome = await resolve_job(db, job)
+        resolver_track_ids = outcome.track_ids
     await db.flush()
-    for tid in edited_track_ids:
+    # De-duplicated, stable order: the tracks the request itself edited,
+    # followed by any sibling the resolver also changed (e.g. a claim that
+    # was never applied until this PATCH ran the resolver) -- fixing PR 1's
+    # parked finding that resolver-only changes never got a track.updated.
+    for tid in list(dict.fromkeys([*edited_track_ids, *sorted(resolver_track_ids)])):
         await hub.emit(
             topic="ripper.events",
             event_type="track.updated",
@@ -893,6 +926,8 @@ async def update_job(
         )
     await db.commit()
     await db.refresh(job)
+    if stage_runner is not None and _identity_snapshot(job) != before_identity:
+        stage_runner.schedule(job.id)
     return job
 
 
@@ -903,6 +938,9 @@ async def update_job(
 #      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
 #      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
 #      because there are no WAITING_IDENTIFY apps on an already-identified job.
+# Show ids an operator can send on /resolve; tvmaze is only ever derived.
+_SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
+
 _RESOLVABLE_STATUSES_PROMOTE: frozenset[JobStatus] = frozenset(
     {JobStatus.AWAITING_USER_ID, JobStatus.RIPPED_AWAITING_IDENTIFY}
 )
@@ -927,8 +965,10 @@ async def resolve(
     _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> ResolveResponse:
-    job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     if job.status not in _RESOLVABLE_STATUSES:
@@ -936,6 +976,7 @@ async def resolve(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
+    before_identity = _identity_snapshot(job)
 
     # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
     # matching typed sections of the existing metadata_json; everything else
@@ -943,6 +984,7 @@ async def resolve(
     # partial-edit case ("just fix the title") sends neither field and must
     # NOT wipe auto-identified sections.
     md = JobMetadata.model_validate(job.metadata_json or {})
+    show_changed = False
     if req.music is not None:
         md.music = req.music
     # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
@@ -959,6 +1001,24 @@ async def resolve(
         # external_ids as set even when identity was just freshly created.
         existing_ids = md.identity.external_ids
         ids_set = req.external_ids.model_fields_set
+        # I4: a different imdb / tmdb / tvdb names a different show, so every
+        # show id belonging to the old one and not sent now is stale: clear
+        # tvmaze, and imdb / tmdb / tvdb when absent from the request (a
+        # kept old imdb would let providers re-resolve the old show). An
+        # explicit null only clears that one id; it names no other show.
+        # R3: filling a blank id names no different show, so only a stored,
+        # non-null id replaced by a different value triggers the clear.
+        show_changed = any(
+            name in ids_set
+            and getattr(req.external_ids, name) is not None
+            and getattr(existing_ids, name) is not None
+            and getattr(req.external_ids, name) != getattr(existing_ids, name)
+            for name in _SHOW_ID_FIELDS
+        )
+        if show_changed:
+            for name in ("tvmaze", *_SHOW_ID_FIELDS):
+                if name not in ids_set:
+                    setattr(existing_ids, name, None)
         if "imdb" in ids_set:
             existing_ids.imdb = req.external_ids.imdb
         if "tmdb" in ids_set:
@@ -996,6 +1056,10 @@ async def resolve(
         # IDENTIFIED — its rip is done (G-09).
         job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
     job.metadata_json = new_metadata
+    if show_changed:
+        # R2: the stored episode entries were matched against the previous
+        # show; forgetting their show id means no keep-path can hold them.
+        forget_episode_show_ids(job)
     # Disc position and season are identity fields: they go through the
     # resolver as manual proposals so provenance is recorded and later
     # sources (episode matching, disc hints) never override them. This must
@@ -1075,6 +1139,9 @@ async def resolve(
     await session.refresh(job)
     for outcome in fan_out_outcomes:
         await session.refresh(outcome.application)
+
+    if stage_runner is not None and _identity_snapshot(job) != before_identity:
+        stage_runner.schedule(job.id)
 
     return ResolveResponse(
         job=JobView.model_validate(job),

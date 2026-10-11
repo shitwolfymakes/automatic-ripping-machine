@@ -740,6 +740,121 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
+# --- /identify (background episode stage trigger) -----------------------------
+
+
+class _StageRunner:
+    """Recording fake `EpisodeStageRunner` (Task 8): records every job_id
+    `schedule` was called with, without running anything for real."""
+
+    def __init__(self) -> None:
+        self.scheduled: list[str] = []
+
+    def schedule(self, job_id: str) -> None:
+        self.scheduled.append(job_id)
+
+
+def test_identify_tv_disc_schedules_episode_stage() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Some Show", year=2020, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == [r.json()["id"]]
+
+
+def test_identify_movie_does_not_schedule_episode_stage() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert stage_runner.scheduled == []
+
+
+def test_identify_without_a_stage_runner_configured_skips_scheduling() -> None:
+    """No `app.state.episode_stage` (every other test in this module, and
+    real routers-under-test elsewhere): the dependency returns None and
+    identify proceeds exactly as before Task 8."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Some Show", year=2020, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+
+
+def test_identify_without_hold_then_rip_start_schedules_episode_stage() -> None:
+    """C1: with the default config (no review hold) identify creates no Track
+    rows, so the stage it schedules sees nothing to match. rip-start is where
+    the tracks appear, so rip-start must schedule the stage too."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["rip_presets"] = [_movie_preset()]
+    result = MetadataResult(title="Some Show", year=2020, kind="tv", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+        assert r.status_code == 200
+        job_id = r.json()["id"]
+        assert r.json()["status"] == "identified"
+        assert db.rows.get("tracks", []) == []
+        db.rows["jobs"][0].resumed_from_crash = False
+        new = [_track("trk_new", status=TrackStatus.QUEUED, job_id=job_id)]
+        with _patch_select_tracks(new):
+            r2 = client.post(f"/api/ripper/jobs/{job_id}/rip-start", headers=_OWNER_HEADERS)
+    assert r2.status_code == 200
+    assert stage_runner.scheduled == [job_id, job_id]
+
+
+def test_rip_start_movie_does_not_schedule_episode_stage() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})
+    job.media_type = MediaType.MOVIE
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    app = _make_app(db)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client, _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert stage_runner.scheduled == []
+
+
 # --- /identify (TheDiscDB match) ----------------------------------------------
 
 
@@ -2330,7 +2445,7 @@ async def test_resolve_manual_season_beats_label_hint() -> None:
 
     # A later resolve_job re-run (e.g. triggered by a plain field PATCH) must
     # not let the lower-tier label hint reclaim the operator's season.
-    changed = await resolve_job(db, job2)
-    assert changed == 0
+    outcome = await resolve_job(db, job2)
+    assert outcome.changed == 0
     assert job2.season == 5
     assert job2.identity_provenance.get("season") == "manual"

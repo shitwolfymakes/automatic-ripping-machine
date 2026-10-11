@@ -17,6 +17,7 @@ from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_probe import load_configured_gpus
 from arm_backend.gpu_probe_runner import GpuProbeRunner
+from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.drive_scanner import DriveScanner
@@ -39,6 +40,7 @@ from arm_backend.routers import (
     drives,
     files as files_router,
     health,
+    identity as identity_router,
     images as images_router,
     jobs,
     logs as logs_router,
@@ -196,6 +198,12 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
     app.state.ws_hub = WSHub()
+    # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
+    # request path, triggered by identify/resolve/PATCH (routers) and the
+    # startup sweep below. One SourceHttp per source id lives on the runner
+    # for its whole lifetime (rate limit / cache / backoff state, and TVDB's
+    # login token on the provider built from it).
+    app.state.episode_stage = EpisodeStageRunner(SessionLocal, http, app.state.ws_hub)
 
     from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore
 
@@ -214,6 +222,18 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
             logger.info("backend startup: resumed %d crashed rip(s)", swept)
     except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup crash-recovery sweep failed: %s", exc)
+
+    # Episode stage startup sweep (Review Focus 5): schedule the background
+    # episode stage once for every TV-candidate job that never got an
+    # episode-source entry (e.g. the backend restarted between identify and
+    # the runner picking it up).
+    try:
+        swept = await app.state.episode_stage.sweep_startup()
+        # Only hit when an eligible job exists; sweep logic is unit-tested in test_stage_runner.
+        if swept:  # pragma: no cover
+            logger.info("backend startup: scheduled episode stage for %d job(s)", swept)
+    except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
+        logger.exception("startup episode-stage sweep failed: %s", exc)
 
     # No-transcode-mode: the dispatcher now always runs, even for a
     # ripper-only deployment (ARM_TRANSCODE_CAPABLE=false, no remote docker
@@ -388,6 +408,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
         # cancelled probe removes its container.
         ("gpu probe runner", gpu_probe_runner.shutdown),
         ("transcode dispatcher", _stop_transcode_dispatcher),
+        ("episode stage runner", app.state.episode_stage.shutdown),
         ("metadata dispatcher", app.state.dispatcher.aclose),
     ]
 
@@ -418,6 +439,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(ripper.router)
 app.include_router(jobs.router)
+app.include_router(identity_router.router)
 app.include_router(drives.router)
 app.include_router(sessions.router)
 app.include_router(session_routes.router)

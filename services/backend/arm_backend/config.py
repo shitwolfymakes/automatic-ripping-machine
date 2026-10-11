@@ -217,6 +217,7 @@ class Settings(BaseSettings):
     ARM_TMDB_BASE_URL: str = "https://api.themoviedb.org/3"
     ARM_OMDB_BASE_URL: str = "https://www.omdbapi.com/"
     ARM_TVDB_BASE_URL: str = "https://api4.thetvdb.com/v4"
+    ARM_TVMAZE_BASE_URL: str = "https://api.tvmaze.com"
     ARM_MUSICBRAINZ_BASE_URL: str = "https://musicbrainz.org/ws/2"
     ARM_ARMSERVER_BASE_URL: str = "https://1337server.pythonanywhere.com/api/v1/"
 

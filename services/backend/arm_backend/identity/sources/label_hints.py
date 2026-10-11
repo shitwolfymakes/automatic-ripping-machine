@@ -125,6 +125,9 @@ class LabelSource:
             return "no volume label"
         return None
 
+    def inputs(self, ctx: JobContext) -> dict[str, Any]:
+        return {"volume_label": ctx.scan.volume_label or ""}
+
     def run(self, ctx: JobContext) -> SourceClaims:
         label = ctx.scan.volume_label or ""
         hints = parse_label(label)
@@ -148,7 +151,7 @@ class LabelSource:
             and (hints.season is not None or hints.disc_number is not None or hints.disc_total is not None)
         ):
             fields["title"] = hints.title
-        return SourceClaims(run_at=ctx.now, status="ok", inputs={"volume_label": label}, job=JobClaim(**fields))
+        return SourceClaims(run_at=ctx.now, status="ok", inputs=self.inputs(ctx), job=JobClaim(**fields))
 
 
 LABEL = LabelSource()

@@ -7,11 +7,13 @@ from arm_common.schemas.identity import SourceClaims, TrackClaim
 
 from arm_backend.identity.proposals import (
     claims_of,
+    clear_pin,
     put_source,
     record_manual_job,
     record_manual_track,
     record_preset,
     revert_manual_track,
+    set_pin,
 )
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
@@ -50,6 +52,63 @@ def test_put_source_preserves_other_metadata_and_reassigns_dict() -> None:
     assert job.metadata_json is not before  # SQLAlchemy JSON change detection needs a new object
     assert job.metadata_json["scan_result"] == {"x": 1}
     assert job.metadata_json["identity_claims"]["sources"]["thediscdb"]["tracks"]["1"] == {"episode": 3}
+
+
+def test_put_source_error_keeps_last_good() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(episode=3)}))
+    put_source(job, "thediscdb", SourceClaims(run_at=NOW, status="error", detail="TimeoutError: boom"))
+    entry = claims_of(job).sources["thediscdb"]
+    assert entry.status == "ok" and entry.tracks["1"].episode == 3
+    assert entry.extra["last_error"]["detail"] == "TimeoutError: boom"
+
+
+def test_put_source_error_with_equal_inputs_keeps_last_good() -> None:
+    job = _job()
+    put_source(
+        job,
+        "label",
+        SourceClaims(status="ok", inputs={"volume_label": "LOST_S2D3"}, tracks={"1": TrackClaim(episode=3)}),
+    )
+    put_source(job, "label", SourceClaims(status="error", inputs={"volume_label": "LOST_S2D3"}, detail="boom"))
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "ok" and entry.tracks["1"].episode == 3
+    assert entry.extra["last_error"]["detail"] == "boom"
+
+
+def test_put_source_error_with_different_inputs_replaces() -> None:
+    # The kept claims would describe a different disc input: store the error, claims cleared.
+    job = _job()
+    put_source(
+        job,
+        "label",
+        SourceClaims(status="ok", inputs={"volume_label": "LOST_S2D3"}, tracks={"1": TrackClaim(episode=3)}),
+    )
+    put_source(job, "label", SourceClaims(status="error", inputs={"volume_label": "LOST_S2D4"}, detail="boom"))
+    entry = claims_of(job).sources["label"]
+    assert entry.status == "error" and entry.tracks == {}
+    assert entry.inputs == {"volume_label": "LOST_S2D4"}
+
+
+def test_put_source_error_after_skipped_replaces() -> None:
+    job = _job()
+    put_source(job, "bd_title", SourceClaims(status="skipped", detail="no BDMT disc title"))
+    put_source(job, "bd_title", SourceClaims(status="error", detail="boom"))
+    entry = claims_of(job).sources["bd_title"]
+    assert entry.status == "error" and entry.detail == "boom"
+
+
+def test_put_source_error_without_prior_ok_is_stored() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(status="error", detail="x"))
+    assert claims_of(job).sources["thediscdb"].status == "error"
+
+
+def test_put_source_skipped_replaces_ok() -> None:
+    job = _job()
+    put_source(job, "thediscdb", SourceClaims(tracks={"1": TrackClaim(episode=3)}))
+    put_source(job, "thediscdb", SourceClaims(status="skipped", detail="no key"))
+    assert claims_of(job).sources["thediscdb"].status == "skipped"
 
 
 def test_record_manual_track_maps_attributes_and_merges() -> None:
@@ -138,3 +197,17 @@ def test_record_preset_merges_by_source_ref() -> None:
     record_preset(job, [_track("3")], now=NOW)
     tracks = claims_of(job).sources["preset"].tracks
     assert {k: v.selected for k, v in tracks.items()} == {"1": True, "2": False, "3": True}
+
+
+def test_set_pin_and_clear_pin() -> None:
+    job = _job()
+    set_pin(job, "episode", "episodes_tmdb")
+    assert claims_of(job).pin == {"episode": "episodes_tmdb"}
+    clear_pin(job, "episode")
+    assert claims_of(job).pin == {}
+
+
+def test_clear_pin_noop_when_nothing_pinned() -> None:
+    job = _job()
+    clear_pin(job, "episode")
+    assert claims_of(job).pin == {}
