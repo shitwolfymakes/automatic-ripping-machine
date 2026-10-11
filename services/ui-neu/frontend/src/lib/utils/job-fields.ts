@@ -61,7 +61,11 @@ export function readJobMetadata(
 		v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 	const identity = asRecord(md.identity);
 	const ext = asRecord(identity.external_ids);
-	const armServer = asRecord(asRecord(md.provider_raw).arm_server);
+	const providerRaw = asRecord(md.provider_raw);
+	const armServer = asRecord(providerRaw.arm_server);
+	// Rows from before the typed sections keep their merged provider payload
+	// under provider_raw.legacy (migration 0032).
+	const legacy = asRecord(providerRaw.legacy);
 	const music = asRecord(md.music);
 
 	const imdb = asScalarString(ext.imdb);
@@ -70,18 +74,21 @@ export function readJobMetadata(
 	if (tmdb !== undefined) out.tmdb_id = tmdb;
 	const tvdb = asScalarString(ext.tvdb);
 	if (tvdb !== undefined) out.tvdb_id = tvdb;
-	const vt = asScalarString(armServer.video_type);
-	if (vt !== undefined) {
-		out.video_type = vt;
-	} else if (job?.media_type) {
+	// job.media_type is the authoritative column (set at identify, correctable at
+	// resolve); the provider's own video_type is only a fallback for rows without it.
+	if (job?.media_type) {
 		out.video_type = MEDIA_TYPE_TO_VIDEO_TYPE[job.media_type] ?? job.media_type;
+	} else {
+		const vt = asScalarString(armServer.video_type) ?? asScalarString(legacy.video_type);
+		if (vt !== undefined) out.video_type = vt;
 	}
 	const artist = asScalarString(music.artist);
 	if (artist !== undefined) out.artist = artist;
 	const album = asScalarString(music.album);
 	if (album !== undefined) out.album = album;
-	if (typeof armServer.multi_title === 'boolean') out.multi_title = armServer.multi_title;
-	const source = asScalarString(armServer.source_type);
+	const multiTitle = typeof armServer.multi_title === 'boolean' ? armServer.multi_title : legacy.multi_title;
+	if (typeof multiTitle === 'boolean') out.multi_title = multiTitle;
+	const source = asScalarString(armServer.source_type) ?? asScalarString(legacy.source_type);
 	if (source !== undefined) out.source_type = source;
 
 	const scan = md.scan_result;
