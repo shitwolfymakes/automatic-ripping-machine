@@ -90,7 +90,9 @@ def _to_view(cfg: Config) -> ConfigView:
         max_parallel_transcodes=int(cfg.max_parallel_transcodes) if cfg.max_parallel_transcodes is not None else 1,
         max_parallel_iso_rips=int(cfg.max_parallel_iso_rips or 1),
         # None-coerce covers rows/fixtures predating the column (NULL = enabled).
-        transcode_enabled=cfg.transcode_enabled is not False,
+        # A deployment that cannot transcode reports disabled, as every
+        # enforcement point already treats it.
+        transcode_enabled=effective_transcode_capable(settings) and cfg.transcode_enabled is not False,
         transcode_capable=effective_transcode_capable(settings),
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),

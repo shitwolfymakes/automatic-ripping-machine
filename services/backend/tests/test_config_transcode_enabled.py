@@ -99,6 +99,17 @@ def test_null_column_reads_as_enabled(client: TestClient, config_row: Config) ->
     assert r.json()["transcode_enabled"] is True
 
 
+def test_not_capable_reads_as_disabled(
+    client: TestClient, config_row: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The column still defaults to true on a ripper-only box; the view must not say so.
+    monkeypatch.setattr("arm_backend.routers.config.settings", _settings(ARM_TRANSCODE_CAPABLE=False))
+    assert config_row.transcode_enabled is True
+    body = client.get("/api/config").json()
+    assert body["transcode_capable"] is False
+    assert body["transcode_enabled"] is False
+
+
 def test_patch_toggle_roundtrip(client: TestClient, config_row: Config) -> None:
     r = client.patch("/api/config", json={"transcode_enabled": False})
     assert r.status_code == 200
