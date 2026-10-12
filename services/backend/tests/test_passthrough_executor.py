@@ -562,6 +562,34 @@ async def test_disc_backup_is_moved_as_a_folder(tmp_path: Path) -> None:
     assert sent[2]["payload"]["size_bytes"] == 3
 
 
+async def test_a_same_filesystem_folder_move_does_not_size_the_tree_first(tmp_path: Path, monkeypatch: Any) -> None:
+    """D-127 follow-up: a same-filesystem move is a rename. Sizing the tree
+    for progress is needed only once a copy starts copying bytes."""
+    import arm_backend.passthrough_executor as mod
+
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, _sent = _hub_with_recorder()
+    sized: list[Path] = []
+    monkeypatch.setattr(mod, "tree_size", lambda root: sized.append(root) or 0)
+
+    ok = await execute_passthrough_task(
+        db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path / "m"))
+    )
+
+    assert ok is True and sized == []
+
+
+def test_copy_progress_sizes_the_tree_on_the_first_copied_bytes() -> None:
+    from arm_backend.passthrough_executor import _CopyProgress
+
+    progress = _CopyProgress(sizer=lambda: 300)
+    assert progress.total == 0
+    progress.add(100)
+    progress.add(50)
+    assert (progress.total, progress.done) == (300, 150)
+
+
 async def test_disc_backup_onto_an_existing_folder_fails_and_keeps_it(tmp_path: Path) -> None:
     raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
     media_root = tmp_path / "media"

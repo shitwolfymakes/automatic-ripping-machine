@@ -70,13 +70,20 @@ PROGRESS_INTERVAL_SECONDS = 2.0
 
 
 class _CopyProgress:
-    """Bytes copied so far; written by the worker thread only."""
+    """Bytes copied so far; written by the worker thread only.
 
-    def __init__(self) -> None:
+    `sizer` gives the total on the first copied bytes: a same-filesystem
+    move is a rename that copies nothing, so it never walks the tree."""
+
+    def __init__(self, sizer: Callable[[], int] | None = None) -> None:
         self.total = 0
         self.done = 0
+        self._sizer = sizer
 
     def add(self, n: int) -> None:
+        if self._sizer is not None:
+            self.total = self._sizer()
+            self._sizer = None
         self.done += n
 
 
@@ -216,7 +223,8 @@ async def execute_passthrough_task(
             is_folder = track.kind == TrackKind.DISC_BACKUP
             mover = move_tree if is_folder else transcode_none
             cancel = _cancel_events[task_id] = threading.Event()
-            progress = _CopyProgress()
+            source = Path(track_output_path)
+            progress = _CopyProgress(sizer=(lambda: tree_size(source)) if is_folder else None)
             stop_publisher = asyncio.Event()
             publisher = asyncio.ensure_future(
                 _publish_progress(db, hub, task_id, job_id, source_track_id, progress, stop_publisher)
@@ -225,7 +233,7 @@ async def execute_passthrough_task(
                 # Move and chown together in the worker thread: a backup
                 # tree's chown walks every file, too much for the event loop.
                 size = await asyncio.to_thread(
-                    _move_and_chown, mover, Path(track_output_path), final, settings, is_folder, cancel, progress
+                    _move_and_chown, mover, source, final, settings, is_folder, cancel, progress
                 )
             except CopyCancelled:
                 error = "cancelled"
@@ -376,7 +384,8 @@ def _move_and_chown(
     cancel: threading.Event,
     progress: _CopyProgress,
 ) -> int:
-    progress.total = tree_size(source) if is_folder else source.stat().st_size
+    if not is_folder:
+        progress.total = source.stat().st_size
     size = mover(source, final, cancel=cancel, on_bytes=progress.add)
     if settings.ARM_TRANSCODE_PUID:
         _best_effort_chown(final, settings, tree=is_folder)
