@@ -5,6 +5,7 @@
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/sessionRoutes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
+	import { mediaTypesCompatible } from '$lib/utils/sessions';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
@@ -36,8 +37,16 @@
 		return routes.find((r) => r.media_type === mediaType && r.disc_type === discType);
 	}
 
-	function sessionsFor(mediaType: MediaType): SessionView[] {
-		return sessions.filter((s) => s.media_type === mediaType);
+	// Every session the Backend would accept for this row (same compatibility
+	// rule as PUT /api/session-routes), plus the one already routed, so a live
+	// route never renders as a blank select.
+	function sessionsFor(mediaType: MediaType, route: SessionRouteView | undefined): SessionView[] {
+		const options = sessions.filter((s) => mediaTypesCompatible(mediaType, s.media_type));
+		if (route && !options.some((s) => s.id === route.session_id)) {
+			const routed = sessions.find((s) => s.id === route.session_id);
+			if (routed) options.unshift(routed);
+		}
+		return options;
 	}
 
 	// A route is grid-covered when both its media_type and disc_type appear
@@ -151,7 +160,6 @@
 	{:else}
 		<div class="stack">
 			{#each MEDIA_TYPES as mt (mt.key)}
-				{@const options = sessionsFor(mt.key)}
 				<div>
 					<h4 class="eyebrow session-routes-card-group-title">{mt.label}</h4>
 					<div class="stack stack-sm">
@@ -159,6 +167,7 @@
 							{@const route = routeFor(mt.key, scope.key)}
 							{@const key = rowKey(mt.key, scope.key)}
 							{@const rowBusy = pending.has(key)}
+							{@const options = sessionsFor(mt.key, route)}
 							<div class="panel-section session-routes-card-row">
 								<span class="session-routes-card-scope-label">{scope.label}</span>
 								<select

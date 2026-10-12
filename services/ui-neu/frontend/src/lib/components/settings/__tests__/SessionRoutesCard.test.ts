@@ -89,6 +89,27 @@ describe('SessionRoutesCard', () => {
 		expect(screen.queryByText(/overrides every route/i)).not.toBeInTheDocument();
 	});
 
+	it('offers every session the backend accepts for a row and shows a cross-type route (D-034)', async () => {
+		const isoSession = { ...movieSession, id: 'ses_iso', name: 'ISO dump', media_type: 'iso' } as SessionView;
+		const tvSession = { ...movieSession, id: 'ses_tv', name: 'TV -> MKV', media_type: 'tv' } as SessionView;
+		fetchSessionRoutes.mockResolvedValue([
+			{ id: 'srt_m', media_type: 'movie', disc_type: null, session_id: 'ses_iso', created_at: null, updated_at: null }
+		]);
+		fetchSessions.mockResolvedValue([musicSession, movieSession, isoSession, tvSession]);
+		renderComponent(SessionRoutesCard, { props: {} });
+
+		const movieAny = (await screen.findByLabelText(/movie.*any disc session/i)) as HTMLSelectElement;
+		await waitFor(() => expect(movieAny.value).toBe('ses_iso'));
+		const values = (el: HTMLSelectElement) =>
+			[...el.options]
+				.map((o) => o.value)
+				.filter(Boolean)
+				.sort();
+		expect(values(movieAny)).toEqual(['ses_iso', 'ses_movie', 'ses_tv']);
+		expect(values(screen.getByLabelText(/music.*cd session/i) as HTMLSelectElement)).toEqual(['ses_music']);
+		expect(values(screen.getByLabelText(/data.*dvd session/i) as HTMLSelectElement)).toEqual(['ses_iso']);
+	});
+
 	it('renders a row for every media type x disc-scope combination', async () => {
 		fetchSessionRoutes.mockResolvedValue([]);
 		fetchSessions.mockResolvedValue([musicSession, movieSession]);
