@@ -95,19 +95,29 @@ async def run_script(path: Path, *, title: str, body: str, env: dict[str, str], 
             error=f"script not executable: {path.name} (chmod +x it on the host)",
         )
     started = time.monotonic()
-    proc = await asyncio.create_subprocess_exec(
-        "/usr/bin/env",
-        "bash",
-        str(path),
-        title,
-        body,
-        env=env,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        # Its own process group, so a timeout reaches whatever bash is
-        # waiting on (curl, sleep, an SMTP client), not just bash.
-        start_new_session=True,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "/usr/bin/env",
+            "bash",
+            str(path),
+            title,
+            body,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            # Its own process group, so a timeout reaches whatever bash is
+            # waiting on (curl, sleep, an SMTP client), not just bash.
+            start_new_session=True,
+        )
+    except OSError as exc:  # E2BIG, EMFILE, ENOMEM: a failed run, never an escaped exception
+        return BashRunResult(
+            ok=False,
+            exit_code=None,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            stdout="",
+            stderr="",
+            error=f"script could not start: {exc.strerror or exc}: {path.name}",
+        )
     out, err = bytearray(), bytearray()
     readers = [asyncio.ensure_future(_drain(proc.stdout, out)), asyncio.ensure_future(_drain(proc.stderr, err))]
     try:

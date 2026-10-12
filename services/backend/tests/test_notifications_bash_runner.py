@@ -164,3 +164,12 @@ async def test_run_script_background_child_does_not_hold_the_result(tmp_path: Pa
         assert time.monotonic() - started < 3
     finally:
         os.kill(int(pidfile.read_text()), 9)
+
+
+@pytest.mark.asyncio
+async def test_run_script_spawn_failure_is_a_failed_run(tmp_path: Path) -> None:
+    """D-042: an OSError from exec (here E2BIG) comes back as a result, not an exception."""
+    p = _script(tmp_path, "ok.sh", "exit 0\n")
+    res = await run_script(p, title="T", body="B", env={"BIG": "x" * 300_000}, timeout_seconds=5)
+    assert not res.ok and res.exit_code is None
+    assert res.error == "script could not start: Argument list too long: ok.sh"

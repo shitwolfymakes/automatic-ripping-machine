@@ -61,11 +61,19 @@ def _clean_inputs(raw: Any) -> dict[str, str]:
     }
 
 
+# Same bound as a rendered body: a width spec ({job_title:>300000}) must not
+# grow an env var past the kernel's per-string exec limit (128 KiB).
+INPUT_RENDER_CAP = 16000
+
+
 def _render_input(key: str, value: str, context: dict[str, str]) -> str:
     try:
-        return value.format_map(context)
+        rendered = value.format_map(context)
     except (KeyError, IndexError, ValueError) as exc:
         raise HookError(f"input {key} references an unknown variable: {exc}") from exc
+    if len(rendered) > INPUT_RENDER_CAP:
+        raise HookError(f"input {key} renders to {len(rendered)} characters (limit {INPUT_RENDER_CAP})")
+    return rendered
 
 
 def prepare_run(
