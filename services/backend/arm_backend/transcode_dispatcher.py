@@ -90,6 +90,9 @@ VARIANT_PULL_RETRY_SECONDS = 600.0
 # held/queued encode rows at the head of the FIFO queue can never crowd a
 # passthrough task further back out of the scan window.
 _QUEUE_SCAN_LIMIT = 50
+# While `probe()` says the transcode image or docker host is unusable, encode
+# spawns are skipped and one line says why, repeated at most this often.
+_PROBE_HOLD_LOG_SECONDS = 600
 
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
 # remote end) surfaces as one of these, either raw or wrapped inside
@@ -228,6 +231,8 @@ class TranscodeDispatcher:
         # Surfaced by /api/system/diagnostics so a crash-looping or
         # un-pullable transcoder is visible in the UI, not only in the log.
         self.last_spawn_error: str | None = None
+        # (detail, monotonic time) of the last "spawns held" log line.
+        self._probe_hold_logged: tuple[str | None, float] | None = None
         self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
@@ -570,6 +575,9 @@ class TranscodeDispatcher:
         from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
 
         enabled = await transcode_enabled_now(db)
+        # `probe()` (cached, blocking) is consulted once per tick, and only
+        # when an encode task is actually ready to spawn.
+        host_probe: tuple[bool, str | None] | None = None
 
         in_progress = (
             (
@@ -668,6 +676,15 @@ class TranscodeDispatcher:
                     # No free slot this tick; later passthrough tasks in the
                     # queue must still run, so `continue` (not `break`).
                     continue
+                if host_probe is None:
+                    host_probe = await asyncio.to_thread(self.probe)
+                    self._log_probe_hold(host_probe)
+                if not host_probe[0]:
+                    # A missing image or unreachable host fails every spawn
+                    # the same way; hold the task instead of looping a
+                    # traceback per tick or burning its attempts.
+                    held_encode += 1
+                    continue
                 # No separate re-verify needed here: the fresh,
                 # `populate_existing`-forced, FOR UPDATE-locked load at the
                 # top of this iteration already confirmed `task` is
@@ -753,6 +770,7 @@ class TranscodeDispatcher:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
                         await db.commit()
+                    await self._count_failed_spawn(db, task_id)
                 finally:
                     # Committed (other sessions now read BUSY) or rolled back
                     # and released: either way the in-process marker is done.
@@ -764,6 +782,38 @@ class TranscodeDispatcher:
             )
         await db.commit()
         return spawned
+
+    def _log_probe_hold(self, host_probe: tuple[bool, str | None]) -> None:
+        ok, detail = host_probe
+        if ok:
+            if self._probe_hold_logged is not None:
+                logger.info("transcode docker host and image ok again; encode spawns resume")
+                self._probe_hold_logged = None
+            return
+        now = time.monotonic()
+        last = self._probe_hold_logged
+        if last is None or last[0] != detail or now - last[1] >= _PROBE_HOLD_LOG_SECONDS:
+            logger.warning("transcode spawns held: %s", detail)
+            self._probe_hold_logged = (detail, now)
+
+    async def _count_failed_spawn(self, db: AsyncSession, task_id: str) -> None:
+        """A spawn that failed although the host probe passed is likely
+        task-specific (a bad mount, a preset the image rejects): count it
+        toward ARM_TRANSCODE_MAX_ATTEMPTS so it ends instead of looping."""
+        task = (
+            await db.execute(
+                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if task is None or task.status != TranscodeTaskStatus.QUEUED:
+            return
+        task.attempts = (task.attempts or 0) + 1
+        if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+            await self._fail_queued_task(
+                db, task, f"transcode container could not start (attempts={task.attempts}): {self.last_spawn_error}"
+            )
+            return
+        await db.commit()
 
     async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
         return await resolve_preset_for_task(db, task)

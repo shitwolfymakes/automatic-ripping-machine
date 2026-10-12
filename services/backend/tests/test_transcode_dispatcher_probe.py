@@ -498,3 +498,81 @@ async def test_last_spawn_error_set_on_failure_and_cleared_on_next_success() -> 
     spawned = await d.spawn_pending(db)
     assert spawned == 1
     assert d.last_spawn_error is None
+
+
+def _one_encode_task_db(attempts: int = 0) -> FakeSession:
+    db = FakeSession()
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_probe",
+            session_id="ses_probe",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000099",
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_probe",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            encoder="preset",
+        )
+    ]
+    db.rows["gpus"] = []
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_1",
+            session_application_id="sap_probe",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=attempts,
+            progress_pct=0,
+            output_path="a.mkv",
+            created_at=datetime.now(UTC),
+        )
+    ]
+    return db
+
+
+async def test_missing_image_holds_spawns_with_one_rate_limited_line(caplog) -> None:
+    """D-121: with the base image absent every spawn fails the same way; the
+    tick holds the task (no attempts burned) and logs once, not per tick."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="arm-transcode:test")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        for _ in range(3):
+            assert await d.spawn_pending(db) == 0
+    d._docker.containers.run.assert_not_called()
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED and task.attempts == 0
+    held = [r for r in caplog.records if "transcode spawns held" in r.getMessage()]
+    assert len(held) == 1 and "image arm-transcode:test not present" in held[0].getMessage()
+
+
+async def test_spawn_failures_count_toward_max_attempts() -> None:
+    """D-121: a spawn that fails with the host healthy is task-specific; it
+    must end at ARM_TRANSCODE_MAX_ATTEMPTS instead of looping forever."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_MAX_ATTEMPTS=2)
+    d._docker.containers.run.side_effect = RuntimeError("invalid mount config")
+    await d.spawn_pending(db)
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED and task.attempts == 1
+    await d.spawn_pending(db)
+    assert task.status == TranscodeTaskStatus.FAILED
+    assert task.last_error == "transcode container could not start (attempts=2): RuntimeError: invalid mount config"

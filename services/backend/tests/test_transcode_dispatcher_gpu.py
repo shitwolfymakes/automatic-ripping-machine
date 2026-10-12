@@ -993,6 +993,8 @@ async def test_vaapi_spawn_falls_back_to_base_when_variant_missing() -> None:
     docker_client.images.get.side_effect = docker_errors.ImageNotFound("nope")
     docker_client.images.pull.side_effect = docker_errors.NotFound("no such tag")
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
     docker_client.images.pull.assert_called_once_with("arm-transcode", tag="latest-amd")
@@ -1013,6 +1015,8 @@ async def test_vaapi_spawn_pulls_a_missing_variant_and_uses_it() -> None:
     disp = TranscodeDispatcher(
         _settings(ARM_TRANSCODE_IMAGE="reg:5000/ns/arm-transcode:v3.1.0"), _db_factory(db), docker_client, WSHub()
     )
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     docker_client.images.pull.assert_called_once_with("reg:5000/ns/arm-transcode", tag="v3.1.0-amd")
     assert docker_client.containers.run.call_args.kwargs["image"] == "reg:5000/ns/arm-transcode:v3.1.0-amd"
@@ -1025,6 +1029,8 @@ async def test_nvenc_spawn_uses_base_image_and_never_checks_a_variant() -> None:
     )
     docker_client = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
     # NVENC has no derived variant, so the image-exists probe never runs.
@@ -1048,6 +1054,8 @@ async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None
     disp = TranscodeDispatcher(
         _settings(ARM_TRANSCODE_IMAGE_QSV="custom-qsv:latest"), _db_factory(db), docker_client, WSHub()
     )
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "custom-qsv:latest"
     docker_client.images.get.assert_not_called()
