@@ -12,7 +12,7 @@ from arm_ripper.makemkv_sdf import SdfResult, refresh_makemkv_sdf
 @respx.mock
 async def test_report_sdf_status_posts_body():
     route = respx.post("https://bk/api/ripper/sdf-status").mock(return_value=httpx.Response(204))
-    client = BackendClient("https://bk", "tok", "host1")
+    client = BackendClient("https://bk", "tok", "host1", drive_id="drv_1")
     await client.report_sdf_status(state=MakemkvSdfState.UPDATED, age_days=0)
     await client.close()
     assert route.called

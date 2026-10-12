@@ -92,7 +92,7 @@ async def test_probe_never_raises_on_timeout(fake_exec, monkeypatch):
 @respx.mock
 async def test_report_makemkv_key_status_posts_body():
     route = respx.post("https://bk/api/ripper/makemkv-key-status").mock(return_value=httpx.Response(204))
-    client = BackendClient("https://bk", "tok", "host1")
+    client = BackendClient("https://bk", "tok", "host1", drive_id="drv_1")
     await client.report_makemkv_key_status(state=MakemkvKeyState.VALID, detail="ok")
     await client.close()
     assert route.called

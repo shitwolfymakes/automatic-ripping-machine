@@ -385,6 +385,7 @@ async def amain() -> None:
         settings.ARM_BACKEND_URL,
         settings.ARM_SERVICE_TOKEN,
         hostname=settings.HOSTNAME,
+        drive_id=settings.ARM_DRIVE_ID,
     )
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
     ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)
