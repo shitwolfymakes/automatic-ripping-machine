@@ -182,6 +182,9 @@ class EpisodeStageRunner:
         # the latest state on its own once it does start.
         self._started: set[str] = set()
         self._rerun: set[str] = set()
+        # Jobs a caller is about to write (`invalidate` .. `release`): no run
+        # may start for them until the caller's write has landed.
+        self._held: set[str] = set()
         self._shutdown = False
         self._run_slots = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
 
@@ -213,6 +216,10 @@ class EpisodeStageRunner:
         called."""
         if self._shutdown:
             return
+        if job_id in self._held:
+            # A caller is mid-write for this job; run once it releases.
+            self._rerun.add(job_id)
+            return
         if job_id in self._pending:
             if job_id in self._started:
                 self._rerun.add(job_id)
@@ -226,7 +233,7 @@ class EpisodeStageRunner:
             # coroutine at all, and would otherwise never clear `_pending`.
             self._pending.pop(job_id, None)
             self._started.discard(job_id)
-            if job_id in self._rerun and not self._shutdown:
+            if job_id in self._rerun and job_id not in self._held and not self._shutdown:
                 self._rerun.discard(job_id)
                 self.schedule(job_id)
 
@@ -242,15 +249,29 @@ class EpisodeStageRunner:
 
         Reuses `schedule`'s rerun-once bookkeeping (Task 8): any pending run,
         started or still queued behind the concurrency cap, gets marked for
-        exactly one rerun, which applies fresh outcomes once the caller's own
-        write has landed. A queued run must be marked too (R1): it can take
+        exactly one rerun. A queued run must be marked too (R1): it can take
         its slot and compute while the caller is still computing, then apply
-        after the caller commits. A no-op when nothing is pending for this
-        job at all, or after `shutdown`."""
+        after the caller commits.
+
+        It also holds the job until the caller calls `release`: the rerun,
+        and any `schedule` that arrives meanwhile, waits for it. Starting the
+        rerun as soon as the invalidated run finished would snapshot the job
+        before the caller's commit and then overwrite that write (D-093).
+        The caller must `release` in a `finally`. A no-op after `shutdown`."""
         if self._shutdown:
             return
+        self._held.add(job_id)
         if job_id in self._pending:
             self._rerun.add(job_id)
+
+    def release(self, job_id: str) -> None:
+        """End an `invalidate` hold once the caller's write has committed (or
+        failed): run the rerun it deferred, if any, against the current
+        state."""
+        self._held.discard(job_id)
+        if job_id in self._rerun and job_id not in self._pending and not self._shutdown:
+            self._rerun.discard(job_id)
+            self.schedule(job_id)
 
     async def drain(self) -> None:
         """Wait for every scheduled run to finish, including any

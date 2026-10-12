@@ -188,9 +188,25 @@ async def match_identity(
     if req.apply:
         # F4 part 2: discard any in-flight background run's about-to-be-
         # stale outcome for this job BEFORE we start our own network round-
-        # trip, so it can't clobber the write we're about to commit.
+        # trip, so it can't clobber the write we're about to commit. The
+        # hold this places defers the rerun until `release` below, after
+        # our commit (D-093).
         stage_runner.invalidate(job_id)
+        try:
+            return await _match_identity(job_id, job, req, db, hub, stage_runner)
+        finally:
+            stage_runner.release(job_id)
+    return await _match_identity(job_id, job, req, db, hub, stage_runner)
 
+
+async def _match_identity(
+    job_id: str,
+    job: Job,
+    req: MatchRequest,
+    db: AsyncSession,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner,
+) -> MatchPreview:
     cfg = await _get_config(db)
     providers = stage_runner.providers(cfg)
     source_id = EPISODE_SOURCE_BY_SETTING[req.source] if req.source is not None else None

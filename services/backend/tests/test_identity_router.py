@@ -130,6 +130,7 @@ class _FakeStageRunner:
         self._providers = providers
         self.provider_calls: list[Config] = []
         self.invalidate_calls: list[str] = []
+        self.release_calls: list[str] = []
 
     def providers(self, cfg: Config) -> list[Any]:
         self.provider_calls.append(cfg)
@@ -137,6 +138,11 @@ class _FakeStageRunner:
 
     def invalidate(self, job_id: str) -> None:
         self.invalidate_calls.append(job_id)
+
+    def release(self, job_id: str) -> None:
+        # D-093: every invalidate is released, after the router's commit.
+        assert job_id in self.invalidate_calls
+        self.release_calls.append(job_id)
 
 
 @pytest.fixture
@@ -288,6 +294,7 @@ def test_match_preview_writes_nothing(signing_key: bytes) -> None:
     assert job.metadata_json == before
     assert claims_of(job).sources == {}
     assert runner.invalidate_calls == []  # only apply=True invalidates
+    assert runner.release_calls == []
 
 
 def test_match_preview_miss_outcome_has_no_score(signing_key: bytes) -> None:
@@ -342,6 +349,7 @@ def test_match_apply_without_source_stores_claims_no_pin(signing_key: bytes) -> 
     assert any(e["event_type"] == "job.identity_updated" for e in hub.events)
     assert any(e["event_type"] == "track.updated" for e in hub.events)
     assert runner.invalidate_calls == [JOB_ID]
+    assert runner.release_calls == [JOB_ID]  # D-093: released after the commit
     body = r.json()
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
     assert outcome["status"] == "ok"
