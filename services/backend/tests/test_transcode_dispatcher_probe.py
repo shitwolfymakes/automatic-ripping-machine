@@ -564,6 +564,40 @@ async def test_missing_image_holds_spawns_with_one_rate_limited_line(caplog) -> 
     assert len(held) == 1 and "image arm-transcode:test not present" in held[0].getMessage()
 
 
+async def test_a_missing_base_image_is_pulled_before_spawns_are_held() -> None:
+    """D-121 follow-up: before the probe gated spawning, containers.run pulled
+    a missing image. A pruned host must still pull it instead of holding
+    every encode task until someone pulls it by hand."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="ghcr.io/arm/arm-transcode:3.0.0")
+    pulled: list[tuple[str, str]] = []
+
+    def _get(image: str) -> object:
+        if not pulled:
+            raise docker.errors.ImageNotFound("nope")
+        return object()
+
+    def _pull(repo: str, tag: str) -> None:
+        pulled.append((repo, tag))
+
+    d._docker.images.get.side_effect = _get
+    d._docker.images.pull.side_effect = _pull
+    assert await d.spawn_pending(db) == 1
+    assert pulled == [("ghcr.io/arm/arm-transcode", "3.0.0")]
+    d._docker.containers.run.assert_called_once()
+
+
+async def test_a_failed_base_image_pull_holds_and_is_not_retried_every_tick() -> None:
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="arm-transcode:test")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    d._docker.images.pull.side_effect = docker.errors.APIError("no registry")
+    for _ in range(3):
+        assert await d.spawn_pending(db) == 0
+    assert d._docker.images.pull.call_count == 1
+    d._docker.containers.run.assert_not_called()
+
+
 async def test_spawn_failures_count_toward_max_attempts() -> None:
     """D-121: a spawn that fails with the host healthy is task-specific; it
     must end at ARM_TRANSCODE_MAX_ATTEMPTS instead of looping forever."""

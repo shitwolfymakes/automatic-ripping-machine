@@ -63,6 +63,10 @@ class TtlProbe:
         self._cache = (now, result)
         return result
 
+    def invalidate(self) -> None:
+        """Forget the cached answer; the next call probes again."""
+        self._cache = None
+
 
 def _tls_context() -> ssl.SSLContext:
     ctx = ssl.create_default_context()

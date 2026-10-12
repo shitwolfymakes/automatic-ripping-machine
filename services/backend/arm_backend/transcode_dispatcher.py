@@ -283,8 +283,8 @@ class TranscodeDispatcher:
         # Per-image TtlProbe cache for `image_exists` (one entry per distinct
         # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
         self._image_probes: dict[str, TtlProbe] = {}
-        # Variant image -> time.monotonic() of its last failed pull (see
-        # `variant_available`); separate from the 30 s presence cache above.
+        # Image -> time.monotonic() of its last failed pull (see
+        # `_pull_image`); separate from the 30 s presence cache above.
         self._variant_pull_failed: dict[str, float] = {}
         # One lock per variant image being pulled, so concurrent callers (a
         # spawn and a GPU probe in two worker threads) share a single pull:
@@ -705,7 +705,7 @@ class TranscodeDispatcher:
                     # queue must still run, so `continue` (not `break`).
                     continue
                 if host_probe is None:
-                    host_probe = await asyncio.to_thread(self.probe)
+                    host_probe = await asyncio.to_thread(self._probe_pulling_base_image)
                     self._log_probe_hold(host_probe)
                 if not host_probe[0]:
                     # A missing image or unreachable host fails every spawn
@@ -1070,6 +1070,14 @@ class TranscodeDispatcher:
             return False
         if self.image_exists(image):
             return True
+        return self._pull_image(image, kind="variant", fallback="using the base image")
+
+    def _pull_image(self, image: str, *, kind: str, fallback: str) -> bool:
+        """Pull `image` onto the docker host; True when it is there afterwards.
+        A failed pull is not retried for VARIANT_PULL_RETRY_SECONDS, and
+        concurrent callers for one image share a pull. A digest reference has
+        no tag to pull and is never pulled. Blocking."""
+        assert self._docker is not None
         parts = split_reference(image)
         if parts is None:
             return False
@@ -1081,14 +1089,16 @@ class TranscodeDispatcher:
             if self.image_exists(image):
                 return True
             repo, tag = parts
-            logger.info("variant image %s not present on the docker host; pulling it", image)
+            logger.info("%s image %s not present on the docker host; pulling it", kind, image)
             try:
                 self._docker.images.pull(repo, tag=tag)
-            except Exception as exc:  # noqa: BLE001 - any pull failure means "use the base image"
+            except Exception as exc:  # noqa: BLE001 - any pull failure is reported, then retried later
                 logger.warning(
-                    "could not pull variant image %s (%s); using the base image, next pull attempt in %.0f s",
+                    "could not pull %s image %s (%s); %s, next pull attempt in %.0f s",
+                    kind,
                     image,
                     exc,
+                    fallback,
                     VARIANT_PULL_RETRY_SECONDS,
                 )
                 self._variant_pull_failed[image] = time.monotonic()
@@ -1096,8 +1106,21 @@ class TranscodeDispatcher:
             self._variant_pull_failed.pop(image, None)
             # Drop the cached "absent" answer so the next presence check sees it.
             self._image_probes.pop(image, None)
-            logger.info("pulled variant image %s", image)
+            logger.info("pulled %s image %s", kind, image)
             return True
+
+    def _probe_pulling_base_image(self) -> tuple[bool, str | None]:
+        """`probe()`, but when it fails because the base image is missing, try
+        to pull it first, as docker's own `containers.run` would have before
+        the probe gated spawning. Blocking."""
+        result = self.probe()
+        image = self._settings.ARM_TRANSCODE_IMAGE
+        if result[0] or self._docker is None or self.image_exists(image):
+            return result
+        if not self._pull_image(image, kind="base", fallback="encode tasks stay held"):
+            return result
+        self._probe.invalidate()
+        return self.probe()
 
     def _missing_variant_notes(self) -> list[str]:
         """One note per vendor that has an enabled GPU row, has a derivable

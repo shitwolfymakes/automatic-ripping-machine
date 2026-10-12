@@ -528,7 +528,7 @@ async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pyt
 
     assert spawned == 1
     # The other off-loop call is the tick's cached host probe.
-    assert [c[0] for c in calls] == [disp.probe, disp._spawn_container]
+    assert [c[0] for c in calls] == [disp._probe_pulling_base_image, disp._spawn_container]
 
 
 async def test_spawn_rebuilds_docker_client_on_dead_ssh_transport(
