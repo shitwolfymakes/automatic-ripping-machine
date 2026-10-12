@@ -149,3 +149,18 @@ async def test_run_script_timeout_kills_the_scripts_children(tmp_path: Path) -> 
     else:
         os.kill(child, 9)
         raise AssertionError("the script's child survived the timeout")
+
+
+@pytest.mark.asyncio
+async def test_run_script_background_child_does_not_hold_the_result(tmp_path: Path) -> None:
+    """D-041: bash exiting 0 is success, even with a backgrounded child still
+    holding stdout/stderr; the output that arrived before the exit is kept."""
+    pidfile = tmp_path / "child.pid"
+    p = _script(tmp_path, "bg.sh", f"echo started; sleep 8 & echo $! > {pidfile}; exit 0\n")
+    started = time.monotonic()
+    res = await run_script(p, title="T", body="B", env={"PATH": os.environ["PATH"]}, timeout_seconds=3)
+    try:
+        assert res.ok and res.exit_code == 0 and res.error is None and res.stdout.strip() == "started"
+        assert time.monotonic() - started < 3
+    finally:
+        os.kill(int(pidfile.read_text()), 9)
