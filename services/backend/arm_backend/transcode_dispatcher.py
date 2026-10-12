@@ -182,14 +182,39 @@ async def count_queued_encode_tasks(db: AsyncSession) -> int:
     that cannot transcode these are held by `spawn_pending` indefinitely."""
     from arm_backend.transcode_apply import is_passthrough_preset
 
+    # One query per table, not per task: the Transcoder page polls this.
     queued = (
         (await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)))
         .scalars()
         .all()
     )
+    if not queued:
+        return 0
+    app_ids = {task.session_application_id for task in queued}
+    session_by_app = {
+        app.id: app.session_id
+        for app in (await db.execute(select(SessionApplication).where(col(SessionApplication.id).in_(app_ids))))
+        .scalars()
+        .all()
+    }
+    preset_by_session = {
+        sess.id: sess.transcode_preset_id
+        for sess in (await db.execute(select(Session).where(col(Session.id).in_(set(session_by_app.values())))))
+        .scalars()
+        .all()
+    }
+    preset_ids = {pid for pid in preset_by_session.values() if pid is not None}
+    presets = {
+        preset.id: preset
+        for preset in (await db.execute(select(TranscodePreset).where(col(TranscodePreset.id).in_(preset_ids))))
+        .scalars()
+        .all()
+    }
     count = 0
     for task in queued:
-        if not is_passthrough_preset(await resolve_preset_for_task(db, task)):
+        session_id = session_by_app.get(task.session_application_id)
+        preset_id = preset_by_session.get(session_id) if session_id is not None else None
+        if not is_passthrough_preset(presets.get(preset_id) if preset_id is not None else None):
             count += 1
     return count
 

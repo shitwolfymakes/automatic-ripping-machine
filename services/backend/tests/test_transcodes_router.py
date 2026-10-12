@@ -278,6 +278,26 @@ def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: by
     assert body["tasks_by_status"] == {"queued": 3} and body["queued_encode_tasks"] == 2
 
 
+async def test_queued_encode_count_does_not_query_per_task() -> None:
+    """D-067 follow-up: the Transcoder page polls this, so it reads each table
+    once rather than three queries per queued task."""
+    from arm_backend.transcode_dispatcher import count_queued_encode_tasks
+
+    db = FakeSession()
+    _seed_encode_and_passthrough_queue(db)
+    real_execute = db.execute
+    statements = 0
+
+    async def _counting(stmt: Any, *a: Any, **kw: Any) -> Any:
+        nonlocal statements
+        statements += 1
+        return await real_execute(stmt, *a, **kw)
+
+    db.execute = _counting  # type: ignore[method-assign]
+    assert await count_queued_encode_tasks(db) == 2  # type: ignore[arg-type]
+    assert statements == 4
+
+
 def test_stats_disabled_gpu_is_not_available(signing_key: bytes) -> None:
     db = FakeSession()
     disabled = _gpu("gpu_off", status=GpuStatus.AVAILABLE)
