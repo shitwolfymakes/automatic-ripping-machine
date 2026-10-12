@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel import col, select
 
 from arm_backend import disc_folders, file_browser, iso_image, iso_prepare
+from arm_backend.auto_session import cancel_parked_applications
 from arm_backend.config import settings
 from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured
@@ -141,6 +142,8 @@ async def _fail_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     job.status = JobStatus.FAILED
     job.ripped_at = datetime.now(UTC)
     db.add(job)
+    # The drain that would fill a parked application never runs now.
+    await cancel_parked_applications(db, job)
     await hub.emit(
         topic="ripper.events",
         event_type="rip.failed",
