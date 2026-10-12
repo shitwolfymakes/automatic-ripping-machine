@@ -196,8 +196,13 @@ def _parked_apps_are_settled(job: Job) -> bool:
     can it never run)? True once the rip is over and identity is not still
     pending: rip-complete drained what it could on a ripped job, and a
     failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
-    parked application is still legitimately waiting for resolve."""
-    return job.status in TERMINAL_JOB_STATUSES and job.status != JobStatus.RIPPED_AWAITING_IDENTIFY
+    parked application is still legitimately waiting for resolve, and so is
+    an unidentified RIPPED_PARTIAL one's (resolve drains both)."""
+    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
+        return False
+    if job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified"):
+        return False
+    return job.status in TERMINAL_JOB_STATUSES
 
 
 def _summarize_transcode_progress(
