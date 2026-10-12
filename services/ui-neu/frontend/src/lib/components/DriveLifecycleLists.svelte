@@ -51,6 +51,8 @@
 	{@const serial = serialLabel(d)}
 	{@const conn = connectionLabel(d)}
 	{@const failure = errors[d.id] ?? (ignoredRow ? null : d.last_error)}
+	<!-- The backend refuses to enroll an unplugged drive (409), so don't offer it. -->
+	{@const absent = d.present === false}
 	<div
 		data-testid={`${ignoredRow ? 'ignored' : 'detected'}-row-${d.id}`}
 		class="drive-lifecycle-lists-row"
@@ -90,7 +92,8 @@
 				{/if}
 				<button
 					data-testid={`enroll-${d.id}`}
-					disabled={!!busy[d.id] || !!enrollDisabledReason}
+					disabled={!!busy[d.id] || !!enrollDisabledReason || absent}
+					title={absent ? 'Not connected; plug the drive in to enroll it' : undefined}
 					onclick={() => run(d.id, 'enroll', () => enrollDrive(d.id))}
 					class="btn btn-primary btn-sm"
 				>
@@ -108,6 +111,10 @@
 					detail="Other drives are not affected."
 					message={failure}
 				/>
+			</div>
+		{:else if absent}
+			<div data-testid={`not-connected-${d.id}`}>
+				<StatusStrip tone="muted" title="Not connected" detail="Plug the drive in to enroll it." />
 			</div>
 		{:else if !ignoredRow}
 			<StatusStrip tone="muted" title="Not enrolled" detail="ARM leaves this drive alone until you enroll it." />
