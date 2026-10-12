@@ -225,3 +225,28 @@ def test_cancelled_tree_copy_removes_the_partial_tree(tmp_path: Path, monkeypatc
     with pytest.raises(CopyCancelled):
         move_tree(src, dst, cancel=cancel)
     assert not dst.exists() and tree_size(src) == 115
+
+
+def test_copy_reports_progress_and_hints_at_a_shared_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """D-127: the copy reports every chunk, and a copy between two mounts of
+    one filesystem logs the single-parent-mount hint."""
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v" * 10)
+    _no_rename(monkeypatch)
+    monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 4)
+    chunks: list[int] = []
+    with caplog.at_level("INFO", logger="arm_common.fileops"):
+        transcode_none(src, tmp_path / "media" / "t0.mkv", on_bytes=chunks.append)
+    assert chunks == [4, 4, 2]
+    assert "share a filesystem" in caplog.text
+
+
+def test_tree_copy_reports_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    _no_rename(monkeypatch)
+    done: list[int] = []
+    move_tree(src, tmp_path / "media" / "T", on_bytes=done.append)
+    assert sum(done) == 115

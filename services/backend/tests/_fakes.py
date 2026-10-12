@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from sqlalchemy.sql import Select
+from sqlalchemy.sql import Select, Update
 from sqlalchemy.sql.elements import BinaryExpression
 
 
@@ -222,6 +222,14 @@ class FakeSession:
 
     async def execute(self, stmt: Any) -> _Result:
         self.call_log.append("execute")
+        if isinstance(stmt, Update):
+            # Core UPDATE: apply the literal values to every matching row.
+            filters = _all_filters(stmt)  # type: ignore[arg-type]
+            for row in self.rows.get(stmt.table.name, []):  # type: ignore[attr-defined]
+                if _matches(row, filters):
+                    for column, value in stmt._values.items():  # type: ignore[union-attr]
+                        setattr(row, column.key if hasattr(column, "key") else str(column), value.value)
+            return _Result([])
         if not isinstance(stmt, Select):
             return _Result([])
 

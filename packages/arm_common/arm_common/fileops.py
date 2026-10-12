@@ -15,9 +15,12 @@ bind mounts). The copy goes to `<final>.arm-inprogress` and is renamed into
 place only once complete, and it checks an optional `cancel` event between
 chunks: a cancelled copy removes its partial file and keeps the source.
 
-No live progress — the operation is either instantaneous (rename) or
-limited by disk throughput (copy). The caller may still report a single
-100% heartbeat after success for UI consistency.
+Progress: the rename is instant; the copy reports each chunk through an
+optional `on_bytes(n)` callback, which the in-process executor turns into
+`progress_pct` heartbeats. When the copy fallback fires although source and
+destination sit on the same filesystem (two bind mounts of one disk or one
+NFS export), it logs a hint that a single parent mount would make the move
+an instant rename.
 
 `move_tree`: the folder counterpart of `transcode_none`, for the Blu-ray
 decrypted backup. `shutil.move` renames on the same filesystem and copies
@@ -32,6 +35,7 @@ import logging
 import os
 import shutil
 import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -78,7 +82,9 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
     logger.info("atomic rename → %s", final_path)
 
 
-def _copy_file(src: Path, dst: Path, cancel: threading.Event | None) -> None:
+def _copy_file(
+    src: Path, dst: Path, cancel: threading.Event | None, on_bytes: Callable[[int], None] | None = None
+) -> None:
     """`shutil.copy2`, in chunks, checking `cancel` before each one."""
     with src.open("rb") as fin, dst.open("wb") as fout:
         while True:
@@ -88,10 +94,31 @@ def _copy_file(src: Path, dst: Path, cancel: threading.Event | None) -> None:
             if not chunk:
                 break
             fout.write(chunk)
+            if on_bytes is not None:
+                on_bytes(len(chunk))
     shutil.copystat(src, dst)
 
 
-def transcode_none(input_path: Path, output_path: Path, *, cancel: threading.Event | None = None) -> int:
+def _same_device_hint(src: Path, dst_dir: Path) -> None:
+    try:
+        same = src.stat().st_dev == dst_dir.stat().st_dev
+    except OSError:
+        return
+    if same:
+        logger.info(
+            "passthrough is copying %s although source and destination share a filesystem; "
+            "mount their common parent once (raw and media as subfolders) to make this an instant rename",
+            src.name,
+        )
+
+
+def transcode_none(
+    input_path: Path,
+    output_path: Path,
+    *,
+    cancel: threading.Event | None = None,
+    on_bytes: Callable[[int], None] | None = None,
+) -> int:
     """Move-or-copy `input_path` → `output_path`. Returns the final file size.
 
     The rename is atomic; the copy fallback writes `<output>.arm-inprogress`
@@ -104,9 +131,10 @@ def transcode_none(input_path: Path, output_path: Path, *, cancel: threading.Eve
         os.rename(input_path, output_path)
     except OSError as exc:
         logger.info("passthrough rename failed (%s); falling back to copy+remove", exc)
+        _same_device_hint(input_path, output_path.parent)
         tmp_path = output_path.with_name(output_path.name + INPROGRESS_SUFFIX)
         try:
-            _copy_file(input_path, tmp_path, cancel)
+            _copy_file(input_path, tmp_path, cancel, on_bytes)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -125,7 +153,13 @@ def tree_size(root: Path) -> int:
     return sum(p.lstat().st_size for p in root.rglob("*") if p.is_file() and not p.is_symlink())
 
 
-def move_tree(src: Path, dst: Path, *, cancel: threading.Event | None = None) -> int:
+def move_tree(
+    src: Path,
+    dst: Path,
+    *,
+    cancel: threading.Event | None = None,
+    on_bytes: Callable[[int], None] | None = None,
+) -> int:
     """Move the folder `src` to `dst`. Returns the total size of its files.
 
     Refuses to touch an existing `dst` (`FileExistsError`, an `OSError`, so a
@@ -137,8 +171,15 @@ def move_tree(src: Path, dst: Path, *, cancel: threading.Event | None = None) ->
         raise FileExistsError(f"destination already exists: {dst}")
     dst.parent.mkdir(parents=True, exist_ok=True)
 
+    copying = False
+
     def copy(s: str, d: str) -> None:
-        _copy_file(Path(s), Path(d), cancel)
+        # shutil.move only copies once its rename failed (another filesystem).
+        nonlocal copying
+        if not copying:
+            copying = True
+            _same_device_hint(src, dst.parent)
+        _copy_file(Path(s), Path(d), cancel, on_bytes)
 
     try:
         shutil.move(src, dst, copy_function=copy)
