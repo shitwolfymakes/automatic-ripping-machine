@@ -199,6 +199,16 @@ def _iso_drive(**overrides: Any) -> Drive:
     return _drive(**base)
 
 
+def test_virtual_container_spec_mounts_an_iso_whose_name_has_a_colon() -> None:
+    """D-101: a colon in the file name must not reach a `host:container:mode`
+    volume string; the ISO is a Mount with separate source and target."""
+    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/lib")
+    d = _iso_drive(source_path="A: B.iso", device_path="/source/A: B.iso")
+    spec = m.container_spec(d)
+    assert not any(":" in host for host in spec["volumes"])
+    assert [(mt["Source"], mt["Target"]) for mt in spec["mounts"]] == [("/lib/A: B.iso", "/source/A: B.iso")]
+
+
 def test_virtual_container_name_uses_the_iso_prefix() -> None:
     m, _ = _manager()
     assert m.container_name(_iso_drive()) == "arm-ripper-iso-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
@@ -208,7 +218,14 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
     m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso", PUID="1001", PGID="1000", CDROM_GID="24")
     d = _iso_drive(by_id_name="should-not-leak")
     spec = m.container_spec(d)
-    assert spec["volumes"]["/mnt/nas/iso/Movies/Blade Runner.iso"] == {"bind": "/source/Blade Runner.iso", "mode": "ro"}
+    assert spec["mounts"] == [
+        {
+            "Target": "/source/Blade Runner.iso",
+            "Source": "/mnt/nas/iso/Movies/Blade Runner.iso",
+            "Type": "bind",
+            "ReadOnly": True,
+        }
+    ]
     assert "/dev/disk" not in spec["volumes"]
     assert spec["volumes"]["/host/raw"] == {"bind": "/raw", "mode": "rw"}
     assert spec["volumes"]["/host/logs"] == {"bind": "/logs", "mode": "rw"}

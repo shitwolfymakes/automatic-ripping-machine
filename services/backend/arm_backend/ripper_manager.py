@@ -164,7 +164,12 @@ class RipperManager:
         """Turn the optical spec into a one-shot ISO ripper's (spec 6.1): only
         the chosen ISO is mounted, read-only, at the drive's device_path
         (`/source/<file name>`); no /dev/disk, no device cgroup rules, no
-        cdrom group; restart policy "no" (the watchdog cleans up)."""
+        cdrom group; restart policy "no" (the watchdog cleans up).
+
+        The ISO goes in `mounts`, not `volumes`: docker-py renders a volume
+        as `host:container:mode`, so a file name with a colon in it
+        (`Star Wars: Episode IV.iso`) breaks the spec, while a Mount carries
+        source and target as separate fields."""
         assert drive.source_path is not None, "a virtual drive always has a source_path"
         source = drive.device_path
         env = {k: v for k, v in spec["environment"].items() if k not in _OPTICAL_ONLY_ENV}
@@ -175,11 +180,17 @@ class RipperManager:
         volumes = dict(spec["volumes"])
         volumes.pop("/dev/disk")
         library_host = self._settings.ARM_HOST_ISO_LIBRARY_PATH
-        volumes[iso_host_path(drive.source_path, library_host=library_host)] = {"bind": source, "mode": "ro"}
+        iso_mount = docker.types.Mount(
+            target=source,
+            source=iso_host_path(drive.source_path, library_host=library_host),
+            type="bind",
+            read_only=True,
+        )
         virtual = {
             **spec,
             "environment": env,
             "volumes": volumes,
+            "mounts": [iso_mount],
             "labels": {DOCKER_LABEL_KEY: drive.id, VIRTUAL_LABEL_KEY: "1"},
             "restart_policy": {"Name": "no"},
         }
