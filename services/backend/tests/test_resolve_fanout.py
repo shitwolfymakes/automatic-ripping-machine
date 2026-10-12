@@ -691,3 +691,41 @@ def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signin
     tasks = [t for t in db.rows["transcode_tasks"] if t.session_application_id == "sap_x"]
     assert len(tasks) == 1
     assert any(e["event_type"] == "session.queued" for e in hub.events)
+
+
+@pytest.mark.parametrize(("flags", "expect_after_rip"), [({"unidentified": True}, True), ({}, False)])
+def test_resolve_unidentified_partial_rip_runs_after_rip(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flags: dict, expect_after_rip: bool
+) -> None:
+    """D-027: rip-complete skips after_rip for an unidentified RIPPED_PARTIAL
+    job, so resolve must run it (auto-apply of the pending/default session as
+    well as the drain), not only the parked-application fan-out. An
+    identified partial rip already had after_rip at rip-complete."""
+    import arm_backend.routers.jobs as jobs_router
+
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed(db, job_status=JobStatus.RIPPED_PARTIAL)
+    db.rows["jobs"][0].metadata_json = {"flags": flags}
+    calls: list[str] = []
+
+    async def fake_after_rip(_session, job, _hub):  # type: ignore[no-untyped-def]
+        calls.append("after_rip")
+        return []
+
+    async def fake_fan_out(_session, *, job, hub):  # type: ignore[no-untyped-def]
+        calls.append("fan_out")
+        return []
+
+    monkeypatch.setattr(jobs_router, "after_rip", fake_after_rip)
+    monkeypatch.setattr(jobs_router, "fan_out_waiting_identify_applications", fake_fan_out)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["status"] == "ripped_partial"
+    assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])

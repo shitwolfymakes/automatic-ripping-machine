@@ -80,7 +80,7 @@ from arm_common.enums import (
     TERMINAL_JOB_STATUSES,
 )
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
-from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
+from arm_common.schemas.job_metadata import JobIdentity, JobMetadata, flag_is_set
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -1056,6 +1056,12 @@ async def resolve(
     if "media_type" in fields_set:
         job.media_type = req.media_type
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
+    # The rip already finished but rip-complete skipped after_rip because the
+    # disc was unidentified: a ripped placeholder, or a partial one (which
+    # keeps RIPPED_PARTIAL). Read the flag now; it is cleared just below.
+    rip_waited_for_identity = was_ripped_placeholder or (
+        job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
+    )
     # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
     # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
     # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
@@ -1109,7 +1115,7 @@ async def resolve(
     await session.commit()
     await session.refresh(job)
 
-    if was_ripped_placeholder:
+    if rip_waited_for_identity:
         # Rip done + identity just landed: run the same post-rip pass
         # rip-complete runs for identified jobs — drain parked applications
         # (fan-out uses the just-resolved title) and then the auto-apply
