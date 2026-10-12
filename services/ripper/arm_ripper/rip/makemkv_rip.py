@@ -563,6 +563,7 @@ async def rip_disc(
     on_title_progress: OnTitleProgress | None = None,
     on_disc_progress: OnDiscProgress | None = None,
     on_title_done: OnTitleDone | None = None,
+    hash_outputs: bool = True,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -579,6 +580,10 @@ async def rip_disc(
     file whose suffix is `_t{i:02d}` to get back to source-index
     keys. Pass `None` (or `[]`) only if the caller will handle
     attribution itself; the result will have an empty `titles` dict.
+
+    `hash_outputs=False` leaves `sha256` unset on every result: the
+    dispatcher hashes each title itself as soon as it is written, so the
+    pass overlaps the rip instead of re-reading every file after it.
 
     Returns a `RipDiscResult` whose `titles` dict maps source title
     index to a RipResult. The dispatcher cross-references this with
@@ -641,7 +646,7 @@ async def rip_disc(
 
     for source_idx, file_path in zip(eligible, output_files):
         size = file_path.stat().st_size
-        digest = await sha256_file(file_path)
+        digest = await sha256_file(file_path) if hash_outputs else None
         titles_out[source_idx] = RipResult(
             ok=True,
             output_path=file_path,

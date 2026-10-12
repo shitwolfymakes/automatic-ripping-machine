@@ -472,7 +472,9 @@
 			{#if ripping}
 				<section class="job-detail-lifecycle-card stack job-detail-rip" data-testid="job-rip-progress">
 					<div class="flex items-center justify-between gap-2">
-						<h2 class="job-detail-section-title">Ripping</h2>
+						<h2 class="job-detail-section-title">
+							{liveProgress?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
+						</h2>
 						{#if liveProgress?.eta_seconds != null}
 							<span class="job-detail-rip-meta">{formatEta(liveProgress.eta_seconds)} left</span>
 						{/if}

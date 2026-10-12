@@ -854,6 +854,8 @@ class JobController:
                         payload["bytes_done"] = stats["bytes_done"]
                         payload["bytes_total"] = stats["bytes_total"]
                         payload["rate_bps"] = round(stats["rate_bps"]) if stats["rate_bps"] is not None else None
+                        if "phase" in stats:
+                            payload["phase"] = stats["phase"]
                     await self._ws.publish(
                         topic=f"ripper.progress.{job_id}",
                         event_type="ripper.progress",
