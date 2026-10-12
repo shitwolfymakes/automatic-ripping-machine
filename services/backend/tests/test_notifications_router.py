@@ -1113,6 +1113,30 @@ def test_scripts_list_and_detail(signing_key: bytes, scripts_root: Path) -> None
     assert missing.status_code == 404 and bad.status_code in (404, 422)
 
 
+def test_unreadable_script_is_skipped_in_list_and_422_on_detail(
+    signing_key: bytes, scripts_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-044: a root-owned 0700 file on the mount must not 500 the whole picker."""
+    from arm_backend.notifications import script_meta
+
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    _bash_script(scripts_root, "locked.sh", "exit 0\n")
+    real_read_head = script_meta._read_head
+
+    def read_head(path: Path) -> str:
+        if path.name == "locked.sh":
+            raise PermissionError(13, "Permission denied")
+        return real_read_head(path)
+
+    monkeypatch.setattr(script_meta, "_read_head", read_head)
+    app, token = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        lst = client.get("/api/notifications/scripts", headers=_auth(token))
+        det = client.get("/api/notifications/scripts/locked.sh", headers=_auth(token))
+    assert lst.status_code == 200 and [s["name"] for s in lst.json()] == ["ok.sh"]
+    assert det.status_code == 422 and det.json()["detail"] == "script is not readable: locked.sh: Permission denied"
+
+
 def test_create_bash_channel_masks_secret_and_stamps_secret_keys(signing_key: bytes, scripts_root: Path) -> None:
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     db = FakeSession()

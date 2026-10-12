@@ -14,6 +14,7 @@ first position, but the later attributes replace the earlier ones.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shlex
@@ -21,6 +22,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from arm_common.schemas import BashScriptInfo, BashScriptSummary, ScriptInput
+
+logger = logging.getLogger("arm_backend.notifications.script_meta")
 
 HEADER_LINES = 60
 PREVIEW_BYTES = 8192
@@ -123,6 +126,10 @@ def _read_head(path: Path) -> str:
         return fh.read(PREVIEW_BYTES).decode("utf-8", "replace")
 
 
+class ScriptUnreadableError(Exception):
+    """The script exists but the backend's user cannot read it (EACCES, EIO)."""
+
+
 def read_script_info(root: str, name: str) -> BashScriptInfo:
     try:
         path = resolve_script(root, name)
@@ -130,8 +137,14 @@ def read_script_info(root: str, name: str) -> BashScriptInfo:
         raise FileNotFoundError(name) from exc
     if not path.is_file():
         raise FileNotFoundError(name)
-    st = path.stat()
-    head = _read_head(path)
+    try:
+        st = path.stat()
+        head = _read_head(path)
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        # A root-owned 0700 file on the host mount, typically.
+        raise ScriptUnreadableError(f"{name}: {exc.strerror or exc}") from exc
     description, inputs = parse_header(head)
     preview = "\n".join(head.splitlines()[:PREVIEW_LINES])
     return BashScriptInfo(
@@ -155,6 +168,12 @@ def list_scripts(root: str) -> list[BashScriptSummary]:
             continue
         if p.resolve().parent != base.resolve():
             continue
-        description, _ = parse_header(_read_head(p))
+        try:
+            head = _read_head(p)
+        except OSError as exc:
+            # One unreadable file must not take the whole picker down.
+            logger.warning("skipping unreadable script %s: %s", p.name, exc.strerror or exc)
+            continue
+        description, _ = parse_header(head)
         out.append(BashScriptSummary(name=p.name, executable=os.access(p, os.X_OK), description=description))
     return out

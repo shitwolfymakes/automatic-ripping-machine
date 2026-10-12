@@ -58,7 +58,12 @@ from arm_backend.notifications.field_map import (
     mask_config,
     merge_patch_config,
 )
-from arm_backend.notifications.script_meta import list_scripts, read_script_info, validate_script_name
+from arm_backend.notifications.script_meta import (
+    ScriptUnreadableError,
+    list_scripts,
+    read_script_info,
+    validate_script_name,
+)
 from arm_backend.notifications.url_composer import compose_apprise_url
 from arm_common import NotificationChannel, NotificationDispatchLog, NotificationInbox, User
 from arm_common.schemas import (
@@ -401,6 +406,10 @@ async def get_script(name: str, _: User = Depends(require_writer)) -> BashScript
         return read_script_info(settings.ARM_SCRIPTS_ROOT, name)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown script: {name}") from exc
+    except ScriptUnreadableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"script is not readable: {exc}"
+        ) from exc
 
 
 @router.post("/services/{service_id}/compose-url", response_model=ComposeUrlResult)
