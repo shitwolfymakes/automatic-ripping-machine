@@ -63,6 +63,18 @@ detect_gpus() {
     printf '[%s]' "${entries[*]:-}"
 }
 
+# The GPUs an ARM_GPUS list names, one sorted "<vendor> <device_path>" line
+# each. The backend seeds one row per device, so the list's order and its
+# encoder_kinds hints do not change which rows a list stands for.
+gpu_identities() {
+    local obj vendor path
+    while IFS= read -r obj; do
+        vendor="$(sed -nE 's/.*"vendor"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' <<<"${obj}")"
+        path="$(sed -nE 's/.*"device_path"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' <<<"${obj}")"
+        if [[ -n "${vendor}${path}" ]]; then printf '%s %s\n' "${vendor}" "${path}"; fi
+    done < <(tr '}' '\n' <<<"$1") | sort
+}
+
 # GID of the /dev/dri render-node group. The dispatcher adds this to VAAPI/QSV
 # transcoders so the PUID-dropped process can open the node (root:render 0660).
 # Empty if there's no render node (CPU / NVENC-only host).
@@ -144,7 +156,8 @@ refresh_arm_gpus() {
     # The backend reads ARM_GPUS only while the gpus table is empty. A list that
     # was non-empty before holds rows in that table, so a changed list needs them
     # deleted (Settings > GPUs) before the next backend start re-seeds it.
-    if [[ -n "${previous}" && "${previous}" != "[]" && "${previous}" != "${value}" ]]; then
+    if [[ -n "${previous}" && "${previous}" != "[]" \
+          && "$(gpu_identities "${previous}")" != "$(gpu_identities "${value}")" ]]; then
         arm_say "ARM_GPUS changed. The backend only reads it while the GPU list is empty: delete the rows in Settings > GPUs, then restart the backend to re-seed."
     fi
 }

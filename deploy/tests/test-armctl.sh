@@ -405,6 +405,11 @@ out="$(gpu_refresh '[{"vendor":"qsv","device_path":"/dev/dri/renderD128","encode
 has "gpus: a changed list says how to re-seed" "delete the rows in Settings > GPUs" "$out"
 out="$(gpu_refresh "${gpu_changed}")"
 lacks "gpus: an unchanged list stays quiet" "delete the rows in Settings > GPUs" "$out"
+gpu_changed='[{"vendor":"nvenc","device_path":"nvidia://1","encoder_kinds":[]},{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'
+out="$(gpu_refresh '[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":["h265"]},{"vendor":"nvenc","device_path":"nvidia://1","encoder_kinds":[]}]')"
+lacks "gpus: a reordered list with other encoder hints stays quiet" "delete the rows in Settings > GPUs" "$out"
+out="$(gpu_refresh '[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]')"
+has "gpus: an added GPU says how to re-seed" "delete the rows in Settings > GPUs" "$out"
 out="$(gpu_refresh '[]')"
 lacks "gpus: a first detection stays quiet" "delete the rows in Settings > GPUs" "$out"
 out="$( (write_image_pins "" "$pin") 2>&1 || true)"
