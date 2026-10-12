@@ -80,6 +80,17 @@ vi.mock('$lib/api/transcoder', () => ({
 	deleteTranscoderJob: vi.fn()
 }));
 
+let transcodeEventHandler: (() => void) | null = null;
+vi.mock('$lib/api/ws', () => ({
+	wsClient: {
+		start: vi.fn(),
+		subscribe: vi.fn((topic: string, handler: () => void) => {
+			if (topic === 'transcode.events') transcodeEventHandler = handler;
+			return () => {};
+		})
+	}
+}));
+
 vi.mock('$lib/api/gpus', () => ({
 	fetchGpus: vi.fn(() =>
 		Promise.resolve([
@@ -257,4 +268,26 @@ it('renders per-GPU inventory rows with status and a manage link', async () => {
 	expect(rows.textContent).toContain('VAAPI');
 	expect(rows.textContent).toContain('disabled');
 	expect(screen.getByText('Manage GPUs in Settings')).toHaveAttribute('href', '/settings#transcoding');
+});
+
+it('reloads the per-GPU rows on transcode events so they track claims (D-058)', async () => {
+	cleanup();
+	renderComponent(TranscoderPage);
+	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).toContain('busy'));
+	vi.mocked(fetchGpus).mockResolvedValueOnce([
+		{
+			id: 'gpu_1',
+			vendor: 'nvenc',
+			device_path: 'nvidia://0',
+			encoder_kinds: ['h264', 'h265'],
+			status: 'available',
+			enabled: true,
+			claimed_by_task_id: null,
+			last_seen_at: null
+		}
+	] as Awaited<ReturnType<typeof fetchGpus>>);
+	expect(transcodeEventHandler).not.toBeNull();
+	transcodeEventHandler?.();
+	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).not.toContain('busy'));
+	expect(screen.getByTestId('gpu-rows').textContent).toContain('available');
 });

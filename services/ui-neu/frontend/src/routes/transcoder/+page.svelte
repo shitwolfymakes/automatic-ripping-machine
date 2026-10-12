@@ -17,6 +17,7 @@
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { fetchGpus } from '$lib/api/gpus';
+	import { wsClient } from '$lib/api/ws';
 	import type { GpuView } from '$lib/types/api.gen';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { isAdmin } from '$lib/stores/auth';
@@ -167,9 +168,14 @@
 		stats.start();
 		workers.start();
 		loadGpus();
+		// Claims, releases and probes all land on transcode.events; reload the
+		// per-device rows so they agree with the polled summary count.
+		wsClient.start();
+		const unsubscribeGpus = wsClient.subscribe('transcode.events', () => loadGpus());
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
 		return () => {
+			unsubscribeGpus();
 			stats.stop();
 			workers.stop();
 			stopJobsPolling();
