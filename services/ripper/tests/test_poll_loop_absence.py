@@ -14,6 +14,7 @@ import asyncio  # noqa: E402
 import errno  # noqa: E402
 import logging  # noqa: E402
 
+import httpx  # noqa: E402
 import pytest  # noqa: E402
 from arm_ripper import main as ripper_main  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
@@ -251,6 +252,40 @@ async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatc
     assert s.boot_probes == 1
     assert s.client.get_drive_calls == 1
     assert s.handle.current == "/dev/sr2"
+
+
+async def test_absent_drive_back_on_its_configured_node_is_found_without_the_backend(monkeypatch, caplog) -> None:
+    """D-004 follow-up: a renumbered drive (sr0 -> sr2) is replugged and comes
+    back as sr0 while the backend is unreachable. The kept sr2 hint must not
+    be the only node tried; ARM_DRIVE_DEV is tried too while absent."""
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    s = Script(monkeypatch, [(None, DriveState.NO_DISC)] * 12)
+    s.client.drive_device_path = "/dev/sr2"
+    real_get_drive = s.client.get_drive
+
+    async def get_drive(drive_id: str):
+        if s.i >= 4:
+            raise httpx.ConnectError("backend down")
+        return await real_get_drive(drive_id)
+
+    s.client.get_drive = get_drive  # type: ignore[method-assign]
+
+    def hint_aware(by_id, hint, *, disk_root, dev_root, sysfs_root):
+        if s.i >= len(s.ticks):
+            raise asyncio.CancelledError
+        # sr0 until tick 1, then sr2 until tick 4, then sr0 again.
+        node = "/dev/sr2" if 1 <= s.i < 4 else "/dev/sr0"
+        if s.i == 1:
+            node = None
+        return ResolvedDevice(path=hint, via="hint") if hint == node else None
+
+    monkeypatch.setattr(ripper_main, "resolve_drive_device", hint_aware)
+    await s.run()
+    reattached = [r for r in caplog.records if "reattached" in r.message]
+    assert len(reattached) == 2
+    assert s.handle.current == "/dev/sr0" and not s.handle.absent
 
 
 async def test_hint_refresh_is_throttled_while_the_drive_stays_absent(monkeypatch) -> None:

@@ -228,7 +228,8 @@ async def _current_hint(
 
     `last_resolved` keeps a backend-supplied node once it has resolved: going
     back to ARM_DRIVE_DEV on the next tick would lose a renumbered drive again
-    and flap absent/present every other poll.
+    and flap absent/present every other poll. Once the drive is absent,
+    ARM_DRIVE_DEV is tried again on alternate ticks.
 
     `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
     resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
@@ -241,6 +242,11 @@ async def _current_hint(
     fallback = last_resolved or settings.ARM_DRIVE_DEV or ""
     if settings.ARM_DRIVE_BY_ID or not absent:
         return fallback
+    if last_resolved and settings.ARM_DRIVE_DEV and absent_ticks % 2:
+        # While absent, every other tick also tries the configured node: a
+        # drive replugged back onto it is found even when the backend cannot
+        # be asked. Trying it while present is what used to flap (D-004).
+        fallback = settings.ARM_DRIVE_DEV
     if absent_ticks % _hint_refresh_every_n_ticks() != 0:
         return fallback
     try:
