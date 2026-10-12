@@ -382,6 +382,15 @@ async def preview_script(
         result = await run_script(
             run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
         )
+        # The response must not undo the masking above: a script that echoes
+        # a secret (curl -v, set -x) would hand it back in its output.
+        result = result.model_copy(
+            update={
+                "stdout": redact_secrets(result.stdout, run),
+                "stderr": redact_secrets(result.stderr, run),
+                "error": redact_secrets(result.error, run) if result.error is not None else None,
+            }
+        )
     return BashPreviewResult(title=run.title, body=run.body, inputs=inputs, env=env, argv=run.argv, result=result)
 
 
