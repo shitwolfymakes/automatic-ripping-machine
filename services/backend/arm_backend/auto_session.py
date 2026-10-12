@@ -890,6 +890,9 @@ async def drain_parked_applications_after_rip(
     log lines): encode applications that hit this drain while the toggle was
     off stayed parked with reason `transcode_disabled`.
     """
+    # Read before the try: a rollback expires every loaded instance, and an
+    # expired attribute cannot lazy-load on an AsyncSession (MissingGreenlet).
+    job_id = job.id
     try:
         outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)
         if not outcomes:
@@ -897,7 +900,13 @@ async def drain_parked_applications_after_rip(
         await db.commit()
     except Exception:  # noqa: BLE001 - hook must never break rip-complete
         await db.rollback()
-        logger.exception("%s: draining parked session_applications failed job_id=%s", trigger, job.id)
+        logger.exception("%s: draining parked session_applications failed job_id=%s", trigger, job_id)
+        try:
+            # Reload the job the rollback expired, so the caller (after_rip's
+            # auto-apply half) can keep reading it.
+            await db.refresh(job)
+        except Exception:  # noqa: BLE001
+            logger.warning("%s: reloading job_id=%s after a failed drain failed", trigger, job_id, exc_info=True)
         return []
     for outcome in outcomes:
         if outcome.skipped_reason is None:
@@ -905,7 +914,7 @@ async def drain_parked_applications_after_rip(
                 "%s: fanned out parked session_application=%s job_id=%s tasks=%d",
                 trigger,
                 outcome.application.id,
-                job.id,
+                job_id,
                 len(outcome.tasks),
             )
         else:
@@ -913,7 +922,7 @@ async def drain_parked_applications_after_rip(
                 "%s: parked session_application=%s job_id=%s stays parked reason=%s: %s",
                 trigger,
                 outcome.application.id,
-                job.id,
+                job_id,
                 outcome.skipped_reason,
                 outcome.error_detail,
             )

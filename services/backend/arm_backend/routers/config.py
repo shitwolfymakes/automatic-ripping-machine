@@ -338,8 +338,9 @@ async def _redrain_parked_applications(session: AsyncSession, request: Request) 
         }
         if not parked_job_ids:
             return
-        jobs = list(
-            (
+        job_ids = [
+            job.id
+            for job in (
                 await session.execute(
                     select(Job)
                     .where(col(Job.id).in_(sorted(parked_job_ids)))
@@ -348,12 +349,24 @@ async def _redrain_parked_applications(session: AsyncSession, request: Request) 
             )
             .scalars()
             .all()
-        )
+        ]
     except Exception:  # noqa: BLE001 - re-drain must never fail the config PATCH
         logger.warning("transcode re-enable: listing parked session_applications failed", exc_info=True)
         return
-    for job in jobs:
-        await drain_parked_applications_after_rip(session, job, hub, trigger="transcode re-enable")
+    for job_id in job_ids:
+        # Load each job fresh: a failed drain rolls the session back, which
+        # expires every job loaded before it.
+        try:
+            job = (
+                await session.execute(
+                    select(Job).where(col(Job.id) == job_id).execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+            if job is not None:
+                await drain_parked_applications_after_rip(session, job, hub, trigger="transcode re-enable")
+        except Exception:  # noqa: BLE001 - one job must not stop the rest
+            await session.rollback()
+            logger.warning("transcode re-enable: re-draining job_id=%s failed", job_id, exc_info=True)
 
 
 _KEY_ATTR = {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key", "makemkv": "makemkv_key"}
