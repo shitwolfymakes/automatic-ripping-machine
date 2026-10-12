@@ -8,6 +8,7 @@
 		connectionLabel,
 		driveStatusLabel,
 		driveTitle,
+		hasLiveJob,
 		isRipping,
 		mediaLabel,
 		DETACHED_LABEL
@@ -590,8 +591,10 @@
 			<button
 				data-testid="drive-unenroll"
 				onclick={handleUnenroll}
-				disabled={unenrolling || isRipping(drive)}
-				title={isRipping(drive) ? 'Cannot unenroll while ripping' : "Stop and remove this drive's ripper"}
+				disabled={unenrolling || hasLiveJob(drive)}
+				title={hasLiveJob(drive)
+					? 'Cannot unenroll while the drive has a job in progress'
+					: "Stop and remove this drive's ripper"}
 				class="btn btn-danger btn-sm drive-card-unenroll-btn">{unenrolling ? 'Unenrolling...' : 'Unenroll'}</button
 			>
 		</div>

@@ -242,6 +242,11 @@ describe('DriveCard', () => {
 			expect(screen.getByTestId('drive-unenroll')).toBeDisabled();
 		});
 
+		it('Unenroll is disabled while a pre-rip job is live', () => {
+			renderDrive({ status: 'online', current_job: { id: 'job_1', title: 'X', status: 'awaiting_review' } });
+			expect(screen.getByTestId('drive-unenroll')).toBeDisabled();
+		});
+
 		it('never shows Remove', () => {
 			renderDrive({ status: 'offline' });
 			expect(screen.queryByText('Remove')).not.toBeInTheDocument();

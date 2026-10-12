@@ -147,6 +147,24 @@ def test_unenroll_refused_while_ripping(signing_key: bytes) -> None:
     assert db.rows["drives"][0].lifecycle is DriveLifecycle.ENROLLED
 
 
+@pytest.mark.parametrize(
+    "job_status",
+    [JobStatus.CREATED, JobStatus.AWAITING_USER_ID, JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW],
+)
+def test_unenroll_refused_while_a_pre_rip_job_is_live(signing_key: bytes, job_status: JobStatus) -> None:
+    """D-016: removing the ripper kills its scan/identify/review pipeline, so
+    any non-terminal job blocks unenroll, not just RIPPING."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive(DriveLifecycle.ENROLLED)]
+    db.rows["jobs"] = [Job(id="job_1", drive_id="drv_1", status=job_status, disc_type=DiscType.DVD)]
+    client, auth = _app(db, signing_key)
+    with client:
+        r = client.post("/api/drives/drv_1/unenroll", headers=auth)
+    assert r.status_code == 409
+    assert job_status.value in r.json()["detail"]
+    assert db.rows["drives"][0].lifecycle is DriveLifecycle.ENROLLED
+
+
 def test_unenroll_absent_drive_deletes_the_row(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive(DriveLifecycle.ENROLLED, present=False)]

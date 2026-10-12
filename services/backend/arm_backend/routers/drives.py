@@ -13,8 +13,9 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
 from arm_backend.drive_scanner import PruneUnavailable, _tunables
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
-from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveStatus, Job, JobStatus, Session, User
-from arm_common.enums import TERMINAL_JOB_STATUSES
+from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveStatus, Job, Session, User
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.models._columns import enum_value_str
 from arm_common.models.user import ADMIN_ROLE
 from arm_common.schemas import (
     DriveDiagnosticItem,
@@ -50,6 +51,22 @@ def _current_job(jobs_for_drive: list[Job]) -> DriveCurrentJobView | None:
         return None
     latest = max(active, key=lambda j: j.created_at or datetime.min.replace(tzinfo=timezone.utc))
     return DriveCurrentJobView(id=latest.id, title=latest.title, status=latest.status)
+
+
+async def _live_job(db: AsyncSession, drive_id: str) -> Job | None:
+    """A job on this drive its ripper still owns (any non-terminal status)."""
+    return (
+        (
+            await db.execute(
+                select(Job)
+                .where(col(Job.drive_id) == drive_id)
+                .where(col(Job.status).in_(NON_TERMINAL_JOB_STATUSES))
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
 
 
 def _connection(by_id_name: str | None) -> Literal["usb", "sata", "other"] | None:
@@ -314,21 +331,13 @@ async def delete_drive(
         # silently orphan that container. unenroll (which stops/removes it)
         # is the only legal path off ENROLLED.
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="unenroll the drive first")
-    # Refuse to delete a drive with an in-flight (RIPPING) job — same predicate
-    # the ripper boot-probe uses. A live ripper re-registers the row on its next
-    # startup (hostname upsert), so this only guards the active-rip case; job
-    # history is unaffected either way (jobs.drive_id is SET NULL on delete,
-    # and Job.drive_serial keeps a permanent record of the physical drive —
-    # see migration 0016_2_jobs_drive_serial).
-    active = (
-        (
-            await db.execute(
-                select(Job).where(col(Job.drive_id) == drive_id).where(col(Job.status) == JobStatus.RIPPING).limit(1)
-            )
-        )
-        .scalars()
-        .first()
-    )
+    # Refuse to delete a drive with an in-flight job (scanning, identifying,
+    # held for review or ripping). A live ripper re-registers the row on its
+    # next startup (hostname upsert), so this only guards the live-job case;
+    # job history is unaffected either way (jobs.drive_id is SET NULL on
+    # delete, and Job.drive_serial keeps a permanent record of the physical
+    # drive — see migration 0016_2_jobs_drive_serial).
+    active = await _live_job(db, drive_id)
     if active is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -490,20 +499,14 @@ async def unenroll_drive(
         _require_optical(drive, "unenroll")
         manager = _manager(request)
         _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
-        ripping = (
-            (
-                await db.execute(
-                    select(Job)
-                    .where(col(Job.drive_id) == drive_id)
-                    .where(col(Job.status) == JobStatus.RIPPING)
-                    .limit(1)
-                )
+        # Removing the ripper kills its pipeline, so any job it still owns
+        # (scan, identify, the review countdown, the rip) would be orphaned.
+        live = await _live_job(db, drive_id)
+        if live is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"cannot unenroll: the drive has a {enum_value_str(live.status)} job; abandon it first",
             )
-            .scalars()
-            .first()
-        )
-        if ripping is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot unenroll: a drive is ripping")
         try:
             await asyncio.to_thread(manager.remove, drive.id)
         except RipperManagerError as exc:
