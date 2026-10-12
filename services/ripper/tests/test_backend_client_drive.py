@@ -13,8 +13,8 @@ import pytest
 from arm_ripper.backend_client import BackendClient
 
 
-def _client(handler) -> BackendClient:
-    c = BackendClient("https://backend", "tok", hostname="h")
+def _client(handler, drive_id: str = "drv_test") -> BackendClient:
+    c = BackendClient("https://backend", "tok", hostname="h", drive_id=drive_id)
     c._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://backend")
     return c
 
@@ -161,34 +161,20 @@ async def test_get_drive_parses_a_drive() -> None:
     assert d is not None and d.device_path == "/dev/sr3"
 
 
-async def test_get_ripper_config_sends_this_drive_id(monkeypatch) -> None:
+async def test_get_ripper_config_sends_this_drive_id() -> None:
     """The backend resolves the drive's own auto-rip override from drive_id (setup spec D1)."""
-    monkeypatch.setenv("ARM_DRIVE_ID", "drv_9")
     seen = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
         seen["params"] = dict(req.url.params)
         return httpx.Response(200, json={"auto_rip_on_insert": False})
 
-    cfg = await _client(handler).get_ripper_config()
+    cfg = await _client(handler, drive_id="drv_9").get_ripper_config()
     assert seen["params"] == {"drive_id": "drv_9"}
     assert cfg.auto_rip_on_insert is False
 
 
-async def test_get_ripper_config_without_drive_id_sends_no_param(monkeypatch) -> None:
-    monkeypatch.delenv("ARM_DRIVE_ID", raising=False)
-    seen = {}
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        seen["params"] = dict(req.url.params)
-        return httpx.Response(200, json={"auto_rip_on_insert": True})
-
-    await _client(handler).get_ripper_config()
-    assert seen["params"] == {}
-
-
-async def test_report_makemkv_key_status_names_this_drive(monkeypatch) -> None:
-    monkeypatch.setenv("ARM_DRIVE_ID", "drv_9")
+async def test_report_makemkv_key_status_names_this_drive() -> None:
     seen = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -197,5 +183,5 @@ async def test_report_makemkv_key_status_names_this_drive(monkeypatch) -> None:
 
     from arm_common import MakemkvKeyState
 
-    await _client(handler).report_makemkv_key_status(state=MakemkvKeyState.VALID, detail=None)
+    await _client(handler, drive_id="drv_9").report_makemkv_key_status(state=MakemkvKeyState.VALID, detail=None)
     assert seen["body"]["drive_id"] == "drv_9"

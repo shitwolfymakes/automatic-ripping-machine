@@ -18,7 +18,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_writer
 from arm_backend.auto_session import route_session_id_for
 from arm_backend.db import get_session
-from arm_backend.routers.system import _app_version, collect_diagnostics
+from arm_backend.routers.system import collect_diagnostics
 from arm_backend.seeders import ADMIN_USERNAME, CONFIG_SINGLETON_ID
 from arm_common import Config, MediaType, RipPreset, Session, TranscodePreset, User
 from arm_common.enums import SETUP_STEP_ORDER, SetupStep, SetupStepState
@@ -113,7 +113,7 @@ async def setup_status(db: AsyncSession = Depends(get_session)) -> SetupStatusPu
     except Exception:  # noqa: BLE001 - any failure means "don't redirect"
         logger.warning("setup status unavailable; reporting first_run=false", exc_info=True)
         first_run = False
-    return SetupStatusPublic(first_run=first_run, arm_version=_app_version())
+    return SetupStatusPublic(first_run=first_run)
 
 
 @router.get("", response_model=SetupView)
@@ -177,10 +177,15 @@ async def complete_setup(_: User = Depends(require_writer), db: AsyncSession = D
 
 @router.post("/restart", response_model=SetupView)
 async def restart_setup(_: User = Depends(require_writer), db: AsyncSession = Depends(get_session)) -> SetupView:
-    """Settings > System "Run setup again": keep what was recorded, reopen the walkthrough."""
+    """Settings > System "Run setup again": keep what was recorded, reopen the walkthrough.
+
+    A finished walkthrough has every step recorded, so the current step would be
+    Finish. Reopen the system check along with Finish so the walkthrough starts
+    from its first step again, wherever the operator returns to /setup."""
     cfg = await _config(db)
     progress = _progress(cfg)
     progress.pop(SetupStep.FINISH.value, None)
+    progress.pop(SetupStep.SYSTEM.value, None)
     cfg.setup_progress = progress
     cfg.setup_completed_at = None
     cfg.setup_checklist_dismissed_at = None

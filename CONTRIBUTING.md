@@ -62,9 +62,13 @@ Prerequisites: [`uv`](https://astral.sh/uv), Docker with the `docker compose`
 v2 plugin, `openssl`, and Node/`npm` (for the UI).
 
 ```bash
-bash devtools/setup-dev.sh     # one-shot, idempotent dev-env setup
-docker compose up -d           # bring up the stack
+bash devtools/setup-dev.sh up     # idempotent setup, then build and start the stack
+bash devtools/setup-dev.sh down   # stop the stack and the backend-spawned containers
 ```
+
+Always start and stop the stack through `setup-dev.sh`: a bare `docker compose
+down` leaves the backend-spawned per-drive ripper and per-task transcoder
+containers running.
 
 The UI is served at <https://localhost:8081>.
 

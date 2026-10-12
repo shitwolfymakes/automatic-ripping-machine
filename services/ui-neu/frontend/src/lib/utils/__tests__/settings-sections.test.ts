@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sectionFields } from '../settings-sections';
+import { sectionFields, settingsTabFor } from '../settings-sections';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
 const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
@@ -121,5 +121,14 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 		expect(keys).toContain('auto_rip_on_insert');
 		expect(keys).toContain('manual_wait_seconds');
 		expect(keys).not.toContain('hold_for_review');
+	});
+});
+
+describe('settingsTabFor', () => {
+	it('keeps the config group names and lower-cases the screen tabs', () => {
+		expect(settingsTabFor('Metadata')).toBe('Metadata');
+		expect(settingsTabFor('Ripping')).toBe('Ripping');
+		expect(settingsTabFor('Transcoding')).toBe('transcoding');
+		expect(settingsTabFor('System')).toBe('system');
 	});
 });

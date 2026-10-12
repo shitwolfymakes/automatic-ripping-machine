@@ -377,7 +377,7 @@ async def run_source_mode(controller: JobController, session_id: str | None) -> 
         logger.info("source pipeline cancelled; exiting")
     finally:
         # The scratch copy of an image MakeMKV could only read once unpacked.
-        await asyncio.to_thread(iso_extract.discard_all)
+        await iso_extract.discard_all()
 
 
 async def amain() -> None:
@@ -385,6 +385,7 @@ async def amain() -> None:
         settings.ARM_BACKEND_URL,
         settings.ARM_SERVICE_TOKEN,
         hostname=settings.HOSTNAME,
+        drive_id=settings.ARM_DRIVE_ID,
     )
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
     ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)

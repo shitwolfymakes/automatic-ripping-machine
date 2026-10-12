@@ -21,6 +21,13 @@ NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
         ("THE_OFFICE_SEASON_2", LabelHints("the office", 2, None, None)),
         ("THE_OFFICE_SEASON2", LabelHints("the office", 2, None, None)),
         ("LOST_S4", LabelHints("lost", 4, None, None)),
+        # A trailing number stays in the title: it may be part of the name
+        # (the dispatcher retries the search without a trailing year).
+        ("THE_OFFICE_2005_S1_D2", LabelHints("the office 2005", 1, 2, None)),
+        ("WONDER_WOMAN_1984_D1", LabelHints("wonder woman 1984", None, 1, None)),
+        ("1917_D1", LabelHints("1917", None, 1, None)),
+        ("BLADE_RUNNER_2049_D1", LabelHints("blade runner 2049", None, 1, None)),
+        ("ALIEN_1979", LabelHints("alien 1979", None, None, None)),
         ("LOTR_FELLOWSHIP_D2", LabelHints("lotr fellowship", None, 2, None)),
         ("LOTR_FELLOWSHIP_P1", LabelHints("lotr fellowship", None, 1, None, True)),
         ("BAND_OF_BROTHERS_DISC_3_OF_6", LabelHints("band of brothers", None, 3, 6)),

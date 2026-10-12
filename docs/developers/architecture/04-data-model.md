@@ -63,7 +63,8 @@ One row per disc insertion the ripper detected (via its `ioctl(CDROM_DRIVE_STATU
 - `title` (text, nullable — from metadata lookup, editable in UI)
 - `year` (int, nullable)
 - `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis, plus a load-bearing `scan_result` key holding the full `ScanResult` Pydantic dump from identify time. The rip-start handler in Phase 3+ reads `metadata_json["scan_result"]` to drive track selection; consumers must treat unknown keys as opaque.)
-- `status` (enum: created | awaiting_user_id | identified | ripping | ripped | ripped_partial | abandoned | failed)
+- `status` (enum: created | awaiting_user_id | awaiting_review | identified | ripping | ripped | ripped_partial | ripped_awaiting_identify | abandoned | failed)
+- `identity_provenance` (jsonb, nullable — `{attribute: source_id}` for the `season`, `disc_number` and `disc_total` values the identity resolver set)
 - `resumed_from_crash` (bool, default false — set by Backend-startup sweep or by `POST /api/ripper/jobs/{job_id}/resume`; cleared when the job next reaches a terminal state)
 - `started_at`, `ripped_at`
 
@@ -81,9 +82,13 @@ The **checkpoint unit**. Every title on a DVD/BD or every song on a CD is a trac
 - `index` (int — zero-based position on the disc)
 - `source_ref` (text — MakeMKV title id / CD track number / etc.)
 - `label` (text, nullable — human-readable title name, e.g. "Theatrical Cut", "Sing-Along Version". Unpopulated on v3.0; forward-compat for community-DB lookup keyed on the job's `disc_fingerprint`.)
-- `role` (text, nullable — semantic role within the disc: `feature`, `alternate_cut`, `extended`, `bonus`, `trailer`, `commentary`, `menu`, `decoy`. Free-text, not enum, so community sources can introduce new values without schema churn.)
-- `role_source` (text, nullable — `community` | `user` | `heuristic`. Identifies provenance of `label`/`role`/`edition` so a re-fetch knows which rows are safe to overwrite.)
+- `role` (enum `TrackRole`, nullable: `main` | `episode` | `extra` | `trailer` | `other`. What the title is on the disc. Set by identity sources through the resolver (`arm_backend.identity`) or by the operator; stored as VARCHAR and validated in the app layer.)
 - `edition` (text, nullable — per-track edition tag: `theatrical`, `directors_cut`, `final_cut`, etc. Per-track rather than per-job because one disc can carry multiple editions as distinct tracks — Blade Runner Ultimate Collector's Edition, or Hancock's theatrical+extended on a single disc.)
+- `title`, `year`, `imdb_id`, `poster_url` (nullable — per-track identity for multi-title discs such as TV box sets; null means inherit the job's value)
+- `season`, `episode_number`, `episode_number_end`, `episode_name` (nullable — per-track season and episode; `episode_number_end` is the last episode for a title spanning two consecutive episodes)
+- `identity_provenance` (jsonb, nullable — `{attribute: source_id}` for the fields the identity resolver set)
+- `excluded` (bool, default false — omits the title from transcode output; the disc still rips whole)
+- `custom_filename` (text, nullable — overrides the template-rendered name for this track)
 - `expected_duration_seconds` (int, nullable)
 - `status` (enum: queued | in_progress | done | failed)
 - `attempts` (int, default 0)
@@ -137,7 +142,7 @@ The user-facing composition: a named bundle of (rip preset, transcode preset, ou
 - `is_builtin` (bool)
 - `rip_preset_id` (FK → `rip_presets.id`)
 - `transcode_preset_id` (FK → `transcode_presets.id`, **nullable**) — null for ISO / data-copy sessions where no transcode stage runs.
-- `output_path_template` (text — tokenized path, **relative to the media-type library root**. Example for `media_type=movie`: `{title} ({year})/{title} ({year}) - {transcode_slug}.{ext}`. See [02-job-lifecycle.md § Output paths and naming](02-job-lifecycle.md#output-paths-and-naming) for defaults and token list.)
+- `output_path_template` (text — tokenized path, **relative to the media-type library root**. Example for `media_type=movie`: `{title} ({year?})/{title} ({year?}) - {transcode_slug}.{ext}`. See [02-job-lifecycle.md § Output paths and naming](02-job-lifecycle.md#output-paths-and-naming) for defaults and token list.)
 - `overrides_json` (jsonb, nullable — per-session tweaks applied on top of the referenced presets, e.g. "use this preset but force CRF 22 instead of 20." Keeps users from having to clone a whole preset for one-field changes.)
 - `created_by_user_id` (nullable FK — null for built-ins)
 - `created_at`, `updated_at`

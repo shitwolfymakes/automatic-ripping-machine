@@ -33,6 +33,11 @@ logger = logging.getLogger("arm_ripper.drive_resolve")
 # <linux/major.h>: SCSI CD-ROM block devices.
 SCSI_CDROM_MAJOR = 11
 
+# (dev_root, node name) pairs already warned about. The poll loop resolves every
+# couple of seconds; a node that stays missing is logged once, and again only
+# after it has been present in between.
+_warned_missing: set[tuple[str, str]] = set()
+
 
 @dataclass(frozen=True)
 class ResolvedDevice:
@@ -50,8 +55,10 @@ def _is_optical(name: str, sysfs_root: Path) -> bool:
 
 def _optical_node(name: str, *, dev_root: Path, sysfs_root: Path, warn_if_missing: bool = False) -> str | None:
     node = dev_root / name
+    key = (str(dev_root), name)
     if not node.exists():
-        if warn_if_missing:
+        if warn_if_missing and key not in _warned_missing:
+            _warned_missing.add(key)
             # udev says the drive is at <name>, but the entrypoint never
             # pre-created that node — so nothing in this container can open it.
             # Almost always a too-low ARM_OPTICAL_SR_MAX / ARM_OPTICAL_SG_MAX.
@@ -61,6 +68,7 @@ def _optical_node(name: str, *, dev_root: Path, sysfs_root: Path, warn_if_missin
                 dev_root,
             )
         return None
+    _warned_missing.discard(key)
     if not _is_optical(name, sysfs_root):
         return None
     return str(node)

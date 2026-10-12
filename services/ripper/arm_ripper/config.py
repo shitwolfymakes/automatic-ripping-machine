@@ -44,11 +44,11 @@ class Settings(BaseSettings):
     # pipeline against the file exactly once, then exits (the backend's
     # virtual-drive watchdog does the cleanup — see spec §5/§6.2). The
     # backend spawns one such container per ISO rip; it sets no
-    # ARM_DRIVE_DEV for these. ARM_SOURCE_KIND selects the MakeMKV source
-    # scheme ("iso" for now; "folder" is a later addition). ARM_SOURCE_SESSION_ID
-    # carries the operator's chosen session, when one was picked explicitly.
+    # ARM_DRIVE_DEV for these. The ripper tells an ISO from a disc folder by
+    # looking at ARM_SOURCE_PATH itself (`source.is_folder_source`).
+    # ARM_SOURCE_SESSION_ID carries the operator's chosen session, when one was
+    # picked explicitly.
     ARM_SOURCE_PATH: str | None = None
-    ARM_SOURCE_KIND: str = "iso"
     ARM_SOURCE_SESSION_ID: str | None = None
     # Tier-4: how often the ripper re-probes makemkv key validity (daily default).
     MAKEMKV_KEYCHECK_INTERVAL_SECONDS: int = 86400

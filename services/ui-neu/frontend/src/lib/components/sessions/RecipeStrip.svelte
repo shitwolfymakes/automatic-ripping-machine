@@ -14,11 +14,14 @@
 	// The rip > transcode > output strip: Settings > Sessions cards and the
 	// setup walkthrough's "What happens to each kind of disc" table. Cells sit
 	// side by side on desktop and stack on mobile, where the chevron rotates.
-	let { cells }: { cells: RecipeCell[] } = $props();
+	// `tone="info"` swaps the grey wash for the blue info tint, for a strip that
+	// summarises settings rather than describing an item card.
+	let { cells, tone }: { cells: RecipeCell[]; tone?: 'info' } = $props();
 </script>
 
 <div
 	class="recipe-strip"
+	data-tone={tone}
 	style:--recipe-columns={cells.map((_, i) => (i ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)')).join(' ')}
 >
 	{#each cells as cell, i (i)}
@@ -26,7 +29,7 @@
 			<div class="recipe-strip-arrow" aria-hidden="true"><Glyph name="chevron-right" /></div>
 		{/if}
 		<div class="recipe-strip-cell">
-			<span class="recipe-strip-label">{cell.label}</span>
+			<span class="label-caps">{cell.label}</span>
 			{#if cell.value}
 				<span class={cell.mono ? 'mono recipe-strip-path' : 'recipe-strip-value'}>{cell.value}</span>
 				{#if cell.sub}<span class="recipe-strip-sub">{cell.sub}</span>{/if}
@@ -53,6 +56,13 @@
 	:global(.dark) .recipe-strip {
 		background: color-mix(in srgb, var(--color-backdrop) 33%, transparent);
 	}
+	.recipe-strip[data-tone='info'] {
+		background: var(--color-info-soft);
+	}
+	/* :global: .dark is the app-level scheme class on <html>, outside this component */
+	:global(.dark) .recipe-strip[data-tone='info'] {
+		background: var(--color-info-soft);
+	}
 	@media (min-width: 640px) {
 		.recipe-strip {
 			grid-template-columns: var(--recipe-columns);
@@ -73,12 +83,6 @@
 		gap: 0.125rem;
 		min-width: 0;
 		padding: 0.75rem 1rem;
-	}
-	.recipe-strip-label {
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: var(--color-text-faint);
 	}
 	.recipe-strip-value {
 		font-weight: 500;

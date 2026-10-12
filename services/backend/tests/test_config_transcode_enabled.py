@@ -99,6 +99,15 @@ def test_null_column_reads_as_enabled(client: TestClient, config_row: Config) ->
     assert r.json()["transcode_enabled"] is True
 
 
+def test_not_capable_reads_as_disabled(client: TestClient, config_row: Config, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The column still defaults to true on a ripper-only box; the view must not say so.
+    monkeypatch.setattr("arm_backend.routers.config.settings", _settings(ARM_TRANSCODE_CAPABLE=False))
+    assert config_row.transcode_enabled is True
+    body = client.get("/api/config").json()
+    assert body["transcode_capable"] is False
+    assert body["transcode_enabled"] is False
+
+
 def test_patch_toggle_roundtrip(client: TestClient, config_row: Config) -> None:
     r = client.patch("/api/config", json={"transcode_enabled": False})
     assert r.status_code == 200
@@ -203,7 +212,12 @@ def test_reenable_promotes_encode_application_parked_while_disabled(
 
 @pytest.mark.parametrize("job_status", [JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW])
 def test_reenable_leaves_pre_rip_application_parked_even_with_review_tracks(
-    signing_key: bytes, db: FakeSession, config_row: Config, media_root: Path, job_status: JobStatus
+    signing_key: bytes,
+    db: FakeSession,
+    config_row: Config,
+    media_root: Path,
+    job_status: JobStatus,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A held (or identified, not yet ripped) disc can already carry review
     Track rows from identify's hold_for_review path. Re-enabling transcode
@@ -224,6 +238,8 @@ def test_reenable_leaves_pre_rip_application_parked_even_with_review_tracks(
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
     assert db.rows["transcode_tasks"] == []
     assert not any(e["event_type"] == "session.queued" for e in hub.events)
+    # The job is never selected for the re-drain, so no "stays parked" WARN per row.
+    assert "stays parked" not in caplog.text
 
 
 def test_patch_without_transition_does_not_redrain(

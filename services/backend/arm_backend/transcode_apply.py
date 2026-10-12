@@ -77,7 +77,7 @@ def _build_track_ctx(
     track_index_padded = f"{track.index:02d}"
 
     # Music naming reads the typed `music` section (§3.4); the bare
-    # top-level keys are the pre-0031 fallback.
+    # top-level keys are the pre-0032 fallback.
     raw_music = metadata.get("music")
     music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
 

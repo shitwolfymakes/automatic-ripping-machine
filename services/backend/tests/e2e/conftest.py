@@ -145,6 +145,16 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     # branch is stable regardless of any stray env. CI has no GPU, so model that.
     monkeypatch.setattr(main_mod, "load_configured_gpus", lambda _raw: [])
 
+    # The lifespan boots the real DriveScanner. Point it at empty trees so it
+    # finds no drives, instead of scanning the host's /sys (and /host-disk),
+    # which would seed Drive rows differently on every machine.
+    sysfs_root = tmp_path / "sys"
+    host_disk_root = tmp_path / "host-disk"
+    sysfs_root.mkdir()
+    host_disk_root.mkdir()
+    monkeypatch.setattr(main_mod.settings, "ARM_SYSFS_ROOT", str(sysfs_root))
+    monkeypatch.setattr(main_mod.settings, "ARM_HOST_DISK_ROOT", str(host_disk_root))
+
     # Postgres Alembic revisions can't run on SQLite — create the schema from
     # model metadata instead. Same effect for the API surface under test. A
     # throwaway *sync* engine on the same file sidesteps event-loop juggling

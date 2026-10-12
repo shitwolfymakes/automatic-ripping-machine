@@ -16,7 +16,7 @@
 - [Standard UI patterns](feedback_standard_ui_patterns.md) — recurring UI (sort indicators, close buttons, status glyphs, chips) is a shared component (`Glyph`, `SortIndicator`, `CloseButton`, ...), never one-off inline markup.
 - [No-transcode mode shipped (wolfy #85)](project_no_transcode_mode.md) — capability + toggle + in-process passthrough; dispatcher identity-map invariants; follow-up list
 - [Encoder-first presets + per-device GPU probe (wolfy #87)](project_encoder_first_presets.md) — encoder ids replace codec/hw_preference (migration 0038); probe-verified eligibility; vendor image variants; parked follow-ups
-- [Docs site architecture](project_docs_site.md) — `site/` builds `build/site` (Pages) and `build/app` (baked into ui-neu's `/docs-data/`, backing the `/help` route); broken doc links fail `npm test`; branch stacked at the end of the wolfy PR stack (after #87).
+- [Docs site architecture](project_docs_site.md) — `site/` builds `build/site` (Pages) and `build/app` (baked into ui-neu's `/docs-data/`, backing the `/help` route); broken doc links fail `npm test`.
 - [Vue UI removed](project_vue_ui_deprecated.md) — Vue dropped 2026-09-09, `services/ui/` removed 2026-09-27; ui-neu (`arm-ui`) is the only UI — never propose Vue fixes.
 - [Automation Gap Register is the live gap analysis](project_automation_gap_register.md) — G-01..G-26 + R-1..R-6; phase 1 done, phase 2 on wolfy/feat/job-identity-columns; supersedes the stale June port-backlog board.
 - [PEP 758 parse checks](project_pep758_parse_checks.md) — unparenthesized except tuples are valid py3.14 + ruff canon; parse-check with uv run python
@@ -30,3 +30,5 @@
 - [hifi verification method](project_hifi_verification_method.md) — temp admin via DB + argon2, ISO rips as the disc path, log-capture loop, SQL quoting and image gotchas (2026-10-03 register verification)
 - [Subagents stay in their worktree](feedback_subagents_stay_in_worktree.md) — implementers given a worktree also edited the main checkout (2026-10-04); forbid it in dispatches and check the main checkout status after each task
 - [Docs describe the current state](feedback_docs_describe_current_state.md) — docs, memory, comments and CLAUDE.md say what is true now; replace an old description instead of annotating it ("DONE", "no longer", "used to"); history lives in git, spec/plan and CHANGELOG
+- [No em dashes or unicode symbols in UI copy](feedback_no_em_dashes_in_ui_copy.md) — correct the characters (em-dash, ✓ ✗ ⚠ → · … ≥ ▾ ○); do not reword or change what is shown.
+- [Glyph icons, not emoji](feedback_glyph_icons_not_emoji.md) — status/indicator icons are the inline SVG glyphs ui-neu already uses, never emoji or unicode symbols.

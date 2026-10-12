@@ -71,9 +71,4 @@ def test_apply_groups() -> None:
 
 def test_post_rip_and_redrain_groups() -> None:
     assert POST_RIP_JOB_STATUSES == {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY}
-    assert REDRAIN_JOB_STATUSES == {
-        JobStatus.RIPPED,
-        JobStatus.RIPPED_PARTIAL,
-        JobStatus.IDENTIFIED,
-        JobStatus.AWAITING_REVIEW,
-    }
+    assert REDRAIN_JOB_STATUSES == {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}

@@ -29,18 +29,20 @@ Prerequisites: `uv`, Docker + the `docker compose` v2 plugin, `openssl`, and
 Node/`npm` for the UI. From a checkout:
 
 ```bash
-bash devtools/setup-dev.sh        # uv sync, generate certs, seed .env (idempotent)
-docker compose up -d --build      # build images from your working tree and start
+bash devtools/setup-dev.sh up     # uv sync, certs, .env (idempotent), then build and start
+bash devtools/setup-dev.sh down   # stop the stack and the backend-spawned containers
 ```
 
 The dev compose that `devtools/setup-dev.sh` generates from
-`docker-compose.yml.example` (into a gitignored `docker-compose.yml`, one
-`arm-ripper-srN` per drive) keeps `build:` blocks (vs the installer's `image:`
-references) so you iterate against your own code. The UI comes up at
+`docker-compose.yml.example` (into a gitignored `docker-compose.yml`) keeps
+`build:` blocks (vs the installer's `image:` references) so you iterate against
+your own code. Its single `arm-ripper` service only builds the ripper image; the
+Backend spawns one `arm-ripper-<serial>` container per drive when you enroll it.
+The UI comes up at
 <https://localhost:8081>.
 
-The `.env` file contains the switch for the log level, so you'll want to run
-`docker compose up -d --build --force-recreate` after changing values there.
+The `.env` file contains the switch for the log level, so you'll want to
+re-run `bash devtools/setup-dev.sh up` after changing values there.
 
 ## Development model: trunk-based
 

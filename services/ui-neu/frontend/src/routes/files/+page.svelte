@@ -493,12 +493,13 @@
 
 	<!-- Root tabs -->
 	{#if roots.length > 0}
-		<div class="tabs" aria-label="File root tabs">
+		<div class="tabs" role="group" aria-label="File root tabs">
 			{#each roots as root (root.key)}
 				<button
 					type="button"
 					onclick={() => navigate(root.key, '')}
 					data-selected={root.key === current.root}
+					aria-pressed={root.key === current.root}
 					class="tabs-tab"
 				>
 					{root.label}

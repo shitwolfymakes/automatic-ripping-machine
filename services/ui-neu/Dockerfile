@@ -23,6 +23,8 @@ RUN npm run build
 # Stage 2 — nginx serving the static bundle + reverse-proxying to arm-backend.
 FROM nginx:1.27-alpine
 RUN apk add --no-cache ca-certificates
+# Ship the project license in the image, as every other image does.
+COPY LICENSE /LICENSE
 COPY --from=build /app/frontend/build /usr/share/nginx/html
 COPY --from=docs /repo/site/build/app /usr/share/nginx/html/docs-data
 COPY services/ui-neu/nginx.conf /etc/nginx/conf.d/default.conf

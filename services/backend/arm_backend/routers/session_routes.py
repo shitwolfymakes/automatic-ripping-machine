@@ -22,13 +22,14 @@ more churn than the import itself.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.auto_session import _media_types_compatible
 from arm_backend.db import get_session
-from arm_common import Session, SessionRoute, User
+from arm_common import DiscType, MediaType, Session, SessionRoute, User
 from arm_common.schemas import SessionRouteUpsert, SessionRouteView
 
 router = APIRouter(prefix="/api/session-routes", tags=["session-routes"])
@@ -41,6 +42,15 @@ async def list_session_routes(
 ) -> list[SessionRoute]:
     result = await db.execute(select(SessionRoute))
     return list(result.scalars().all())
+
+
+def _route_conflict() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="the route changed concurrently; retry")
+
+
+async def _find_route(db: AsyncSession, media_type: MediaType, disc_type: DiscType | None) -> SessionRoute | None:
+    rows = (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == media_type))).scalars().all()
+    return next((r for r in rows if r.disc_type == disc_type), None)
 
 
 @router.put("", response_model=SessionRouteView)
@@ -67,25 +77,38 @@ async def upsert_session_route(
             ),
         )
 
-    existing_rows = (
-        (await db.execute(select(SessionRoute).where(col(SessionRoute.media_type) == req.media_type))).scalars().all()
-    )
-    existing = next((r for r in existing_rows if r.disc_type == req.disc_type), None)
+    existing = await _find_route(db, req.media_type, req.disc_type)
+    if existing is None:
+        row = SessionRoute(media_type=req.media_type, disc_type=req.disc_type, session_id=req.session_id)
+        db.add(row)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # A concurrent PUT for the same (media_type, disc_type) inserted
+            # first and tripped the NULLS-NOT-DISTINCT unique constraint. Fold
+            # into an update of the winner's row, the same result as the
+            # sequential upsert.
+            await db.rollback()
+            existing = await _find_route(db, req.media_type, req.disc_type)
+            if existing is None:
+                # The conflict was something else (the session vanished mid-request).
+                raise _route_conflict() from None
+        else:
+            await db.refresh(row)
+            return row
 
-    if existing is not None:
-        # Already attached to the session (loaded via `select` above); no
-        # `db.add()` needed for an update, and re-adding an already-tracked
-        # row would duplicate it in a naive in-memory session.
-        existing.session_id = req.session_id
+    # Already attached to the session (loaded via `select`); no `db.add()`
+    # needed for an update, and re-adding an already-tracked row would
+    # duplicate it in a naive in-memory session.
+    existing.session_id = req.session_id
+    try:
         await db.commit()
-        await db.refresh(existing)
-        return existing
-
-    row = SessionRoute(media_type=req.media_type, disc_type=req.disc_type, session_id=req.session_id)
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
-    return row
+    except IntegrityError:
+        # The session (or the route) changed under this request.
+        await db.rollback()
+        raise _route_conflict() from None
+    await db.refresh(existing)
+    return existing
 
 
 @router.delete("/{route_id}", status_code=status.HTTP_204_NO_CONTENT)

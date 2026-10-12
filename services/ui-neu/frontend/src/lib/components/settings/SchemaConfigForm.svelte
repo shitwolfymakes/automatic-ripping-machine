@@ -3,7 +3,13 @@
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
-	import { groupBlurb, sectionFields, KEY_CHECK_NAMES, KEY_SERVICE_LABEL } from '$lib/utils/settings-sections';
+	import {
+		groupBlurb,
+		sectionFields,
+		settingsTabFor,
+		KEY_CHECK_NAMES,
+		KEY_SERVICE_LABEL
+	} from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
 	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
@@ -35,6 +41,9 @@
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
 	const blurb = $derived(groupBlurb(group.name));
+	// A required key's field lives in this form's group when it has one; the API
+	// keys otherwise sit with the metadata settings.
+	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : 'Metadata');
 
 	let values = $state<Record<string, unknown>>({});
 
@@ -236,6 +245,7 @@
 			bind:value={values[field.key]}
 			config={values}
 			context={config}
+			{keyTab}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		/>
 	{/if}
@@ -301,7 +311,7 @@
 					</div>
 					{#if section.advanced.length > 0}
 						<hr class="schema-config-form-advanced-divider" />
-						<span class="schema-config-form-advanced-label">Advanced</span>
+						<span class="label-caps schema-config-form-advanced-label">Advanced</span>
 						<div class="stack">
 							{#each section.advanced as field (field.key)}
 								{@render fieldRow(field)}
@@ -379,17 +389,9 @@
 		border: none;
 		border-top: 1px solid var(--color-border);
 	}
-	/* the session-card-recipe-label look (SessionCard.svelte), restated here
-	   since this is its only other consumer - not yet a shared block. */
 	.schema-config-form-advanced-label {
 		display: block;
 		margin-bottom: 0.5rem;
-		font-size: 0.75rem;
-		line-height: calc(1 / 0.75);
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: var(--color-text-faint);
 	}
 	.schema-config-form-key-check {
 		font-size: 0.875rem;

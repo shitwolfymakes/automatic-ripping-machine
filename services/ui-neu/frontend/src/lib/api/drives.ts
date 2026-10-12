@@ -1,5 +1,5 @@
 import type { DriveView, DriveUpdateRequest, DriveDiagnosticResponse, DriveRescanResponse } from '$lib/types/api.gen';
-import { get, patch, del, post, buildQuery } from './client';
+import { get, patch, post, buildQuery } from './client';
 
 // `includeRetired` adds retired rows (finished ISO rips): only the
 // dashboard's drive-name map needs them, so a finished job keeps its label.
@@ -9,10 +9,6 @@ export function fetchDrives(opts: { includeRetired?: boolean } = {}): Promise<Dr
 
 export function updateDrive(driveId: string, data: DriveUpdateRequest): Promise<DriveView> {
 	return patch<DriveView>(`/api/drives/${driveId}`, data);
-}
-
-export function deleteDrive(driveId: string): Promise<void> {
-	return del(`/api/drives/${driveId}`);
 }
 
 export function rescanDrives(force = false): Promise<DriveRescanResponse> {

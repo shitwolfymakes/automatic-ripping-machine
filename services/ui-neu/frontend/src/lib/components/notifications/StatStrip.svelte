@@ -28,9 +28,8 @@
 	.stat-strip .stat {
 		background: var(--color-page);
 	}
-	/* the .stat block's value margin-top (0.5rem) is sized for a future denser
-	   consumer (JobStatsPanel); this strip's value sat closer to its label
-	   (mt-1, 0.25rem). */
+	/* the .stat block's value margin-top (0.5rem) is sized for the transcoder
+	   page's tiles; this strip's value sat closer to its label (mt-1, 0.25rem). */
 	.stat-strip .stat-value {
 		margin-top: 0.25rem;
 	}

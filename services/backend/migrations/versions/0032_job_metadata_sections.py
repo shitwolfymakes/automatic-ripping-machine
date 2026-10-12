@@ -18,9 +18,10 @@ Per row (PostgreSQL only, in Python — the reshaping is not sane SQL):
   pending_session_id mirror, and the section keys themselves.
 
 Idempotent: an already-shaped row has no stray keys, so the loop rewrites
-nothing. Downgrade is a no-op — the sections remain readable by the
-pre-migration code's fallbacks except provider_raw, which older code never
-read anyway.
+nothing. The lift is one-way: downgrade is a no-op and leaves the lifted
+`music`, `identity.external_ids`, `flags` and `provider_raw["legacy"]` data
+where it is. Code from before this revision reads artist / album / tracks and
+the flags from the top level, so it cannot see them after a downgrade.
 
 Revision ID: 0032_job_metadata_sections
 Revises: 0031_job_identity_columns

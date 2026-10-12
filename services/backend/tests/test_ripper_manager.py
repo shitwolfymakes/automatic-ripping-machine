@@ -205,7 +205,7 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
     assert "device_cgroup_rules" not in spec
     assert spec["restart_policy"] == {"Name": "no"}
     env = spec["environment"]
-    assert env["ARM_SOURCE_PATH"] == "/source/Blade Runner.iso" and env["ARM_SOURCE_KIND"] == "iso"
+    assert env["ARM_SOURCE_PATH"] == "/source/Blade Runner.iso" and "ARM_SOURCE_KIND" not in env
     assert "ARM_DRIVE_DEV" not in env and "ARM_DRIVE_BY_ID" not in env and "CDROM_GID" not in env
     assert "ARM_HOST_DISK_ROOT" not in env and "ARM_SOURCE_SESSION_ID" not in env
     assert env["ARM_DRIVE_ID"] == d.id and env["ARM_SERVICE_TOKEN"] == "tok-service"
@@ -219,11 +219,6 @@ def test_virtual_container_spec_carries_session() -> None:
     m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
     env = m.container_spec(_iso_drive(rip_params_json={"session_id": "ses_01ABC"}))["environment"]
     assert env["ARM_SOURCE_SESSION_ID"] == "ses_01ABC"
-
-
-def test_virtual_container_spec_defaults_the_source_kind_to_iso() -> None:
-    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
-    assert m.container_spec(_iso_drive(source_kind=None))["environment"]["ARM_SOURCE_KIND"] == "iso"
 
 
 def test_host_paths_set_accepts_a_ripper_certs_path_alone() -> None:

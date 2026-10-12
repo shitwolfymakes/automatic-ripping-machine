@@ -31,7 +31,8 @@ export interface NotificationPurgeResult {
 	deleted: number;
 }
 
-// Marks every unseen row seen. It does NOT clear them, so they are not purgeable.
+// Marks every not-yet-cleared row seen and cleared, like dismissing each row, so they
+// leave the inbox and become purgeable.
 export function dismissAllNotifications(): Promise<NotificationDismissAllResult> {
 	return post<NotificationDismissAllResult>('/api/notifications/inbox/dismiss-all');
 }

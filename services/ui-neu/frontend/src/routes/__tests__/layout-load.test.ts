@@ -1,8 +1,8 @@
 // Unit tests for the +layout.ts `load` guard itself (not the +layout.svelte
 // component — see layout-guest.test.ts for that). Tokenless requests are a
-// valid browsing state (guest, backend-side) — the load guard no longer
-// attempts any acquisition or redirect based on token presence; it only
-// hydrates config and runs the first-run setup check.
+// valid browsing state (guest, backend-side) — the load guard does not acquire
+// a session; it probes once whether anonymous visits are allowed (sending the
+// rest to /login), hydrates config and runs the first-run setup check.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isRedirect } from '@sveltejs/kit';
 import type { LayoutLoad } from '../$types';
@@ -42,13 +42,70 @@ describe('+layout.ts load guard', () => {
 		expect(result).toEqual({});
 	});
 
-	it('token present: behaves the same as no token (no redirect)', async () => {
+	function versionFetch(status: number) {
+		return vi.fn(() => Promise.resolve({ ok: status === 200, status })) as unknown as typeof fetch;
+	}
+
+	it('no token + guest access off: one probe, then /login, with no config or poller fan-out', async () => {
+		const fetchImpl = versionFetch(401);
+		const { load } = await import('../+layout');
+		let caught: unknown;
+		try {
+			await load(loadArgs('/jobs', fetchImpl));
+		} catch (e) {
+			caught = e;
+		}
+		expect(isRedirect(caught)).toBe(true);
+		expect((caught as { location: string }).location).toBe('/login');
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+		expect(fetchImpl).toHaveBeenCalledWith('/api/system/version');
+		expect(hydrateConfigMock).not.toHaveBeenCalled();
+	});
+
+	it('no token + guest access on: loads normally and probes only once per page load', async () => {
+		const fetchImpl = versionFetch(200);
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/jobs', fetchImpl))).toEqual({});
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+		expect(hydrateConfigMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('a failing probe does not lock anyone out and is not repeated', async () => {
+		const down = vi.fn(() => Promise.reject(new Error('down'))) as unknown as typeof fetch;
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', down))).toEqual({});
+		expect(await load(loadArgs('/jobs', down))).toEqual({});
+		expect(down).toHaveBeenCalledTimes(1);
+		expect(hydrateConfigMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('an erroring backend lets the visitor in once per page load', async () => {
+		const fetchImpl = versionFetch(503);
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/jobs', fetchImpl))).toEqual({});
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
+
+	it('sign-in pages neither probe nor hydrate config', async () => {
+		const fetchImpl = versionFetch(401);
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/login', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/change-password', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(hydrateConfigMock).not.toHaveBeenCalled();
+	});
+
+	it('token present: no probe, no redirect', async () => {
 		getTokenMock.mockReturnValue('existing-token');
+		const fetchImpl = vi.fn() as unknown as typeof fetch;
 
 		const { load } = await import('../+layout');
-		const result = await load(loadArgs('/'));
+		const result = await load(loadArgs('/', fetchImpl));
 
 		expect(result).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it('auth route (/login) + no token: no redirect', async () => {
@@ -83,7 +140,7 @@ describe('+layout.ts load guard', () => {
 		const fetchImpl = statusFetch({ first_run: true });
 		const { load } = await import('../+layout');
 		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
-		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(fetchImpl).not.toHaveBeenCalledWith('/api/setup/status');
 	});
 
 	it('the server decides: an old browser-session Finish later flag no longer pauses the redirect', async () => {

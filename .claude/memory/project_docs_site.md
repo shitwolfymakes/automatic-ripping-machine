@@ -27,9 +27,3 @@ must be placed in the manifest or the build fails.
 
 `npm test` (site/test) fails the build on broken doc links — treat a red
 `npm test` in `site/` as a genuine broken-link regression, not flakiness.
-
-Branch `feat/docs-site` sits at the end of the wolfy PR stack, on
-`feat/encoder-first-presets` (#87; the stack runs #61..#66, #75, #76, #73,
-#74, #81, #83, #84, #85, #87). It needs #74's ui-neu styling system; it was
-moved to the end so its migration numbers and doc moves come after the rest
-of the stack. Rebase/merge order matters.

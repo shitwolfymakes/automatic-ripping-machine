@@ -107,8 +107,7 @@ class JobStatus(StrEnum):
     # identification never landed (metadata_json["unidentified"]): transcode
     # is gated on identity, so the after-rip hooks wait for resolve, which
     # promotes this to RIPPED (not IDENTIFIED). Resolvable via the
-    # /resolve endpoint just like AWAITING_USER_ID. Inert today — no code
-    # path sets this yet.
+    # /resolve endpoint just like AWAITING_USER_ID.
     RIPPED_AWAITING_IDENTIFY = "ripped_awaiting_identify"
     ABANDONED = "abandoned"
     FAILED = "failed"
@@ -167,10 +166,9 @@ POST_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
 )
 # Jobs whose parked applications are re-drained when transcoding is re-enabled:
 # the rip is done and identity is known, so the only thing that held an encode
-# application parked was the toggle.
-REDRAIN_JOB_STATUSES: frozenset[JobStatus] = frozenset(
-    {JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW}
-)
+# application parked was the toggle. Pre-rip jobs (identified, awaiting review)
+# are left out: their applications stay parked until rip-complete drains them.
+REDRAIN_JOB_STATUSES: frozenset[JobStatus] = frozenset({JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
 
 
 class TrackStatus(StrEnum):

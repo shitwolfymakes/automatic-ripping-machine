@@ -241,10 +241,12 @@ detection), add `ARM_GPUS_MANUAL=true` to `.env`. ARM then keeps `ARM_GPUS`
 as written on every run, and pulls the `-intel` / `-amd` images that list
 calls for.
 
-> **Re-run the installer after any GPU or driver change** (new card, driver
-> upgrade) so `ARM_GPUS` is refreshed. Re-probe the affected row from
-> Settings > GPUs afterward (or restart the Backend, which probes any
-> newly-unprobed row on boot).
+> **After any GPU or driver change** (new card, driver upgrade), re-run the
+> installer (or `armctl up`) so `ARM_GPUS` is refreshed. The Backend reads
+> `ARM_GPUS` only while the GPU list in Settings > GPUs is empty, so delete the
+> existing rows there and restart the Backend to re-seed from the new list
+> (it probes every newly-seeded row on boot). To refresh a single row without
+> re-seeding, re-probe it from Settings > GPUs.
 
 A ripper-only dev checkout (`devtools/setup-dev.sh --ripper-only`) skips this
 detection entirely and writes `ARM_GPUS=[]` plus `ARM_TRANSCODE_CAPABLE=false`,

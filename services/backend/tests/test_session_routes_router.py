@@ -13,6 +13,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import pytest  # noqa: E402
+from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
@@ -130,6 +131,76 @@ def test_upsert_updates_existing_route_in_place(signing_key: bytes) -> None:
     assert first.json()["id"] == second.json()["id"]
     assert second.json()["session_id"] == "ses_music_alt"
     assert len(db.rows["session_routes"]) == 1
+
+
+class _RacingSession(FakeSession):
+    """The first commit loses a unique-constraint race: another request's row
+    for the same key is already there and this request's insert is rejected."""
+
+    def __init__(self, winner: SessionRoute | None) -> None:
+        super().__init__()
+        self._winner = winner
+        self._raced = False
+
+    async def commit(self) -> None:
+        if not self._raced:
+            self._raced = True
+            routes = self.rows["session_routes"]
+            routes[:] = [r for r in routes if r is not self._winner and r.id not in {a.id for a in self.added}]
+            if self._winner is not None:
+                routes.append(self._winner)
+            raise IntegrityError("INSERT", {}, Exception("uq_session_routes_media_type_disc_type"))
+        await super().commit()
+
+
+def test_upsert_concurrent_put_folds_into_the_winning_row(signing_key: bytes) -> None:
+    winner = SessionRoute(id="srt_winner", media_type=MediaType.MUSIC, disc_type=DiscType.CD, session_id="ses_music")
+    db = _RacingSession(winner)
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(), _session("ses_music_alt")]
+    db.rows["session_routes"] = []
+    body = {"media_type": "music", "disc_type": "cd", "session_id": "ses_music_alt"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == "srt_winner"
+    assert r.json()["session_id"] == "ses_music_alt"
+    assert len(db.rows["session_routes"]) == 1
+    assert "rollback" in db.call_log
+
+
+def test_upsert_unique_violation_without_a_winner_is_409(signing_key: bytes) -> None:
+    db = _RacingSession(None)
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session()]
+    db.rows["session_routes"] = []
+    body = {"media_type": "music", "disc_type": "cd", "session_id": "ses_music"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 409
+
+
+class _AlwaysFailingSession(_RacingSession):
+    """Loses the insert race, then the update on the winner's row fails too
+    (e.g. the session FK, during a concurrent session delete)."""
+
+    async def commit(self) -> None:
+        if not self._raced:
+            await super().commit()
+        raise IntegrityError("UPDATE", {}, Exception("fk_session_routes_session_id"))
+
+
+def test_upsert_failing_retry_is_409_not_500(signing_key: bytes) -> None:
+    winner = SessionRoute(id="srt_winner", media_type=MediaType.MUSIC, disc_type=DiscType.CD, session_id="ses_music")
+    db = _AlwaysFailingSession(winner)
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(), _session("ses_music_alt")]
+    db.rows["session_routes"] = []
+    body = {"media_type": "music", "disc_type": "cd", "session_id": "ses_music_alt"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert db.call_log.count("rollback") == 2
 
 
 def test_upsert_unknown_session_404(signing_key: bytes) -> None:

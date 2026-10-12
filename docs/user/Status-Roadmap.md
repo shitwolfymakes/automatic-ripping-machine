@@ -31,6 +31,10 @@ The architectural goals that defined v3 are in place:
   and runs it through the normal scan, identify, rip and transcode pipeline.
   See
   [`docs/developers/architecture/10-iso-source-ripping.md`](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/docs/developers/architecture/10-iso-source-ripping.md).
+- **Ripping from an extracted disc folder** (a `BDMV` or `VIDEO_TS` folder
+  already on disk, rather than an `.iso` file). The gear menu's **Rip from
+  folder** picker lists the disc folders in the same library and runs the
+  chosen one through the same virtual-ripper pipeline.
 
 ## In progress / ahead
 
@@ -40,15 +44,12 @@ The architectural goals that defined v3 are in place:
 - **TV-series-aware ripping**: episode matching and the **Match Episodes** tab
   are built (see the Web UI page); naming conventions and further session
   ergonomics, building on the sessions/presets foundation, are still to come.
-- **Maintenance tools**: find and remove orphaned media folders and log files,
-  clean up finished transcode jobs, and clear the raw rip area from the UI. The
-  buttons are hidden until these endpoints exist in v3.
+- **Maintenance tools**: find and remove orphaned media folders and clean up
+  finished transcode jobs from the Files page. The buttons are hidden until
+  these endpoints exist in v3.
 - **First-run setup wizard**: a guided first boot (drive scan, readiness
   checks, settings review). Built in the UI, switched off until the v3 setup
   status endpoints land.
-- **Extracted disc folders as a rip source** (a `BDMV` or `VIDEO_TS` folder
-  already on disk, rather than an `.iso` file). Next up for the ISO-source
-  picker; see the non-goals in the design doc linked above.
 
 ## Where to follow along
 

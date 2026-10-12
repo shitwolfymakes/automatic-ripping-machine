@@ -19,7 +19,14 @@ const ALLOWED = [
 	/^(w-full|h-full|min-w-0|min-h-0|max-w-(xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|prose|full|none)|w-auto|h-auto)$/,
 	/^(truncate|whitespace-[a-z-]+|break-[a-z]+|overflow-(auto|hidden|visible|scroll|x-auto|y-auto|x-hidden|y-hidden))$/,
 	/^sr-only$/,
-	/^(relative|absolute|inset-0|inset-x-0|inset-y-0|top-0|right-0|bottom-0|left-0)$/
+	/^(relative|absolute|inset-0|inset-x-0|inset-y-0|top-0|right-0|bottom-0|left-0)$/,
+	// Sizing and positioning that markup already carries (icon sizes, pinned
+	// corners, image fit): named here so the table is the whole vocabulary.
+	/^(w|h|size)-(\d+(\.\d+)?|\d+\/\d+|screen)$/,
+	/^(min|max)-[wh]-(0|full|screen)$/,
+	/^(aspect-(square|video|auto)|object-(cover|contain|center|fill)|line-clamp-\d+|basis-(full|auto|\d+\/\d+))$/,
+	/^(flex-shrink|flex-shrink-0|flex-grow|flex-grow-0|fixed|sticky|static)$/,
+	/^-?(top|right|bottom|left|inset)-(\d+(\.\d+)?|px)$/
 ];
 const RESPONSIVE = /^(sm|md|lg|xl):/;
 const BANNED_FAMILIES = /^(bg|text|border|ring|fill|stroke|from|to|via|divide|outline|shadow|rounded|font|tracking|leading|uppercase|lowercase|capitalize|italic|underline|transition|duration|ease|animate|opacity|cursor|z|dark|hover|focus|focus-visible|group-hover|disabled|active|placeholder)(-|:|$)/;
@@ -62,10 +69,13 @@ function lintClassBody(body, filename, push) {
 export function lintSource(src, filename) {
 	const out = [];
 	const push = (kind, detail) => out.push({ file: filename, kind, detail });
-	// 1. style="..." string attributes
+	// 1. style="..." / style='...' string attributes and style={...} bindings
 	for (const m of src.matchAll(/\sstyle="([^"]*)"/g)) push('style-attr', m[1]);
-	// 2. style:prop directives
-	for (const m of src.matchAll(/\sstyle:([a-zA-Z-]+)=/g)) {
+	for (const m of src.matchAll(/\sstyle='([^']*)'/g)) push('style-attr', m[1]);
+	for (const m of src.matchAll(/\sstyle=\{([^}]*)/g)) push('style-attr', `{${m[1].trim().slice(0, 60)}}`);
+	// 2. style:prop directives, with a value or in the value-less shorthand
+	// (`style:width` means `style:width={width}`)
+	for (const m of src.matchAll(/\sstyle:([a-zA-Z-]+)(?=[\s=/>])/g)) {
 		const prop = m[1];
 		if (prop.startsWith('--')) continue;
 		if (/Flyout\.svelte$/.test(filename) && FLYOUT_ALLOW.has(prop)) continue;

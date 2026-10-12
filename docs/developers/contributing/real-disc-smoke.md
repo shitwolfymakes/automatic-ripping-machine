@@ -94,7 +94,7 @@ The settings file is `$ARM/.armctl/.env`; after editing it, run
 ## Run the test (dev stack path)
 
 ```bash
-docker compose up -d
+bash devtools/setup-dev.sh up
 docker logs -f arm-ripper-<serial> &          # watch ripper events (enroll the drive from the UI first)
 ```
 

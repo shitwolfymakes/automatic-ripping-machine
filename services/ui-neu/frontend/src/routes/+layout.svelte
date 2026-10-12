@@ -120,16 +120,24 @@
 				goto('/login');
 			}
 		});
-		// Auth pages (/login, /change-password) render bare and must NOT poll the
-		// dashboard — the user has no usable session there, so the poll would 401
-		// (login) or 403 (change-password) on a loop.
-		if ($page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')) {
-			return;
+	});
+
+	// Auth pages (/login, /change-password) render bare and must NOT poll the
+	// dashboard: the user has no usable session there, so the poll would 401
+	// (login) or 403 (change-password) on a loop. The root layout persists
+	// across navigations, so the poll starts whenever the visitor reaches a real
+	// page (first load, after signing in, after a session expiry) and stops on
+	// the way back to an auth page. Tokenless browsing is a valid state
+	// (anonymous requests act as guest backend-side), so it polls the same as an
+	// authenticated session.
+	let themesLoaded = false;
+	$effect(() => {
+		if (isAuthPage) return;
+		if (!themesLoaded) {
+			themesLoaded = true;
+			// Falls back to the built-in themes if the backend is unreachable.
+			loadThemesFromApi();
 		}
-		// Load themes from API (falls back to built-in if backend unreachable)
-		loadThemesFromApi();
-		// Tokenless browsing is a valid state (anonymous requests act as guest
-		// backend-side) — start polling the same as an authenticated session.
 		dashboard.start();
 		return () => dashboard.stop();
 	});

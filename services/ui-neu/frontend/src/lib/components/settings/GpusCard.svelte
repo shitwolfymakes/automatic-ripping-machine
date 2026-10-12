@@ -14,6 +14,7 @@
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 
 	// Shared by Settings > Transcoding and the setup walkthrough's Transcoding
@@ -22,7 +23,6 @@
 	// in-progress state until that event (or a 2-minute timeout).
 	let { location = null }: { location?: { label: string } | null } = $props();
 
-	const VENDOR_LABEL: Record<string, string> = { nvenc: 'NVENC', qsv: 'Quick Sync', vaapi: 'VAAPI' };
 	const PROBE_TIMEOUT_MS = 120_000;
 
 	let gpus = $state<GpuView[]>([]);
@@ -66,16 +66,6 @@
 		} finally {
 			loaded = true;
 		}
-	}
-
-	function dotStatus(g: GpuView): string {
-		if (!g.enabled) return 'off';
-		return g.status === 'available' ? 'ok' : 'warn';
-	}
-
-	function statusLabel(g: GpuView): string {
-		if (!g.enabled) return 'disabled';
-		return g.status === 'available' ? 'available' : 'busy';
 	}
 
 	async function reprobe(g: GpuView) {
@@ -196,50 +186,50 @@
 		<div class="stack stack-sm">
 			{#each gpus as g (g.id)}
 				<div class="panel-section gpus-card-row-wrap" data-testid="gpu-row-{g.id}">
-					<div class="gpus-card-row">
-						<span class="status-dot" data-status={dotStatus(g)} aria-hidden="true"></span>
-						<span class="badge gpus-card-vendor">{VENDOR_LABEL[g.vendor] ?? g.vendor.toUpperCase()}</span>
-						<span class="gpus-card-device" title={g.device_path}>{g.device_path}</span>
-						<span class="gpus-card-kinds">
-							{#if !g.probed_at}
-								<span class="chip chip-sm"><Glyph name="clock" class="h-3 w-3" />Not tested</span>
-							{:else if g.encoder_kinds.length === 0}
-								<span class="chip chip-sm chip-danger"><Glyph name="x" class="h-3 w-3" />Nothing verified</span>
-							{:else}
-								{#each g.encoder_kinds as kind (kind)}
-									<span class="chip chip-sm chip-success"
-										><Glyph name="check" class="h-3 w-3" />{kind.toUpperCase()} available</span
-									>
-								{/each}
+					<GpuInventoryRow gpu={g}>
+						{#snippet kinds()}
+							<span class="gpus-card-kinds">
+								{#if !g.probed_at}
+									<span class="chip chip-sm"><Glyph name="clock" class="h-3 w-3" />Not tested</span>
+								{:else if g.encoder_kinds.length === 0}
+									<span class="chip chip-sm chip-danger"><Glyph name="x" class="h-3 w-3" />Nothing verified</span>
+								{:else}
+									{#each g.encoder_kinds as kind (kind)}
+										<span class="chip chip-sm chip-success"
+											><Glyph name="check" class="h-3 w-3" />{kind.toUpperCase()} available</span
+										>
+									{/each}
+								{/if}
+							</span>
+						{/snippet}
+						{#snippet controls()}
+							{#if $isAdmin}
+								<Toggle
+									checked={g.enabled}
+									label="Enable {g.vendor} {g.device_path}"
+									onchange={(next) => toggle(g, next)}
+								/>
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									disabled={pending.has(g.id)}
+									aria-label="Re-probe {g.vendor} {g.device_path}"
+									onclick={() => reprobe(g)}
+								>
+									Re-probe
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									disabled={pending.has(g.id)}
+									aria-label="Delete {g.vendor} {g.device_path}"
+									onclick={() => (confirmTarget = g)}
+								>
+									Delete
+								</button>
 							{/if}
-						</span>
-						<span class="gpus-card-status">{statusLabel(g)}</span>
-						{#if $isAdmin}
-							<Toggle
-								checked={g.enabled}
-								label="Enable {g.vendor} {g.device_path}"
-								onchange={(next) => toggle(g, next)}
-							/>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								disabled={pending.has(g.id)}
-								aria-label="Re-probe {g.vendor} {g.device_path}"
-								onclick={() => reprobe(g)}
-							>
-								Re-probe
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								disabled={pending.has(g.id)}
-								aria-label="Delete {g.vendor} {g.device_path}"
-								onclick={() => (confirmTarget = g)}
-							>
-								Delete
-							</button>
-						{/if}
-					</div>
+						{/snippet}
+					</GpuInventoryRow>
 					{#if probing[g.id]}
 						<StatusStrip tone="busy" title="Testing encoders..." detail="Takes 10 to 60 seconds" progress />
 					{:else if probeTimedOut[g.id]}
@@ -281,35 +271,11 @@
 		flex-direction: column;
 		gap: 0.375rem;
 	}
-	.gpus-card-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-	}
-	.gpus-card-vendor {
-		flex-shrink: 0;
-	}
-	.gpus-card-device {
-		font-family: var(--font-mono);
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
-		flex: 1;
-	}
 	.gpus-card-kinds {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.25rem;
 		flex-shrink: 0;
-	}
-	.gpus-card-status {
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-		flex-shrink: 0;
-		width: 4.5rem;
 	}
 	.gpus-card-location {
 		display: flex;

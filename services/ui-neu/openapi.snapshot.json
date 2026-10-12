@@ -2554,7 +2554,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the pre-existing heartbeat-freshness counts so the UI's\nonline/stale badge is unchanged. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
+        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "parameters": [
           {
@@ -8665,7 +8665,7 @@
           "setup"
         ],
         "summary": "Restart Setup",
-        "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.",
+        "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.\n\nA finished walkthrough has every step recorded, so the current step would be\nFinish. Reopen the system check along with Finish so the walkthrough starts\nfrom its first step again, wherever the operator returns to /setup.",
         "operationId": "restart_setup_api_setup_restart_post",
         "parameters": [
           {
@@ -11129,7 +11129,7 @@
           "value"
         ],
         "title": "DiscFingerprintInput",
-        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).\nFree-form to permit new algos without a schema bump."
+        "description": "One (algo, value) pair on a scanned disc.\n\nCanonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS\nDisc ID), `musicbrainz` (CD disc id), `matrix256` (matrix256v1\nstructural hash), `thediscdb` (TheDiscDB content hash).\nFree-form to permit new algos without a schema bump."
       },
       "DiscFingerprintView": {
         "properties": {
@@ -17354,16 +17354,11 @@
           "first_run": {
             "type": "boolean",
             "title": "First Run"
-          },
-          "arm_version": {
-            "type": "string",
-            "title": "Arm Version"
           }
         },
         "type": "object",
         "required": [
-          "first_run",
-          "arm_version"
+          "first_run"
         ],
         "title": "SetupStatusPublic",
         "description": "Unauthenticated: the login page and the first-run guard read it."

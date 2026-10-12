@@ -76,7 +76,8 @@ class DiscFingerprintInput(BaseModel):
     """One (algo, value) pair on a scanned disc.
 
     Canonical algo names: `crc64` (pydvdid DVD), `aacs` (Blu-ray AACS
-    Disc ID), `musicbrainz` (CD disc id), `matrix256` (ARM-native).
+    Disc ID), `musicbrainz` (CD disc id), `matrix256` (matrix256v1
+    structural hash), `thediscdb` (TheDiscDB content hash).
     Free-form to permit new algos without a schema bump.
     """
 

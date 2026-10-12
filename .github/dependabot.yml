@@ -34,6 +34,18 @@ updates:
       ui:
         patterns: ["*"]
 
+  # Docs site npm deps (the markdown renderer behind the in-app help and the
+  # published docs).
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      site:
+        patterns: ["*"]
+
   # Service base images — one entry per Dockerfile dir so dependabot
   # can pin each service independently.
   - package-ecosystem: "docker"

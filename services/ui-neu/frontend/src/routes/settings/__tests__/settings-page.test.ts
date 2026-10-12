@@ -619,6 +619,51 @@ describe('Settings Page', () => {
 			expect(screen.getByText('Issues Found')).toBeInTheDocument();
 		});
 
+		it('diagnostics panel trusts the backend verdict: informational notes on healthy drives are not issues', async () => {
+			const base = {
+				present: true,
+				media_status: null,
+				media_status_at: null,
+				container: null,
+				last_error: null,
+				healthy: true,
+				status: 'offline' as const
+			};
+			vi.mocked(fetchDriveDiagnostic).mockResolvedValueOnce({
+				drives: [
+					{
+						...base,
+						id: 'drv_port_ignored',
+						lifecycle: 'ignored',
+						identity_kind: 'port',
+						device_path: '/dev/sr1',
+						notes: ['ignored', 'no by-id link on the host: identified by port']
+					},
+					{
+						...base,
+						id: 'drv_new',
+						lifecycle: 'detected',
+						identity_kind: 'by_id',
+						device_path: '/dev/sr3',
+						notes: ['not enrolled: enroll it on the Drives page to rip with it']
+					}
+				],
+				system: []
+			});
+			await renderAndOpenTab('Drives');
+			await waitFor(() => {
+				expect(screen.getByText('Udev & Drive Diagnostics')).toBeInTheDocument();
+			});
+			await fireEvent.click(screen.getByText('Udev & Drive Diagnostics'));
+			await fireEvent.click(screen.getByText('Run Check'));
+			await waitFor(() => {
+				expect(screen.getByText('All OK')).toBeInTheDocument();
+			});
+			expect(screen.queryByText('Issues Found')).not.toBeInTheDocument();
+			expect(screen.getByTestId('diag-drive-drv_new')).toHaveTextContent('not enrolled');
+			expect(screen.getByTestId('diag-drive-drv_new')).toHaveAttribute('data-flagged', 'false');
+		});
+
 		it('diagnostics panel lists a healthy drive with its details and All OK', async () => {
 			vi.mocked(fetchDriveDiagnostic).mockResolvedValueOnce({
 				drives: [

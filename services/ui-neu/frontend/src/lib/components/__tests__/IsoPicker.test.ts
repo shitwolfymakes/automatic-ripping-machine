@@ -111,7 +111,19 @@ describe('IsoPicker', () => {
 		await waitFor(() => expect(screen.getByRole('option', { name: 'a.iso' })).toBeInTheDocument());
 
 		await fireEvent.click(screen.getByRole('option', { name: 'a.iso' }));
-		await waitFor(() => expect(screen.getByText('Selected a.iso, 1.0 GB.')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByText('Selected a.iso, 1 GB.')).toBeInTheDocument());
+	});
+
+	it('announces a selection with no known size as --', async () => {
+		fetchIsoLibraryMock.mockResolvedValue({
+			...ROOT_LISTING,
+			entries: [{ name: 'odd.iso', kind: 'iso', size_bytes: null, modified_at: null, ripping: false }]
+		});
+		renderComponent(IsoPicker, { props: defaultProps() });
+		await waitFor(() => expect(screen.getByRole('option', { name: 'odd.iso' })).toBeInTheDocument());
+
+		await fireEvent.click(screen.getByRole('option', { name: 'odd.iso' }));
+		await waitFor(() => expect(screen.getByText('Selected odd.iso, --.')).toBeInTheDocument());
 	});
 
 	it('disables a ripping ISO', async () => {
@@ -179,6 +191,7 @@ describe('IsoPicker', () => {
 		renderComponent(IsoPicker, { props: defaultProps() });
 
 		await waitFor(() => expect(screen.getByText('Set up your ISO library first')).toBeInTheDocument());
+		expect(screen.getByText(/armctl up/)).toBeInTheDocument();
 		expect(screen.getByText(/bash devtools\/setup-dev\.sh up/)).toBeInTheDocument();
 		expect(screen.getByText('Open Rip from ISO again and pick a file.')).toBeInTheDocument();
 		expect(screen.getByText('Nothing to pick until the library is set up.')).toBeInTheDocument();

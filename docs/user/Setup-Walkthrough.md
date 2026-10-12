@@ -18,8 +18,8 @@ Settings shows.
 ## 1. Secure your account
 
 Set your own admin password. Until you do, every other part of ARM stays
-locked. You can also let people on your network view ARM without signing in
-(read-only). Later: **Settings, Users**.
+locked. To let people on your network view ARM without signing in (read-only),
+use **Settings, Users** later.
 
 ## 2. System check
 

@@ -85,7 +85,6 @@ def test_settings_allow_missing_drive_dev_with_source(monkeypatch):
 
     assert s.ARM_DRIVE_DEV is None
     assert s.ARM_SOURCE_PATH == "/source/sintel.iso"
-    assert s.ARM_SOURCE_KIND == "iso"
     assert s.ARM_SOURCE_SESSION_ID is None
 
 
@@ -93,7 +92,11 @@ async def test_source_mode_drops_the_iso_extraction_when_the_pipeline_ends(monke
     import arm_ripper.iso_extract as iso_extract
 
     calls: list[str] = []
-    monkeypatch.setattr(iso_extract, "discard_all", lambda: calls.append("discard"))
+
+    async def _discard() -> None:
+        calls.append("discard")
+
+    monkeypatch.setattr(iso_extract, "discard_all", _discard)
 
     await run_source_mode(FakeController(), None)  # type: ignore[arg-type]
     await run_source_mode(FakeController(raise_cancelled=True), None)  # type: ignore[arg-type]

@@ -12,7 +12,7 @@ from arm_ripper.community_keydb import KeydbResult, refresh_community_keydb
 @respx.mock
 async def test_report_keydb_status_posts_body():
     route = respx.post("https://bk/api/ripper/keydb-status").mock(return_value=httpx.Response(204))
-    client = BackendClient("https://bk", "tok", "host1")
+    client = BackendClient("https://bk", "tok", "host1", drive_id="drv_1")
     await client.report_keydb_status(state=KeydbState.OK, vuk_count=4200, age_days=0)
     await client.close()
     assert route.called

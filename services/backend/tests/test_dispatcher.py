@@ -456,6 +456,67 @@ async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
     assert seen_years["alien"] == 1979
 
 
+async def test_identify_retries_hint_without_trailing_year(monkeypatch):
+    """A hint ending in a year is searched as given first (WONDER_WOMAN_1984),
+    then without the year (THE_OFFICE_2005), before the label title."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    searched_titles: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            searched_titles.append(title)
+            return None
+
+        async def search_tv(self, title):
+            searched_titles.append(title)
+            if title == "the office":
+                return MetadataResult(title="The Office", year=2005, kind="tv")
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_OFFICE_2005_S1_D2")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None), title_hint="the office 2005", title_hint_is_tv=True
+        )
+    assert result is not None and result.title == "The Office"
+    assert searched_titles == ["the office 2005", "the office 2005", "the office"]
+
+
+async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
+    """A hint that is all year ("1917") is searched once, never as an empty title."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+
+    searched_titles: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            searched_titles.append(title)
+            return None
+
+        async def search_tv(self, title):
+            searched_titles.append(title)
+            return None
+
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="1917_D1")
+        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="1917")
+    assert result is None
+    assert "" not in searched_titles
+    assert searched_titles.count("1917") == 2  # movie then TV, one candidate
+
+
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
     from arm_backend.metadata import dispatcher as dispatcher_mod
     from arm_backend.metadata.base import MetadataResult

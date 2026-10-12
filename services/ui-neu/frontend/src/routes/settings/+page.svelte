@@ -719,9 +719,8 @@
 
 								{#if diagResult}
 									{@const system = diagResult.system ?? []}
-									{@const unhealthy = diagResult.drives.filter(
-										(d) => !d.healthy || (d.notes.length > 0 && !(d.notes.length === 1 && d.notes[0] === 'ignored'))
-									)}
+									<!-- The backend decides which drives are unhealthy; a healthy drive's notes are informational. -->
+									{@const unhealthy = diagResult.drives.filter((d) => !d.healthy)}
 									{#if system.length > 0}
 										<div class="alert alert-warning mb-2 settings-page-diag-system" data-testid="diag-system">
 											{#each system as note, i (i)}
@@ -767,6 +766,8 @@
 												<div class="mt-1 flex items-start gap-1.5 settings-page-diag-note">
 													{#if note === 'ignored'}
 														<span class="settings-page-diag-ignored">ignored</span>
+													{:else if diag.healthy}
+														<span class="settings-page-diag-ignored">{note}</span>
 													{:else}
 														<Glyph name="warning" class="mt-0.5 h-3 w-3 flex-shrink-0 settings-page-diag-warn-icon" />
 														<span class="settings-page-diag-warn-text">{note}</span>

@@ -73,6 +73,29 @@ def test_by_id_pointing_above_the_precreated_range_warns(tmp_path: Path, caplog)
     assert "ARM_OPTICAL_SG_MAX" in warns[0].getMessage()
 
 
+def test_a_node_that_stays_missing_warns_once(tmp_path: Path, caplog) -> None:
+    """The poll loop resolves every couple of seconds; one warning per
+    transition, not one per poll."""
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    t = Tree(tmp_path)
+    t.link(BY_ID, "sr9")
+    for _ in range(3):
+        assert t.resolve(BY_ID) is None
+    assert len([r for r in caplog.records if "is not present under" in r.message]) == 1
+
+
+def test_a_node_that_reappears_and_vanishes_warns_again(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    t = Tree(tmp_path)
+    t.link(BY_ID, "sr9")
+    assert t.resolve(BY_ID) is None
+    t.node("sr9", 11, 9)
+    assert t.resolve(BY_ID) is not None
+    (t.dev / "sr9").unlink()
+    assert t.resolve(BY_ID) is None
+    assert len([r for r in caplog.records if "is not present under" in r.message]) == 2
+
+
 def test_a_missing_hint_node_does_not_warn(tmp_path: Path, caplog) -> None:
     """The hint path has no udev evidence the drive is anywhere, so a missing
     node there is just "absent" — the poll loop already logs that once."""

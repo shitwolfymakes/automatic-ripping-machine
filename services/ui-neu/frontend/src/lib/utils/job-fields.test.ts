@@ -218,11 +218,28 @@ describe('readJobMetadata — video_type falls back to job.media_type', () => {
 		expect(readJobMetadata({}, { media_type: 'data' } as never).video_type).toBe('data');
 	});
 
-	it('prefers provider_raw.arm_server.video_type over job.media_type when both are present', () => {
+	it('prefers the job.media_type column over a stale provider_raw.arm_server.video_type', () => {
 		const out = readJobMetadata({ provider_raw: { arm_server: { video_type: 'movie' } } }, {
 			media_type: 'tv'
 		} as never);
-		expect(out.video_type).toBe('movie');
+		expect(out.video_type).toBe('series');
+	});
+
+	it('reads video_type, multi_title and source_type from provider_raw.legacy on pre-section rows', () => {
+		const out = readJobMetadata(
+			{ provider_raw: { legacy: { video_type: 'series', multi_title: true, source_type: 'dvd' } } },
+			{ media_type: null } as never
+		);
+		expect(out.video_type).toBe('series');
+		expect(out.multi_title).toBe(true);
+		expect(out.source_type).toBe('dvd');
+	});
+
+	it('prefers provider_raw.arm_server over provider_raw.legacy', () => {
+		const out = readJobMetadata({
+			provider_raw: { arm_server: { source_type: 'iso' }, legacy: { source_type: 'dvd' } }
+		});
+		expect(out.source_type).toBe('iso');
 	});
 
 	it('omits video_type when neither source has a value', () => {

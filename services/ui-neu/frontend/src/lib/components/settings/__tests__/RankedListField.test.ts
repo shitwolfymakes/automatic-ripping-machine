@@ -76,6 +76,18 @@ describe('RankedListField', () => {
 		expect(screen.queryByRole('link', { name: /Needs TMDb key/ })).toBeNull();
 	});
 
+	it('deep-links a missing key into the tab the caller names', () => {
+		renderComponent(RankedListField, {
+			props: {
+				field: f(),
+				value: ['tmdb'],
+				config: { tmdb_api_key: '<hidden>', tvdb_api_key: '' },
+				keyTab: () => 'Ripping'
+			}
+		});
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#Ripping/tvdb_api_key');
+	});
+
 	it('renders all rows as not used for an empty value', () => {
 		renderComponent(RankedListField, { props: { field: f(), value: [] } });
 		expect(screen.getAllByText('Not used')).toHaveLength(3);

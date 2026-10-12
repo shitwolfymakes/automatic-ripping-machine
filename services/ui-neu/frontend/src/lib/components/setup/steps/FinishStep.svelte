@@ -7,7 +7,6 @@
 	import { fetchConfigView } from '$lib/api/config';
 	import { fetchGpus } from '$lib/api/gpus';
 	import { fetchChannels } from '$lib/api/channels';
-	import { fetchUsers } from '$lib/api/users';
 	import { wsClient, type WSEnvelope } from '$lib/api/ws';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { transcoderEnabled } from '$lib/stores/config';
@@ -25,16 +24,14 @@
 	let config = $state<ConfigView | null>(null);
 	let gpus = $state<GpuView[]>([]);
 	let channelCount = $state(0);
-	let guestOn = $state<boolean | null>(null);
 
 	onMount(() => {
 		drives.start();
 		void (async () => {
-			const [c, g, ch, u] = await Promise.allSettled([fetchConfigView(), fetchGpus(), fetchChannels(), fetchUsers()]);
+			const [c, g, ch] = await Promise.allSettled([fetchConfigView(), fetchGpus(), fetchChannels()]);
 			if (c.status === 'fulfilled') config = c.value;
 			if (g.status === 'fulfilled') gpus = g.value;
 			if (ch.status === 'fulfilled') channelCount = ch.value.filter((x) => (x.type as string) !== 'inapp').length;
-			if (u.status === 'fulfilled') guestOn = u.value.some((x) => x.role === 'guest' && !x.disabled);
 		})();
 		wsClient.start();
 		const unsubscribe = wsClient.subscribe('ripper.events', (env: WSEnvelope) => {
@@ -51,7 +48,7 @@
 			? ['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key'].filter((k) => !!config?.[k as keyof ConfigView]).length
 			: 0;
 		const out: Record<string, string> = {
-			account: `Password changed.${guestOn === null ? '' : ` Guest access ${guestOn ? 'on' : 'off'}.`}`,
+			account: 'Password changed.',
 			system:
 				view.progress.system?.state === 'attention'
 					? 'Needs a fix on the server, see System check.'

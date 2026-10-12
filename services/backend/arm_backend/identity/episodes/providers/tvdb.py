@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from arm_common import Config
 from arm_common.schemas import ExternalIds
@@ -91,7 +92,7 @@ class TvdbEpisodes:
         if not ids.imdb:
             return None
         try:
-            body = await self._get_authed(f"{settings.ARM_TVDB_BASE_URL}/search/remoteid/{ids.imdb}")
+            body = await self._get_authed(f"{settings.ARM_TVDB_BASE_URL}/search/remoteid/{quote(ids.imdb, safe='')}")
         except SourceMiss:
             return None
         try:

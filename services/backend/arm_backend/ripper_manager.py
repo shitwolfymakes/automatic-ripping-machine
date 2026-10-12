@@ -27,7 +27,7 @@ from sqlmodel import col, select
 from arm_backend.config import Settings
 from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_backend.iso_library import iso_host_path
-from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus, Job, JobStatus
+from arm_common import Drive, DriveKind, DriveLifecycle, DriveStatus, Job, JobStatus
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -165,7 +165,6 @@ class RipperManager:
         source = drive.device_path
         env = {k: v for k, v in spec["environment"].items() if k not in _OPTICAL_ONLY_ENV}
         env["ARM_SOURCE_PATH"] = source
-        env["ARM_SOURCE_KIND"] = (drive.source_kind or DriveSourceKind.ISO).value
         session_id = (drive.rip_params_json or {}).get("session_id")
         if session_id:
             env["ARM_SOURCE_SESSION_ID"] = str(session_id)

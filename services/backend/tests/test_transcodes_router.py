@@ -138,6 +138,7 @@ def _gpu(
         vendor=GpuVendor.VAAPI,
         device_path="/dev/dri/renderD128",
         encoder_kinds=["h264"],
+        probed_at=datetime.now(UTC),
         status=status,
         claimed_by_task_id=claimed_by_task_id,
     )
@@ -251,6 +252,38 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     assert body["gpus_total"] == 2
     assert body["gpus_available"] == 1
     assert body["max_parallel"] == settings.MAX_PARALLEL_TRANSCODES
+
+
+def test_stats_disabled_gpu_is_not_available(signing_key: bytes) -> None:
+    db = FakeSession()
+    disabled = _gpu("gpu_off", status=GpuStatus.AVAILABLE)
+    disabled.enabled = False
+    db.rows["gpus"] = [_gpu("gpu_on", status=GpuStatus.AVAILABLE), disabled]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["gpus_total"] == 2
+    assert body["gpus_available"] == 1
+
+
+def test_stats_unverified_gpu_is_not_available(signing_key: bytes) -> None:
+    """A GPU the dispatcher never uses (never probed, or nothing verified)
+    is not counted as available."""
+    db = FakeSession()
+    unprobed = _gpu("gpu_unprobed")
+    unprobed.probed_at = None
+    nothing_verified = _gpu("gpu_none")
+    nothing_verified.encoder_kinds = []
+    db.rows["gpus"] = [_gpu("gpu_ok"), unprobed, nothing_verified]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["gpus_total"] == 3
+    assert body["gpus_available"] == 1
 
 
 def test_stats_empty_db_all_zero(signing_key: bytes) -> None:

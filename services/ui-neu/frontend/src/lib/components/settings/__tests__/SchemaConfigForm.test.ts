@@ -433,6 +433,33 @@ describe('SchemaConfigForm TV episodes section', () => {
 		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
 	});
 
+	it('deep-links a missing key to Metadata when the form does not hold the key', () => {
+		renderComponent(SchemaConfigForm, {
+			props: { group: TV_GROUP, config: { ...TV_CONFIG, tmdb_api_key: '<hidden>', tvdb_api_key: '' } }
+		});
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#Metadata/tvdb_api_key');
+	});
+
+	it("deep-links a missing key to this form's own tab when the form holds the key", () => {
+		const keyField: ConfigFieldMeta = {
+			key: 'tvdb_api_key',
+			group: 'Transcoding',
+			tier: 'operator',
+			label: 'TVDB API key',
+			help: '',
+			type: 'str',
+			editable: true
+		};
+		const group: SettingsGroup = {
+			name: 'Transcoding',
+			fields: [{ ...TV_FIELDS[1], group: 'Transcoding' }, keyField]
+		};
+		renderComponent(SchemaConfigForm, {
+			props: { group, config: { episode_sources: ['tvdb'], tvdb_api_key: '' } }
+		});
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#transcoding/tvdb_api_key');
+	});
+
 	it('places the two ranked lists in different column cells (side by side, not stacked)', () => {
 		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
 

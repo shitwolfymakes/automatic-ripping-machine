@@ -385,3 +385,52 @@ describe('Layout guest bounce off /settings', () => {
 		expect(gotoMock).not.toHaveBeenCalled();
 	});
 });
+
+describe('Layout dashboard poll across sign-in', () => {
+	afterEach(async () => {
+		cleanup();
+		await setPathname('/');
+	});
+
+	it('starts the poll and theme load once the visitor leaves /login', async () => {
+		const { dashboard } = await import('$lib/stores/dashboard');
+		const { loadThemesFromApi } = await import('$lib/stores/colorScheme');
+		const start = dashboard.start as ReturnType<typeof vi.fn>;
+		const stop = dashboard.stop as ReturnType<typeof vi.fn>;
+		const loadThemes = loadThemesFromApi as ReturnType<typeof vi.fn>;
+		start.mockClear();
+		loadThemes.mockClear();
+
+		// An anonymous visit with guest access off lands on /login first.
+		await setPathname('/login');
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		expect(start).not.toHaveBeenCalled();
+		expect(loadThemes).not.toHaveBeenCalled();
+
+		// Signing in navigates to / without remounting the root layout.
+		await setPathname('/');
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+		expect(loadThemes).toHaveBeenCalledTimes(1);
+
+		// A session expiry back to /login stops the poll; signing in again
+		// restarts it without reloading the themes.
+		stop.mockClear();
+		await setPathname('/login');
+		await waitFor(() => expect(stop).toHaveBeenCalled());
+		await setPathname('/');
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+		expect(loadThemes).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not restart the poll on a navigation between real pages', async () => {
+		const { dashboard } = await import('$lib/stores/dashboard');
+		const start = dashboard.start as ReturnType<typeof vi.fn>;
+		start.mockClear();
+		await setPathname('/');
+		renderComponent(Layout, { props: { children: childSnippet() } });
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+		await setPathname('/jobs');
+		await Promise.resolve();
+		expect(start).toHaveBeenCalledTimes(1);
+	});
+});

@@ -81,6 +81,16 @@ async def test_resolve_show_id_via_tmdb_ids_makes_no_request(provider):
 
 
 @respx.mock
+async def test_find_escapes_the_external_id_in_the_path(provider):
+    """A pasted URL or an id with `?` / `/` must stay one path segment."""
+    route = respx.get(url__startswith=f"{BASE}/find/").mock(return_value=httpx.Response(200, json={"tv_results": []}))
+    await provider.resolve_show_id(ExternalIds(imdb="https://www.imdb.com/title/tt0903747/?x=1"))
+    assert route.calls.last.request.url.raw_path.startswith(
+        b"/3/find/https%3A%2F%2Fwww.imdb.com%2Ftitle%2Ftt0903747%2F%3Fx%3D1?external_source=imdb_id"
+    )
+
+
+@respx.mock
 async def test_resolve_show_id_via_imdb_hit(provider):
     route = respx.get(f"{BASE}/find/tt0944947").mock(
         return_value=httpx.Response(200, json={"tv_results": [{"id": 1399}], "movie_results": []})

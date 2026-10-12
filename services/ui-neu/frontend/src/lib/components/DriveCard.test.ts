@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
 import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
@@ -212,16 +212,29 @@ describe('DriveCard', () => {
 	});
 
 	describe('unenroll', () => {
-		it('Unenroll confirms, calls the API and notifies', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
+		it('Unenroll asks in the shared confirm dialog, then calls the API and notifies', async () => {
 			const onupdate = vi.fn();
 			renderComponent(DriveCard, { props: { drive: createDrive(), sessions: [], onupdate } });
 			await fireEvent.click(screen.getByTestId('drive-unenroll'));
-			await waitFor(() => expect(onupdate).toHaveBeenCalled());
-			expect(window.confirm).toHaveBeenCalledWith(
-				'Unenroll Main Drive? Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.'
+			const dialog = await screen.findByRole('dialog');
+			expect(dialog).toHaveTextContent('Unenroll Main Drive?');
+			expect(dialog).toHaveTextContent(
+				'Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan.'
 			);
+			expect(unenrollDriveMock).not.toHaveBeenCalled();
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Unenroll' }));
+			await waitFor(() => expect(onupdate).toHaveBeenCalled());
 			expect(unenrollDriveMock).toHaveBeenCalledWith('drv_1');
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+		});
+
+		it('Cancel leaves the drive enrolled', async () => {
+			renderDrive();
+			await fireEvent.click(screen.getByTestId('drive-unenroll'));
+			const dialog = await screen.findByRole('dialog');
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+			expect(unenrollDriveMock).not.toHaveBeenCalled();
 		});
 
 		it('Unenroll is disabled while ripping', () => {
@@ -235,10 +248,10 @@ describe('DriveCard', () => {
 		});
 
 		it('surfaces an unenroll failure inline instead of swallowing it', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			unenrollDriveMock.mockRejectedValueOnce(new Error('cannot unenroll: a drive is ripping'));
 			renderDrive();
 			await fireEvent.click(screen.getByTestId('drive-unenroll'));
+			await fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Unenroll' }));
 			await waitFor(() =>
 				expect(screen.getByTestId('drive-unenroll-error')).toHaveTextContent('cannot unenroll: a drive is ripping')
 			);

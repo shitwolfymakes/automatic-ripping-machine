@@ -1,4 +1,4 @@
-/* text helpers: eyebrow (small uppercase tracked label), mono, kbd.
+/* text helpers: eyebrow (small uppercase tracked label), label-caps, mono, kbd.
    .mono is size-neutral (font-family + tabular-nums only): it sits inside
    many different contexts (a table cell, a card value, a read-only field)
    each with its own original text size, so the size comes from the
@@ -11,6 +11,16 @@
 		letter-spacing: var(--eyebrow-tracking);
 		text-transform: uppercase;
 		color: var(--color-text-muted);
+	}
+	/* label-caps: the small uppercase caption above a value (recipe strips, the
+	   Advanced divider label). Quieter than .eyebrow: medium weight, faint. */
+	.label-caps {
+		font-size: 0.75rem;
+		line-height: calc(1 / 0.75);
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: var(--color-text-faint);
 	}
 	.mono {
 		font-family: var(--font-mono);

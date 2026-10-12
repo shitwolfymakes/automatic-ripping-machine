@@ -216,8 +216,9 @@ async def rescan_drives(
     db: AsyncSession = Depends(get_session),
 ) -> DriveRescanResponse:
     """Run the host drive scan now (spec §2) and report the reconciled table.
-    Also keeps the pre-existing heartbeat-freshness counts so the UI's
-    online/stale badge is unchanged. `force` = Force Rescan: the prune window
+    Also keeps the heartbeat-freshness counts behind the UI's online/stale
+    badge; only enrolled drives are counted, since a detected or ignored
+    drive has no ripper to heartbeat. `force` = Force Rescan: the prune window
     is zero, so absent detected rows are removed immediately; enrolled and
     ignored rows are untouched."""
     if force and user.role != ADMIN_ROLE:
@@ -231,9 +232,20 @@ async def rescan_drives(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"cannot remove missing drives: {exc}"
         ) from exc
-    # Online/stale counts are an optical-drive heartbeat view; virtual (ISO)
-    # rows never heartbeat and would only ever land in "stale".
-    drives = list((await db.execute(select(Drive).where(col(Drive.kind) == DriveKind.OPTICAL))).scalars().all())
+    # Online/stale counts are a heartbeat view of enrolled optical drives; virtual
+    # (ISO) rows never heartbeat, and detected / ignored rows have no ripper, so
+    # all of those would only ever land in "stale".
+    drives = list(
+        (
+            await db.execute(
+                select(Drive)
+                .where(col(Drive.kind) == DriveKind.OPTICAL)
+                .where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED)
+            )
+        )
+        .scalars()
+        .all()
+    )
     now = datetime.now(timezone.utc)
     online = 0
     stale = 0

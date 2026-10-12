@@ -38,7 +38,7 @@ def test_browser_origin_in_allowlist_accepted() -> None:
 
 
 def test_browser_origin_with_empty_allowlist_rejected() -> None:
-    """Phase 4 default: empty allowlist means service-token only."""
+    """An empty allowlist with no request host rejects a browser origin: same-origin needs a host to compare."""
     settings.ARM_ALLOWED_ORIGINS = []
     assert _origin_allowed("https://arm.local:8081", []) is False
 
