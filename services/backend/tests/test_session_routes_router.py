@@ -180,6 +180,29 @@ def test_upsert_unique_violation_without_a_winner_is_409(signing_key: bytes) -> 
     assert r.status_code == 409
 
 
+class _AlwaysFailingSession(_RacingSession):
+    """Loses the insert race, then the update on the winner's row fails too
+    (e.g. the session FK, during a concurrent session delete)."""
+
+    async def commit(self) -> None:
+        if not self._raced:
+            await super().commit()
+        raise IntegrityError("UPDATE", {}, Exception("fk_session_routes_session_id"))
+
+
+def test_upsert_failing_retry_is_409_not_500(signing_key: bytes) -> None:
+    winner = SessionRoute(id="srt_winner", media_type=MediaType.MUSIC, disc_type=DiscType.CD, session_id="ses_music")
+    db = _AlwaysFailingSession(winner)
+    app, token = _make_app(signing_key, db)
+    db.rows["sessions"] = [_session(), _session("ses_music_alt")]
+    db.rows["session_routes"] = []
+    body = {"media_type": "music", "disc_type": "cd", "session_id": "ses_music_alt"}
+    with TestClient(app) as client:
+        r = client.put("/api/session-routes", json=body, headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert db.call_log.count("rollback") == 2
+
+
 def test_upsert_unknown_session_404(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
