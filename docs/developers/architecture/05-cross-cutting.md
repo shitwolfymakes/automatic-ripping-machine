@@ -73,7 +73,7 @@ Two tiers:
 |---|---|---|
 | `DATABASE_URL` | Backend | Composed in `compose.yml` as `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@arm-db:5432/${POSTGRES_DB}?sslmode=verify-full&sslrootcert=/etc/ssl/arm/arm-ca.crt`. User never edits it directly. |
 | `ARM_BACKEND_URL` | Ripper, Transcode, UI nginx | Static `https://arm-backend:8443` — hard-coded in compose, not in `.env`. Clients verify against the merged system trust store, which includes the internal CA merged in at container startup. See [Transport (TLS)](#transport-tls). |
-| `ARM_DRIVE_DEV` | Ripper (per-container) | Set by the backend on the `arm-ripper-<serial>` container it creates for an enrolled drive — a hint only; the container follows `ARM_DRIVE_BY_ID` for the current node. |
+| `ARM_DRIVE_DEV` | Ripper (per-container) | Set by the backend on the `arm-ripper-<serial>-<id>` container it creates for an enrolled drive — a hint only; the container follows `ARM_DRIVE_BY_ID` for the current node. |
 | `ARM_GPU_DEVICE` | Transcode (per-spawn) | Injected at spawn time by Backend based on the claimed `gpus` row. |
 
 **Crucially, Ripper and Transcode containers have no DB env vars.** They talk only to Backend via the shared service token.

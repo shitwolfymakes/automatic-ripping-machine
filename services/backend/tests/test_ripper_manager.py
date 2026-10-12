@@ -83,7 +83,7 @@ def _container(drive_id: str, status: str = "running", name: str = "arm-ripper-x
 
 def test_container_name_uses_the_serial_slug() -> None:
     m, _ = _manager()
-    assert m.container_name(_drive()) == "arm-ripper-aaaabbbb000e"
+    assert m.container_name(_drive()) == "arm-ripper-aaaabbbb000e-jkmnpq"
 
 
 def test_container_name_falls_back_to_the_drive_id_suffix() -> None:
@@ -101,17 +101,28 @@ def test_container_name_falls_back_to_the_drive_id_suffix_for_an_empty_serial() 
 
 def test_container_name_sanitises_hostname_unsafe_characters() -> None:
     m, _ = _manager()
-    assert m.container_name(_drive(serial="S/N 12_3.")) == "arm-ripper-s-n-12-3"
+    assert m.container_name(_drive(serial="S/N 12_3.")) == "arm-ripper-s-n-12-3-jkmnpq"
 
 
 # --- spec ------------------------------------------------------------------
+
+
+def test_container_names_differ_for_two_drives_sharing_a_serial() -> None:
+    """D-017: a USB bridge and a SATA drive can report the same short serial;
+    their containers (and hostnames) must not collide."""
+    m, _ = _manager()
+    a = _drive(serial="0123456789")
+    b = _drive(serial="0123456789")
+    b.id = "drv_01JZYXWVUTSRQPNMK"
+    assert m.container_name(a) != m.container_name(b)
+    assert m.container_name(a).startswith("arm-ripper-0123456789-")
 
 
 def test_container_spec_matches_spec_section_3() -> None:
     m, _ = _manager(PUID="1001", PGID="1000", CDROM_GID="24")
     spec = m.container_spec(_drive())
     assert spec["image"] == "arm-ripper:test"
-    assert spec["name"] == spec["hostname"] == "arm-ripper-aaaabbbb000e"
+    assert spec["name"] == spec["hostname"] == "arm-ripper-aaaabbbb000e-jkmnpq"
     assert spec["labels"] == {DOCKER_LABEL_KEY: "drv_01JABCDEFGHJKMNPQ"}
     assert spec["device_cgroup_rules"] == ["b 11:* rmw", "c 21:* rmw"]
     assert spec["restart_policy"] == {"Name": "unless-stopped"}
@@ -236,13 +247,13 @@ def test_host_paths_set_needs_raw_logs_and_certs_only() -> None:
 
 def test_ensure_running_creates_when_no_container_carries_the_label() -> None:
     m, client = _manager()
-    client.containers.run.return_value = _container("drv_01JABCDEFGHJKMNPQ", name="arm-ripper-aaaabbbb000e")
-    assert m.ensure_running(_drive()) == "arm-ripper-aaaabbbb000e"
+    client.containers.run.return_value = _container("drv_01JABCDEFGHJKMNPQ", name="arm-ripper-aaaabbbb000e-jkmnpq")
+    assert m.ensure_running(_drive()) == "arm-ripper-aaaabbbb000e-jkmnpq"
     client.containers.list.assert_called_once_with(
         all=True, filters={"label": f"{DOCKER_LABEL_KEY}=drv_01JABCDEFGHJKMNPQ"}
     )
     kwargs = client.containers.run.call_args.kwargs
-    assert kwargs["name"] == "arm-ripper-aaaabbbb000e" and kwargs["restart_policy"] == {"Name": "unless-stopped"}
+    assert kwargs["name"] == "arm-ripper-aaaabbbb000e-jkmnpq" and kwargs["restart_policy"] == {"Name": "unless-stopped"}
 
 
 def test_ensure_running_adopts_a_running_container_without_creating() -> None:
@@ -282,11 +293,11 @@ def test_ensure_running_adopts_on_a_409_name_conflict_from_a_concurrent_creator(
     name collision. Re-list and adopt the winner's container instead of
     failing the whole call."""
     m, client = _manager()
-    winner = _container("drv_01JABCDEFGHJKMNPQ", status="running", name="arm-ripper-aaaabbbb000e")
+    winner = _container("drv_01JABCDEFGHJKMNPQ", status="running", name="arm-ripper-aaaabbbb000e-jkmnpq")
     conflict = docker.errors.APIError("Conflict", response=MagicMock(status_code=409))
     client.containers.run.side_effect = conflict
     client.containers.list.side_effect = [[], [winner]]
-    assert m.ensure_running(_drive()) == "arm-ripper-aaaabbbb000e"
+    assert m.ensure_running(_drive()) == "arm-ripper-aaaabbbb000e-jkmnpq"
     assert client.containers.list.call_count == 2
 
 

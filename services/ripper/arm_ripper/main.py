@@ -41,7 +41,7 @@ HEARTBEAT_INTERVAL_SECONDS = 30.0
 REGISTER_REFUSED_RETRY_SECONDS = 60.0
 
 # The backend spawns each ripper container for one Drive row and sets
-# HOSTNAME to arm-ripper-<serial> (or the equivalent stable identity); srN
+# HOSTNAME to arm-ripper-<serial>-<drive-id suffix> (a stable identity); srN
 # is not stable across a renumbering replug, so the log file is named from
 # the identity the manager assigned rather than the current device node.
 configure_service_logging(settings.HOSTNAME, level=settings.ARM_LOG_LEVEL)

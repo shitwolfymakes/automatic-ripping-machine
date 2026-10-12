@@ -41,7 +41,7 @@ Single row. Runtime configuration that the UI writes to — third-party API keys
 One row per optical drive detected on the host; enrolling one creates its ripper container.
 
 - `id` (ULID)
-- `hostname` (the ripper container's hostname, e.g. `arm-ripper-<serial>`, created by the backend on enroll)
+- `hostname` (the ripper container's hostname, e.g. `arm-ripper-<serial>-<id>`, created by the backend on enroll)
 - `device_path` (`/dev/sr0`)
 - `display_name` (user-editable)
 - `status` (enum: online | offline | ripping | error)

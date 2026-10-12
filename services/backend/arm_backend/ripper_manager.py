@@ -98,16 +98,20 @@ class RipperManager:
     # --- spec ------------------------------------------------------------------
 
     def container_name(self, drive: Drive) -> str:
-        """`arm-ripper-<serial slug>` — a stable slot label; srN is not in the
-        name because the node moves. Falls back to the drive-id suffix when
-        the drive has no serial. Lower-cased `[a-z0-9-]` so it is valid both
-        as a docker name and as a hostname. A virtual (ISO) drive is
-        `arm-ripper-iso-<drive-id suffix>`."""
+        """`arm-ripper-<serial slug>-<drive-id suffix>` — a stable slot label;
+        srN is not in the name because the node moves. The drive-id suffix
+        keeps two drives that report the same short serial (common behind USB
+        bridges) from colliding on the name. Falls back to the drive-id suffix
+        alone when the drive has no serial. Lower-cased `[a-z0-9-]` so it is
+        valid both as a docker name and as a hostname. A virtual (ISO) drive
+        is `arm-ripper-iso-<drive-id suffix>`."""
         if drive.kind == DriveKind.VIRTUAL:
             return f"arm-ripper-iso-{drive.id[-12:].lower()}"
-        raw = drive.serial or drive.id[-12:]
-        slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-") or drive.id[-12:].lower()
-        return f"arm-ripper-{slug}"
+        id_slug = drive.id[-12:].lower()
+        serial_slug = re.sub(r"[^a-z0-9]+", "-", (drive.serial or "").lower()).strip("-")
+        if not serial_slug:
+            return f"arm-ripper-{id_slug}"
+        return f"arm-ripper-{serial_slug}-{drive.id[-6:].lower()}"
 
     def container_spec(self, drive: Drive) -> dict[str, Any]:
         """kwargs for `containers.run` — what the ripper needs and nothing more

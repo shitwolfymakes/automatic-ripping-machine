@@ -64,7 +64,7 @@ notification history and the transcode queue.
   presets are seeded on first boot, so you can ignore all of this until you want
   to customize output.
 - **Drives**: the optical drives ARM knows about. Enroll a drive here to give
-  it an `arm-ripper-<serial>` container.
+  it an `arm-ripper-<serial>-<id>` container.
 - **Transcoding**, **Notifications**, **Interface**, **Themes**, **Users** and
   **System**.
 

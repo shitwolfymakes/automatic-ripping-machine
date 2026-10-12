@@ -140,7 +140,7 @@ services:
       replicas: 0   # built by `docker compose up -d --build`; never started here
 ```
 
-The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects. One exception: containers the backend creates for enrolled drives (see below) are named `arm-ripper-<serial>` without the `armv3-` prefix — they're created over the docker socket, not by compose, so they sit outside the `armv3` compose project namespace.
+The `armv3-` prefix on container names and `name: armv3` project namespace guarantee zero collision with v2 containers (which use `arm-` names) so `docker compose ls`, `docker compose down`, and `docker volume ls` all show v3 and v2 as distinct projects. One exception: containers the backend creates for enrolled drives (see below) are named `arm-ripper-<serial>-<id>` without the `armv3-` prefix — they're created over the docker socket, not by compose, so they sit outside the `armv3` compose project namespace.
 
 ### Rippers are created by the backend, not by compose
 
@@ -149,7 +149,7 @@ There is no per-drive compose service. `docker compose up -d --build` builds the
 and starts nothing from it. On boot the backend scans `/sys/class/block/sr*` +
 `/dev/disk/by-id` (mounted read-only at `/host-disk`) and lists every optical
 drive on the **Drives** page as *detected*. Enrolling a drive there makes the
-backend create one durable container `arm-ripper-<serial>` for it over the
+backend create one durable container `arm-ripper-<serial>-<id>` for it over the
 docker socket:
 
 - label `arm.drive_id=<id>` (the tracking key), `restart: unless-stopped`;
@@ -186,7 +186,7 @@ The pairing isn't lexicographic — `sr0` does **not** automatically pair with `
 ls /sys/class/block/sr0/device/scsi_generic/   # → e.g. "sg5"
 ```
 
-Rippers no longer need this pairing done for them: the `arm-ripper-<serial>` container's entrypoint pre-creates `/dev/sr0..7` and `/dev/sg0..15` itself (via `device_cgroup_rules`, not per-node `devices:` binds), so it can follow the kernel's own `sr`↔`sg` pairing at runtime instead of a compose author working it out at install time — see [§ Rippers are created by the backend, not by compose](#rippers-are-created-by-the-backend-not-by-compose) above.
+Rippers no longer need this pairing done for them: the `arm-ripper-<serial>-<id>` container's entrypoint pre-creates `/dev/sr0..7` and `/dev/sg0..15` itself (via `device_cgroup_rules`, not per-node `devices:` binds), so it can follow the kernel's own `sr`↔`sg` pairing at runtime instead of a compose author working it out at install time — see [§ Rippers are created by the backend, not by compose](#rippers-are-created-by-the-backend-not-by-compose) above.
 
 ### Host-side auto-mount must be disabled
 
