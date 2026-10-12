@@ -14,6 +14,7 @@ from arm_common.encoders import (
     gpu_could_serve,
     gpu_encoders_for_vendor,
     gpu_is_eligible,
+    gpu_is_usable,
 )
 
 EXPECTED_IDS = [
@@ -106,6 +107,14 @@ def test_eligibility() -> None:
     assert not gpu_is_eligible(_gpu(enabled=False), "h265")
     assert not gpu_is_eligible(_gpu(probed_at=None), "h265")
     assert not gpu_is_eligible(_gpu(encoder_kinds=None), "h265")
+
+
+def test_usable_needs_one_eligible_codec() -> None:
+    assert gpu_is_usable(_gpu())
+    assert not gpu_is_usable(_gpu(enabled=False))
+    assert not gpu_is_usable(_gpu(probed_at=None))
+    assert not gpu_is_usable(_gpu(encoder_kinds=[]))
+    assert not gpu_is_usable(_gpu(encoder_kinds=None))
 
 
 def test_could_serve_ignores_probe_state() -> None:

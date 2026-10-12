@@ -115,6 +115,12 @@ def gpu_is_eligible(gpu: Gpu, codec: str) -> bool:
     return bool(gpu.enabled) and gpu.probed_at is not None and codec in (gpu.encoder_kinds or [])
 
 
+def gpu_is_usable(gpu: Gpu) -> bool:
+    """Whether `gpu_is_eligible` holds for at least one codec, so the
+    dispatcher can hand this row some task."""
+    return any(gpu_is_eligible(gpu, codec) for codec in gpu.encoder_kinds or [])
+
+
 def gpu_could_serve(gpu: Gpu, spec: EncoderSpec) -> bool:
     """Whether an enabled row's vendor has a GPU encoder for `spec`, whatever
     its probe has verified so far: any vendor for `any_<codec>`, the matching
