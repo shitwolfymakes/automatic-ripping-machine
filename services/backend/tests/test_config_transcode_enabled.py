@@ -93,6 +93,18 @@ def test_get_exposes_transcode_flags(client: TestClient, config_row: Config) -> 
     assert body["transcode_capable"] is True
 
 
+def test_null_parallel_cap_reads_as_the_env_value_the_dispatcher_uses(
+    client: TestClient, config_row: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-060: before the backfill, Settings shows the cap the dispatcher
+    actually uses (the env value), not a hardcoded 1."""
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "MAX_PARALLEL_TRANSCODES", 3)
+    config_row.max_parallel_transcodes = None
+    assert client.get("/api/config").json()["max_parallel_transcodes"] == 3
+
+
 def test_null_column_reads_as_enabled(client: TestClient, config_row: Config) -> None:
     config_row.transcode_enabled = None  # pre-backfill upgrade row
     r = client.get("/api/config")

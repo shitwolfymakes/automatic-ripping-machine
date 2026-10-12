@@ -89,7 +89,10 @@ def _to_view(cfg: Config) -> ConfigView:
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
-        max_parallel_transcodes=int(cfg.max_parallel_transcodes) if cfg.max_parallel_transcodes is not None else 1,
+        # NULL falls back to the env value, exactly as the dispatcher does.
+        max_parallel_transcodes=int(cfg.max_parallel_transcodes)
+        if cfg.max_parallel_transcodes is not None
+        else settings.MAX_PARALLEL_TRANSCODES,
         max_parallel_iso_rips=int(cfg.max_parallel_iso_rips or 1),
         # None-coerce covers rows/fixtures predating the column (NULL = enabled).
         # A deployment that cannot transcode reports disabled, as every
