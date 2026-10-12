@@ -1036,6 +1036,18 @@ def _pending_session_id(job: Job) -> str | None:
     return job.pending_session_id or None
 
 
+def routing_media_type(job: Job) -> MediaType | None:
+    """The media type routing keys on: the identified kind, else what the disc
+    type alone says. An audio CD is music whether or not MusicBrainz knew it,
+    so an unidentified CD still reaches the music routes and the drive
+    default's compatibility gate (G-17) instead of a video default."""
+    if job.media_type is not None:
+        return job.media_type
+    if job.disc_type == DiscType.CD:
+        return MediaType.MUSIC
+    return None
+
+
 async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
     """Which session is ROUTED to this job (gap analysis §5.1, G-02/G-17).
 
@@ -1045,7 +1057,9 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
       1. `job.pending_session_id` - explicit per-rip choice.
       2. `drive.default_session_id` - the persistent per-drive default, but
          ONLY when it's compatibility-gated: the drive default wins when
-         `job.media_type is None` (nothing to disagree with yet) OR the
+         the routing media type (`routing_media_type`: the job's
+         media_type, or music for a CD) is None (nothing to disagree with
+         yet) OR the
          drive-default session's media_type is `_media_types_compatible`
          with the job's. Otherwise (e.g. a movie drive default on a music CD
          job) it's skipped in favor of steps 3-4 - a drive default must not
@@ -1055,8 +1069,9 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
       3. `session_routes` row matching `(job.media_type, job.disc_type)` exactly.
       4. `session_routes` wildcard row matching `(job.media_type, NULL)`.
       5. None.
-    Steps 3-4 are skipped when `job.media_type is None` (never identified) -
-    a route is keyed on media_type, so there is nothing to match. No
+    Steps 3-4 are skipped when the routing media type is None (a
+    never-identified non-CD disc) - a route is keyed on media_type, so there
+    is nothing to match. No
     `auto_transcode_on_idle` gating: routing shapes the rip and the preview;
     whether rip-complete may QUEUE the routed session unattended is
     `auto_apply_allowed`'s question. Returns None when nothing routes.
@@ -1064,9 +1079,10 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
     pending = _pending_session_id(job)
     if pending is not None:
         return pending
+    media_type = routing_media_type(job)
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
     if drive is not None and drive.default_session_id is not None:
-        if job.media_type is None:
+        if media_type is None:
             return drive.default_session_id
         default_sess = (
             await db.execute(select(Session).where(col(Session.id) == drive.default_session_id))
@@ -1077,14 +1093,14 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
                 drive.default_session_id,
                 drive.id,
             )
-        elif default_sess.media_type is None or _media_types_compatible(job.media_type, default_sess.media_type):
+        elif default_sess.media_type is None or _media_types_compatible(media_type, default_sess.media_type):
             return drive.default_session_id
         # else: incompatible drive default — fall through to session_routes.
 
-    if job.media_type is None:
+    if media_type is None:
         return None
 
-    return await route_session_id_for(db, job.media_type, job.disc_type)
+    return await route_session_id_for(db, media_type, job.disc_type)
 
 
 async def route_session_id_for(db: AsyncSession, media_type: MediaType, disc_type: DiscType | None) -> str | None:
