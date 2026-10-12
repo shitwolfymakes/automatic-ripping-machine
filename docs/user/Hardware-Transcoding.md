@@ -149,6 +149,12 @@ nothing) records one of these in `probe_error`:
   of the container's stderr: usually a transcode image that predates the
   `--probe-device` worker mode.
 
+When the probe container never got to test the device (it could not start,
+the docker host failed mid-wait, or it ran past the 120 s timeout), the row
+keeps the encoders it had verified before and records only `probe_error`.
+A transient docker fault on a re-probe therefore never turns a working
+device into "Verified nothing"; re-probe once the host is reachable again.
+
 ## Image variants
 
 Vendor userspace lives in per-vendor image targets, not the base image:

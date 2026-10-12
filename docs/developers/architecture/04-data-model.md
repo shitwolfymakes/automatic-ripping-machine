@@ -191,7 +191,7 @@ DB-authoritative GPU inventory, editable in Settings > GPUs. The `ARM_GPUS` env 
 - `enabled` (bool, default true: operator switch; the dispatcher's claim and the probe both skip a disabled row, but it stays in the inventory)
 - `claimed_by_task_id` (FK → `transcode_tasks.id`, nullable)
 - `probed_at` (timestamptz, nullable: set by every probe attempt, success or failure; `NULL` means "never probed," which alone makes the row ineligible for any GPU work regardless of `encoder_kinds`)
-- `probe_error` (text, nullable: set when the probe process itself failed, or when it ran but verified nothing; `NULL` when the last probe verified at least one codec)
+- `probe_error` (text, nullable: set when the probe process itself failed, or when it ran but verified nothing; `NULL` when the last probe verified at least one codec. A probe that never reached the device (container could not start, docker error, timeout) writes only this column and leaves `encoder_kinds` as it was)
 - `last_seen_at`
 
 **Eligibility** (`arm_common.encoders.gpu_is_eligible`): a row can serve a codec iff `enabled AND probed_at IS NOT NULL AND codec IN encoder_kinds`. Transcode task spawn takes an eligible row via `SELECT … FOR UPDATE SKIP LOCKED`, flips `status` to `busy`, and passes the device path to the spawned container (`ARM_GPU_DEVICE` plus the matching vendor image, see [06-deployment.md](06-deployment.md)). Release on container exit. See [02-job-lifecycle.md § Encoder claim and apply-time refusal](02-job-lifecycle.md#encoder-claim-and-apply-time-refusal) for what happens with no eligible row, and [Hardware Transcoding § The per-device probe](../../user/Hardware-Transcoding.md#the-per-device-probe) for what runs the probe and when.

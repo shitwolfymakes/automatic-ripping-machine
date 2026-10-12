@@ -348,7 +348,9 @@ async def test_wait_timeout_removes_container_and_records_timeout() -> None:
     row = db.rows["gpus"][0]
     assert container.removed == [True]
     assert container.logs_calls == []
-    assert row.encoder_kinds == []
+    # D-070: the probe never got to test the device, so its verified
+    # encoders stand; only the error is recorded.
+    assert row.encoder_kinds == ["h264"]
     assert row.probe_error is not None
     assert f"timed out after {PROBE_TIMEOUT_S} s" in row.probe_error
 
@@ -366,6 +368,22 @@ async def test_wait_failure_that_is_not_a_timeout_is_recorded() -> None:
     await runner.probe_gpu("gpu_1")
     assert db.rows["gpus"][0].probe_error == "probe failed while waiting for the container: connection reset"
     assert container.removed == [True]
+
+
+async def test_infra_failures_keep_the_verified_encoders() -> None:
+    """D-070: a container that cannot start or a docker wait error says
+    nothing about the device; wiping its list would fail pinned tasks."""
+    container = _Container(wait_exc=RuntimeError("connection reset"))
+    runner, db, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])], container)
+    await runner.probe_gpu("gpu_1")
+    assert db.rows["gpus"][0].encoder_kinds == ["h264", "hevc"]
+
+    runner, db, docker, *_ = _build([_gpu(encoder_kinds=["h264"])])
+    assert docker is not None
+    docker.containers.run_exc = RuntimeError("ssh transport closed")
+    await runner.probe_gpu("gpu_1")
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264"] and row.probe_error == "probe container could not start: ssh transport closed"
 
 
 async def test_container_that_cannot_start_is_recorded() -> None:
