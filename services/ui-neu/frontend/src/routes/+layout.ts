@@ -16,23 +16,24 @@ let configHydrated = false;
 
 // Anonymous (tokenless) requests act as the guest backend-side. With guest
 // access off every one of them 401s, so the shell must not mount and start its
-// pollers just to be bounced to /login. Once an anonymous probe succeeds, guest
-// access is known to be on for this page load.
-let guestAccessConfirmed = false;
+// pollers just to be bounced to /login. Once an anonymous probe lets the
+// visitor in, it is not repeated for this page load.
+let anonymousVisitAllowedCached = false;
 
 // False only when the backend says an anonymous visitor is not allowed in. An
 // unreachable or erroring backend counts as allowed, like the setup check below:
-// the normal UI shows the outage. Raw fetch, not the API client, whose 401
-// handler must not fire for a probe.
+// the normal UI shows the outage, and should guest access turn out to be off
+// once the backend is back, the shell's 401 handler routes to /login. Raw
+// fetch, not the API client, whose 401 handler must not fire for a probe.
 async function anonymousVisitAllowed(fetchFn: typeof fetch): Promise<boolean> {
-	if (guestAccessConfirmed || getToken() !== null) return true;
+	if (anonymousVisitAllowedCached || getToken() !== null) return true;
 	try {
 		const resp = await fetchFn('/api/system/version');
 		if (resp.status === 401) return false;
-		guestAccessConfirmed = resp.ok;
 	} catch {
 		// ARM unreachable - let the normal UI handle it
 	}
+	anonymousVisitAllowedCached = true;
 	return true;
 }
 

@@ -71,11 +71,21 @@ describe('+layout.ts load guard', () => {
 		expect(hydrateConfigMock).toHaveBeenCalledTimes(1);
 	});
 
-	it('a failing probe does not lock anyone out', async () => {
+	it('a failing probe does not lock anyone out and is not repeated', async () => {
 		const down = vi.fn(() => Promise.reject(new Error('down'))) as unknown as typeof fetch;
 		const { load } = await import('../+layout');
 		expect(await load(loadArgs('/', down))).toEqual({});
+		expect(await load(loadArgs('/jobs', down))).toEqual({});
+		expect(down).toHaveBeenCalledTimes(1);
 		expect(hydrateConfigMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('an erroring backend lets the visitor in once per page load', async () => {
+		const fetchImpl = versionFetch(503);
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/jobs', fetchImpl))).toEqual({});
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});
 
 	it('sign-in pages neither probe nor hydrate config', async () => {
