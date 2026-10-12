@@ -143,6 +143,19 @@ def test_waiting_identify_zero_task_is_not_terminal() -> None:
     assert s.state == "transcoding"
 
 
+def test_settled_parked_app_is_left_out_of_the_rollup() -> None:
+    """D-081: on a ripped job the drain already ran, so a WAITING_IDENTIFY
+    app with no tasks is parked, not in flight: no transcode state at all
+    when it is the only app, and it does not hold others at "transcoding"."""
+    parked = _sa("sap_1", SessionApplicationStatus.WAITING_IDENTIFY)
+    assert _summarize_transcode_progress([parked], [], parked_settled=True) is None
+    done = _sa("sap_2", SessionApplicationStatus.DONE)
+    s = _summarize_transcode_progress(
+        [parked, done], [_task("txt_1", "sap_2", TranscodeTaskStatus.DONE, 100)], parked_settled=True
+    )
+    assert s is not None and s.state == "done" and s.tasks_total == 1
+
+
 import secrets  # noqa: E402
 from typing import Any  # noqa: E402
 
@@ -440,3 +453,29 @@ def test_parked_session_ids_ordered_by_created_at_none_last() -> None:
     with TestClient(app) as client:
         detail = client.get(f"/api/jobs/{job_id}", headers=_auth(token)).json()
     assert detail["job"]["parked_session_ids"] == ["ses_early", "ses_late", "ses_none"]
+
+
+def test_ripped_job_with_only_a_parked_app_reads_no_transcode_state() -> None:
+    """D-081 end to end: the detail view of a ripped job whose application
+    stayed parked has no transcode_progress (not "transcoding 0/0") and
+    still lists the parked session."""
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000033"
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_ripped_job(job_id)]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_1",
+            session_id="ses_x",
+            job_id=job_id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        detail = client.get(f"/api/jobs/{job_id}", headers=_auth(token)).json()
+        listed = client.get("/api/jobs", headers=_auth(token)).json()
+    assert detail["job"]["transcode_progress"] is None
+    assert detail["job"]["parked_session_ids"] == ["ses_x"]
+    assert next(j for j in listed if j["id"] == job_id)["transcode_progress"] is None
