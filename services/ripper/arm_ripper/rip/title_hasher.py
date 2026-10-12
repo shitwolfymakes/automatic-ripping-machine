@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -28,16 +29,25 @@ OnHashed = Callable[[str | None], Awaitable[None]]
 VERIFY_PROGRESS_INTERVAL_SECONDS = 1.0
 
 
+class HashCancelled(Exception):
+    """Raised in the hashing thread to stop it reading once `cancel` ran."""
+
+
 class TitleHasher:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         self._tasks: list[asyncio.Task[None]] = []
         self._bytes_total = 0
         self._bytes_done = 0
+        self._cancelled = threading.Event()
 
     def _on_bytes(self, n: int) -> None:
         # Called from the hashing thread; a lone int add is safe under the GIL
         # and the reader only needs an approximate figure.
+        if self._cancelled.is_set():
+            # Cancelling the task cannot stop a to_thread call; this stops the
+            # thread at its next chunk instead of reading the file to the end.
+            raise HashCancelled
         self._bytes_done += n
 
     def submit(self, path: Path, size: int, then: OnHashed) -> None:
@@ -76,5 +86,6 @@ class TitleHasher:
         await asyncio.gather(*self._tasks)
 
     def cancel(self) -> None:
+        self._cancelled.set()
         for task in self._tasks:
             task.cancel()
