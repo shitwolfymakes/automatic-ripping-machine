@@ -136,6 +136,8 @@
 
 	let gpuRows = $state<GpuView[]>([]);
 
+	const GPU_RELOAD_DEBOUNCE_MS = 300;
+
 	async function loadGpus() {
 		try {
 			gpuRows = await fetchGpus();
@@ -169,13 +171,22 @@
 		workers.start();
 		loadGpus();
 		// Claims, releases and probes all land on transcode.events; reload the
-		// per-device rows so they agree with the polled summary count.
+		// per-device rows so they agree with the polled summary count. A burst
+		// of task events (a batch finishing) coalesces into one reload.
 		wsClient.start();
-		const unsubscribeGpus = wsClient.subscribe('transcode.events', () => loadGpus());
+		let gpuReload: ReturnType<typeof setTimeout> | null = null;
+		const unsubscribeGpus = wsClient.subscribe('transcode.events', () => {
+			if (gpuReload !== null) clearTimeout(gpuReload);
+			gpuReload = setTimeout(() => {
+				gpuReload = null;
+				loadGpus();
+			}, GPU_RELOAD_DEBOUNCE_MS);
+		});
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
 		return () => {
 			unsubscribeGpus();
+			if (gpuReload !== null) clearTimeout(gpuReload);
 			stats.stop();
 			workers.stop();
 			stopJobsPolling();

@@ -287,7 +287,11 @@ it('reloads the per-GPU rows on transcode events so they track claims (D-058)', 
 		}
 	] as Awaited<ReturnType<typeof fetchGpus>>);
 	expect(transcodeEventHandler).not.toBeNull();
-	transcodeEventHandler?.();
+	const before = vi.mocked(fetchGpus).mock.calls.length;
+	// A batch of task events reloads the rows once, not once per event.
+	for (let i = 0; i < 5; i++) transcodeEventHandler?.();
 	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).not.toContain('busy'));
 	expect(screen.getByTestId('gpu-rows').textContent).toContain('available');
+	await new Promise((r) => setTimeout(r, 400));
+	expect(vi.mocked(fetchGpus).mock.calls.length - before).toBe(1);
 });
