@@ -224,6 +224,35 @@ async def test_port_identity_refreshes_hint_from_backend_while_absent(monkeypatc
     assert "/dev/sr2" in seen_hints  # backend-supplied hint was used
 
 
+async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatch, caplog) -> None:
+    """D-004: the backend's node resolves on the refresh tick; the following
+    ticks must keep using it, not go back to ARM_DRIVE_DEV (gone) and flap
+    absent/present every other poll."""
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    # Present on sr0, then sr0 disappears; the drive now lives at sr2 only.
+    s = Script(monkeypatch, [(None, DriveState.NO_DISC)] + [(None, DriveState.DISC_OK)] * 12)
+    s.client.drive_device_path = "/dev/sr2"
+
+    def hint_aware(by_id, hint, *, disk_root, dev_root, sysfs_root):
+        if s.i >= len(s.ticks):
+            raise asyncio.CancelledError
+        if s.i == 0:
+            return ResolvedDevice(path="/dev/sr0", via="hint")
+        return ResolvedDevice(path="/dev/sr2", via="hint") if hint == "/dev/sr2" else None
+
+    monkeypatch.setattr(ripper_main, "resolve_drive_device", hint_aware)
+    await s.run()
+    absent = [r for r in caplog.records if "drive absent" in r.message]
+    reattached = [r for r in caplog.records if "reattached" in r.message]
+    assert len(absent) == 1
+    assert len(reattached) == 1
+    assert s.boot_probes == 1
+    assert s.client.get_drive_calls == 1
+    assert s.handle.current == "/dev/sr2"
+
+
 async def test_hint_refresh_is_throttled_while_the_drive_stays_absent(monkeypatch) -> None:
     """The backend's scanner republishes on its own cadence; asking it every
     POLL_INTERVAL adds nothing. Refresh on the first absent tick, then once per

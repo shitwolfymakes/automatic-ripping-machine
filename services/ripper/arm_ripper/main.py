@@ -218,10 +218,17 @@ def _hint_refresh_every_n_ticks() -> int:
     return max(1, int(HEARTBEAT_INTERVAL_SECONDS / settings.POLL_INTERVAL_SECONDS))
 
 
-async def _current_hint(client: BackendClient, drive_id: str, *, absent: bool, absent_ticks: int) -> str:
-    """The node to try when there is no by-id link. Normally ARM_DRIVE_DEV;
-    while such a drive is absent, ask the backend — its scanner tracks the
-    port -> node mapping and may have seen the drive come back renumbered.
+async def _current_hint(
+    client: BackendClient, drive_id: str, *, absent: bool, absent_ticks: int, last_resolved: str | None
+) -> str:
+    """The node to try when there is no by-id link. Normally the last node that
+    resolved (ARM_DRIVE_DEV until one has); while such a drive is absent, ask
+    the backend — its scanner tracks the port -> node mapping and may have seen
+    the drive come back renumbered.
+
+    `last_resolved` keeps a backend-supplied node once it has resolved: going
+    back to ARM_DRIVE_DEV on the next tick would lose a renumbered drive again
+    and flap absent/present every other poll.
 
     `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
     resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
@@ -231,16 +238,17 @@ async def _current_hint(client: BackendClient, drive_id: str, *, absent: bool, a
     required ARM_DRIVE_DEV to be set there, so the `or ""` fallbacks below
     are unreachable in practice; they exist to give mypy a plain `str`.
     """
+    fallback = last_resolved or settings.ARM_DRIVE_DEV or ""
     if settings.ARM_DRIVE_BY_ID or not absent:
-        return settings.ARM_DRIVE_DEV or ""
+        return fallback
     if absent_ticks % _hint_refresh_every_n_ticks() != 0:
-        return settings.ARM_DRIVE_DEV or ""
+        return fallback
     try:
         drive = await client.get_drive(drive_id)
     except (httpx.HTTPError, OSError) as exc:
         logger.debug("hint refresh failed: %s", exc)
-        return settings.ARM_DRIVE_DEV or ""
-    return drive.device_path if drive is not None and drive.device_path else (settings.ARM_DRIVE_DEV or "")
+        return fallback
+    return drive.device_path if drive is not None and drive.device_path else fallback
 
 
 async def _on_reattached(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
@@ -275,13 +283,19 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
     # Ticks that have run with the drive already known absent: 0 on the first
     # such tick, so it refreshes and later ones are throttled.
     absent_ticks = 0
+    # The last node a hint resolved to (port-identity drives only).
+    last_resolved: str | None = None
     while True:
         # Re-resolve every poll: the node behind this drive can change while we
         # run (replug under a new srN). One readlink; cheap.
         was_absent = last_state is DriveState.ABSENT
-        hint = await _current_hint(client, drive_id, absent=was_absent, absent_ticks=absent_ticks)
+        hint = await _current_hint(
+            client, drive_id, absent=was_absent, absent_ticks=absent_ticks, last_resolved=last_resolved
+        )
         absent_ticks = absent_ticks + 1 if was_absent else 0
         resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
+        if resolved is not None and not settings.ARM_DRIVE_BY_ID:
+            last_resolved = resolved.path
         moved = handle.set(resolved.path if resolved else None)
 
         if handle.absent:
