@@ -1909,9 +1909,9 @@ def test_rip_complete_parked_application_with_missing_session_does_not_break(
     assert db.rows["transcode_tasks"] == []
 
 
-def test_rip_complete_failed_rip_leaves_parked_application_alone(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_rip_complete_failed_rip_cancels_parked_application(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """D-082: nothing was ripped, so no drain will ever fill the parked
+    application; it is cancelled and no tasks are created."""
     from arm_backend import config as bcfg
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
@@ -1923,7 +1923,7 @@ def test_rip_complete_failed_rip_leaves_parked_application_alone(
     r = _rip_complete(db, _Hub(), monkeypatch)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "failed"
-    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.CANCELLED
     assert db.rows["transcode_tasks"] == []
 
 

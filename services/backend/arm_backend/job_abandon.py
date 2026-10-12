@@ -1,5 +1,5 @@
-"""The shared job-abandon transition: status -> ABANDONED plus the two WS
-events, used by `routers/jobs.py` `abandon_job` and `iso_rips.cancel_iso_rip`
+"""The shared job-abandon transition: status -> ABANDONED, its parked
+session applications cancelled, plus the two WS events, used by `routers/jobs.py` `abandon_job` and `iso_rips.cancel_iso_rip`
 so the two callers never drift apart. Neither commits here — each caller
 owns its own commit point.
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from arm_backend.auto_session import cancel_parked_applications
 from arm_common import Job, JobStatus
 
 if TYPE_CHECKING:
@@ -33,6 +34,9 @@ async def abandon_job_transition(db: AsyncSession, hub: WSHub, job: Job, *, dele
     """
     job.status = JobStatus.ABANDONED
     db.add(job)
+    # A parked application would otherwise promise "applies when the rip
+    # finishes" for a rip that never will.
+    await cancel_parked_applications(db, job)
     await db.flush()
 
     payload: dict[str, Any] = {

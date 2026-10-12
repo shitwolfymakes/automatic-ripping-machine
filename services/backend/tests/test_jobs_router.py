@@ -230,6 +230,36 @@ def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
     assert all(e["payload"]["delete_raw"] is True for e in hub.events)
 
 
+def test_abandon_cancels_parked_applications(signing_key: bytes) -> None:
+    """D-082: an abandoned job never finishes its rip, so its parked
+    applications are cancelled; other applications are untouched."""
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000001"
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_a",
+            job_id=job_id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        ),
+        SessionApplication(
+            id="sap_other", session_id="ses_b", job_id="job_other", status=SessionApplicationStatus.WAITING_IDENTIFY
+        ),
+    ]
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job_id}/abandon", headers=_auth(token))
+    assert r.status_code == 200
+    by_id = {a.id: a.status for a in db.rows["session_applications"]}
+    assert by_id == {
+        "sap_parked": SessionApplicationStatus.CANCELLED,
+        "sap_other": SessionApplicationStatus.WAITING_IDENTIFY,
+    }
+
+
 # --- rip-start-review (timed review gate Start) -------------------------------
 
 

@@ -13,7 +13,7 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import after_rip, resolve_routed_session_id
+from arm_backend.auto_session import after_rip, cancel_parked_applications, resolve_routed_session_id
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
@@ -115,6 +115,7 @@ async def _fail_titleless_source(db: AsyncSession, hub: WSHub, job: Job, reason:
     job.status = JobStatus.FAILED
     job.ripped_at = datetime.now(timezone.utc)
     db.add(job)
+    await cancel_parked_applications(db, job)
     await hub.emit(
         topic="ripper.events",
         event_type="rip.failed",
@@ -1124,6 +1125,7 @@ async def recovery_abandon(
         )
     job.status = JobStatus.ABANDONED
     session.add(job)
+    await cancel_parked_applications(session, job)
     await session.flush()
     await hub.emit(
         topic="ripper.events",
@@ -1239,6 +1241,8 @@ async def rip_complete(
 
     if total == 0 or done == 0:
         job.status = JobStatus.FAILED
+        # Nothing was ripped, so nothing will ever drain a parked application.
+        await cancel_parked_applications(session, job)
     elif failed == 0:
         # A placeholder rip (identify missed, block_on_miss=false) parks at
         # RIPPED_AWAITING_IDENTIFY: transcode is gated on identity, so the

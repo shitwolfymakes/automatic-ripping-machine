@@ -20,6 +20,7 @@ unchanged. The user can still hand-apply the session afterwards.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, NamedTuple
 
@@ -652,6 +653,31 @@ async def _fan_out_tasks_for_application(
         idempotent=False,
         skipped_reason=None,
     )
+
+
+async def cancel_parked_applications(db: AsyncSession, job: Job) -> int:
+    """Cancel the job's WAITING_IDENTIFY applications: the rip failed or the
+    job was abandoned, so the drain that would fill them never runs. Leaves
+    the commit to the caller. Returns how many were cancelled."""
+    parked = (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.job_id) == job.id)
+                .where(col(SessionApplication.status) == SessionApplicationStatus.WAITING_IDENTIFY)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for application in parked:
+        application.status = SessionApplicationStatus.CANCELLED
+        application.completed_at = now
+        db.add(application)
+    if parked:
+        logger.info("cancelled %d parked session application(s) job_id=%s", len(parked), job.id)
+    return len(parked)
 
 
 async def fan_out_waiting_identify_applications(
