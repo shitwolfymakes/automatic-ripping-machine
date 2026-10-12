@@ -162,9 +162,21 @@ async def update_config(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
         )
-    for key in ("drive_scan_interval_seconds", "drive_detected_prune_days", "max_parallel_transcodes"):
+    # The number inputs send null for an emptied box; these columns are NOT
+    # NULL, so refuse it here rather than 500 on the commit (D-096).
+    for key in (
+        "drive_scan_interval_seconds",
+        "drive_detected_prune_days",
+        "max_parallel_transcodes",
+        "thediscdb_refresh_days",
+    ):
         if key in fields and (fields[key] is None or fields[key] < 1):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
+    if "manual_wait_seconds" in fields and (fields["manual_wait_seconds"] is None or fields["manual_wait_seconds"] < 0):
+        # 0 is a real choice: no countdown, the held disc starts at once.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="manual_wait_seconds must be 0 or a positive integer"
+        )
     if "max_parallel_iso_rips" in fields:
         cap = fields["max_parallel_iso_rips"]
         if cap is None or isinstance(cap, bool) or not 1 <= cap <= 8:

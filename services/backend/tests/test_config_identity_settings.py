@@ -259,3 +259,34 @@ def test_a_failing_re_resolve_never_fails_the_patch(signing_key: bytes, monkeypa
     assert r.status_code == 200, r.text  # type: ignore[attr-defined]
     assert sorted(seen) == ["job_live", "job_ripped_unapplied"]  # one failure did not stop the next
     assert _row(db).disc_hint_sources == ["label"]
+
+
+@pytest.mark.parametrize(
+    ("body", "detail"),
+    [
+        ({"thediscdb_refresh_days": None}, "thediscdb_refresh_days must be a positive integer"),
+        ({"thediscdb_refresh_days": 0}, "thediscdb_refresh_days must be a positive integer"),
+        ({"manual_wait_seconds": None}, "manual_wait_seconds must be 0 or a positive integer"),
+        ({"manual_wait_seconds": -5}, "manual_wait_seconds must be 0 or a positive integer"),
+    ],
+)
+def test_not_null_int_settings_refuse_null_with_400(signing_key: bytes, body: dict, detail: str) -> None:
+    """D-096: an emptied number input sends null; for a NOT NULL column that
+    is a 400 the form can show, never an IntegrityError 500 on commit."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, body)
+    assert r.status_code == 400  # type: ignore[attr-defined]
+    assert r.json()["detail"] == detail  # type: ignore[attr-defined]
+
+
+def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {"manual_wait_seconds": 0})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert _row(db).manual_wait_seconds == 0
