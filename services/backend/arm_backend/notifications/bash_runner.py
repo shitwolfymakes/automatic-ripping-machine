@@ -13,6 +13,7 @@ import contextlib
 import os
 import signal
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from arm_backend.notifications.script_meta import RESERVED_INPUT_KEYS
@@ -50,8 +51,10 @@ def build_env(
     return env
 
 
-def _text(raw: bytes | bytearray) -> str:
-    return raw.decode("utf-8", "replace")[:OUTPUT_CAP]
+def _text(raw: bytes | bytearray, redact: Callable[[str], str] | None) -> str:
+    # Redact before the cap: a secret cut in half by it would no longer match.
+    text = raw.decode("utf-8", "replace")
+    return (redact(text) if redact is not None else text)[:OUTPUT_CAP]
 
 
 async def _drain(stream: asyncio.StreamReader | None, into: bytearray) -> None:
@@ -80,7 +83,17 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
         os.killpg(proc.pid, signal.SIGKILL)
 
 
-async def run_script(path: Path, *, title: str, body: str, env: dict[str, str], timeout_seconds: int) -> BashRunResult:
+async def run_script(
+    path: Path,
+    *,
+    title: str,
+    body: str,
+    env: dict[str, str],
+    timeout_seconds: int,
+    redact: Callable[[str], str] | None = None,
+) -> BashRunResult:
+    """Run the hook script. `redact` masks secrets in its output; it runs on
+    the whole output, before stdout, stderr and the error tail are cut."""
     if not path.is_file():
         return BashRunResult(
             ok=False, exit_code=None, duration_ms=0, stdout="", stderr="", error=f"script not found: {path.name}"
@@ -140,7 +153,7 @@ async def run_script(path: Path, *, title: str, body: str, env: dict[str, str], 
         for reader in readers:
             reader.cancel()
     duration_ms = int((time.monotonic() - started) * 1000)
-    stdout, stderr = _text(out), _text(err)
+    stdout, stderr = _text(out, redact), _text(err, redact)
     if returncode == 0:
         return BashRunResult(ok=True, exit_code=0, duration_ms=duration_ms, stdout=stdout, stderr=stderr, error=None)
     tail = stderr.strip()[:ERROR_TAIL]

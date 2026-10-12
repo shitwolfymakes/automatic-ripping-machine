@@ -1368,6 +1368,38 @@ def test_preview_run_redacts_secrets_the_script_echoes(signing_key: bytes, scrip
     assert "<hidden>" in res["error"]
 
 
+def test_preview_run_redacts_a_secret_cut_by_the_output_cap(signing_key: bytes, scripts_root: Path) -> None:
+    """D-039 follow-up: a secret straddling OUTPUT_CAP must not leak its first
+    half; redaction runs before the output is cut."""
+    from arm_backend.notifications.bash_runner import OUTPUT_CAP
+
+    pad = OUTPUT_CAP - 6
+    _bash_script(
+        scripts_root,
+        "ok.sh",
+        f"head -c {pad} /dev/zero | tr '\\0' x; echo \"$SMTP_PASS\"; head -c {pad} /dev/zero | tr '\\0' y >&2; "
+        'echo "$SMTP_PASS" >&2; exit 1\n',
+    )
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel(config={"inputs": {"TO": "me@x", "SMTP_PASS": "s3cr3t-value"}})]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"}},
+                "event_type": "rip.failed",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    res = r.json()["result"]
+    assert len(res["stdout"]) == OUTPUT_CAP and res["stdout"].endswith("x<hidde")
+    assert "s3cr3t" not in res["stdout"] and "s3cr3t" not in res["stderr"] and "s3cr3t" not in res["error"]
+
+
 def test_preview_and_scripts_require_roles(signing_key: bytes, scripts_root: Path) -> None:
     _bash_script(scripts_root, "a.sh", "exit 0\n")
     app, _ = _make_app(signing_key, FakeSession())

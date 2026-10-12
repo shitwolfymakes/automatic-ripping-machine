@@ -384,17 +384,15 @@ async def preview_script(
     inputs, env = masked(run)
     result = None
     if req.run:
-        result = await run_script(
-            run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
-        )
         # The response must not undo the masking above: a script that echoes
         # a secret (curl -v, set -x) would hand it back in its output.
-        result = result.model_copy(
-            update={
-                "stdout": redact_secrets(result.stdout, run),
-                "stderr": redact_secrets(result.stderr, run),
-                "error": redact_secrets(result.error, run) if result.error is not None else None,
-            }
+        result = await run_script(
+            run.path,
+            title=run.title,
+            body=run.body,
+            env=run.env,
+            timeout_seconds=run.timeout_seconds,
+            redact=lambda text: redact_secrets(text, run),
         )
     return BashPreviewResult(title=run.title, body=run.body, inputs=inputs, env=env, argv=run.argv, result=result)
 
@@ -476,10 +474,15 @@ def _bash_send(
     async def _send(_title: str, _body: str) -> None:
         run = _prepare_sample(config, template, event_type)
         result = await run_script(
-            run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
+            run.path,
+            title=run.title,
+            body=run.body,
+            env=run.env,
+            timeout_seconds=run.timeout_seconds,
+            redact=lambda text: redact_secrets(text, run),
         )
         if not result.ok:
-            raise RuntimeError(redact_secrets(result.error or "", run))
+            raise RuntimeError(result.error or "")
 
     return _send
 
