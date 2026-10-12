@@ -9,7 +9,9 @@ hook is visible in the UI. The backend's own environment is never inherited.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import signal
 import time
 from pathlib import Path
 
@@ -49,6 +51,13 @@ def _text(raw: bytes) -> str:
     return raw.decode("utf-8", "replace")[:OUTPUT_CAP]
 
 
+def _kill_group(proc: asyncio.subprocess.Process) -> None:
+    # The group id is bash's pid (start_new_session); a group that already
+    # emptied out is fine.
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+
+
 async def run_script(path: Path, *, title: str, body: str, env: dict[str, str], timeout_seconds: int) -> BashRunResult:
     if not path.is_file():
         return BashRunResult(
@@ -73,11 +82,14 @@ async def run_script(path: Path, *, title: str, body: str, env: dict[str, str], 
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        # Its own process group, so a timeout reaches whatever bash is
+        # waiting on (curl, sleep, an SMTP client), not just bash.
+        start_new_session=True,
     )
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
     except TimeoutError:
-        proc.kill()
+        _kill_group(proc)
         await proc.wait()
         return BashRunResult(
             ok=False,
