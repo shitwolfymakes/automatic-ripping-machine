@@ -217,7 +217,10 @@ async def execute_passthrough_task(
             mover = move_tree if is_folder else transcode_none
             cancel = _cancel_events[task_id] = threading.Event()
             progress = _CopyProgress()
-            publisher = asyncio.ensure_future(_publish_progress(db, hub, task_id, job_id, source_track_id, progress))
+            stop_publisher = asyncio.Event()
+            publisher = asyncio.ensure_future(
+                _publish_progress(db, hub, task_id, job_id, source_track_id, progress, stop_publisher)
+            )
             try:
                 # Move and chown together in the worker thread: a backup
                 # tree's chown walks every file, too much for the event loop.
@@ -231,10 +234,14 @@ async def execute_passthrough_task(
                 error = f"{type(exc).__name__}: {exc}"[:300]
             finally:
                 _cancel_events.pop(task_id, None)
-                # Stop the publisher before this coroutine uses `db` again.
-                publisher.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
+                # Stop the publisher before this coroutine uses `db` again. It
+                # checks the event between writes, so a commit is never cut
+                # off part way; and nothing it raises replaces the move's result.
+                stop_publisher.set()
+                try:
                     await publisher
+                except Exception:
+                    logger.exception("passthrough progress publisher failed task_id=%s", task_id)
 
         # Re-fetch: cancel_running (a different session) may have deleted
         # this row while the move was in flight. `populate_existing=True`
@@ -311,8 +318,9 @@ async def _publish_progress(
     job_id: str | None,
     track_id: str | None,
     progress: _CopyProgress,
+    stop: asyncio.Event,
 ) -> None:
-    """While a copy runs, heartbeat `progress_pct` onto the row and publish
+    """While a copy runs, until `stop` is set, heartbeat `progress_pct` onto the row and publish
     `transcode.progress.{task_id}`, as a container transcoder does.
 
     A Core UPDATE rather than an ORM write: `cancel_running` may delete the
@@ -321,7 +329,10 @@ async def _publish_progress(
     started = time.monotonic()
     last_pct = -1
     while True:
-        await asyncio.sleep(PROGRESS_INTERVAL_SECONDS)
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), PROGRESS_INTERVAL_SECONDS)
+        if stop.is_set():
+            return
         if progress.total <= 0:
             continue
         pct = min(99, progress.done * 100 // progress.total)
@@ -343,14 +354,17 @@ async def _publish_progress(
             logger.warning("passthrough progress write failed task_id=%s: %s; no further progress", task_id, exc)
             await db.rollback()
             return
-        await hub.emit(
-            topic=f"transcode.progress.{task_id}",
-            event_type="transcode.progress",
-            payload={"task_id": task_id, "progress_pct": pct, "eta_seconds": eta, "current_pass": None},
-            persist=False,
-            job_id=job_id,
-            track_id=track_id,
-        )
+        try:
+            await hub.emit(
+                topic=f"transcode.progress.{task_id}",
+                event_type="transcode.progress",
+                payload={"task_id": task_id, "progress_pct": pct, "eta_seconds": eta, "current_pass": None},
+                persist=False,
+                job_id=job_id,
+                track_id=track_id,
+            )
+        except Exception as exc:
+            logger.warning("passthrough progress publish failed task_id=%s: %s", task_id, exc)
 
 
 def _move_and_chown(

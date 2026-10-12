@@ -697,3 +697,42 @@ async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch
     progress = [e for e in sent if e["event_type"] == "transcode.progress"]
     assert progress and progress[0]["topic"] == "transcode.progress.txt_1"
     assert progress[0]["payload"]["progress_pct"] == 50 and progress[0]["persist"] is False
+
+
+async def test_a_failing_progress_publish_does_not_strand_the_task(tmp_path: Path, monkeypatch: Any) -> None:
+    """D-127 follow-up: a hub error while publishing progress is telemetry
+    only. The move's result still lands as the task's terminal status."""
+    import threading
+
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"x" * 100)
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+    progress_tried = threading.Event()
+
+    async def _emit(**kwargs: Any) -> None:
+        if kwargs["event_type"] == "transcode.progress":
+            progress_tried.set()
+            raise RuntimeError("hub down")
+        sent.append(kwargs)
+
+    hub.emit = _emit  # type: ignore[method-assign]
+
+    import arm_backend.passthrough_executor as mod
+
+    monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.01)
+
+    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
+        on_bytes(50)
+        progress_tried.wait(5)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.rename(output_path)
+        return 100
+
+    monkeypatch.setattr(mod, "transcode_none", _slow_copy)
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(tmp_path / "media")))
+
+    assert progress_tried.is_set()
+    assert ok is True and task.status == TranscodeTaskStatus.DONE
