@@ -207,7 +207,7 @@ describe('Transcoder Page', () => {
 			).not.toBeInTheDocument();
 		});
 
-		it('renders a full-page empty state and fetches no task data when not capable (ripper-only deep link)', async () => {
+		it('renders a full-page empty state and fetches no task list when not capable (ripper-only deep link)', async () => {
 			setTranscoderEnabled(false);
 			// Earlier tests in this file already invoked these fetchers; clear
 			// their call history so this assertion only reflects this render.
@@ -222,8 +222,28 @@ describe('Transcoder Page', () => {
 			// Let any pending microtasks flush, then confirm nothing was fetched.
 			await new Promise((r) => setTimeout(r, 0));
 			expect(fetchTranscoderJobs).not.toHaveBeenCalled();
-			expect(fetchTranscoderStats).not.toHaveBeenCalled();
 			expect(fetchGpus).not.toHaveBeenCalled();
+			// Only the one-shot held-task count; none held, so no warning.
+			expect(fetchTranscoderStats).toHaveBeenCalledTimes(1);
+			expect(screen.queryByTestId('transcoder-held-encode-tasks')).not.toBeInTheDocument();
+		});
+
+		it('says how many encode tasks a ripper-only deployment is holding', async () => {
+			setTranscoderEnabled(false);
+			vi.mocked(fetchTranscoderStats).mockResolvedValueOnce({
+				tasks_by_status: { queued: 3 },
+				total_tasks: 3,
+				gpus_total: 0,
+				gpus_available: 0,
+				max_parallel: 1,
+				queued_encode_tasks: 2
+			});
+			renderComponent(TranscoderPage);
+			await waitFor(() =>
+				expect(screen.getByTestId('transcoder-held-encode-tasks')).toHaveTextContent(
+					'2 encode tasks are held. Re-run setup without --ripper-only to resume them.'
+				)
+			);
 		});
 	});
 });

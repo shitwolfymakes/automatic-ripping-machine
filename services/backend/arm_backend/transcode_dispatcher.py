@@ -158,6 +158,38 @@ async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
         gpu.claimed_by_task_id = None
 
 
+async def resolve_preset_for_task(db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
+    """The preset a task runs with: its application's session's preset."""
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
+    ).scalar_one_or_none()
+    if application is None:
+        return None
+    sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
+    if sess is None or sess.transcode_preset_id is None:
+        return None
+    return (
+        await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+    ).scalar_one_or_none()
+
+
+async def count_queued_encode_tasks(db: AsyncSession) -> int:
+    """QUEUED tasks that need an encoder (not a passthrough move). On a box
+    that cannot transcode these are held by `spawn_pending` indefinitely."""
+    from arm_backend.transcode_apply import is_passthrough_preset
+
+    queued = (
+        (await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)))
+        .scalars()
+        .all()
+    )
+    count = 0
+    for task in queued:
+        if not is_passthrough_preset(await resolve_preset_for_task(db, task)):
+            count += 1
+    return count
+
+
 WAITING_FOR_PROBE_REASON = "waiting for GPU probe"
 
 # The running backend's dispatcher, for code paths with no app handle (the
@@ -733,19 +765,7 @@ class TranscodeDispatcher:
         return spawned
 
     async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
-        application = (
-            await db.execute(
-                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
-            )
-        ).scalar_one_or_none()
-        if application is None:
-            return None
-        sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
-        if sess is None or sess.transcode_preset_id is None:
-            return None
-        return (
-            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-        ).scalar_one_or_none()
+        return await resolve_preset_for_task(db, task)
 
     def awaiting_probe(self, gpu: Gpu) -> bool:
         """A never-probed row whose probe is reserved, running, or about to be

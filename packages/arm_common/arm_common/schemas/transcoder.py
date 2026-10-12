@@ -81,6 +81,9 @@ class TranscodeStatsView(BaseModel):
     gpus_total: int
     gpus_available: int
     max_parallel: int
+    # QUEUED tasks that need an encoder, as opposed to a passthrough move.
+    # On a ripper-only deployment these are held until transcoding returns.
+    queued_encode_tasks: int = 0
 
 
 class GpuView(BaseModel):

@@ -267,6 +267,17 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     assert body["max_parallel"] == settings.MAX_PARALLEL_TRANSCODES
 
 
+def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: bytes) -> None:
+    """D-067: the Transcoder page's ripper-only branch shows how many encode
+    tasks are held; a queued passthrough is not one of them."""
+    db = FakeSession()
+    _seed_encode_and_passthrough_queue(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        body = c.get("/api/transcodes/stats", headers=_auth(token)).json()
+    assert body["tasks_by_status"] == {"queued": 3} and body["queued_encode_tasks"] == 2
+
+
 def test_stats_disabled_gpu_is_not_available(signing_key: bytes) -> None:
     db = FakeSession()
     disabled = _gpu("gpu_off", status=GpuStatus.AVAILABLE)
@@ -572,3 +583,39 @@ def test_list_transcodes_job_id_none_when_no_application(signing_key: bytes) -> 
     assert r.status_code == 200
     tasks = r.json()
     assert tasks[0]["job_id"] is None
+
+
+def _seed_encode_and_passthrough_queue(db: Any) -> None:
+    """Two QUEUED tasks under an encode session, one under a passthrough one."""
+    from arm_common import ContainerFormat, MediaType, Session, SessionApplication, SessionApplicationStatus
+    from arm_common import TranscodePreset, TranscodeTask, TranscodeTaskStatus, TranscodeTool
+
+    db.rows["session_applications"] = [
+        SessionApplication(id="sap_enc", session_id="ses_enc", job_id="job_1", status=SessionApplicationStatus.QUEUED),
+        SessionApplication(id="sap_pt", session_id="ses_pt", job_id="job_1", status=SessionApplicationStatus.QUEUED),
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id=sid,
+            name=sid,
+            media_type=MediaType.MOVIE,
+            rip_preset_id="rpr_x",
+            transcode_preset_id=preset,
+            output_path_template="{title}",
+        )
+        for sid, preset in (("ses_enc", "tpr_enc"), ("ses_pt", None))
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_enc",
+            name="enc",
+            media_type=MediaType.MOVIE,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+        )
+    ]
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(id=tid, session_application_id=sap, source_track_id="trk_1", status=TranscodeTaskStatus.QUEUED)
+        for tid, sap in (("txt_e1", "sap_enc"), ("txt_e2", "sap_enc"), ("txt_p", "sap_pt"))
+    ]

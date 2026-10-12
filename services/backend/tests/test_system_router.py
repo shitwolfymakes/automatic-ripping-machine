@@ -470,6 +470,29 @@ def test_diagnostics_transcoder_ripper_only_ok_even_without_dispatcher(
     assert "ripper-only" in check["detail"]
 
 
+def test_diagnostics_ripper_only_warns_about_held_encode_tasks(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """D-067: encode tasks queued before the box went ripper-only are held
+    forever; diagnostics must say so instead of an unconditional ok."""
+    from arm_backend.config import settings
+
+    from tests.test_transcodes_router import _seed_encode_and_passthrough_queue
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    _seed_encode_and_passthrough_queue(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert check["detail"] == (
+        "ripper-only deployment: 2 queued encode task(s) are held; "
+        "re-run setup without --ripper-only to resume them, or delete them"
+    )
+
+
 def test_diagnostics_transcoder_remote_host_overrides_capability_off(signing_key: bytes, tmp_path, monkeypatch) -> None:
     """A remote docker host implies capability, so the normal probe path runs."""
     from arm_backend.config import settings

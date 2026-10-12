@@ -30,6 +30,7 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.transcode_dispatcher import count_queued_encode_tasks
 from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
 from arm_backend.utils import default_roots
 from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
@@ -191,6 +192,15 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
         # dispatcher runs without a docker client by design, so reporting its
         # (absent) container path as a warning would be permanent noise.
         tc_status, tc_detail = "ok", "ripper-only deployment (transcoding not installed)"
+        held = await count_queued_encode_tasks(db)
+        if held:
+            # Queued before the box went ripper-only (or swept back to
+            # QUEUED): spawn_pending holds them with nothing to run them.
+            tc_status = "warning"
+            tc_detail = (
+                f"ripper-only deployment: {held} queued encode task(s) are held; "
+                "re-run setup without --ripper-only to resume them, or delete them"
+            )
     elif dispatcher is None:
         tc_status, tc_detail = "warning", "transcoder dispatcher not running"
     elif not dispatcher.host_paths_set():
