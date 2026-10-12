@@ -82,6 +82,16 @@ describe('buildMetadataFields', () => {
 			expect(findField(partial, 'State')?.value).toBe('Waiting for session');
 		});
 
+		it('does not say Waiting for session when a session is parked on the job', () => {
+			const fields = buildMetadataFields(
+				createJob({ status: 'ripped', transcode_progress: null, parked_session_ids: ['ses_movies'] }),
+				null,
+				new Map([['ses_movies', 'Movies']])
+			);
+			expect(findField(fields, 'State')?.value).toBe('Waiting');
+			expect(findField(fields, 'Session')?.value).toBe('Movies, waiting');
+		});
+
 		it('shows Waiting for identity for a ripped placeholder disc', () => {
 			const fields = buildMetadataFields(createJob({ status: 'ripped_awaiting_identify', transcode_progress: null }));
 			expect(findField(fields, 'State')?.value).toBe('Waiting for identity');

@@ -155,12 +155,17 @@ export function buildMetadataFields(
 
 	// --- Time field based on job state ---
 	// A ripped job that is waiting for the operator is live (it can still change)
-	// but nothing is running, so it is neither "In progress" nor "Finished".
+	// but nothing is running, so it is neither "In progress" nor "Finished". A
+	// job with a parked session is not waiting for one: the Session row below
+	// names the session that is waiting.
+	const parked = parkedSessionLine(job, sessionNames ?? new Map());
 	let stateLabel = 'Finished';
 	if (isInProgress(job)) stateLabel = 'In progress';
-	else if (isLive(job)) stateLabel = isAwaitingIdentity(job.status) ? 'Waiting for identity' : 'Waiting for session';
+	else if (isLive(job)) {
+		if (isAwaitingIdentity(job.status)) stateLabel = 'Waiting for identity';
+		else stateLabel = parked ? 'Waiting' : 'Waiting for session';
+	}
 	fields.push({ label: 'State', value: stateLabel });
-	const parked = parkedSessionLine(job, sessionNames ?? new Map());
 	if (parked) fields.push({ label: 'Session', value: parked });
 
 	// --- Promoted real JobView columns ---
