@@ -166,3 +166,96 @@ def test_patch_tolerance_and_auto_apply(signing_key: bytes) -> None:
         r = _patch(client, token, {"episode_match_tolerance_seconds": 90, "episode_auto_apply": False})
     assert r.status_code == 200, r.text
     assert (r.json()["episode_match_tolerance_seconds"], r.json()["episode_auto_apply"]) == (90, False)
+
+
+def _identity_jobs(db: FakeSession) -> None:
+    from arm_common import DiscType, Job, JobStatus, SessionApplication, SessionApplicationStatus
+
+    db.rows["jobs"] = [
+        Job(id="job_live", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.AWAITING_REVIEW),
+        Job(id="job_ripped_unapplied", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(id="job_ripped_applied", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(id="job_failed", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.FAILED),
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_1", session_id="ses_x", job_id="job_ripped_applied", status=SessionApplicationStatus.DONE
+        )
+    ]
+
+
+class _Stage:
+    def __init__(self) -> None:
+        self.scheduled: list[str] = []
+
+    def schedule(self, job_id: str) -> None:
+        self.scheduled.append(job_id)
+
+
+@pytest.mark.parametrize("key", ["episode_sources", "disc_hint_sources"])
+def test_changing_identity_sources_re_resolves_live_jobs(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    """D-097: the resolver reads the source settings only when it runs, so a
+    change re-runs it (and the episode stage) for live jobs and for ripped
+    jobs no session has been applied to yet; finished work is left alone."""
+    db = FakeSession()
+    _seed(db)
+    _identity_jobs(db)
+    resolved: list[str] = []
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        from arm_backend.identity.pipeline import ResolveOutcome
+
+        resolved.append(job.id)
+        return ResolveOutcome(changed=0, track_ids=frozenset())
+
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    app, token = _make_app(signing_key, db)
+    stage = _Stage()
+    app.state.episode_stage = stage
+    body = {"episode_sources": ["tvmaze"]} if key == "episode_sources" else {"disc_hint_sources": ["label"]}
+    with TestClient(app) as client:
+        r = _patch(client, token, body)
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert sorted(resolved) == ["job_live", "job_ripped_unapplied"]
+    assert sorted(stage.scheduled) == ["job_live", "job_ripped_unapplied"]
+
+
+def test_identity_sources_patch_without_a_change_resolves_nothing(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = FakeSession()
+    _seed(db)
+    _row(db).episode_sources = ["tvmaze"]
+    _identity_jobs(db)
+    resolved: list[str] = []
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        resolved.append(job.id)
+
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {"episode_sources": ["tvmaze"], "episode_auto_apply": False})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert resolved == []
+
+
+def test_a_failing_re_resolve_never_fails_the_patch(signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed(db)
+    _identity_jobs(db)
+    seen: list[str] = []
+
+    async def boom(_session, job):  # type: ignore[no-untyped-def]
+        seen.append(job.id)
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(config_router, "resolve_job", boom)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {"disc_hint_sources": ["label"]})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert sorted(seen) == ["job_live", "job_ripped_unapplied"]  # one failure did not stop the next
+    assert _row(db).disc_hint_sources == ["label"]
