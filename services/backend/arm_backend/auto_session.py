@@ -117,15 +117,16 @@ def _media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
 
 def media_mismatch_detail(job: Job, sess: Session) -> str:
     """Human-readable detail for `skipped_reason="media_mismatch"`, naming
-    both sides. `job.media_type`/`sess.media_type` are both non-None by the
-    time this is called (the guard only fires when both are set and
+    both sides. The job side is `routing_media_type(job)`, which is non-None
+    by the time this is called (the guard only fires when both are set and
     incompatible). Uses `enum_value_str` rather than `.value` so a
     forward-compat row that loaded as a raw `str` still renders instead of
     raising `AttributeError`."""
-    assert job.media_type is not None
+    job_media_type = routing_media_type(job)
+    assert job_media_type is not None
     return (
         f"session media type {enum_value_str(sess.media_type)} is not compatible with "
-        f"job media type {enum_value_str(job.media_type)}"
+        f"job media type {enum_value_str(job_media_type)}"
     )
 
 
@@ -453,10 +454,13 @@ async def _fan_out_tasks_for_application(
     Caller is responsible for the commit. The helper only `flush`es so the
     new application's id is populated for downstream task FKs.
     """
+    # routing_media_type, not job.media_type: an audio CD MusicBrainz missed
+    # is still music, and a video session on it would fan out nothing (D-033).
+    job_media_type = routing_media_type(job)
     if (
-        job.media_type is not None
+        job_media_type is not None
         and sess.media_type is not None
-        and not _media_types_compatible(job.media_type, sess.media_type)
+        and not _media_types_compatible(job_media_type, sess.media_type)
     ):
         # A routed/manually-picked session whose media_type is INCOMPATIBLE
         # with what the job was actually identified as (e.g. a music session
@@ -480,7 +484,7 @@ async def _fan_out_tasks_for_application(
             sess.id,
             job.id,
             enum_value_str(sess.media_type),
-            enum_value_str(job.media_type),
+            enum_value_str(job_media_type),
             source,
         )
         return ApplySessionOutcome(
