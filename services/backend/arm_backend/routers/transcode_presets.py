@@ -6,8 +6,8 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.db import get_session
-from arm_common import MediaType, Session, TranscodePreset, TranscodeTool, User
-from arm_common.encoders import encoder_allowed_for_tool, get_encoder
+from arm_common import ContainerFormat, MediaType, Session, TranscodePreset, TranscodeTool, User
+from arm_common.encoders import encoder_allowed_for_tool, encoder_supports_container, get_encoder
 from arm_common.schemas import (
     TranscodePresetCreateRequest,
     TranscodePresetUpdateRequest,
@@ -17,8 +17,9 @@ from arm_common.schemas import (
 router = APIRouter(prefix="/api/transcode-presets", tags=["transcode-presets"])
 
 
-def _validate_encoder(encoder: str, tool: TranscodeTool) -> None:
-    """422 unless `encoder` is a catalog id the preset's tool can run."""
+def _validate_encoder(encoder: str, tool: TranscodeTool, container: ContainerFormat) -> None:
+    """422 unless `encoder` is a catalog id the preset's tool can run and its
+    engine can write `container`."""
     try:
         get_encoder(encoder)
     except ValueError as exc:
@@ -27,6 +28,11 @@ def _validate_encoder(encoder: str, tool: TranscodeTool) -> None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"encoder {encoder!r} is not valid for tool {tool.value}; only 'preset' is",
+        )
+    if not encoder_supports_container(encoder, container):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"encoder {encoder!r} cannot write {container.value}; AMD VAAPI encoders write mkv or mp4",
         )
 
 
@@ -61,7 +67,7 @@ async def create_transcode_preset(
     user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodePreset:
-    _validate_encoder(req.encoder, req.tool)
+    _validate_encoder(req.encoder, req.tool, req.container)
     row = TranscodePreset(
         name=req.name,
         media_type=req.media_type,
@@ -98,12 +104,14 @@ async def update_transcode_preset(
             status_code=status.HTTP_409_CONFLICT,
             detail="built-in transcode preset: only `name` can be edited",
         )
-    if req.encoder is not None or req.tool is not None:
-        # Validate the pair the row will hold after the patch, so switching the
-        # tool away from HandBrake cannot strand a codec encoder on it.
+    if req.encoder is not None or req.tool is not None or req.container is not None:
+        # Validate what the row will hold after the patch, so switching the
+        # tool away from HandBrake cannot strand a codec encoder on it, and a
+        # container change cannot pair a VAAPI encoder with WebM.
         _validate_encoder(
             req.encoder if req.encoder is not None else row.encoder,
             req.tool if req.tool is not None else row.tool,
+            req.container if req.container is not None else row.container,
         )
 
     for key, value in fields.items():

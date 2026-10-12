@@ -154,6 +154,33 @@ def test_create_non_handbrake_tool_rejects_codec_encoder_422(signing_key: bytes)
     assert r.json()["detail"] == "encoder 'cpu_h265' is not valid for tool abcde; only 'preset' is"
 
 
+def test_vaapi_encoder_with_webm_is_refused_on_create_and_patch(signing_key: bytes) -> None:
+    """D-071: the ffmpeg VAAPI engine muxes only MKV/MP4, so the pairing would
+    fail every task at run time; refuse it whichever field the patch changes."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_presets"] = [_preset("tpr_enc", name="enc")]
+    db.rows["transcode_presets"][0].encoder = "vaapi_av1"
+    detail = "encoder 'vaapi_av1' cannot write webm; AMD VAAPI encoders write mkv or mp4"
+    with TestClient(app) as client:
+        create = client.post(
+            "/api/transcode-presets",
+            json={**_CREATE_BODY, "container": "webm", "encoder": "vaapi_av1"},
+            headers=_auth(token),
+        )
+        to_webm = client.patch("/api/transcode-presets/tpr_enc", json={"container": "webm"}, headers=_auth(token))
+        any_webm = client.post(
+            "/api/transcode-presets",
+            json={**_CREATE_BODY, "container": "webm", "encoder": "any_av1"},
+            headers=_auth(token),
+        )
+    assert create.status_code == 422 and create.json()["detail"] == detail
+    assert to_webm.status_code == 422 and to_webm.json()["detail"] == detail
+    assert db.rows["transcode_presets"][0].container == ContainerFormat.MKV
+    # any_* resolves at claim time, which skips VAAPI devices for WebM.
+    assert any_webm.status_code == 201
+
+
 def test_patch_encoder_validated_against_stored_tool(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)

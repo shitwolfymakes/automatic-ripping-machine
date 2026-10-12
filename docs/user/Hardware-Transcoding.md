@@ -61,7 +61,12 @@ the preset's encoder:
   built-in preset that defaults to `any_h265` keeps working on a CPU-only box.
   The HandBrake preset's own settings (scaling, filters, audio) apply when
   the job runs on the CPU, NVENC or QSV, but not when it lands on an AMD
-  (VAAPI) device, which encodes through ffmpeg instead.
+  (VAAPI) device, which encodes through ffmpeg instead. A WebM preset never
+  lands on an AMD device (see below); it takes another vendor or the CPU.
+- **Containers on AMD**: the ffmpeg VAAPI path copies the source audio,
+  which WebM cannot carry, so it writes MKV or MP4 only. The API refuses a
+  `vaapi_*` encoder with a WebM container (`422`), and the preset form
+  disables WebM for those encoders.
 - **`<vendor>_<codec>`** (a specific `qsv_*`, `nvenc_*` or `vaapi_*` id): picks
   a free eligible device of that vendor if one exists; if all are busy, the
   task queues. If **no** device of that vendor has verified the codec, the

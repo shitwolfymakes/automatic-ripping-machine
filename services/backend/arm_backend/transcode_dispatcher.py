@@ -61,6 +61,7 @@ from arm_common.encoders import (
     gpu_could_serve,
     gpu_encoder_for,
     gpu_is_eligible,
+    vendor_supports_container,
 )
 
 if TYPE_CHECKING:
@@ -811,11 +812,23 @@ class TranscodeDispatcher:
         if spec.kind == "cpu":
             return GpuAssignment(gpu=None, encoder=spec, action="spawn")
         codec = str(spec.codec)
+        if spec.vendor is not None and not vendor_supports_container(spec.vendor, preset.container):
+            # A preset saved before the API refused this pairing.
+            return GpuAssignment(
+                gpu=None,
+                encoder=spec,
+                action="fail",
+                reason=f"encoder {spec.id} cannot write {preset.container.value}; edit the preset to use mkv or mp4",
+            )
         # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
         self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
+        # An `any_*` WebM preset must not land on a VAAPI device, whose
+        # ffmpeg engine cannot write WebM (a pinned vaapi_* + WebM preset is
+        # refused at create time).
+        all_gpus = [g for g in all_gpus if vendor_supports_container(g.vendor, preset.container)]
         eligible = [
             g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
         ]
