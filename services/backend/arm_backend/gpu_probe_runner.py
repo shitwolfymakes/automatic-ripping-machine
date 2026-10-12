@@ -132,6 +132,20 @@ def probe_failure_error(status_code: int, stderr: bytes | str) -> str:
     return _truncate(message)
 
 
+# Docker's wording when the device node it was asked to pass in is missing or
+# unusable on the host (`--device` / device requests).
+_DEVICE_REFUSED_MARKERS = ("error gathering device information",)
+
+
+def _device_refused(exc: Exception, gpu: Gpu) -> bool:
+    """Did the probe container fail to start because of the GPU's device
+    itself (as opposed to the daemon, the transport or the image)?"""
+    message = str(exc)
+    if any(marker in message for marker in _DEVICE_REFUSED_MARKERS):
+        return True
+    return gpu.device_path.startswith("/dev/") and gpu.device_path in message
+
+
 def probe_outcome(payload: dict[str, Any]) -> ProbeOutcome:
     """`(verified codecs, probe_error)` from a successful probe's result.
     Codecs outside the catalog vocabulary are dropped and noted."""
@@ -386,7 +400,10 @@ class GpuProbeRunner:
             # `run` creates the container before starting it, so a start
             # failure leaves a Created container behind with no handle to it.
             await self._remove_probe_containers(docker, gpu.id)
-            return None, _truncate(f"probe container could not start: {exc}")
+            detail = _truncate(f"probe container could not start: {exc}")
+            # Docker refusing the device itself says the device is gone or
+            # broken: that verifies nothing, unlike a daemon or transport fault.
+            return ([] if _device_refused(exc, gpu) else None), detail
         try:
             try:
                 result = await asyncio.to_thread(container.wait, timeout=PROBE_TIMEOUT_S)

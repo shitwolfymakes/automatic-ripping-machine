@@ -410,6 +410,20 @@ async def test_container_created_but_not_started_is_removed() -> None:
     assert dispatcher.probing_gpu_ids == set()
 
 
+async def test_a_device_docker_refuses_verifies_nothing() -> None:
+    """D-070 follow-up: a start failure naming the device (node removed, driver
+    broken) is about the device, not the infrastructure, so the row must stop
+    advertising its old encoders; tasks then fall back to the CPU."""
+    runner, db, docker, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])])
+    assert docker is not None
+    gpu = db.rows["gpus"][0]
+    docker.containers.run_exc = RuntimeError(
+        f'error gathering device information while adding custom device "{gpu.device_path}": no such file or directory'
+    )
+    await runner.probe_gpu("gpu_1")
+    assert gpu.encoder_kinds == [] and gpu.probe_error.startswith("probe container could not start")
+
+
 async def test_unstarted_container_cleanup_failure_is_logged(caplog: pytest.LogCaptureFixture) -> None:
     runner, db, docker, *_ = _build([_gpu()])
     assert docker is not None

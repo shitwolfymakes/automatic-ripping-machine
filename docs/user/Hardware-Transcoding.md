@@ -159,6 +159,10 @@ the docker host failed mid-wait, or it ran past the 120 s timeout), the row
 keeps the encoders it had verified before and records only `probe_error`.
 A transient docker fault on a re-probe therefore never turns a working
 device into "Verified nothing"; re-probe once the host is reachable again.
+The exception is a start failure about the device itself: when docker
+cannot pass the device node in (it is gone, or its driver is broken), the
+row records "Verified nothing", so tasks stop being sent to it and fall
+back to the CPU encoder until a re-probe succeeds.
 
 ## Image variants
 
