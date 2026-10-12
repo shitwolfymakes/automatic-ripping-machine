@@ -1,4 +1,5 @@
-"""TheDiscDB ContentHash: MD5 over stream-file sizes, read via pycdlib.
+"""TheDiscDB ContentHash: MD5 over stream-file sizes, read via pycdlib (or
+7-Zip for a UDF-only disc).
 
 Mirrors ImportBuddy's DiskContentHash.cs + HashingExtensions.cs exactly:
 Blu-ray/UHD hashes `BDMV/STREAM/*.m2ts`; DVD hashes ALL files under
@@ -46,6 +47,31 @@ def _hash_from_listing(files: list[tuple[str, int]]) -> str | None:
     return compute_content_hash([size for _, size in ordered])
 
 
+def _files_in(listing: list[tuple[str, int]], directory: str) -> list[tuple[str, int]]:
+    """(basename, size) for the files directly inside `directory` of a 7z
+    listing of relative paths; the directory match ignores case."""
+    prefix = directory.lower().rstrip("/") + "/"
+    out: list[tuple[str, int]] = []
+    for path, size in listing:
+        if path.lower().startswith(prefix) and "/" not in path[len(prefix) :]:
+            out.append((path[len(prefix) :], size))
+    return out
+
+
+def collect_hash_files_udf(source_path: str) -> list[tuple[str, int]] | None:
+    """The same file set as `collect_hash_files`, from a 7-Zip listing: the
+    fallback for a UDF-only disc that pycdlib refuses (no ISO 9660 PVD)."""
+    from arm_ripper.scan import udf_image
+
+    listing = udf_image.list_files(source_path)
+    if not listing:
+        return None
+    m2ts = [(n, s) for n, s in _files_in(listing, "BDMV/STREAM") if n.lower().endswith(".m2ts")]
+    if m2ts:
+        return m2ts
+    return _files_in(listing, "VIDEO_TS") or None
+
+
 def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
     """Read the hashable file set from a device or ISO path via pycdlib.
 
@@ -87,10 +113,14 @@ def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
 def probe_thediscdb_hash(source_path: str) -> str | None:
     """Compute the ContentHash for a device/ISO path. Never raises."""
     try:
-        files = collect_hash_files(source_path)
+        try:
+            files = collect_hash_files(source_path)
+        except Exception as e:  # noqa: BLE001 — pycdlib refuses UDF-only images (no ISO 9660 PVD)
+            logger.debug("thediscdb pycdlib walk failed for %s: %s; trying 7z", source_path, e)
+            files = collect_hash_files_udf(source_path)
         if not files:
             return None
         return _hash_from_listing(files)
-    except Exception as e:  # noqa: BLE001 — pycdlib / struct.error on out-of-range sizes
-        logger.debug("thediscdb hash probe failed for %s: %s", source_path, e)
+    except Exception as e:  # noqa: BLE001 — struct.error on out-of-range sizes, 7z surprises
+        logger.info("thediscdb hash probe failed for %s: %s", source_path, e)
         return None

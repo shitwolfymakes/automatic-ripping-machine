@@ -111,6 +111,7 @@ vi.mock('$lib/api/settings', () => ({
 import { fetchJob, updateTrack, fetchNamingPreview, setJobMediaType } from '$lib/api/jobs';
 import * as authStore from '$lib/stores/auth';
 import { fetchIdentity } from '$lib/api/identity';
+import { ApiError } from '$lib/api/client';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
 const mockFetchNamingPreview = vi.mocked(fetchNamingPreview);
@@ -126,6 +127,28 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(screen.getByRole('heading', { name: 'Test Movie' })).toBeInTheDocument();
 		});
+	});
+
+	it('polls the naming preview only every sixth poll once it answers 409 (no routed session)', async () => {
+		const jobImpl = mockFetchJob.getMockImplementation();
+		const previewImpl = mockFetchNamingPreview.getMockImplementation();
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		try {
+			mockFetchJob.mockResolvedValue(createJobDetail({ job: createJob({ id: 'job_42', status: 'ripping' }) }));
+			mockFetchNamingPreview.mockRejectedValue(new ApiError(409, 'job has no output template', null));
+			renderComponent(Page);
+			await waitFor(() => expect(mockFetchNamingPreview).toHaveBeenCalledTimes(1));
+			await vi.advanceTimersByTimeAsync(11_000);
+			await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThanOrEqual(3));
+			expect(mockFetchNamingPreview).toHaveBeenCalledTimes(1);
+			// ...but asks again every sixth poll, so a route added elsewhere shows up.
+			await vi.advanceTimersByTimeAsync(20_000);
+			await waitFor(() => expect(mockFetchNamingPreview).toHaveBeenCalledTimes(2));
+		} finally {
+			vi.useRealTimers();
+			mockFetchJob.mockImplementation(jobImpl!);
+			mockFetchNamingPreview.mockImplementation(previewImpl!);
+		}
 	});
 
 	it('renders the breadcrumb', async () => {

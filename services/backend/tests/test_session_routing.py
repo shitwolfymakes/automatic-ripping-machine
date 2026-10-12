@@ -202,9 +202,9 @@ async def test_incompatible_drive_default_falls_through_to_route() -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_job_media_type_still_prefers_drive_default() -> None:
-    """A job that hasn't been identified yet (media_type=None) has nothing
-    to disagree with, so the drive default still wins regardless of the
-    drive-default session's own media_type."""
+    """A non-CD job that hasn't been identified yet (media_type=None) has
+    nothing to disagree with, so the drive default still wins regardless of
+    the drive-default session's own media_type."""
     db = FakeSession()
     _seed(
         db,
@@ -221,8 +221,37 @@ async def test_unknown_job_media_type_still_prefers_drive_default() -> None:
             )
         ],
     )
-    job = _job(media_type=None, disc_type=DiscType.CD)
+    job = _job(media_type=None, disc_type=DiscType.DVD)
     assert await resolve_routed_session_id(db, job) == "ses_drive_default_movie"  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_unidentified_cd_routes_as_music_past_a_video_drive_default() -> None:
+    """D-033: a CD whose MusicBrainz lookup missed keeps media_type=None,
+    but disc_type=cd already says music. The movie drive default must not
+    swallow it; the seeded (music, cd) route wins."""
+    db = FakeSession()
+    _seed(
+        db,
+        default_session_id="ses_drive_default_movie",
+        flag=True,
+        routes=[
+            SessionRoute(
+                id="srt_m", media_type=MediaType.MUSIC, disc_type=DiscType.CD, session_id="ses_builtin_music_flac"
+            )
+        ],
+        sessions=[
+            Session(
+                id="ses_drive_default_movie",
+                name="Drive default",
+                media_type=MediaType.MOVIE,
+                rip_preset_id="rpr_x",
+                output_path_template="{title}",
+            )
+        ],
+    )
+    job = _job(media_type=None, disc_type=DiscType.CD)
+    assert await resolve_routed_session_id(db, job) == "ses_builtin_music_flac"  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -281,8 +310,9 @@ async def test_exact_route_preferred_over_wildcard() -> None:
 
 @pytest.mark.asyncio
 async def test_no_media_type_skips_routes() -> None:
-    """A job that was never identified (media_type=None) must not match the
-    wildcard route for any media_type; routing falls through to None."""
+    """A non-CD job that was never identified (media_type=None) must not
+    match the wildcard route for any media_type; routing falls through to
+    None."""
     db = FakeSession()
     _seed(
         db,
@@ -294,7 +324,7 @@ async def test_no_media_type_skips_routes() -> None:
             ),
         ],
     )
-    job = _job(media_type=None, disc_type=DiscType.CD)
+    job = _job(media_type=None, disc_type=DiscType.DVD)
     assert await resolve_routed_session_id(db, job) is None  # type: ignore[arg-type]
 
 

@@ -59,10 +59,15 @@ class BashListener:
                 )
                 title, body = run.title, run.body
                 result = await run_script(
-                    run.path, title=title, body=body, env=run.env, timeout_seconds=run.timeout_seconds
+                    run.path,
+                    title=title,
+                    body=body,
+                    env=run.env,
+                    timeout_seconds=run.timeout_seconds,
+                    redact=lambda text: redact_secrets(text, run),
                 )
                 if not result.ok:
-                    err = redact_secrets(result.error or "", run)
+                    err = result.error or ""
             except HookError as exc:
                 err = str(exc)
             if err is not None:

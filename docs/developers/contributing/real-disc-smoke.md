@@ -95,7 +95,7 @@ The settings file is `$ARM/.armctl/.env`; after editing it, run
 
 ```bash
 bash devtools/setup-dev.sh up
-docker logs -f arm-ripper-<serial> &          # watch ripper events (enroll the drive from the UI first)
+docker logs -f arm-ripper-<serial>-<id> &          # watch ripper events (enroll the drive from the UI first)
 ```
 
 ## Run the test (ISO fixture — no physical disc needed)

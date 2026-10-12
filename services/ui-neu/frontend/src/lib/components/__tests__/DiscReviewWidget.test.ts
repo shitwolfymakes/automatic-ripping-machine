@@ -22,6 +22,7 @@ vi.mock('$lib/api/jobs', () => ({
 		})
 	),
 	abandonJob: vi.fn(() => Promise.resolve(createJob())),
+	deleteJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
@@ -88,6 +89,41 @@ describe('DiscReviewWidget', () => {
 			// Start rip is the rightmost action — Cancel comes before it.
 			expect(cancelBtn.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 			expect(startBtn).not.toBeDisabled();
+		});
+
+		it('offers Delete instead of Cancel once the rip has finished', async () => {
+			const { deleteJob, fetchJob } = await import('$lib/api/jobs');
+			const done = createJob({ status: 'ripped_awaiting_identify' });
+			const original = vi.mocked(fetchJob).getMockImplementation();
+			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: done });
+			try {
+				const ondismiss = vi.fn();
+				renderComponent(DiscReviewWidget, { props: { job: done, driveNames: {}, paused: false, ondismiss } });
+				const deleteBtn = await screen.findByRole('button', { name: 'Delete' });
+				expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+				await fireEvent.click(deleteBtn);
+				expect(
+					screen.getByText('Delete this job? The raw files stay on disk. This cannot be undone.')
+				).toBeInTheDocument();
+				const buttons = screen.getAllByRole('button', { name: 'Delete' });
+				await fireEvent.click(buttons[buttons.length - 1]);
+				await waitFor(() => expect(deleteJob).toHaveBeenCalledWith('job_1'));
+				await waitFor(() => expect(ondismiss).toHaveBeenCalled());
+			} finally {
+				vi.mocked(fetchJob).mockImplementation(original!);
+			}
+		});
+
+		it('keeps the card and shows the error when Cancel fails', async () => {
+			const { abandonJob } = await import('$lib/api/jobs');
+			vi.mocked(abandonJob).mockRejectedValueOnce(new Error('409 job cannot be abandoned'));
+			const ondismiss = vi.fn();
+			renderComponent(DiscReviewWidget, {
+				props: { job: createJob({ status: 'awaiting_review' }), driveNames: {}, paused: false, ondismiss }
+			});
+			await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+			expect(await screen.findByText('409 job cannot be abandoned')).toBeInTheDocument();
+			expect(ondismiss).not.toHaveBeenCalled();
 		});
 	});
 

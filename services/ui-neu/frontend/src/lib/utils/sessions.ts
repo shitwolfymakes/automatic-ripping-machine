@@ -25,3 +25,20 @@ export function isPassthroughSession(
 export function presetToolMap(presets: ReadonlyArray<{ id: string; tool: string }>): Map<string, string> {
 	return new Map(presets.map((p) => [p.id, p.tool]));
 }
+
+const VIDEO_MEDIA_TYPES: ReadonlySet<string> = new Set(['movie', 'tv']);
+
+/**
+ * Whether a session of `sessionMediaType` can apply to a job of `jobMediaType`;
+ * mirrors the Backend's `auto_session._media_types_compatible`, which also
+ * gates session routes. Movie and tv share a track kind; an iso/data session
+ * takes a dump of any video or data disc; music is only ever music.
+ */
+export function mediaTypesCompatible(jobMediaType: string, sessionMediaType: string): boolean {
+	if (jobMediaType === sessionMediaType) return true;
+	if (VIDEO_MEDIA_TYPES.has(sessionMediaType) && VIDEO_MEDIA_TYPES.has(jobMediaType)) return true;
+	return (
+		(sessionMediaType === 'iso' || sessionMediaType === 'data') &&
+		(VIDEO_MEDIA_TYPES.has(jobMediaType) || jobMediaType === 'data')
+	);
+}

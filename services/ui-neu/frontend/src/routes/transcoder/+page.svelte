@@ -2,7 +2,12 @@
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { fade } from 'svelte/transition';
-	import { fetchTranscoderJobs, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
+	import {
+		fetchTranscoderJobs,
+		fetchTranscoderStats,
+		retryTranscoderJob,
+		deleteTranscoderJob
+	} from '$lib/api/transcoder';
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
@@ -12,6 +17,7 @@
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { fetchGpus } from '$lib/api/gpus';
+	import { wsClient } from '$lib/api/ws';
 	import type { GpuView } from '$lib/types/api.gen';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { isAdmin } from '$lib/stores/auth';
@@ -130,6 +136,8 @@
 
 	let gpuRows = $state<GpuView[]>([]);
 
+	const GPU_RELOAD_DEBOUNCE_MS = 300;
+
 	async function loadGpus() {
 		try {
 			gpuRows = await fetchGpus();
@@ -139,17 +147,46 @@
 		}
 	}
 
+	// Ripper-only: encode tasks queued before the box lost transcoding are
+	// held by the backend with nothing to run them; say how many.
+	let heldEncodeTasks = $state(0);
+
+	async function loadHeldEncodeTasks() {
+		try {
+			heldEncodeTasks = (await fetchTranscoderStats()).queued_encode_tasks ?? 0;
+		} catch {
+			heldEncodeTasks = 0;
+		}
+	}
+
 	onMount(() => {
 		// Ripper-only deployments (transcoder not capable): the nav hides this
-		// route, but the URL still resolves (deep link), so the page must
-		// render a full-page empty state below instead of fetching task data.
-		if (!get(transcoderEnabled)) return;
+		// route, but the URL still resolves (deep link), so the page renders a
+		// full-page empty state below and fetches only the held-task count.
+		if (!get(transcoderEnabled)) {
+			loadHeldEncodeTasks();
+			return;
+		}
 		stats.start();
 		workers.start();
 		loadGpus();
+		// Claims, releases and probes all land on transcode.events; reload the
+		// per-device rows so they agree with the polled summary count. A burst
+		// of task events (a batch finishing) coalesces into one reload.
+		wsClient.start();
+		let gpuReload: ReturnType<typeof setTimeout> | null = null;
+		const unsubscribeGpus = wsClient.subscribe('transcode.events', () => {
+			if (gpuReload !== null) clearTimeout(gpuReload);
+			gpuReload = setTimeout(() => {
+				gpuReload = null;
+				loadGpus();
+			}, GPU_RELOAD_DEBOUNCE_MS);
+		});
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
 		return () => {
+			unsubscribeGpus();
+			if (gpuReload !== null) clearTimeout(gpuReload);
 			stats.stop();
 			workers.stop();
 			stopJobsPolling();
@@ -173,9 +210,15 @@
 
 {#if !$transcoderEnabled}
 	<!-- Ripper-only deployment: nav hides /transcoder, but the URL still
-	     resolves as a deep link. No task data is fetched (see onMount). -->
+	     resolves as a deep link. Only the held-task count is fetched (see onMount). -->
 	<div class="stack stack-lg">
 		<h1 class="page-title">Transcoder</h1>
+		{#if heldEncodeTasks > 0}
+			<div class="alert alert-warning" role="status" data-testid="transcoder-held-encode-tasks">
+				{heldEncodeTasks === 1 ? '1 encode task is' : `${heldEncodeTasks} encode tasks are`} held. Re-run setup without --ripper-only
+				to resume them.
+			</div>
+		{/if}
 		<div class="panel transcoder-page-unavailable" data-testid="transcoder-unavailable">
 			<p class="transcoder-page-unavailable-text">
 				Transcoding is not available on this deployment (ripper-only install).

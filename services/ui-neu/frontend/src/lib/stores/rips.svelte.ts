@@ -17,6 +17,8 @@ interface RipperProgressPayload {
 	bytes_done?: number | null;
 	bytes_total?: number | null;
 	rate_bps?: number | null;
+	// "verifying" while the ripper hashes the ripped files after the rip.
+	phase?: string | null;
 }
 
 interface RipBaseline {
@@ -36,6 +38,7 @@ export interface RipLiveProgress {
 	bytes_done: number | null;
 	bytes_total: number | null;
 	rate_bps: number | null;
+	phase: string | null;
 }
 
 // Mask early per-track samples — the first tick has no rate yet, and the
@@ -94,7 +97,8 @@ export function onProgress(jobId: string, env: WSEnvelope): void {
 	const bytes = {
 		bytes_done: payload.bytes_done ?? null,
 		bytes_total: payload.bytes_total ?? null,
-		rate_bps: payload.rate_bps ?? null
+		rate_bps: payload.rate_bps ?? null,
+		phase: payload.phase ?? null
 	};
 	const byteEta =
 		bytes.rate_bps && bytes.rate_bps > 0 && bytes.bytes_total != null && bytes.bytes_done != null

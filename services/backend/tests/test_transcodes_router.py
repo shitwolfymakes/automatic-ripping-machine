@@ -229,6 +229,19 @@ def test_delete_terminal_no_application_no_hub(signing_key: bytes) -> None:
     assert r.status_code == 204
 
 
+def test_delete_queued_task_releases_its_spawn_time_gpu_claim(signing_key: bytes) -> None:
+    """D-057: the GPU is claimed at spawn, while the task is still QUEUED."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_tasks"] = [_task("txt_q", status=TranscodeTaskStatus.QUEUED)]
+    db.rows["gpus"] = [_gpu(status=GpuStatus.BUSY, claimed_by_task_id="txt_q")]
+    with TestClient(app) as client:
+        r = client.delete("/api/transcodes/txt_q", headers=_auth(token))
+    assert r.status_code == 204
+    gpu = db.rows["gpus"][0]
+    assert gpu.status == GpuStatus.AVAILABLE and gpu.claimed_by_task_id is None
+
+
 def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [
@@ -252,6 +265,37 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     assert body["gpus_total"] == 2
     assert body["gpus_available"] == 1
     assert body["max_parallel"] == settings.MAX_PARALLEL_TRANSCODES
+
+
+def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: bytes) -> None:
+    """D-067: the Transcoder page's ripper-only branch shows how many encode
+    tasks are held; a queued passthrough is not one of them."""
+    db = FakeSession()
+    _seed_encode_and_passthrough_queue(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        body = c.get("/api/transcodes/stats", headers=_auth(token)).json()
+    assert body["tasks_by_status"] == {"queued": 3} and body["queued_encode_tasks"] == 2
+
+
+async def test_queued_encode_count_does_not_query_per_task() -> None:
+    """D-067 follow-up: the Transcoder page polls this, so it reads each table
+    once rather than three queries per queued task."""
+    from arm_backend.transcode_dispatcher import count_queued_encode_tasks
+
+    db = FakeSession()
+    _seed_encode_and_passthrough_queue(db)
+    real_execute = db.execute
+    statements = 0
+
+    async def _counting(stmt: Any, *a: Any, **kw: Any) -> Any:
+        nonlocal statements
+        statements += 1
+        return await real_execute(stmt, *a, **kw)
+
+    db.execute = _counting  # type: ignore[method-assign]
+    assert await count_queued_encode_tasks(db) == 2  # type: ignore[arg-type]
+    assert statements == 4
 
 
 def test_stats_disabled_gpu_is_not_available(signing_key: bytes) -> None:
@@ -559,3 +603,39 @@ def test_list_transcodes_job_id_none_when_no_application(signing_key: bytes) -> 
     assert r.status_code == 200
     tasks = r.json()
     assert tasks[0]["job_id"] is None
+
+
+def _seed_encode_and_passthrough_queue(db: Any) -> None:
+    """Two QUEUED tasks under an encode session, one under a passthrough one."""
+    from arm_common import ContainerFormat, MediaType, Session, SessionApplication, SessionApplicationStatus
+    from arm_common import TranscodePreset, TranscodeTask, TranscodeTaskStatus, TranscodeTool
+
+    db.rows["session_applications"] = [
+        SessionApplication(id="sap_enc", session_id="ses_enc", job_id="job_1", status=SessionApplicationStatus.QUEUED),
+        SessionApplication(id="sap_pt", session_id="ses_pt", job_id="job_1", status=SessionApplicationStatus.QUEUED),
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id=sid,
+            name=sid,
+            media_type=MediaType.MOVIE,
+            rip_preset_id="rpr_x",
+            transcode_preset_id=preset,
+            output_path_template="{title}",
+        )
+        for sid, preset in (("ses_enc", "tpr_enc"), ("ses_pt", None))
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_enc",
+            name="enc",
+            media_type=MediaType.MOVIE,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+        )
+    ]
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(id=tid, session_application_id=sap, source_track_id="trk_1", status=TranscodeTaskStatus.QUEUED)
+        for tid, sap in (("txt_e1", "sap_enc"), ("txt_e2", "sap_enc"), ("txt_p", "sap_pt"))
+    ]

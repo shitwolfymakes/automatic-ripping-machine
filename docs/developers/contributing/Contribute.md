@@ -37,7 +37,7 @@ The dev compose that `devtools/setup-dev.sh` generates from
 `docker-compose.yml.example` (into a gitignored `docker-compose.yml`) keeps
 `build:` blocks (vs the installer's `image:` references) so you iterate against
 your own code. Its single `arm-ripper` service only builds the ripper image; the
-Backend spawns one `arm-ripper-<serial>` container per drive when you enroll it.
+Backend spawns one `arm-ripper-<serial>-<id>` container per drive when you enroll it.
 The UI comes up at
 <https://localhost:8081>.
 

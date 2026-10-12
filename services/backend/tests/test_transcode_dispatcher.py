@@ -283,6 +283,7 @@ async def test_spawn_remote_uses_routable_url_and_no_network() -> None:
         docker,
         WSHub(),
     )
+    disp._backend_url_probe = lambda: (True, None)  # type: ignore[assignment]  # reachability is not under test
 
     spawned = await disp.spawn_pending(db)
     assert spawned == 1
@@ -526,8 +527,8 @@ async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pyt
     spawned = await disp.spawn_pending(db)
 
     assert spawned == 1
-    assert len(calls) == 1
-    assert calls[0][0] == disp._spawn_container
+    # The other off-loop call is the tick's cached host probe.
+    assert [c[0] for c in calls] == [disp._probe_pulling_base_image, disp._spawn_container]
 
 
 async def test_spawn_rebuilds_docker_client_on_dead_ssh_transport(
@@ -1219,11 +1220,11 @@ async def test_passthrough_row_deleted_before_its_turn_skips_cleanly(
 
     real_transcode_none = pt_mod.transcode_none
 
-    def _delete_b_then_move(input_path: Path, output_path: Path) -> int:
+    def _delete_b_then_move(input_path: Path, output_path: Path, **kwargs: Any) -> int:
         # Simulate a concurrent delete of txt_pt_b (a different session)
         # while txt_pt_a's move is in flight.
         db.rows["transcode_tasks"] = [t for t in db.rows["transcode_tasks"] if t.id != "txt_pt_b"]
-        return real_transcode_none(input_path, output_path)
+        return real_transcode_none(input_path, output_path, **kwargs)
 
     monkeypatch.setattr(pt_mod, "transcode_none", _delete_b_then_move)
 
@@ -1628,6 +1629,55 @@ async def test_cancel_running_emits_ws_then_docker_stop_fallback_then_deletes(
     container.stop.assert_called_once()
     # New semantics: row is gone, not marked FAILED.
     assert db.rows["transcode_tasks"] == []
+
+
+async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-057: a docker-stopped transcoder never calls /fail; the delete must
+    free its GPU, not leave it BUSY with a nulled claim."""
+    db = _app_with_one_task(TranscodeTaskStatus.IN_PROGRESS, claimed_by="host", attempts=1)
+    db.rows["gpus"] = [
+        Gpu(
+            id="gpu_1",
+            vendor=GpuVendor.VAAPI,
+            device_path="/dev/dri/renderD128",
+            encoder_kinds=["h265"],
+            status=GpuStatus.BUSY,
+            claimed_by_task_id="txt_1",
+            probed_at=datetime.now(UTC),
+        )
+    ]
+    docker = MagicMock()
+    docker.containers.list.return_value = [MagicMock()]
+    import arm_backend.transcode_dispatcher as dispatcher_mod
+
+    async def _fast_sleep(_t: float) -> None:
+        return None
+
+    monkeypatch.setattr(dispatcher_mod.asyncio, "sleep", _fast_sleep)
+    await TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub()).cancel_running("txt_1")
+    gpu = db.rows["gpus"][0]
+    assert db.rows["transcode_tasks"] == []
+    assert gpu.status == GpuStatus.AVAILABLE and gpu.claimed_by_task_id is None
+
+
+async def test_cancel_running_stops_an_in_process_passthrough_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-066: an in-process passthrough has no container; cancel_running
+    sets its copy's cancel event."""
+    import threading
+
+    import arm_backend.passthrough_executor as pt_mod
+    import arm_backend.transcode_dispatcher as dispatcher_mod
+
+    db = _app_with_one_task(TranscodeTaskStatus.IN_PROGRESS, claimed_by="backend-inprocess", attempts=1)
+    event = threading.Event()
+    monkeypatch.setitem(pt_mod._cancel_events, "txt_1", event)
+
+    async def _fast_sleep(_t: float) -> None:
+        return None
+
+    monkeypatch.setattr(dispatcher_mod.asyncio, "sleep", _fast_sleep)
+    await TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub()).cancel_running("txt_1")
+    assert event.is_set()
 
 
 async def test_cancel_running_skips_docker_stop_but_still_deletes_when_terminal(

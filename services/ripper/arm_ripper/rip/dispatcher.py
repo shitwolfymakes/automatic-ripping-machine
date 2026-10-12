@@ -2,7 +2,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol, TypedDict
+from typing import NotRequired, Protocol, TypedDict
 
 from arm_common import DiscType
 from arm_common.enums import TrackKind
@@ -12,6 +12,7 @@ from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.makemkv_rip import RipResult, _output_files_in_rip_order, rip_disc
+from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
 
@@ -25,6 +26,8 @@ class TransferStats(TypedDict):
     bytes_done: int
     bytes_total: int | None
     rate_bps: float | None
+    # "verifying" while the ripped files are hashed after makemkvcon exits.
+    phase: NotRequired[str]
 
 
 class OnTrackProgress(Protocol):
@@ -265,14 +268,39 @@ async def _rip_optical(
             return
         await on_track_progress(first_track, fraction)
 
+    hasher = TitleHasher()
+
+    def _finalise_after_hash(track: TrackView, result: RipResult) -> OnHashed:
+        async def then(digest: str | None) -> None:
+            await on_track_done(
+                track,
+                RipResult(
+                    ok=True,
+                    output_path=result.output_path,
+                    size_bytes=result.size_bytes,
+                    duration_seconds=result.duration_seconds,
+                    sha256=digest,
+                ),
+            )
+
+        return then
+
+    async def _on_verify_progress(done: int, total: int, rate: float | None) -> None:
+        if on_track_progress is None or not eligible_source_indexes:
+            return
+        first_track = track_by_index.get(eligible_source_indexes[0])
+        if first_track is None:
+            return
+        stats: TransferStats = {"bytes_done": done, "bytes_total": total, "rate_bps": rate, "phase": "verifying"}
+        await on_track_progress(first_track, min(done / total, 1.0) if total else 0.0, stats)
+
     async def _on_title_done(title_idx: int) -> None:
         """Mid-rip per-title finalisation. Stat the .mkv produced for
-        this title's output position and PATCH the Track DONE with
-        size + output_path. SHA256 is intentionally skipped here —
-        hashing a 27 GB main feature would block the streamer for a
-        minute and starve the next title's PRGC of attention; if the
-        column is needed it can be filled in by a separate post-rip
-        pass.
+        this title's output position and hand it to the background
+        hasher, which PATCHes the Track DONE with size, output_path and
+        sha256 once the file is hashed. The hash never runs on the
+        streamer: a 27 GB main feature would block it for minutes and
+        starve the next title's PRGC of attention.
 
         Files are matched positionally to `eligible_source_indexes`
         (same convention as the post-rip attribution loop): the file
@@ -319,7 +347,7 @@ async def _rip_optical(
             duration_seconds=track.duration_seconds or track.expected_duration_seconds,
         )
         done_emitted.add(title_idx)
-        await on_track_done(track, result)
+        hasher.submit(file_path, size, _finalise_after_hash(track, result))
 
     async def _ensure_started(title_idx: int, track: TrackView) -> None:
         """Guarantee on_track_start has fired for this track before any
@@ -331,74 +359,89 @@ async def _rip_optical(
         started.add(title_idx)
         await on_track_start(track)
 
-    disc_result = await rip_disc(
-        device_path=device_path,
-        output_dir=output_dir,
-        minlength_seconds=min_length_seconds,
-        eligible_source_indexes=eligible_source_indexes,
-        on_title_start=_on_title_start,
-        on_title_progress=_on_title_progress,
-        on_disc_progress=_on_disc_progress,
-        on_title_done=_on_title_done,
-    )
+    try:
+        disc_result = await rip_disc(
+            device_path=device_path,
+            output_dir=output_dir,
+            minlength_seconds=min_length_seconds,
+            eligible_source_indexes=eligible_source_indexes,
+            on_title_start=_on_title_start,
+            on_title_progress=_on_title_progress,
+            on_disc_progress=_on_disc_progress,
+            on_title_done=_on_title_done,
+            hash_outputs=False,
+        )
 
-    if disc_result.overall_error is not None:
-        # Rip-level failure — mark every selected track FAILED with the
-        # disc-level error so the operator knows what happened. Each
-        # track must transit IN_PROGRESS first per the backend's state
-        # machine. Tracks already PATCHed DONE via the live path
-        # (titles that finalised before the rip aborted) keep their
-        # DONE status — partial success is still success for those
-        # files.
-        logger.warning("rip_disc failed: %s", disc_result.overall_error)
+        if disc_result.overall_error is not None:
+            # Rip-level failure — mark every selected track FAILED with the
+            # disc-level error so the operator knows what happened. Each
+            # track must transit IN_PROGRESS first per the backend's state
+            # machine. Tracks already handed to the hasher via the live
+            # path (titles that finalised before the rip aborted) are
+            # PATCHed DONE once hashed — partial success is still success
+            # for those files.
+            logger.warning("rip_disc failed: %s", disc_result.overall_error)
+            await hasher.finish(_on_verify_progress)
+            for title_idx, track in track_by_index.items():
+                if title_idx in done_emitted:
+                    continue
+                await _ensure_started(title_idx, track)
+                await on_track_done(track, RipResult(ok=False, error=disc_result.overall_error))
+            return
+
+        # Per-title attribution for tracks the live path didn't already
+        # finalise (e.g. below-minlength tracks MakeMKV skipped, or
+        # eligible tracks that didn't produce a file). Tracks already in
+        # `done_emitted` were handed to the hasher by `_on_title_done`
+        # mid-rip and are skipped here to avoid double-PATCHing.
+        # - If rip_disc reports a result for it: use that. (Includes
+        #   ok=False for eligible titles that didn't render — the live
+        #   path can't report failures since it's only triggered by PRGC
+        #   transitions on successful saves.) A successful file goes to
+        #   the hasher like a live one.
+        # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
+        #   never attempted it. FAILED with a clear reason so the operator
+        #   can lower minlength and retry.
         for title_idx, track in track_by_index.items():
             if title_idx in done_emitted:
                 continue
             await _ensure_started(title_idx, track)
-            await on_track_done(track, RipResult(ok=False, error=disc_result.overall_error))
-        return
-
-    # Per-title attribution for tracks the live path didn't already
-    # finalise (e.g. below-minlength tracks MakeMKV skipped, or
-    # eligible tracks that didn't produce a file). Tracks already in
-    # `done_emitted` were PATCHed DONE by `_on_title_done` mid-rip and
-    # are skipped here to avoid double-PATCHing.
-    # - If rip_disc reports a result for it: use that. (Includes
-    #   ok=False for eligible titles that didn't render — the live
-    #   path can't report failures since it's only triggered by PRGC
-    #   transitions on successful saves.)
-    # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
-    #   never attempted it. FAILED with a clear reason so the operator
-    #   can lower minlength and retry.
-    for title_idx, track in track_by_index.items():
-        if title_idx in done_emitted:
-            continue
-        await _ensure_started(title_idx, track)
-        result = disc_result.titles.get(title_idx)
-        if result is None:
-            duration = track.duration_seconds
-            if duration is not None and duration < min_length_seconds:
-                err = f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
-            else:
-                err = (
-                    f"makemkvcon produced no output for title {title_idx} "
-                    f"(eligible={title_idx in eligible_source_indexes})"
+            result = disc_result.titles.get(title_idx)
+            if result is None:
+                duration = track.duration_seconds
+                if duration is not None and duration < min_length_seconds:
+                    err = f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
+                else:
+                    err = (
+                        f"makemkvcon produced no output for title {title_idx} "
+                        f"(eligible={title_idx in eligible_source_indexes})"
+                    )
+                await on_track_done(track, RipResult(ok=False, error=err))
+                continue
+            output_path = result.output_path
+            if not result.ok or output_path is None:
+                await on_track_done(track, result)
+                continue
+            # Carry duration_seconds through from the scan when MakeMKV
+            # produced the file successfully. rip_disc doesn't measure
+            # durations from the .mkv files, so we forward the scan-time
+            # estimate. `track.duration_seconds` is the post-rip actual
+            # (null until a previous rip set it — usually null here);
+            # `track.expected_duration_seconds` is the scan-time estimate
+            # populated by `select_tracks` at rip-start.
+            if result.duration_seconds is None:
+                result = RipResult(
+                    ok=True,
+                    output_path=result.output_path,
+                    size_bytes=result.size_bytes,
+                    duration_seconds=track.duration_seconds or track.expected_duration_seconds,
                 )
-            await on_track_done(track, RipResult(ok=False, error=err))
-            continue
-        # Carry duration_seconds through from the scan when MakeMKV
-        # produced the file successfully. rip_disc doesn't measure
-        # durations from the .mkv files, so we forward the scan-time
-        # estimate. `track.duration_seconds` is the post-rip actual
-        # (null until a previous rip set it — usually null here);
-        # `track.expected_duration_seconds` is the scan-time estimate
-        # populated by `select_tracks` at rip-start.
-        if result.ok and result.duration_seconds is None:
-            result = RipResult(
-                ok=True,
-                output_path=result.output_path,
-                size_bytes=result.size_bytes,
-                duration_seconds=track.duration_seconds or track.expected_duration_seconds,
-                sha256=result.sha256,
-            )
-        await on_track_done(track, result)
+            done_emitted.add(title_idx)
+            hasher.submit(output_path, result.size_bytes or 0, _finalise_after_hash(track, result))
+
+        await hasher.finish(_on_verify_progress)
+    except BaseException:
+        # Abandoned mid-rip (CancelledError) or a PATCH that gave up: stop
+        # hashing files that are about to be wiped.
+        hasher.cancel()
+        raise

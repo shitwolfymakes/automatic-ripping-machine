@@ -15,13 +15,17 @@ a harmless no-op).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 import logging
 import os
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -35,7 +39,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.fileops import move_tree, transcode_none
+from arm_common.fileops import CopyCancelled, move_tree, transcode_none, tree_size
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -53,6 +57,43 @@ logger = logging.getLogger("arm_backend.passthrough_executor")
 # `IN_PROCESS_CLAIMANT` rows from staleness sweeping or this function must
 # start refreshing the heartbeat periodically during the move.
 IN_PROCESS_CLAIMANT = "backend-inprocess"
+
+# task_id -> cancel event for the move running now. There is no container
+# to stop, so `cancel_running` sets the event and the copy stops at its
+# next chunk.
+_cancel_events: dict[str, threading.Event] = {}
+
+
+# How often a running copy's progress is written to the task row (the
+# durable surface the Transcoder page reads) and published over WS.
+PROGRESS_INTERVAL_SECONDS = 2.0
+
+
+class _CopyProgress:
+    """Bytes copied so far; written by the worker thread only.
+
+    `sizer` gives the total on the first copied bytes: a same-filesystem
+    move is a rename that copies nothing, so it never walks the tree."""
+
+    def __init__(self, sizer: Callable[[], int] | None = None) -> None:
+        self.total = 0
+        self.done = 0
+        self._sizer = sizer
+
+    def add(self, n: int) -> None:
+        if self._sizer is not None:
+            self.total = self._sizer()
+            self._sizer = None
+        self.done += n
+
+
+def request_cancel(task_id: str) -> bool:
+    """Stop an in-flight in-process move. False when none is running."""
+    event = _cancel_events.get(task_id)
+    if event is None:
+        return False
+    event.set()
+    return True
 
 
 async def execute_passthrough_task(
@@ -181,14 +222,34 @@ async def execute_passthrough_task(
             final = Path(settings.MEDIA_ROOT) / task_output_path
             is_folder = track.kind == TrackKind.DISC_BACKUP
             mover = move_tree if is_folder else transcode_none
+            cancel = _cancel_events[task_id] = threading.Event()
+            source = Path(track_output_path)
+            progress = _CopyProgress(sizer=(lambda: tree_size(source)) if is_folder else None)
+            stop_publisher = asyncio.Event()
+            publisher = asyncio.ensure_future(
+                _publish_progress(db, hub, task_id, job_id, source_track_id, progress, stop_publisher)
+            )
             try:
                 # Move and chown together in the worker thread: a backup
                 # tree's chown walks every file, too much for the event loop.
                 size = await asyncio.to_thread(
-                    _move_and_chown, mover, Path(track_output_path), final, settings, is_folder
+                    _move_and_chown, mover, source, final, settings, is_folder, cancel, progress
                 )
+            except CopyCancelled:
+                error = "cancelled"
+                logger.info("passthrough task_id=%s cancelled mid-copy; source kept", task_id)
             except OSError as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
+            finally:
+                _cancel_events.pop(task_id, None)
+                # Stop the publisher before this coroutine uses `db` again. It
+                # checks the event between writes, so a commit is never cut
+                # off part way; and nothing it raises replaces the move's result.
+                stop_publisher.set()
+                try:
+                    await publisher
+                except Exception:
+                    logger.exception("passthrough progress publisher failed task_id=%s", task_id)
 
         # Re-fetch: cancel_running (a different session) may have deleted
         # this row while the move was in flight. `populate_existing=True`
@@ -200,6 +261,16 @@ async def execute_passthrough_task(
                 select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
             )
         ).scalar_one_or_none()
+        if application is not None:
+            # The progress publisher committed (or rolled back) on this
+            # session while the move ran; reload before the aggregate reads it.
+            application = (
+                await db.execute(
+                    select(SessionApplication)
+                    .where(col(SessionApplication.id) == session_application_id)
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
         if fresh_task is None:
             logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", task_id)
             return error is None
@@ -248,10 +319,74 @@ async def execute_passthrough_task(
         return error is None
 
 
+async def _publish_progress(
+    db: AsyncSession,
+    hub: "WSHub",
+    task_id: str,
+    job_id: str | None,
+    track_id: str | None,
+    progress: _CopyProgress,
+    stop: asyncio.Event,
+) -> None:
+    """While a copy runs, until `stop` is set, heartbeat `progress_pct` onto the row and publish
+    `transcode.progress.{task_id}`, as a container transcoder does.
+
+    A Core UPDATE rather than an ORM write: `cancel_running` may delete the
+    row at any moment, and an UPDATE of a missing row is a no-op where an
+    ORM flush would raise and force a rollback."""
+    started = time.monotonic()
+    last_pct = -1
+    while True:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), PROGRESS_INTERVAL_SECONDS)
+        if stop.is_set():
+            return
+        if progress.total <= 0:
+            continue
+        pct = min(99, progress.done * 100 // progress.total)
+        if pct == last_pct:
+            continue
+        last_pct = pct
+        rate = progress.done / max(time.monotonic() - started, 1e-6)
+        eta = int((progress.total - progress.done) / rate) if rate > 0 else None
+        try:
+            await db.execute(
+                update(TranscodeTask)
+                .where(col(TranscodeTask.id) == task_id, col(TranscodeTask.status) == TranscodeTaskStatus.IN_PROGRESS)
+                .values(progress_pct=pct, claim_heartbeat_at=datetime.now(UTC))
+            )
+            await db.commit()
+        except Exception as exc:
+            # Telemetry only: the copy carries on, unreported. The rollback
+            # expires the caller's objects, which it reloads after the move.
+            logger.warning("passthrough progress write failed task_id=%s: %s; no further progress", task_id, exc)
+            await db.rollback()
+            return
+        try:
+            await hub.emit(
+                topic=f"transcode.progress.{task_id}",
+                event_type="transcode.progress",
+                payload={"task_id": task_id, "progress_pct": pct, "eta_seconds": eta, "current_pass": None},
+                persist=False,
+                job_id=job_id,
+                track_id=track_id,
+            )
+        except Exception as exc:
+            logger.warning("passthrough progress publish failed task_id=%s: %s", task_id, exc)
+
+
 def _move_and_chown(
-    mover: Callable[[Path, Path], int], source: Path, final: Path, settings: Settings, is_folder: bool
+    mover: Callable[..., int],
+    source: Path,
+    final: Path,
+    settings: Settings,
+    is_folder: bool,
+    cancel: threading.Event,
+    progress: _CopyProgress,
 ) -> int:
-    size = mover(source, final)
+    if not is_folder:
+        progress.total = source.stat().st_size
+    size = mover(source, final, cancel=cancel, on_bytes=progress.add)
     if settings.ARM_TRANSCODE_PUID:
         _best_effort_chown(final, settings, tree=is_folder)
     return size

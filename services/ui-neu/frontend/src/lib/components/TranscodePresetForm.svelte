@@ -86,6 +86,11 @@
 	// vaapi_* encoders run over ffmpeg directly; the HandBrake preset name
 	// plays no part, and extra_args are ffmpeg CLI flags, not HandBrake ones.
 	let usesFfmpegVaapi = $derived(selectedEncoder?.engine === 'ffmpeg_vaapi');
+	// That ffmpeg path copies the source audio, which WebM cannot carry, so
+	// it writes MKV or MP4 only (the API refuses the pairing with a 422).
+	$effect(() => {
+		if (usesFfmpegVaapi && container === 'webm' && !isBuiltin) container = 'mkv';
+	});
 	// An any_* encoder may resolve to an AMD device at claim time, which runs
 	// ffmpeg instead of HandBrake.
 	let anyGpuSelected = $derived(selectedEncoder?.kind === 'any');
@@ -204,13 +209,16 @@
 		<select id="tp-container" data-testid="tp-container" bind:value={container} disabled={isBuiltin}>
 			<option value="mkv">MKV</option>
 			<option value="mp4">MP4</option>
-			<option value="webm">WebM</option>
+			<option value="webm" disabled={usesFfmpegVaapi}>WebM</option>
 			<option value="flac">FLAC</option>
 			<option value="mp3">MP3</option>
 			<option value="ogg">OGG</option>
 			<option value="iso">ISO</option>
 			<option value="none">None</option>
 		</select>
+		{#if usesFfmpegVaapi}
+			<p class="field-help" data-testid="tp-container-vaapi-note">AMD VAAPI encoders write MKV or MP4.</p>
+		{/if}
 	</label>
 
 	<label class="field">

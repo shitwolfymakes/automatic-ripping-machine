@@ -190,6 +190,51 @@ async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.
     assert hub.events == []
 
 
+async def test_refresh_gpu_inventory_releases_orphaned_claims(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-057: with seed-once inventory a BUSY row whose claim was nulled by a
+    task delete, or whose task finished, is freed at boot. A QUEUED or
+    IN_PROGRESS claimant may still be running and keeps its GPU."""
+    from arm_common import Gpu, GpuStatus, TranscodeTask, TranscodeTaskStatus
+    from arm_common.enums import GpuVendor
+
+    from tests._fakes import FakeSession
+
+    def gpu(gid: str, claim: str | None, status: GpuStatus = GpuStatus.BUSY) -> Gpu:
+        return Gpu(
+            id=gid, vendor=GpuVendor.VAAPI, device_path=f"/dev/dri/{gid}", status=status, claimed_by_task_id=claim
+        )
+
+    def task(tid: str, status: TranscodeTaskStatus) -> TranscodeTask:
+        return TranscodeTask(id=tid, session_application_id="sap_1", source_track_id="trk_1", status=status)
+
+    db = FakeSession()
+    db.rows["gpus"] = [
+        gpu("nulled", None),
+        gpu("done", "txt_done"),
+        gpu("gone", "txt_gone"),
+        gpu("queued", "txt_q"),
+        gpu("running", "txt_r"),
+        gpu("free", None, GpuStatus.AVAILABLE),
+    ]
+    db.rows["transcode_tasks"] = [
+        task("txt_done", TranscodeTaskStatus.DONE),
+        task("txt_q", TranscodeTaskStatus.QUEUED),
+        task("txt_r", TranscodeTaskStatus.IN_PROGRESS),
+    ]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    await main_mod._refresh_gpu_inventory(_Hub())
+    state = {g.id: (g.status, g.claimed_by_task_id) for g in db.rows["gpus"]}
+    assert state == {
+        "nulled": (GpuStatus.AVAILABLE, None),
+        "done": (GpuStatus.AVAILABLE, None),
+        "gone": (GpuStatus.AVAILABLE, None),
+        "queued": (GpuStatus.BUSY, "txt_q"),
+        "running": (GpuStatus.BUSY, "txt_r"),
+        "free": (GpuStatus.AVAILABLE, None),
+    }
+    assert db.committed
+
+
 async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
     """With the feature enabled and no local index, the loop refreshes once,
     stamps thediscdb_refreshed_at on the singleton Config, commits, then

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import type { WSEnvelope } from '$lib/api/ws';
+import { ApiError } from '$lib/api/client';
 
 const mockFetchGpus = vi.fn();
 const mockUpdateGpu = vi.fn();
@@ -158,7 +159,8 @@ describe('GpusCard', () => {
 
 	it('a 409 delete shows the in-use message and keeps the row', async () => {
 		mockFetchGpus.mockResolvedValue([qsv]);
-		mockDeleteGpu.mockRejectedValue(new Error('HTTP 409'));
+		// The real client's shape: the server detail as message, the status on the error.
+		mockDeleteGpu.mockRejectedValue(new ApiError(409, 'gpu is in use by a running transcode', {}));
 		render(GpusCard);
 		await waitFor(() => expect(screen.getByLabelText(/Delete qsv/)).toBeInTheDocument());
 		await fireEvent.click(screen.getByLabelText(/Delete qsv/));

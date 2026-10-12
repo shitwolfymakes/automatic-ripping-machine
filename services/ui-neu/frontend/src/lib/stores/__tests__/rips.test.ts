@@ -172,6 +172,15 @@ describe('rips store: byte copies', () => {
 		expect(live.eta_seconds).toBe(Math.round((15 * 1024 ** 3) / (50 * 1024 ** 2)));
 	});
 
+	it('keeps the verifying phase of the post-rip hash pass', () => {
+		const env = copyEnv(1024 ** 3, 4 * 1024 ** 3, 100 * 1024 ** 2);
+		(env.payload as Record<string, unknown>).phase = 'verifying';
+		onProgress('job_iso', env);
+		expect(ripProgress.value['job_iso'].phase).toBe('verifying');
+		onProgress('job_iso', copyEnv(2 * 1024 ** 3, 4 * 1024 ** 3, 100 * 1024 ** 2));
+		expect(ripProgress.value['job_iso'].phase).toBeNull();
+	});
+
 	it('formats the transfer line', () => {
 		onProgress('job_iso', copyEnv(5 * 1024 ** 3, 20 * 1024 ** 3, 50 * 1024 ** 2));
 		expect(formatTransfer(ripProgress.value['job_iso'])).toBe('5 GB of 20 GB · 50 MB/s');
@@ -186,7 +195,8 @@ describe('rips store: byte copies', () => {
 				eta_seconds: null,
 				bytes_done: null,
 				bytes_total: null,
-				rate_bps: null
+				rate_bps: null,
+				phase: null
 			})
 		).toBeNull();
 	});

@@ -104,6 +104,8 @@ CONFIG_SINGLETON_ID = 1
 
 
 async def _seed_config_singleton(session: AsyncSession) -> None:
+    from arm_backend.config import settings  # noqa: PLC0415 — avoid import cycle at module load
+
     existing = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if existing is None:
         session.add(
@@ -116,6 +118,10 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
                 notification_apprise_urls=[],
                 session_signing_key=secrets.token_bytes(32),
                 transcode_enabled=True,
+                # The column is authoritative from the first boot; leaving it
+                # NULL until the next one made Settings show a different cap
+                # from the one the dispatcher used.
+                max_parallel_transcodes=settings.MAX_PARALLEL_TRANSCODES,
             )
         )
         await session.flush()
@@ -132,8 +138,6 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
     # the legacy MAX_PARALLEL_TRANSCODES env value (default 1). After this,
     # the column is authoritative and Settings edits stick.
     if existing.max_parallel_transcodes is None:
-        from arm_backend.config import settings  # noqa: PLC0415 — avoid import cycle at module load
-
         existing.max_parallel_transcodes = settings.MAX_PARALLEL_TRANSCODES
         session.add(existing)
         await session.flush()

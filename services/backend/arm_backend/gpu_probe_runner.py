@@ -71,7 +71,10 @@ SHUTDOWN_GRACE_S = 5.0
 _STDERR_TAIL_LINES = 5
 _KNOWN_CODECS = frozenset(c.value for c in VideoCodec)
 
-ProbeOutcome = tuple[list[str], str | None]
+# (verified encoders, error). Verified is None when the probe never got to
+# test the device (no container, a docker error, a timeout): that says
+# nothing about its encoders, so the row keeps the ones it had.
+ProbeOutcome = tuple[list[str] | None, str | None]
 
 
 def _truncate(text: str) -> str:
@@ -127,6 +130,20 @@ def probe_failure_error(status_code: int, stderr: bytes | str) -> str:
         # normal transcode worker and fails its config validation.
         message = STALE_IMAGE_ERROR.format(code=status_code) + (f"; stderr: {tail}" if tail else "")
     return _truncate(message)
+
+
+# Docker's wording when the device node it was asked to pass in is missing or
+# unusable on the host (`--device` / device requests).
+_DEVICE_REFUSED_MARKERS = ("error gathering device information",)
+
+
+def _device_refused(exc: Exception, gpu: Gpu) -> bool:
+    """Did the probe container fail to start because of the GPU's device
+    itself (as opposed to the daemon, the transport or the image)?"""
+    message = str(exc)
+    if any(marker in message for marker in _DEVICE_REFUSED_MARKERS):
+        return True
+    return gpu.device_path.startswith("/dev/") and gpu.device_path in message
 
 
 def probe_outcome(payload: dict[str, Any]) -> ProbeOutcome:
@@ -383,14 +400,17 @@ class GpuProbeRunner:
             # `run` creates the container before starting it, so a start
             # failure leaves a Created container behind with no handle to it.
             await self._remove_probe_containers(docker, gpu.id)
-            return [], _truncate(f"probe container could not start: {exc}")
+            detail = _truncate(f"probe container could not start: {exc}")
+            # Docker refusing the device itself says the device is gone or
+            # broken: that verifies nothing, unlike a daemon or transport fault.
+            return ([] if _device_refused(exc, gpu) else None), detail
         try:
             try:
                 result = await asyncio.to_thread(container.wait, timeout=PROBE_TIMEOUT_S)
             except Exception as exc:  # noqa: BLE001 - reported on the row
                 if _is_timeout(exc):
-                    return [], f"probe timed out after {PROBE_TIMEOUT_S} s; the probe container was removed"
-                return [], _truncate(f"probe failed while waiting for the container: {exc}")
+                    return None, f"probe timed out after {PROBE_TIMEOUT_S} s; the probe container was removed"
+                return None, _truncate(f"probe failed while waiting for the container: {exc}")
             raw_code = result.get("StatusCode")
             status_code = raw_code if isinstance(raw_code, int) else -1
             stdout = await asyncio.to_thread(container.logs, stdout=True, stderr=False)
@@ -422,15 +442,19 @@ class GpuProbeRunner:
             except Exception as exc:  # noqa: BLE001 - best-effort cleanup
                 logger.warning("gpu probe: could not remove the unstarted probe container for %s: %s", gpu_id, exc)
 
-    async def _write(self, gpu_id: str, verified: list[str], error: str | None) -> None:
+    async def _write(self, gpu_id: str, verified: list[str] | None, error: str | None) -> None:
         async with self._db_factory() as db:
             gpu = (await db.execute(select(Gpu).where(col(Gpu.id) == gpu_id))).scalar_one_or_none()
             if gpu is None:
                 logger.info("gpu probe: %s was deleted while probing; result discarded", gpu_id)
                 return
             # A row disabled mid-probe still records what it verified; the
-            # eligibility rule already excludes disabled rows.
-            gpu.encoder_kinds = verified
+            # eligibility rule already excludes disabled rows. A probe that
+            # never ran records only its error: wiping a verified list over
+            # a transient docker fault would fail every pinned task queued
+            # for the device.
+            if verified is not None:
+                gpu.encoder_kinds = verified
             gpu.probed_at = datetime.now(UTC)
             gpu.probe_error = error
             db.add(gpu)
@@ -445,4 +469,7 @@ class GpuProbeRunner:
                 topic="transcode.events", event_type="gpu.probed", payload={"gpu_id": gpu_id}, session=db
             )
             await db.commit()
-        logger.info("gpu probe: %s verified %s%s", gpu_id, verified or "nothing", f" ({error})" if error else "")
+        if verified is None:
+            logger.warning("gpu probe: %s did not run (%s); kept its previous encoders", gpu_id, error)
+        else:
+            logger.info("gpu probe: %s verified %s%s", gpu_id, verified or "nothing", f" ({error})" if error else "")

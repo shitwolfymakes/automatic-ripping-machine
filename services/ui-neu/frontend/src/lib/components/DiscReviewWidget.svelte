@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
-	import { abandonJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import { abandonJob, deleteJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
@@ -13,6 +13,7 @@
 	import TitleSearch from './TitleSearch.svelte';
 	import MusicSearch from './MusicSearch.svelte';
 	import ApplySessionDialog from './ApplySessionDialog.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobInfoForm from './JobInfoForm.svelte';
@@ -63,6 +64,8 @@
 	let showMusicSearch = $state(false);
 	let showApplySession = $state(false);
 	let cancelling = $state(false);
+	let deleting = $state(false);
+	let confirmDelete = $state(false);
 	let errorMessage = $state<string | null>(null);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
@@ -151,18 +154,37 @@
 	async function handleCancel() {
 		if (!job) return;
 		cancelling = true;
+		errorMessage = null;
 		try {
 			if (isoName && job.drive_id) {
 				await cancelIsoRip(job.drive_id);
 			} else {
 				await abandonJob(job.id);
 			}
-		} catch {
-			// still dismiss — next refresh will reconcile
-		} finally {
-			cancelling = false;
 			ondismiss?.();
 			onrefresh?.();
+		} catch (e) {
+			errorMessage = e instanceof Error ? e.message : 'Failed to cancel the job';
+		} finally {
+			cancelling = false;
+		}
+	}
+
+	// A rip that already finished cannot be abandoned; the backend offers
+	// delete instead. Raw files stay on disk, as on the job page.
+	async function handleDelete() {
+		if (!job) return;
+		confirmDelete = false;
+		deleting = true;
+		errorMessage = null;
+		try {
+			await deleteJob(job.id);
+			ondismiss?.();
+			onrefresh?.();
+		} catch (e) {
+			errorMessage = e instanceof Error ? e.message : 'Failed to delete the job';
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -380,7 +402,7 @@
 				>
 			{/if}
 			<a href="/jobs/{job.id}" class="btn disc-review-widget-action-btn"> View details </a>
-			{#if $isAdmin}
+			{#if $isAdmin && displayJob.actions.can_abandon}
 				<button
 					onclick={handleCancel}
 					disabled={cancelling}
@@ -388,6 +410,11 @@
 					title={isoName ? 'Cancel the rip and remove the virtual drive' : undefined}
 				>
 					{cancelling ? 'Cancelling...' : 'Cancel'}
+				</button>
+			{/if}
+			{#if $isAdmin && displayJob.actions.can_delete}
+				<button onclick={() => (confirmDelete = true)} disabled={deleting} class="btn btn-danger ml-auto">
+					{deleting ? 'Deleting...' : 'Delete'}
 				</button>
 			{/if}
 			{#if canStart && $isAdmin}
@@ -447,6 +474,16 @@
 	{#if showApplySession}
 		<ApplySessionDialog {job} onclose={() => (showApplySession = false)} onapplied={handleSessionApplied} />
 	{/if}
+
+	<ConfirmDialog
+		open={confirmDelete}
+		title="Delete job"
+		message="Delete this job? The raw files stay on disk. This cannot be undone."
+		confirmLabel="Delete"
+		variant="danger"
+		onconfirm={handleDelete}
+		oncancel={() => (confirmDelete = false)}
+	/>
 {/if}
 
 <style>

@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from arm_common.enums import GpuVendor, TranscodeTool
+from arm_common.enums import ContainerFormat, GpuVendor, TranscodeTool
 
 if TYPE_CHECKING:
     from arm_common.models import Gpu
@@ -92,6 +92,25 @@ def encoder_allowed_for_tool(encoder_id: str, tool: TranscodeTool) -> bool:
     if tool == TranscodeTool.HANDBRAKE:
         return True
     return encoder_id == PRESET_ENCODER_ID
+
+
+# The ffmpeg VAAPI engine copies the source audio, and WebM carries only
+# Opus/Vorbis, so it muxes MKV and MP4 only. HandBrake handles the rest.
+FFMPEG_VAAPI_CONTAINERS = frozenset({ContainerFormat.MKV, ContainerFormat.MP4})
+
+
+def vendor_supports_container(vendor: GpuVendor, container: ContainerFormat) -> bool:
+    """Whether a task resolved onto this vendor's encoder can write `container`."""
+    return vendor != GpuVendor.VAAPI or container in FFMPEG_VAAPI_CONTAINERS
+
+
+def encoder_supports_container(encoder_id: str, container: ContainerFormat) -> bool:
+    """Whether a preset may pair this encoder with `container`. An `any_*`
+    encoder is always allowed: the claim skips devices that cannot write it."""
+    spec = ENCODERS.get(encoder_id)
+    if spec is None or spec.engine != "ffmpeg_vaapi":
+        return True
+    return container in FFMPEG_VAAPI_CONTAINERS
 
 
 def gpu_encoders_for_vendor(vendor: GpuVendor) -> list[EncoderSpec]:

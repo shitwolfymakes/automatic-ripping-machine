@@ -18,6 +18,7 @@ from arm_backend.notifications.bash_runner import build_env
 from arm_backend.notifications.script_meta import (
     INPUT_KEY_RE,
     RESERVED_INPUT_KEYS,
+    ScriptUnreadableError,
     read_script_info,
     resolve_script,
 )
@@ -47,7 +48,7 @@ class PreparedRun:
 def _declared(scripts_root: str, script: str) -> list[ScriptInput]:
     try:
         return read_script_info(scripts_root, script).inputs
-    except FileNotFoundError:
+    except FileNotFoundError, ScriptUnreadableError:
         return []
 
 
@@ -61,11 +62,19 @@ def _clean_inputs(raw: Any) -> dict[str, str]:
     }
 
 
+# Same bound as a rendered body: a width spec ({job_title:>300000}) must not
+# grow an env var past the kernel's per-string exec limit (128 KiB).
+INPUT_RENDER_CAP = 16000
+
+
 def _render_input(key: str, value: str, context: dict[str, str]) -> str:
     try:
-        return value.format_map(context)
+        rendered = value.format_map(context)
     except (KeyError, IndexError, ValueError) as exc:
         raise HookError(f"input {key} references an unknown variable: {exc}") from exc
+    if len(rendered) > INPUT_RENDER_CAP:
+        raise HookError(f"input {key} renders to {len(rendered)} characters (limit {INPUT_RENDER_CAP})")
+    return rendered
 
 
 def prepare_run(
@@ -187,7 +196,7 @@ def storage_config(incoming: dict[str, Any], scripts_root: str) -> dict[str, Any
         raise HookError(f"timeout_seconds must be between 1 and {MAX_TIMEOUT_SECONDS}")
     try:
         secret_keys = [i.key for i in read_script_info(scripts_root, script).inputs if i.secret]
-    except FileNotFoundError:
+    except FileNotFoundError, ScriptUnreadableError:
         secret_keys = [str(k) for k in (incoming.get("secret_keys") or [])]
     return {
         "type": "bash",

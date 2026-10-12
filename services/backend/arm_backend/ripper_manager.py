@@ -98,16 +98,20 @@ class RipperManager:
     # --- spec ------------------------------------------------------------------
 
     def container_name(self, drive: Drive) -> str:
-        """`arm-ripper-<serial slug>` — a stable slot label; srN is not in the
-        name because the node moves. Falls back to the drive-id suffix when
-        the drive has no serial. Lower-cased `[a-z0-9-]` so it is valid both
-        as a docker name and as a hostname. A virtual (ISO) drive is
-        `arm-ripper-iso-<drive-id suffix>`."""
+        """`arm-ripper-<serial slug>-<drive-id suffix>` — a stable slot label;
+        srN is not in the name because the node moves. The drive-id suffix
+        keeps two drives that report the same short serial (common behind USB
+        bridges) from colliding on the name. Falls back to the drive-id suffix
+        alone when the drive has no serial. Lower-cased `[a-z0-9-]` so it is
+        valid both as a docker name and as a hostname. A virtual (ISO) drive
+        is `arm-ripper-iso-<drive-id suffix>`."""
         if drive.kind == DriveKind.VIRTUAL:
             return f"arm-ripper-iso-{drive.id[-12:].lower()}"
-        raw = drive.serial or drive.id[-12:]
-        slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-") or drive.id[-12:].lower()
-        return f"arm-ripper-{slug}"
+        id_slug = drive.id[-12:].lower()
+        serial_slug = re.sub(r"[^a-z0-9]+", "-", (drive.serial or "").lower()).strip("-")
+        if not serial_slug:
+            return f"arm-ripper-{id_slug}"
+        return f"arm-ripper-{serial_slug}-{drive.id[-6:].lower()}"
 
     def container_spec(self, drive: Drive) -> dict[str, Any]:
         """kwargs for `containers.run` — what the ripper needs and nothing more
@@ -160,7 +164,12 @@ class RipperManager:
         """Turn the optical spec into a one-shot ISO ripper's (spec 6.1): only
         the chosen ISO is mounted, read-only, at the drive's device_path
         (`/source/<file name>`); no /dev/disk, no device cgroup rules, no
-        cdrom group; restart policy "no" (the watchdog cleans up)."""
+        cdrom group; restart policy "no" (the watchdog cleans up).
+
+        The ISO goes in `mounts`, not `volumes`: docker-py renders a volume
+        as `host:container:mode`, so a file name with a colon in it
+        (`Star Wars: Episode IV.iso`) breaks the spec, while a Mount carries
+        source and target as separate fields."""
         assert drive.source_path is not None, "a virtual drive always has a source_path"
         source = drive.device_path
         env = {k: v for k, v in spec["environment"].items() if k not in _OPTICAL_ONLY_ENV}
@@ -171,11 +180,17 @@ class RipperManager:
         volumes = dict(spec["volumes"])
         volumes.pop("/dev/disk")
         library_host = self._settings.ARM_HOST_ISO_LIBRARY_PATH
-        volumes[iso_host_path(drive.source_path, library_host=library_host)] = {"bind": source, "mode": "ro"}
+        iso_mount = docker.types.Mount(
+            target=source,
+            source=iso_host_path(drive.source_path, library_host=library_host),
+            type="bind",
+            read_only=True,
+        )
         virtual = {
             **spec,
             "environment": env,
             "volumes": volumes,
+            "mounts": [iso_mount],
             "labels": {DOCKER_LABEL_KEY: drive.id, VIRTUAL_LABEL_KEY: "1"},
             "restart_policy": {"Name": "no"},
         }

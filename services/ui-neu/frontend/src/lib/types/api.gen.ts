@@ -5079,6 +5079,10 @@ export type TranscodeStatsView = {
      * Max Parallel
      */
     max_parallel: number;
+    /**
+     * Queued Encode Tasks
+     */
+    queued_encode_tasks?: number;
 };
 
 /**

@@ -65,6 +65,18 @@ async def test_seed_config_backfills_missing_signing_key() -> None:
     assert len(db.rows["config"][0].session_signing_key) == 32
 
 
+async def test_fresh_config_singleton_carries_the_env_parallel_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-060: a first boot seeds max_parallel_transcodes from the env value,
+    so Settings and the dispatcher agree before the second boot."""
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "MAX_PARALLEL_TRANSCODES", 3)
+    db = FakeSession()
+    await _seed_config_singleton(db)
+    (cfg,) = [r for r in db.added if isinstance(r, Config)]
+    assert cfg.max_parallel_transcodes == 3
+
+
 async def test_seed_backfills_transcode_enabled() -> None:
     # Row exists with transcode_enabled=None (pre-0037 install).
     db = FakeSession()

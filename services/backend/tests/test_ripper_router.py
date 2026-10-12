@@ -203,6 +203,16 @@ def _scan_dict(disc_type: str = "dvd") -> dict[str, Any]:
 # --- /config -----------------------------------------------------------------
 
 
+def _session_row(session_id: str) -> Session:
+    return Session(
+        id=session_id,
+        name=session_id,
+        media_type=MediaType.MOVIE,
+        is_builtin=False,
+        output_path_template="{title}/{title}.mkv",
+    )
+
+
 def test_get_config_returns_flag() -> None:
     db = FakeSession()
     db.rows["config"] = [_config()]
@@ -452,6 +462,7 @@ def test_identify_success_sets_identified_and_poster() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_1")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={"poster_path": "/abc.jpg"})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     scan = _scan_dict()
@@ -689,10 +700,22 @@ def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> No
     assert out["metadata_json"]["flags"]["unidentified"] is True
 
 
-def test_identify_repost_on_held_disc_keeps_operator_exclusion() -> None:
+def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ripper re-POSTs identify for a disc already parked in review after the
-    operator re-enabled a preset-dropped title. The preset claim must not flip
-    it back and no duplicate Track rows appear (Review Focus 5)."""
+    operator re-enabled a preset-dropped title. The reused job takes the
+    already-identified path: no review tracks are persisted again, no preset
+    claim is recorded and the resolver does not run, so no duplicate Track
+    rows appear and the operator's choice stands (Review Focus 5). The
+    manual-over-preset precedence itself is
+    `test_resolve_job_keeps_a_manual_reenable_over_a_preset_drop`."""
+    import arm_backend.routers.ripper as ripper_router
+
+    def _must_not_run(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("the reuse path must not touch tracks or claims")
+
+    monkeypatch.setattr(ripper_router, "_persist_review_tracks", _must_not_run)
+    monkeypatch.setattr(ripper_router, "record_preset", _must_not_run)
+    monkeypatch.setattr(ripper_router, "resolve_job", _must_not_run)
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(hold_for_review=True)]
@@ -741,6 +764,36 @@ def test_identify_repost_on_held_disc_keeps_operator_exclusion() -> None:
     assert len(db.rows["tracks"]) == 2  # no duplicate Track rows
     reenabled = next(t for t in db.rows["tracks"] if t.source_ref == "2")
     assert reenabled.excluded is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_job_keeps_a_manual_reenable_over_a_preset_drop() -> None:
+    """D-088: the precedence the repost test above used to claim. A held disc
+    whose preset dropped title 2 and whose operator re-enabled it: resolving
+    the stored claims keeps title 2 selected, owned by the manual claim, and
+    leaves the preset's choice for title 1 in place."""
+    from arm_backend.identity.pipeline import resolve_job
+
+    db = FakeSession()
+    db.rows["config"] = [_config(hold_for_review=True)]
+    claims = {
+        "sources": {
+            "preset": {"status": "ok", "tracks": {"1": {"selected": True}, "2": {"selected": False}}},
+            "manual": {"status": "ok", "tracks": {"2": {"selected": True}}},
+        }
+    }
+    held = _job(status=JobStatus.AWAITING_REVIEW, meta={"identity_claims": claims})
+    db.rows["jobs"] = [held]
+    db.rows["tracks"] = [
+        Track(id="trk_1", job_id=held.id, kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1", excluded=True),
+        Track(id="trk_2", job_id=held.id, kind=TrackKind.VIDEO_TITLE, index=2, source_ref="2", excluded=True),
+    ]
+    await resolve_job(db, held)  # type: ignore[arg-type]
+    by_ref = {t.source_ref: t for t in db.rows["tracks"]}
+    assert by_ref["2"].excluded is False
+    assert (by_ref["2"].identity_provenance or {}).get("excluded") == "manual"
+    assert by_ref["1"].excluded is False
+    assert (by_ref["1"].identity_provenance or {}).get("excluded") == "preset"
 
 
 def test_identify_snapshots_drive_serial_onto_job() -> None:
@@ -1898,9 +1951,9 @@ def test_rip_complete_parked_application_with_missing_session_does_not_break(
     assert db.rows["transcode_tasks"] == []
 
 
-def test_rip_complete_failed_rip_leaves_parked_application_alone(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_rip_complete_failed_rip_cancels_parked_application(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """D-082: nothing was ripped, so no drain will ever fill the parked
+    application; it is cancelled and no tasks are created."""
     from arm_backend import config as bcfg
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
@@ -1912,7 +1965,7 @@ def test_rip_complete_failed_rip_leaves_parked_application_alone(
     r = _rip_complete(db, _Hub(), monkeypatch)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "failed"
-    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.CANCELLED
     assert db.rows["transcode_tasks"] == []
 
 
@@ -2204,6 +2257,7 @@ def test_identify_pending_session_lands_on_column() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_1")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_1"}
@@ -2220,6 +2274,7 @@ def test_identify_writes_no_pending_mirror() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_builtin_movie_plex_1080p")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_builtin_movie_plex_1080p"}
@@ -2930,3 +2985,20 @@ def test_owner_check_rejects_job_whose_drive_was_deleted() -> None:
         r = client.post(f"/api/ripper/jobs/{orphan.id}/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 403
     assert r.json()["detail"] == "job has no owning drive"
+
+
+def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.LogCaptureFixture) -> None:
+    """D-028: the session chosen at manual trigger was deleted before
+    identify. Writing its id into the FK column would 500 (and the ripper
+    would retry forever); identify drops it with a warning instead."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_deleted"}
+    with caplog.at_level("WARNING"), TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert r.json()["pending_session_id"] is None
+    assert "ses_deleted no longer exists" in caplog.text

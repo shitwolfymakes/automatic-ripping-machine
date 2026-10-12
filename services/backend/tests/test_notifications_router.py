@@ -1113,6 +1113,30 @@ def test_scripts_list_and_detail(signing_key: bytes, scripts_root: Path) -> None
     assert missing.status_code == 404 and bad.status_code in (404, 422)
 
 
+def test_unreadable_script_is_skipped_in_list_and_422_on_detail(
+    signing_key: bytes, scripts_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-044: a root-owned 0700 file on the mount must not 500 the whole picker."""
+    from arm_backend.notifications import script_meta
+
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    _bash_script(scripts_root, "locked.sh", "exit 0\n")
+    real_read_head = script_meta._read_head
+
+    def read_head(path: Path) -> str:
+        if path.name == "locked.sh":
+            raise PermissionError(13, "Permission denied")
+        return real_read_head(path)
+
+    monkeypatch.setattr(script_meta, "_read_head", read_head)
+    app, token = _make_app(signing_key, FakeSession())
+    with TestClient(app) as client:
+        lst = client.get("/api/notifications/scripts", headers=_auth(token))
+        det = client.get("/api/notifications/scripts/locked.sh", headers=_auth(token))
+    assert lst.status_code == 200 and [s["name"] for s in lst.json()] == ["ok.sh"]
+    assert det.status_code == 422 and det.json()["detail"] == "script is not readable: locked.sh: Permission denied"
+
+
 def test_create_bash_channel_masks_secret_and_stamps_secret_keys(signing_key: bytes, scripts_root: Path) -> None:
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     db = FakeSession()
@@ -1319,6 +1343,63 @@ def test_preview_fills_hidden_secret_from_channel_and_reports_hook_error(
     assert unknown.status_code == 404
 
 
+def test_preview_run_redacts_secrets_the_script_echoes(signing_key: bytes, scripts_root: Path) -> None:
+    """D-039: masking the inputs is not enough when the run echoes the secret back."""
+    _bash_script(scripts_root, "ok.sh", 'echo "pass=$SMTP_PASS"; echo "err $SMTP_PASS" >&2; exit 1\n')
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel(config={"inputs": {"TO": "me@x", "SMTP_PASS": "s3cr3t-value"}})]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"}},
+                "event_type": "rip.failed",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert "s3cr3t-value" not in r.text
+    res = r.json()["result"]
+    assert res["ok"] is False
+    assert res["stdout"].strip() == "pass=<hidden>" and res["stderr"].strip() == "err <hidden>"
+    assert "<hidden>" in res["error"]
+
+
+def test_preview_run_redacts_a_secret_cut_by_the_output_cap(signing_key: bytes, scripts_root: Path) -> None:
+    """D-039 follow-up: a secret straddling OUTPUT_CAP must not leak its first
+    half; redaction runs before the output is cut."""
+    from arm_backend.notifications.bash_runner import OUTPUT_CAP
+
+    pad = OUTPUT_CAP - 6
+    _bash_script(
+        scripts_root,
+        "ok.sh",
+        f"head -c {pad} /dev/zero | tr '\\0' x; echo \"$SMTP_PASS\"; head -c {pad} /dev/zero | tr '\\0' y >&2; "
+        'echo "$SMTP_PASS" >&2; exit 1\n',
+    )
+    db = FakeSession()
+    db.rows["notification_channels"] = [_bash_channel(config={"inputs": {"TO": "me@x", "SMTP_PASS": "s3cr3t-value"}})]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/notifications/scripts/preview",
+            json={
+                "channel_id": "ncl_b",
+                "config": {"type": "bash", "script": "ok.sh", "inputs": {"TO": "a", "SMTP_PASS": "<hidden>"}},
+                "event_type": "rip.failed",
+                "run": True,
+            },
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    res = r.json()["result"]
+    assert len(res["stdout"]) == OUTPUT_CAP and res["stdout"].endswith("x<hidde")
+    assert "s3cr3t" not in res["stdout"] and "s3cr3t" not in res["stderr"] and "s3cr3t" not in res["error"]
+
+
 def test_preview_and_scripts_require_roles(signing_key: bytes, scripts_root: Path) -> None:
     _bash_script(scripts_root, "a.sh", "exit 0\n")
     app, _ = _make_app(signing_key, FakeSession())
@@ -1388,8 +1469,8 @@ def test_preview_ignores_client_supplied_secret_keys(signing_key: bytes, scripts
     assert swapped.status_code == 422 and "stored script" in swapped.json()["detail"]
     assert stored.status_code == 200, stored.text
     assert stored.json()["inputs"]["SMTP_PASS"] == "<hidden>" and stored.json()["env"]["SMTP_PASS"] == "<hidden>"
-    # The operator's own script may print its own secret; only inputs/env are masked.
-    assert ran.json()["result"]["stdout"].strip() == "pw"
+    # The stored secret still reaches the script, but its echo comes back masked.
+    assert ran.json()["result"]["stdout"].strip() == "<hidden>"
     assert ran.json()["inputs"]["SMTP_PASS"] == "<hidden>" and ran.json()["env"]["SMTP_PASS"] == "<hidden>"
 
 

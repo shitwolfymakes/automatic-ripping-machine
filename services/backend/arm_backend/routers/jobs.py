@@ -80,7 +80,7 @@ from arm_common.enums import (
     TERMINAL_JOB_STATUSES,
 )
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
-from arm_common.schemas.job_metadata import JobIdentity, JobMetadata
+from arm_common.schemas.job_metadata import JobIdentity, JobMetadata, flag_is_set
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -191,9 +191,25 @@ def _parked_session_ids(sas: list[SessionApplication]) -> list[str]:
     return [sa.session_id for sa in parked]
 
 
+def _parked_apps_are_settled(job: Job) -> bool:
+    """Has the drain that would fill a parked application already run (or
+    can it never run)? True once the rip is over and identity is not still
+    pending: rip-complete drained what it could on a ripped job, and a
+    failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
+    parked application is still legitimately waiting for resolve, and so is
+    an unidentified RIPPED_PARTIAL one's (resolve drains both)."""
+    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
+        return False
+    if job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified"):
+        return False
+    return job.status in TERMINAL_JOB_STATUSES
+
+
 def _summarize_transcode_progress(
     session_apps: list[SessionApplication],
     tasks: list[TranscodeTask],
+    *,
+    parked_settled: bool = False,
 ) -> TranscodeProgressSummary | None:
     """Roll a job's session_applications (+ their tasks) into one job-level
     transcode state. Returns None when no session has been applied.
@@ -201,13 +217,24 @@ def _summarize_transcode_progress(
     Aggregates ALL applications, not the latest: a job can hold a DONE app
     plus a newer QUEUED app (non-colliding outputs), and is "transcoding"
     until every application is terminal.
-    """
-    if not session_apps:
-        return None
 
+    `parked_settled` (see `_parked_apps_are_settled`): a WAITING_IDENTIFY
+    application with no tasks is then not in flight, only parked (its reason
+    is shown through `parked_session_ids`), so it is left out of the rollup;
+    otherwise a ripped job would read "Transcoding 0/0" forever.
+    """
     tasks_by_app: dict[str, list[TranscodeTask]] = {}
     for t in tasks:
         tasks_by_app.setdefault(t.session_application_id, []).append(t)
+
+    if parked_settled:
+        session_apps = [
+            sa
+            for sa in session_apps
+            if not (sa.status == SessionApplicationStatus.WAITING_IDENTIFY and not tasks_by_app.get(sa.id))
+        ]
+    if not session_apps:
+        return None
 
     all_terminal = all(_session_app_is_terminal(sa.status, len(tasks_by_app.get(sa.id, []))) for sa in session_apps)
 
@@ -313,7 +340,7 @@ async def list_jobs(
         if j.status == JobStatus.RIPPING:
             view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
         view.transcode_progress = _summarize_transcode_progress(
-            sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, [])
+            sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, []), parked_settled=_parked_apps_are_settled(j)
         )
         view.parked_session_ids = _parked_session_ids(sas_by_job.get(j.id, []))
         views.append(view)
@@ -376,7 +403,9 @@ async def get_job_detail(
             .all()
         )
     job_view = JobView.model_validate(job)
-    job_view.transcode_progress = _summarize_transcode_progress(list(sas), job_tasks)
+    job_view.transcode_progress = _summarize_transcode_progress(
+        list(sas), job_tasks, parked_settled=_parked_apps_are_settled(job)
+    )
     job_view.parked_session_ids = _parked_session_ids(list(sas))
 
     # Most-recent transcode task status per source track (ULID ids are
@@ -1056,6 +1085,12 @@ async def resolve(
     if "media_type" in fields_set:
         job.media_type = req.media_type
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
+    # The rip already finished but rip-complete skipped after_rip because the
+    # disc was unidentified: a ripped placeholder, or a partial one (which
+    # keeps RIPPED_PARTIAL). Read the flag now; it is cleared just below.
+    rip_waited_for_identity = was_ripped_placeholder or (
+        job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
+    )
     # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
     # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
     # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
@@ -1109,7 +1144,7 @@ async def resolve(
     await session.commit()
     await session.refresh(job)
 
-    if was_ripped_placeholder:
+    if rip_waited_for_identity:
         # Rip done + identity just landed: run the same post-rip pass
         # rip-complete runs for identified jobs — drain parked applications
         # (fan-out uses the just-resolved title) and then the auto-apply

@@ -539,6 +539,35 @@ async def test_any_encoder_prefers_vendor_rank() -> None:
     assert assignment.encoder.id == "nvenc_h265"
 
 
+async def test_any_webm_encoder_skips_vaapi_devices() -> None:
+    """D-071: an any_* WebM preset must not land on a VAAPI device, whose
+    ffmpeg engine cannot write WebM; it takes another vendor or CPU."""
+    db = _build_db(
+        encoder="any_av1",
+        gpus=[
+            (GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["av1"], None),
+            (GpuVendor.QSV, GpuStatus.AVAILABLE, ["av1"], None),
+        ],
+    )
+    db.rows["transcode_presets"][0].container = ContainerFormat.WEBM
+    assignment = await _claim(db)
+    assert assignment.gpu is not None and assignment.gpu.vendor == GpuVendor.QSV
+
+    db = _build_db(encoder="any_av1", gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["av1"], None)])
+    db.rows["transcode_presets"][0].container = ContainerFormat.WEBM
+    assignment = await _claim(db)
+    assert assignment.action == "spawn" and assignment.gpu is None and assignment.encoder.id == "cpu_av1"
+
+
+async def test_saved_vaapi_webm_preset_fails_with_a_fixable_reason() -> None:
+    db = _build_db(encoder="vaapi_av1", gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["av1"], None)])
+    db.rows["transcode_presets"][0].container = ContainerFormat.WEBM
+    assignment = await _claim(db)
+    assert assignment.action == "fail"
+    assert assignment.reason == "encoder vaapi_av1 cannot write webm; edit the preset to use mkv or mp4"
+    assert db.rows["gpus"][0].claimed_by_task_id is None
+
+
 def _never_probed_db(encoder: str) -> FakeSession:
     """A never-probed QSV row plus an operator-disabled, never-probed VAAPI row."""
     db = _build_db(
@@ -964,6 +993,8 @@ async def test_vaapi_spawn_falls_back_to_base_when_variant_missing() -> None:
     docker_client.images.get.side_effect = docker_errors.ImageNotFound("nope")
     docker_client.images.pull.side_effect = docker_errors.NotFound("no such tag")
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
     docker_client.images.pull.assert_called_once_with("arm-transcode", tag="latest-amd")
@@ -984,6 +1015,8 @@ async def test_vaapi_spawn_pulls_a_missing_variant_and_uses_it() -> None:
     disp = TranscodeDispatcher(
         _settings(ARM_TRANSCODE_IMAGE="reg:5000/ns/arm-transcode:v3.1.0"), _db_factory(db), docker_client, WSHub()
     )
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     docker_client.images.pull.assert_called_once_with("reg:5000/ns/arm-transcode", tag="v3.1.0-amd")
     assert docker_client.containers.run.call_args.kwargs["image"] == "reg:5000/ns/arm-transcode:v3.1.0-amd"
@@ -996,6 +1029,8 @@ async def test_nvenc_spawn_uses_base_image_and_never_checks_a_variant() -> None:
     )
     docker_client = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker_client, WSHub())
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "arm-transcode:latest"
     # NVENC has no derived variant, so the image-exists probe never runs.
@@ -1019,6 +1054,8 @@ async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None
     disp = TranscodeDispatcher(
         _settings(ARM_TRANSCODE_IMAGE_QSV="custom-qsv:latest"), _db_factory(db), docker_client, WSHub()
     )
+    # The host probe is not under test here; only the image choice is.
+    disp.probe = lambda: (True, None)  # type: ignore[method-assign]
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "custom-qsv:latest"
     docker_client.images.get.assert_not_called()

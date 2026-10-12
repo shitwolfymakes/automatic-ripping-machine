@@ -80,6 +80,17 @@ vi.mock('$lib/api/transcoder', () => ({
 	deleteTranscoderJob: vi.fn()
 }));
 
+let transcodeEventHandler: (() => void) | null = null;
+vi.mock('$lib/api/ws', () => ({
+	wsClient: {
+		start: vi.fn(),
+		subscribe: vi.fn((topic: string, handler: () => void) => {
+			if (topic === 'transcode.events') transcodeEventHandler = handler;
+			return () => {};
+		})
+	}
+}));
+
 vi.mock('$lib/api/gpus', () => ({
 	fetchGpus: vi.fn(() =>
 		Promise.resolve([
@@ -207,7 +218,7 @@ describe('Transcoder Page', () => {
 			).not.toBeInTheDocument();
 		});
 
-		it('renders a full-page empty state and fetches no task data when not capable (ripper-only deep link)', async () => {
+		it('renders a full-page empty state and fetches no task list when not capable (ripper-only deep link)', async () => {
 			setTranscoderEnabled(false);
 			// Earlier tests in this file already invoked these fetchers; clear
 			// their call history so this assertion only reflects this render.
@@ -222,8 +233,28 @@ describe('Transcoder Page', () => {
 			// Let any pending microtasks flush, then confirm nothing was fetched.
 			await new Promise((r) => setTimeout(r, 0));
 			expect(fetchTranscoderJobs).not.toHaveBeenCalled();
-			expect(fetchTranscoderStats).not.toHaveBeenCalled();
 			expect(fetchGpus).not.toHaveBeenCalled();
+			// Only the one-shot held-task count; none held, so no warning.
+			expect(fetchTranscoderStats).toHaveBeenCalledTimes(1);
+			expect(screen.queryByTestId('transcoder-held-encode-tasks')).not.toBeInTheDocument();
+		});
+
+		it('says how many encode tasks a ripper-only deployment is holding', async () => {
+			setTranscoderEnabled(false);
+			vi.mocked(fetchTranscoderStats).mockResolvedValueOnce({
+				tasks_by_status: { queued: 3 },
+				total_tasks: 3,
+				gpus_total: 0,
+				gpus_available: 0,
+				max_parallel: 1,
+				queued_encode_tasks: 2
+			});
+			renderComponent(TranscoderPage);
+			await waitFor(() =>
+				expect(screen.getByTestId('transcoder-held-encode-tasks')).toHaveTextContent(
+					'2 encode tasks are held. Re-run setup without --ripper-only to resume them.'
+				)
+			);
 		});
 	});
 });
@@ -237,4 +268,30 @@ it('renders per-GPU inventory rows with status and a manage link', async () => {
 	expect(rows.textContent).toContain('VAAPI');
 	expect(rows.textContent).toContain('disabled');
 	expect(screen.getByText('Manage GPUs in Settings')).toHaveAttribute('href', '/settings#transcoding');
+});
+
+it('reloads the per-GPU rows on transcode events so they track claims (D-058)', async () => {
+	cleanup();
+	renderComponent(TranscoderPage);
+	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).toContain('busy'));
+	vi.mocked(fetchGpus).mockResolvedValueOnce([
+		{
+			id: 'gpu_1',
+			vendor: 'nvenc',
+			device_path: 'nvidia://0',
+			encoder_kinds: ['h264', 'h265'],
+			status: 'available',
+			enabled: true,
+			claimed_by_task_id: null,
+			last_seen_at: null
+		}
+	] as Awaited<ReturnType<typeof fetchGpus>>);
+	expect(transcodeEventHandler).not.toBeNull();
+	const before = vi.mocked(fetchGpus).mock.calls.length;
+	// A batch of task events reloads the rows once, not once per event.
+	for (let i = 0; i < 5; i++) transcodeEventHandler?.();
+	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).not.toContain('busy'));
+	expect(screen.getByTestId('gpu-rows').textContent).toContain('available');
+	await new Promise((r) => setTimeout(r, 400));
+	expect(vi.mocked(fetchGpus).mock.calls.length - before).toBe(1);
 });

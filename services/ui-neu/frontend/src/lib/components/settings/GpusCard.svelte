@@ -8,6 +8,7 @@
 	import { onMount } from 'svelte';
 	import type { GpuView } from '$lib/types/api.gen';
 	import { fetchGpus, updateGpu, deleteGpu, probeGpu, probeAllGpus } from '$lib/api/gpus';
+	import { ApiError } from '$lib/api/client';
 	import { wsClient, type WSEnvelope } from '$lib/api/ws';
 	import { isAdmin } from '$lib/stores/auth';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
@@ -128,10 +129,11 @@
 			error = null;
 			encodersStore.refresh();
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : '';
-			error = msg.includes('409')
-				? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
-				: 'Deleting the GPU failed.';
+			// The client puts the server's detail in the message; the status is the signal.
+			error =
+				e instanceof ApiError && e.status === 409
+					? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
+					: 'Deleting the GPU failed.';
 		} finally {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
 			const p = new Set(pending);

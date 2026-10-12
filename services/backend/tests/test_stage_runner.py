@@ -497,6 +497,9 @@ async def test_invalidated_job_queued_behind_the_cap_writes_nothing_first_r1(
 
     runner.invalidate("job_2")
     gate.set()
+    await runner.drain()  # job_2's first run finishes; its rerun waits for release
+    assert computed.count("job_2") == 1
+    runner.release("job_2")  # the caller's write landed
     await runner.drain()
 
     assert computed.count("job_2") == 2  # the first run, then the rerun
@@ -648,6 +651,9 @@ async def test_invalidate_marks_rerun_for_a_run_not_yet_started_r1() -> None:
     assert job.id in runner._rerun
 
     await runner.drain()
+    assert "episodes_tmdb" not in claims_of(job).sources  # the rerun waits for release
+    runner.release(job.id)
+    await runner.drain()
     assert claims_of(job).sources["episodes_tmdb"].status == "ok"  # the rerun applied
 
 
@@ -676,7 +682,10 @@ async def test_invalidate_marks_rerun_when_run_has_started() -> None:
     assert job.id in runner._rerun
 
     gate1.set()  # let run 1's network call finish
-    await asyncio.wait_for(reached.wait(), timeout=1)  # run 1 bailed; run 2 reached its own network call
+    await runner.drain()  # run 1 bailed; run 2 waits for the caller's release
+    assert not reached.is_set()
+    runner.release(job.id)
+    await asyncio.wait_for(reached.wait(), timeout=1)  # run 2 reached its own network call
 
     # Checkpoint: run 1 wrote, committed and emitted nothing at all.
     assert job.id not in runner._rerun
@@ -998,3 +1007,73 @@ async def test_movie_tmdb_swapped_for_the_resolved_show_is_merged() -> None:
 
     stored = job.metadata_json["identity"]["external_ids"]
     assert (stored["tmdb"], stored["tmdb_kind"]) == ("999", "tv")
+
+
+async def test_rerun_after_invalidate_waits_for_the_callers_write_d093() -> None:
+    """D-093: the invalidated run finishes while the caller (the identity
+    router's `/identity/match` apply) is still computing. Its rerun must not
+    snapshot the job until the caller has committed and released; a
+    `schedule()` arriving in the meantime waits too. After `release`, the
+    rerun sees the caller's write."""
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    gate1, gate2 = asyncio.Event(), asyncio.Event()
+    reached = asyncio.Event()
+    provider = _GatedSeasonProvider(
+        seasons={1: _season(1, DISTINCT), 3: _season(3, DISTINCT)}, gates=[gate1, gate2], reached=reached
+    )
+    runner = _runner(db, _Hub(), [provider])
+
+    runner.schedule(job.id)
+    await asyncio.wait_for(reached.wait(), timeout=1)
+    reached.clear()
+    runner.invalidate(job.id)  # the router starts its own compute
+    gate1.set()
+    await runner.drain()  # the invalidated run is over
+    runner.schedule(job.id)  # e.g. rip-start re-triggers the stage meanwhile
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert job.id not in runner._pending
+    assert not reached.is_set()  # no run started while the caller is mid-write
+
+    job.season = 3  # the caller's write lands...
+    runner.release(job.id)  # ...then it releases
+    await asyncio.wait_for(reached.wait(), timeout=1)
+    gate2.set()
+    await runner.drain()
+    assert job.id not in runner._held and job.id not in runner._rerun
+    assert ("season", 3) in provider.calls  # the rerun read the committed season
+
+
+async def test_overlapping_holds_wait_for_the_last_release_d093() -> None:
+    """D-093 follow-up: two identity writes on one job overlap. The first
+    caller's release must not start the deferred run while the second
+    caller is still writing."""
+    job = _job()
+    db = _db(job, tracks=[])
+    runner = _runner(db, _Hub(), [FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    runs: list[str] = []
+
+    async def _record(job_id: str) -> None:
+        runs.append(job_id)
+
+    runner._run_once = _record  # type: ignore[method-assign]
+    runner.invalidate(job.id)  # caller A
+    runner.invalidate(job.id)  # caller B
+    runner.schedule(job.id)  # deferred by the hold
+    runner.release(job.id)  # A is done; B is still writing
+    await runner.drain()
+    assert runs == []
+    runner.release(job.id)  # B is done
+    await runner.drain()
+    assert runs == [job.id] and runner._held == {}
+
+
+async def test_release_without_a_pending_rerun_runs_nothing() -> None:
+    job = _job()
+    db = _db(job, tracks=[])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    runner = _runner(db, _Hub(), [provider])
+    runner.invalidate(job.id)  # nothing pending: only the hold
+    runner.release(job.id)
+    assert runner._pending == {} and runner._held == {} and runner._rerun == set()

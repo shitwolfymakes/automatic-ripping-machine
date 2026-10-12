@@ -15,6 +15,7 @@ Two surfaces:
 
 from __future__ import annotations
 
+import asyncio
 import errno
 import os
 from pathlib import Path
@@ -208,8 +209,10 @@ def _stub_rip_disc(
         on_title_progress: Any | None = None,
         on_disc_progress: Any | None = None,
         on_title_done: Any | None = None,
+        hash_outputs: bool = True,
     ) -> RipDiscResult:
         if captured is not None:
+            captured["hash_outputs"] = hash_outputs
             captured["device_path"] = device_path
             captured["output_dir"] = output_dir
             captured["minlength_seconds"] = minlength_seconds
@@ -263,7 +266,9 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
     async def on_done(track: TrackView, result: RipResult) -> None:
         done.append((track.id, result.ok, result.error))
 
-    async def on_progress(track: TrackView, fraction: float) -> None:
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        if stats is not None and stats.get("phase") == "verifying":
+            return  # the post-rip hash pass; covered by its own tests
         progress.append((track.id, fraction))
 
     tracks = [_track(0), _track(1), _track(2)]
@@ -321,7 +326,7 @@ async def test_rip_all_marks_skipped_titles_failed(monkeypatch, tmp_path):
         min_length_seconds=600,
     )
 
-    assert done[0] == ("trk_0", True, None)
+    assert [d for d in done if d[0] == "trk_0"] == [("trk_0", True, None)]
     failed = [d for d in done if d[0] == "trk_1"][0]
     assert failed[1] is False
     assert "below minlength=600s" in failed[2]
@@ -486,7 +491,9 @@ async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypa
 
     progress: list[tuple[str, float]] = []
 
-    async def on_progress(track: TrackView, fraction: float) -> None:
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        if stats is not None and stats.get("phase") == "verifying":
+            return  # the post-rip hash pass; covered by its own tests
         progress.append((track.id, fraction))
 
     async def noop_start(_track: TrackView) -> None:
@@ -944,3 +951,113 @@ async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
         ("progress", ("trk_0", 0.5, None)),
         ("done", ("trk_0", True, 7)),
     ]
+
+
+async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkeypatch, tmp_path):
+    """D-125: the makemkv path hashes each title in the background as soon
+    as it is written (rip_disc is told not to re-read everything after the
+    rip) and PATCHes DONE with the digest, live titles and post-rip ones
+    alike. Whatever is still hashing after the rip is reported as a
+    "verifying" phase on the progress channel."""
+    import hashlib
+
+    (tmp_path / "title_t00.mkv").write_bytes(b"main feature")
+    (tmp_path / "title_t01.mkv").write_bytes(b"extra")
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=12),
+            1: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=5),
+        },
+    )
+    captured: dict[str, Any] = {}
+    _stub_rip_disc(monkeypatch, fake_result, captured=captured, fire_per_title_start=False)
+
+    # Title 0 finalises live (mid-rip); title 1 is attributed post-rip.
+    real_stub = dispatcher_module.rip_disc
+
+    async def live_then_post(**kwargs: Any) -> RipDiscResult:
+        await kwargs["on_title_done"](0)
+        return await real_stub(**kwargs)
+
+    monkeypatch.setattr(dispatcher_module, "rip_disc", live_then_post)
+
+    done: dict[str, str | None] = {}
+    phases: list[str] = []
+
+    async def noop_start(_track: TrackView) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        assert result.ok
+        done[track.id] = result.sha256
+
+    async def on_progress(_track: TrackView, _fraction: float, stats: Any = None) -> None:
+        if stats is not None and "phase" in stats:
+            phases.append(stats["phase"])
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=noop_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+        min_length_seconds=600,
+    )
+
+    assert captured["hash_outputs"] is False
+    assert done == {
+        "trk_0": hashlib.sha256(b"main feature").hexdigest(),
+        "trk_1": hashlib.sha256(b"extra").hexdigest(),
+    }
+    assert set(phases) <= {"verifying"}
+
+
+async def test_title_hasher_reports_verify_progress_until_done(tmp_path):
+    from arm_ripper.rip import title_hasher
+
+    path = tmp_path / "t.mkv"
+    path.write_bytes(b"x" * 10)
+    gate = asyncio.Event()
+    real = title_hasher.sha256_file
+
+    async def slow(p, on_bytes=None):  # type: ignore[no-untyped-def]
+        await gate.wait()
+        return await real(p, on_bytes)
+
+    title_hasher.sha256_file = slow  # type: ignore[assignment]
+    try:
+        hasher = title_hasher.TitleHasher()
+        got: list[str | None] = []
+
+        async def then(digest: str | None) -> None:
+            got.append(digest)
+
+        hasher.submit(path, 10, then)
+        seen: list[tuple[int, int]] = []
+
+        async def on_progress(done: int, total: int, _rate: float | None) -> None:
+            seen.append((done, total))
+            gate.set()
+
+        await hasher.finish(on_progress)
+    finally:
+        title_hasher.sha256_file = real  # type: ignore[assignment]
+    assert seen and seen[0] == (0, 10)
+    assert got and got[0] is not None
+
+
+async def test_title_hasher_passes_none_for_an_unreadable_file(tmp_path):
+    from arm_ripper.rip.title_hasher import TitleHasher
+
+    hasher = TitleHasher()
+    got: list[str | None] = []
+
+    async def then(digest: str | None) -> None:
+        got.append(digest)
+
+    hasher.submit(tmp_path / "missing.mkv", 1, then)
+    await hasher.finish()
+    assert got == [None]

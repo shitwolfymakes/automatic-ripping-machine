@@ -61,7 +61,12 @@ the preset's encoder:
   built-in preset that defaults to `any_h265` keeps working on a CPU-only box.
   The HandBrake preset's own settings (scaling, filters, audio) apply when
   the job runs on the CPU, NVENC or QSV, but not when it lands on an AMD
-  (VAAPI) device, which encodes through ffmpeg instead.
+  (VAAPI) device, which encodes through ffmpeg instead. A WebM preset never
+  lands on an AMD device (see below); it takes another vendor or the CPU.
+- **Containers on AMD**: the ffmpeg VAAPI path copies the source audio,
+  which WebM cannot carry, so it writes MKV or MP4 only. The API refuses a
+  `vaapi_*` encoder with a WebM container (`422`), and the preset form
+  disables WebM for those encoders.
 - **`<vendor>_<codec>`** (a specific `qsv_*`, `nvenc_*` or `vaapi_*` id): picks
   a free eligible device of that vendor if one exists; if all are busy, the
   task queues. If **no** device of that vendor has verified the codec, the
@@ -149,6 +154,16 @@ nothing) records one of these in `probe_error`:
   of the container's stderr: usually a transcode image that predates the
   `--probe-device` worker mode.
 
+When the probe container never got to test the device (it could not start,
+the docker host failed mid-wait, or it ran past the 120 s timeout), the row
+keeps the encoders it had verified before and records only `probe_error`.
+A transient docker fault on a re-probe therefore never turns a working
+device into "Verified nothing"; re-probe once the host is reachable again.
+The exception is a start failure about the device itself: when docker
+cannot pass the device node in (it is gone, or its driver is broken), the
+row records "Verified nothing", so tasks stop being sent to it and fall
+back to the CPU encoder until a re-probe succeeds.
+
 ## Image variants
 
 Vendor userspace lives in per-vendor image targets, not the base image:
@@ -210,6 +225,45 @@ DOCKER_HOST=ssh://user@transcoder-host docker build \
 Run this from a checkout of this repo (the build context needs
 `services/transcode/Dockerfile` and the workspace it copies in), after any
 change to the transcode image or on the remote host's own upgrades.
+
+## Offload host
+
+With `ARM_TRANSCODE_DOCKER_HOST` set (the installer's `offload` profile),
+transcoders run on another machine's docker daemon and call the Backend
+back on `ARM_TRANSCODE_BACKEND_URL`. Three things must hold:
+
+- **The URL is reachable from the offload host, and its certificate fits.**
+  The transcoder verifies the Backend's certificate against the ARM CA, so
+  the URL's host (an IP address or a name) must be one of the Backend
+  certificate's subject alternative names. The installer adds the host from
+  `--offload-backend-url` when it issues that certificate. If the Backend's
+  address changes (a new DHCP lease, a renamed host), re-run
+  `armctl install --offload-backend-url https://<new-address>:<port>`: it
+  writes the new URL and reissues the certificate with the new name. Prefer
+  a name or a reserved address, and check the name resolves to the same
+  place on the offload host as on the Backend host.
+- **The offload daemon sees the same paths.** Spawned transcoders bind
+  `ARM_HOST_RAW_PATH`, `ARM_HOST_MEDIA_PATH`, `ARM_HOST_LOGS_PATH` and
+  `ARM_HOST_CERTS_PATH` exactly as written, on the offload host. Mount the
+  shared storage there at those same paths.
+- **Changes to `.env` need the containers recreated.** `docker restart` keeps
+  the old environment; run `armctl up` (or `docker compose up -d`) instead.
+
+The Backend checks the first point itself: while the URL does not answer
+over TLS from the Backend host, the Diagnostics page shows the transcoder
+check as a warning naming the URL, the address it resolved to and the
+reason (for example a certificate that is not valid for that address), and
+no transcoder is spawned. The check runs on the Backend host, so a name that
+resolves differently on the offload host can still pass it; compare the
+address in the detail with what the offload host resolves.
+
+The opposite can happen too: the Backend container may be unable to reach a
+URL that the offload host reaches fine (a router without NAT hairpinning, a
+firewall in front of the published port, or split DNS). If you have checked
+that the offload host can reach the URL, set
+`ARM_TRANSCODE_BACKEND_URL_CHECK=warn` in `.env` and recreate the containers.
+The check then still shows on the Diagnostics page, but no longer stops
+transcoders from being spawned.
 
 ## Enabling GPU transcoding
 

@@ -48,6 +48,24 @@ describe('DriveLifecycleLists', () => {
 		vi.clearAllMocks();
 	});
 
+	it('disables Enroll and says so for a drive that is not connected', () => {
+		renderComponent(DriveLifecycleLists, {
+			props: {
+				detected: [drive({ id: 'drv_gone', present: false }), drive({ id: 'drv_here' })],
+				ignored: [],
+				onchanged: vi.fn()
+			}
+		});
+		expect(screen.getByTestId('enroll-drv_gone')).toBeDisabled();
+		expect(screen.getByTestId('enroll-drv_gone')).toHaveAttribute(
+			'title',
+			'Not connected; plug the drive in to enroll it'
+		);
+		expect(screen.getByTestId('not-connected-drv_gone')).toHaveTextContent('Plug the drive in to enroll it.');
+		expect(screen.getByTestId('enroll-drv_here')).toBeEnabled();
+		expect(screen.queryByTestId('not-connected-drv_here')).not.toBeInTheDocument();
+	});
+
 	it('renders detected rows with model, serial, node and actions', () => {
 		renderComponent(DriveLifecycleLists, {
 			props: { detected: [drive({ id: 'drv_d' })], ignored: [], onchanged: vi.fn() }

@@ -22,7 +22,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
-from arm_backend.transcode_dispatcher import max_parallel_transcodes
+from arm_backend.transcode_dispatcher import count_queued_encode_tasks, max_parallel_transcodes, release_gpu_for_task
 from arm_backend.db import get_session
 from arm_backend.routers.logs import LOG_DIR
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
@@ -101,6 +101,7 @@ async def transcode_stats(
         gpus_total=len(gpus),
         gpus_available=gpus_available,
         max_parallel=await max_parallel_transcodes(db),
+        queued_encode_tasks=await count_queued_encode_tasks(db) if by_status.get("queued") else 0,
     )
 
 
@@ -242,6 +243,9 @@ async def delete_transcode(
     track_id = row.source_track_id
     application_id = row.session_application_id
 
+    # A QUEUED task may already hold a GPU (claimed at spawn, before the
+    # transcoder's /claim); the FK only nulls the claim, so release it.
+    await release_gpu_for_task(db, task_id)
     await db.delete(row)
 
     hub = getattr(request.app.state, "ws_hub", None)

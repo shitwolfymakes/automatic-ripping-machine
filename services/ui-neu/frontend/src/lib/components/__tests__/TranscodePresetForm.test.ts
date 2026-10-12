@@ -457,6 +457,25 @@ describe('encoder picker', () => {
 	});
 });
 
+describe('vaapi container limits', () => {
+	afterEach(() => cleanup());
+
+	it('disables WebM for a vaapi encoder and moves a WebM preset back to MKV', async () => {
+		renderComponent(TranscodePresetForm, { props: { preset: null, oncancel: vi.fn(), onsaved: vi.fn() } });
+		const encoder = screen.getByTestId('tp-encoder') as HTMLSelectElement;
+		const container = screen.getByTestId('tp-container') as HTMLSelectElement;
+		await waitFor(() => expect(encoder.querySelector('option[value="vaapi_h264"]')).not.toBeNull());
+		await fireEvent.change(container, { target: { value: 'webm' } });
+		expect((container.querySelector('option[value="webm"]') as HTMLOptionElement).disabled).toBe(false);
+
+		await fireEvent.change(encoder, { target: { value: 'vaapi_h264' } });
+
+		expect((container.querySelector('option[value="webm"]') as HTMLOptionElement).disabled).toBe(true);
+		await waitFor(() => expect(container.value).toBe('mkv'));
+		expect(screen.getByTestId('tp-container-vaapi-note')).toHaveTextContent('AMD VAAPI encoders write MKV or MP4.');
+	});
+});
+
 describe('encoder availability refresh', () => {
 	afterEach(() => cleanup());
 

@@ -199,6 +199,26 @@ describe('wsStatus (G-28 live-updates state)', () => {
 		expect(get(wsStatus)).toBe('online');
 	});
 
+	it('start() during the reconnect back-off keeps the offline state and opens no extra socket (D-050)', () => {
+		wsClient.start();
+		authAck(FakeWS.instances[0]);
+		FakeWS.instances[0].emit('close', {});
+		vi.advanceTimersByTime(1000);
+		FakeWS.instances[1].emit('close', {});
+		expect(get(wsStatus)).toBe('offline');
+
+		// A page mount while the back-off timer is pending.
+		wsClient.start();
+		expect(get(wsStatus)).toBe('offline');
+		expect(FakeWS.instances).toHaveLength(2);
+
+		// Only the pending timer reconnects, once.
+		vi.advanceTimersByTime(2000);
+		expect(FakeWS.instances).toHaveLength(3);
+		authAck(FakeWS.instances[2]);
+		expect(get(wsStatus)).toBe('online');
+	});
+
 	it('stop() returns the status to idle', () => {
 		wsClient.start();
 		authAck(FakeWS.instances[0]);

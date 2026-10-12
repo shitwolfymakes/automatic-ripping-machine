@@ -18945,6 +18945,11 @@
           "max_parallel": {
             "type": "integer",
             "title": "Max Parallel"
+          },
+          "queued_encode_tasks": {
+            "type": "integer",
+            "title": "Queued Encode Tasks",
+            "default": 0
           }
         },
         "type": "object",

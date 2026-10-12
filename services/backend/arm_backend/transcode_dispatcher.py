@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
-from arm_backend.docker_probe import TtlProbe, probe_docker
+from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.transcode_images import (
     VARIANT_SUFFIX,
     image_for,
@@ -61,6 +61,7 @@ from arm_common.encoders import (
     gpu_could_serve,
     gpu_encoder_for,
     gpu_is_eligible,
+    vendor_supports_container,
 )
 
 if TYPE_CHECKING:
@@ -89,6 +90,9 @@ VARIANT_PULL_RETRY_SECONDS = 600.0
 # held/queued encode rows at the head of the FIFO queue can never crowd a
 # passthrough task further back out of the scan window.
 _QUEUE_SCAN_LIMIT = 50
+# While `probe()` says the transcode image or docker host is unusable, encode
+# spawns are skipped and one line says why, repeated at most this often.
+_PROBE_HOLD_LOG_SECONDS = 600
 
 # A dead docker-over-SSH transport (idle paramiko connection reset by the
 # remote end) surfaces as one of these, either raw or wrapped inside
@@ -158,6 +162,63 @@ async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
         gpu.claimed_by_task_id = None
 
 
+async def resolve_preset_for_task(db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
+    """The preset a task runs with: its application's session's preset."""
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
+    ).scalar_one_or_none()
+    if application is None:
+        return None
+    sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
+    if sess is None or sess.transcode_preset_id is None:
+        return None
+    return (
+        await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+    ).scalar_one_or_none()
+
+
+async def count_queued_encode_tasks(db: AsyncSession) -> int:
+    """QUEUED tasks that need an encoder (not a passthrough move). On a box
+    that cannot transcode these are held by `spawn_pending` indefinitely."""
+    from arm_backend.transcode_apply import is_passthrough_preset
+
+    # One query per table, not per task: the Transcoder page polls this.
+    queued = (
+        (await db.execute(select(TranscodeTask).where(col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED)))
+        .scalars()
+        .all()
+    )
+    if not queued:
+        return 0
+    app_ids = {task.session_application_id for task in queued}
+    session_by_app = {
+        app.id: app.session_id
+        for app in (await db.execute(select(SessionApplication).where(col(SessionApplication.id).in_(app_ids))))
+        .scalars()
+        .all()
+    }
+    preset_by_session = {
+        sess.id: sess.transcode_preset_id
+        for sess in (await db.execute(select(Session).where(col(Session.id).in_(set(session_by_app.values())))))
+        .scalars()
+        .all()
+    }
+    preset_ids = {pid for pid in preset_by_session.values() if pid is not None}
+    presets = {
+        preset.id: preset
+        for preset in (await db.execute(select(TranscodePreset).where(col(TranscodePreset.id).in_(preset_ids))))
+        .scalars()
+        .all()
+    }
+    count = 0
+    for task in queued:
+        session_id = session_by_app.get(task.session_application_id)
+        preset_id = preset_by_session.get(session_id) if session_id is not None else None
+        if not is_passthrough_preset(presets.get(preset_id) if preset_id is not None else None):
+            count += 1
+    return count
+
+
 WAITING_FOR_PROBE_REASON = "waiting for GPU probe"
 
 # The running backend's dispatcher, for code paths with no app handle (the
@@ -195,7 +256,15 @@ class TranscodeDispatcher:
         # Surfaced by /api/system/diagnostics so a crash-looping or
         # un-pullable transcoder is visible in the UI, not only in the log.
         self.last_spawn_error: str | None = None
+        # (detail, monotonic time) of the last "spawns held" log line.
+        self._probe_hold_logged: tuple[str | None, float] | None = None
         self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
+        # The URL a remote-spawned transcoder calls home on; only checked
+        # when spawning remotely (see `probe`).
+        self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
+        # The URL check's failure while ARM_TRANSCODE_BACKEND_URL_CHECK=warn
+        # lets spawns through; diagnostics still reports it. Set by `probe`.
+        self.backend_url_warning: str | None = None
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
@@ -217,8 +286,8 @@ class TranscodeDispatcher:
         # Per-image TtlProbe cache for `image_exists` (one entry per distinct
         # variant image ever checked, e.g. the derived "-intel"/"-amd" tag).
         self._image_probes: dict[str, TtlProbe] = {}
-        # Variant image -> time.monotonic() of its last failed pull (see
-        # `variant_available`); separate from the 30 s presence cache above.
+        # Image -> time.monotonic() of its last failed pull (see
+        # `_pull_image`); separate from the 30 s presence cache above.
         self._variant_pull_failed: dict[str, float] = {}
         # One lock per variant image being pulled, so concurrent callers (a
         # spawn and a GPU probe in two worker threads) share a single pull:
@@ -537,6 +606,9 @@ class TranscodeDispatcher:
         from arm_backend.transcode_apply import is_passthrough_preset, transcode_enabled_now
 
         enabled = await transcode_enabled_now(db)
+        # `probe()` (cached, blocking) is consulted once per tick, and only
+        # when an encode task is actually ready to spawn.
+        host_probe: tuple[bool, str | None] | None = None
 
         in_progress = (
             (
@@ -635,6 +707,15 @@ class TranscodeDispatcher:
                     # No free slot this tick; later passthrough tasks in the
                     # queue must still run, so `continue` (not `break`).
                     continue
+                if host_probe is None:
+                    host_probe = await asyncio.to_thread(self._probe_pulling_base_image)
+                    self._log_probe_hold(host_probe)
+                if not host_probe[0]:
+                    # A missing image or unreachable host fails every spawn
+                    # the same way; hold the task instead of looping a
+                    # traceback per tick or burning its attempts.
+                    held_encode += 1
+                    continue
                 # No separate re-verify needed here: the fresh,
                 # `populate_existing`-forced, FOR UPDATE-locked load at the
                 # top of this iteration already confirmed `task` is
@@ -662,6 +743,7 @@ class TranscodeDispatcher:
                 # Read before the try: after a failed flush/commit no ORM
                 # attribute is readable until the rollback (see below).
                 claimed_gpu_id = assignment.gpu.id if assignment.gpu is not None else None
+                started = False
                 try:
                     # `_spawn_container` is a blocking call: a plain docker
                     # socket round-trip normally, but on the SSH-transport-
@@ -675,6 +757,7 @@ class TranscodeDispatcher:
                     # locals/args (never the AsyncSession), so moving it to a
                     # thread doesn't put any DB access off the loop.
                     await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
+                    started = True
                     spawned += 1
                     self.last_spawn_error = None
                     # Commit this task's GPU claim promptly, per-task, right
@@ -720,6 +803,15 @@ class TranscodeDispatcher:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
                         await db.commit()
+                    # Only a container that never started counts as an
+                    # attempt: when just the commit failed, the transcoder
+                    # is running and will claim the task.
+                    if not started:
+                        try:
+                            await self._count_failed_spawn(db, task_id)
+                        except Exception:
+                            logger.exception("could not count the failed spawn task_id=%s", task_id)
+                            await db.rollback()
                 finally:
                     # Committed (other sessions now read BUSY) or rolled back
                     # and released: either way the in-process marker is done.
@@ -732,20 +824,40 @@ class TranscodeDispatcher:
         await db.commit()
         return spawned
 
-    async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
-        application = (
+    def _log_probe_hold(self, host_probe: tuple[bool, str | None]) -> None:
+        ok, detail = host_probe
+        if ok:
+            if self._probe_hold_logged is not None:
+                logger.info("transcode docker host and image ok again; encode spawns resume")
+                self._probe_hold_logged = None
+            return
+        now = time.monotonic()
+        last = self._probe_hold_logged
+        if last is None or last[0] != detail or now - last[1] >= _PROBE_HOLD_LOG_SECONDS:
+            logger.warning("transcode spawns held: %s", detail)
+            self._probe_hold_logged = (detail, now)
+
+    async def _count_failed_spawn(self, db: AsyncSession, task_id: str) -> None:
+        """A spawn that failed although the host probe passed is likely
+        task-specific (a bad mount, a preset the image rejects): count it
+        toward ARM_TRANSCODE_MAX_ATTEMPTS so it ends instead of looping."""
+        task = (
             await db.execute(
-                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
+                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
             )
         ).scalar_one_or_none()
-        if application is None:
-            return None
-        sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
-        if sess is None or sess.transcode_preset_id is None:
-            return None
-        return (
-            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-        ).scalar_one_or_none()
+        if task is None or task.status != TranscodeTaskStatus.QUEUED:
+            return
+        task.attempts = (task.attempts or 0) + 1
+        if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+            await self._fail_queued_task(
+                db, task, f"transcode container could not start (attempts={task.attempts}): {self.last_spawn_error}"
+            )
+            return
+        await db.commit()
+
+    async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
+        return await resolve_preset_for_task(db, task)
 
     def awaiting_probe(self, gpu: Gpu) -> bool:
         """A never-probed row whose probe is reserved, running, or about to be
@@ -791,11 +903,23 @@ class TranscodeDispatcher:
         if spec.kind == "cpu":
             return GpuAssignment(gpu=None, encoder=spec, action="spawn")
         codec = str(spec.codec)
+        if spec.vendor is not None and not vendor_supports_container(spec.vendor, preset.container):
+            # A preset saved before the API refused this pairing.
+            return GpuAssignment(
+                gpu=None,
+                encoder=spec,
+                action="fail",
+                reason=f"encoder {spec.id} cannot write {preset.container.value}; edit the preset to use mkv or mp4",
+            )
         # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
         self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
+        # An `any_*` WebM preset must not land on a VAAPI device, whose
+        # ffmpeg engine cannot write WebM (a pinned vaapi_* + WebM preset is
+        # refused at create time).
+        all_gpus = [g for g in all_gpus if vendor_supports_container(g.vendor, preset.container)]
         eligible = [
             g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
         ]
@@ -872,7 +996,10 @@ class TranscodeDispatcher:
 
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
-        docker host and checks the BASE image exists there. Never raises;
+        docker host and checks the BASE image exists there; when spawning on
+        a remote host (`ARM_TRANSCODE_DOCKER_HOST` + `ARM_TRANSCODE_BACKEND_URL`),
+        also that the backend URL the transcoder dials home on answers over
+        TLS with the ARM CA (`probe_backend_url`). Never raises;
         cached for docker_probe.PROBE_TTL_SECONDS (see there for why). A
         ripper-only deployment (no docker client at all) can't run encode
         tasks; that's not a probe failure to retry, just a fixed fact, so
@@ -891,6 +1018,17 @@ class TranscodeDispatcher:
         ok, detail = self._probe()
         if not ok:
             return ok, detail
+        if self._settings.ARM_TRANSCODE_DOCKER_HOST and self._settings.ARM_TRANSCODE_BACKEND_URL:
+            # A remote transcoder that cannot reach this URL (moved address,
+            # a certificate without that SAN) spawns fine and then never
+            # claims; catch it here instead.
+            url_ok, url_detail = self._backend_url_probe()
+            warn_only = self._settings.ARM_TRANSCODE_BACKEND_URL_CHECK == "warn"
+            # With warn, the operator said this backend cannot judge the URL
+            # (no hairpin, split DNS): report the failure, spawn anyway.
+            self.backend_url_warning = url_detail if not url_ok and warn_only else None
+            if not url_ok and not warn_only:
+                return url_ok, url_detail
         notes = self._missing_variant_notes()
         return ok, "; ".join(notes) if notes else detail
 
@@ -939,6 +1077,14 @@ class TranscodeDispatcher:
             return False
         if self.image_exists(image):
             return True
+        return self._pull_image(image, kind="variant", fallback="using the base image")
+
+    def _pull_image(self, image: str, *, kind: str, fallback: str) -> bool:
+        """Pull `image` onto the docker host; True when it is there afterwards.
+        A failed pull is not retried for VARIANT_PULL_RETRY_SECONDS, and
+        concurrent callers for one image share a pull. A digest reference has
+        no tag to pull and is never pulled. Blocking."""
+        assert self._docker is not None
         parts = split_reference(image)
         if parts is None:
             return False
@@ -950,14 +1096,16 @@ class TranscodeDispatcher:
             if self.image_exists(image):
                 return True
             repo, tag = parts
-            logger.info("variant image %s not present on the docker host; pulling it", image)
+            logger.info("%s image %s not present on the docker host; pulling it", kind, image)
             try:
                 self._docker.images.pull(repo, tag=tag)
-            except Exception as exc:  # noqa: BLE001 - any pull failure means "use the base image"
+            except Exception as exc:  # noqa: BLE001 - any pull failure is reported, then retried later
                 logger.warning(
-                    "could not pull variant image %s (%s); using the base image, next pull attempt in %.0f s",
+                    "could not pull %s image %s (%s); %s, next pull attempt in %.0f s",
+                    kind,
                     image,
                     exc,
+                    fallback,
                     VARIANT_PULL_RETRY_SECONDS,
                 )
                 self._variant_pull_failed[image] = time.monotonic()
@@ -965,8 +1113,21 @@ class TranscodeDispatcher:
             self._variant_pull_failed.pop(image, None)
             # Drop the cached "absent" answer so the next presence check sees it.
             self._image_probes.pop(image, None)
-            logger.info("pulled variant image %s", image)
+            logger.info("pulled %s image %s", kind, image)
             return True
+
+    def _probe_pulling_base_image(self) -> tuple[bool, str | None]:
+        """`probe()`, but when it fails because the base image is missing, try
+        to pull it first, as docker's own `containers.run` would have before
+        the probe gated spawning. Blocking."""
+        result = self.probe()
+        image = self._settings.ARM_TRANSCODE_IMAGE
+        if result[0] or self._docker is None or self.image_exists(image):
+            return result
+        if not self._pull_image(image, kind="base", fallback="encode tasks stay held"):
+            return result
+        self._probe.invalidate()
+        return self.probe()
 
     def _missing_variant_notes(self) -> list[str]:
         """One note per vendor that has an enabled GPU row, has a derivable
@@ -1209,8 +1370,9 @@ class TranscodeDispatcher:
     # --- cancel running -----------------------------------------------------
 
     async def cancel_running(self, task_id: str) -> None:
-        """Send `task.cancel` over WS, wait `_CANCEL_GRACE_SECONDS`, then
-        docker-stop any survivor and delete the row.
+        """Send `task.cancel` over WS (and stop an in-process passthrough
+        copy directly), wait `_CANCEL_GRACE_SECONDS`, then docker-stop any
+        survivor and delete the row.
 
         Cancel = delete: the row vanishes from the DB and `task.deleted`
         fires over WS. If the transcoder honoured the cancel cleanly by
@@ -1218,6 +1380,11 @@ class TranscodeDispatcher:
         marked FAILED — we delete it anyway, since the user's intent was
         to remove it entirely.
         """
+        # An in-process passthrough has no container and no WS listener;
+        # stop its copy directly (it then fails itself as "cancelled").
+        from arm_backend.passthrough_executor import request_cancel
+
+        request_cancel(task_id)
         async with self._db_factory() as db:
             await self._hub.emit(
                 topic=f"transcoder.commands.{task_id}",
@@ -1268,6 +1435,9 @@ class TranscodeDispatcher:
                 await db.execute(select(SessionApplication).where(col(SessionApplication.id) == application_id))
             ).scalar_one_or_none()
             job_id = application.job_id if application is not None else None
+            # A docker-stopped transcoder never calls /fail, and the FK only
+            # nulls the claim; release here or the GPU stays BUSY for good.
+            await release_gpu_for_task(db, task_id)
             await db.delete(row)
             await self._hub.emit(
                 topic="transcode.events",

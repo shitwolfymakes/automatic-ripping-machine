@@ -24,6 +24,8 @@ from arm_common import (  # noqa: E402
     DriveStatus,
     Job,
     JobStatus,
+    SessionApplication,
+    SessionApplicationStatus,
     Track,
     TrackKind,
     TrackStatus,
@@ -353,6 +355,25 @@ async def test_sweep_fails_unfinished_job_and_retires() -> None:
         "reason": "ISO ripper stopped unexpectedly",
     }
     assert db.committed == 1
+
+
+@pytest.mark.asyncio
+async def test_sweep_cancels_the_failed_jobs_parked_applications() -> None:
+    """D-082 follow-up: the watchdog's fail path cancels parked applications,
+    like every other FAILED or ABANDONED transition."""
+    db = FakeSession()
+    db.rows["drives"] = [_virtual()]
+    db.rows["jobs"] = [_job("job_1", "drv_iso1", JobStatus.RIPPING)]
+    parked = SessionApplication(
+        id="sap_1",
+        session_id="ses_x",
+        job_id="job_1",
+        status=SessionApplicationStatus.WAITING_IDENTIFY,
+        overwrite=False,
+    )
+    db.rows["session_applications"] = [parked]
+    assert await iso_rips.sweep_virtual_drives(db, _Manager(), _Hub()) == 1  # type: ignore[arg-type]
+    assert parked.status is SessionApplicationStatus.CANCELLED and parked.completed_at is not None
 
 
 @pytest.mark.asyncio

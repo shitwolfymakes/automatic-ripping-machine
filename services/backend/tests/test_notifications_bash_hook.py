@@ -179,3 +179,10 @@ def test_storage_config(tmp_path: Path) -> None:
         storage_config({"type": "bash", "script": "a/b.sh"}, str(tmp_path))
     with pytest.raises(HookError, match="timeout"):
         storage_config({"type": "bash", "script": "send-email.sh", "timeout_seconds": 0}, str(tmp_path))
+
+
+def test_prepare_run_refuses_a_width_spec_blowup(tmp_path: Path) -> None:
+    """D-042: an input rendered past the cap is a HookError, not an execve E2BIG."""
+    _script(tmp_path)
+    with pytest.raises(HookError, match="input TO renders to 300000 characters"):
+        _prep(tmp_path, _config(inputs={"TO": "{job_title:>300000}", "SMTP_PASS": "pw"}))

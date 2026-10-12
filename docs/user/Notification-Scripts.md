@@ -114,6 +114,10 @@ of stderr, with any secret input value replaced by `<hidden>`. There is no
 retry. The Test panel shows the full stdout and stderr (up to 4 KB each) of a
 test run.
 
+The run is finished when the script itself exits. A job it starts in the
+background (`long-task &`) keeps running, and its output after that point
+is not captured. A timeout kills the script and everything it started.
+
 ## Examples
 
 - [send-email.sh](examples/send-email.sh): email through an SMTP relay with

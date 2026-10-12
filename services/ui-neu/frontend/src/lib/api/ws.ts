@@ -47,7 +47,10 @@ class WSConnection {
 	private stopping = false;
 
 	start(): void {
-		if (this.ws !== null) return;
+		// A pending back-off already owns the retry: connecting now would open a
+		// second socket, and resetting the status would drop the offline banner
+		// although nothing changed. Only the auth ack clears it.
+		if (this.ws !== null || this.reconnectTimer !== null) return;
 		this.stopping = false;
 		statusStore.set('connecting');
 		this.connect();
@@ -64,6 +67,7 @@ class WSConnection {
 			this.ws = null;
 		}
 		this.connected = false;
+		this.retryIdx = 0;
 		statusStore.set('idle');
 	}
 

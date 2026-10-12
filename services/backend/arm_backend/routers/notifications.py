@@ -58,7 +58,12 @@ from arm_backend.notifications.field_map import (
     mask_config,
     merge_patch_config,
 )
-from arm_backend.notifications.script_meta import list_scripts, read_script_info, validate_script_name
+from arm_backend.notifications.script_meta import (
+    ScriptUnreadableError,
+    list_scripts,
+    read_script_info,
+    validate_script_name,
+)
 from arm_backend.notifications.url_composer import compose_apprise_url
 from arm_common import NotificationChannel, NotificationDispatchLog, NotificationInbox, User
 from arm_common.schemas import (
@@ -379,8 +384,15 @@ async def preview_script(
     inputs, env = masked(run)
     result = None
     if req.run:
+        # The response must not undo the masking above: a script that echoes
+        # a secret (curl -v, set -x) would hand it back in its output.
         result = await run_script(
-            run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
+            run.path,
+            title=run.title,
+            body=run.body,
+            env=run.env,
+            timeout_seconds=run.timeout_seconds,
+            redact=lambda text: redact_secrets(text, run),
         )
     return BashPreviewResult(title=run.title, body=run.body, inputs=inputs, env=env, argv=run.argv, result=result)
 
@@ -392,6 +404,10 @@ async def get_script(name: str, _: User = Depends(require_writer)) -> BashScript
         return read_script_info(settings.ARM_SCRIPTS_ROOT, name)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown script: {name}") from exc
+    except ScriptUnreadableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"script is not readable: {exc}"
+        ) from exc
 
 
 @router.post("/services/{service_id}/compose-url", response_model=ComposeUrlResult)
@@ -458,10 +474,15 @@ def _bash_send(
     async def _send(_title: str, _body: str) -> None:
         run = _prepare_sample(config, template, event_type)
         result = await run_script(
-            run.path, title=run.title, body=run.body, env=run.env, timeout_seconds=run.timeout_seconds
+            run.path,
+            title=run.title,
+            body=run.body,
+            env=run.env,
+            timeout_seconds=run.timeout_seconds,
+            redact=lambda text: redact_secrets(text, run),
         )
         if not result.ok:
-            raise RuntimeError(redact_secrets(result.error or "", run))
+            raise RuntimeError(result.error or "")
 
     return _send
 

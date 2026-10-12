@@ -533,6 +533,27 @@ def test_manual_apply_media_mismatch_is_422(signing_key: bytes, tmp_path: Path) 
     assert db.rows["session_applications"] == []
 
 
+def test_manual_apply_video_session_to_an_unidentified_cd_is_422(signing_key: bytes, tmp_path: Path) -> None:
+    """D-033 follow-up: a CD MusicBrainz missed has no media_type, but it is
+    music all the same; a movie session on it is a mismatch, not an empty
+    fan-out."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].media_type = None
+    db.rows["jobs"][0].disc_type = DiscType.CD
+    db.rows["sessions"][0].media_type = MediaType.MOVIE
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == "session media type movie is not compatible with job media type music"
+    assert db.rows["session_applications"] == []
+
+
 def test_manual_apply_media_mismatch_does_not_requery_router_side(
     signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -498,3 +498,271 @@ async def test_last_spawn_error_set_on_failure_and_cleared_on_next_success() -> 
     spawned = await d.spawn_pending(db)
     assert spawned == 1
     assert d.last_spawn_error is None
+
+
+def _one_encode_task_db(attempts: int = 0) -> FakeSession:
+    db = FakeSession()
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_probe",
+            session_id="ses_probe",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000099",
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
+    db.rows["sessions"] = [
+        Session(
+            id="ses_probe",
+            name="Movie to Plex",
+            media_type=MediaType.MOVIE,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title}/{title}.mkv",
+        )
+    ]
+    db.rows["transcode_presets"] = [
+        TranscodePreset(
+            id="tpr_x",
+            name="Plex 1080p",
+            media_type=MediaType.MOVIE,
+            tool=TranscodeTool.HANDBRAKE,
+            preset_ref="H.265 MKV 1080p30",
+            container=ContainerFormat.MKV,
+            encoder="preset",
+        )
+    ]
+    db.rows["gpus"] = []
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_1",
+            session_application_id="sap_probe",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.QUEUED,
+            attempts=attempts,
+            progress_pct=0,
+            output_path="a.mkv",
+            created_at=datetime.now(UTC),
+        )
+    ]
+    return db
+
+
+async def test_missing_image_holds_spawns_with_one_rate_limited_line(caplog) -> None:
+    """D-121: with the base image absent every spawn fails the same way; the
+    tick holds the task (no attempts burned) and logs once, not per tick."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="arm-transcode:test")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        for _ in range(3):
+            assert await d.spawn_pending(db) == 0
+    d._docker.containers.run.assert_not_called()
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED and task.attempts == 0
+    held = [r for r in caplog.records if "transcode spawns held" in r.getMessage()]
+    assert len(held) == 1 and "image arm-transcode:test not present" in held[0].getMessage()
+
+
+async def test_a_missing_base_image_is_pulled_before_spawns_are_held() -> None:
+    """D-121 follow-up: before the probe gated spawning, containers.run pulled
+    a missing image. A pruned host must still pull it instead of holding
+    every encode task until someone pulls it by hand."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="ghcr.io/arm/arm-transcode:3.0.0")
+    pulled: list[tuple[str, str]] = []
+
+    def _get(image: str) -> object:
+        if not pulled:
+            raise docker.errors.ImageNotFound("nope")
+        return object()
+
+    def _pull(repo: str, tag: str) -> None:
+        pulled.append((repo, tag))
+
+    d._docker.images.get.side_effect = _get
+    d._docker.images.pull.side_effect = _pull
+    assert await d.spawn_pending(db) == 1
+    assert pulled == [("ghcr.io/arm/arm-transcode", "3.0.0")]
+    d._docker.containers.run.assert_called_once()
+
+
+async def test_a_failed_base_image_pull_holds_and_is_not_retried_every_tick() -> None:
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="arm-transcode:test")
+    d._docker.images.get.side_effect = docker.errors.ImageNotFound("nope")
+    d._docker.images.pull.side_effect = docker.errors.APIError("no registry")
+    for _ in range(3):
+        assert await d.spawn_pending(db) == 0
+    assert d._docker.images.pull.call_count == 1
+    d._docker.containers.run.assert_not_called()
+
+
+async def test_spawn_failures_count_toward_max_attempts() -> None:
+    """D-121: a spawn that fails with the host healthy is task-specific; it
+    must end at ARM_TRANSCODE_MAX_ATTEMPTS instead of looping forever."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_MAX_ATTEMPTS=2)
+    d._docker.containers.run.side_effect = RuntimeError("invalid mount config")
+    await d.spawn_pending(db)
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.QUEUED and task.attempts == 1
+    await d.spawn_pending(db)
+    assert task.status == TranscodeTaskStatus.FAILED
+    assert task.last_error == "transcode container could not start (attempts=2): RuntimeError: invalid mount config"
+
+
+async def test_commit_failure_after_a_started_spawn_is_not_an_attempt() -> None:
+    """D-121 follow-up: when the container started and only the commit after
+    it failed, the transcoder is running and will claim the task. That must
+    not count toward ARM_TRANSCODE_MAX_ATTEMPTS."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_MAX_ATTEMPTS=1)
+    real_commit = db.commit
+    failed = False
+
+    async def _commit_once_fails() -> None:
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise RuntimeError("db blip")
+        await real_commit()
+
+    db.commit = _commit_once_fails  # type: ignore[method-assign]
+    await d.spawn_pending(db)
+    d._docker.containers.run.assert_called_once()
+    task = db.rows["transcode_tasks"][0]
+    assert failed and task.status == TranscodeTaskStatus.QUEUED and task.attempts == 0
+
+
+def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
+    """D-129: a remote transcoder that cannot reach ARM_TRANSCODE_BACKEND_URL
+    spawns and then never claims; the probe (which gates spawning) must fail
+    with the URL, the resolved address and the TLS reason."""
+    import ssl
+
+    import httpx
+
+    from arm_backend import docker_probe
+
+    d = _disp(
+        FakeSession(),
+        ARM_TRANSCODE_IMAGE="arm-transcode:test",
+        ARM_TRANSCODE_DOCKER_HOST="ssh://sam@gpu-box",
+        ARM_TRANSCODE_BACKEND_URL="https://192.168.0.71:8080",
+    )
+    d._docker.ping.return_value = True
+    seen: list[str] = []
+
+    class _Client:
+        def __init__(self, *, verify: object, timeout: float) -> None:
+            assert isinstance(verify, ssl.SSLContext)
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def get(self, url: str) -> None:
+            seen.append(url)
+            raise httpx.ConnectError("certificate is not valid for '192.168.0.71'")
+
+    monkeypatch.setattr(docker_probe.httpx, "Client", _Client)
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("192.168.0.71", 8080))])
+    ok, detail = d.probe()
+    assert ok is False and seen == ["https://192.168.0.71:8080/api/health"]
+    assert detail == (
+        "backend URL https://192.168.0.71:8080 (192.168.0.71) not reachable from the backend host: "
+        "certificate is not valid for '192.168.0.71'"
+    )
+
+
+def test_backend_url_check_set_to_warn_reports_but_does_not_hold(monkeypatch) -> None:
+    """D-129 follow-up: a backend that cannot reach a URL the offload host can
+    (no NAT hairpin, split DNS) must not hold every spawn once the operator
+    sets ARM_TRANSCODE_BACKEND_URL_CHECK=warn; the failure is still kept for
+    diagnostics."""
+    d = _disp(
+        FakeSession(),
+        ARM_TRANSCODE_IMAGE="arm-transcode:test",
+        ARM_TRANSCODE_DOCKER_HOST="ssh://sam@gpu-box",
+        ARM_TRANSCODE_BACKEND_URL="https://192.168.0.71:8080",
+        ARM_TRANSCODE_BACKEND_URL_CHECK="warn",
+    )
+    d._docker.ping.return_value = True
+    d._backend_url_probe = lambda: (False, "backend URL https://192.168.0.71:8080 unreachable")  # type: ignore[assignment]
+    ok, _detail = d.probe()
+    assert ok is True
+    assert d.backend_url_warning == "backend URL https://192.168.0.71:8080 unreachable"
+    d._backend_url_probe = lambda: (True, None)  # type: ignore[assignment]
+    assert d.probe()[0] is True and d.backend_url_warning is None
+
+
+def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    def _fail(*a, **kw):
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", _fail)
+    ok, detail = docker_probe.probe_backend_url("https://quark.example:8080")
+    assert ok is False
+    assert (
+        detail
+        == "backend URL https://quark.example:8080 does not resolve from the backend host: Name or service not known"
+    )
+
+
+def test_backend_url_with_a_bad_port_fails_the_probe_without_raising() -> None:
+    """D-129 follow-up: probe() promises never to raise; a typo in the URL
+    must read as a failed check, not abort every spawn tick."""
+    from arm_backend import docker_probe
+
+    ok, detail = docker_probe.probe_backend_url("https://host:84a3")
+    assert ok is False and detail is not None and detail.startswith("backend URL https://host:84a3 is not a valid URL")
+
+
+def test_backend_url_with_a_malformed_ca_fails_the_probe_without_raising(tmp_path, monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    ca = tmp_path / "arm-ca.crt"
+    ca.write_text("not a certificate")
+    monkeypatch.setattr(docker_probe, "ARM_CA_FILE", str(ca))
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("10.0.0.5", 443))])
+    ok, detail = docker_probe.probe_backend_url("https://arm.example")
+    assert ok is False and detail is not None and detail.startswith(f"ARM CA {ca} could not be loaded")
+
+
+def test_backend_url_reachable(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    class _Client:
+        def __init__(self, **kw: object) -> None:
+            pass
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def get(self, url: str) -> None:
+            return None
+
+    monkeypatch.setattr(docker_probe.httpx, "Client", _Client)
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("10.0.0.5", 443))])
+    monkeypatch.setattr(docker_probe, "ARM_CA_FILE", __file__)  # any readable file path; load is stubbed below
+    monkeypatch.setattr(docker_probe.ssl.SSLContext, "load_verify_locations", lambda self, *a, **kw: None)
+    assert docker_probe.probe_backend_url("https://arm.example") == (True, None)
+
+
+def test_local_spawn_never_checks_the_backend_url() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+
+    def _boom() -> tuple[bool, str | None]:
+        raise AssertionError("local spawns dial arm-backend on the docker network")
+
+    d._backend_url_probe = _boom
+    assert d.probe() == (True, None)

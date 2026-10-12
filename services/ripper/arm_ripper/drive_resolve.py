@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -32,6 +33,9 @@ logger = logging.getLogger("arm_ripper.drive_resolve")
 
 # <linux/major.h>: SCSI CD-ROM block devices.
 SCSI_CDROM_MAJOR = 11
+
+# A SCSI host component of a sysfs device path; the port is what precedes it.
+_HOST_COMPONENT = re.compile(r"^host\d+$")
 
 # (dev_root, node name) pairs already warned about. The poll loop resolves every
 # couple of seconds; a node that stays missing is logged once, and again only
@@ -95,3 +99,18 @@ def resolve_drive_device(
     hint_path = Path(hint)
     path = _optical_node(hint_path.name, dev_root=dev_root, sysfs_root=sysfs_root)
     return ResolvedDevice(path=path, via="hint") if path else None
+
+
+def node_port(node: str, *, sysfs_root: Path) -> str | None:
+    """The port the drive behind `node` is plugged into: its sysfs device path
+    cut before the first `hostN` component, as the backend scanner records
+    `sysfs_port`. None when sysfs cannot say (no entry, no SCSI host)."""
+    entry = sysfs_root / "class" / "block" / Path(node).name
+    try:
+        real = Path(os.path.realpath(entry, strict=True))
+    except OSError:
+        return None
+    for i, part in enumerate(real.parts):
+        if _HOST_COMPONENT.match(part):
+            return str(Path(*real.parts[:i]))
+    return None

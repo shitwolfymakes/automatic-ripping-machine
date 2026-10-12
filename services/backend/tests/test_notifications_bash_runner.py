@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import stat
+import time
 from pathlib import Path
 
 import pytest
@@ -120,3 +122,54 @@ async def test_run_script_timeout(tmp_path: Path) -> None:
     p = _script(tmp_path, "slow.sh", "sleep 5\n")
     res = await run_script(p, title="T", body="B", env={"PATH": os.environ["PATH"]}, timeout_seconds=1)
     assert not res.ok and res.exit_code is None and res.error == "script timed out after 1s: slow.sh"
+
+
+def _alive(pid: int) -> bool:
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except FileNotFoundError:
+        return False
+    return state != "Z"
+
+
+@pytest.mark.asyncio
+async def test_run_script_timeout_kills_the_scripts_children(tmp_path: Path) -> None:
+    """D-040: the timeout kills the whole process group, not just bash."""
+    pidfile = tmp_path / "child.pid"
+    p = _script(tmp_path, "tree.sh", f"sleep 30 & echo $! > {pidfile}; wait\n")
+    started = time.monotonic()
+    res = await run_script(p, title="T", body="B", env={"PATH": os.environ["PATH"]}, timeout_seconds=1)
+    assert not res.ok and res.error == "script timed out after 1s: tree.sh"
+    assert time.monotonic() - started < 5
+    child = int(pidfile.read_text())
+    for _ in range(50):
+        if not _alive(child):
+            break
+        await asyncio.sleep(0.05)
+    else:
+        os.kill(child, 9)
+        raise AssertionError("the script's child survived the timeout")
+
+
+@pytest.mark.asyncio
+async def test_run_script_background_child_does_not_hold_the_result(tmp_path: Path) -> None:
+    """D-041: bash exiting 0 is success, even with a backgrounded child still
+    holding stdout/stderr; the output that arrived before the exit is kept."""
+    pidfile = tmp_path / "child.pid"
+    p = _script(tmp_path, "bg.sh", f"echo started; sleep 8 & echo $! > {pidfile}; exit 0\n")
+    started = time.monotonic()
+    res = await run_script(p, title="T", body="B", env={"PATH": os.environ["PATH"]}, timeout_seconds=3)
+    try:
+        assert res.ok and res.exit_code == 0 and res.error is None and res.stdout.strip() == "started"
+        assert time.monotonic() - started < 3
+    finally:
+        os.kill(int(pidfile.read_text()), 9)
+
+
+@pytest.mark.asyncio
+async def test_run_script_spawn_failure_is_a_failed_run(tmp_path: Path) -> None:
+    """D-042: an OSError from exec (here E2BIG) comes back as a result, not an exception."""
+    p = _script(tmp_path, "ok.sh", "exit 0\n")
+    res = await run_script(p, title="T", body="B", env={"BIG": "x" * 300_000}, timeout_seconds=5)
+    assert not res.ok and res.exit_code is None
+    assert res.error == "script could not start: Argument list too long: ok.sh"

@@ -346,10 +346,18 @@ class _StubDispatcher:
     diagnostics check reads. A real dispatcher needs a docker client + settings,
     which the Tier-1 fake-session suite has no business constructing."""
 
-    def __init__(self, *, host_paths: bool, probe=(True, None), last_spawn_error: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        host_paths: bool,
+        probe=(True, None),
+        last_spawn_error: str | None = None,
+        backend_url_warning: str | None = None,
+    ) -> None:
         self._host_paths = host_paths
         self._probe = probe
         self.last_spawn_error = last_spawn_error
+        self.backend_url_warning = backend_url_warning
 
     def host_paths_set(self) -> bool:
         return self._host_paths
@@ -470,6 +478,29 @@ def test_diagnostics_transcoder_ripper_only_ok_even_without_dispatcher(
     assert "ripper-only" in check["detail"]
 
 
+def test_diagnostics_ripper_only_warns_about_held_encode_tasks(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """D-067: encode tasks queued before the box went ripper-only are held
+    forever; diagnostics must say so instead of an unconditional ok."""
+    from arm_backend.config import settings
+
+    from tests.test_transcodes_router import _seed_encode_and_passthrough_queue
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    _seed(db)
+    _seed_encode_and_passthrough_queue(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert check["detail"] == (
+        "ripper-only deployment: 2 queued encode task(s) are held; "
+        "re-run setup without --ripper-only to resume them, or delete them"
+    )
+
+
 def test_diagnostics_transcoder_remote_host_overrides_capability_off(signing_key: bytes, tmp_path, monkeypatch) -> None:
     """A remote docker host implies capability, so the normal probe path runs."""
     from arm_backend.config import settings
@@ -536,6 +567,20 @@ def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: byte
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "warning" and "409" in check["detail"]
+
+
+def test_diagnostics_transcoder_warns_about_a_backend_url_check_set_to_warn(signing_key: bytes, tmp_path) -> None:
+    """D-129 follow-up: with ARM_TRANSCODE_BACKEND_URL_CHECK=warn a failed URL
+    check no longer holds spawns, but the operator still sees it."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True, backend_url_warning="backend URL x unreachable")
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+    assert check["status"] == "warning"
+    assert check["detail"] == "backend URL x unreachable (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)"
 
 
 def test_diagnostics_transcoder_ok_when_probe_and_spawns_clean(signing_key: bytes, tmp_path) -> None:
