@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+	import { ApiError } from '$lib/api/client';
 	import { posterSrc, posterFallback, jobPoster } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
 	import type { JobDetailView, ResolveResponse, ApplySessionResponse, NamingPreviewItem } from '$lib/types/api.gen';
@@ -60,6 +61,9 @@
 	}
 	let editingTrackId = $state<string | null>(null);
 	let previewItems = $state<NamingPreviewItem[]>([]);
+	// The last preview answered 409 (no routed session, so no template). The
+	// 5s poll skips the preview until an explicit reload asks again.
+	let previewUnrouted = false;
 	let previewByTrack = $derived(new Map(previewItems.map((i) => [i.track_id, i])));
 
 	// Dialog visibility + a transient note shown after a resolve/apply lands.
@@ -146,7 +150,7 @@
 		}
 	}
 
-	async function loadJob() {
+	async function loadJob({ poll = false } = {}) {
 		const id = $page.params.id ?? '';
 		// Only flip into the loading state on the FIRST load. The 5s poll
 		// re-calls loadJob() and on a slow network that would unmount the
@@ -162,11 +166,15 @@
 			detail = await fetchJob(id);
 			// Rendered filename preview is a best-effort SECOND fetch — never block
 			// or fail the job render on it. Excluded tracks may be absent from items[].
-			try {
-				const preview = await fetchNamingPreview(id);
-				previewItems = preview.items;
-			} catch {
-				previewItems = [];
+			if (!(poll && previewUnrouted)) {
+				try {
+					const preview = await fetchNamingPreview(id);
+					previewItems = preview.items;
+					previewUnrouted = false;
+				} catch (e) {
+					previewItems = [];
+					previewUnrouted = e instanceof ApiError && e.status === 409;
+				}
 			}
 		} catch (e) {
 			if (e instanceof Error && e.message.includes('404')) {
@@ -263,7 +271,7 @@
 			// apply), and the next tick picks that up without a remount.
 			while (!stopped) {
 				await new Promise((r) => setTimeout(r, 5000));
-				if (!stopped && detail && isLive(detail.job)) await loadJob();
+				if (!stopped && detail && isLive(detail.job)) await loadJob({ poll: true });
 			}
 		}
 		loadJob().then(() => poll());
