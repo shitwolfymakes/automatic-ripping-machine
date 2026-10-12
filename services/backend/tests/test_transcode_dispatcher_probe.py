@@ -576,3 +576,95 @@ async def test_spawn_failures_count_toward_max_attempts() -> None:
     await d.spawn_pending(db)
     assert task.status == TranscodeTaskStatus.FAILED
     assert task.last_error == "transcode container could not start (attempts=2): RuntimeError: invalid mount config"
+
+
+def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
+    """D-129: a remote transcoder that cannot reach ARM_TRANSCODE_BACKEND_URL
+    spawns and then never claims; the probe (which gates spawning) must fail
+    with the URL, the resolved address and the TLS reason."""
+    import ssl
+
+    import httpx
+
+    from arm_backend import docker_probe
+
+    d = _disp(
+        FakeSession(),
+        ARM_TRANSCODE_IMAGE="arm-transcode:test",
+        ARM_TRANSCODE_DOCKER_HOST="ssh://sam@gpu-box",
+        ARM_TRANSCODE_BACKEND_URL="https://192.168.0.71:8080",
+    )
+    d._docker.ping.return_value = True
+    seen: list[str] = []
+
+    class _Client:
+        def __init__(self, *, verify: object, timeout: float) -> None:
+            assert isinstance(verify, ssl.SSLContext)
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def get(self, url: str) -> None:
+            seen.append(url)
+            raise httpx.ConnectError("certificate is not valid for '192.168.0.71'")
+
+    monkeypatch.setattr(docker_probe.httpx, "Client", _Client)
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("192.168.0.71", 8080))])
+    ok, detail = d.probe()
+    assert ok is False and seen == ["https://192.168.0.71:8080/api/health"]
+    assert detail == (
+        "backend URL https://192.168.0.71:8080 (192.168.0.71) not reachable from the backend host: "
+        "certificate is not valid for '192.168.0.71'"
+    )
+
+
+def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    def _fail(*a, **kw):
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", _fail)
+    ok, detail = docker_probe.probe_backend_url("https://quark.example:8080")
+    assert ok is False
+    assert (
+        detail
+        == "backend URL https://quark.example:8080 does not resolve from the backend host: Name or service not known"
+    )
+
+
+def test_backend_url_reachable(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    class _Client:
+        def __init__(self, **kw: object) -> None:
+            pass
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def get(self, url: str) -> None:
+            return None
+
+    monkeypatch.setattr(docker_probe.httpx, "Client", _Client)
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("10.0.0.5", 443))])
+    monkeypatch.setattr(docker_probe, "ARM_CA_FILE", __file__)  # any readable file path; load is stubbed below
+    monkeypatch.setattr(docker_probe.ssl.SSLContext, "load_verify_locations", lambda self, *a, **kw: None)
+    assert docker_probe.probe_backend_url("https://arm.example") == (True, None)
+
+
+def test_local_spawn_never_checks_the_backend_url() -> None:
+    d = _make_dispatcher()
+    d._docker.ping.return_value = True
+
+    def _boom() -> tuple[bool, str | None]:
+        raise AssertionError("local spawns dial arm-backend on the docker network")
+
+    d._backend_url_probe = _boom
+    assert d.probe() == (True, None)

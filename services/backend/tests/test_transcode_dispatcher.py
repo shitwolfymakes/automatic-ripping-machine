@@ -283,6 +283,7 @@ async def test_spawn_remote_uses_routable_url_and_no_network() -> None:
         docker,
         WSHub(),
     )
+    disp._backend_url_probe = lambda: (True, None)  # type: ignore[assignment]  # reachability is not under test
 
     spawned = await disp.spawn_pending(db)
     assert spawned == 1

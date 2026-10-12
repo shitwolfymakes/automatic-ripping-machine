@@ -222,6 +222,37 @@ Run this from a checkout of this repo (the build context needs
 `services/transcode/Dockerfile` and the workspace it copies in), after any
 change to the transcode image or on the remote host's own upgrades.
 
+## Offload host
+
+With `ARM_TRANSCODE_DOCKER_HOST` set (the installer's `offload` profile),
+transcoders run on another machine's docker daemon and call the Backend
+back on `ARM_TRANSCODE_BACKEND_URL`. Three things must hold:
+
+- **The URL is reachable from the offload host, and its certificate fits.**
+  The transcoder verifies the Backend's certificate against the ARM CA, so
+  the URL's host (an IP address or a name) must be one of the Backend
+  certificate's subject alternative names. The installer adds the host from
+  `--offload-backend-url` when it issues that certificate. If the Backend's
+  address changes (a new DHCP lease, a renamed host), re-run
+  `armctl install --offload-backend-url https://<new-address>:<port>`: it
+  writes the new URL and reissues the certificate with the new name. Prefer
+  a name or a reserved address, and check the name resolves to the same
+  place on the offload host as on the Backend host.
+- **The offload daemon sees the same paths.** Spawned transcoders bind
+  `ARM_HOST_RAW_PATH`, `ARM_HOST_MEDIA_PATH`, `ARM_HOST_LOGS_PATH` and
+  `ARM_HOST_CERTS_PATH` exactly as written, on the offload host. Mount the
+  shared storage there at those same paths.
+- **Changes to `.env` need the containers recreated.** `docker restart` keeps
+  the old environment; run `armctl up` (or `docker compose up -d`) instead.
+
+The Backend checks the first point itself: while the URL does not answer
+over TLS from the Backend host, the Diagnostics page shows the transcoder
+check as a warning naming the URL, the address it resolved to and the
+reason (for example a certificate that is not valid for that address), and
+no transcoder is spawned. The check runs on the Backend host, so a name that
+resolves differently on the offload host can still pass it; compare the
+address in the detail with what the offload host resolves.
+
 ## Enabling GPU transcoding
 
 There's nothing to enable by hand beyond the image build above: **the

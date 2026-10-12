@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
-from arm_backend.docker_probe import TtlProbe, probe_docker
+from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.transcode_images import (
     VARIANT_SUFFIX,
     image_for,
@@ -234,6 +234,9 @@ class TranscodeDispatcher:
         # (detail, monotonic time) of the last "spawns held" log line.
         self._probe_hold_logged: tuple[str | None, float] | None = None
         self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
+        # The URL a remote-spawned transcoder calls home on; only checked
+        # when spawning remotely (see `probe`).
+        self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
@@ -955,7 +958,10 @@ class TranscodeDispatcher:
 
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
-        docker host and checks the BASE image exists there. Never raises;
+        docker host and checks the BASE image exists there; when spawning on
+        a remote host (`ARM_TRANSCODE_DOCKER_HOST` + `ARM_TRANSCODE_BACKEND_URL`),
+        also that the backend URL the transcoder dials home on answers over
+        TLS with the ARM CA (`probe_backend_url`). Never raises;
         cached for docker_probe.PROBE_TTL_SECONDS (see there for why). A
         ripper-only deployment (no docker client at all) can't run encode
         tasks; that's not a probe failure to retry, just a fixed fact, so
@@ -974,6 +980,13 @@ class TranscodeDispatcher:
         ok, detail = self._probe()
         if not ok:
             return ok, detail
+        if self._settings.ARM_TRANSCODE_DOCKER_HOST and self._settings.ARM_TRANSCODE_BACKEND_URL:
+            # A remote transcoder that cannot reach this URL (moved address,
+            # a certificate without that SAN) spawns fine and then never
+            # claims; catch it here instead.
+            ok, detail = self._backend_url_probe()
+            if not ok:
+                return ok, detail
         notes = self._missing_variant_notes()
         return ok, "; ".join(notes) if notes else detail
 

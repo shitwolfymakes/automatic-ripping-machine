@@ -7,16 +7,26 @@ asyncio.to_thread from request handlers.
 
 from __future__ import annotations
 
+import os
+import socket
+import ssl
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import docker.errors  # type: ignore[import-untyped]
+import httpx
 
 # How long a probe result is reused before re-pinging the docker host. An
 # unreachable ssh host stalls each uncached call for docker-py's client
 # timeout, and diagnostics polls this on every request.
 PROBE_TTL_SECONDS = 30.0
+
+# Where the shared entrypoint finds the ARM CA (it also merges it into the
+# system bundle; loaded explicitly so the check holds without that merge).
+ARM_CA_FILE = "/etc/ssl/arm/arm-ca.crt"
+BACKEND_URL_TIMEOUT_SECONDS = 5.0
 
 
 def probe_docker(client: Any, image: str) -> tuple[bool, str | None]:
@@ -52,3 +62,34 @@ class TtlProbe:
         result = self._fn()
         self._cache = (now, result)
         return result
+
+
+def _tls_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    if os.path.isfile(ARM_CA_FILE):
+        ctx.load_verify_locations(ARM_CA_FILE)
+    return ctx
+
+
+def probe_backend_url(url: str) -> tuple[bool, str | None]:
+    """Can a client that trusts the ARM CA reach `url` over TLS? (ok, detail).
+
+    This is the URL a remote-spawned transcoder dials home on, checked the
+    same way it verifies it (system bundle + ARM CA, so the backend leaf's
+    SANs must cover the URL host). It runs from the backend host, so it
+    cannot see DNS that resolves differently on the remote host; the detail
+    names the address it resolved to, for comparison.
+    """
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        address = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[0][4][0]
+    except OSError as exc:
+        return False, f"backend URL {url} does not resolve from the backend host: {exc}"
+    try:
+        with httpx.Client(verify=_tls_context(), timeout=BACKEND_URL_TIMEOUT_SECONDS) as client:
+            client.get(url.rstrip("/") + "/api/health")
+    except httpx.HTTPError as exc:
+        return False, f"backend URL {url} ({address}) not reachable from the backend host: {exc}"
+    return True, None
