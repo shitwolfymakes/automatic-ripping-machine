@@ -715,6 +715,7 @@ class TranscodeDispatcher:
                 # Read before the try: after a failed flush/commit no ORM
                 # attribute is readable until the rollback (see below).
                 claimed_gpu_id = assignment.gpu.id if assignment.gpu is not None else None
+                started = False
                 try:
                     # `_spawn_container` is a blocking call: a plain docker
                     # socket round-trip normally, but on the SSH-transport-
@@ -728,6 +729,7 @@ class TranscodeDispatcher:
                     # locals/args (never the AsyncSession), so moving it to a
                     # thread doesn't put any DB access off the loop.
                     await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
+                    started = True
                     spawned += 1
                     self.last_spawn_error = None
                     # Commit this task's GPU claim promptly, per-task, right
@@ -773,7 +775,15 @@ class TranscodeDispatcher:
                         assignment.gpu.status = GpuStatus.AVAILABLE
                         assignment.gpu.claimed_by_task_id = None
                         await db.commit()
-                    await self._count_failed_spawn(db, task_id)
+                    # Only a container that never started counts as an
+                    # attempt: when just the commit failed, the transcoder
+                    # is running and will claim the task.
+                    if not started:
+                        try:
+                            await self._count_failed_spawn(db, task_id)
+                        except Exception:
+                            logger.exception("could not count the failed spawn task_id=%s", task_id)
+                            await db.rollback()
                 finally:
                     # Committed (other sessions now read BUSY) or rolled back
                     # and released: either way the in-process marker is done.

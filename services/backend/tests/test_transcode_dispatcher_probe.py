@@ -578,6 +578,29 @@ async def test_spawn_failures_count_toward_max_attempts() -> None:
     assert task.last_error == "transcode container could not start (attempts=2): RuntimeError: invalid mount config"
 
 
+async def test_commit_failure_after_a_started_spawn_is_not_an_attempt() -> None:
+    """D-121 follow-up: when the container started and only the commit after
+    it failed, the transcoder is running and will claim the task. That must
+    not count toward ARM_TRANSCODE_MAX_ATTEMPTS."""
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_MAX_ATTEMPTS=1)
+    real_commit = db.commit
+    failed = False
+
+    async def _commit_once_fails() -> None:
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise RuntimeError("db blip")
+        await real_commit()
+
+    db.commit = _commit_once_fails  # type: ignore[method-assign]
+    await d.spawn_pending(db)
+    d._docker.containers.run.assert_called_once()
+    task = db.rows["transcode_tasks"][0]
+    assert failed and task.status == TranscodeTaskStatus.QUEUED and task.attempts == 0
+
+
 def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
     """D-129: a remote transcoder that cannot reach ARM_TRANSCODE_BACKEND_URL
     spawns and then never claims; the probe (which gates spawning) must fail
