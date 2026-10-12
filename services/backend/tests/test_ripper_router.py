@@ -203,6 +203,16 @@ def _scan_dict(disc_type: str = "dvd") -> dict[str, Any]:
 # --- /config -----------------------------------------------------------------
 
 
+def _session_row(session_id: str) -> Session:
+    return Session(
+        id=session_id,
+        name=session_id,
+        media_type=MediaType.MOVIE,
+        is_builtin=False,
+        output_path_template="{title}/{title}.mkv",
+    )
+
+
 def test_get_config_returns_flag() -> None:
     db = FakeSession()
     db.rows["config"] = [_config()]
@@ -452,6 +462,7 @@ def test_identify_success_sets_identified_and_poster() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_1")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={"poster_path": "/abc.jpg"})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     scan = _scan_dict()
@@ -2204,6 +2215,7 @@ def test_identify_pending_session_lands_on_column() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_1")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_1"}
@@ -2220,6 +2232,7 @@ def test_identify_writes_no_pending_mirror() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
+    db.rows["sessions"] = [_session_row("ses_builtin_movie_plex_1080p")]
     result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
     app = _make_app(db, dispatcher=_Dispatcher(result))
     body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_builtin_movie_plex_1080p"}
@@ -2930,3 +2943,20 @@ def test_owner_check_rejects_job_whose_drive_was_deleted() -> None:
         r = client.post(f"/api/ripper/jobs/{orphan.id}/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 403
     assert r.json()["detail"] == "job has no owning drive"
+
+
+def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.LogCaptureFixture) -> None:
+    """D-028: the session chosen at manual trigger was deleted before
+    identify. Writing its id into the FK column would 500 (and the ripper
+    would retry forever); identify drops it with a warning instead."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_deleted"}
+    with caplog.at_level("WARNING"), TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert r.json()["pending_session_id"] is None
+    assert "ses_deleted no longer exists" in caplog.text

@@ -645,7 +645,21 @@ async def identify(
     # session's preset — the exact held-vs-unattended divergence
     # resolve_rip_preset_id_for_job's docstring promises never happens.
     if req.pending_session_id is not None:
-        job.pending_session_id = req.pending_session_id
+        # The ripper echoes the session chosen at manual trigger; it can have
+        # been deleted since. Writing a dangling id into the FK column would
+        # turn this identify into a 500 the ripper retries forever, so drop
+        # it and let routing fall back to the routes / drive default.
+        chosen = (
+            await session.execute(select(Session).where(col(Session.id) == req.pending_session_id))
+        ).scalar_one_or_none()
+        if chosen is None:
+            logger.warning(
+                "identify job_id=%s: pending session %s no longer exists; ignoring it",
+                job.id,
+                req.pending_session_id,
+            )
+        else:
+            job.pending_session_id = req.pending_session_id
 
     if already_identified:
         # Guard 1: preserve existing identity — do not re-run the dispatcher or
