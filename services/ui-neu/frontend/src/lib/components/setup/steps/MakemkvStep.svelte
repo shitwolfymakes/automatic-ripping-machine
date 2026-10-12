@@ -11,7 +11,10 @@
 
 	export async function commit(): Promise<StepCommitResult> {
 		if (!fields || !(await fields.save())) return false;
-		return fields.current()?.makemkv_key_valid === false ? 'attention' : 'done';
+		// Judge from the config as it is now, not as it was when the step opened:
+		// a ripper may have accepted or rejected the key since.
+		const config = await fields.refresh();
+		return config?.makemkv_key_valid === false ? 'attention' : 'done';
 	}
 </script>
 

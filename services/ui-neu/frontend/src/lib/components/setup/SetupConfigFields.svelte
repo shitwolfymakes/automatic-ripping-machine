@@ -34,6 +34,16 @@
 	export function current(): ConfigView | null {
 		return config;
 	}
+	/** Re-read the config after a save: the MakeMKV key's verdict, for one, is
+	 * written by a ripper after the form loaded. Keeps the last copy on failure. */
+	export async function refresh(): Promise<ConfigView | null> {
+		try {
+			config = (await fetchSettings()).config;
+		} catch {
+			// The saved values stand; only the verdict may be stale.
+		}
+		return config;
+	}
 </script>
 
 {#if loadError}
