@@ -214,6 +214,9 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
             tc_status, tc_detail = "warning", detail
         elif dispatcher.last_spawn_error:
             tc_status, tc_detail = "warning", f"last spawn failed: {dispatcher.last_spawn_error}"
+        elif dispatcher.backend_url_warning:
+            tc_status = "warning"
+            tc_detail = f"{dispatcher.backend_url_warning} (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)"
         else:
             tc_status, tc_detail = "ok", None
     remote = settings.ARM_TRANSCODE_DOCKER_HOST or ""

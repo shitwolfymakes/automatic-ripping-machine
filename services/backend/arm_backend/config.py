@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -150,6 +150,11 @@ class Settings(BaseSettings):
     # empty = keep the local "https://arm-backend:8443".
     ARM_TRANSCODE_DOCKER_HOST: str = ""
     ARM_TRANSCODE_BACKEND_URL: str = ""
+    # What a failed check of ARM_TRANSCODE_BACKEND_URL from the backend host
+    # does: "hold" stops remote spawns until it passes; "warn" only reports
+    # it, for hosts where the backend cannot reach a URL the offload host can
+    # (no NAT hairpin, split DNS).
+    ARM_TRANSCODE_BACKEND_URL_CHECK: Literal["hold", "warn"] = "hold"
 
     # PUID/PGID the spawned transcoder drops to (the entrypoint reads these;
     # empty = its own default, current behavior unchanged). Set these when the

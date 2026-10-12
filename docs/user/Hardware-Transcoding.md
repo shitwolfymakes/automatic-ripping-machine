@@ -253,6 +253,14 @@ no transcoder is spawned. The check runs on the Backend host, so a name that
 resolves differently on the offload host can still pass it; compare the
 address in the detail with what the offload host resolves.
 
+The opposite can happen too: the Backend container may be unable to reach a
+URL that the offload host reaches fine (a router without NAT hairpinning, a
+firewall in front of the published port, or split DNS). If you have checked
+that the offload host can reach the URL, set
+`ARM_TRANSCODE_BACKEND_URL_CHECK=warn` in `.env` and recreate the containers.
+The check then still shows on the Diagnostics page, but no longer stops
+transcoders from being spawned.
+
 ## Enabling GPU transcoding
 
 There's nothing to enable by hand beyond the image build above: **the

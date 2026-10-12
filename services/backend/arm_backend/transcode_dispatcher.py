@@ -262,6 +262,9 @@ class TranscodeDispatcher:
         # The URL a remote-spawned transcoder calls home on; only checked
         # when spawning remotely (see `probe`).
         self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
+        # The URL check's failure while ARM_TRANSCODE_BACKEND_URL_CHECK=warn
+        # lets spawns through; diagnostics still reports it. Set by `probe`.
+        self.backend_url_warning: str | None = None
         # GPU rows currently running a device probe; the claim never hands
         # one of these to a task.
         self.probing_gpu_ids: set[str] = set()
@@ -1019,9 +1022,13 @@ class TranscodeDispatcher:
             # A remote transcoder that cannot reach this URL (moved address,
             # a certificate without that SAN) spawns fine and then never
             # claims; catch it here instead.
-            ok, detail = self._backend_url_probe()
-            if not ok:
-                return ok, detail
+            url_ok, url_detail = self._backend_url_probe()
+            warn_only = self._settings.ARM_TRANSCODE_BACKEND_URL_CHECK == "warn"
+            # With warn, the operator said this backend cannot judge the URL
+            # (no hairpin, split DNS): report the failure, spawn anyway.
+            self.backend_url_warning = url_detail if not url_ok and warn_only else None
+            if not url_ok and not warn_only:
+                return url_ok, url_detail
         notes = self._missing_variant_notes()
         return ok, "; ".join(notes) if notes else detail
 

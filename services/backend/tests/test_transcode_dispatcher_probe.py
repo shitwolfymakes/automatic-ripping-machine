@@ -678,6 +678,27 @@ def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
     )
 
 
+def test_backend_url_check_set_to_warn_reports_but_does_not_hold(monkeypatch) -> None:
+    """D-129 follow-up: a backend that cannot reach a URL the offload host can
+    (no NAT hairpin, split DNS) must not hold every spawn once the operator
+    sets ARM_TRANSCODE_BACKEND_URL_CHECK=warn; the failure is still kept for
+    diagnostics."""
+    d = _disp(
+        FakeSession(),
+        ARM_TRANSCODE_IMAGE="arm-transcode:test",
+        ARM_TRANSCODE_DOCKER_HOST="ssh://sam@gpu-box",
+        ARM_TRANSCODE_BACKEND_URL="https://192.168.0.71:8080",
+        ARM_TRANSCODE_BACKEND_URL_CHECK="warn",
+    )
+    d._docker.ping.return_value = True
+    d._backend_url_probe = lambda: (False, "backend URL https://192.168.0.71:8080 unreachable")  # type: ignore[assignment]
+    ok, _detail = d.probe()
+    assert ok is True
+    assert d.backend_url_warning == "backend URL https://192.168.0.71:8080 unreachable"
+    d._backend_url_probe = lambda: (True, None)  # type: ignore[assignment]
+    assert d.probe()[0] is True and d.backend_url_warning is None
+
+
 def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
     from arm_backend import docker_probe
 
