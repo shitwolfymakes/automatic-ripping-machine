@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 import subprocess
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,6 +10,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import effective_transcode_capable, settings
@@ -67,7 +68,7 @@ from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dis
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
-from arm_common import Config, Gpu, GpuStatus, configure_service_logging
+from arm_common import Config, Gpu, GpuStatus, TranscodeTask, TranscodeTaskStatus, configure_service_logging
 
 configure_service_logging("arm-backend", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_backend")
@@ -91,6 +92,30 @@ async def _run_seeders() -> None:
     logger.info("seeders complete")
 
 
+async def _release_orphaned_gpu_claims(session: AsyncSession, gpus: Sequence[Gpu]) -> None:
+    """Free BUSY rows no live task holds: the claim was nulled by a task
+    delete (the FK only sets NULL), or its task already finished. A QUEUED
+    or IN_PROGRESS claimant may be a transcoder that outlived the restart,
+    so those stay for `sweep_stale_claims`."""
+    released = 0
+    for gpu in gpus:
+        if gpu.status != GpuStatus.BUSY:
+            continue
+        task = None
+        if gpu.claimed_by_task_id is not None:
+            task = (
+                await session.execute(select(TranscodeTask).where(col(TranscodeTask.id) == gpu.claimed_by_task_id))
+            ).scalar_one_or_none()
+        if task is not None and task.status in (TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS):
+            continue
+        gpu.status = GpuStatus.AVAILABLE
+        gpu.claimed_by_task_id = None
+        released += 1
+    if released:
+        logger.warning("gpu inventory: released %d orphaned GPU claim(s)", released)
+        await session.commit()
+
+
 async def _refresh_gpu_inventory(hub: WSHub) -> None:
     """Seed the `gpus` table from `ARM_GPUS` - but only when it is empty.
 
@@ -111,6 +136,7 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
         existing = (await session.execute(select(Gpu))).scalars().all()
         if existing:
             logger.info("gpu inventory: %d device(s) in DB (authoritative); ARM_GPUS not consulted", len(existing))
+            await _release_orphaned_gpu_claims(session, existing)
             return
         probed = load_configured_gpus(settings.ARM_GPUS)
         for g in probed:

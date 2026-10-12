@@ -1268,6 +1268,9 @@ class TranscodeDispatcher:
                 await db.execute(select(SessionApplication).where(col(SessionApplication.id) == application_id))
             ).scalar_one_or_none()
             job_id = application.job_id if application is not None else None
+            # A docker-stopped transcoder never calls /fail, and the FK only
+            # nulls the claim; release here or the GPU stays BUSY for good.
+            await release_gpu_for_task(db, task_id)
             await db.delete(row)
             await self._hub.emit(
                 topic="transcode.events",

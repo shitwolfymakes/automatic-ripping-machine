@@ -1630,6 +1630,35 @@ async def test_cancel_running_emits_ws_then_docker_stop_fallback_then_deletes(
     assert db.rows["transcode_tasks"] == []
 
 
+async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-057: a docker-stopped transcoder never calls /fail; the delete must
+    free its GPU, not leave it BUSY with a nulled claim."""
+    db = _app_with_one_task(TranscodeTaskStatus.IN_PROGRESS, claimed_by="host", attempts=1)
+    db.rows["gpus"] = [
+        Gpu(
+            id="gpu_1",
+            vendor=GpuVendor.VAAPI,
+            device_path="/dev/dri/renderD128",
+            encoder_kinds=["h265"],
+            status=GpuStatus.BUSY,
+            claimed_by_task_id="txt_1",
+            probed_at=datetime.now(UTC),
+        )
+    ]
+    docker = MagicMock()
+    docker.containers.list.return_value = [MagicMock()]
+    import arm_backend.transcode_dispatcher as dispatcher_mod
+
+    async def _fast_sleep(_t: float) -> None:
+        return None
+
+    monkeypatch.setattr(dispatcher_mod.asyncio, "sleep", _fast_sleep)
+    await TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub()).cancel_running("txt_1")
+    gpu = db.rows["gpus"][0]
+    assert db.rows["transcode_tasks"] == []
+    assert gpu.status == GpuStatus.AVAILABLE and gpu.claimed_by_task_id is None
+
+
 async def test_cancel_running_skips_docker_stop_but_still_deletes_when_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

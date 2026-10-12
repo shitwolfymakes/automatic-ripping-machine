@@ -229,6 +229,19 @@ def test_delete_terminal_no_application_no_hub(signing_key: bytes) -> None:
     assert r.status_code == 204
 
 
+def test_delete_queued_task_releases_its_spawn_time_gpu_claim(signing_key: bytes) -> None:
+    """D-057: the GPU is claimed at spawn, while the task is still QUEUED."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_tasks"] = [_task("txt_q", status=TranscodeTaskStatus.QUEUED)]
+    db.rows["gpus"] = [_gpu(status=GpuStatus.BUSY, claimed_by_task_id="txt_q")]
+    with TestClient(app) as client:
+        r = client.delete("/api/transcodes/txt_q", headers=_auth(token))
+    assert r.status_code == 204
+    gpu = db.rows["gpus"][0]
+    assert gpu.status == GpuStatus.AVAILABLE and gpu.claimed_by_task_id is None
+
+
 def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [
