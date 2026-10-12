@@ -18,6 +18,7 @@ import asyncio
 from collections.abc import Callable
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,7 +36,7 @@ from arm_common import (
     TranscodeTaskStatus,
     with_log_context,
 )
-from arm_common.fileops import move_tree, transcode_none
+from arm_common.fileops import CopyCancelled, move_tree, transcode_none
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -53,6 +54,20 @@ logger = logging.getLogger("arm_backend.passthrough_executor")
 # `IN_PROCESS_CLAIMANT` rows from staleness sweeping or this function must
 # start refreshing the heartbeat periodically during the move.
 IN_PROCESS_CLAIMANT = "backend-inprocess"
+
+# task_id -> cancel event for the move running now. There is no container
+# to stop, so `cancel_running` sets the event and the copy stops at its
+# next chunk.
+_cancel_events: dict[str, threading.Event] = {}
+
+
+def request_cancel(task_id: str) -> bool:
+    """Stop an in-flight in-process move. False when none is running."""
+    event = _cancel_events.get(task_id)
+    if event is None:
+        return False
+    event.set()
+    return True
 
 
 async def execute_passthrough_task(
@@ -181,14 +196,20 @@ async def execute_passthrough_task(
             final = Path(settings.MEDIA_ROOT) / task_output_path
             is_folder = track.kind == TrackKind.DISC_BACKUP
             mover = move_tree if is_folder else transcode_none
+            cancel = _cancel_events[task_id] = threading.Event()
             try:
                 # Move and chown together in the worker thread: a backup
                 # tree's chown walks every file, too much for the event loop.
                 size = await asyncio.to_thread(
-                    _move_and_chown, mover, Path(track_output_path), final, settings, is_folder
+                    _move_and_chown, mover, Path(track_output_path), final, settings, is_folder, cancel
                 )
+            except CopyCancelled:
+                error = "cancelled"
+                logger.info("passthrough task_id=%s cancelled mid-copy; source kept", task_id)
             except OSError as exc:
                 error = f"{type(exc).__name__}: {exc}"[:300]
+            finally:
+                _cancel_events.pop(task_id, None)
 
         # Re-fetch: cancel_running (a different session) may have deleted
         # this row while the move was in flight. `populate_existing=True`
@@ -249,9 +270,14 @@ async def execute_passthrough_task(
 
 
 def _move_and_chown(
-    mover: Callable[[Path, Path], int], source: Path, final: Path, settings: Settings, is_folder: bool
+    mover: Callable[..., int],
+    source: Path,
+    final: Path,
+    settings: Settings,
+    is_folder: bool,
+    cancel: threading.Event,
 ) -> int:
-    size = mover(source, final)
+    size = mover(source, final, cancel=cancel)
     if settings.ARM_TRANSCODE_PUID:
         _best_effort_chown(final, settings, tree=is_folder)
     return size

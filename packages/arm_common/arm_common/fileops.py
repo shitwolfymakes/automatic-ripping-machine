@@ -8,9 +8,12 @@ stays on disk for the Backend startup sweep.
 
 `transcode_none`: used by ISO and data-copy sessions where there's no
 transcoding to do. Tries `os.rename` first (atomic, instant on the same
-filesystem); falls back to `shutil.copy2` + remove when source and dest are
+filesystem); falls back to a chunked copy + remove when source and dest are
 on different mount points (common when /raw is local and /media is a NAS
-share).
+share, and always with the stock compose layout's separate /raw and /media
+bind mounts). The copy goes to `<final>.arm-inprogress` and is renamed into
+place only once complete, and it checks an optional `cancel` event between
+chunks: a cancelled copy removes its partial file and keeps the source.
 
 No live progress — the operation is either instantaneous (rename) or
 limited by disk throughput (copy). The caller may still report a single
@@ -18,8 +21,9 @@ limited by disk throughput (copy). The caller may still report a single
 
 `move_tree`: the folder counterpart of `transcode_none`, for the Blu-ray
 decrypted backup. `shutil.move` renames on the same filesystem and copies
-the tree then removes the source across filesystems; `move_tree` adds only
-the refusal to overwrite an existing destination and the size of the tree.
+the tree then removes the source across filesystems; `move_tree` adds the
+refusal to overwrite an existing destination, the same `cancel` check
+(a cancelled copy removes the partial tree), and the size of the tree.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -34,6 +39,15 @@ from typing import Iterator
 logger = logging.getLogger("arm_common.fileops")
 
 INPROGRESS_SUFFIX = ".arm-inprogress"
+COPY_CHUNK_BYTES = 8 * 1024 * 1024
+
+
+class CopyCancelled(Exception):
+    """A passthrough copy stopped because its `cancel` event was set.
+
+    Deliberately not an `OSError`: `shutil.copytree` collects a per-file
+    `OSError` and keeps going, while this must stop the whole tree at once.
+    """
 
 
 @contextmanager
@@ -64,20 +78,39 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
     logger.info("atomic rename → %s", final_path)
 
 
-def transcode_none(input_path: Path, output_path: Path) -> int:
+def _copy_file(src: Path, dst: Path, cancel: threading.Event | None) -> None:
+    """`shutil.copy2`, in chunks, checking `cancel` before each one."""
+    with src.open("rb") as fin, dst.open("wb") as fout:
+        while True:
+            if cancel is not None and cancel.is_set():
+                raise CopyCancelled(str(src))
+            chunk = fin.read(COPY_CHUNK_BYTES)
+            if not chunk:
+                break
+            fout.write(chunk)
+    shutil.copystat(src, dst)
+
+
+def transcode_none(input_path: Path, output_path: Path, *, cancel: threading.Event | None = None) -> int:
     """Move-or-copy `input_path` → `output_path`. Returns the final file size.
 
-    Caller is responsible for using `atomic_output` if the destination
-    needs the `.arm-inprogress` rename dance — but for passthrough the
-    operation is itself atomic, so the caller can just write directly to
-    the final path.
+    The rename is atomic; the copy fallback writes `<output>.arm-inprogress`
+    and renames it into place, so a library scanner never sees a partial
+    file. On `CopyCancelled` (or any copy error) the partial file is removed
+    and the source is left where it was.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.rename(input_path, output_path)
     except OSError as exc:
         logger.info("passthrough rename failed (%s); falling back to copy+remove", exc)
-        shutil.copy2(input_path, output_path)
+        tmp_path = output_path.with_name(output_path.name + INPROGRESS_SUFFIX)
+        try:
+            _copy_file(input_path, tmp_path, cancel)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        os.replace(tmp_path, output_path)
         try:
             input_path.unlink()
         except OSError as cleanup_exc:
@@ -92,7 +125,7 @@ def tree_size(root: Path) -> int:
     return sum(p.lstat().st_size for p in root.rglob("*") if p.is_file() and not p.is_symlink())
 
 
-def move_tree(src: Path, dst: Path) -> int:
+def move_tree(src: Path, dst: Path, *, cancel: threading.Event | None = None) -> int:
     """Move the folder `src` to `dst`. Returns the total size of its files.
 
     Refuses to touch an existing `dst` (`FileExistsError`, an `OSError`, so a
@@ -103,7 +136,17 @@ def move_tree(src: Path, dst: Path) -> int:
     if dst.exists() or dst.is_symlink():
         raise FileExistsError(f"destination already exists: {dst}")
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(src, dst)
+
+    def copy(s: str, d: str) -> None:
+        _copy_file(Path(s), Path(d), cancel)
+
+    try:
+        shutil.move(src, dst, copy_function=copy)
+    except CopyCancelled:
+        # Only a cross-filesystem copy can be cancelled, and it leaves the
+        # source in place; drop the partial tree.
+        shutil.rmtree(dst, ignore_errors=True)
+        raise
     size = tree_size(dst)
     logger.info("passthrough moved folder to %s (%d bytes)", dst, size)
     return size

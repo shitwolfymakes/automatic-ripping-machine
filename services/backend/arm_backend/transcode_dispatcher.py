@@ -1209,8 +1209,9 @@ class TranscodeDispatcher:
     # --- cancel running -----------------------------------------------------
 
     async def cancel_running(self, task_id: str) -> None:
-        """Send `task.cancel` over WS, wait `_CANCEL_GRACE_SECONDS`, then
-        docker-stop any survivor and delete the row.
+        """Send `task.cancel` over WS (and stop an in-process passthrough
+        copy directly), wait `_CANCEL_GRACE_SECONDS`, then docker-stop any
+        survivor and delete the row.
 
         Cancel = delete: the row vanishes from the DB and `task.deleted`
         fires over WS. If the transcoder honoured the cancel cleanly by
@@ -1218,6 +1219,11 @@ class TranscodeDispatcher:
         marked FAILED — we delete it anyway, since the user's intent was
         to remove it entirely.
         """
+        # An in-process passthrough has no container and no WS listener;
+        # stop its copy directly (it then fails itself as "cancelled").
+        from arm_backend.passthrough_executor import request_cancel
+
+        request_cancel(task_id)
         async with self._db_factory() as db:
             await self._hub.emit(
                 topic=f"transcoder.commands.{task_id}",

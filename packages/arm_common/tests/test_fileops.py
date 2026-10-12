@@ -8,7 +8,17 @@ from unittest.mock import patch
 
 import pytest
 
-from arm_common.fileops import INPROGRESS_SUFFIX, atomic_output, move_tree, transcode_none, tree_size
+import threading
+
+from arm_common import fileops
+from arm_common.fileops import (
+    INPROGRESS_SUFFIX,
+    CopyCancelled,
+    atomic_output,
+    move_tree,
+    transcode_none,
+    tree_size,
+)
 
 
 def test_atomic_output_renames_on_clean_exit(tmp_path: Path) -> None:
@@ -141,4 +151,77 @@ def test_move_tree_uses_shutil_move_for_cross_filesystem(tmp_path: Path) -> None
     dst = tmp_path / "media" / "T"
     with patch("arm_common.fileops.shutil.move", wraps=__import__("shutil").move) as spy:
         move_tree(src, dst)
-    spy.assert_called_once_with(src, dst)
+    spy.assert_called_once()
+    assert spy.call_args.args == (src, dst)
+
+
+def _no_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _exdev(a: object, b: object) -> None:
+        raise OSError(18, "Invalid cross-device link")
+
+    monkeypatch.setattr(fileops.os, "rename", _exdev)
+
+
+def test_copy_fallback_goes_through_inprogress_then_renames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-066: the cross-mount copy never exposes a partial file at the final path."""
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v" * 10)
+    dst = tmp_path / "media" / "t0.mkv"
+    _no_rename(monkeypatch)
+    monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 3)
+    seen: list[str] = []
+    real_replace = os.replace
+
+    def _replace(a: object, b: object) -> None:
+        seen.append(Path(str(a)).name)
+        real_replace(a, b)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fileops.os, "replace", _replace)
+    assert transcode_none(src, dst) == 10
+    assert seen == ["t0.mkv" + INPROGRESS_SUFFIX] and dst.read_bytes() == b"v" * 10 and not src.exists()
+
+
+def test_cancelled_copy_removes_the_partial_and_keeps_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-066: a cancel stops the copy at the next chunk; nothing lands in
+    /media and the raw source is not consumed."""
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v" * 10)
+    dst = tmp_path / "media" / "t0.mkv"
+    _no_rename(monkeypatch)
+    monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 3)
+    cancel = threading.Event()
+    real_open = Path.open
+
+    def _open(self: Path, mode: str = "r", *a: object, **kw: object):  # type: ignore[no-untyped-def]
+        fh = real_open(self, mode, *a, **kw)  # type: ignore[arg-type]
+        if mode == "rb":
+            real_read = fh.read
+
+            def _read(n: int = -1) -> bytes:
+                chunk = real_read(n)
+                cancel.set()  # cancelled after the first chunk is read
+                return chunk
+
+            fh.read = _read  # type: ignore[method-assign]
+        return fh
+
+    monkeypatch.setattr(Path, "open", _open)
+    with pytest.raises(CopyCancelled):
+        transcode_none(src, dst, cancel=cancel)
+    assert src.read_bytes() == b"v" * 10
+    assert list((tmp_path / "media").iterdir()) == []
+
+
+def test_cancelled_tree_copy_removes_the_partial_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    _no_rename(monkeypatch)
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(CopyCancelled):
+        move_tree(src, dst, cancel=cancel)
+    assert not dst.exists() and tree_size(src) == 115
