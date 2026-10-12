@@ -203,7 +203,7 @@ async def test_extract_reports_7z_progress(tmp_path: Path, monkeypatch: pytest.M
     try:
         assert await iso_extract.extract(str(iso)) is not None
     finally:
-        iso_extract.discard_all()
+        await iso_extract.discard_all()
 
     assert reports[0] == (EXTRACTING, 0, None)
     assert (EXTRACTING, 40, "BDMV/STREAM/0.m2ts") in reports

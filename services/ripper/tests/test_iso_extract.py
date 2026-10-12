@@ -11,6 +11,7 @@ import os
 import shutil
 import threading
 from collections import namedtuple
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -47,12 +48,12 @@ def _udf_image(path: Path, video_dir: str | None = "BDMV") -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+async def _scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Path]:
     root = tmp_path / "raw" / ".iso-extract"
     monkeypatch.setattr(iso_extract, "EXTRACT_ROOT", root)
-    iso_extract.discard_all()
+    await iso_extract.discard_all()
     yield root
-    iso_extract.discard_all()
+    await iso_extract.discard_all()
 
 
 class _Stream:
@@ -120,7 +121,7 @@ async def test_discard_all_removes_the_extraction(tmp_path: Path, _scratch: Path
     root = await iso_extract.extract(str(iso))
     assert root is not None
 
-    iso_extract.discard_all()
+    await iso_extract.discard_all()
 
     assert not root.exists()
     assert makemkv_source_url(str(iso)) == f"iso:{iso}"
@@ -156,16 +157,16 @@ def _patch_scan(
     async def _data(_p: str) -> ScanResult:
         return ScanResult(disc_type=DiscType.BLURAY, volume_label="BD_LABEL")
 
-    real_discard = iso_extract.discard_all
+    real_remove = iso_extract._remove_extractions
 
-    def _discard() -> None:
+    def _remove(roots: list[Path]) -> None:
         seen["discarded"].append("all")
         seen["discard_threads"].append(threading.current_thread().name)
-        real_discard()
+        real_remove(roots)
 
     monkeypatch.setattr(scan_dispatcher, "scan_makemkv", _makemkv)
     monkeypatch.setattr(scan_dispatcher.iso_extract, "extract", _extract)
-    monkeypatch.setattr(scan_dispatcher.iso_extract, "discard_all", _discard)
+    monkeypatch.setattr(iso_extract, "_remove_extractions", _remove)
     monkeypatch.setattr(scan_dispatcher, "scan_cd", _no_cd)
     monkeypatch.setattr(scan_dispatcher, "scan_data", _data)
     return seen

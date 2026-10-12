@@ -201,12 +201,18 @@ async def extract(image_path: str) -> Path | None:
     return root
 
 
-def discard_all() -> None:
-    """Remove every extraction this process made and stop routing to it."""
-    for root in _extracted.values():
+async def discard_all() -> None:
+    """Stop routing to every extraction this process made and remove them.
+    The removal runs off the event loop: an extraction is a multi-GB tree."""
+    roots = list(_extracted.values())
+    _extracted.clear()
+    await asyncio.to_thread(_remove_extractions, roots)
+
+
+def _remove_extractions(roots: list[Path]) -> None:
+    for root in roots:
         shutil.rmtree(root, ignore_errors=True)
         # The per-drive dir `extract` made around it, once empty; never
         # anything else that happens to be the folder's parent.
         with contextlib.suppress(OSError):
             root.parent.rmdir()
-    _extracted.clear()
