@@ -1045,6 +1045,30 @@ async def test_rerun_after_invalidate_waits_for_the_callers_write_d093() -> None
     assert ("season", 3) in provider.calls  # the rerun read the committed season
 
 
+async def test_overlapping_holds_wait_for_the_last_release_d093() -> None:
+    """D-093 follow-up: two identity writes on one job overlap. The first
+    caller's release must not start the deferred run while the second
+    caller is still writing."""
+    job = _job()
+    db = _db(job, tracks=[])
+    runner = _runner(db, _Hub(), [FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    runs: list[str] = []
+
+    async def _record(job_id: str) -> None:
+        runs.append(job_id)
+
+    runner._run_once = _record  # type: ignore[method-assign]
+    runner.invalidate(job.id)  # caller A
+    runner.invalidate(job.id)  # caller B
+    runner.schedule(job.id)  # deferred by the hold
+    runner.release(job.id)  # A is done; B is still writing
+    await runner.drain()
+    assert runs == []
+    runner.release(job.id)  # B is done
+    await runner.drain()
+    assert runs == [job.id] and runner._held == {}
+
+
 async def test_release_without_a_pending_rerun_runs_nothing() -> None:
     job = _job()
     db = _db(job, tracks=[])
@@ -1052,4 +1076,4 @@ async def test_release_without_a_pending_rerun_runs_nothing() -> None:
     runner = _runner(db, _Hub(), [provider])
     runner.invalidate(job.id)  # nothing pending: only the hold
     runner.release(job.id)
-    assert runner._pending == {} and runner._held == set() and runner._rerun == set()
+    assert runner._pending == {} and runner._held == {} and runner._rerun == set()

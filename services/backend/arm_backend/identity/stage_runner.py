@@ -182,9 +182,10 @@ class EpisodeStageRunner:
         # the latest state on its own once it does start.
         self._started: set[str] = set()
         self._rerun: set[str] = set()
-        # Jobs a caller is about to write (`invalidate` .. `release`): no run
-        # may start for them until the caller's write has landed.
-        self._held: set[str] = set()
+        # Jobs a caller is about to write (`invalidate` .. `release`), with how
+        # many callers hold each (two identity writes can overlap): no run may
+        # start for them until the last caller's write has landed.
+        self._held: dict[str, int] = {}
         self._shutdown = False
         self._run_slots = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
 
@@ -260,15 +261,19 @@ class EpisodeStageRunner:
         The caller must `release` in a `finally`. A no-op after `shutdown`."""
         if self._shutdown:
             return
-        self._held.add(job_id)
+        self._held[job_id] = self._held.get(job_id, 0) + 1
         if job_id in self._pending:
             self._rerun.add(job_id)
 
     def release(self, job_id: str) -> None:
         """End an `invalidate` hold once the caller's write has committed (or
         failed): run the rerun it deferred, if any, against the current
-        state."""
-        self._held.discard(job_id)
+        state, once no other caller still holds the job."""
+        holders = self._held.get(job_id, 0) - 1
+        if holders > 0:
+            self._held[job_id] = holders
+            return
+        self._held.pop(job_id, None)
         if job_id in self._rerun and job_id not in self._pending and not self._shutdown:
             self._rerun.discard(job_id)
             self.schedule(job_id)
