@@ -62,8 +62,11 @@
 	let editingTrackId = $state<string | null>(null);
 	let previewItems = $state<NamingPreviewItem[]>([]);
 	// The last preview answered 409 (no routed session, so no template). The
-	// 5s poll skips the preview until an explicit reload asks again.
+	// 5s poll then asks again only every PREVIEW_UNROUTED_EVERY_N_POLLS polls,
+	// so a route added elsewhere still shows up; explicit reloads always ask.
+	const PREVIEW_UNROUTED_EVERY_N_POLLS = 6;
 	let previewUnrouted = false;
+	let previewSkippedPolls = 0;
 	let previewByTrack = $derived(new Map(previewItems.map((i) => [i.track_id, i])));
 
 	// Dialog visibility + a transient note shown after a resolve/apply lands.
@@ -166,7 +169,8 @@
 			detail = await fetchJob(id);
 			// Rendered filename preview is a best-effort SECOND fetch — never block
 			// or fail the job render on it. Excluded tracks may be absent from items[].
-			if (!(poll && previewUnrouted)) {
+			const skipPreview = poll && previewUnrouted && ++previewSkippedPolls % PREVIEW_UNROUTED_EVERY_N_POLLS !== 0;
+			if (!skipPreview) {
 				try {
 					const preview = await fetchNamingPreview(id);
 					previewItems = preview.items;
@@ -174,6 +178,7 @@
 				} catch (e) {
 					previewItems = [];
 					previewUnrouted = e instanceof ApiError && e.status === 409;
+					previewSkippedPolls = 0;
 				}
 			}
 		} catch (e) {

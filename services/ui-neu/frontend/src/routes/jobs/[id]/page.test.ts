@@ -129,7 +129,7 @@ describe('Job detail page (v3)', () => {
 		});
 	});
 
-	it('stops polling the naming preview once it answers 409 (no routed session)', async () => {
+	it('polls the naming preview only every sixth poll once it answers 409 (no routed session)', async () => {
 		const jobImpl = mockFetchJob.getMockImplementation();
 		const previewImpl = mockFetchNamingPreview.getMockImplementation();
 		vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -141,6 +141,9 @@ describe('Job detail page (v3)', () => {
 			await vi.advanceTimersByTimeAsync(11_000);
 			await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThanOrEqual(3));
 			expect(mockFetchNamingPreview).toHaveBeenCalledTimes(1);
+			// ...but asks again every sixth poll, so a route added elsewhere shows up.
+			await vi.advanceTimersByTimeAsync(20_000);
+			await waitFor(() => expect(mockFetchNamingPreview).toHaveBeenCalledTimes(2));
 		} finally {
 			vi.useRealTimers();
 			mockFetchJob.mockImplementation(jobImpl!);
