@@ -80,16 +80,23 @@ def probe_backend_url(url: str) -> tuple[bool, str | None]:
     cannot see DNS that resolves differently on the remote host; the detail
     names the address it resolved to, for comparison.
     """
-    parts = urlsplit(url)
-    host = parts.hostname or ""
-    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError as exc:
+        return False, f"backend URL {url} is not a valid URL: {exc}"
     try:
         address = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[0][4][0]
     except OSError as exc:
         return False, f"backend URL {url} does not resolve from the backend host: {exc}"
     try:
-        with httpx.Client(verify=_tls_context(), timeout=BACKEND_URL_TIMEOUT_SECONDS) as client:
+        ctx = _tls_context()
+    except (OSError, ssl.SSLError) as exc:
+        return False, f"ARM CA {ARM_CA_FILE} could not be loaded: {exc}"
+    try:
+        with httpx.Client(verify=ctx, timeout=BACKEND_URL_TIMEOUT_SECONDS) as client:
             client.get(url.rstrip("/") + "/api/health")
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.InvalidURL) as exc:
         return False, f"backend URL {url} ({address}) not reachable from the backend host: {exc}"
     return True, None

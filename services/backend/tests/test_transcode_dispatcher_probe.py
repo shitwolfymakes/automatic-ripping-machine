@@ -659,6 +659,26 @@ def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
     )
 
 
+def test_backend_url_with_a_bad_port_fails_the_probe_without_raising() -> None:
+    """D-129 follow-up: probe() promises never to raise; a typo in the URL
+    must read as a failed check, not abort every spawn tick."""
+    from arm_backend import docker_probe
+
+    ok, detail = docker_probe.probe_backend_url("https://host:84a3")
+    assert ok is False and detail is not None and detail.startswith("backend URL https://host:84a3 is not a valid URL")
+
+
+def test_backend_url_with_a_malformed_ca_fails_the_probe_without_raising(tmp_path, monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    ca = tmp_path / "arm-ca.crt"
+    ca.write_text("not a certificate")
+    monkeypatch.setattr(docker_probe, "ARM_CA_FILE", str(ca))
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("10.0.0.5", 443))])
+    ok, detail = docker_probe.probe_backend_url("https://arm.example")
+    assert ok is False and detail is not None and detail.startswith(f"ARM CA {ca} could not be loaded")
+
+
 def test_backend_url_reachable(monkeypatch) -> None:
     from arm_backend import docker_probe
 
