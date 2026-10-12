@@ -28,6 +28,10 @@ _PROVIDER_BY_LABEL_PREFIX = {
 DISPATCH_TIMEOUT_SECONDS = 25.0
 
 _YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
+# A release year at the end of a disc-hint title (`THE_OFFICE_2005_S1_D2` ->
+# "the office 2005"). Capped at 2029 so a title ending in a later number
+# (BLADE_RUNNER_2049) is never shortened.
+_HINT_YEAR_SUFFIX_RE = re.compile(r"\s*\(?(?:19\d{2}|20[0-2]\d)\)?$")
 # DVDs commonly bake the broadcast standard into the volume label
 # (e.g. `THE_MATRIX_NTSC` or `MOVIE_NTSC_1999`). It's noise for title
 # matching — strip it before the underscore-to-space pass so OMDB/TMDB
@@ -149,7 +153,14 @@ class MetadataDispatcher:
 
         candidates: list[tuple[str, int | None, bool]] = []
         if title_hint and title_hint.strip():
-            candidates.append((title_hint.strip(), label_year, title_hint_is_tv))
+            hint = title_hint.strip()
+            candidates.append((hint, label_year, title_hint_is_tv))
+            # A trailing year can be the release year (THE_OFFICE_2005_S1_D2)
+            # or part of the title (WONDER_WOMAN_1984, 1917), and the label
+            # cannot tell which. Search the hint as given first, then without
+            # the year.
+            if without_year := _HINT_YEAR_SUFFIX_RE.sub("", hint).rstrip(" :,"):
+                candidates.append((without_year, label_year, title_hint_is_tv))
         if label_title:
             candidates.append((label_title, label_year, False))
         seen: set[str] = set()

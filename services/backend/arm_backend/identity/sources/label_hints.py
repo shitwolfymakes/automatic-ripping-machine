@@ -45,10 +45,6 @@ _SEASON_RE = re.compile(r"[\s-]S(\d+)$", re.IGNORECASE)
 # begins with the same three letters) is left alone.
 _SKU_RE = re.compile(r" {0,4}\bSKU\d*\b", re.IGNORECASE)
 _ASPECT_RE = re.compile(r"\b16[xX]9\b")
-# A release year left in front of a stripped season / disc marker
-# (`THE_OFFICE_2005_S1_D2`). Capped at 2029 so a title ending in a number
-# (`BLADE_RUNNER_2049_D1`) keeps it.
-_TRAILING_YEAR_RE = re.compile(r"\s*\(?(?:19\d{2}|20[0-2]\d)\)?$")
 _BLURAY_SUFFIXES = (" - Blu-rayTM", " Blu-rayTM", " - BLU-RAYTM", " - BLU-RAY", " - Blu-ray", " Blu-ray", " BLU-RAY")
 # Postgres columns backing season/disc_number/disc_total are int4; a garbage
 # volume label with an absurd digit run must not 500 the identify request.
@@ -115,10 +111,6 @@ def parse_label(raw: str) -> LabelHints:
     if total is not None and disc is not None and total < disc:
         total = None
     title = re.sub(r"\s+", " ", s.replace("-", " ")).strip().rstrip(" :,").lower()
-    if season is not None or disc is not None or total is not None:
-        # The year is a search filter, not part of the title; the dispatcher
-        # reads it from the label itself.
-        title = _TRAILING_YEAR_RE.sub("", title).rstrip(" :,")
     return LabelHints(title, season, disc, total, part_marker_only)
 
 
