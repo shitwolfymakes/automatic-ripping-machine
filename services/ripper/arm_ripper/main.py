@@ -12,7 +12,7 @@ from arm_ripper.backend_client import BackendClient, JobView, RegisterRefused
 from arm_ripper.config import settings
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, InsertDetector, classify_drive_error, read_drive_status
-from arm_ripper.drive_resolve import resolve_drive_device
+from arm_ripper.drive_resolve import node_port, resolve_drive_device
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
@@ -219,7 +219,13 @@ def _hint_refresh_every_n_ticks() -> int:
 
 
 async def _current_hint(
-    client: BackendClient, drive_id: str, *, absent: bool, absent_ticks: int, last_resolved: str | None
+    client: BackendClient,
+    drive_id: str,
+    *,
+    absent: bool,
+    absent_ticks: int,
+    last_resolved: str | None,
+    last_port: str | None = None,
 ) -> str:
     """The node to try when there is no by-id link. Normally the last node that
     resolved (ARM_DRIVE_DEV until one has); while such a drive is absent, ask
@@ -229,7 +235,8 @@ async def _current_hint(
     `last_resolved` keeps a backend-supplied node once it has resolved: going
     back to ARM_DRIVE_DEV on the next tick would lose a renumbered drive again
     and flap absent/present every other poll. Once the drive is absent,
-    ARM_DRIVE_DEV is tried again on alternate ticks.
+    ARM_DRIVE_DEV is tried again on alternate ticks, but only when its node
+    is on `last_port`, the port this drive was last seen on.
 
     `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
     resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
@@ -242,10 +249,18 @@ async def _current_hint(
     fallback = last_resolved or settings.ARM_DRIVE_DEV or ""
     if settings.ARM_DRIVE_BY_ID or not absent:
         return fallback
-    if last_resolved and settings.ARM_DRIVE_DEV and absent_ticks % 2:
+    if (
+        last_resolved
+        and settings.ARM_DRIVE_DEV
+        and absent_ticks % 2
+        and last_port is not None
+        and node_port(settings.ARM_DRIVE_DEV, sysfs_root=_resolve_paths()["sysfs_root"]) == last_port
+    ):
         # While absent, every other tick also tries the configured node: a
         # drive replugged back onto it is found even when the backend cannot
-        # be asked. Trying it while present is what used to flap (D-004).
+        # be asked. Only when that node sits on this drive's port: on a
+        # multi-drive host it may now be another drive's. Trying it while
+        # present is what used to flap (D-004).
         fallback = settings.ARM_DRIVE_DEV
     if absent_ticks % _hint_refresh_every_n_ticks() != 0:
         return fallback
@@ -291,16 +306,25 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
     absent_ticks = 0
     # The last node a hint resolved to (port-identity drives only).
     last_resolved: str | None = None
+    last_port: str | None = None
     while True:
         # Re-resolve every poll: the node behind this drive can change while we
         # run (replug under a new srN). One readlink; cheap.
         was_absent = last_state is DriveState.ABSENT
         hint = await _current_hint(
-            client, drive_id, absent=was_absent, absent_ticks=absent_ticks, last_resolved=last_resolved
+            client,
+            drive_id,
+            absent=was_absent,
+            absent_ticks=absent_ticks,
+            last_resolved=last_resolved,
+            last_port=last_port,
         )
         absent_ticks = absent_ticks + 1 if was_absent else 0
         resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
         if resolved is not None and not settings.ARM_DRIVE_BY_ID:
+            if resolved.path != last_resolved or last_port is None:
+                # The port is this drive's identity when it has no by-id link.
+                last_port = node_port(resolved.path, sysfs_root=_resolve_paths()["sysfs_root"])
             last_resolved = resolved.path
         moved = handle.set(resolved.path if resolved else None)
 

@@ -148,3 +148,18 @@ def test_hint_is_rerooted_under_dev_root(tmp_path: Path) -> None:
     t.node("sr0", 11)
     elsewhere = tmp_path / "elsewhere" / "sr0"  # a hint whose parent is NOT dev_root
     assert t.resolve(None, hint=str(elsewhere)) == ResolvedDevice(path=str(t.dev / "sr0"), via="hint")
+
+
+def test_node_port_cuts_the_sysfs_path_before_the_scsi_host(tmp_path: Path) -> None:
+    """D-004 follow-up: the port is the ripper's identity check for a drive with
+    no by-id link, matching the backend scanner's `sysfs_port`."""
+    from arm_ripper.drive_resolve import node_port
+
+    device = (
+        tmp_path / "devices" / "pci0000:00" / "usb2" / "2-1" / "host6" / "target6:0:0" / "6:0:0:0" / "block" / "sr1"
+    )
+    device.mkdir(parents=True)
+    (tmp_path / "class" / "block").mkdir(parents=True)
+    (tmp_path / "class" / "block" / "sr1").symlink_to(device)
+    assert node_port("/dev/sr1", sysfs_root=tmp_path) == str(tmp_path / "devices" / "pci0000:00" / "usb2" / "2-1")
+    assert node_port("/dev/sr9", sysfs_root=tmp_path) is None  # no sysfs entry: no identity to compare
