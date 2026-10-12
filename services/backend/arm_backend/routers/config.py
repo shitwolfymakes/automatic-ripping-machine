@@ -230,8 +230,17 @@ async def update_config(
     # after the commit or a disabled source's fields stay on them (D-097).
     identity_sources_changed = any(key in fields and fields[key] != getattr(cfg, key) for key in _IDENTITY_SOURCE_KEYS)
 
+    # A ripper's verdict belongs to the key it checked. A new key has none
+    # until a ripper checks it, so the old one must not be read as its own.
+    makemkv_key_changed = "makemkv_key" in fields and fields["makemkv_key"] != cfg.makemkv_key
+
     for key, value in fields.items():
         setattr(cfg, key, value)
+    if makemkv_key_changed:
+        cfg.makemkv_key_valid = None
+        cfg.makemkv_key_state = None
+        cfg.makemkv_key_checked_at = None
+        cfg.makemkv_key_checked_by_drive_id = None
     cfg.updated_by_user_id = user.id
     cfg.updated_at = datetime.now(timezone.utc)
 

@@ -12,7 +12,8 @@
 	export async function commit(): Promise<StepCommitResult> {
 		if (!fields || !(await fields.save())) return false;
 		// Judge from the config as it is now, not as it was when the step opened:
-		// a ripper may have accepted or rejected the key since.
+		// a ripper may have accepted or rejected the key since. Saving a new key
+		// clears the old key's verdict, so an unchecked key is not 'attention'.
 		const config = await fields.refresh();
 		return config?.makemkv_key_valid === false ? 'attention' : 'done';
 	}

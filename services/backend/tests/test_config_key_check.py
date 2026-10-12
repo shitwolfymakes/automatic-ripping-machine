@@ -470,3 +470,19 @@ def test_missing_singleton_is_500(signing_key: bytes) -> None:
         r = c.post("/api/config/keys/tmdb/check", json={}, headers=_auth(token))
     assert r.status_code == 500
     assert "config singleton missing" in r.json()["detail"]
+
+
+def test_saving_a_new_makemkv_key_clears_the_old_keys_verdict(signing_key: bytes) -> None:
+    """D-109 follow-up: the verdict belongs to the key a ripper checked. A new
+    key has none until a ripper checks it; re-saving the same key keeps it."""
+    db = FakeSession()
+    _seed(db, makemkv_key="M-old", makemkv_key_valid=False, makemkv_key_state="key_invalid")
+    app, token = _make_app(signing_key, db)
+    cfg = db.rows["config"][0]
+    with TestClient(app) as c:
+        assert c.patch("/api/config", json={"makemkv_key": "M-old"}, headers=_auth(token)).status_code == 200
+        assert cfg.makemkv_key_valid is False
+        r = c.patch("/api/config", json={"makemkv_key": "M-new"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["makemkv_key_valid"] is None
+    assert cfg.makemkv_key_valid is None and cfg.makemkv_key_state is None and cfg.makemkv_key_checked_at is None
