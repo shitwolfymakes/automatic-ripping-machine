@@ -104,6 +104,18 @@ SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3
 _RESOLUTION_TIMEOUT_UNSET = object()
 
 
+def _previously_ripped(response: httpx.Response) -> bool:
+    """identify's 409 for a disc the backend refused because it was ripped
+    before (on_previously_ripped=reject)."""
+    if response.status_code != 409:
+        return False
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return False
+    return isinstance(detail, dict) and detail.get("reason") == "previously_ripped"
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -358,6 +370,12 @@ class JobController:
                 try:
                     job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
                 except httpx.HTTPStatusError as e:
+                    if _previously_ripped(e.response):
+                        # on_previously_ripped=reject: the backend made no job
+                        # and told the operator; give the disc back.
+                        logger.info("disc already ripped (on_previously_ripped=reject); ejecting %s", device_path)
+                        await self._eject_with_retry(device_path)
+                        return
                     # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
                     # the pipeline quietly — the lock releases via the context manager.
                     logger.info(

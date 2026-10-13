@@ -71,6 +71,10 @@ class Drive(SQLModel, table=True):
     model: str | None = Field(default=None)
     # Last operator-visible failure (e.g. a Plan 3 docker error on enroll).
     last_error: str | None = Field(default=None)
+    # Informational note about the last disc (e.g. "ejected: already ripped").
+    # Set by identify, cleared by the next identify on this drive or when the
+    # tray reports empty.
+    notice: str | None = Field(default=None)
     display_name: str | None = Field(default=None)
     status: DriveStatus = Field(
         sa_column=enum_column(DriveStatus, "drive_status", server_default=DriveStatus.ONLINE.value)

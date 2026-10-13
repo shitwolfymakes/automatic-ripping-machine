@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import { abandonJob, deleteJob } from '$lib/api/jobs';
+	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 
 	interface Props {
 		job: JobView;
@@ -16,6 +16,9 @@
 
 	let canAbandon = $derived(job.actions.can_abandon);
 	let canDelete = $derived(job.actions.can_delete);
+	// A ripped disc that the previously-ripped setting would hold or reject
+	// on its next insert: let it through (or start the copy already held).
+	let canRipAgain = $derived(['ripped', 'ripped_partial', 'ripped_awaiting_identify'].includes(job.status));
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);
@@ -35,6 +38,26 @@
 			onaction?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to abandon' };
+		} finally {
+			loading = null;
+			clearFeedback();
+		}
+	}
+
+	async function handleRipAgain() {
+		loading = 'rip-again';
+		feedback = null;
+		try {
+			const out = await ripAgain(job.id);
+			feedback = {
+				type: 'success',
+				message: out.started_job_id
+					? 'Started ripping the copy waiting in the drive'
+					: 'The next time this disc goes in, ARM rips it again'
+			};
+			onaction?.();
+		} catch (e) {
+			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to rip again' };
 		} finally {
 			loading = null;
 			clearFeedback();
@@ -62,8 +85,19 @@
 	}
 </script>
 
-{#if canAbandon || canDelete}
+{#if canAbandon || canDelete || canRipAgain}
 	<div class="cluster job-actions-row">
+		{#if canRipAgain}
+			<button
+				onclick={handleRipAgain}
+				disabled={loading !== null}
+				data-compact={compact}
+				class="job-actions-pill job-actions-pill-neutral"
+				title="Rip this disc again even though it was ripped before"
+			>
+				{loading === 'rip-again' ? 'Working...' : 'Rip again'}
+			</button>
+		{/if}
 		{#if canAbandon}
 			<button
 				onclick={handleAbandon}
@@ -118,6 +152,14 @@
 	.job-actions-pill:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+	.job-actions-pill-neutral {
+		background: var(--color-surface-raised);
+		color: var(--color-text);
+		box-shadow: 0 0 0 1px var(--color-border);
+	}
+	.job-actions-pill-neutral:hover {
+		background: color-mix(in srgb, var(--color-surface-raised) 85%, var(--color-text));
 	}
 	.job-actions-pill-warning {
 		background: var(--color-warning-soft);

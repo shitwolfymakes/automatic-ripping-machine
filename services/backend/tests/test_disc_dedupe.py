@@ -1,10 +1,10 @@
-"""Tests for arm_backend.disc_dedupe.find_reusable_job_for_disc."""
+"""Tests for arm_backend.disc_dedupe: find_reusable_job_for_disc and find_previous_rip."""
 
 import pytest
 from arm_common.enums import JobStatus
 from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.job import Job
-from arm_backend.disc_dedupe import find_reusable_job_for_disc
+from arm_backend.disc_dedupe import find_previous_rip, find_reusable_job_for_disc
 
 from tests._fakes import FakeSession
 
@@ -95,3 +95,51 @@ async def test_blank_algo_or_value_fingerprints_short_circuit() -> None:
     db.rows["disc_fingerprints"] = [_fp("job_a", "crc64", "abc")]
     decision = await find_reusable_job_for_disc(db, drive_id="drv_1", fingerprints=[("", "abc"), ("crc64", "")])
     assert decision is None
+
+
+# --- find_previous_rip (D-132) ---------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("st", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL, JobStatus.RIPPED_AWAITING_IDENTIFY])
+async def test_previous_rip_matches_a_ripped_job_on_any_drive(st):
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_a", drive_id="drv_OTHER", status=st)]
+    db.rows["disc_fingerprints"] = [_fp("job_a", "matrix256", "79ee")]
+    previous = await find_previous_rip(db, fingerprints=[("matrix256", "79ee")])
+    assert previous is not None and previous.id == "job_a"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("st", [JobStatus.FAILED, JobStatus.ABANDONED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW])
+async def test_previous_rip_ignores_jobs_that_did_not_rip(st):
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_a", drive_id="drv_1", status=st)]
+    db.rows["disc_fingerprints"] = [_fp("job_a", "matrix256", "79ee")]
+    assert await find_previous_rip(db, fingerprints=[("matrix256", "79ee")]) is None
+
+
+@pytest.mark.asyncio
+async def test_previous_rip_needs_the_same_algo_and_value():
+    db = FakeSession()
+    db.rows["jobs"] = [_job("job_a", drive_id="drv_1", status=JobStatus.RIPPED)]
+    db.rows["disc_fingerprints"] = [_fp("job_a", "crc64", "79ee")]
+    assert await find_previous_rip(db, fingerprints=[("matrix256", "79ee")]) is None
+    assert await find_previous_rip(db, fingerprints=[("", ""), ("crc64", "")]) is None
+
+
+@pytest.mark.asyncio
+async def test_previous_rip_returns_the_newest_of_several():
+    db = FakeSession()
+    db.rows["jobs"] = [
+        _job("job_01A", drive_id="drv_1", status=JobStatus.RIPPED),
+        _job("job_01C", drive_id="drv_2", status=JobStatus.RIPPED_PARTIAL),
+        _job("job_01B", drive_id="drv_1", status=JobStatus.RIPPED),
+    ]
+    db.rows["disc_fingerprints"] = [
+        _fp("job_01A", "matrix256", "79ee"),
+        _fp("job_01B", "matrix256", "79ee"),
+        _fp("job_01C", "thediscdb", "beef"),
+    ]
+    previous = await find_previous_rip(db, fingerprints=[("matrix256", "79ee"), ("thediscdb", "beef")])
+    assert previous is not None and previous.id == "job_01C"

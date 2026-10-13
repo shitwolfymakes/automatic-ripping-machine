@@ -219,6 +219,11 @@ pauses and asks you to confirm or search for the title before ripping. You can
 also start a rip by hand from the drive's **Start rip** button when a disc is
 already in the tray.
 
+Put in a disc ARM has already ripped and, by default, it waits on the dashboard
+as *Already ripped* instead of ripping a second copy: press **Rip again** or
+**Discard**. **Settings, Ripping, When a disc was ripped before** can eject it
+instead, or rip it again without asking.
+
 ## Next steps
 
 - **[Configuration](Configuring-ARM)** — every `.env` tunable and UI setting.

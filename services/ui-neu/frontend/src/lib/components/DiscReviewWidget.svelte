@@ -6,7 +6,8 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
-	import { reviewPhaseBadge } from '$lib/utils/job-status';
+	import { previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-status';
+	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
@@ -103,6 +104,11 @@
 	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
 
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json, displayJob));
+
+	// on_previously_ripped = hold: this disc matched an earlier rip. No
+	// countdown runs; the operator chooses Rip again (Start) or Discard (Cancel).
+	let previousId = $derived(isReviewGate ? previouslyRippedJobId(displayJob) : null);
+	let previous = $derived(data?.previous_rip ?? null);
 
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
@@ -280,7 +286,13 @@
 			<div class="flex items-center gap-2">
 				<div class="disc-review-widget-status-dot"></div>
 				<span class="disc-review-widget-status-label">
-					{isReviewGate ? 'Ready: Review & Start' : isPostRip ? 'Ripped: Apply Session' : 'Awaiting Review'}
+					{previousId
+						? 'Already ripped: Rip again or Discard'
+						: isReviewGate
+							? 'Ready: Review & Start'
+							: isPostRip
+								? 'Ripped: Apply Session'
+								: 'Awaiting Review'}
 				</span>
 			</div>
 			<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
@@ -367,6 +379,31 @@
 			</div>
 		</div>
 
+		{#if previousId}
+			<div class="disc-review-widget-previous" data-testid="previously-ripped">
+				{#if previous}
+					<p>
+						ARM already ripped this disc as
+						<a href="/jobs/{previous.job_id}" class="disc-review-widget-previous-link"
+							>{previous.title?.trim() || 'an untitled disc'}</a
+						>{#if previous.ripped_at}&nbsp;on {formatDateTime(previous.ripped_at)}{/if}{previous.status ===
+						'ripped_partial'
+							? ', partially.'
+							: '.'}
+					</p>
+					<p class="disc-review-widget-previous-sub">
+						{previous.outputs_present === true
+							? 'Its files are still in the library.'
+							: previous.outputs_present === false
+								? 'Some of its files are no longer in the library.'
+								: 'It has no transcoded files.'}
+					</p>
+				{:else if !initialLoading}
+					<p>ARM ripped this disc before, but that job has since been deleted.</p>
+				{/if}
+			</div>
+		{/if}
+
 		<!-- Error banner -->
 		{#if errorMessage}
 			<div class="alert alert-danger disc-review-widget-error">
@@ -409,7 +446,7 @@
 					class="btn btn-danger ml-auto"
 					title={isoName ? 'Cancel the rip and remove the virtual drive' : undefined}
 				>
-					{cancelling ? 'Cancelling...' : 'Cancel'}
+					{cancelling ? 'Cancelling...' : previousId ? 'Discard' : 'Cancel'}
 				</button>
 			{/if}
 			{#if $isAdmin && displayJob.actions.can_delete}
@@ -422,9 +459,9 @@
 					onclick={handleStartRip}
 					disabled={starting}
 					class="btn disc-review-widget-success-btn"
-					title="Save the metadata and start ripping this disc"
+					title={previousId ? 'Rip this disc again' : 'Save the metadata and start ripping this disc'}
 				>
-					{starting ? 'Starting...' : 'Start rip'}
+					{starting ? 'Starting...' : previousId ? 'Rip again' : 'Start rip'}
 				</button>
 			{/if}
 		</div>
@@ -504,6 +541,23 @@
 		justify-content: space-between;
 		background: var(--color-primary);
 		padding: 0.375rem 1rem;
+	}
+	.disc-review-widget-previous {
+		margin: 0 1rem 0.75rem;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-raised);
+		padding: 0.625rem 0.75rem;
+		font-size: 0.875rem;
+	}
+	.disc-review-widget-previous-link {
+		font-weight: 600;
+		color: var(--color-primary);
+		text-decoration: underline;
+	}
+	.disc-review-widget-previous-sub {
+		margin-top: 0.25rem;
+		color: var(--color-text-muted);
 	}
 	.disc-review-widget-status-dot {
 		height: 0.5rem;

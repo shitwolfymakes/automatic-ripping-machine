@@ -675,6 +675,7 @@ export type ConfigUpdateRequest = {
      * Manual Wait Seconds
      */
     manual_wait_seconds?: number | null;
+    on_previously_ripped?: PreviouslyRippedAction | null;
     /**
      * Notifications Enabled
      */
@@ -791,6 +792,7 @@ export type ConfigView = {
      * Manual Wait Seconds
      */
     manual_wait_seconds: number;
+    on_previously_ripped: PreviouslyRippedAction;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -1034,6 +1036,10 @@ export type Drive = {
      * Last Error
      */
     last_error?: string | null;
+    /**
+     * Notice
+     */
+    notice?: string | null;
     /**
      * Display Name
      */
@@ -1407,6 +1413,10 @@ export type DriveView = {
      * Last Error
      */
     last_error: string | null;
+    /**
+     * Notice
+     */
+    notice?: string | null;
     current_job?: DriveCurrentJobView | null;
     /**
      * Connection
@@ -2270,6 +2280,7 @@ export type JobDetailView = {
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintView>;
+    previous_rip?: PreviousRipView | null;
 };
 
 /**
@@ -2284,6 +2295,10 @@ export type JobFlags = {
      * Dispatch Timeout
      */
     dispatch_timeout?: boolean;
+    /**
+     * Rerip Allowed
+     */
+    rerip_allowed?: boolean;
     [key: string]: unknown;
 };
 
@@ -2325,6 +2340,7 @@ export type JobMetadata = {
         [key: string]: unknown;
     } | null;
     flags?: JobFlags;
+    previously_ripped?: PreviouslyRipped | null;
     /**
      * Provider Raw
      */
@@ -3529,6 +3545,59 @@ export type PathStatus = {
 };
 
 /**
+ * PreviousRipView
+ *
+ * The earlier rip a held disc matched (on_previously_ripped=hold), as the
+ * review card shows it. Filled on GET /api/jobs/{id} for a job whose
+ * metadata names one that still exists.
+ */
+export type PreviousRipView = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Year
+     */
+    year: number | null;
+    status: JobStatus;
+    /**
+     * Ripped At
+     */
+    ripped_at: string | null;
+    /**
+     * Outputs Present
+     */
+    outputs_present: boolean | null;
+};
+
+/**
+ * PreviouslyRipped
+ *
+ * Why a held job sits in AWAITING_REVIEW without a countdown: its disc
+ * matched the fingerprint of an earlier rip (on_previously_ripped=hold).
+ */
+export type PreviouslyRipped = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    [key: string]: unknown;
+};
+
+/**
+ * PreviouslyRippedAction
+ *
+ * What identify does with a disc whose fingerprint matches an earlier rip
+ * (a job in POST_RIP_JOB_STATUSES, on any drive).
+ */
+export type PreviouslyRippedAction = 'hold' | 'reject' | 'rip';
+
+/**
  * RegisterRequest
  *
  * POST /api/ripper/register. Keyed on the Drive row the backend handed
@@ -3728,6 +3797,24 @@ export type ResolveResponse = {
  * RetentionPolicy
  */
 export type RetentionPolicy = 'keep_forever' | 'prune_after_session' | 'custom';
+
+/**
+ * RipAgainResponse
+ *
+ * POST /api/jobs/{id}/rip-again. `started_job_id` names a held copy of
+ * this disc that was started; otherwise `armed` means the next identify of
+ * the disc skips the previously-ripped check once.
+ */
+export type RipAgainResponse = {
+    /**
+     * Started Job Id
+     */
+    started_job_id?: string | null;
+    /**
+     * Armed
+     */
+    armed?: boolean;
+};
 
 /**
  * RipPresetCreateRequest
@@ -5312,6 +5399,7 @@ export type JobDetailViewWritable = {
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintView>;
+    previous_rip?: PreviousRipView | null;
 };
 
 /**
@@ -6470,6 +6558,42 @@ export type RipStartReviewApiJobsJobIdRipStartReviewPostResponses = {
 };
 
 export type RipStartReviewApiJobsJobIdRipStartReviewPostResponse = RipStartReviewApiJobsJobIdRipStartReviewPostResponses[keyof RipStartReviewApiJobsJobIdRipStartReviewPostResponses];
+
+export type RipAgainApiJobsJobIdRipAgainPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/rip-again';
+};
+
+export type RipAgainApiJobsJobIdRipAgainPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RipAgainApiJobsJobIdRipAgainPostError = RipAgainApiJobsJobIdRipAgainPostErrors[keyof RipAgainApiJobsJobIdRipAgainPostErrors];
+
+export type RipAgainApiJobsJobIdRipAgainPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RipAgainResponse;
+};
+
+export type RipAgainApiJobsJobIdRipAgainPostResponse = RipAgainApiJobsJobIdRipAgainPostResponses[keyof RipAgainApiJobsJobIdRipAgainPostResponses];
 
 export type ReviewPauseApiJobsJobIdReviewPausePostData = {
     body?: never;

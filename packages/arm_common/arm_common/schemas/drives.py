@@ -59,6 +59,8 @@ class DriveView(BaseModel):
     vendor: str | None
     model: str | None
     last_error: str | None
+    # Informational note about the last disc (not an error); see Drive.notice.
+    notice: str | None = None
     current_job: DriveCurrentJobView | None = None
     # Bus the drive hangs off, derived from by_id_name's prefix; not stored
     # (setup spec 2026-10-01 §6.6). "usb" | "sata" | "other" | None.

@@ -9,7 +9,10 @@ The bag holds four kinds of content, and this module gives each a home:
 - `music` — provider-shaped section with a real reader (the music naming tokens).
 - `identity_claims` — per-source identity proposals (arm_backend.identity).
 - `flags` — booleans that steer behaviour (`unidentified` parks placeholder
-  rips at ripped_awaiting_identify; `dispatch_timeout` is diagnostic).
+  rips at ripped_awaiting_identify; `dispatch_timeout` is diagnostic;
+  `rerip_allowed` lets a ripped disc through the previously-ripped check once).
+- `previously_ripped` — the earlier rip a held disc matched (the review hold's
+  reason; no countdown runs while it is set).
 - `provider_raw` — everything a provider returned, keyed by provider name.
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
@@ -81,6 +84,18 @@ class JobFlags(BaseModel):
 
     unidentified: bool = False
     dispatch_timeout: bool = False
+    # On a ripped job: the operator chose "Rip again", so the next identify of
+    # this disc skips the previously-ripped check once (and clears the flag).
+    rerip_allowed: bool = False
+
+
+class PreviouslyRipped(BaseModel):
+    """Why a held job sits in AWAITING_REVIEW without a countdown: its disc
+    matched the fingerprint of an earlier rip (on_previously_ripped=hold)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    job_id: str
 
 
 class JobMetadata(BaseModel):
@@ -97,6 +112,8 @@ class JobMetadata(BaseModel):
     # backend's claims_of() warns and treats an invalid section as empty.
     identity_claims: IdentityClaims | dict[str, Any] | None = Field(default=None, union_mode="left_to_right")
     flags: JobFlags = Field(default_factory=JobFlags)
+    # Set when on_previously_ripped=hold parked this job; names the earlier rip.
+    previously_ripped: PreviouslyRipped | None = None
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -120,3 +137,11 @@ def with_flags(metadata_json: dict[str, Any] | None, **flags: bool) -> dict[str,
         md.pop(name, None)
     md["flags"] = section
     return md
+
+
+def previously_ripped_job_id(metadata_json: dict[str, Any] | None) -> str | None:
+    """The earlier rip a held job matched (see PreviouslyRipped), or None."""
+    section = (metadata_json or {}).get("previously_ripped")
+    if isinstance(section, dict) and isinstance(section.get("job_id"), str):
+        return str(section["job_id"])
+    return None

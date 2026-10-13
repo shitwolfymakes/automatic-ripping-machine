@@ -46,6 +46,16 @@ Four long-lived entities drive the lifecycle, plus one reusable template:
 
 Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically). Abandoning also ejects the disc: the ripper's `job.abandoned` WS handler pops the tray when the abandoned job owns the drive's pipeline (ripping or parked) or when the drive sits idle with the disc still seated — a stale abandon while a different job's rip owns the drive never touches the tray.
 
+### A disc that was ripped before
+
+Identify first reuses a pre-rip job on the same drive with a matching fingerprint (a re-scan of the same disc; `disc_dedupe.find_reusable_job_for_disc`). Failing that, it looks for an **earlier rip** of the disc: any job on any drive in `POST_RIP_JOB_STATUSES` (`ripped`, `ripped_partial`, `ripped_awaiting_identify`) sharing any `(algo, value)` fingerprint (`find_previous_rip`). `failed` and `abandoned` never count, and deleting a job deletes its fingerprints. `config.on_previously_ripped` then decides:
+
+- **`hold`** (default): the new job runs identify as usual, then parks in `awaiting_review` with `metadata_json.previously_ripped = {job_id}` and **no** `wait_start_time`, so the ripper's review wait never auto-starts it, a ripper restart re-parks it (`held-job` reports it paused), and un-pausing does not start a countdown. The review card shows the earlier rip (`JobDetailView.previous_rip`: date, status, whether its finished outputs are still on disk) with **Rip again** (`rip-start-review`) and **Discard** (abandon).
+- **`reject`**: no job. Identify records `rip.duplicate_rejected` against the earlier job (inbox by default), sets `drives.notice`, and answers 409 `{"reason": "previously_ripped", "job_id"}`; the ripper ejects on that. The notice clears on the drive's next identify or when the tray reports `no_disc`.
+- **`rip`**: no check.
+
+`POST /api/jobs/{id}/rip-again` on the earlier job starts a held copy if one is waiting, else sets `flags.rerip_allowed`, which the next identify that matches it consumes to skip the check once. ISO and folder sources go through the same identify, so the same rule applies.
+
 ## Track state machine
 
 Every track is a row with a status column. Within a single rip, tracks move through this machine sequentially as the ripper works:

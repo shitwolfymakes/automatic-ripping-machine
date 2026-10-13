@@ -11,8 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import RetentionPolicy, UserRole
-from arm_common.schemas.jobs import DiscFingerprintView, JobView, TrackView
+from arm_common.enums import PreviouslyRippedAction, RetentionPolicy, UserRole
+from arm_common.schemas.jobs import DiscFingerprintView, JobView, PreviousRipView, TrackView
 
 
 class LoginRequest(BaseModel):
@@ -36,6 +36,9 @@ class JobDetailView(BaseModel):
     job: JobView
     tracks: list[TrackView]
     fingerprints: list[DiscFingerprintView] = Field(default_factory=list)
+    # The earlier rip this held disc matched (metadata previously_ripped);
+    # None when there is none or it has since been deleted.
+    previous_rip: PreviousRipView | None = None
 
 
 class ConfigView(BaseModel):
@@ -74,6 +77,7 @@ class ConfigView(BaseModel):
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
+    on_previously_ripped: PreviouslyRippedAction
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
@@ -112,6 +116,7 @@ class ConfigUpdateRequest(BaseModel):
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
+    on_previously_ripped: PreviouslyRippedAction | None = None
     notifications_enabled: bool | None = None
     metadata_provider: str | None = None
 

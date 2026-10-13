@@ -5,6 +5,7 @@ _EXPECTED = {
     "rip.failed",
     "rip.partial",
     "rip.needs_user_input",
+    "rip.duplicate_rejected",
     "session.completed",
     "session.failed",
     "session.partial",

@@ -60,6 +60,30 @@ class ResolveRequest(BaseModel):
     external_ids: ExternalIds | None = None
 
 
+class PreviousRipView(BaseModel):
+    """The earlier rip a held disc matched (on_previously_ripped=hold), as the
+    review card shows it. Filled on GET /api/jobs/{id} for a job whose
+    metadata names one that still exists."""
+
+    job_id: str
+    title: str | None
+    year: int | None
+    status: JobStatus
+    ripped_at: datetime | None
+    # True when every finished transcode output recorded for it is still on
+    # disk, False when any is gone, None when it has no finished outputs.
+    outputs_present: bool | None
+
+
+class RipAgainResponse(BaseModel):
+    """POST /api/jobs/{id}/rip-again. `started_job_id` names a held copy of
+    this disc that was started; otherwise `armed` means the next identify of
+    the disc skips the previously-ripped check once."""
+
+    started_job_id: str | None = None
+    armed: bool = False
+
+
 class ManualTriggerRequest(BaseModel):
     """POST /api/jobs/manual — kick off a rip on a drive that already has a
     disc in the tray. The ripper picks it up via WS command and runs the

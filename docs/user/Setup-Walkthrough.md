@@ -71,6 +71,9 @@ What happens when you insert a disc:
   for you to check the title before ripping. No answer and it rips anyway.
 - **Manual:** nothing starts until you press Start.
 
+Below that, choose what happens to a disc ARM has already ripped: hold it for
+you (the default), eject it, or rip it again.
+
 This is the default for every drive; a drive can have its own setting in
 **Settings, Drives**. Below it, a read-only table shows what each kind of disc
 gets. Later: **Settings, Ripping** and **Settings, Sessions**.

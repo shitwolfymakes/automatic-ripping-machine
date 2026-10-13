@@ -1895,6 +1895,66 @@
         }
       }
     },
+    "/api/jobs/{job_id}/rip-again": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Rip Again",
+        "description": "Operator \"Rip again\" on a ripped job (on_previously_ripped hold/reject).\n\nIf a copy of this disc is held right now (AWAITING_REVIEW naming this job\nas its earlier rip), start that one. Otherwise flag this job so the next\nidentify of the disc skips the previously-ripped check once.",
+        "operationId": "rip_again_api_jobs__job_id__rip_again_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RipAgainResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{job_id}/review-pause": {
       "post": {
         "tags": [
@@ -10694,6 +10754,16 @@
             ],
             "title": "Manual Wait Seconds"
           },
+          "on_previously_ripped": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviouslyRippedAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notifications_enabled": {
             "anyOf": [
               {
@@ -10863,6 +10933,9 @@
             "type": "integer",
             "title": "Manual Wait Seconds"
           },
+          "on_previously_ripped": {
+            "$ref": "#/components/schemas/PreviouslyRippedAction"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -10977,6 +11050,7 @@
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
+          "on_previously_ripped",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -11363,6 +11437,17 @@
               }
             ],
             "title": "Last Error"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "display_name": {
             "anyOf": [
@@ -12177,6 +12262,17 @@
               }
             ],
             "title": "Last Error"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "current_job": {
             "anyOf": [
@@ -13688,6 +13784,16 @@
             },
             "type": "array",
             "title": "Fingerprints"
+          },
+          "previous_rip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviousRipView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -13707,6 +13813,11 @@
           "dispatch_timeout": {
             "type": "boolean",
             "title": "Dispatch Timeout",
+            "default": false
+          },
+          "rerip_allowed": {
+            "type": "boolean",
+            "title": "Rerip Allowed",
             "default": false
           }
         },
@@ -13804,6 +13915,16 @@
           },
           "flags": {
             "$ref": "#/components/schemas/JobFlags"
+          },
+          "previously_ripped": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviouslyRipped"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "provider_raw": {
             "additionalProperties": {
@@ -16038,6 +16159,98 @@
         ],
         "title": "PathStatus"
       },
+      "PreviousRipView": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "ripped_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ripped At"
+          },
+          "outputs_present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputs Present"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "title",
+          "year",
+          "status",
+          "ripped_at",
+          "outputs_present"
+        ],
+        "title": "PreviousRipView",
+        "description": "The earlier rip a held disc matched (on_previously_ripped=hold), as the\nreview card shows it. Filled on GET /api/jobs/{id} for a job whose\nmetadata names one that still exists."
+      },
+      "PreviouslyRipped": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "PreviouslyRipped",
+        "description": "Why a held job sits in AWAITING_REVIEW without a countdown: its disc\nmatched the fingerprint of an earlier rip (on_previously_ripped=hold)."
+      },
+      "PreviouslyRippedAction": {
+        "type": "string",
+        "enum": [
+          "hold",
+          "reject",
+          "rip"
+        ],
+        "title": "PreviouslyRippedAction",
+        "description": "What identify does with a disc whose fingerprint matches an earlier rip\n(a job in POST_RIP_JOB_STATUSES, on any drive)."
+      },
       "RegisterRequest": {
         "properties": {
           "drive_id": {
@@ -16348,6 +16561,29 @@
           "custom"
         ],
         "title": "RetentionPolicy"
+      },
+      "RipAgainResponse": {
+        "properties": {
+          "started_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started Job Id"
+          },
+          "armed": {
+            "type": "boolean",
+            "title": "Armed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "RipAgainResponse",
+        "description": "POST /api/jobs/{id}/rip-again. `started_job_id` names a held copy of\nthis disc that was started; otherwise `armed` means the next identify of\nthe disc skips the previously-ripped check once."
       },
       "RipPresetCreateRequest": {
         "properties": {

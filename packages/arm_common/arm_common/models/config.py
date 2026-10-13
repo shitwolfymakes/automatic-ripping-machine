@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import enum_column, updated_at_column
-from arm_common.enums import RetentionPolicy
+from arm_common.enums import PreviouslyRippedAction, RetentionPolicy
 
 # MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
 # `AppName/version ( contact )` shape — a bare token like `armv3` is rejected.
@@ -86,6 +86,17 @@ class Config(SQLModel, table=True):
     # rip (suppressed while `ripping_paused`). Off = today's auto-rip behavior.
     hold_for_review: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     manual_wait_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="60"))
+    # A disc whose fingerprint matches an earlier rip (on any drive): hold it
+    # for the operator, reject (eject) it, or rip it again. VARCHAR, validated
+    # app-side by PreviouslyRippedAction.
+    on_previously_ripped: PreviouslyRippedAction = Field(
+        default=PreviouslyRippedAction.HOLD,
+        sa_column=enum_column(
+            PreviouslyRippedAction,
+            "on_previously_ripped",
+            server_default=PreviouslyRippedAction.HOLD.value,
+        ),
+    )
     # Drive scanner (spec §2). Read on every tick, so edits apply live.
     drive_scan_interval_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="30"))
     # Dispatcher parallelism cap - operator config (Settings > Transcoding),
