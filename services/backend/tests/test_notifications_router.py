@@ -1242,6 +1242,56 @@ def test_patch_bash_channel_rejects_hook_error(signing_key: bytes, scripts_root:
     assert r.status_code == 422 and "file name" in r.json()["detail"]
 
 
+def test_patch_bash_channel_cannot_unmask_a_secret_via_a_missing_script(signing_key: bytes, scripts_root: Path) -> None:
+    """D-038 / #160: a script name not on disk keeps the stored secret_keys, so the secret stays masked."""
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    ch = _bash_channel()
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={
+                "config": {
+                    "type": "bash",
+                    "script": "does-not-exist.sh",
+                    "inputs": {"TO": "me@x", "SMTP_PASS": "<hidden>"},
+                    "secret_keys": [],
+                }
+            },
+            headers=_auth(token),
+        )
+        got = client.get("/api/notifications/channels/ncl_b", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert ch.config["secret_keys"] == ["SMTP_PASS"] and ch.config["inputs"]["SMTP_PASS"] == "pw"
+    for cfg in (r.json()["config"], got.json()["config"]):
+        assert cfg["inputs"] == {"TO": "me@x", "SMTP_PASS": "<hidden>"} and cfg["secret_keys"] == ["SMTP_PASS"]
+
+
+def test_patch_bash_channel_refuses_carrying_a_secret_to_a_script_that_drops_it(
+    signing_key: bytes, scripts_root: Path
+) -> None:
+    """D-038: switching to a script that declares the key non-secret cannot carry the stored secret over."""
+    _bash_script(scripts_root, "ok.sh", "exit 0\n")
+    plain = scripts_root / "plain.sh"
+    plain.write_text("#!/usr/bin/env bash\n# arm-input: SMTP_PASS\nexit 0\n")
+    plain.chmod(plain.stat().st_mode | stat.S_IXUSR)
+    ch = _bash_channel()
+    before = dict(ch.config)
+    db = FakeSession()
+    db.rows["notification_channels"] = [ch]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/notifications/channels/ncl_b",
+            json={"config": {"type": "bash", "script": "plain.sh", "inputs": {"SMTP_PASS": "<hidden>"}}},
+            headers=_auth(token),
+        )
+    assert r.status_code == 422 and "SMTP_PASS" in r.json()["detail"]
+    assert ch.config == before
+
+
 def test_test_saved_bash_channel(signing_key: bytes, scripts_root: Path) -> None:
     out = scripts_root / "out.txt"
     _bash_script(scripts_root, "ok.sh", f'printf "%s|%s|%s" "$ARM_EVENT_TYPE" "$1" "$TO" > "{out}"\n')

@@ -47,6 +47,7 @@ from arm_backend.notifications.bash_hook import (
     mask_bash_config,
     masked,
     merge_bash_config,
+    patch_bash_config,
     prepare_run,
     redact_secrets,
     storage_config,
@@ -276,7 +277,7 @@ async def patch_channel(
                     detail="a bash channel's config must have type 'bash'",
                 )
             try:
-                ch.config = storage_config(merge_bash_config(ch.config or {}, incoming), settings.ARM_SCRIPTS_ROOT)
+                ch.config = patch_bash_config(ch.config or {}, incoming, settings.ARM_SCRIPTS_ROOT)
             except HookError as exc:
                 raise _hook_422(exc) from exc
         else:

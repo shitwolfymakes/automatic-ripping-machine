@@ -11,6 +11,7 @@ from arm_backend.notifications.bash_hook import (
     masked,
     mask_bash_config,
     merge_bash_config,
+    patch_bash_config,
     prepare_run,
     redact_secrets,
     storage_config,
@@ -149,6 +150,9 @@ def test_mask_and_merge_config() -> None:
     assert replaced["inputs"]["SMTP_PASS"] == "pw2"
     dropped = merge_bash_config(stored, _config(inputs={"TO": "x"}))
     assert "SMTP_PASS" not in dropped["inputs"]
+    # A non-secret stored value is never masked, so <hidden> for it is a literal.
+    literal = merge_bash_config(stored, _config(inputs={"TO": "<hidden>"}))
+    assert literal["inputs"] == {"TO": "<hidden>"}
     assert mask_bash_config({"type": "bash", "script": "a.sh"})["inputs"] == {}
 
 
@@ -170,15 +174,41 @@ def test_storage_config(tmp_path: Path) -> None:
         "inputs": {"TO": "a", "SMTP_PASS": "p"},
         "secret_keys": ["SMTP_PASS"],
     }
-    # Missing file keeps the caller's secret_keys so masking survives a removed script.
-    kept = storage_config(
-        {"type": "bash", "script": "gone.sh", "inputs": {}, "secret_keys": ["X"], "timeout_seconds": 5}, str(tmp_path)
-    )
-    assert kept["secret_keys"] == ["X"] and kept["timeout_seconds"] == 5
+    # secret_keys is server-owned: a missing file takes the fallback, never the caller's list.
+    gone = {"type": "bash", "script": "gone.sh", "inputs": {}, "secret_keys": ["X"], "timeout_seconds": 5}
+    kept = storage_config(gone, str(tmp_path), fallback_secret_keys=["SMTP_PASS"])
+    assert kept["secret_keys"] == ["SMTP_PASS"] and kept["timeout_seconds"] == 5
+    assert storage_config(gone, str(tmp_path))["secret_keys"] == []
     with pytest.raises(HookError):
         storage_config({"type": "bash", "script": "a/b.sh"}, str(tmp_path))
     with pytest.raises(HookError, match="timeout"):
         storage_config({"type": "bash", "script": "send-email.sh", "timeout_seconds": 0}, str(tmp_path))
+
+
+def test_patch_bash_config_keeps_the_stored_secret_set_for_a_missing_script(tmp_path: Path) -> None:
+    """D-038: a script name not on disk cannot strip secret_keys and unmask the stored value."""
+    _script(tmp_path)
+    incoming = _config(script="does-not-exist.sh", inputs={"TO": "me@x", "SMTP_PASS": "<hidden>"}, secret_keys=[])
+    out = patch_bash_config(_config(), incoming, str(tmp_path))
+    assert out["inputs"]["SMTP_PASS"] == "pw" and out["secret_keys"] == ["SMTP_PASS"]
+    assert mask_bash_config(out)["inputs"]["SMTP_PASS"] == "<hidden>"
+
+
+def test_patch_bash_config_refuses_a_hidden_input_the_new_script_does_not_hold_secret(tmp_path: Path) -> None:
+    """D-038: switching to a script that declares the key non-secret cannot carry the stored secret over."""
+    _script(tmp_path)
+    _script(tmp_path, "plain.sh", "#!/usr/bin/env bash\n# arm-input: SMTP_PASS\n")
+    hidden = _config(script="plain.sh", inputs={"SMTP_PASS": "<hidden>"})
+    with pytest.raises(HookError, match="SMTP_PASS is not secret for plain.sh"):
+        patch_bash_config(_config(), hidden, str(tmp_path))
+    fresh = patch_bash_config(_config(), _config(script="plain.sh", inputs={"SMTP_PASS": "new"}), str(tmp_path))
+    assert fresh["inputs"] == {"SMTP_PASS": "new"} and fresh["secret_keys"] == []
+
+
+def test_patch_bash_config_keeps_a_hidden_secret_on_the_same_script(tmp_path: Path) -> None:
+    _script(tmp_path)
+    out = patch_bash_config(_config(), _config(inputs={"TO": "new@x", "SMTP_PASS": "<hidden>"}), str(tmp_path))
+    assert out["inputs"] == {"TO": "new@x", "SMTP_PASS": "pw"} and out["secret_keys"] == ["SMTP_PASS"]
 
 
 def test_prepare_run_refuses_a_width_spec_blowup(tmp_path: Path) -> None:
