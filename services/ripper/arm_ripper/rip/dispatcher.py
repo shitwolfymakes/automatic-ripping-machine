@@ -12,7 +12,14 @@ from arm_common.schemas import TrackView
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
-from arm_ripper.rip.makemkv_rip import _OUTPUT_FILE_RE, RipResult, _output_files_in_rip_order, rip_disc
+from arm_ripper.rip.makemkv_rip import (
+    _OUTPUT_FILE_RE,
+    STOPPED_ERROR,
+    RipDiscResult,
+    RipResult,
+    _output_files_in_rip_order,
+    rip_disc,
+)
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -52,11 +59,15 @@ async def rip_all(
     min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
+    drive_lost: Callable[[], bool] | None = None,
 ) -> None:
     """Rip every track in `tracks` and invoke the lifecycle callbacks.
 
     DVD / BD only: `stop` kills makemkvcon when set (the drive dropped off the
     bus), and `skip_track_ids` names tracks an earlier pass already settled.
+    `drive_lost` is asked as each title finishes: makemkvcon moves on from a
+    title the drive dropped under before anything else may notice, and that
+    title's file is cut short, so it is reported unfinished and `stop` is set.
     A resume passes every track so the `mkv all` output positions still line
     up, and the skipped tracks get no callbacks (their new files are deleted).
 
@@ -102,6 +113,7 @@ async def rip_all(
             min_length_seconds=min_length_seconds,
             stop=stop,
             skip_track_ids=skip_track_ids,
+            drive_lost=drive_lost,
         )
         return
 
@@ -175,6 +187,7 @@ async def _rip_optical(
     min_length_seconds: int,
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
+    drive_lost: Callable[[], bool] | None = None,
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
 
@@ -242,6 +255,16 @@ async def _rip_optical(
     # streamer's mid-rip on_title_done callback. The post-rip
     # attribution loop skips these to avoid double-PATCHing.
     done_emitted: set[int] = set(skipped)
+
+    def _drive_dropped() -> bool:
+        """The drive left the bus under this rip (D-133). The first time
+        `drive_lost` says so, set `stop`, which kills makemkvcon."""
+        if stop is None:
+            return False
+        if not stop.is_set() and drive_lost is not None and drive_lost():
+            logger.warning("drive dropped off the bus mid-rip; stopping makemkvcon")
+            stop.set()
+        return stop.is_set()
 
     async def _on_title_start(title_idx: int) -> None:
         track = track_by_index.get(title_idx)
@@ -330,6 +353,11 @@ async def _rip_optical(
             return
         if title_idx in done_emitted:
             return
+        if _drive_dropped():
+            # makemkvcon moved on because the drive dropped under this title,
+            # so its file is cut short. The stopped-rip path below reports it
+            # unfinished.
+            return
         try:
             position = eligible_source_indexes.index(title_idx)
         except ValueError:
@@ -391,6 +419,10 @@ async def _rip_optical(
             stop=stop,
         )
         _delete_skipped_outputs(output_dir, eligible_source_indexes, skipped)
+        if disc_result.overall_error is None and _drive_dropped():
+            # makemkvcon exited on its own after the drive dropped: a title
+            # not finalised above may be cut short, so none of them count.
+            disc_result = RipDiscResult(overall_error=STOPPED_ERROR, titles={})
 
         if disc_result.overall_error is not None:
             # Rip-level failure — mark every selected track FAILED with the

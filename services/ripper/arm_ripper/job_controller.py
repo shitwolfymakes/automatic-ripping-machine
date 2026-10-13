@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import functools
 import logging
 import shutil
 from dataclasses import dataclass
@@ -935,6 +936,7 @@ class JobController:
                     min_length_seconds=min_length_seconds,
                     stop=lost if resumable else None,
                     skip_track_ids=skip,
+                    drive_lost=functools.partial(self._drive_gone, rip_path) if resumable else None,
                 )
             finally:
                 if watcher is not None:

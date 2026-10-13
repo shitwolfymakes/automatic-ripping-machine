@@ -1136,3 +1136,81 @@ async def test_rip_all_stopped_pass_reports_the_rest_without_touching_settled_tr
         skip_track_ids={"trk_0", "trk_2"},
     )
     assert done == [("trk_1", STOPPED_ERROR)]
+
+
+async def test_rip_all_does_not_finalise_a_title_the_drive_dropped_under(monkeypatch, tmp_path):
+    """D-133: makemkvcon moves on from the title the drive dropped under (a
+    PRGC transition) before the poll loop notices. That title's file is cut
+    short, so it and the rest are reported stopped, never DONE, and `stop` is
+    set to kill makemkvcon."""
+    from arm_ripper.rip.makemkv_rip import STOPPED_ERROR
+
+    for pos in range(3):
+        (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={idx: RipResult(ok=True, output_path=tmp_path / f"Disc_t{idx:02d}.mkv") for idx in range(3)},
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+    asked: list[int] = []
+
+    def drive_lost() -> bool:
+        # Still there when title 0 finishes; gone by the time title 1 does.
+        asked.append(1)
+        return len(asked) > 1
+
+    stop = asyncio.Event()
+    done: list[tuple[str, bool, str | None]] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok, result.error))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        stop=stop,
+        drive_lost=drive_lost,
+    )
+
+    assert stop.is_set()
+    assert sorted(done) == [("trk_0", True, None), ("trk_1", False, STOPPED_ERROR), ("trk_2", False, STOPPED_ERROR)]
+
+
+async def test_rip_all_with_the_drive_present_finalises_every_title(monkeypatch, tmp_path):
+    for pos in range(2):
+        (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={idx: RipResult(ok=True, output_path=tmp_path / f"Disc_t{idx:02d}.mkv") for idx in range(2)},
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+    stop = asyncio.Event()
+    done: list[tuple[str, bool]] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok))
+
+    await rip_all(
+        disc_type=DiscType.DVD,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        stop=stop,
+        drive_lost=lambda: False,
+    )
+    assert not stop.is_set()
+    assert sorted(done) == [("trk_0", True), ("trk_1", True)]

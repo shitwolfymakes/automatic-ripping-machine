@@ -86,6 +86,13 @@ the job ends as partially ripped and the missing titles say the drive
 disconnected. Audio CDs and full-disc backups don't resume; they fail as
 before.
 
+MakeMKV can only rip a whole disc in one pass, so the resume rips the titles
+that already finished again too, into `raw/<job>/resume-1/`, and deletes those
+copies once the pass ends. While it runs, `raw/` needs room for about one more
+copy of the disc: up to 50 GB for a Blu-ray. If it fills up, the resumed titles
+fail with MakeMKV's write error, not the disconnect message, and the job ends
+partially ripped.
+
 A drive that keeps dropping out usually needs a powered USB hub, a different
 port or cable, or a different enclosure. Check `dmesg` for the disconnects.
 

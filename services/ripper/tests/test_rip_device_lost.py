@@ -22,6 +22,8 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveState
 from arm_ripper.job_controller import JobController
 from arm_ripper.rip import RipResult
+from arm_ripper.rip import dispatcher as dispatcher_module
+from arm_ripper.rip.makemkv_rip import STOPPED_ERROR, RipDiscResult
 
 _JOB = "job_01M4R7157QDCVQ3MX6M2VK0XX0"
 
@@ -254,3 +256,60 @@ async def test_cds_and_disc_backups_are_not_resumed(monkeypatch, env) -> None:
             rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
         )
         assert env["client"].statuses("trk_0") == [TrackStatus.IN_PROGRESS, TrackStatus.FAILED]
+
+
+async def test_a_title_makemkvcon_moved_on_from_is_resumed_not_kept(monkeypatch, env) -> None:
+    """The real dispatcher, with makemkvcon scripted: the drive drops under
+    title 1 and makemkvcon moves on to title 2 before the poll loop notices.
+    Title 1's cut-short file must not count as done; the resume rips it."""
+    tracks = [_track(0), _track(1), _track(2)]
+    calls: list[dict[str, Any]] = []
+
+    async def fake_rip_disc(*, output_dir: Path, on_title_done: Any, stop: Any, **kw: Any) -> RipDiscResult:
+        calls.append({"output_dir": output_dir, **kw})
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if len(calls) == 1:
+            (output_dir / "Disc_t00.mkv").write_bytes(b"x" * 8)
+            (output_dir / "Disc_t01.mkv").write_bytes(b"cut")
+            # PRGC:5017 for title 1 finalises title 0 while the drive is there.
+            await on_title_done(0)
+            # The USB bus drops under title 1; the node stops answering
+            # before the poll loop moves the handle.
+            monkeypatch.setattr(jc_module, "read_drive_status", _absent)
+            # PRGC:5017 for title 2: makemkvcon moved on from the failed title.
+            await on_title_done(1)
+            assert stop.is_set()
+            env["handle"].set(None)
+            monkeypatch.setattr(jc_module, "read_drive_status", lambda _path: DriveState.DISC_OK)
+            asyncio.get_running_loop().call_later(0.02, env["handle"].set, "/dev/sr1")
+            return RipDiscResult(overall_error=STOPPED_ERROR, titles={})
+        for pos in range(3):
+            (output_dir / f"Disc_t{pos:02d}.mkv").write_bytes(b"y" * 8)
+            await on_title_done(pos)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+    client: _Client = env["client"]
+    assert len(calls) == 2
+    assert calls[1]["device_path"] == "/dev/sr1"
+    for tid in ("trk_0", "trk_1", "trk_2"):
+        assert client.statuses(tid) == [TrackStatus.IN_PROGRESS, TrackStatus.DONE]
+    outputs = {tid: f["output_path"] for tid, f in client.patches if "output_path" in f}
+    assert outputs == {
+        "trk_0": str(env["raw"] / "Disc_t00.mkv"),
+        "trk_1": str(env["raw"] / "resume-1" / "Disc_t01.mkv"),
+        "trk_2": str(env["raw"] / "resume-1" / "Disc_t02.mkv"),
+    }
+    assert not (env["raw"] / "Disc_t01.mkv").exists()
+    assert not (env["raw"] / "resume-1" / "Disc_t00.mkv").exists()
+
+
+def _absent(_path: str) -> DriveState:
+    raise OSError(19, "No such device")  # ENODEV
