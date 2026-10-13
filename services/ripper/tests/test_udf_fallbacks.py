@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,9 @@ def test_matrix256_uses_7z_records_when_pycdlib_refuses(monkeypatch: pytest.Monk
     assert digest == matrix256_fp.fingerprint_records(records)
 
 
-def test_matrix256_7z_record_cannot_escape_the_skeleton(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_matrix256_7z_record_cannot_escape_the_skeleton(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """D-003: a `..` path in the 7z listing is refused like a pycdlib one."""
     _pycdlib_refuses(monkeypatch)
     victim = tmp_path / "victim.mkv"
@@ -58,6 +61,7 @@ def test_matrix256_7z_record_cannot_escape_the_skeleton(monkeypatch: pytest.Monk
     monkeypatch.setattr(udf_image, "list_files", lambda _p: udf_image.parse_listing(listing))
     assert matrix256_fp.probe_matrix256("/source/x.iso") is None
     assert victim.read_bytes() == b"x" * 1000
+    assert any("hostile disc tree" in r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
 
 
 def test_matrix256_none_when_7z_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

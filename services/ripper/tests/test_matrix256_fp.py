@@ -5,6 +5,7 @@ materialization that turns pycdlib (path, size) records into the mounted-root
 input the library expects, pycdlib view selection and tree collection against
 a stub image, and the probe's soft-fail behavior."""
 
+import logging
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -13,6 +14,7 @@ import pytest
 
 from arm_ripper.scan import matrix256_fp
 from arm_ripper.scan.matrix256_fp import (
+    UnsafeRecordError,
     _collect_from_iso,
     fingerprint_records,
     probe_matrix256,
@@ -73,7 +75,7 @@ def test_dotdot_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
     """D-003: a disc-supplied `..` name must not truncate a file outside the
     skeleton root (the defect's PoC)."""
     victim = _victim(tmp_path)
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(UnsafeRecordError):
         fingerprint_records([(_escaping(victim), 0), ("BDMV/index.bdmv", 5)])
     assert victim.read_bytes() == b"x" * 1000
 
@@ -81,22 +83,40 @@ def test_dotdot_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
 def test_absolute_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
     # `root / "/abs"` discards root, so an absolute name is an escape too.
     victim = _victim(tmp_path)
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(UnsafeRecordError):
         fingerprint_records([(str(victim), 0)])
     assert victim.read_bytes() == b"x" * 1000
 
 
 def test_escaping_record_creates_no_directories(tmp_path: Path) -> None:
     # The check runs before mkdir, so no directory appears outside the root.
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(UnsafeRecordError):
         fingerprint_records([(_escaping(tmp_path / "escaped" / "x"), 1)])
     assert not (tmp_path / "escaped").exists()
 
 
 @pytest.mark.parametrize("relative", ["", ".", "a/.."])
 def test_record_naming_the_root_is_rejected(relative: str) -> None:
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(UnsafeRecordError):
         fingerprint_records([(relative, 1)])
+
+
+@pytest.mark.parametrize("relative", ["A/../X", "./X", "A/./X", "A//X", "A/X/"])
+def test_record_that_is_not_plain_is_rejected_not_normalized(relative: str) -> None:
+    # Normalizing would collapse it onto `X`/`A/X` and hash two disc files as one.
+    with pytest.raises(UnsafeRecordError, match="not a plain relative path"):
+        fingerprint_records([(relative, 1), ("X", 2)])
+
+
+def test_containment_failure_is_an_unsafe_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A plain name that still resolves outside (e.g. through a symlink) is
+    # refused the same way, so the probe logs it as hostile too.
+    def _escapes(_root: Path, relative: str) -> Path:
+        raise ValueError(f"path {relative!r} escapes")
+
+    monkeypatch.setattr(matrix256_fp, "safe_join", _escapes)
+    with pytest.raises(UnsafeRecordError, match="escapes"):
+        fingerprint_records([("BDMV/index.bdmv", 1)])
 
 
 # --- pycdlib view selection and collection (stub image) ----------------------
@@ -213,9 +233,12 @@ def test_probe_no_walkable_view_none() -> None:
         assert probe_matrix256("/dev/sr0") is None
 
 
-def test_probe_soft_fails_on_reader_error() -> None:
+def test_probe_soft_fails_on_reader_error(caplog: pytest.LogCaptureFixture) -> None:
+    # An unreadable disc is routine: no fingerprint, and nothing above DEBUG.
+    caplog.set_level(logging.DEBUG, logger=matrix256_fp.__name__)
     with mock.patch.object(matrix256_fp, "collect_tree_records", side_effect=OSError("boom")):
         assert probe_matrix256("/dev/sr0") is None
+    assert [r.levelno for r in caplog.records] == [logging.DEBUG]
 
 
 def test_probe_soft_fails_on_unmaterializable_record() -> None:
@@ -226,10 +249,14 @@ def test_probe_soft_fails_on_unmaterializable_record() -> None:
         assert probe_matrix256("/dev/sr0") is None
 
 
-def test_probe_soft_fails_on_escaping_record(tmp_path: Path) -> None:
-    # A hostile tree yields no fingerprint, and the file it named is untouched.
+def test_probe_soft_fails_on_escaping_record(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    # A hostile tree yields no fingerprint, leaves the file it named
+    # untouched, and is refused by the record check (the WARNING), not by
+    # some unrelated failure on the way there.
     victim = _victim(tmp_path)
     records = [(_escaping(victim), 0), ("BDMV/index.bdmv", 5)]
     with mock.patch.object(matrix256_fp, "collect_tree_records", return_value=(records, "udf")):
         assert probe_matrix256("/dev/sr0") is None
     assert victim.read_bytes() == b"x" * 1000
+    [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert "hostile disc tree" in warning.getMessage()
