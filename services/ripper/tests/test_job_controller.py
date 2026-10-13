@@ -64,7 +64,8 @@ def _view(
 
 class FakeClient:
     def __init__(self) -> None:
-        self.identify_responses: deque[Job] = deque()
+        # A queued exception is raised instead of returned (identify refused).
+        self.identify_responses: deque[Job | Exception] = deque()
         self.get_job_responses: deque[JobView] = deque()
         self.identify_calls: list[ScanResult] = []
         self.identify_pending_session_ids: list[str | None] = []
@@ -92,7 +93,10 @@ class FakeClient:
     ) -> Job:
         self.identify_calls.append(scan_result)
         self.identify_pending_session_ids.append(pending_session_id)
-        return self.identify_responses.popleft()
+        response = self.identify_responses.popleft()
+        if isinstance(response, Exception):
+            raise response
+        return response
 
     async def get_job(self, job_id: str) -> JobView:
         self.get_job_calls.append(job_id)
@@ -457,6 +461,35 @@ def _abandon_envelope() -> WSEnvelope:
         job_id="job_test",
         payload={"job_id": "job_test", "delete_raw": False},
     )
+
+
+def _identify_refused(code: int, detail: object) -> httpx.HTTPStatusError:
+    req = httpx.Request("POST", "https://x/api/ripper/identify")
+    return httpx.HTTPStatusError(
+        f"{code}", request=req, response=httpx.Response(code, json={"detail": detail}, request=req)
+    )
+
+
+async def test_identify_refusing_an_already_ripped_disc_ejects_it(stub_scan, eject_spy):
+    """on_previously_ripped=reject (D-132): no job, and the disc comes back out."""
+    client = FakeClient()
+    client.identify_responses.append(_identify_refused(409, {"reason": "previously_ripped", "job_id": "job_old"}))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert eject_spy == ["/dev/sr0"]
+    assert client.rip_start_calls == []
+
+
+async def test_other_identify_refusals_leave_the_disc_in(stub_scan, eject_spy):
+    client = FakeClient()
+    client.identify_responses.append(_identify_refused(409, "ripping is paused; no new jobs accepted"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert eject_spy == []
 
 
 async def test_abandon_while_parked_cancels_and_ejects(stub_scan, eject_spy, monkeypatch):

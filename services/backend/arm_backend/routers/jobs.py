@@ -64,6 +64,8 @@ from arm_common.schemas import (
     JobView,
     ManualTriggerRequest,
     ManualTriggerResponse,
+    PreviousRipView,
+    RipAgainResponse,
     ResolveFanOutOutcomeView,
     ResolveRequest,
     ResolveResponse,
@@ -75,12 +77,19 @@ from arm_common.schemas import (
 )
 from arm_common.enums import (
     NON_TERMINAL_JOB_STATUSES,
+    POST_RIP_JOB_STATUSES,
     RESOLVABLE_JOB_STATUSES,
     RESOLVABLE_PROMOTE_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,
 )
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
-from arm_common.schemas.job_metadata import JobIdentity, JobMetadata, flag_is_set
+from arm_common.schemas.job_metadata import (
+    JobIdentity,
+    JobMetadata,
+    flag_is_set,
+    previously_ripped_job_id,
+    with_flags,
+)
 from arm_common.ulid import is_valid_id
 
 logger = logging.getLogger("arm_backend.routers.jobs")
@@ -428,6 +437,47 @@ async def get_job_detail(
         job=job_view,
         tracks=[_track_view(t) for t in tracks],
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
+        previous_rip=await _previous_rip_view(session, job),
+    )
+
+
+async def _previous_rip_view(db: AsyncSession, job: Job) -> PreviousRipView | None:
+    """The earlier rip a previously-ripped hold names, with whether its
+    finished outputs are still on disk. None when there is none or it has
+    since been deleted."""
+    previous_id = previously_ripped_job_id(job.metadata_json)
+    if previous_id is None:
+        return None
+    previous = (await db.execute(select(Job).where(col(Job.id) == previous_id))).scalar_one_or_none()
+    if previous is None:
+        return None
+    # Two single-table reads rather than _resolve_media_outputs' join, so the
+    # detail endpoint stays FakeSession-compatible.
+    track_ids = [
+        t.id for t in (await db.execute(select(Track).where(col(Track.job_id) == previous.id))).scalars().all()
+    ]
+    outputs: list[Path] = []
+    if track_ids:
+        media_root = Path(settings.MEDIA_ROOT)
+        done = (
+            (
+                await db.execute(
+                    select(TranscodeTask)
+                    .where(col(TranscodeTask.source_track_id).in_(track_ids))
+                    .where(col(TranscodeTask.status) == TranscodeTaskStatus.DONE)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        outputs = [media_root / t.output_path for t in done if t.output_path]
+    return PreviousRipView(
+        job_id=previous.id,
+        title=previous.title,
+        year=previous.year,
+        status=previous.status,
+        ripped_at=previous.ripped_at,
+        outputs_present=all(p.exists() for p in outputs) if outputs else None,
     )
 
 
@@ -494,7 +544,16 @@ async def rip_start_review(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"rip-start-review only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
-    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all())
+    await _start_held_job(db, hub, job)
+    await db.refresh(job)
+    logger.info("rip-start-review job_id=%s -> ripping", job.id)
+    return job
+
+
+async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
+    """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
+    the parked ripper. Commits. 422 when every track is excluded."""
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -522,9 +581,68 @@ async def rip_start_review(
         session=db,
     )
     await db.commit()
-    await db.refresh(job)
-    logger.info("rip-start-review job_id=%s -> ripping", job.id)
-    return job
+
+
+@router.post("/{job_id}/rip-again", response_model=RipAgainResponse)
+async def rip_again(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> RipAgainResponse:
+    """Operator "Rip again" on a ripped job (on_previously_ripped hold/reject).
+
+    If a copy of this disc is held right now (a previously-ripped hold sharing
+    a fingerprint with this job, whichever earlier rip it names), start that
+    one. Otherwise flag this job so the next identify of the disc skips the
+    previously-ripped check once.
+    """
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    if job.status not in POST_RIP_JOB_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"rip-again only valid for a ripped job, got {enum_value_str(job.status)}",
+        )
+    held = (
+        (await db.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW).order_by(col(Job.id))))
+        .scalars()
+        .all()
+    )
+    held = [h for h in held if previously_ripped_job_id(h.metadata_json) is not None]
+    same_disc: set[str] = set()
+    if held:
+        fps = {
+            (fp.algo, fp.value)
+            for fp in (await db.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id)))
+            .scalars()
+            .all()
+        }
+        if fps:
+            held_fps = (
+                (
+                    await db.execute(
+                        select(DiscFingerprint).where(col(DiscFingerprint.job_id).in_(tuple(h.id for h in held)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            same_disc = {fp.job_id for fp in held_fps if (fp.algo, fp.value) in fps}
+    copy = next(
+        (h for h in held if h.id in same_disc or previously_ripped_job_id(h.metadata_json) == job.id),
+        None,
+    )
+    if copy is not None:
+        await _start_held_job(db, hub, copy)
+        logger.info("rip-again job_id=%s: started held copy job_id=%s", job.id, copy.id)
+        return RipAgainResponse(started_job_id=copy.id)
+    job.metadata_json = with_flags(job.metadata_json, rerip_allowed=True)
+    db.add(job)
+    await db.commit()
+    logger.info("rip-again job_id=%s: next identify of this disc may rip it", job.id)
+    return RipAgainResponse(armed=True)
 
 
 @router.post("/{job_id}/review-pause", response_model=JobView)
@@ -550,6 +668,11 @@ async def review_pause(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
+        )
+    if previously_ripped_job_id(job.metadata_json) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="this disc was ripped before; it has no countdown to pause",
         )
     job.manual_pause = paused
     if not paused:

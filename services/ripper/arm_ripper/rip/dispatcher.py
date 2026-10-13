@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict
 
@@ -11,7 +12,14 @@ from arm_common.schemas import TrackView
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
-from arm_ripper.rip.makemkv_rip import RipResult, _output_files_in_rip_order, rip_disc
+from arm_ripper.rip.makemkv_rip import (
+    _OUTPUT_FILE_RE,
+    STOPPED_ERROR,
+    RipDiscResult,
+    RipResult,
+    _output_files_in_rip_order,
+    rip_disc,
+)
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -49,8 +57,19 @@ async def rip_all(
     on_track_done: OnTrackDone,
     on_track_progress: OnTrackProgress | None = None,
     min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+    stop: asyncio.Event | None = None,
+    skip_track_ids: Collection[str] = (),
+    drive_lost: Callable[[], bool] | None = None,
 ) -> None:
     """Rip every track in `tracks` and invoke the lifecycle callbacks.
+
+    DVD / BD only: `stop` kills makemkvcon when set (the drive dropped off the
+    bus), and `skip_track_ids` names tracks an earlier pass already settled.
+    `drive_lost` is asked as each title finishes: makemkvcon moves on from a
+    title the drive dropped under before anything else may notice, and that
+    title's file is cut short, so it is reported unfinished and `stop` is set.
+    A resume passes every track so the `mkv all` output positions still line
+    up, and the skipped tracks get no callbacks (their new files are deleted).
 
     Per disc_type:
     - DVD / BD: one `makemkvcon mkv ... all` invocation for the whole
@@ -92,6 +111,9 @@ async def rip_all(
             on_track_done=on_track_done,
             on_track_progress=on_track_progress,
             min_length_seconds=min_length_seconds,
+            stop=stop,
+            skip_track_ids=skip_track_ids,
+            drive_lost=drive_lost,
         )
         return
 
@@ -163,6 +185,9 @@ async def _rip_optical(
     on_track_done: OnTrackDone,
     on_track_progress: OnTrackProgress | None,
     min_length_seconds: int,
+    stop: asyncio.Event | None = None,
+    skip_track_ids: Collection[str] = (),
+    drive_lost: Callable[[], bool] | None = None,
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
 
@@ -189,6 +214,8 @@ async def _rip_optical(
         try:
             idx = int(track.source_ref)
         except ValueError:
+            if track.id in skip_track_ids:
+                continue
             # No need to fire on_track_start for an invalid-source_ref
             # track — the backend rejects the track entirely via the
             # FAILED-from-QUEUED guard. Falling through to on_track_done
@@ -219,11 +246,25 @@ async def _rip_optical(
         if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
     )
 
-    started: set[int] = set()
+    # Titles an earlier pass of this job already settled (a resume after the
+    # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
+    # does, but they get no callbacks and their new files are deleted.
+    skipped = {idx for idx, t in track_by_index.items() if t.id in skip_track_ids}
+    started: set[int] = set(skipped)
     # Source indexes whose Track has already been PATCHed DONE via the
     # streamer's mid-rip on_title_done callback. The post-rip
     # attribution loop skips these to avoid double-PATCHing.
-    done_emitted: set[int] = set()
+    done_emitted: set[int] = set(skipped)
+
+    def _drive_dropped() -> bool:
+        """The drive left the bus under this rip (D-133). The first time
+        `drive_lost` says so, set `stop`, which kills makemkvcon."""
+        if stop is None:
+            return False
+        if not stop.is_set() and drive_lost is not None and drive_lost():
+            logger.warning("drive dropped off the bus mid-rip; stopping makemkvcon")
+            stop.set()
+        return stop.is_set()
 
     async def _on_title_start(title_idx: int) -> None:
         track = track_by_index.get(title_idx)
@@ -312,6 +353,11 @@ async def _rip_optical(
             return
         if title_idx in done_emitted:
             return
+        if _drive_dropped():
+            # makemkvcon moved on because the drive dropped under this title,
+            # so its file is cut short. The stopped-rip path below reports it
+            # unfinished.
+            return
         try:
             position = eligible_source_indexes.index(title_idx)
         except ValueError:
@@ -370,7 +416,13 @@ async def _rip_optical(
             on_disc_progress=_on_disc_progress,
             on_title_done=_on_title_done,
             hash_outputs=False,
+            stop=stop,
         )
+        _delete_skipped_outputs(output_dir, eligible_source_indexes, skipped)
+        if disc_result.overall_error is None and _drive_dropped():
+            # makemkvcon exited on its own after the drive dropped: a title
+            # not finalised above may be cut short, so none of them count.
+            disc_result = RipDiscResult(overall_error=STOPPED_ERROR, titles={})
 
         if disc_result.overall_error is not None:
             # Rip-level failure — mark every selected track FAILED with the
@@ -445,3 +497,16 @@ async def _rip_optical(
         # hashing files that are about to be wiped.
         hasher.cancel()
         raise
+
+
+def _delete_skipped_outputs(output_dir: Path, eligible_source_indexes: list[int], skipped: set[int]) -> None:
+    """Delete the files a resume pass wrote for titles an earlier pass already
+    settled. Matched by their `_tNN` position suffix, not by list order, so a
+    title that produced no file never shifts the others."""
+    if not skipped:
+        return
+    positions = {pos for pos, idx in enumerate(eligible_source_indexes) if idx in skipped}
+    for f in output_dir.glob("*.mkv"):
+        m = _OUTPUT_FILE_RE.search(f.name)
+        if m and int(m.group(1)) in positions:
+            f.unlink(missing_ok=True)

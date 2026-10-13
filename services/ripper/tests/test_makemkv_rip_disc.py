@@ -714,3 +714,53 @@ async def test_msg_5021_surfaces_distinct_error_and_kills_proc(monkeypatch, tmp_
     # The MSG:5021 line is preserved in the composed-error diagnostics so
     # operators can see the exact line that fired the guard.
     assert "131332" in result.overall_error
+
+
+class _HangingProc(_FakeProc):
+    """makemkvcon grinding against a dead device node: never exits on its own."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+        self._killed = asyncio.Event()
+        self.killed = False
+
+    async def wait(self) -> int:
+        await self._killed.wait()
+        return -9
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+        self._killed.set()
+
+
+async def test_rip_disc_stop_kills_makemkvcon_and_reports_the_lost_drive(monkeypatch, tmp_path):
+    """D-133: once the caller sets `stop` (the drive dropped off the bus),
+    makemkvcon is killed at once instead of failing title after title."""
+    proc = _HangingProc()
+
+    async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any) -> _FakeProc:
+        return proc
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    stop = asyncio.Event()
+    rip = asyncio.create_task(
+        rip_disc(device_path="/dev/sr0", output_dir=tmp_path, eligible_source_indexes=[0, 1], stop=stop)
+    )
+    await asyncio.sleep(0.01)
+    assert not rip.done()
+    stop.set()
+    result = await asyncio.wait_for(rip, timeout=2.0)
+    assert proc.killed
+    assert result.overall_error == makemkv_rip.STOPPED_ERROR
+    assert result.titles == {}
+
+
+async def test_rip_disc_with_an_unset_stop_runs_to_completion(monkeypatch, tmp_path):
+    _stub_subprocess(monkeypatch, ['MSG:5036,0,1,"Copy complete. 1 titles saved.","",""'])
+    _write_title_file(tmp_path, 0)
+    result = await rip_disc(
+        device_path="/dev/sr0", output_dir=tmp_path, eligible_source_indexes=[0], stop=asyncio.Event()
+    )
+    assert result.overall_error is None
+    assert result.titles[0].ok

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend import iso_prepare
-from arm_backend.disc_dedupe import find_reusable_job_for_disc
+from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
@@ -46,13 +46,14 @@ from arm_common import (
     Session,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind, PreviouslyRippedAction
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
     IsoPrepareReport,
     flag_is_set,
+    previously_ripped_job_id,
     with_flags,
     HeldJobView,
     IdentifyRequest,
@@ -338,6 +339,12 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
     now = datetime.now(timezone.utc)
+    # The disc a notice was about has left the tray: the open tray an eject
+    # leaves has closed empty. Only that change clears it. A slot-loading drive
+    # has no open tray and reads "no disc" the moment it ejects, so its notice
+    # stays until the next disc is identified.
+    if drive.media_status == DriveMediaStatus.TRAY_OPEN and req.media_status is DriveMediaStatus.NO_DISC:
+        drive.notice = None
     drive.media_status = req.media_status
     drive.media_status_at = now
     drive.last_seen_at = now
@@ -532,6 +539,41 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     return drive
 
 
+# The 409 detail identify answers when on_previously_ripped=reject turns a disc
+# away; the ripper ejects on it.
+PREVIOUSLY_RIPPED_REASON = "previously_ripped"
+
+
+async def _reject_previously_ripped(
+    session: AsyncSession, hub: WSHub, drive: Drive, previous: Job, scan: ScanResult
+) -> HTTPException:
+    """on_previously_ripped=reject: create no job, record the refusal against
+    the earlier rip (event + inbox) and leave a note on the drive. Returns the
+    409 for the caller to raise once this is committed."""
+    title = previous.title or scan.volume_label or "an untitled disc"
+    when = f" on {previous.ripped_at.date().isoformat()}" if previous.ripped_at else ""
+    drive.notice = f"Ejected a disc already ripped as {title}{when}."
+    session.add(drive)
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.duplicate_rejected",
+        payload={
+            "drive_id": drive.id,
+            "volume_label": scan.volume_label,
+            "disc_type": scan.disc_type.value,
+            "previous_job_id": previous.id,
+        },
+        job_id=previous.id,
+        session=session,
+    )
+    await session.commit()
+    logger.info("identify drive_id=%s: disc already ripped as job_id=%s; rejecting it", drive.id, previous.id)
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"reason": PREVIOUSLY_RIPPED_REASON, "job_id": previous.id},
+    )
+
+
 @router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
 async def identify(
     req: IdentifyRequest,
@@ -546,6 +588,8 @@ async def identify(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
     # An ISO rip's job exists from here on; its "preparing" status is done.
     iso_prepare.clear(drive.id)
+    # A new disc: the note about the last one no longer applies.
+    drive.notice = None
 
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
@@ -567,6 +611,25 @@ async def identify(
         # live job; in-flight recovery owns it. No new job, no re-identify.
         return decision.job
     reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
+
+    # A disc ARM already ripped (on any drive) is held, rejected or ripped
+    # again per on_previously_ripped. A reused job was already through this.
+    previous: Job | None = None
+    action = cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
+    if reuse_job is None and action != PreviouslyRippedAction.RIP:
+        earlier = await find_previous_rips(session, fingerprints=fps)
+        armed = [j for j in earlier if flag_is_set(j.metadata_json, "rerip_allowed")]
+        if armed:
+            # The operator chose "Rip again" on an earlier rip of this disc
+            # (any of them, not only the newest): let this one through, once.
+            for j in armed:
+                j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
+                session.add(j)
+            logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, armed[0].id)
+        elif earlier:
+            previous = earlier[0]
+        if previous is not None and action == PreviouslyRippedAction.REJECT:
+            raise await _reject_previously_ripped(session, hub, drive, previous, scan)
 
     if reuse_job is not None:
         job = reuse_job
@@ -737,6 +800,17 @@ async def identify(
                 job.title = scan.volume_label
                 job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
 
+        if previous is not None:
+            # on_previously_ripped=hold: whatever identify concluded, the disc
+            # waits for Rip again or Discard. No countdown (wait_start_time
+            # stays unset), so the ripper never auto-starts it.
+            if job.status != JobStatus.AWAITING_REVIEW:
+                await _persist_review_tracks(session, job, scan)
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = None
+            job.metadata_json = {**(job.metadata_json or {}), "previously_ripped": {"job_id": previous.id}}
+            logger.info("identify job_id=%s: disc already ripped as job_id=%s; holding it", job.id, previous.id)
+
         # Apply every stored proposal: hint job fields for all outcomes, plus
         # disc-map / preset track fields when review tracks were persisted.
         await resolve_job(session, job)
@@ -757,15 +831,18 @@ async def identify(
         # not re-emit for a reused job already sitting in the target held status.
         if reuse_job is None or prior_status != job.status:
             event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
+            payload: dict[str, object] = {
+                "job_id": job.id,
+                "drive_id": job.drive_id,
+                "volume_label": scan.volume_label,
+                "disc_type": job.disc_type.value,
+            }
+            if previous is not None:
+                payload["previous_job_id"] = previous.id
             await hub.emit(
                 topic="ripper.events",
                 event_type=event_type,
-                payload={
-                    "job_id": job.id,
-                    "drive_id": job.drive_id,
-                    "volume_label": scan.volume_label,
-                    "disc_type": job.disc_type.value,
-                },
+                payload=payload,
                 job_id=job.id,
                 session=session,
             )
@@ -1092,7 +1169,8 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     # paused = the hold survives a reboot: global ripping_paused OR this disc's
     # per-job manual_pause. Either means the operator deliberately held it.
     global_paused = bool(cfg.ripping_paused) if cfg is not None else False
-    paused = global_paused or bool(rows[0].manual_pause)
+    # A previously-ripped hold waits for the operator however it got there.
+    paused = global_paused or bool(rows[0].manual_pause) or previously_ripped_job_id(rows[0].metadata_json) is not None
     return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
 
 

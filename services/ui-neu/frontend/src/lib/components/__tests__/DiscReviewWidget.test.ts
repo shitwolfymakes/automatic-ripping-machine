@@ -24,6 +24,7 @@ vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve(createJob())),
 	deleteJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
+	resolveJob: vi.fn(() => Promise.resolve({})),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
 	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
@@ -202,6 +203,71 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(cancelIsoRip).toHaveBeenCalledWith('drv_iso_1'));
 			const { abandonJob } = await import('$lib/api/jobs');
 			expect(abandonJob).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('already ripped (D-132)', () => {
+		const held = createJob({
+			status: 'awaiting_review',
+			title: 'Resident Evil: Retribution',
+			wait_start_time: null,
+			metadata_json: { previously_ripped: { job_id: 'job_old' } } as never
+		});
+		const previous = {
+			job_id: 'job_old',
+			title: 'Resident Evil: Retribution',
+			year: 2012,
+			status: 'ripped' as const,
+			ripped_at: '2026-10-12T06:35:00Z',
+			outputs_present: true
+		};
+
+		async function renderHeld(previousRip: typeof previous | null) {
+			const { fetchJob } = await import('$lib/api/jobs');
+			const original = vi.mocked(fetchJob).getMockImplementation();
+			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: held, previous_rip: previousRip });
+			const ondismiss = vi.fn();
+			renderComponent(DiscReviewWidget, { props: { job: held, driveNames: {}, paused: false, ondismiss } });
+			return { ondismiss, restore: () => vi.mocked(fetchJob).mockImplementation(original!) };
+		}
+
+		it('names the earlier rip and offers Rip again or Discard', async () => {
+			const { restore } = await renderHeld(previous);
+			try {
+				expect(await screen.findByText('Already ripped: Rip again or Discard')).toBeInTheDocument();
+				expect(screen.getByText('ALREADY RIPPED')).toBeInTheDocument();
+				const link = await screen.findByRole('link', { name: 'Resident Evil: Retribution' });
+				expect(link).toHaveAttribute('href', '/jobs/job_old');
+				expect(screen.getByText('Its files are still in the library.')).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: 'Rip again' })).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+				expect(screen.queryByRole('button', { name: 'Start rip' })).toBeNull();
+			} finally {
+				restore();
+			}
+		});
+
+		it('Rip again starts the held disc', async () => {
+			const { startWaitingJob } = await import('$lib/api/jobs');
+			const { ondismiss, restore } = await renderHeld(previous);
+			try {
+				await fireEvent.click(await screen.findByRole('button', { name: 'Rip again' }));
+				await waitFor(() => expect(startWaitingJob).toHaveBeenCalledWith('job_1'));
+				await waitFor(() => expect(ondismiss).toHaveBeenCalled());
+			} finally {
+				restore();
+			}
+		});
+
+		it('says so when the earlier job has since been deleted', async () => {
+			const { restore } = await renderHeld(null);
+			try {
+				expect(
+					await screen.findByText('ARM ripped this disc before, but that job has since been deleted.')
+				).toBeInTheDocument();
+			} finally {
+				restore();
+			}
 		});
 	});
 

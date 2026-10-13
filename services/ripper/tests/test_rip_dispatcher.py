@@ -210,6 +210,7 @@ def _stub_rip_disc(
         on_disc_progress: Any | None = None,
         on_title_done: Any | None = None,
         hash_outputs: bool = True,
+        stop: Any | None = None,
     ) -> RipDiscResult:
         if captured is not None:
             captured["hash_outputs"] = hash_outputs
@@ -1061,3 +1062,155 @@ async def test_title_hasher_passes_none_for_an_unreadable_file(tmp_path):
     hasher.submit(tmp_path / "missing.mkv", 1, then)
     await hasher.finish()
     assert got == [None]
+
+
+async def test_rip_all_resume_pass_skips_titles_an_earlier_pass_settled(monkeypatch, tmp_path):
+    """D-133: a resume after the drive dropped off the bus runs one more
+    `mkv all`, which rips every title again. Titles already settled get no
+    callbacks and their duplicate files are deleted; the rest attribute by
+    position exactly as in a first pass."""
+    for pos in range(3):
+        (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            0: RipResult(ok=True, output_path=tmp_path / "Disc_t00.mkv", size_bytes=10),
+            1: RipResult(ok=True, output_path=tmp_path / "Disc_t01.mkv", size_bytes=11),
+            2: RipResult(ok=True, output_path=tmp_path / "Disc_t02.mkv", size_bytes=12),
+        },
+    )
+    captured: dict[str, Any] = {}
+    stop = asyncio.Event()
+    _stub_rip_disc(monkeypatch, fake_result, captured=captured, fire_per_title_start=True, fire_per_title_done=True)
+
+    events: list[tuple[str, str]] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(("start", track.id))
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        assert result.ok
+        events.append(("done", track.id))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr1",
+        tracks=[_track(0), _track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        stop=stop,
+        skip_track_ids={"trk_0"},
+    )
+
+    # Positions still line up with every eligible title, skipped or not.
+    assert captured["eligible_source_indexes"] == [0, 1, 2]
+    assert {e[1] for e in events} == {"trk_1", "trk_2"}
+    assert sorted(f.name for f in tmp_path.glob("*.mkv")) == ["Disc_t01.mkv", "Disc_t02.mkv"]
+
+
+async def test_rip_all_stopped_pass_reports_the_rest_without_touching_settled_tracks(monkeypatch, tmp_path):
+    """A pass stopped by the lost drive reports its unfinished tracks with
+    the stop error (the controller holds them for the resume), never the
+    ones an earlier pass settled."""
+    from arm_ripper.rip.makemkv_rip import STOPPED_ERROR
+
+    _stub_rip_disc(monkeypatch, RipDiscResult(overall_error=STOPPED_ERROR, titles={}), fire_per_title_start=False)
+    done: list[tuple[str, str | None]] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.error))
+
+    await rip_all(
+        disc_type=DiscType.DVD,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1), _track(2, source_ref="bad")],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        skip_track_ids={"trk_0", "trk_2"},
+    )
+    assert done == [("trk_1", STOPPED_ERROR)]
+
+
+async def test_rip_all_does_not_finalise_a_title_the_drive_dropped_under(monkeypatch, tmp_path):
+    """D-133: makemkvcon moves on from the title the drive dropped under (a
+    PRGC transition) before the poll loop notices. That title's file is cut
+    short, so it and the rest are reported stopped, never DONE, and `stop` is
+    set to kill makemkvcon."""
+    from arm_ripper.rip.makemkv_rip import STOPPED_ERROR
+
+    for pos in range(3):
+        (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={idx: RipResult(ok=True, output_path=tmp_path / f"Disc_t{idx:02d}.mkv") for idx in range(3)},
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+    asked: list[int] = []
+
+    def drive_lost() -> bool:
+        # Still there when title 0 finishes; gone by the time title 1 does.
+        asked.append(1)
+        return len(asked) > 1
+
+    stop = asyncio.Event()
+    done: list[tuple[str, bool, str | None]] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok, result.error))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        stop=stop,
+        drive_lost=drive_lost,
+    )
+
+    assert stop.is_set()
+    assert sorted(done) == [("trk_0", True, None), ("trk_1", False, STOPPED_ERROR), ("trk_2", False, STOPPED_ERROR)]
+
+
+async def test_rip_all_with_the_drive_present_finalises_every_title(monkeypatch, tmp_path):
+    for pos in range(2):
+        (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={idx: RipResult(ok=True, output_path=tmp_path / f"Disc_t{idx:02d}.mkv") for idx in range(2)},
+    )
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True, fire_per_title_done=True)
+    stop = asyncio.Event()
+    done: list[tuple[str, bool]] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok))
+
+    await rip_all(
+        disc_type=DiscType.DVD,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        stop=stop,
+        drive_lost=lambda: False,
+    )
+    assert not stop.is_set()
+    assert sorted(done) == [("trk_0", True), ("trk_1", True)]

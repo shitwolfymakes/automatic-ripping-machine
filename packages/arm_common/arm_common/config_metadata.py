@@ -179,6 +179,20 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         widget="disc_handling",
     ),
     ConfigFieldMeta(
+        key="on_previously_ripped",
+        group="Ripping",
+        tier="operator",
+        label="When a disc was ripped before",
+        help="What ARM does with a disc it has already ripped (on any drive). Hold waits for you to choose "
+        "Rip again or Discard; Reject ejects it; Rip again rips it without asking.",
+        type="enum",
+        editable=True,
+        enum_values=["hold", "reject", "rip"],
+        enum_labels={"hold": "Hold for me", "reject": "Reject and eject", "rip": "Rip again"},
+        setup_step="discs",
+        setup_order=2,
+    ),
+    ConfigFieldMeta(
         key="block_on_miss",
         group="Ripping",
         tier="operator",

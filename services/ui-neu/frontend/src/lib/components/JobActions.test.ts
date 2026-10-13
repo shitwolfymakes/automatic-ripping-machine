@@ -7,12 +7,14 @@ import { createJob } from './__fixtures__/job';
 // renders no control for it.
 vi.mock('$lib/api/jobs', () => ({
 	abandonJob: vi.fn(() => Promise.resolve()),
-	deleteJob: vi.fn(() => Promise.resolve())
+	deleteJob: vi.fn(() => Promise.resolve()),
+	ripAgain: vi.fn(() => Promise.resolve({ started_job_id: null, armed: true }))
 }));
 
-import { abandonJob, deleteJob } from '$lib/api/jobs';
+import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
+const mockRipAgain = vi.mocked(ripAgain);
 
 // Mock window.confirm
 vi.stubGlobal(
@@ -25,6 +27,36 @@ describe('JobActions', () => {
 		cleanup();
 		vi.clearAllMocks();
 		vi.mocked(confirm).mockReturnValue(true);
+	});
+
+	describe('rip again (D-132)', () => {
+		it('is offered for a ripped job only', () => {
+			renderComponent(JobActions, { props: { job: createJob({ status: 'ripped_partial' }) } });
+			expect(screen.getByRole('button', { name: 'Rip again' })).toBeInTheDocument();
+			cleanup();
+			renderComponent(JobActions, { props: { job: createJob({ status: 'failed' }) } });
+			expect(screen.queryByRole('button', { name: 'Rip again' })).toBeNull();
+		});
+
+		it('says the next insert rips it when nothing is held', async () => {
+			const onaction = vi.fn();
+			renderComponent(JobActions, { props: { job: createJob({ id: 'job_old', status: 'ripped' }), onaction } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Rip again' }));
+			expect(mockRipAgain).toHaveBeenCalledWith('job_old');
+			await waitFor(() =>
+				expect(screen.getByText('The next time this disc goes in, ARM rips it again')).toBeInTheDocument()
+			);
+			expect(onaction).toHaveBeenCalled();
+		});
+
+		it('says it started the held copy when there was one', async () => {
+			mockRipAgain.mockResolvedValueOnce({ started_job_id: 'job_new', armed: false });
+			renderComponent(JobActions, { props: { job: createJob({ status: 'ripped' }) } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Rip again' }));
+			await waitFor(() =>
+				expect(screen.getByText('Started ripping the copy waiting in the drive')).toBeInTheDocument()
+			);
+		});
 	});
 
 	describe('rendering', () => {

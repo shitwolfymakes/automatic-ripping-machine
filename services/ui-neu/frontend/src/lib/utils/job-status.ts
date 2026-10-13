@@ -69,7 +69,21 @@ export function hasTitleMatch(job: Pick<JobView, 'title'>): boolean {
 	return typeof job.title === 'string' && job.title.trim().length > 0;
 }
 
-type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'>;
+type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'> & {
+	metadata_json?: JobView['metadata_json'];
+};
+
+/**
+ * The earlier rip a held disc matched (on_previously_ripped = hold), or null.
+ * A job held for this reason has no countdown: it waits for Rip again or
+ * Discard.
+ */
+export function previouslyRippedJobId(
+	job: { metadata_json?: JobView['metadata_json'] } | null | undefined
+): string | null {
+	const id = job?.metadata_json?.previously_ripped?.job_id;
+	return typeof id === 'string' && id ? id : null;
+}
 
 /**
  * The header phase pill for any job rendered as a review card. Pre-rip statuses
@@ -82,6 +96,8 @@ type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'>;
  */
 export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string } {
 	const s = job.status?.toLowerCase() ?? '';
+	if (s === 'awaiting_review' && previouslyRippedJobId(job))
+		return { label: 'ALREADY RIPPED', accent: 'var(--color-accent-4)' };
 	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-accent-1)' };
 	if (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify')
 		return { label: 'IDENTIFY', accent: 'var(--color-accent-4)' };

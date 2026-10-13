@@ -62,7 +62,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 	Ripping: [
 		{
 			title: 'On insert',
-			keys: ['auto_rip_on_insert', 'block_on_miss', 'ripping_paused']
+			keys: ['auto_rip_on_insert', 'block_on_miss', 'on_previously_ripped', 'ripping_paused']
 		},
 		{
 			title: 'Review gate',

@@ -42,6 +42,9 @@ from arm_ripper.source import makemkv_source_url
 logger = logging.getLogger("arm_ripper.rip.makemkv")
 
 RIP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours: worst-case BD
+# The error a rip reports when its caller set `stop` (the drive dropped off the
+# bus mid-rip, arm_ripper.job_controller): makemkvcon was killed, not failed.
+STOPPED_ERROR = "makemkvcon stopped: the drive disconnected"
 
 OnTitleStart = Callable[[int], Awaitable[None]]
 OnTitleProgress = Callable[[int, float], Awaitable[None]]
@@ -485,10 +488,13 @@ async def _run_makemkvcon(
     on_title_done: OnTitleDone | None = None,
     eligible_source_indexes: list[int] | None = None,
     gate_disc_progress: bool = True,
+    stop: asyncio.Event | None = None,
 ) -> str | None:
     """Run one makemkvcon invocation to completion, streaming its robot output
     into `state`. Returns None on a clean exit, else the error text: not on
-    PATH, timed out, the expired-binary kill switch, or a non-zero exit.
+    PATH, timed out, the expired-binary kill switch, a non-zero exit, or
+    STOPPED_ERROR once `stop` is set (the process is killed at once rather
+    than left to fail every remaining title against a dead device node).
     Cancel-safe: a cancelled caller kills the subprocess before unwinding."""
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -511,8 +517,23 @@ async def _run_makemkvcon(
             gate_disc_progress=gate_disc_progress,
         )
     )
+    stopped = False
     try:
-        await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
+        if stop is None:
+            await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
+        else:
+            exited = asyncio.create_task(proc.wait())
+            stop_seen = asyncio.create_task(stop.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    {exited, stop_seen}, timeout=RIP_TIMEOUT_SECONDS, return_when=asyncio.FIRST_COMPLETED
+                )
+            finally:
+                stop_seen.cancel()
+                exited.cancel()
+            if not done:
+                raise asyncio.TimeoutError
+            stopped = exited not in done
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
@@ -534,6 +555,9 @@ async def _run_makemkvcon(
         await streamer
     except asyncio.CancelledError:
         pass
+
+    if stopped:
+        return STOPPED_ERROR
 
     if state.binary_expired:
         return _compose_error(
@@ -564,6 +588,7 @@ async def rip_disc(
     on_disc_progress: OnDiscProgress | None = None,
     on_title_done: OnTitleDone | None = None,
     hash_outputs: bool = True,
+    stop: asyncio.Event | None = None,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -580,6 +605,9 @@ async def rip_disc(
     file whose suffix is `_t{i:02d}` to get back to source-index
     keys. Pass `None` (or `[]`) only if the caller will handle
     attribution itself; the result will have an empty `titles` dict.
+
+    `stop`, when set mid-rip, kills makemkvcon and returns STOPPED_ERROR as
+    the overall error (see _run_makemkvcon).
 
     `hash_outputs=False` leaves `sha256` unset on every result: the
     dispatcher hashes each title itself as soon as it is written, so the
@@ -618,6 +646,7 @@ async def rip_disc(
         on_disc_progress=on_disc_progress,
         on_title_done=on_title_done,
         eligible_source_indexes=eligible_source_indexes,
+        stop=stop,
     )
     if error is not None:
         return RipDiscResult(overall_error=error, titles={})

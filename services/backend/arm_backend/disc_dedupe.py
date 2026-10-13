@@ -1,5 +1,6 @@
 """Find an existing job to reuse for a re-scanned disc, so a ripper restart /
-re-identify on a disc-in-drive does not mint a duplicate Job.
+re-identify on a disc-in-drive does not mint a duplicate Job; and find an
+earlier rip of the same disc (on any drive) for the on_previously_ripped gate.
 
 Caller (identify) supplies the scan's (algo, value) fingerprints. We look up the
 drive's non-terminal jobs and match by any shared fingerprint:
@@ -20,7 +21,7 @@ from typing import Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, PRE_RIP_JOB_STATUSES
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, POST_RIP_JOB_STATUSES, PRE_RIP_JOB_STATUSES
 from arm_common.models.disc_fingerprint import DiscFingerprint
 from arm_common.models.job import Job
 
@@ -87,3 +88,43 @@ async def find_reusable_job_for_disc(
 
     action: Literal["reuse", "in_flight"] = "reuse" if matched_job.status in PRE_RIP_JOB_STATUSES else "in_flight"
     return ReuseDecision(job=matched_job, action=action)
+
+
+async def find_previous_rips(
+    session: AsyncSession,
+    *,
+    fingerprints: Sequence[tuple[str, str]],
+) -> list[Job]:
+    """Every earlier rip of this disc, newest first: jobs on any drive in
+    POST_RIP_JOB_STATUSES sharing any (algo, value) fingerprint with the scan.
+    Failed and abandoned jobs never count; deleting a job deletes its
+    fingerprints, so a deleted rip no longer matches.
+    """
+    wanted = {(a, v) for a, v in fingerprints if a and v}
+    if not wanted:
+        return []
+    fps: Sequence[DiscFingerprint] = (
+        (
+            await session.execute(
+                select(DiscFingerprint).where(col(DiscFingerprint.value).in_(tuple({v for _, v in wanted})))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    job_ids = {fp.job_id for fp in fps if (fp.algo, fp.value) in wanted}
+    if not job_ids:
+        return []
+    ripped: Sequence[Job] = (
+        (
+            await session.execute(
+                select(Job)
+                .where(col(Job.id).in_(tuple(job_ids)))
+                .where(col(Job.status).in_(tuple(POST_RIP_JOB_STATUSES)))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # ULIDs sort by creation, so the greatest id is the newest rip.
+    return sorted(ripped, key=lambda j: j.id, reverse=True)

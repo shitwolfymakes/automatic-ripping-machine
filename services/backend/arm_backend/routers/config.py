@@ -39,8 +39,14 @@ from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES
-from arm_common.schemas import ConfigUpdateRequest, ConfigView, KeyCheckRequest, KeyCheckResponse
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES, PreviouslyRippedAction
+from arm_common.schemas import (
+    ConfigUpdateRequest,
+    ConfigView,
+    KeyCheckRequest,
+    KeyCheckResponse,
+    previously_ripped_job_id,
+)
 from arm_common.secrets import HIDDEN_SECRET
 
 _KEY_CHECK_TIMEOUT_SECONDS = 10.0
@@ -87,6 +93,7 @@ def _to_view(cfg: Config) -> ConfigView:
         # server_default only) for rows/fixtures predating these columns.
         hold_for_review=bool(cfg.hold_for_review),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        on_previously_ripped=cfg.on_previously_ripped or PreviouslyRippedAction.HOLD,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         # NULL falls back to the env value, exactly as the dispatcher does.
@@ -177,6 +184,10 @@ async def update_config(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="manual_wait_seconds must be 0 or a positive integer"
         )
+    if "on_previously_ripped" in fields and fields["on_previously_ripped"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="on_previously_ripped must be hold, reject or rip"
+        )
     if "max_parallel_iso_rips" in fields:
         cap = fields["max_parallel_iso_rips"]
         if cap is None or isinstance(cap, bool) or not 1 <= cap <= 8:
@@ -248,6 +259,9 @@ async def update_config(
         now = datetime.now(timezone.utc)
         held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
         for job in held:
+            # A previously-ripped hold has no countdown to restart.
+            if previously_ripped_job_id(job.metadata_json) is not None:
+                continue
             job.wait_start_time = now
             session.add(job)
 

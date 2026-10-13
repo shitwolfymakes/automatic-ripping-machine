@@ -16,7 +16,8 @@ import type {
 	ResolveResponse,
 	ApplySessionResponse,
 	ManualTriggerRequest,
-	ManualTriggerResponse
+	ManualTriggerResponse,
+	RipAgainResponse
 } from '$lib/types/api.gen';
 import { apiFetch, post } from './client';
 
@@ -286,6 +287,12 @@ export function fetchNamingVariables(): Promise<NamingVariablesResponse> {
 
 // Timed review gate: operator Start for a disc held in awaiting_review.
 // Transitions AWAITING_REVIEW -> RIPPING and unblocks the parked ripper.
+// on_previously_ripped: rip a ripped job's disc again. Starts a held copy of
+// the disc if one is waiting, otherwise lets the next insert through once.
+export function ripAgain(id: string): Promise<RipAgainResponse> {
+	return apiFetch<RipAgainResponse>(`/api/jobs/${id}/rip-again`, { method: 'POST' });
+}
+
 export function startWaitingJob(id: string): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/rip-start-review`, { method: 'POST' });
 }

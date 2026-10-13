@@ -46,6 +46,16 @@ Four long-lived entities drive the lifecycle, plus one reusable template:
 
 Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically). Abandoning also ejects the disc: the ripper's `job.abandoned` WS handler pops the tray when the abandoned job owns the drive's pipeline (ripping or parked) or when the drive sits idle with the disc still seated — a stale abandon while a different job's rip owns the drive never touches the tray.
 
+### A disc that was ripped before
+
+Identify first reuses a pre-rip job on the same drive with a matching fingerprint (a re-scan of the same disc; `disc_dedupe.find_reusable_job_for_disc`). Failing that, it looks for an **earlier rip** of the disc: any job on any drive in `POST_RIP_JOB_STATUSES` (`ripped`, `ripped_partial`, `ripped_awaiting_identify`) sharing any `(algo, value)` fingerprint (`find_previous_rips`; the newest is the one named). `failed` and `abandoned` never count, and deleting a job deletes its fingerprints. `config.on_previously_ripped` then decides:
+
+- **`hold`** (default): the new job runs identify as usual, then parks in `awaiting_review` with `metadata_json.previously_ripped = {job_id}` and **no** `wait_start_time`, so the ripper's review wait never auto-starts it, a ripper restart re-parks it (`held-job` reports it paused), and un-pausing does not start a countdown. The review card shows the earlier rip (`JobDetailView.previous_rip`: date, status, whether its finished outputs are still on disk) with **Rip again** (`rip-start-review`) and **Discard** (abandon).
+- **`reject`**: no job. Identify records `rip.duplicate_rejected` against the earlier job (inbox by default), sets `drives.notice`, and answers 409 `{"reason": "previously_ripped", "job_id"}`; the ripper ejects on that. The notice clears on the drive's next identify, or when a heartbeat goes from `tray_open` to `no_disc` (the tray closed empty). A slot-loading drive reports `no_disc` straight after the eject, so its notice stays until the next identify.
+- **`rip`**: no check.
+
+`POST /api/jobs/{id}/rip-again` on any earlier rip starts a held copy of the disc if one is waiting (a previously-ripped hold sharing a fingerprint with it, whichever earlier rip the hold names), else sets `flags.rerip_allowed`. The next identify that matches any flagged earlier rip skips the check once and clears the flag on every match. ISO and folder sources go through the same identify, so the same rule applies.
+
 ## Track state machine
 
 Every track is a row with a status column. Within a single rip, tracks move through this machine sequentially as the ripper works:
@@ -99,6 +109,17 @@ The UI marks a job "resumed from crash" until its next terminal state.
 
 - **Resume mid-track or mid-job.** Interruption means full restart of the rip — every track, including ones the DB says were `done`. Accepted by design (see reasons above).
 - **Detect a hung-but-not-crashed ripper.** If MakeMKV wedges without the container exiting, no automatic detection. The user sees flat progress in the UI and restarts the ripper container manually, which triggers the ripper-startup probe.
+
+## A drive that drops off the bus mid-rip
+
+A USB enclosure reset takes the drive away and brings it back moments later, usually under a new node (`sr0` -> `sr1`). The ripper process keeps running, so this is not the crash-recovery path above; the running rip handles it itself (`JobController._execute_rip`, DVD/BD `mkv all` rips only):
+
+- **Stop.** A watcher reads the shared `DriveHandle` (the poll loop moves it) and sets a stop event as soon as the drive leaves the node the rip started on; `rip_disc` kills `makemkvcon` on it instead of letting it fail every remaining title against a dead node. The poll loop can be slower than makemkvcon, which fails the title the drive dropped under and moves on to the next (a `PRGC:5017` transition). So the dispatcher also asks `drive_lost` (handle moved, or the node answers ENXIO/ENODEV/ENOENT) as each title finishes, before finalising it. A drive gone at that point sets the stop event, and the title stays unfinished instead of going `done` with a cut-short file. The same probe runs on a title failure, and once more if makemkvcon exits cleanly after the drop. Unfinished titles are held back, not PATCHed `failed`.
+- **Wait.** Up to `DEVICE_RETURN_WAIT_SECONDS` (180 s) for the handle to name a node that reports `DISC_OK`. No eject meanwhile: the disc has to stay in for the resume. The reattach handler skips its boot probe while the pipeline is active.
+- **Resume.** Delete every `.mkv` no finished title owns (the half-written title), then run one more `mkv all` on the new node into `/raw/<job_id>/resume-N/`, passing the settled tracks as `skip_track_ids`. `mkv all` rips every eligible title again, so the output positions still line up; the settled titles get no callbacks and their duplicate files are deleted. This keeps the one-makemkvcon-per-disc rule: a resume is one more `mkv all`, never per-title calls.
+- **Give up.** If the drive does not return in time, or after `MAX_DEVICE_RESUMES` (3) resumes, the held tracks fail with `last_error` saying the drive disconnected, and rip-complete classifies the job as `ripped_partial` as usual. Eject happens once, after the last pass, at whatever node the drive is on.
+
+Unlike crash recovery, finished titles are kept: the process that wrote and hashed them never went away, so there is no durability question about them.
 
 ## Session Application & Transcode Task lifecycle
 

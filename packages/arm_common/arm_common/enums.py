@@ -242,6 +242,19 @@ class ContainerFormat(StrEnum):
     NONE = "none"
 
 
+class PreviouslyRippedAction(StrEnum):
+    """What identify does with a disc whose fingerprint matches an earlier rip
+    (a job in POST_RIP_JOB_STATUSES, on any drive)."""
+
+    # Park the new job in AWAITING_REVIEW with no countdown until the operator
+    # chooses Rip again or Discard.
+    HOLD = "hold"
+    # Create no job; record a rip.duplicate_rejected event and eject the disc.
+    REJECT = "reject"
+    # Rip it again without asking.
+    RIP = "rip"
+
+
 class RetentionPolicy(StrEnum):
     KEEP_FOREVER = "keep_forever"
     PRUNE_AFTER_SESSION = "prune_after_session"

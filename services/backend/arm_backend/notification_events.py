@@ -52,6 +52,12 @@ EVENT_VOCAB: dict[str, EventSpec] = {
         "{job_title} on drive {drive_id} needs identification before ripping can continue.",
         _COMMON + ("volume_label", "disc_type"),
     ),
+    "rip.duplicate_rejected": EventSpec(
+        "Disc already ripped",
+        "ARM: disc already ripped - {job_title}",
+        "Drive {drive_id} ejected a disc ARM already ripped as {job_title} (job {job_id}).",
+        _COMMON + ("volume_label", "disc_type"),
+    ),
     "session.completed": _session(
         "Session completed",
         "ARM: session completed - {job_title}",

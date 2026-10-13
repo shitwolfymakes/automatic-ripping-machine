@@ -390,6 +390,10 @@
 			/>
 		{:else if isRipping(drive)}
 			<StatusStrip tone="busy" title="Ripping" detail="A disc is being ripped right now." />
+		{:else if drive.notice}
+			<!-- e.g. on_previously_ripped = reject ejected a disc; cleared when the
+			     tray closes empty or the next disc is identified. -->
+			<StatusStrip tone="warning" title="Disc ejected" detail={drive.notice} />
 		{:else if drive.status === 'online'}
 			<StatusStrip tone="ok" title="Ready" detail="Insert a disc any time" />
 		{:else}

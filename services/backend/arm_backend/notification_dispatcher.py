@@ -71,10 +71,12 @@ NOTIFIABLE_EVENT_TYPES: frozenset[str] = frozenset(
 
 # Events the in-app inbox records by default (the seeded inapp channel
 # starts subscribed to these). Broader than apprise — the bell is a good
-# place for the actionable needs-user-input prompt.
+# place for the actionable needs-user-input prompt. Keep in sync with the
+# migrations that subscribe the existing ncl_inbox row (0016, 0044).
 DEFAULT_INBOX_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "rip.completed",
+        "rip.duplicate_rejected",
         "rip.failed",
         "rip.needs_user_input",
         "session.completed",

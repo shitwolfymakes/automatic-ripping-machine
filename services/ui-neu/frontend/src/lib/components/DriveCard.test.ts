@@ -477,6 +477,18 @@ describe('DriveCard', () => {
 			expect(screen.queryByText('Starting ripper...')).toBeNull();
 		});
 
+		it('shows why it ejected an already-ripped disc instead of Ready', () => {
+			renderComponent(DriveCard, {
+				props: {
+					drive: createDrive({ notice: 'Ejected a disc already ripped as Heat on 2026-10-12.' }),
+					variant: 'essentials'
+				}
+			});
+			expect(screen.getByText('Disc ejected')).toBeInTheDocument();
+			expect(screen.getByText('Ejected a disc already ripped as Heat on 2026-10-12.')).toBeInTheDocument();
+			expect(screen.queryByText('Ready')).toBeNull();
+		});
+
 		it('does not save an unchanged name', async () => {
 			renderComponent(DriveCard, { props: { drive: createDrive(), variant: 'essentials' } });
 			const name = screen.getByLabelText(/friendly name/i);

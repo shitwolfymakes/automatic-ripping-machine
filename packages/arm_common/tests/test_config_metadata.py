@@ -146,7 +146,7 @@ def test_setup_step_tagging_matches_spec() -> None:
         "metadata_provider",
         "thediscdb_enabled",
     ]
-    assert keys("discs") == ["auto_rip_on_insert"]
+    assert keys("discs") == ["auto_rip_on_insert", "on_previously_ripped"]
     assert keys("transcoding") == ["transcode_enabled", "max_parallel_transcodes"]
 
 
