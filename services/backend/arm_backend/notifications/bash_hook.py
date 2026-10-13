@@ -9,7 +9,7 @@ env, and expose a masked view for the API.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -107,7 +107,7 @@ def prepare_run(
         raise HookError(str(exc)) from exc
 
     declared = _declared(scripts_root, script)
-    secret_keys = frozenset(str(k) for k in (config.get("secret_keys") or [])) | {i.key for i in declared if i.secret}
+    secret_keys = frozenset(secret_set(config) | {i.key for i in declared if i.secret})
     channel_inputs = _clean_inputs(config.get("inputs"))
     event_inputs = _clean_inputs((template or {}).get("inputs"))
 
@@ -161,62 +161,68 @@ def masked(run: PreparedRun) -> tuple[dict[str, str], dict[str, str]]:
     return inputs, env
 
 
+def secret_set(config: dict[str, Any]) -> set[str]:
+    """The input keys a stored bash config holds as secret."""
+    return {str(k) for k in (config.get("secret_keys") or [])}
+
+
 def mask_bash_config(config: dict[str, Any]) -> dict[str, Any]:
     out = dict(config)
-    secret = set(config.get("secret_keys") or [])
+    secret = secret_set(config)
     out["inputs"] = {k: (HIDDEN_SECRET if k in secret else v) for k, v in (config.get("inputs") or {}).items()}
     return out
 
 
-def _secret_set(config: dict[str, Any]) -> set[str]:
-    return {str(k) for k in (config.get("secret_keys") or [])}
+def merge_bash_config(existing: dict[str, Any], incoming: dict[str, Any]) -> tuple[dict[str, Any], set[str]]:
+    """Resolve ``<hidden>`` inputs against the stored config; return the merged config and the carried keys.
 
-
-def merge_bash_config(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """``<hidden>`` on an incoming input the stored config holds as secret keeps the stored value;
-    every other key is taken from incoming.
-
-    A non-secret stored value is never masked on read, so ``<hidden>`` for it is
-    a literal the client typed and stays one. This neither validates the config
-    nor re-stamps ``secret_keys``: ``storage_config`` is the only gate that
-    writes ``secret_keys``.
+    ``<hidden>`` on an input the stored config holds as secret keeps the stored
+    value (a carried key); every other key is taken from incoming. A non-secret
+    stored value is never masked on read, so ``<hidden>`` for it is a literal
+    the client typed and stays one. This neither validates the config nor
+    re-stamps ``secret_keys``: ``storage_config`` is the only gate that writes
+    ``secret_keys``, and it keeps every carried key secret.
     """
     stored = existing.get("inputs") or {}
-    secret = _secret_set(existing)
+    secret = secret_set(existing)
+    carried = {k for k, v in (incoming.get("inputs") or {}).items() if v == HIDDEN_SECRET and k in secret}
     merged = dict(incoming)
     merged["inputs"] = {
-        k: (stored.get(k, "") if v == HIDDEN_SECRET and k in secret else v)
-        for k, v in (incoming.get("inputs") or {}).items()
+        k: (stored.get(k, "") if k in carried else v) for k, v in (incoming.get("inputs") or {}).items()
     }
-    return merged
+    return merged, carried
 
 
 def patch_bash_config(existing: dict[str, Any], incoming: dict[str, Any], scripts_root: str) -> dict[str, Any]:
     """Apply a PATCH to a stored bash config without ever unmasking a stored secret.
 
     An unreadable script keeps the stored ``secret_keys`` (never the request's),
-    and a ``<hidden>`` carried over from a stored secret must still be secret
-    under the new config; otherwise the client has to enter the value again.
+    and a value carried over from a stored secret stays secret until the client
+    replaces it, whatever the new script header says.
     """
-    stored_secret = _secret_set(existing)
-    config = storage_config(
-        merge_bash_config(existing, incoming), scripts_root, fallback_secret_keys=sorted(stored_secret)
+    merged, carried = merge_bash_config(existing, incoming)
+    return storage_config(
+        merged,
+        scripts_root,
+        fallback_secret_keys=existing.get("secret_keys") or [],
+        carried_secret_keys=carried,
     )
-    carried = {k for k, v in (incoming.get("inputs") or {}).items() if v == HIDDEN_SECRET and k in stored_secret}
-    unmasked = sorted(carried - set(config["secret_keys"]))
-    if unmasked:
-        raise HookError(f"input {', '.join(unmasked)} is not secret for {config['script']}; enter its value again")
-    return config
 
 
 def storage_config(
-    incoming: dict[str, Any], scripts_root: str, *, fallback_secret_keys: Sequence[str] = ()
+    incoming: dict[str, Any],
+    scripts_root: str,
+    *,
+    fallback_secret_keys: Sequence[str] = (),
+    carried_secret_keys: Collection[str] = (),
 ) -> dict[str, Any]:
     """Validate a bash config for persistence and stamp ``secret_keys`` from the script header.
 
-    ``secret_keys`` is server-owned: the incoming value is ignored, and a script
+    ``secret_keys`` is server-owned: the incoming value is ignored. A script
     whose header cannot be read gets ``fallback_secret_keys`` (the stored set on
-    a PATCH) so masking survives a removed script.
+    a PATCH, the request's own on a create) so masking survives a removed
+    script, and ``carried_secret_keys`` are added either way so a stored secret
+    is never unmasked by a header that no longer declares it.
     """
     script = str(incoming.get("script") or "")
     try:
@@ -233,6 +239,7 @@ def storage_config(
         secret_keys = [i.key for i in read_script_info(scripts_root, script).inputs if i.secret]
     except FileNotFoundError, ScriptUnreadableError:
         secret_keys = [str(k) for k in fallback_secret_keys]
+    secret_keys += sorted(set(carried_secret_keys) - set(secret_keys))
     return {
         "type": "bash",
         "script": script,

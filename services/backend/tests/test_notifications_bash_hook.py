@@ -144,15 +144,15 @@ def test_mask_and_merge_config() -> None:
     stored = _config()
     m = mask_bash_config(stored)
     assert m["inputs"] == {"TO": "me@x", "SMTP_PASS": "<hidden>"} and stored["inputs"]["SMTP_PASS"] == "pw"
-    merged = merge_bash_config(stored, _config(inputs={"TO": "new@x", "SMTP_PASS": "<hidden>"}))
-    assert merged["inputs"] == {"TO": "new@x", "SMTP_PASS": "pw"}
-    replaced = merge_bash_config(stored, _config(inputs={"TO": "new@x", "SMTP_PASS": "pw2"}))
-    assert replaced["inputs"]["SMTP_PASS"] == "pw2"
-    dropped = merge_bash_config(stored, _config(inputs={"TO": "x"}))
+    merged, carried = merge_bash_config(stored, _config(inputs={"TO": "new@x", "SMTP_PASS": "<hidden>"}))
+    assert merged["inputs"] == {"TO": "new@x", "SMTP_PASS": "pw"} and carried == {"SMTP_PASS"}
+    replaced, carried = merge_bash_config(stored, _config(inputs={"TO": "new@x", "SMTP_PASS": "pw2"}))
+    assert replaced["inputs"]["SMTP_PASS"] == "pw2" and carried == set()
+    dropped, _ = merge_bash_config(stored, _config(inputs={"TO": "x"}))
     assert "SMTP_PASS" not in dropped["inputs"]
     # A non-secret stored value is never masked, so <hidden> for it is a literal.
-    literal = merge_bash_config(stored, _config(inputs={"TO": "<hidden>"}))
-    assert literal["inputs"] == {"TO": "<hidden>"}
+    literal, carried = merge_bash_config(stored, _config(inputs={"TO": "<hidden>"}))
+    assert literal["inputs"] == {"TO": "<hidden>"} and carried == set()
     assert mask_bash_config({"type": "bash", "script": "a.sh"})["inputs"] == {}
 
 
@@ -179,6 +179,11 @@ def test_storage_config(tmp_path: Path) -> None:
     kept = storage_config(gone, str(tmp_path), fallback_secret_keys=["SMTP_PASS"])
     assert kept["secret_keys"] == ["SMTP_PASS"] and kept["timeout_seconds"] == 5
     assert storage_config(gone, str(tmp_path))["secret_keys"] == []
+    # The fallback keeps its stored order; carried keys are added either way.
+    order = storage_config(gone, str(tmp_path), fallback_secret_keys=["Z_TOKEN", "A_PASS"])
+    assert order["secret_keys"] == ["Z_TOKEN", "A_PASS"]
+    stamped = storage_config(_config(), str(tmp_path), carried_secret_keys={"TO", "SMTP_PASS"})
+    assert stamped["secret_keys"] == ["SMTP_PASS", "TO"]
     with pytest.raises(HookError):
         storage_config({"type": "bash", "script": "a/b.sh"}, str(tmp_path))
     with pytest.raises(HookError, match="timeout"):
@@ -194,15 +199,33 @@ def test_patch_bash_config_keeps_the_stored_secret_set_for_a_missing_script(tmp_
     assert mask_bash_config(out)["inputs"]["SMTP_PASS"] == "<hidden>"
 
 
-def test_patch_bash_config_refuses_a_hidden_input_the_new_script_does_not_hold_secret(tmp_path: Path) -> None:
-    """D-038: switching to a script that declares the key non-secret cannot carry the stored secret over."""
+def test_patch_bash_config_keeps_a_carried_secret_under_a_script_that_drops_it(tmp_path: Path) -> None:
+    """D-038: a header that no longer declares the key secret cannot unmask the stored value."""
     _script(tmp_path)
     _script(tmp_path, "plain.sh", "#!/usr/bin/env bash\n# arm-input: SMTP_PASS\n")
     hidden = _config(script="plain.sh", inputs={"SMTP_PASS": "<hidden>"})
-    with pytest.raises(HookError, match="SMTP_PASS is not secret for plain.sh"):
-        patch_bash_config(_config(), hidden, str(tmp_path))
-    fresh = patch_bash_config(_config(), _config(script="plain.sh", inputs={"SMTP_PASS": "new"}), str(tmp_path))
+    out = patch_bash_config(_config(), hidden, str(tmp_path))
+    assert out["inputs"] == {"SMTP_PASS": "pw"} and out["secret_keys"] == ["SMTP_PASS"]
+    assert mask_bash_config(out)["inputs"]["SMTP_PASS"] == "<hidden>"
+    # Round-tripping the masked value again keeps it secret; only a new value drops it.
+    again = patch_bash_config(out, hidden, str(tmp_path))
+    assert again == out
+    fresh = patch_bash_config(out, _config(script="plain.sh", inputs={"SMTP_PASS": "new"}), str(tmp_path))
     assert fresh["inputs"] == {"SMTP_PASS": "new"} and fresh["secret_keys"] == []
+
+
+def test_patch_bash_config_carries_a_secret_with_no_stored_value(tmp_path: Path) -> None:
+    """A stored secret with no value merges to an empty string and stays secret; nothing to refuse."""
+    _script(tmp_path, "plain.sh", "#!/usr/bin/env bash\n# arm-input: SMTP_PASS\n")
+    stored = _config(script="plain.sh", inputs={})
+    out = patch_bash_config(stored, _config(script="plain.sh", inputs={"SMTP_PASS": "<hidden>"}), str(tmp_path))
+    assert out["inputs"] == {"SMTP_PASS": ""} and out["secret_keys"] == ["SMTP_PASS"]
+
+
+def test_patch_bash_config_keeps_the_stored_order_for_a_missing_script(tmp_path: Path) -> None:
+    stored = _config(script="gone.sh", secret_keys=["Z_TOKEN", "SMTP_PASS"])
+    out = patch_bash_config(stored, _config(script="gone.sh", secret_keys=[]), str(tmp_path))
+    assert out["secret_keys"] == ["Z_TOKEN", "SMTP_PASS"]
 
 
 def test_patch_bash_config_keeps_a_hidden_secret_on_the_same_script(tmp_path: Path) -> None:

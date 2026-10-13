@@ -35,8 +35,10 @@ class BashChannelConfig(BaseModel):
     """A script under the backend's ``/scripts`` mount (bare file name), run as
     ``bash <script> "<title>" "<body>"`` with ``ARM_*`` env vars plus one env
     var per declared input. ``secret_keys`` is server-written from the script
-    header so masking does not depend on the file still existing; it is
-    ignored on input (the field stays on the wire for round-tripping)."""
+    header so masking does not depend on the file still existing. On input it
+    is used only by a create whose script header cannot be read, where it can
+    only add masking; otherwise it is ignored (the field stays on the wire for
+    round-tripping)."""
 
     model_config = ConfigDict(extra="ignore")
     type: Literal["bash"] = "bash"

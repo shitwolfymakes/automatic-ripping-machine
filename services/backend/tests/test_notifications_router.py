@@ -1162,6 +1162,26 @@ def test_create_bash_channel_masks_secret_and_stamps_secret_keys(signing_key: by
     assert stored.config["inputs"]["SMTP_PASS"] == "pw"
 
 
+def test_create_bash_channel_keeps_requested_secret_keys_for_a_missing_script(
+    signing_key: bytes, scripts_root: Path
+) -> None:
+    """A script not on disk yet still masks the secret the request names; it can only add masking."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    body = {
+        "type": "bash",
+        "name": "Mail",
+        "config": {"type": "bash", "script": "later.sh", "inputs": {"SMTP_PASS": "pw"}, "secret_keys": ["SMTP_PASS"]},
+        "subscribed_events": [],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/notifications/channels", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["config"]["inputs"] == {"SMTP_PASS": "<hidden>"}
+    stored = [o for o in db.added if isinstance(o, NotificationChannel)][0]
+    assert stored.config["secret_keys"] == ["SMTP_PASS"] and stored.config["inputs"]["SMTP_PASS"] == "pw"
+
+
 def test_create_bash_channel_rejects_path_and_secret_event_override(signing_key: bytes, scripts_root: Path) -> None:
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     app, token = _make_app(signing_key, FakeSession())
@@ -1269,16 +1289,15 @@ def test_patch_bash_channel_cannot_unmask_a_secret_via_a_missing_script(signing_
         assert cfg["inputs"] == {"TO": "me@x", "SMTP_PASS": "<hidden>"} and cfg["secret_keys"] == ["SMTP_PASS"]
 
 
-def test_patch_bash_channel_refuses_carrying_a_secret_to_a_script_that_drops_it(
+def test_patch_bash_channel_keeps_a_carried_secret_under_a_script_that_drops_it(
     signing_key: bytes, scripts_root: Path
 ) -> None:
-    """D-038: switching to a script that declares the key non-secret cannot carry the stored secret over."""
+    """D-038: a header that no longer declares the key secret cannot unmask the stored value, and the save works."""
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     plain = scripts_root / "plain.sh"
     plain.write_text("#!/usr/bin/env bash\n# arm-input: SMTP_PASS\nexit 0\n")
     plain.chmod(plain.stat().st_mode | stat.S_IXUSR)
     ch = _bash_channel()
-    before = dict(ch.config)
     db = FakeSession()
     db.rows["notification_channels"] = [ch]
     app, token = _make_app(signing_key, db)
@@ -1288,8 +1307,10 @@ def test_patch_bash_channel_refuses_carrying_a_secret_to_a_script_that_drops_it(
             json={"config": {"type": "bash", "script": "plain.sh", "inputs": {"SMTP_PASS": "<hidden>"}}},
             headers=_auth(token),
         )
-    assert r.status_code == 422 and "SMTP_PASS" in r.json()["detail"]
-    assert ch.config == before
+        got = client.get("/api/notifications/channels/ncl_b", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert ch.config["secret_keys"] == ["SMTP_PASS"] and ch.config["inputs"]["SMTP_PASS"] == "pw"
+    assert got.json()["config"]["inputs"] == {"SMTP_PASS": "<hidden>"}
 
 
 def test_test_saved_bash_channel(signing_key: bytes, scripts_root: Path) -> None:
