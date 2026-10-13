@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from arm_backend.config import settings
+from arm_common.fileops import safe_join
 
 log = logging.getLogger(__name__)
 
@@ -27,14 +28,6 @@ def _safe_theme_id(theme_id: str) -> str:
     if not _SAFE_ID.match(theme_id) or ".." in theme_id:
         raise ValueError(f"Invalid theme id: {theme_id!r}")
     return theme_id
-
-
-def _safe_path(base: Path, filename: str) -> Path:
-    """Build a path inside *base* and verify it resolves within it (traversal guard)."""
-    target = (base / filename).resolve()
-    if not target.is_relative_to(base.resolve()):
-        raise ValueError(f"Path traversal blocked: {target}")
-    return target
 
 
 def _validate_theme(data: Any) -> bool:
@@ -103,8 +96,8 @@ def save_user_theme(data: dict[str, Any], css: str = "") -> dict[str, Any]:
     result.setdefault("swatch", "#888888")
 
     user_dir = _user_dir()
-    json_path = _safe_path(user_dir, f"{theme_id}.json")
-    css_path = _safe_path(user_dir, f"{theme_id}.css")
+    json_path = safe_join(user_dir, f"{theme_id}.json")
+    css_path = safe_join(user_dir, f"{theme_id}.css")
 
     save_data = {k: v for k, v in result.items() if k not in ("builtin", "css")}
     json_path.write_text(json.dumps(save_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -123,9 +116,9 @@ def delete_user_theme(theme_id: str) -> bool:
     """Delete a user theme. False if it doesn't exist."""
     theme_id = _safe_theme_id(theme_id)
     user_dir = _user_dir()
-    json_path = _safe_path(user_dir, f"{theme_id}.json")
+    json_path = safe_join(user_dir, f"{theme_id}.json")
     if not json_path.exists():
         return False
     json_path.unlink()
-    _safe_path(user_dir, f"{theme_id}.css").unlink(missing_ok=True)
+    safe_join(user_dir, f"{theme_id}.css").unlink(missing_ok=True)
     return True

@@ -122,9 +122,13 @@ def test_get_user_theme_includes_css(user_dir):
     assert full["builtin"] is False
 
 
-def test_safe_path_blocks_traversal(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="Path traversal blocked"):
-        theme_service._safe_path(tmp_path, "../escape.json")
+def test_delete_refuses_a_theme_file_linked_outside_the_dir(user_dir, tmp_path_factory) -> None:
+    victim = tmp_path_factory.mktemp("outside") / "victim.json"
+    victim.write_text("{}")
+    (user_dir / "mine.json").symlink_to(victim)
+    with pytest.raises(ValueError, match="escapes"):
+        theme_service.delete_user_theme("mine")
+    assert victim.exists()
 
 
 def test_validate_theme_rejects_non_dict() -> None:

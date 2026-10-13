@@ -25,7 +25,9 @@ view is logged with the digest; per the guidance, digests from different
 views of the same disc legitimately differ.
 
 Soft-fail everywhere: any error returns None and the fingerprint is simply
-absent (a matrix256 miss only ever degrades to today's behavior).
+absent (a matrix256 miss only ever degrades to today's behavior). Record
+names come off the disc and are untrusted: one that is not a plain relative
+path is refused with a WARNING, since a real disc never carries one.
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from arm_common.fileops import safe_join
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -43,6 +47,26 @@ logger = logging.getLogger(__name__)
 
 # pycdlib path-keyword per filesystem view, in preference order.
 _VIEW_KEYS = (("udf", "udf_path"), ("rock_ridge", "rr_path"), ("joliet", "joliet_path"), ("iso_path", "iso_path"))
+
+
+class UnsafeRecordError(ValueError):
+    """A disc-supplied record path that is not a plain relative path inside the skeleton."""
+
+
+def _skeleton_path(root: Path, relative: str) -> Path:
+    """Where `relative` lives under `root`, refusing any name that is not plain.
+
+    An empty, `.` or `..` component (which also covers absolute and
+    root-naming paths) is refused outright rather than normalized: `A/../X`
+    and `X` would otherwise collapse onto one skeleton file and hash as one
+    where the disc listed two. `safe_join` then proves containment.
+    """
+    if any(part in ("", ".", "..") for part in relative.split("/")):
+        raise UnsafeRecordError(f"matrix256 record is not a plain relative path: {relative!r}")
+    try:
+        return safe_join(root, relative)
+    except ValueError as e:
+        raise UnsafeRecordError(str(e)) from None
 
 
 def fingerprint_records(records: Iterable[tuple[str, int]]) -> str:
@@ -54,15 +78,18 @@ def fingerprint_records(records: Iterable[tuple[str, int]]) -> str:
     the digest is `matrix256.v1.fingerprint` of that root. Path text
     (Unicode normalization, undecodable bytes) round-trips through the
     filesystem unaltered on Linux, so the library sees the same names
-    pycdlib enumerated. Raises OSError on unmaterializable paths; the
-    probe wrapper soft-fails.
+    pycdlib enumerated. Raises OSError on unmaterializable paths, and
+    UnsafeRecordError on a name that is not a plain relative path (names
+    come off the disc and are untrusted: a `..` or absolute name would
+    otherwise truncate a file elsewhere), before that record touches the
+    filesystem; the probe wrapper soft-fails.
     """
     from matrix256 import v1  # type: ignore[import-untyped]  # lazy: off the hot path
 
     with tempfile.TemporaryDirectory(prefix="arm-matrix256-") as tmp:
-        root = Path(tmp)
+        root = Path(tmp).resolve()
         for relative, size in records:
-            target = root / relative
+            target = _skeleton_path(root, relative)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.touch()
             os.truncate(target, size)
@@ -159,6 +186,10 @@ def probe_matrix256(source_path: str) -> str | None:
             return None
         digest = fingerprint_records(records)
         logger.info("matrix256 view=%s files=%d source=%s", view, len(records), source_path)
+    except UnsafeRecordError as e:
+        # Not an unreadable disc: the tree tried to name a path outside the skeleton.
+        logger.warning("matrix256 refused a hostile disc tree on %s: %s", source_path, e)
+        return None
     except Exception as e:  # noqa: BLE001 — pycdlib / OS errors, a few flavors
         logger.debug("matrix256 probe failed for %s: %s", source_path, e)
         return None

@@ -49,6 +49,7 @@ from arm_common import (
     TranscodeTaskStatus,
     User,
 )
+from arm_common.fileops import is_within
 from arm_common.models import Track, TranscodeTask
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -785,8 +786,7 @@ def _delete_job_files(
             if path.is_dir() and not path.is_symlink():
                 # A disc backup's output is its title folder. Only ever the
                 # recorded path itself, and only inside media_root.
-                resolved, root = path.resolve(), media_root.resolve()
-                if resolved == root or not resolved.is_relative_to(root):
+                if not is_within(path, media_root):
                     logger.warning("delete: refusing folder not strictly inside media_root path=%s", path)
                     continue
                 # Movie templates also write into "{title} ({year?})/", so the

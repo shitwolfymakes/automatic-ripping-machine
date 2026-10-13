@@ -106,7 +106,7 @@ def test_startup_scan_skips_corrupt_entry(cache_dir):
 
 def test_store_blocks_path_traversal(cache_dir, monkeypatch):
     monkeypatch.setattr(image_cache, "_url_to_filename", lambda url: "../escape")
-    with pytest.raises(ValueError, match="traversal"):
+    with pytest.raises(ValueError, match="escapes"):
         image_cache.store("http://h/x.jpg", b"d", "image/jpeg")
 
 
