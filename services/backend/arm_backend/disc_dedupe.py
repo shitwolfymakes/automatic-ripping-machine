@@ -90,19 +90,19 @@ async def find_reusable_job_for_disc(
     return ReuseDecision(job=matched_job, action=action)
 
 
-async def find_previous_rip(
+async def find_previous_rips(
     session: AsyncSession,
     *,
     fingerprints: Sequence[tuple[str, str]],
-) -> Job | None:
-    """The most recent earlier rip of this disc: a job on any drive in
+) -> list[Job]:
+    """Every earlier rip of this disc, newest first: jobs on any drive in
     POST_RIP_JOB_STATUSES sharing any (algo, value) fingerprint with the scan.
     Failed and abandoned jobs never count; deleting a job deletes its
     fingerprints, so a deleted rip no longer matches.
     """
     wanted = {(a, v) for a, v in fingerprints if a and v}
     if not wanted:
-        return None
+        return []
     fps: Sequence[DiscFingerprint] = (
         (
             await session.execute(
@@ -114,7 +114,7 @@ async def find_previous_rip(
     )
     job_ids = {fp.job_id for fp in fps if (fp.algo, fp.value) in wanted}
     if not job_ids:
-        return None
+        return []
     ripped: Sequence[Job] = (
         (
             await session.execute(
@@ -126,7 +126,5 @@ async def find_previous_rip(
         .scalars()
         .all()
     )
-    if not ripped:
-        return None
     # ULIDs sort by creation, so the greatest id is the newest rip.
-    return max(ripped, key=lambda j: j.id)
+    return sorted(ripped, key=lambda j: j.id, reverse=True)

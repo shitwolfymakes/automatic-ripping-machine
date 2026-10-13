@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend import iso_prepare
-from arm_backend.disc_dedupe import find_previous_rip, find_reusable_job_for_disc
+from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
@@ -339,12 +339,14 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
     now = datetime.now(timezone.utc)
+    # The disc a notice was about has left the tray: the open tray an eject
+    # leaves has closed empty. Only that change clears it. A slot-loading drive
+    # has no open tray and reads "no disc" the moment it ejects, so its notice
+    # stays until the next disc is identified.
+    if drive.media_status == DriveMediaStatus.TRAY_OPEN and req.media_status is DriveMediaStatus.NO_DISC:
+        drive.notice = None
     drive.media_status = req.media_status
     drive.media_status_at = now
-    # The disc a notice was about has left the tray (ejected and the tray
-    # closed empty); an open tray keeps it, since that is how an eject leaves it.
-    if req.media_status is DriveMediaStatus.NO_DISC:
-        drive.notice = None
     drive.last_seen_at = now
     # Spec §1: for an enrolled drive the ripper is authoritative on presence.
     # DETACHED = the node has no hardware behind it right now. ERROR (identity
@@ -615,14 +617,17 @@ async def identify(
     previous: Job | None = None
     action = cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
     if reuse_job is None and action != PreviouslyRippedAction.RIP:
-        previous = await find_previous_rip(session, fingerprints=fps)
-        if previous is not None and flag_is_set(previous.metadata_json, "rerip_allowed"):
-            # The operator chose "Rip again" on the earlier job: let this one
-            # through, once.
-            previous.metadata_json = with_flags(previous.metadata_json, rerip_allowed=False)
-            session.add(previous)
-            logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, previous.id)
-            previous = None
+        earlier = await find_previous_rips(session, fingerprints=fps)
+        armed = [j for j in earlier if flag_is_set(j.metadata_json, "rerip_allowed")]
+        if armed:
+            # The operator chose "Rip again" on an earlier rip of this disc
+            # (any of them, not only the newest): let this one through, once.
+            for j in armed:
+                j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
+                session.add(j)
+            logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, armed[0].id)
+        elif earlier:
+            previous = earlier[0]
         if previous is not None and action == PreviouslyRippedAction.REJECT:
             raise await _reject_previously_ripped(session, hub, drive, previous, scan)
 

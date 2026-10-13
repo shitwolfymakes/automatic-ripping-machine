@@ -254,6 +254,36 @@ def test_rip_again_lets_the_next_identify_through_once(action: PreviouslyRippedA
         assert again.json()["status"] == "awaiting_review"
 
 
+_NEWER = "job_01M4Q9V53S8AC69YM5CKHE11DX"
+
+
+def _newer_rip(db: FakeSession) -> Job:
+    """A later rip of the same disc, so the job the operator clicked is not the newest."""
+    newer = Job(
+        id=_NEWER,
+        drive_id="drv_old",
+        disc_type=DiscType.BLURAY,
+        title="Resident Evil: Retribution",
+        status=JobStatus.RIPPED,
+        metadata_json={},
+        resumed_from_crash=False,
+    )
+    db.rows["jobs"].append(newer)
+    db.rows["disc_fingerprints"].append(DiscFingerprint(job_id=_NEWER, algo=_FP["algo"], value=_FP["value"]))
+    return newer
+
+
+@pytest.mark.parametrize("action", [PreviouslyRippedAction.HOLD, PreviouslyRippedAction.REJECT])
+def test_rip_again_on_an_older_rip_of_the_disc_lets_it_through(action: PreviouslyRippedAction) -> None:
+    prior = _prior(meta={"flags": {"rerip_allowed": True}})
+    db = _db(action, prior=prior)
+    _newer_rip(db)
+    r = _identify(db, _Hub())
+    assert r.status_code == 200
+    assert r.json()["status"] == "identified"
+    assert prior.metadata_json["flags"]["rerip_allowed"] is False  # used up, not left to fire later
+
+
 def test_identify_clears_the_drive_notice_for_a_new_disc() -> None:
     db = _db(PreviouslyRippedAction.HOLD)
     db.rows["disc_fingerprints"] = []  # a different disc
@@ -297,12 +327,22 @@ def test_a_previously_ripped_hold_survives_a_ripper_restart() -> None:
 
 
 @pytest.mark.parametrize(
-    ("media_status", "kept"),
-    [(DriveMediaStatus.TRAY_OPEN, True), (DriveMediaStatus.LOADED, True), (DriveMediaStatus.NO_DISC, False)],
+    ("before", "media_status", "kept"),
+    [
+        (DriveMediaStatus.LOADED, DriveMediaStatus.TRAY_OPEN, True),  # the eject
+        (DriveMediaStatus.TRAY_OPEN, DriveMediaStatus.TRAY_OPEN, True),
+        (DriveMediaStatus.TRAY_OPEN, DriveMediaStatus.LOADED, True),
+        (DriveMediaStatus.TRAY_OPEN, DriveMediaStatus.NO_DISC, False),  # closed empty
+        # A slot-loading drive reads "no disc" straight after the eject: keep it.
+        (DriveMediaStatus.LOADED, DriveMediaStatus.NO_DISC, True),
+    ],
 )
-def test_the_drive_notice_lasts_until_the_tray_closes_empty(media_status: DriveMediaStatus, kept: bool) -> None:
+def test_the_drive_notice_lasts_until_the_tray_closes_empty(
+    before: DriveMediaStatus, media_status: DriveMediaStatus, kept: bool
+) -> None:
     db = _db(PreviouslyRippedAction.REJECT)
     db.rows["drives"][0].notice = "Ejected a disc already ripped as X."
+    db.rows["drives"][0].media_status = before
     with TestClient(_ripper_app(db)) as client:
         r = client.post(
             "/api/ripper/heartbeat",
@@ -401,6 +441,34 @@ def test_rip_again_starts_a_held_copy_of_the_disc() -> None:
     assert r.json() == {"started_job_id": held.id, "armed": False}
     assert held.status == JobStatus.RIPPING
     assert any(e["event_type"] == "rip.start" and e["topic"] == "ripper.commands.drv_new" for e in hub.events)
+
+
+def test_rip_again_on_an_older_rip_starts_the_copy_held_against_a_newer_one() -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    _newer_rip(db)
+    held = _held()
+    held.metadata_json = {"previously_ripped": {"job_id": _NEWER}}
+    db.rows["jobs"].append(held)
+    db.rows["disc_fingerprints"].append(DiscFingerprint(job_id=held.id, algo=_FP["algo"], value=_FP["value"]))
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.post(f"/api/jobs/{_PRIOR}/rip-again", headers=auth)
+    assert r.status_code == 200
+    assert r.json() == {"started_job_id": held.id, "armed": False}
+    assert held.status == JobStatus.RIPPING
+
+
+def test_rip_again_leaves_a_held_copy_of_another_disc_alone() -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    other = _held()
+    other.metadata_json = {"previously_ripped": {"job_id": "job_01M4Q2V53S8AC69YM5CKHE11DX"}}
+    db.rows["jobs"].append(other)
+    db.rows["disc_fingerprints"].append(DiscFingerprint(job_id=other.id, algo="matrix256", value="0ther"))
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.post(f"/api/jobs/{_PRIOR}/rip-again", headers=auth)
+    assert r.json() == {"started_job_id": None, "armed": True}
+    assert other.status == JobStatus.AWAITING_REVIEW
 
 
 def test_rip_again_arms_the_next_identify_when_nothing_is_held() -> None:

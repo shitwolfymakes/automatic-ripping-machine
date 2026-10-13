@@ -592,9 +592,10 @@ async def rip_again(
 ) -> RipAgainResponse:
     """Operator "Rip again" on a ripped job (on_previously_ripped hold/reject).
 
-    If a copy of this disc is held right now (AWAITING_REVIEW naming this job
-    as its earlier rip), start that one. Otherwise flag this job so the next
-    identify of the disc skips the previously-ripped check once.
+    If a copy of this disc is held right now (a previously-ripped hold sharing
+    a fingerprint with this job, whichever earlier rip it names), start that
+    one. Otherwise flag this job so the next identify of the disc skips the
+    previously-ripped check once.
     """
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
@@ -609,7 +610,30 @@ async def rip_again(
         .scalars()
         .all()
     )
-    copy = next((h for h in held if previously_ripped_job_id(h.metadata_json) == job.id), None)
+    held = [h for h in held if previously_ripped_job_id(h.metadata_json) is not None]
+    same_disc: set[str] = set()
+    if held:
+        fps = {
+            (fp.algo, fp.value)
+            for fp in (await db.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id)))
+            .scalars()
+            .all()
+        }
+        if fps:
+            held_fps = (
+                (
+                    await db.execute(
+                        select(DiscFingerprint).where(col(DiscFingerprint.job_id).in_(tuple(h.id for h in held)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            same_disc = {fp.job_id for fp in held_fps if (fp.algo, fp.value) in fps}
+    copy = next(
+        (h for h in held if h.id in same_disc or previously_ripped_job_id(h.metadata_json) == job.id),
+        None,
+    )
     if copy is not None:
         await _start_held_job(db, hub, copy)
         logger.info("rip-again job_id=%s: started held copy job_id=%s", job.id, copy.id)

@@ -48,13 +48,13 @@ Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave 
 
 ### A disc that was ripped before
 
-Identify first reuses a pre-rip job on the same drive with a matching fingerprint (a re-scan of the same disc; `disc_dedupe.find_reusable_job_for_disc`). Failing that, it looks for an **earlier rip** of the disc: any job on any drive in `POST_RIP_JOB_STATUSES` (`ripped`, `ripped_partial`, `ripped_awaiting_identify`) sharing any `(algo, value)` fingerprint (`find_previous_rip`). `failed` and `abandoned` never count, and deleting a job deletes its fingerprints. `config.on_previously_ripped` then decides:
+Identify first reuses a pre-rip job on the same drive with a matching fingerprint (a re-scan of the same disc; `disc_dedupe.find_reusable_job_for_disc`). Failing that, it looks for an **earlier rip** of the disc: any job on any drive in `POST_RIP_JOB_STATUSES` (`ripped`, `ripped_partial`, `ripped_awaiting_identify`) sharing any `(algo, value)` fingerprint (`find_previous_rips`; the newest is the one named). `failed` and `abandoned` never count, and deleting a job deletes its fingerprints. `config.on_previously_ripped` then decides:
 
 - **`hold`** (default): the new job runs identify as usual, then parks in `awaiting_review` with `metadata_json.previously_ripped = {job_id}` and **no** `wait_start_time`, so the ripper's review wait never auto-starts it, a ripper restart re-parks it (`held-job` reports it paused), and un-pausing does not start a countdown. The review card shows the earlier rip (`JobDetailView.previous_rip`: date, status, whether its finished outputs are still on disk) with **Rip again** (`rip-start-review`) and **Discard** (abandon).
-- **`reject`**: no job. Identify records `rip.duplicate_rejected` against the earlier job (inbox by default), sets `drives.notice`, and answers 409 `{"reason": "previously_ripped", "job_id"}`; the ripper ejects on that. The notice clears on the drive's next identify or when the tray reports `no_disc`.
+- **`reject`**: no job. Identify records `rip.duplicate_rejected` against the earlier job (inbox by default), sets `drives.notice`, and answers 409 `{"reason": "previously_ripped", "job_id"}`; the ripper ejects on that. The notice clears on the drive's next identify, or when a heartbeat goes from `tray_open` to `no_disc` (the tray closed empty). A slot-loading drive reports `no_disc` straight after the eject, so its notice stays until the next identify.
 - **`rip`**: no check.
 
-`POST /api/jobs/{id}/rip-again` on the earlier job starts a held copy if one is waiting, else sets `flags.rerip_allowed`, which the next identify that matches it consumes to skip the check once. ISO and folder sources go through the same identify, so the same rule applies.
+`POST /api/jobs/{id}/rip-again` on any earlier rip starts a held copy of the disc if one is waiting (a previously-ripped hold sharing a fingerprint with it, whichever earlier rip the hold names), else sets `flags.rerip_allowed`. The next identify that matches any flagged earlier rip skips the check once and clears the flag on every match. ISO and folder sources go through the same identify, so the same rule applies.
 
 ## Track state machine
 
