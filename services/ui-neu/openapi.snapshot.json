@@ -1901,7 +1901,7 @@
           "jobs"
         ],
         "summary": "Rip Again",
-        "description": "Operator \"Rip again\" on a ripped job (on_previously_ripped hold/reject).\n\nIf a copy of this disc is held right now (AWAITING_REVIEW naming this job\nas its earlier rip), start that one. Otherwise flag this job so the next\nidentify of the disc skips the previously-ripped check once.",
+        "description": "Operator \"Rip again\" on a ripped job (on_previously_ripped hold/reject).\n\nIf a copy of this disc is held right now (a previously-ripped hold sharing\na fingerprint with this job, whichever earlier rip it names), start that\none. Otherwise flag this job so the next identify of the disc skips the\npreviously-ripped check once.",
         "operationId": "rip_again_api_jobs__job_id__rip_again_post",
         "parameters": [
           {
