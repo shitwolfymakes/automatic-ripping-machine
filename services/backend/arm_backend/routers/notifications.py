@@ -6,8 +6,12 @@ The channel ``config`` is masked on every read (private apprise fields become
 ``{service_id, fields}``; otherwise a raw apprise URL is accepted and
 validated. A ``bash`` channel runs a script from the scripts mount
 (``script`` is a bare file name, validated against path traversal); its
-``secret_keys`` are stamped server-side from the script header so a
-``<hidden>`` input on write keeps the stored secret. ``GET /scripts`` and
+``secret_keys`` are server-owned. They are stamped from the script header;
+when the header cannot be read, a create keeps the request's list (it can only
+add masking) and a PATCH keeps the stored list. On a PATCH, ``<hidden>`` on a
+stored secret keeps the stored value and that key stays secret until the
+client replaces it, even if the new header no longer declares it; ``<hidden>``
+on a non-secret key is a literal. ``GET /scripts`` and
 ``GET /scripts/{name}`` list and inspect the scripts mount; ``POST
 /scripts/preview`` resolves (and optionally runs) a bash hook for one event
 with sample context, without persisting anything. Catalog, compose-url,
@@ -21,7 +25,7 @@ JWT-guarded.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,8 +51,10 @@ from arm_backend.notifications.bash_hook import (
     mask_bash_config,
     masked,
     merge_bash_config,
+    patch_bash_config,
     prepare_run,
     redact_secrets,
+    secret_set,
     storage_config,
 )
 from arm_backend.notifications.bash_runner import run_script
@@ -99,7 +105,7 @@ def _hook_422(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
 
-def _validate_template_inputs(templates: dict[str, Any], secret_keys: list[str]) -> None:
+def _validate_template_inputs(templates: dict[str, Any], secret_keys: Collection[str]) -> None:
     """Per-event input overrides may not touch secret inputs."""
     for event, tmpl in templates.items():
         inputs = (tmpl or {}).get("inputs")
@@ -216,7 +222,9 @@ async def create_channel(
     raw = req.config.model_dump(mode="json")
     if req.type == "bash":
         try:
-            config = storage_config(raw, settings.ARM_SCRIPTS_ROOT)
+            # Nothing is stored yet, so the request's secret_keys can only add
+            # masking; keep them when the header cannot be read.
+            config = storage_config(raw, settings.ARM_SCRIPTS_ROOT, fallback_secret_keys=raw.get("secret_keys") or [])
         except HookError as exc:
             raise _hook_422(exc) from exc
         _validate_template_inputs(_templates_to_storage(req.templates), config["secret_keys"])
@@ -276,7 +284,7 @@ async def patch_channel(
                     detail="a bash channel's config must have type 'bash'",
                 )
             try:
-                ch.config = storage_config(merge_bash_config(ch.config or {}, incoming), settings.ARM_SCRIPTS_ROOT)
+                ch.config = patch_bash_config(ch.config or {}, incoming, settings.ARM_SCRIPTS_ROOT)
             except HookError as exc:
                 raise _hook_422(exc) from exc
         else:
@@ -298,9 +306,7 @@ async def patch_channel(
     # secret_keys, and the per-event overrides are validated against the new set.
     if req.templates is not None:
         if ch.type == "bash":
-            _validate_template_inputs(
-                _templates_to_storage(req.templates), list((ch.config or {}).get("secret_keys") or [])
-            )
+            _validate_template_inputs(_templates_to_storage(req.templates), secret_set(ch.config or {}))
         ch.templates = _templates_to_storage(req.templates)
     ch.updated_at = datetime.now(UTC)
     await db.commit()
@@ -374,8 +380,9 @@ async def preview_script(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="preview with channel_id must use the channel's stored script",
             )
-        config = merge_bash_config(ch.config or {}, config)
-        config["secret_keys"] = list((ch.config or {}).get("secret_keys") or [])
+        # Same script, so the carried keys are already in the stored set.
+        config = merge_bash_config(ch.config or {}, config)[0]
+        config["secret_keys"] = sorted(secret_set(ch.config or {}))
     template = req.template.model_dump(exclude_none=True) if req.template is not None else None
     try:
         run = _prepare_sample(config, template, req.event_type)
