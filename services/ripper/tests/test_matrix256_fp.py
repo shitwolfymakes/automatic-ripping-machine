@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import pytest
+
 from arm_ripper.scan import matrix256_fp
 from arm_ripper.scan.matrix256_fp import (
     _collect_from_iso,
@@ -54,6 +56,47 @@ def test_surrogate_escaped_name_round_trips() -> None:
     materialize and hash, not raise — the library maps lone surrogates to
     U+FFFD per spec §2.2."""
     assert fingerprint_records([("bad\udc80name", 3)]) == fingerprint_records([("bad�name", 3)])
+
+
+def _victim(tmp_path: Path) -> Path:
+    victim = tmp_path / "title_t00.mkv"
+    victim.write_bytes(b"x" * 1000)
+    return victim
+
+
+def _escaping(target: Path) -> str:
+    # Enough `..` to reach `/` from wherever the temp root lives.
+    return "../" * 64 + str(target).lstrip("/")
+
+
+def test_dotdot_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
+    """D-003: a disc-supplied `..` name must not truncate a file outside the
+    skeleton root (the defect's PoC)."""
+    victim = _victim(tmp_path)
+    with pytest.raises(ValueError, match="escapes"):
+        fingerprint_records([(_escaping(victim), 0), ("BDMV/index.bdmv", 5)])
+    assert victim.read_bytes() == b"x" * 1000
+
+
+def test_absolute_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
+    # `root / "/abs"` discards root, so an absolute name is an escape too.
+    victim = _victim(tmp_path)
+    with pytest.raises(ValueError, match="escapes"):
+        fingerprint_records([(str(victim), 0)])
+    assert victim.read_bytes() == b"x" * 1000
+
+
+def test_escaping_record_creates_no_directories(tmp_path: Path) -> None:
+    # The check runs before mkdir, so no directory appears outside the root.
+    with pytest.raises(ValueError, match="escapes"):
+        fingerprint_records([(_escaping(tmp_path / "escaped" / "x"), 1)])
+    assert not (tmp_path / "escaped").exists()
+
+
+@pytest.mark.parametrize("relative", ["", ".", "a/.."])
+def test_record_naming_the_root_is_rejected(relative: str) -> None:
+    with pytest.raises(ValueError, match="escapes"):
+        fingerprint_records([(relative, 1)])
 
 
 # --- pycdlib view selection and collection (stub image) ----------------------
@@ -181,3 +224,12 @@ def test_probe_soft_fails_on_unmaterializable_record() -> None:
     records = [("x" * 4096, 1)]
     with mock.patch.object(matrix256_fp, "collect_tree_records", return_value=(records, "udf")):
         assert probe_matrix256("/dev/sr0") is None
+
+
+def test_probe_soft_fails_on_escaping_record(tmp_path: Path) -> None:
+    # A hostile tree yields no fingerprint, and the file it named is untouched.
+    victim = _victim(tmp_path)
+    records = [(_escaping(victim), 0), ("BDMV/index.bdmv", 5)]
+    with mock.patch.object(matrix256_fp, "collect_tree_records", return_value=(records, "udf")):
+        assert probe_matrix256("/dev/sr0") is None
+    assert victim.read_bytes() == b"x" * 1000

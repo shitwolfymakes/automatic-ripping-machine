@@ -54,15 +54,19 @@ def fingerprint_records(records: Iterable[tuple[str, int]]) -> str:
     the digest is `matrix256.v1.fingerprint` of that root. Path text
     (Unicode normalization, undecodable bytes) round-trips through the
     filesystem unaltered on Linux, so the library sees the same names
-    pycdlib enumerated. Raises OSError on unmaterializable paths; the
-    probe wrapper soft-fails.
+    pycdlib enumerated. Raises OSError on unmaterializable paths, and
+    ValueError on a record that resolves outside the skeleton root (names
+    come off the disc and are untrusted: a `..` or absolute name would
+    otherwise truncate a file elsewhere); the probe wrapper soft-fails.
     """
     from matrix256 import v1  # type: ignore[import-untyped]  # lazy: off the hot path
 
     with tempfile.TemporaryDirectory(prefix="arm-matrix256-") as tmp:
-        root = Path(tmp)
+        root = Path(tmp).resolve()
         for relative, size in records:
-            target = root / relative
+            target = (root / relative).resolve()
+            if target == root or not target.is_relative_to(root):
+                raise ValueError(f"matrix256 record escapes the skeleton root: {relative!r}")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.touch()
             os.truncate(target, size)
