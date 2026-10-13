@@ -36,6 +36,8 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from arm_common.fileops import safe_join
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -64,9 +66,7 @@ def fingerprint_records(records: Iterable[tuple[str, int]]) -> str:
     with tempfile.TemporaryDirectory(prefix="arm-matrix256-") as tmp:
         root = Path(tmp).resolve()
         for relative, size in records:
-            target = (root / relative).resolve()
-            if target == root or not target.is_relative_to(root):
-                raise ValueError(f"matrix256 record escapes the skeleton root: {relative!r}")
+            target = safe_join(root, relative)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.touch()
             os.truncate(target, size)

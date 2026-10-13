@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from arm_backend.config import settings
+from arm_common.fileops import safe_join
 from arm_common.schemas import DirectoryListing, FileEntry, FileRoot
 
 # Code-resident roots registry. LOG is the fixed /logs mount (browse-only);
@@ -44,11 +45,10 @@ def resolve(root_key: str, subpath: str) -> Path:
     symlink inside the root that points outward is rejected. A leading '/' or
     '..' that escapes the base is likewise caught.
     """
-    base = Path(_root(root_key).path).resolve()
-    target = (base / subpath).resolve()
-    if target != base and not target.is_relative_to(base):
-        raise PathError("path_escape")
-    return target
+    try:
+        return safe_join(Path(_root(root_key).path), subpath, allow_root=True)
+    except ValueError:
+        raise PathError("path_escape") from None
 
 
 def require_writable(root_key: str) -> None:
