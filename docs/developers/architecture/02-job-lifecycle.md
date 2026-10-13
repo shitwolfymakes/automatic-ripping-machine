@@ -110,6 +110,17 @@ The UI marks a job "resumed from crash" until its next terminal state.
 - **Resume mid-track or mid-job.** Interruption means full restart of the rip — every track, including ones the DB says were `done`. Accepted by design (see reasons above).
 - **Detect a hung-but-not-crashed ripper.** If MakeMKV wedges without the container exiting, no automatic detection. The user sees flat progress in the UI and restarts the ripper container manually, which triggers the ripper-startup probe.
 
+## A drive that drops off the bus mid-rip
+
+A USB enclosure reset takes the drive away and brings it back moments later, usually under a new node (`sr0` -> `sr1`). The ripper process keeps running, so this is not the crash-recovery path above; the running rip handles it itself (`JobController._execute_rip`, DVD/BD `mkv all` rips only):
+
+- **Stop.** A watcher reads the shared `DriveHandle` (the poll loop moves it) and sets a stop event as soon as the drive leaves the node the rip started on; `rip_disc` kills `makemkvcon` on it instead of letting it fail every remaining title against a dead node. A title failure reported while the node no longer answers (ENXIO/ENODEV/ENOENT) counts the same way, since makemkvcon can fail titles before the poll loop notices. Those titles are held back, not PATCHed `failed`.
+- **Wait.** Up to `DEVICE_RETURN_WAIT_SECONDS` (180 s) for the handle to name a node that reports `DISC_OK`. No eject meanwhile: the disc has to stay in for the resume. The reattach handler skips its boot probe while the pipeline is active.
+- **Resume.** Delete every `.mkv` no finished title owns (the half-written title), then run one more `mkv all` on the new node into `/raw/<job_id>/resume-N/`, passing the settled tracks as `skip_track_ids`. `mkv all` rips every eligible title again, so the output positions still line up; the settled titles get no callbacks and their duplicate files are deleted. This keeps the one-makemkvcon-per-disc rule: a resume is one more `mkv all`, never per-title calls.
+- **Give up.** If the drive does not return in time, or after `MAX_DEVICE_RESUMES` (3) resumes, the held tracks fail with `last_error` saying the drive disconnected, and rip-complete classifies the job as `ripped_partial` as usual. Eject happens once, after the last pass, at whatever node the drive is on.
+
+Unlike crash recovery, finished titles are kept: the process that wrote and hashed them never went away, so there is no durability question about them.
+
 ## Session Application & Transcode Task lifecycle
 
 Session Applications are the runtime record of "apply this session to this job"; Transcode Tasks are the execution units that fan out from an application. They have separate lifecycles. (The Session itself is a template and has no runtime state — see [§ Session model details](#session-model-details).)

@@ -71,6 +71,24 @@ SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{ID_PATH}=="pci-0000:00:14.0-ata-3", 
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
+## The drive dropped off USB during a rip
+
+Symptom: the ripper logs `drive disconnected mid-rip on /dev/srN … waiting up
+to 180s for it to return`, often next to a kernel `usb … USB disconnect` line.
+
+USB enclosures sometimes reset, and the drive comes back a second later,
+often under a new node (`sr0` becomes `sr1`). For a DVD or Blu-ray rip, ARM
+stops MakeMKV straight away, keeps every title that already finished, and once
+the drive reports the disc readable again, rips the rest with one more MakeMKV
+pass on the new node. The disc stays in the drive until that pass ends. If the
+drive doesn't come back within 180 seconds (or drops three times in one rip),
+the job ends as partially ripped and the missing titles say the drive
+disconnected. Audio CDs and full-disc backups don't resume; they fail as
+before.
+
+A drive that keeps dropping out usually needs a powered USB hub, a different
+port or cable, or a different enclosure. Check `dmesg` for the disconnects.
+
 ## Files have the wrong owner, or the container exits at startup
 
 ARM writes everything as `PUID:PGID` from `~/arm/.armctl/.env`, and it **never**
