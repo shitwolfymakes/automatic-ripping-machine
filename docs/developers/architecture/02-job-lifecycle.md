@@ -46,6 +46,8 @@ Four long-lived entities drive the lifecycle, plus one reusable template:
 
 Terminal states for a `Job`: `ripped`, `ripped_partial`, `abandoned` (user gave up in UI), `failed` (identification failed catastrophically). Abandoning also ejects the disc: the ripper's `job.abandoned` WS handler pops the tray when the abandoned job owns the drive's pipeline (ripping or parked) or when the drive sits idle with the disc still seated — a stale abandon while a different job's rip owns the drive never touches the tray.
 
+Not drawn: `awaiting_review` sits between `created` and `identified`/`ripping` for the timed review gate (`hold_for_review`), a previously-ripped hold, and a suggestion hold (next section); `ripped_awaiting_identify` is a placeholder rip waiting for a title.
+
 ### A disc that was ripped before
 
 Identify first reuses a pre-rip job on the same drive with a matching fingerprint (a re-scan of the same disc; `disc_dedupe.find_reusable_job_for_disc`). Failing that, it looks for an **earlier rip** of the disc: any job on any drive in `POST_RIP_JOB_STATUSES` (`ripped`, `ripped_partial`, `ripped_awaiting_identify`) sharing any `(algo, value)` fingerprint (`find_previous_rips`; the newest is the one named). `failed` and `abandoned` never count, and deleting a job deletes its fingerprints. `config.on_previously_ripped` then decides:
@@ -59,6 +61,26 @@ Identify first reuses a pre-rip job on the same drive with a matching fingerprin
 - **`rip`**: no check.
 
 `POST /api/jobs/{id}/rip-again` on any earlier rip starts a held copy of the disc if one is waiting (a previously-ripped hold sharing a fingerprint with it, whichever earlier rip the hold names), else sets `flags.rerip_allowed`. The next identify that matches any flagged earlier rip skips the check once and clears the flag on every match. ISO and folder sources go through the same identify, so the same rule applies.
+
+### How identify decides
+
+`POST /api/ripper/identify` (`routers/ripper.py`) runs these steps in order. Every online call goes through the source registry (`metadata/sources.py`, accessors in `identity/sources/registry.py`); `sources_for(cfg, media_type, registry)` is the only place that decides which sources run and in which order.
+
+| Step | Code | Settings |
+|---|---|---|
+| Fingerprints stored; a re-scan reuses the pre-rip job; an earlier rip of the disc follows the duplicate policy | `identify`, `disc_dedupe.find_reusable_job_for_disc`, `find_previous_rips` | `on_previously_ripped` |
+| Disc hints (Blu-ray disc title metadata, volume label) → claims plus a cleaned search title | `identity/pipeline.run_disc_hints(sources=enabled_hint_sources(cfg))` | `disc_hint_sources` (a set; the order is fixed, `bd_title` before `label`) |
+| TheDiscDB content-hash match → track claims | the `thediscdb` store lookup, `thediscdb.build_claims` | `thediscdb_enabled` |
+| TheDiscDB IMDb id → the ranked sources for the release's kind (`lookup_imdb`); with no capable source the release itself names the disc (provider `thediscdb`) | `dispatcher.has_imdb_lookup`, `dispatcher.identify_from_imdb`, `thediscdb.release_result` | `movie_sources` / `episode_sources` and their keys |
+| CD: disc-id walk | `dispatcher._identify_cd` → `sources_for(cfg, "music", ...)` → `lookup_disc_id` | `music_sources` |
+| Video: CRC64 fingerprint (DVD) | `fingerprint_sources(cfg, ...)` → `lookup_fingerprint` | `crc64service_enabled` |
+| Video: title candidates (the hint title; the volume label only while `label` is enabled) searched per kind in the order the disc's shape suggests | `dispatcher._identify_video`, `_search_kind` → `search_title` | `movie_sources`, `episode_sources`, `disc_hint_sources` |
+| External ids filled in (a non-TMDb hit with an IMDb id gets its TMDb id) | `dispatcher.fill_external_ids` | TMDb key |
+| Hit: applied, or held as a suggestion when the kind's switch is off; miss: held for identification or ripped as a placeholder | `registry.auto_apply_for`, `identity.apply.apply_identity_result`, `suggest_identity`; `hold_for_review` branch; miss title = BDMT name → release title → raw label | `movie_auto_apply`, `episode_auto_apply`, `music_auto_apply`, `hold_for_review`, `block_on_miss` |
+| Episode stage (TV jobs, in the background) | `identity/stage_runner.py`, `identity/episode_stage.py` | `episode_sources`, `episode_match_tolerance_seconds`, `episode_auto_apply`, job pin |
+| Resolver: claim precedence manual > TheDiscDB > episode match > hints > preset | `pipeline.resolve_job` → `resolver.resolve(tiers, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))` | `disc_hint_sources` (enablement), job pin |
+
+The interactive routes read the same registry. `GET /api/metadata/search` takes an optional `provider`: a named one must be a registered source that searches the requested `type` and has its key; without it the route uses `search_source(cfg, type, registry)`, the operator's `search_provider_<type>` choice. `GET /api/metadata/lookup` takes `imdb_id` or `crc64`; an IMDb lookup walks `lookup_sources`, which is `sources_for` with the chosen search provider first. The music routes use `search_source(cfg, "music", registry)`. `PATCH /api/config` rejects a ranked list holding an unknown or duplicate source, and a search select set to a source whose API key is not saved (`<key>: <label> needs its API key`).
 
 ## Track state machine
 

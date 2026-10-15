@@ -238,7 +238,7 @@ retagged `setup_step="identification"` (D-9).
    offers `tmdb, omdb, tvmaze, tvdb`.
 4. **PR 3 · Auto-apply hold path.** `auto_apply_for(cfg, kind)` (movie / episode / music switch); a hit whose switch is off is stored as `metadata_json.identity_suggestion`, the job keeps the miss title and the `unidentified` flag and parks in `awaiting_review` with no countdown; `POST /jobs/{id}/identity/accept` applies it through the resolve path (gate off → rip released; gate on → countdown); any resolve clears it. The two toggles become editable.
 5. **PR 4 · Docs.** `02-job-lifecycle.md` gains the table in §2; the Identification tab help
-   text, including D-10 and D-11.
+   text, including D-10 and D-11 — landed in PR 4.
 
 The UI tab and card land with PR 1 (fields) and PR 2 (behaviour), as #258 already plans.
 
@@ -302,3 +302,4 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
 - Automatic TVmaze matches must be close to the query (`title_is_close`: equal, whole-word containment, or 75% similar); TVmaze's single search is otherwise lenient enough to name any string. A far match is a miss. The search box is unfiltered.
 - Resolved in PR 3: TV title hits follow `episode_auto_apply` (one switch per media type, D-8); the TheDiscDB release-metadata identity goes through the same gate; accept while ripping is paused keeps the disc held until un-pause stamps a countdown. The review card's suggestion display and Accept button are the UI redesign PR's.
 - Resolved in the UI PR: the wizard step keeps its wire id "metadata" with the visible label Identification (D-9's literal setup_step rename would have changed stored progress keys); MakeMKV keeps its own step. The Playwright visual snapshots for Settings are refreshed by the owner.
+- Resolved in PR 4: the user guide and the lifecycle doc describe the Identification and Keys tabs and the registry pipeline; the auto-apply help strings name the field by its label, Ripping › Hold discs for review.
