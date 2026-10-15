@@ -124,6 +124,10 @@ async def lookup_metadata(
         if imdb_id is not None:
             cfg = await _config(db)
             ranked = [s for s in sources_for(cfg, "movie", registry) if capability(s, "lookup_imdb")]
+            preferred = search_source(cfg, "movie", registry)
+            if preferred in ranked:
+                ranked.remove(preferred)
+                ranked.insert(0, preferred)
             if not ranked:
                 first = next(iter(online_source_ids(cfg, "movie")), "tmdb")
                 raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {first} key configured")

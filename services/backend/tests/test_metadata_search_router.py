@@ -732,3 +732,45 @@ def test_lookup_imdb_walks_to_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["candidates"][0]["title"] == "Heat"
+
+
+@respx.mock
+def test_search_default_provider_honours_metadata_provider(signing_key: bytes) -> None:
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [{"Title": "Heat", "Year": "1995", "imdbID": "tt0113277", "Type": "movie"}],
+            },
+        )
+    )
+    tmdb_route = respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={}))
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", metadata_provider="omdb")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "heat"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Heat"
+    assert not tmdb_route.called
+
+
+@respx.mock
+def test_lookup_prefers_metadata_provider_when_both_keyed(signing_key: bytes) -> None:
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200, json={"Response": "True", "Title": "Heat", "Year": "1995", "Type": "movie", "imdbID": "tt0113277"}
+        )
+    )
+    tmdb_route = respx.get(url__startswith="https://api.themoviedb.org/3/find/").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", metadata_provider="omdb")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Heat"
+    assert not tmdb_route.called

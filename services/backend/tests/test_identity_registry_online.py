@@ -99,3 +99,17 @@ def test_known_source_ids_reads_media_types_from_the_registry():
     assert known_source_ids("movie", reg) == ("tmdb", "omdb")
     assert known_source_ids("music", reg) == ("musicbrainz",)
     assert known_source_ids("data", reg) == ()
+
+
+def test_search_source_honours_legacy_metadata_provider():
+    reg = _registry(
+        FakeSource("tmdb", {"movie", "tv"}),
+        FakeSource("omdb", {"movie", "tv"}),
+        FakeSource("musicbrainz", {"music"}),
+    )
+    assert search_source(_cfg(metadata_provider="omdb"), "movie", reg).id == "omdb"
+    reg["omdb"]._reason = "no omdb key"
+    assert search_source(_cfg(metadata_provider="omdb"), "movie", reg).id == "tmdb"
+    reg["omdb"]._reason = None
+    assert search_source(_cfg(metadata_provider="omdb"), "music", reg).id == "musicbrainz"
+    assert search_source(_cfg(metadata_provider="bogus"), "movie", reg).id == "tmdb"

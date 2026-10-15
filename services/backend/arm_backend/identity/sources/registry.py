@@ -157,9 +157,15 @@ def sources_for(
 
 
 def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
-    """The source behind the job page's search box for `media_type` (PR 1 adds
-    the `search_provider_*` columns; until then the first usable listed source)."""
+    """The source behind the job page's search box for `media_type`: the first
+    usable listed source. Honours the legacy `metadata_provider` setting until
+    PR 1 replaces it with `search_provider_*`."""
     ranked = sources_for(cfg, media_type, registry)
+    preferred = getattr(cfg, "metadata_provider", None)
+    if media_type in ("movie", "tv") and preferred is not None:
+        for source in ranked:
+            if source.id == preferred:
+                return source
     return ranked[0] if ranked else None
 
 
