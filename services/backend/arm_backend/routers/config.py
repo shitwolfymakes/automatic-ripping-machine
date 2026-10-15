@@ -30,16 +30,16 @@ from arm_backend.db import get_session
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.stage_runner import emit_identity_resolved
 from arm_backend.identity.sources.registry import (
-    episode_auto_apply,
     crc64service_enabled,
+    episode_auto_apply,
     episode_sources_setting,
+    episode_tolerance,
+    hint_sources_setting,
     movie_auto_apply,
     movie_sources_setting,
     music_auto_apply,
     music_sources_setting,
     search_provider_setting,
-    episode_tolerance,
-    hint_sources_setting,
 )
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID

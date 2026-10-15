@@ -113,7 +113,12 @@ def test_patch_ranked_lists_and_toggles(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.patch(
             "/api/config",
-            json={"movie_sources": ["omdb", "tmdb"], "music_sources": [], "movie_auto_apply": False, "crc64service_enabled": False},
+            json={
+                "movie_sources": ["omdb", "tmdb"],
+                "music_sources": [],
+                "movie_auto_apply": False,
+                "crc64service_enabled": False,
+            },
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
@@ -181,11 +186,12 @@ def test_patch_ranked_lists_do_not_require_keys(signing_key: bytes) -> None:
 
 
 @pytest.mark.parametrize("key", ["movie_sources", "music_sources"])
-def test_changing_the_new_lists_re_resolves_live_jobs(signing_key: bytes, monkeypatch: pytest.MonkeyPatch, key: str) -> None:
+def test_changing_the_new_lists_re_resolves_live_jobs(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
     db = FakeSession()
     _seed(db)
     resolved: list[str] = []
-    stage_scheduled: list[str] = []
 
     async def fake_reresolve(session, request):  # type: ignore[no-untyped-def]
         resolved.append(key)
@@ -197,7 +203,6 @@ def test_changing_the_new_lists_re_resolves_live_jobs(signing_key: bytes, monkey
         r = client.patch("/api/config", json=body, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert resolved == [key]
-    del stage_scheduled
 
 
 def test_patch_config_rejects_non_editable_key(signing_key: bytes) -> None:
