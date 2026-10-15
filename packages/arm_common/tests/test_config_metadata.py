@@ -102,7 +102,19 @@ def test_config_model_defaults_for_identity_settings() -> None:
     assert cfg.disc_hint_sources == ["bd_title", "label"]
     assert cfg.episode_match_tolerance_seconds == 300
     assert cfg.episode_auto_apply is True
+    assert cfg.movie_sources == ["tmdb", "omdb"]
+    assert cfg.music_sources == ["musicbrainz"]
+    assert (cfg.search_provider_movie, cfg.search_provider_tv, cfg.search_provider_music) == (
+        "tmdb",
+        "tmdb",
+        "musicbrainz",
+    )
+    assert cfg.movie_auto_apply is True
+    assert cfg.music_auto_apply is True
+    assert cfg.crc64service_enabled is True
+    assert not hasattr(cfg, "metadata_provider")
     assert Config().episode_sources is not cfg.episode_sources  # no shared mutable default
+    assert Config().movie_sources is not cfg.movie_sources
 
 
 def test_iso_cap_meta() -> None:

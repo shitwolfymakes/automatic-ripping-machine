@@ -67,16 +67,29 @@ class Config(SQLModel, table=True):
         default=300, sa_column=Column(Integer, nullable=False, server_default="300")
     )
     episode_auto_apply: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
+    # Identification settings (spec 2026-10-14 D-7). Ranked online sources per
+    # media type, the job page's search provider per type, per-type auto-apply
+    # gates, and the ARM community CRC64 database switch (D-2). The TV list is
+    # `episode_sources` above.
+    movie_sources: list[str] = Field(
+        default_factory=lambda: ["tmdb", "omdb"],
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{tmdb,omdb}"),
+    )
+    music_sources: list[str] = Field(
+        default_factory=lambda: ["musicbrainz"],
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{musicbrainz}"),
+    )
+    search_provider_movie: str = Field(default="tmdb", sa_column=Column(String, nullable=False, server_default="tmdb"))
+    search_provider_tv: str = Field(default="tmdb", sa_column=Column(String, nullable=False, server_default="tmdb"))
+    search_provider_music: str = Field(
+        default="musicbrainz", sa_column=Column(String, nullable=False, server_default="musicbrainz")
+    )
+    movie_auto_apply: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
+    music_auto_apply: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
+    crc64service_enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     # See DEFAULT_MUSICBRAINZ_USER_AGENT above — a bare token 403s; operators are
     # still encouraged to override with their own contact info (UI placeholder hint).
     musicbrainz_user_agent: str | None = Field(default=DEFAULT_MUSICBRAINZ_USER_AGENT)
-    # Persisted metadata provider for the identify flow (search + detail).
-    # Default `tmdb` — free, effectively unlimited, richer than OMDb. Validated
-    # app-side to {tmdb, omdb}; tvdb/makemkv are key-test-only, not search providers.
-    metadata_provider: str = Field(
-        default="tmdb",
-        sa_column=Column(String, nullable=False, server_default="tmdb"),
-    )
     auto_transcode_on_idle: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
