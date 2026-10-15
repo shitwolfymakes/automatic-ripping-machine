@@ -41,7 +41,8 @@ DEFAULT_RANKS: dict[str, int] = {
     "episodes_tvdb": 2,
 }
 
-# Disc-hint sources in default rank order (PR 4 makes this the operator's setting).
+# Disc-hint sources in their fixed rank order; the operator's setting only
+# switches each one on or off (`hint_sources_setting`).
 HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, LABEL)
 
 # Episode-match source id per operator-facing provider setting name.
@@ -91,7 +92,14 @@ def enabled_episode_source_ids(cfg: Config | None) -> tuple[str, ...]:
 
 
 def hint_sources_setting(cfg: Config | None) -> tuple[str, ...]:
-    return _ranked(getattr(cfg, "disc_hint_sources", None), HINT_SOURCE_BY_SETTING, _DEFAULT_HINT_SETTING)
+    """The enabled disc hints, always in `HINT_SOURCES` order: the setting is a
+    set (membership = enabled), and the disc's own metadata beats its label
+    whatever order the list was saved in."""
+    values = getattr(cfg, "disc_hint_sources", None)
+    if values is None:
+        return _DEFAULT_HINT_SETTING
+    stored = set(values)
+    return tuple(sid for sid in _DEFAULT_HINT_SETTING if sid in stored)
 
 
 def enabled_hint_sources(cfg: Config | None) -> tuple[Source, ...]:
@@ -106,7 +114,8 @@ def disabled_source_ids(cfg: Config | None) -> frozenset[str]:
 
 
 def source_ranks(cfg: Config | None) -> dict[str, int]:
-    """Within-tier rank per enabled source: its position in the operator's list."""
+    """Within-tier rank per enabled source: its position in the operator's list
+    (episode sources) or in the fixed `HINT_SOURCES` order (disc hints)."""
     ranks = {sid: i for i, sid in enumerate(enabled_episode_source_ids(cfg))}
     ranks.update({s.id: i for i, s in enumerate(enabled_hint_sources(cfg))})
     return ranks
