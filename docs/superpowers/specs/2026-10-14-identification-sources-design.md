@@ -225,7 +225,7 @@ retagged `setup_step="identification"` (D-9).
 ## 6. Sequencing (replaces #258's PR list from PR 2 onward)
 
 0. **PR 0 · Registry and dispatcher walk, no behaviour change.** Adapters, `sources_for`
-   reading a built-in default order equal to today's (`tmdb, omdb` / `tmdb, tvmaze, tvdb` /
+   reading a built-in default order equal to today's (`tmdb, omdb` for movie and TV /
    `musicbrainz`), the dispatcher rewritten as walks, the metadata routes reading the
    registry (`search_source` maps `metadata_provider` until PR 1 replaces it),
    `_PROVIDER_BY_LABEL_PREFIX` removed. Closes S-8.
