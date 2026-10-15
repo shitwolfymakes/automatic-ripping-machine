@@ -233,14 +233,15 @@ def sources_for(
 
 def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
     """The source behind the job page's search box for `media_type`: the
-    operator's `search_provider_<type>` when it is listed, registered and
-    configured, else the first usable listed source (logged, so a provider
-    chosen before its adapter exists — TVmaze/TVDB until PR 2b — is visible)."""
-    ranked = sources_for(cfg, media_type, registry)
+    operator's `search_provider_<type>` when it is registered, serves the type
+    and is configured, whether or not it is in the Online lookup list (the
+    Search card is independent of that list), else the first usable listed
+    source (logged, so an unavailable choice is visible)."""
     preferred = search_provider_setting(cfg, media_type)
-    for source in ranked:
-        if source.id == preferred:
-            return source
+    chosen = registry.get(preferred) if preferred else None
+    if chosen is not None and media_type in chosen.media_types and chosen.configured(cfg) is None:
+        return chosen
+    ranked = sources_for(cfg, media_type, registry)
     fallback = ranked[0] if ranked else None
     if preferred and fallback is not None:
         logger.debug("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)
