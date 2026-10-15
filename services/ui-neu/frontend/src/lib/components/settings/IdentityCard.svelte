@@ -221,7 +221,7 @@
 		</div>
 		<p class="field-help" id="identity-help-trust">
 			When off, a match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping ›
-			Hold discs for review still holds every disc.
+			Review first still holds every disc.
 		</p>
 	</div>
 

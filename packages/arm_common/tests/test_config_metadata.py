@@ -120,10 +120,10 @@ def test_identity_settings_meta() -> None:
         assert (meta.type, meta.group, meta.editable, meta.setup_step) == ("bool", "Identification", True, None)
         assert meta.setup_step == by_key["movie_sources"].setup_step
         assert meta.label == label
-        assert "Hold discs for review" in meta.help
+        assert "Review first" in meta.help
     assert by_key["episode_auto_apply"].help == (
         "When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; "
-        "the disc is held with no countdown. Ripping › Hold discs for review still holds every disc."
+        "the disc is held with no countdown. Ripping › Review first still holds every disc."
     )
     assert by_key["crc64service_enabled"].type == "bool"
     assert "metadata_provider" not in by_key
