@@ -64,7 +64,7 @@ Identify first reuses a pre-rip job on the same drive with a matching fingerprin
 
 ### How identify decides
 
-`POST /api/ripper/identify` (`routers/ripper.py`) runs these steps in order. Every online call goes through the source registry (`metadata/sources.py`, accessors in `identity/sources/registry.py`); `sources_for(cfg, media_type, registry)` is the only place that decides which sources run and in which order.
+`POST /api/ripper/identify` (`routers/ripper.py`) runs these steps in order. Every online call goes through the source registry (`metadata/sources.py`, accessors in `identity/sources/registry.py`); `sources_for(cfg, media_type, registry)` decides the ranked online walks; `fingerprint_sources`, `lookup_sources` and the fixed hint order (`enabled_hint_sources`) decide the rest.
 
 | Step | Code | Settings |
 |---|---|---|
@@ -75,12 +75,12 @@ Identify first reuses a pre-rip job on the same drive with a matching fingerprin
 | CD: disc-id walk | `dispatcher._identify_cd` → `sources_for(cfg, "music", ...)` → `lookup_disc_id` | `music_sources` |
 | Video: CRC64 fingerprint (DVD) | `fingerprint_sources(cfg, ...)` → `lookup_fingerprint` | `crc64service_enabled` |
 | Video: title candidates (the hint title; the volume label only while `label` is enabled) searched per kind in the order the disc's shape suggests | `dispatcher._identify_video`, `_search_kind` → `search_title` | `movie_sources`, `episode_sources`, `disc_hint_sources` |
-| External ids filled in (a non-TMDb hit with an IMDb id gets its TMDb id) | `dispatcher.fill_external_ids` | TMDb key |
-| Hit: applied, or held as a suggestion when the kind's switch is off; miss: held for identification or ripped as a placeholder | `registry.auto_apply_for`, `identity.apply.apply_identity_result`, `suggest_identity`; `hold_for_review` branch; miss title = BDMT name → release title → raw label | `movie_auto_apply`, `episode_auto_apply`, `music_auto_apply`, `hold_for_review`, `block_on_miss` |
-| Episode stage (TV jobs, in the background) | `identity/stage_runner.py`, `identity/episode_stage.py` | `episode_sources`, `episode_match_tolerance_seconds`, `episode_auto_apply`, job pin |
-| Resolver: claim precedence manual > TheDiscDB > episode match > hints > preset | `pipeline.resolve_job` → `resolver.resolve(tiers, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))` | `disc_hint_sources` (enablement), job pin |
+| External ids filled in (a TMDb hit gets its IMDb and TVDB ids; a non-TMDb hit with an IMDb id gets its TMDb id) | `dispatcher.fill_external_ids` | TMDb key |
+| Hit: applied, or held as a suggestion when the kind's switch is off; miss: held for identification or ripped as a placeholder | `registry.auto_apply_for`, `identity.apply.apply_identity_result`, `suggest_identity`; `hold_for_review` branch; miss title = BDMT name (only while `bd_title` is enabled) → release title → raw label | `movie_auto_apply`, `episode_auto_apply`, `music_auto_apply`, `hold_for_review`, `block_on_miss`, `disc_hint_sources` |
+| Resolver: claim precedence manual > TheDiscDB > episode match > hints > preset | `pipeline.resolve_job` → `resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))` | `episode_sources` (rank order; unticked sources dropped), `disc_hint_sources` (enablement), job pin |
+| Episode stage (TV jobs; scheduled after the commit, runs in the background and re-resolves through `resolve_job`) | `identity/stage_runner.py`, `identity/episode_stage.py` | `episode_sources`, `episode_match_tolerance_seconds`, `episode_auto_apply`, job pin |
 
-The interactive routes read the same registry. `GET /api/metadata/search` takes an optional `provider`: a named one must be a registered source that searches the requested `type` and has its key; without it the route uses `search_source(cfg, type, registry)`, the operator's `search_provider_<type>` choice. `GET /api/metadata/lookup` takes `imdb_id` or `crc64`; an IMDb lookup walks `lookup_sources`, which is `sources_for` with the chosen search provider first. The music routes use `search_source(cfg, "music", registry)`. `PATCH /api/config` rejects a ranked list holding an unknown or duplicate source, and a search select set to a source whose API key is not saved (`<key>: <label> needs its API key`).
+The interactive routes read the same registry. `GET /api/metadata/search` takes an optional `provider`: a named one must be a registered source that searches the requested `type` and has its key; without it the route uses `search_source(cfg, type, registry)`, the operator's `search_provider_<type>` choice, which falls back to the first usable listed source when the chosen one is not usable. `GET /api/metadata/lookup` takes `imdb_id` or `crc64`: an IMDb id walks `lookup_sources(cfg, "movie", ...)` (the movie list, chosen search provider first) and a `crc64` goes through `fingerprint_sources`. Of the music routes only `/music/search` uses `search_source`; `/music/{release_id}` calls the MusicBrainz client directly. `PATCH /api/config` validates ranked lists and selects against the field metadata's enum values (a test pins them to the registry) and rejects a select whose source key is not saved (`<key>: <label> needs its API key`).
 
 ## Track state machine
 
