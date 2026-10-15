@@ -64,7 +64,7 @@ Identify first reuses a pre-rip job on the same drive with a matching fingerprin
 
 ### How identify decides
 
-`POST /api/ripper/identify` (`routers/ripper.py`) runs these steps in order. Every online call goes through the source registry (`metadata/sources.py`, accessors in `identity/sources/registry.py`); `sources_for(cfg, media_type, registry)` decides the ranked online walks; `fingerprint_sources`, `lookup_sources` and the fixed hint order (`enabled_hint_sources`) decide the rest.
+`POST /api/ripper/identify` (`routers/ripper.py`) runs these steps in order. Every online call goes through the source registry (`metadata/sources.py`, accessors in `identity/sources/registry.py`); `dispatcher.*` below is `metadata/dispatcher.py`; `sources_for(cfg, media_type, registry)` decides the ranked online walks; `fingerprint_sources`, `lookup_sources` and the fixed hint order (`enabled_hint_sources`) decide the rest.
 
 | Step | Code | Settings |
 |---|---|---|
