@@ -90,6 +90,7 @@ Do not invent new token names.
 | `--color-status-scanning`, `-ripping`, `-transcoding`, `-finishing`, `-waiting`, `-success`, `-error` | job and drive status glyphs, cards, badges | existing values | same |
 | `--color-accent-1` .. `-4` | the fixed accent set used by disc-type icons and glyph tiles (amber, blue, violet, cyan) | existing values | same |
 | `--color-frame-accent`, `--color-on-frame-accent` | the `section-frame` accent bar and its text | rgb(255 153 0) / rgb(0 0 0) | same |
+| `--color-terminal-base`, `--color-terminal-ink`, `--color-terminal-bg` | the log viewer's dark well: its base, its text, and the base tinted 8% by primary. Fixed in both modes so log lines stay light everywhere; a scheme may override them | rgb(9 10 13) / rgb(226 228 233) / mix | same |
 
 Each of the four tones comes in exactly three tokens: solid (fills, badges,
 dots, icons), soft (backgrounds), and on-soft (text). Tone borders are derived
