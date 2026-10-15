@@ -168,6 +168,13 @@ def test_patch_search_provider_needs_its_key(signing_key: bytes) -> None:
         # A keyless choice needs no key even when no key is stored.
         r = client.patch("/api/config", json={"search_provider_music": "musicbrainz"}, headers=_auth(token))
         assert r.status_code == 200, r.text
+        r = client.patch("/api/config", json={"search_provider_tv": "tvdb"}, headers=_auth(token))
+        assert r.status_code == 400, r.text
+        assert r.json()["detail"] == "search_provider_tv: TVDB needs its API key"
+        r = client.patch("/api/config", json={"search_provider_tv": "tvdb", "tvdb_api_key": "k"}, headers=_auth(token))
+        assert r.status_code == 200, r.text
+        r = client.patch("/api/config", json={"search_provider_tv": "tvmaze"}, headers=_auth(token))
+        assert r.status_code == 200, r.text
 
 
 def test_patch_search_provider_rejects_a_key_cleared_in_the_same_body(signing_key: bytes) -> None:

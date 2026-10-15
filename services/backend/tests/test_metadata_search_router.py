@@ -804,3 +804,67 @@ def test_lookup_prefers_search_provider_movie_when_both_keyed(signing_key: bytes
     assert r.status_code == 200, r.text
     assert r.json()["candidates"][0]["title"] == "Heat"
     assert not tmdb_route.called
+
+
+@respx.mock
+def test_search_tv_with_tvmaze_provider(signing_key: bytes) -> None:
+    route = respx.get("https://api.tvmaze.com/search/shows").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "score": 1,
+                    "show": {
+                        "id": 4607,
+                        "name": "Lost",
+                        "premiered": "2004-09-22",
+                        "externals": {"imdb": "tt0411008", "thetvdb": 73739},
+                        "image": {"medium": "https://static.tvmaze.com/l.jpg"},
+                    },
+                }
+            ],
+        )
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "lost", "type": "tv", "provider": "tvmaze"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    cand = r.json()["candidates"][0]
+    assert cand["title"] == "Lost" and cand["poster_url"] == "https://static.tvmaze.com/l.jpg"
+    assert cand["external_ids"]["tvmaze"] == "4607" and cand["external_ids"]["imdb"] == "tt0411008"
+    assert route.called
+
+
+def test_search_rejects_a_provider_that_does_not_serve_the_type(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "x", "type": "movie", "provider": "tvmaze"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 400 and r.json()["detail"] == "tvmaze does not search movie"
+
+
+@respx.mock
+def test_search_default_tv_provider_tvmaze_without_tmdb_key(signing_key: bytes) -> None:
+    respx.get("https://api.tvmaze.com/search/shows").mock(
+        return_value=httpx.Response(
+            200, json=[{"score": 1, "show": {"id": 1, "name": "Lost", "externals": {}, "image": None}}]
+        )
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key=None, search_provider_tv="tvmaze")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Lost"

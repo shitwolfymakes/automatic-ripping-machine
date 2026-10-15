@@ -142,7 +142,7 @@ DEFAULT_SEARCH_PROVIDERS: dict[str, str] = {"movie": "tmdb", "tv": "tmdb", "musi
 # a test pins them to the field metadata.
 ONLINE_SOURCE_VALUES: dict[str, tuple[str, ...]] = {
     "movie": ("tmdb", "omdb"),
-    "tv": ("tmdb", "omdb"),
+    "tv": ("tmdb", "omdb", "tvmaze", "tvdb"),
     "music": ("musicbrainz",),
 }
 _MOVIE_KNOWN = {sid: sid for sid in ONLINE_SOURCE_VALUES["movie"]}

@@ -101,6 +101,10 @@ async def search_metadata(
     registry = _registry(request)
     if provider is not None:
         source = registry.get(provider)
+        if source is not None and type not in source.media_types:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"{provider} does not search {type}"
+            )
         if source is None or source.configured(cfg) is not None:
             raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {provider} key configured")
     else:
