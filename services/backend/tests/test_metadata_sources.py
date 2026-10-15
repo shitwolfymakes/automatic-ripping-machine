@@ -1,11 +1,16 @@
 """Online-source adapters: one per HTTP client, keyed per call from Config."""
 
-import httpx
-import pytest
-from arm_backend.metadata import sources as sources_mod
-from arm_backend.metadata.base import MetadataResult
-from arm_backend.metadata.sources import build_online_sources, capability
-from arm_common import Config
+import os
+
+os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
+os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+
+import httpx  # noqa: E402
+import pytest  # noqa: E402
+from arm_backend.metadata import sources as sources_mod  # noqa: E402
+from arm_backend.metadata.base import MetadataResult  # noqa: E402
+from arm_backend.metadata.sources import build_online_sources, capability  # noqa: E402
+from arm_common import Config  # noqa: E402
 
 
 def _config(**overrides) -> Config:
