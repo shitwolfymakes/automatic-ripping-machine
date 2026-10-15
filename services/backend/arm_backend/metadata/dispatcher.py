@@ -99,7 +99,7 @@ class MetadataDispatcher:
         hit = await self._identify_video(
             scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv, prefer_tv=prefer_tv
         )
-        return await self._with_tmdb_ids(hit, cfg)
+        return await self.fill_external_ids(hit, cfg)
 
     async def _identify_cd(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
@@ -224,23 +224,48 @@ class MetadataDispatcher:
             hit = await self._call(source.id, lookup(cfg, imdb_id))
             if hit is not None:
                 hit.payload.setdefault("imdb_id", imdb_id)
-                return await self._with_tmdb_ids(hit, cfg)
+                return await self.fill_external_ids(hit, cfg)
         return None
 
-    async def _with_tmdb_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
-        """Fill a TMDb hit's IMDb / TVDB ids (one `external_ids` call) so the
-        stored identity lets every episode source find the show (spec 3.4).
-        Ids already in the payload win; a failed or timed-out call (bounded
-        by PROVIDER_TIMEOUT_SECONDS) changes nothing. The last direct client
-        use in this module; PR 2b generalizes it to `fill_external_ids`."""
-        if hit is None or hit.provider != "tmdb" or hit.kind not in ("movie", "tv") or not cfg.tmdb_api_key:
+    async def fill_external_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
+        """Fill the ids a hit lacks so the stored identity lets every episode
+        source find the show (spec S-10). A TMDb hit gets IMDb/TVDB ids from
+        its `external_ids`; any other movie/TV hit with an IMDb id gets its
+        TMDb id (and TVDB id) from TMDb's /find through the tmdb source, when
+        that source is configured. Ids already in the payload win; a failure or
+        timeout (bounded by PROVIDER_TIMEOUT_SECONDS) changes nothing."""
+        if hit is None or hit.kind not in ("movie", "tv"):
+            return hit
+        if hit.provider == "tmdb":
+            return await self._fill_from_tmdb_external_ids(hit, cfg)
+        imdb = hit.payload.get("imdb_id")
+        if hit.payload.get("tmdb_id") or not isinstance(imdb, str) or not imdb:
+            return hit
+        tmdb = self._sources.get("tmdb")
+        if tmdb is None or tmdb.configured(cfg) is not None:
+            return hit
+        lookup = capability(tmdb, "lookup_imdb")
+        if lookup is None:
+            return hit
+        found = await self._call("tmdb", lookup(cfg, imdb))
+        if found is None or found.kind != hit.kind or found.payload.get("id") is None:
+            return hit
+        hit.payload["tmdb_id"] = str(found.payload["id"])
+        tvdb = found.payload.get("tvdb_id")
+        if tvdb and not hit.payload.get("tvdb_id"):
+            hit.payload["tvdb_id"] = str(tvdb)
+        return hit
+
+    async def _fill_from_tmdb_external_ids(self, hit: MetadataResult, cfg: Config) -> MetadataResult:
+        kind = hit.kind
+        if not cfg.tmdb_api_key or kind not in ("movie", "tv"):
             return hit
         tmdb_id = hit.payload.get("id")
         if tmdb_id is None:
             return hit
         try:
             found = await asyncio.wait_for(
-                TMDBClient(cfg.tmdb_api_key, self._http).get_external_id_map(tmdb_id, hit.kind),
+                TMDBClient(cfg.tmdb_api_key, self._http).get_external_id_map(tmdb_id, kind),
                 timeout=PROVIDER_TIMEOUT_SECONDS,
             )
         except TimeoutError:

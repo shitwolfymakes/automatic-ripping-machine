@@ -605,7 +605,8 @@ async def test_identify_from_imdb_falls_through_a_miss_to_the_next_source():
         dispatcher = MetadataDispatcher(client, sources=reg)
         hit = await dispatcher.identify_from_imdb("tt1", _config(movie_sources=["tmdb", "omdb"]))
     assert hit is not None and hit.provider == "omdb"
-    assert calls == ["tmdb:tt1", "omdb:tt1"]
+    # The trailing tmdb call is fill_external_ids asking TMDb for the omdb hit's TMDb id.
+    assert calls == ["tmdb:tt1", "omdb:tt1", "tmdb:tt1"]
 
 
 async def test_identify_from_imdb_uses_the_kind_list():
@@ -760,7 +761,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
             return {}
 
     monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)  # the id enrichment in _with_tmdb_ids
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)  # the id enrichment in fill_external_ids
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK_NIGHT_STALKER")
@@ -909,23 +910,23 @@ async def test_identify_from_imdb_keeps_the_known_imdb_and_adds_tvdb():
     assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
 
 
-async def test_with_tmdb_ids_skips_non_tmdb_keyless_and_idless_hits():
+async def test_fill_external_ids_skips_non_tmdb_keyless_and_idless_hits():
     from arm_backend.metadata.base import MetadataResult
 
     async with httpx.AsyncClient() as client:
         d = MetadataDispatcher(client)
         omdb = MetadataResult(provider="omdb", kind="movie", title="X", year=1999, payload={"imdbID": "tt1"})
-        assert await d._with_tmdb_ids(None, _config()) is None
-        assert await d._with_tmdb_ids(omdb, _config()) is omdb
+        assert await d.fill_external_ids(None, _config()) is None
+        assert await d.fill_external_ids(omdb, _config()) is omdb
         tmdb_hit = MetadataResult(provider="tmdb", kind="movie", title="X", year=1999, payload={"id": 1})
-        assert await d._with_tmdb_ids(tmdb_hit, _config(tmdb_api_key=None)) is tmdb_hit
+        assert await d.fill_external_ids(tmdb_hit, _config(tmdb_api_key=None)) is tmdb_hit
         assert "imdb_id" not in tmdb_hit.payload
         idless = MetadataResult(provider="tmdb", kind="movie", title="X", year=1999, payload={})
-        assert await d._with_tmdb_ids(idless, _config()) is idless
+        assert await d.fill_external_ids(idless, _config()) is idless
         assert idless.payload == {}
 
 
-async def test_with_tmdb_ids_timeout_keeps_the_hit(monkeypatch):
+async def test_fill_external_ids_timeout_keeps_the_hit(monkeypatch):
     """A slow `external_ids` call is bounded by PROVIDER_TIMEOUT_SECONDS; on
     timeout the hit is returned unchanged."""
     import asyncio
@@ -942,7 +943,7 @@ async def test_with_tmdb_ids_timeout_keeps_the_hit(monkeypatch):
     monkeypatch.setattr(dispatcher_mod, "PROVIDER_TIMEOUT_SECONDS", 0.01)
     async with httpx.AsyncClient() as client:
         hit = MetadataResult(provider="tmdb", kind="tv", title="X", year=1999, payload={"id": 1})
-        assert await MetadataDispatcher(client)._with_tmdb_ids(hit, _config()) is hit
+        assert await MetadataDispatcher(client).fill_external_ids(hit, _config()) is hit
     assert hit.payload == {"id": 1}
 
 
@@ -1097,3 +1098,68 @@ async def test_crc64_lookup_skipped_when_the_switch_is_off():
         assert calls == []
         hit = await dispatcher.identify(scan, _config())
     assert calls == ["abc"] and hit is not None and hit.title == "Iron Man"
+
+
+async def test_fill_external_ids_adds_the_tmdb_id_to_a_tvmaze_hit():
+    """S-10: a non-TMDb hit with an IMDb id gets its TMDb id from TMDb /find
+    when TMDb is configured, so the episode stage can use every provider."""
+    from arm_backend.metadata.base import MetadataResult
+
+    calls: list[str] = []
+
+    class Tmdb:
+        id = "tmdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = "tmdb_api_key"
+
+        def configured(self, cfg):
+            return None if cfg.tmdb_api_key else "no tmdb key"
+
+        async def lookup_imdb(self, cfg, imdb_id):
+            calls.append(imdb_id)
+            return MetadataResult(
+                title="Lost", year=2004, kind="tv", payload={"id": 4607, "tvdb_id": "73739"}, provider="tmdb"
+            )
+
+    async with httpx.AsyncClient() as client:
+        d = MetadataDispatcher(client, sources={"tmdb": Tmdb()})
+        hit = MetadataResult(
+            title="Lost", year=2004, kind="tv", payload={"id": 1, "imdb_id": "tt0411008"}, provider="tvmaze"
+        )
+        out = await d.fill_external_ids(hit, _config())
+        assert out is hit and out.payload["tmdb_id"] == "4607" and out.payload["tvdb_id"] == "73739"
+        assert calls == ["tt0411008"]
+        # Ids already present win; no second call for a hit that has tmdb_id.
+        await d.fill_external_ids(hit, _config())
+        assert calls == ["tt0411008"]
+        # Unconfigured TMDb: nothing happens (review focus 5).
+        other = MetadataResult(title="Lost", year=2004, kind="tv", payload={"imdb_id": "tt1"}, provider="tvmaze")
+        assert (await d.fill_external_ids(other, _config(tmdb_api_key=None))).payload == {"imdb_id": "tt1"}
+        assert calls == ["tt0411008"]
+
+
+async def test_fill_external_ids_ignores_a_kind_mismatch_and_failures():
+    from arm_backend.metadata.base import LookupError, MetadataResult
+
+    class Tmdb:
+        id = "tmdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = "tmdb_api_key"
+        mode = "mismatch"
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_imdb(self, cfg, imdb_id):
+            if self.mode == "mismatch":
+                return MetadataResult(title="Lost (film)", year=1990, kind="movie", payload={"id": 99}, provider="tmdb")
+            raise LookupError("down")
+
+    tmdb = Tmdb()
+    async with httpx.AsyncClient() as client:
+        d = MetadataDispatcher(client, sources={"tmdb": tmdb})
+        hit = MetadataResult(title="Lost", year=2004, kind="tv", payload={"imdb_id": "tt0411008"}, provider="tvdb")
+        assert "tmdb_id" not in (await d.fill_external_ids(hit, _config())).payload
+        tmdb.mode = "raise"
+        assert "tmdb_id" not in (await d.fill_external_ids(hit, _config())).payload
+        assert await d.fill_external_ids(None, _config()) is None
