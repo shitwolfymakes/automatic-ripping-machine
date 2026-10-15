@@ -142,11 +142,11 @@ class OnlineSource(Protocol):
     async def search_show(self, title, year) -> ShowHit | None: ...                     # PR 2b
 ```
 
-Adapters wrap the clients `TMDBClient`, `OMDBClient`, `MusicBrainzClient`, `ArmServerClient`,
-`TVMazeClient` and `TVDBClient` (the last two also serve title search for the TV list; episode
-listing keeps its own providers). The adapter is the only place that knows which client method implements
-which capability and which key it needs. `MetadataResult.provider` is always `source.id`;
-`_PROVIDER_BY_LABEL_PREFIX` goes away.
+Adapters wrap the clients `TMDBClient`, `OMDBClient`, `MusicBrainzClient`,
+`ArmServerClient`, `TVMazeClient` and `TVDBClient` (the last two also serve title search for
+the TV list; episode listing keeps its own providers). The adapter is the only place that
+knows which client method implements which capability and which key it needs.
+`MetadataResult.provider` is always `source.id`; `_PROVIDER_BY_LABEL_PREFIX` goes away.
 
 Capability presence is checked with `hasattr`-style helpers (`has_capability(source,
 "lookup_imdb")`) so a walk skips sources that cannot serve a step rather than failing.
@@ -296,6 +296,6 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   for tags on its own, outside the Backend. An empty Music list stops the Backend's disc-id
   lookup but not that tagging call; the Step 3 Music help text should say so, or PR 2 should
   pass the setting through to the ripper.
-- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search. With PR 2b, TVmaze (keyless) is in the default TV list, so every install has an automatic TV title source.
+- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb stays in the manual TV select. With PR 2b, TVmaze (keyless) is in the default TV list, so every install has an automatic TV title source.
 - PR 4 help text: unchecking `label` in disc hints with no BDMT title means a DVD gets no automatic title search at all; the Step 1 help must say so.
-- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 2b added them. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`. PR 2b added them.
