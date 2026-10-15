@@ -294,3 +294,7 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   for tags on its own, outside the Backend. An empty Music list stops the Backend's disc-id
   lookup but not that tagging call; the Step 3 Music help text should say so, or PR 2 should
   pass the setting through to the ripper.
+- PR 0 keeps OMDb in the TV title-search order (`tmdb, omdb`), as today. The v4.2 card's TV
+  list is `episode_sources` (`tmdb, tvmaze, tvdb`), which has no OMDb row. PR 2 must either
+  add `omdb` as a TV source in that list's `enum_values` or accept that OMDb series search is
+  dropped; decide before PR 2.
