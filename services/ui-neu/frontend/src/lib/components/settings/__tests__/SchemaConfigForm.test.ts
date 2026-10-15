@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
@@ -411,6 +411,30 @@ describe('SchemaConfigForm TV episodes section', () => {
 		}
 	];
 	const TV_GROUP: SettingsGroup = { name: 'Metadata', fields: TV_FIELDS };
+	// The production section map no longer has a TV episodes section (the
+	// Identity card replaces it), so these cases pin the layout they exercise.
+	const tvLayout = (fields: ConfigFieldMeta[]) => {
+		const by = (k: string) => fields.filter((f) => f.key === k);
+		return [
+			{
+				title: 'TV episodes',
+				summary: 'tv-episodes' as const,
+				columns: [by('disc_hint_sources'), by('episode_sources')].filter((c) => c.length > 0),
+				fields: by('episode_auto_apply'),
+				advanced: by('episode_match_tolerance_seconds')
+			}
+		];
+	};
+	let realSectionFields: typeof sectionFields;
+	beforeEach(async () => {
+		realSectionFields = (
+			await vi.importActual<typeof import('$lib/utils/settings-sections')>('$lib/utils/settings-sections')
+		).sectionFields;
+		vi.mocked(sectionFields).mockImplementation((_group, fields) => tvLayout(fields));
+	});
+	afterEach(() => {
+		vi.mocked(sectionFields).mockImplementation(realSectionFields);
+	});
 	const TV_CONFIG = {
 		disc_hint_sources: ['bd_title', 'label'],
 		episode_sources: ['tmdb', 'tvmaze', 'tvdb'],
@@ -433,11 +457,11 @@ describe('SchemaConfigForm TV episodes section', () => {
 		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
 	});
 
-	it('deep-links a missing key to Metadata when the form does not hold the key', () => {
+	it("links a missing key to the field's anchor when the form does not hold the key and no schema context is set", () => {
 		renderComponent(SchemaConfigForm, {
 			props: { group: TV_GROUP, config: { ...TV_CONFIG, tmdb_api_key: '<hidden>', tvdb_api_key: '' } }
 		});
-		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#Metadata/tvdb_api_key');
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#setting-tvdb_api_key');
 	});
 
 	it("deep-links a missing key to this form's own tab when the form holds the key", () => {

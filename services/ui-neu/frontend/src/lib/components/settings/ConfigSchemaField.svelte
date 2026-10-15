@@ -28,7 +28,7 @@
 		context?: Record<string, unknown>;
 		onclear?: () => void;
 		/** Settings tab holding a required key's field, for ranked-list deep links. */
-		keyTab?: (key: string) => string;
+		keyTab?: (key: string) => string | undefined;
 	} = $props();
 
 	const HIDDEN = '<hidden>';

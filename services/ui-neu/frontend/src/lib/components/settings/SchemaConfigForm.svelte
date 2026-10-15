@@ -41,9 +41,9 @@
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
 	const blurb = $derived(groupBlurb(group.name));
-	// A required key's field lives in this form's group when it has one; the API
-	// keys otherwise sit with the metadata settings.
-	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : 'Metadata');
+	// A required key's field lives in this form's group when it has one; otherwise
+	// the chip falls back to Settings' schema context, or the field's own anchor.
+	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : undefined);
 
 	let values = $state<Record<string, unknown>>({});
 

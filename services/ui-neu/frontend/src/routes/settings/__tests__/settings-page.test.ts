@@ -59,21 +59,26 @@ function withConfig(patch: Record<string, unknown>) {
 const mockSchema = {
 	groups: [
 		{
-			name: 'Metadata',
+			name: 'Identification',
 			fields: [
 				{
 					key: 'search_provider_movie',
-					group: 'Metadata',
+					group: 'Identification',
 					tier: 'operator',
 					label: 'Search movies with',
 					help: '',
 					type: 'enum',
 					editable: true,
 					enum_values: ['tmdb', 'omdb']
-				},
+				}
+			]
+		},
+		{
+			name: 'Keys',
+			fields: [
 				{
 					key: 'tmdb_api_key',
-					group: 'Metadata',
+					group: 'Keys',
 					tier: 'secret',
 					label: 'TMDb API key',
 					help: '',
@@ -374,7 +379,7 @@ describe('Settings Page', () => {
 		cleanup();
 		// Tab clicks write window.location.hash; jsdom persists it across tests,
 		// which would leave the next render on a non-default tab. Reset so each
-		// test starts on the default Metadata tab.
+		// test starts on the default Identification tab.
 		window.location.hash = '';
 		// transcoderEnabled is a real (unmocked) store shared across tests in
 		// this file; reset to the capable default so it doesn't leak.
@@ -382,10 +387,10 @@ describe('Settings Page', () => {
 		setTranscodeRuntimeEnabled(true);
 	});
 
-	// Render the page and wait for the tab bar to settle. Metadata is the
+	// Render the page and wait for the tab bar to settle. Identification is the
 	// default tab; its config form renders the provider <select> once settings
-	// load, which is the readiness signal. ("Metadata" text appears in both the
-	// tab button and the form heading, so it isn't a unique signal.)
+	// load, which is the readiness signal. ("Identification" text appears in both
+	// the tab button and the form heading, so it isn't a unique signal.)
 	async function renderAndWait() {
 		renderComponent(SettingsPage);
 		await waitFor(() => {
@@ -420,21 +425,48 @@ describe('Settings Page', () => {
 			expect(screen.getByText('Settings')).toBeInTheDocument();
 		});
 
-		it('deep-links #<tab>/<field> to the field: scrolls, focuses and highlights it', async () => {
-			window.location.hash = '#Metadata/tmdb_api_key';
-			const scrollIntoView = vi.fn();
-			Element.prototype.scrollIntoView = scrollIntoView;
+		it('lists the tabs in order: Identification, Keys, Ripping, then the screen tabs', async () => {
 			await renderAndWait();
-			await waitFor(() => {
-				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
-			});
-			expect(scrollIntoView).toHaveBeenCalled();
-			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
+			expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
+				'Identification',
+				'Keys',
+				'Ripping',
+				'Sessions',
+				'Transcoding',
+				'Notifications',
+				'Interface',
+				'Themes',
+				'Drives',
+				'Users',
+				'System'
+			]);
 		});
 
-		it('renders the Metadata config tab with the provider select', async () => {
+		it('maps a legacy #Metadata hash to the Identification tab', async () => {
+			window.location.hash = '#Metadata';
 			await renderAndWait();
-			// Metadata is the default tab — its SchemaConfigForm renders the enum field.
+			expect(screen.getByRole('tab', { name: 'Identification' })).toHaveAttribute('aria-selected', 'true');
+		});
+
+		it.each(['#Keys/tmdb_api_key', '#Metadata/tmdb_api_key'])(
+			'deep-links %s to the field on the Keys tab: scrolls, focuses and highlights it',
+			async (hash) => {
+				window.location.hash = hash;
+				const scrollIntoView = vi.fn();
+				Element.prototype.scrollIntoView = scrollIntoView;
+				renderComponent(SettingsPage);
+				await waitFor(() => {
+					expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+				});
+				expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+				expect(scrollIntoView).toHaveBeenCalled();
+				expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
+			}
+		);
+
+		it('renders the Identification config tab with the provider select', async () => {
+			await renderAndWait();
+			// Identification is the default tab — its SchemaConfigForm renders the enum field.
 			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 

@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { restartSetup } from '$lib/api/setup';
 	import { slide } from 'svelte/transition';
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -17,6 +17,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import { SETTINGS_SCHEMA_CONTEXT, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -47,6 +48,9 @@
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
 	let settingsError = $state<Error | null>(null);
+	// A getter, not a value: the schema arrives after mount and context is set
+	// once. Field widgets use it to deep-link to another tab's field.
+	setContext(SETTINGS_SCHEMA_CONTEXT, () => settings?.schema?.groups);
 
 	// --- Tab state ---
 	type Tab = string;
@@ -61,11 +65,11 @@
 		'users',
 		'system'
 	] as const;
-	// Config-group tabs derived from the backend schema. Metadata + Ripping have
-	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
+	// Config-group tabs derived from the backend schema. Identification, Keys and
+	// Ripping have no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
 	// tabs; System read-only rows fold into the system tab — see template.)
-	const configGroupNames = ['Metadata', 'Ripping'] as const;
+	const configGroupNames = ['Identification', 'Keys', 'Ripping'] as const;
 	const configGroups = $derived(
 		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
 	);
@@ -79,7 +83,8 @@
 	function group(name: string): SettingsGroup | undefined {
 		return (settings?.schema?.groups ?? []).find((g) => g.name === name);
 	}
-	const metaGroup = $derived(group('Metadata'));
+	const identificationGroup = $derived(group('Identification'));
+	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
 	const systemGroup = $derived(group('System'));
@@ -100,24 +105,26 @@
 	}
 
 	function parseHash(): Tab {
-		if (typeof window === 'undefined') return 'Metadata';
+		if (typeof window === 'undefined') return 'Identification';
 		const hash = window.location.hash.replace('#', '');
-		const tabPart = hash.split('/')[0];
+		// Retired names (#Metadata, #appearance) open the tab that replaced them.
+		const tabPart = legacyTab(hash.split('/')[0]);
 		// Validate the hash tab against the known-valid set: the static
 		// config-group tabs (group names, not knowable from the schema at parse
 		// time but fixed in this file) plus the bespoke screen-tabs. A stale or
 		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
-		// 'Metadata' instead of leaving the content pane blank.
+		// 'Identification' instead of leaving the content pane blank.
 		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
-		if (tabPart === 'appearance') return 'themes'; // pre-rename bookmarks and links
-		return allowed.includes(tabPart) ? tabPart : 'Metadata';
+		return allowed.includes(tabPart) ? tabPart : 'Identification';
 	}
 
 	let activeTab = $state<Tab>(parseHash());
 
 	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
-	// #Metadata/makemkv_key). The field is scrolled into view, focused and
-	// briefly highlighted once its tab has rendered.
+	// #Keys/makemkv_key). The field is scrolled into view, focused and
+	// briefly highlighted once its tab has rendered. The field's own schema
+	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
+	// still lands on the tab that now holds the field.
 	function parseHashField(): string | null {
 		if (typeof window === 'undefined') return null;
 		const part = window.location.hash.replace('#', '').split('/')[1];
@@ -125,9 +132,21 @@
 	}
 	let pendingField = $state<string | null>(parseHashField());
 
+	/** The visible tab that renders `key`'s schema group, if any. */
+	function fieldTab(key: string): Tab | undefined {
+		const owner = settings?.schema?.groups?.find((g) => g.fields.some((f) => f.key === key));
+		const tab = owner && settingsTabFor(owner.name);
+		return tab && visibleTabs.includes(tab) ? tab : undefined;
+	}
+
 	$effect(() => {
 		const key = pendingField;
 		if (!key || !settings) return;
+		const home = fieldTab(key);
+		if (home && home !== activeTab) {
+			activeTab = home;
+			return; // re-runs once the field's tab has rendered
+		}
 		const el = document.getElementById(`setting-${key}`);
 		if (!el) return;
 		pendingField = null;
@@ -375,9 +394,14 @@
 				</div>
 			</nav>
 
-			<!-- Metadata config tab (schema-driven) -->
-			{#if activeTab === 'Metadata' && metaGroup}
-				<SchemaConfigForm group={metaGroup} config={settings.config} />
+			<!-- Identification config tab (schema-driven) -->
+			{#if activeTab === 'Identification' && identificationGroup}
+				<SchemaConfigForm group={identificationGroup} config={settings.config} />
+			{/if}
+
+			<!-- Keys config tab (schema-driven) -->
+			{#if activeTab === 'Keys' && keysGroup}
+				<SchemaConfigForm group={keysGroup} config={settings.config} />
 			{/if}
 
 			<!-- Ripping config tab (schema-driven) -->

@@ -276,7 +276,7 @@
 						</a>
 						<svelte:element
 							this={$isGuest ? 'span' : 'a'}
-							href={$isGuest ? undefined : '/settings#Metadata/makemkv_key'}
+							href={$isGuest ? undefined : '/settings#Keys/makemkv_key'}
 							class="layout-health-link"
 							title={$dashboard.makemkv_key_valid === true
 								? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
