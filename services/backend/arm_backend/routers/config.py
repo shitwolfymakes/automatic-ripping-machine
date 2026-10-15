@@ -247,8 +247,9 @@ async def update_config(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )
-    if "episode_auto_apply" in fields and fields["episode_auto_apply"] is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="episode_auto_apply must be true or false")
+    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply"):
+        if key in fields and fields[key] is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

@@ -143,7 +143,10 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         group="Metadata",
         tier="operator",
         label="Apply confident matches",
-        help="When off, every match is kept as a suggestion to review on the job page.",
+        help=(
+            "When off, every match is kept as a suggestion to review on the job page and the disc is held with no "
+            "countdown. Ripping › Review first still holds every disc."
+        ),
         type="bool",
         editable=True,
     ),
@@ -160,6 +163,18 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         enum_requires={"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"},
     ),
     ConfigFieldMeta(
+        key="movie_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident movie matches",
+        help=(
+            "When off, a movie match waits on the job page for you to confirm it and the disc is held with no "
+            "countdown. Ripping › Review first still holds every disc."
+        ),
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="music_sources",
         group="Metadata",
         tier="operator",
@@ -169,6 +184,18 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
         enum_values=["musicbrainz"],
         enum_labels={"musicbrainz": "MusicBrainz"},
+    ),
+    ConfigFieldMeta(
+        key="music_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident music matches",
+        help=(
+            "When off, an audio CD match waits on the job page for you to confirm it and the disc is held with no "
+            "countdown. Ripping › Review first still holds every disc."
+        ),
+        type="bool",
+        editable=True,
     ),
     ConfigFieldMeta(
         key="search_provider_movie",

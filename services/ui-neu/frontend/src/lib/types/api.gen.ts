@@ -703,6 +703,14 @@ export type ConfigUpdateRequest = {
      */
     search_provider_music?: string | null;
     /**
+     * Movie Auto Apply
+     */
+    movie_auto_apply?: boolean | null;
+    /**
+     * Music Auto Apply
+     */
+    music_auto_apply?: boolean | null;
+    /**
      * Crc64Service Enabled
      */
     crc64service_enabled?: boolean | null;

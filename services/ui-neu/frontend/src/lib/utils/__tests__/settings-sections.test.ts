@@ -45,6 +45,21 @@ describe('sectionFields layout hints', () => {
 		expect(allKeys.sort()).toEqual(fields.map((f) => f.key).sort());
 	});
 
+	it('lays out Movies and music as two columns, each source list over its toggle', () => {
+		const sections = sectionFields('Metadata', [
+			meta('movie_sources', 'ranked'),
+			meta('music_sources', 'ranked'),
+			meta('movie_auto_apply'),
+			meta('music_auto_apply')
+		]);
+		const section = sections.find((s) => s.title === 'Movies and music');
+		expect(section?.columns.map((col) => col.map((f) => f.key))).toEqual([
+			['movie_sources', 'movie_auto_apply'],
+			['music_sources', 'music_auto_apply']
+		]);
+		expect(section?.fields).toEqual([]);
+	});
+
 	it('drops the section entirely when none of its keys are present', () => {
 		const sections = sectionFields('Metadata', [meta('search_provider_movie', 'enum')]);
 		expect(sections.find((s) => s.title === 'TV episodes')).toBeUndefined();

@@ -111,8 +111,17 @@ def test_identity_settings_meta() -> None:
     assert tv_sp.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key"}
     music_sp = by_key["search_provider_music"]
     assert (music_sp.type, music_sp.enum_values, music_sp.enum_requires) == ("enum", ["musicbrainz"], None)
-    assert "movie_auto_apply" not in by_key
-    assert "music_auto_apply" not in by_key
+    for key, label in (
+        ("movie_auto_apply", "Apply confident movie matches"),
+        ("music_auto_apply", "Apply confident music matches"),
+    ):
+        meta = by_key[key]
+        # setup_step mirrors the movie_sources entry, which carries none.
+        assert (meta.type, meta.group, meta.editable, meta.setup_step) == ("bool", "Metadata", True, None)
+        assert meta.setup_step == by_key["movie_sources"].setup_step
+        assert meta.label == label
+        assert "Review first" in meta.help
+    assert "Review first" in by_key["episode_auto_apply"].help
     assert by_key["crc64service_enabled"].type == "bool"
     assert "metadata_provider" not in by_key
     for key in (

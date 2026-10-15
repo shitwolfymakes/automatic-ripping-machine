@@ -5,7 +5,7 @@ readable in ConfigView for back-compat."""
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.schemas import ConfigUpdateRequest, ConfigView
 
-_HIDDEN = {"default_retention_policy", "notification_apprise_urls", "movie_auto_apply", "music_auto_apply"}
+_HIDDEN = {"default_retention_policy", "notification_apprise_urls"}
 
 
 def test_hidden_fields_absent_from_registry():

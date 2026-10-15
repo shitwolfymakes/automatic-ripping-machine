@@ -130,6 +130,8 @@ class ConfigUpdateRequest(BaseModel):
     search_provider_movie: str | None = None
     search_provider_tv: str | None = None
     search_provider_music: str | None = None
+    movie_auto_apply: bool | None = None
+    music_auto_apply: bool | None = None
     crc64service_enabled: bool | None = None
 
 

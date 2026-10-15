@@ -129,6 +129,35 @@ def test_patch_ranked_lists_and_toggles(signing_key: bytes) -> None:
     assert row.movie_sources == ["omdb", "tmdb"] and row.crc64service_enabled is False
 
 
+def test_patch_auto_apply_toggles_false_round_trip(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/config",
+            json={"movie_auto_apply": False, "music_auto_apply": False},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["movie_auto_apply"] is False
+    assert body["music_auto_apply"] is False
+    row = db.rows["config"][0]
+    assert row.movie_auto_apply is False and row.music_auto_apply is False
+
+
+@pytest.mark.parametrize("key", ["movie_auto_apply", "music_auto_apply"])
+def test_patch_auto_apply_toggle_null_is_rejected(signing_key: bytes, key: str) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/config", json={key: None}, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == f"{key} must be true or false"
+
+
 @pytest.mark.parametrize(
     ("body", "detail"),
     [
