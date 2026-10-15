@@ -488,7 +488,7 @@ git commit -m "feat(metadata): online-source adapters behind one protocol"
 - Test: `services/backend/tests/test_identity_registry_online.py`
 
 **Interfaces:**
-- Consumes: `OnlineSource`, `capability` from Task 1 (type-only import under `TYPE_CHECKING` to avoid the `arm_backend.metadata` package import cycle; `capability` is imported at module level because `arm_backend.metadata.sources` never imports the registry).
+- Consumes: `OnlineSource` from Task 1 as a type-only import under `TYPE_CHECKING`. The registry must import nothing from `arm_backend.metadata` at runtime: that package's `__init__` imports the dispatcher, which imports this registry, so a runtime import here is a circular import.
 - Produces:
   - `DEFAULT_ONLINE_SOURCES: dict[str, tuple[str, ...]]` = `{"movie": ("tmdb","omdb"), "tv": ("tmdb","omdb"), "music": ("musicbrainz",)}`.
   - `DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...]` = `("arm_server",)`.
