@@ -9,7 +9,8 @@
 		value = $bindable(),
 		config = {},
 		helpId,
-		keyTab
+		keyTab,
+		disabled = false
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
@@ -18,6 +19,8 @@
 		/** The Settings tab that holds the field for a required key, for the
 		 *  "Needs ... key" deep link when no schema context is set. */
 		keyTab?: (key: string) => string | undefined;
+		/** Every checkbox and move button disabled (a guest's read-only view). */
+		disabled?: boolean;
 	} = $props();
 
 	// Settings sets this context with the loaded schema; the setup wizard does not.
@@ -99,6 +102,7 @@
 					id={useId(v)}
 					type="checkbox"
 					checked={isOn}
+					{disabled}
 					aria-label={`Use ${labelOf(v)}`}
 					aria-describedby={rankId(v)}
 					onchange={(e) => toggle(v, (e.currentTarget as HTMLInputElement).checked)}
@@ -123,7 +127,7 @@
 						type="button"
 						class="btn btn-icon ranked-list-field-move"
 						aria-label={`Move ${labelOf(v)} up`}
-						disabled={rank === 0}
+						disabled={disabled || rank === 0}
 						onclick={() => move(v, 'up')}
 					>
 						<Glyph name="chevron-up" />
@@ -133,7 +137,7 @@
 						type="button"
 						class="btn btn-icon ranked-list-field-move"
 						aria-label={`Move ${labelOf(v)} down`}
-						disabled={rank === selected.length - 1}
+						disabled={disabled || rank === selected.length - 1}
 						onclick={() => move(v, 'down')}
 					>
 						<Glyph name="chevron-down" />

@@ -16,9 +16,6 @@ export interface SettingsSection {
 	/** Keys rendered last, under a muted "Advanced" divider. Not repeated
 	 *  in `fields`. */
 	advanced?: string[];
-	/** A named summary component rendered under the section blurb. An
-	 *  unrecognised name (or none) renders nothing. */
-	summary?: 'tv-episodes';
 	/** A named component that renders the whole section from the group's
 	 *  fields (its keys are claimed here, so none fall through to the
 	 *  trailing card). The section keeps no columns, fields or advanced. */
@@ -30,7 +27,6 @@ export interface SettingsSection {
 export interface SectionFieldGroups {
 	title: string;
 	blurb?: string;
-	summary?: 'tv-episodes';
 	custom?: 'identity';
 	columns: ConfigFieldMeta[][];
 	fields: ConfigFieldMeta[];
@@ -209,7 +205,6 @@ export function sectionFields(group: string, allFields: ConfigFieldMeta[]): Sect
 		out.push({
 			title: section.title,
 			blurb: section.blurb,
-			summary: section.summary,
 			columns,
 			fields: plainFields,
 			advanced

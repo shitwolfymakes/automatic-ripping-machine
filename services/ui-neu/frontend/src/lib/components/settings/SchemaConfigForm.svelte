@@ -14,9 +14,7 @@
 	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import TvEpisodesSummary, { tvEpisodesEmptyNote } from './TvEpisodesSummary.svelte';
-
-	const SECTION_SUMMARIES = { 'tv-episodes': TvEpisodesSummary };
+	import IdentityCard from './IdentityCard.svelte';
 
 	let {
 		group,
@@ -285,11 +283,8 @@
 					{:else}
 						<div class="schema-config-form-section-blurb"></div>
 					{/if}
-					{#if section.summary}
-						{@const Summary = SECTION_SUMMARIES[section.summary]}
-						{#if Summary}
-							<Summary {values} fields={group.fields} />
-						{/if}
+					{#if section.custom === 'identity'}
+						<IdentityCard bind:values fields={group.fields} {config} {keyTab} disabled={!editable.length} />
 					{/if}
 					{#if section.columns.length > 0}
 						<div class="schema-config-form-columns" data-testid="settings-section-columns">
@@ -301,12 +296,6 @@
 								</div>
 							{/each}
 						</div>
-					{/if}
-					{#if section.summary === 'tv-episodes'}
-						{@const emptyNote = tvEpisodesEmptyNote(values)}
-						{#if emptyNote}
-							<p class="schema-config-form-description mb-4" data-testid="tv-episodes-empty-note">{emptyNote}</p>
-						{/if}
 					{/if}
 					<div class="stack">
 						{#each section.fields as field (field.key)}

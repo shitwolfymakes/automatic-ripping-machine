@@ -19,7 +19,8 @@
 		config = {},
 		context = {},
 		onclear,
-		keyTab
+		keyTab,
+		disabled = false
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
@@ -29,6 +30,8 @@
 		onclear?: () => void;
 		/** Settings tab holding a required key's field, for ranked-list deep links. */
 		keyTab?: (key: string) => string | undefined;
+		/** The editable control rendered but disabled (a guest's view of a bespoke card). */
+		disabled?: boolean;
 	} = $props();
 
 	const HIDDEN = '<hidden>';
@@ -67,6 +70,7 @@
 					type="checkbox"
 					aria-label={field.label}
 					checked={boolValue}
+					{disabled}
 					onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
 				/>
 				<span class="field-label">{field.label}</span>
@@ -75,7 +79,7 @@
 	{:else if field.type === 'ranked'}
 		<div class="field-label">{field.label}</div>
 		{#if field.editable}
-			<RankedListField {field} bind:value {config} {helpId} {keyTab} />
+			<RankedListField {field} bind:value {config} {helpId} {keyTab} {disabled} />
 		{:else}
 			<div class="mono config-schema-field-value">
 				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}
@@ -93,6 +97,7 @@
 					<select
 						aria-label={field.label}
 						value={value ?? ''}
+						{disabled}
 						onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
 						class="field-control w-full"
 					>
@@ -111,6 +116,7 @@
 						inputmode="numeric"
 						aria-label={field.label}
 						value={value ?? ''}
+						{disabled}
 						oninput={(e) => {
 							const raw = (e.currentTarget as HTMLInputElement).value;
 							value = raw === '' ? null : Number(raw);
