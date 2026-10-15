@@ -205,7 +205,10 @@ async def test_identify_tries_title_hint_before_volume_label(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
-        result = await dispatcher.identify(scan, _config(), title_hint="the west wing")
+        # TVmaze is keyless and in the default TV list; pin the TV walk to TMDb so this test stays about TMDb ordering and never reaches the network.
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None, episode_sources=["tmdb"]), title_hint="the west wing"
+        )
     assert result is not None and result.title == "The West Wing"
     assert searched_titles[0] == "the west wing"
     # The label-derived title ("WW S3D2") must never have been searched.
@@ -238,7 +241,9 @@ async def test_identify_falls_back_to_label_when_hint_misses(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
-        result = await dispatcher.identify(scan, _config(), title_hint="wrong hint")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None, episode_sources=["tmdb"]), title_hint="wrong hint"
+        )
     assert result is not None and result.title == "The West Wing"
     assert searched_titles[0] == "wrong hint"
     assert searched_titles[-1] == "WW S3D2"
@@ -269,7 +274,9 @@ async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
-        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="arrival")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None, episode_sources=["tmdb"]), title_hint="arrival"
+        )
     assert result is None
     # movie + tv called once each, for the hint's own casing — the label
     # candidate ("ARRIVAL") was deduped away (same casefold key).
@@ -361,7 +368,9 @@ async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="TRON")
-        result = await dispatcher.identify(scan, _config(), title_hint="tron", title_hint_is_tv=True)
+        result = await dispatcher.identify(
+            scan, _config(episode_sources=["tmdb"]), title_hint="tron", title_hint_is_tv=True
+        )
     assert result is not None and result.title == "Tron"
     # TV was searched first due to tv_first=True, then movie fallback found it
     assert call_order[0] == "tv"
@@ -475,7 +484,9 @@ async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="ALIEN_1979")
-        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="alien")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None, episode_sources=["tmdb"]), title_hint="alien"
+        )
     assert result is None
     assert seen_years["alien"] == 1979
 
@@ -507,7 +518,10 @@ async def test_identify_retries_hint_without_trailing_year(monkeypatch):
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_OFFICE_2005_S1_D2")
         result = await dispatcher.identify(
-            scan, _config(omdb_api_key=None), title_hint="the office 2005", title_hint_is_tv=True
+            scan,
+            _config(omdb_api_key=None, episode_sources=["tmdb"]),
+            title_hint="the office 2005",
+            title_hint_is_tv=True,
         )
     assert result is not None and result.title == "The Office"
     assert searched_titles == ["the office 2005", "the office 2005", "the office"]
@@ -535,7 +549,9 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="1917_D1")
-        result = await dispatcher.identify(scan, _config(omdb_api_key=None), title_hint="1917")
+        result = await dispatcher.identify(
+            scan, _config(omdb_api_key=None, episode_sources=["tmdb"]), title_hint="1917"
+        )
     assert result is None
     assert "" not in searched_titles
     assert searched_titles.count("1917") == 2  # movie then TV, one candidate
@@ -766,7 +782,10 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK_NIGHT_STALKER")
         result = await dispatcher.identify(
-            scan, _config(omdb_api_key=None), title_hint="kolchak the night stalker", prefer_tv=True
+            scan,
+            _config(omdb_api_key=None, episode_sources=["tmdb"]),
+            title_hint="kolchak the night stalker",
+            prefer_tv=True,
         )
     assert result is not None and result.kind == "tv" and result.year == 1974
     # TV across every candidate before any movie search: the hint's movie
@@ -808,7 +827,7 @@ async def test_two_candidates_walk_kind_major_per_candidate(monkeypatch):
     monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
     async with httpx.AsyncClient() as client:
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="BETA")
-        result = await MetadataDispatcher(client).identify(scan, _config(), title_hint="alpha")
+        result = await MetadataDispatcher(client).identify(scan, _config(episode_sources=["tmdb"]), title_hint="alpha")
     assert calls == [
         "tmdb:movie:alpha", "omdb:movie:alpha", "tmdb:tv:alpha",
         "tmdb:movie:BETA", "omdb:movie:BETA", "tmdb:tv:BETA",
@@ -980,7 +999,7 @@ async def test_title_search_is_kind_major(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="SOMETHING")
-        assert await dispatcher.identify(scan, _config()) is None
+        assert await dispatcher.identify(scan, _config(episode_sources=["tmdb"])) is None
     assert order == ["tmdb:movie", "omdb:movie", "tmdb:tv"]
 
 
