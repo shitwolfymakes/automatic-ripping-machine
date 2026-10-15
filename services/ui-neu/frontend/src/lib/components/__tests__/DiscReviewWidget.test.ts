@@ -287,17 +287,17 @@ describe('DiscReviewWidget', () => {
 			},
 			flags: { unidentified: true }
 		};
-		const heldFor = (disc_type: 'bluray' | 'cd' = 'bluray') =>
+		const heldFor = (disc_type: 'bluray' | 'cd' = 'bluray', extraMeta: Record<string, unknown> = {}) =>
 			createJob({
 				status: 'awaiting_review',
 				title: 'MY_DISC',
 				disc_type,
 				wait_start_time: null,
-				metadata_json: suggestionMeta as never
+				metadata_json: { ...suggestionMeta, ...extraMeta } as never
 			});
 
-		async function renderSuggested(disc_type: 'bluray' | 'cd' = 'bluray') {
-			const held = heldFor(disc_type);
+		async function renderSuggested(disc_type: 'bluray' | 'cd' = 'bluray', extraMeta: Record<string, unknown> = {}) {
+			const held = heldFor(disc_type, extraMeta);
 			const { fetchJob } = await import('$lib/api/jobs');
 			const original = vi.mocked(fetchJob).getMockImplementation();
 			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: held });
@@ -350,6 +350,22 @@ describe('DiscReviewWidget', () => {
 				expect(screen.queryByPlaceholderText('Album or title...')).toBeNull();
 				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
 				expect(await screen.findByPlaceholderText('Album or title...')).toBeInTheDocument();
+			} finally {
+				restore();
+			}
+		});
+
+		it('on a previously-ripped hold, keeps the hold label and badge and still offers the banner', async () => {
+			const { acceptIdentitySuggestion } = await import('$lib/api/jobs');
+			const { onrefresh, restore } = await renderSuggested('bluray', { previously_ripped: { job_id: 'job_old' } });
+			try {
+				expect(await screen.findByText('Already ripped: Rip again or Discard')).toBeInTheDocument();
+				expect(screen.getByText('ALREADY RIPPED')).toBeInTheDocument();
+				expect(screen.queryByText('CONFIRM TITLE')).toBeNull();
+				expect(screen.getByTestId('identity-suggestion')).toBeInTheDocument();
+				await fireEvent.click(screen.getByRole('button', { name: 'Use this title' }));
+				await waitFor(() => expect(acceptIdentitySuggestion).toHaveBeenCalledWith('job_1'));
+				await waitFor(() => expect(onrefresh).toHaveBeenCalled());
 			} finally {
 				restore();
 			}

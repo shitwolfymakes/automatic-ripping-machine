@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { JobView } from '$lib/types/api.gen';
+	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import { acceptIdentitySuggestion } from '$lib/api/jobs';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import { identitySuggestionOf, providerLabel } from '$lib/utils/job-status';
@@ -8,7 +8,7 @@
 	interface Props {
 		job: JobView;
 		canAct: boolean;
-		onaccepted?: () => void;
+		onaccepted?: (resp: ResolveResponse) => void;
 		onsearch?: () => void;
 	}
 
@@ -24,8 +24,8 @@
 		accepting = true;
 		errorMessage = null;
 		try {
-			await acceptIdentitySuggestion(job.id);
-			onaccepted?.();
+			const resp = await acceptIdentitySuggestion(job.id);
+			onaccepted?.(resp);
 		} catch (e) {
 			errorMessage = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
 		} finally {

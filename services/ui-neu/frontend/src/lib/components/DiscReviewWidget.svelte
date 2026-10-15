@@ -409,7 +409,7 @@
 			</div>
 		{/if}
 
-		{#if suggestion && !previousId}
+		{#if suggestion}
 			<div class="disc-review-widget-suggestion">
 				<IdentitySuggestionBanner
 					job={displayJob}

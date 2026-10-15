@@ -590,6 +590,22 @@ describe('Job detail page (v3)', () => {
 			}
 		});
 
+		it('accepting hands the resolve response on, so resumed sessions are announced', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
+			vi.mocked(acceptIdentitySuggestion).mockResolvedValueOnce({
+				job: createJob({ id: 'job_42' }),
+				fan_out: [{}, {}]
+			} as never);
+			try {
+				renderComponent(Page);
+				await fireEvent.click(await screen.findByRole('button', { name: 'Use this title' }));
+				expect(await screen.findByTestId('action-note')).toHaveTextContent('2 sessions resumed');
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+
 		it('Search instead opens the identify dialog', async () => {
 			const original = mockFetchJob.getMockImplementation();
 			mockFetchJob.mockImplementation(() => Promise.resolve(held()));

@@ -384,10 +384,7 @@
 						<IdentitySuggestionBanner
 							{job}
 							canAct={$isAdmin && canResolve}
-							onaccepted={() => {
-								showIdentify = false;
-								loadJob();
-							}}
+							onaccepted={handleIdentified}
 							onsearch={() => (showIdentify = true)}
 						/>
 					</div>

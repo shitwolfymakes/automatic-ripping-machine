@@ -74,7 +74,7 @@ describe('IdentitySuggestionBanner', () => {
 		const { onaccepted } = renderBanner(heldJob());
 		await fireEvent.click(screen.getByRole('button', { name: 'Use this title' }));
 		await waitFor(() => expect(mockAccept).toHaveBeenCalledWith('job_held'));
-		await waitFor(() => expect(onaccepted).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(onaccepted).toHaveBeenCalledWith({ job: {}, fan_out: [] }));
 	});
 
 	it('disables Use this title while the request is in flight', async () => {
