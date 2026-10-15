@@ -385,7 +385,7 @@
 	   panel without a media query. */
 	.schema-config-form-columns {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 		gap: 1.5rem;
 		margin-bottom: 1rem;
 	}

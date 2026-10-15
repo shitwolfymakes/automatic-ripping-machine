@@ -18,13 +18,18 @@
 	// switch is off. Accept applies it; Search hands off to the manual search.
 	let suggestion = $derived(identitySuggestionOf(job));
 	let accepting = $state(false);
+	// The suggestion this banner accepted: its button stays disabled until the
+	// parent's refresh drops the banner (a second accept would only get a 409).
+	let acceptedSuggestion = $state.raw<typeof suggestion>(null);
 	let errorMessage = $state<string | null>(null);
 
 	async function accept() {
 		accepting = true;
 		errorMessage = null;
 		try {
+			const accepted = suggestion;
 			const resp = await acceptIdentitySuggestion(job.id);
+			acceptedSuggestion = accepted;
 			onaccepted?.(resp);
 		} catch (e) {
 			errorMessage = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
@@ -50,7 +55,12 @@
 			{/if}
 			{#if canAct}
 				<div class="mt-2 flex flex-wrap gap-2">
-					<button type="button" class="btn btn-primary" disabled={accepting} onclick={accept}>Use this title</button>
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={accepting || (acceptedSuggestion !== null && acceptedSuggestion === suggestion)}
+						onclick={accept}>Use this title</button
+					>
 					<button type="button" class="btn" onclick={() => onsearch?.()}>Search instead</button>
 				</div>
 			{/if}

@@ -77,15 +77,18 @@ describe('IdentitySuggestionBanner', () => {
 		await waitFor(() => expect(onaccepted).toHaveBeenCalledWith({ job: {}, fan_out: [] }));
 	});
 
-	it('disables Use this title while the request is in flight', async () => {
+	it('disables Use this title while the request is in flight and keeps it disabled after success', async () => {
 		let release: (v: unknown) => void = () => {};
 		mockAccept.mockImplementationOnce(() => new Promise((r) => (release = r)) as never);
-		renderBanner(heldJob());
+		const { onaccepted } = renderBanner(heldJob());
 		const btn = screen.getByRole('button', { name: 'Use this title' });
 		await fireEvent.click(btn);
 		await waitFor(() => expect(btn).toBeDisabled());
 		release({ job: {}, fan_out: [] });
-		await waitFor(() => expect(btn).not.toBeDisabled());
+		await waitFor(() => expect(onaccepted).toHaveBeenCalled());
+		// The banner goes once the parent refreshes the job; until then a second
+		// click would only meet a 409 (the suggestion is already applied).
+		expect(btn).toBeDisabled();
 	});
 
 	it('a rejected accept shows the detail inline and keeps the banner', async () => {

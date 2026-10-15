@@ -22,7 +22,7 @@ describe('setup step registry', () => {
 		expect(m.label).toBe('Identification');
 		expect(m.title).toBe('Identification');
 		expect(m.intro).toBe(
-			'ARM looks up what is on each disc so your files get the right names. TVmaze and MusicBrainz need no key; the others do.'
+			'ARM looks up what is on each disc so your files get the right names. The disc databases, TVmaze and MusicBrainz need no key; TMDb, OMDb and TVDB do.'
 		);
 	});
 
