@@ -51,7 +51,8 @@ When a media type's **Apply confident matches** switch is off (Settings,
 Identification, step 4), a match ARM found waits for you instead of being
 applied. The review card on the dashboard and the job page show **ARM found a
 match** with the title, year and source. **Use this title** applies it: the
-rip starts, or the review countdown starts when discs are held for review.
+rip starts, or the review countdown starts when discs are held for review,
+and a paused ripper keeps it held.
 **Search instead** opens the title search. The disc is held with no countdown
 until you do one or the other; **Start rip** without confirming rips a
 placeholder you name afterwards.

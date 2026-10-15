@@ -63,7 +63,9 @@ the API keys those services need.
 
 **Search** picks the service behind the job page's search box, one per media
 type: Movies (TMDb or OMDb), TV shows (TMDb, OMDb, TVmaze or TVDB) and Music
-(MusicBrainz). A service whose key is not saved cannot be picked.
+(MusicBrainz). Every service is listed; saving a choice whose key is not saved is
+refused. The search box uses the service you chose even when it is unticked
+under Online lookup.
 
 **Identity** shows the pipeline as four steps, in the order ARM runs them. The
 Blu-ray | DVD | CD selector above the summary only changes what the summary
@@ -71,7 +73,7 @@ shows; nothing is saved for it.
 
 | Step | Setting | Default | Effect |
 |---|---|---|---|
-| 1 On the disc | — | — | ARM reads the Blu-ray disc title metadata and the volume label on every disc, and the track layout on a CD. When they disagree, the disc's own metadata beats its label. CD-TEXT is planned. |
+| 1 On the disc | — | — | ARM reads the volume label on every disc, the disc title metadata on a Blu-ray, and the track layout on a CD. When they disagree, the disc's own metadata beats its label. CD-TEXT is planned. |
 | 2 Disc database | **TheDiscDB disc map** | on | Matches the disc itself against a local snapshot of TheDiscDB, labels its titles and picks the main feature. A match beats the disc's labels; ARM then confirms the title with the first online source below. |
 | 2 Disc database | **ARM community database (CRC64)** | on | Sends a DVD's CRC64 fingerprint to the ARM project's database and takes its title when it has one. DVDs only, no key. |
 | 3 Online lookup | **Movies**, **TV shows**, **Music** | TMDb, OMDb · TMDb, TVmaze, TVDB · MusicBrainz | Tried top to bottom; the first confident match wins. Untick a source to skip it, move it to change the order. A source whose key is not saved shows "Needs … key" and is skipped. With every source unticked, ARM makes no online lookup for that type. |
@@ -81,6 +83,7 @@ shows; nothing is saved for it.
 
 A disc with no confident match follows **Ripping › Block on metadata miss**:
 held for you to identify, or ripped as a placeholder you name afterwards.
+Data discs skip identification and follow the same setting.
 
 #### Keys
 
