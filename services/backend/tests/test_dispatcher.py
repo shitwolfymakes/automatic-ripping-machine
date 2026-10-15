@@ -518,30 +518,123 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
     assert searched_titles.count("1917") == 2  # movie then TV, one candidate
 
 
-async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
-    from arm_backend.metadata import sources as sources_mod
+async def test_identify_from_imdb_walks_the_ranked_sources():
+    """D-1: the exact-id lookup asks the enabled sources for the kind in rank
+    order; an unconfigured source is skipped and the hit carries its source id."""
     from arm_backend.metadata.base import MetadataResult
 
-    class FakeTMDB:
-        def __init__(self, api_key, http):  # matches TMDBClient signature
-            pass
+    calls: list[str] = []
 
-        async def find_by_imdb_id(self, imdb_id):
-            assert imdb_id == "tt0090557"
-            return MetadataResult(title="Round Midnight", year=1986, kind="movie")
+    def _source(sid: str, reason: str | None, hit: MetadataResult | None):
+        class S:
+            id = sid
+            media_types = frozenset({"movie", "tv"})
+            requires_key = None
 
-    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
+            def configured(self, cfg):
+                return reason
+
+            async def lookup_imdb(self, cfg, imdb_id):
+                calls.append(f"{sid}:{imdb_id}")
+                return hit
+
+        return S()
+
+    reg = {
+        "tmdb": _source("tmdb", "no tmdb key", MetadataResult(title="T", year=None, kind="movie")),
+        "omdb": _source("omdb", None, MetadataResult(title="Round Midnight", year=1986, kind="movie")),
+    }
     async with httpx.AsyncClient() as client:
-        dispatcher = MetadataDispatcher(client)
-        hit = await dispatcher.identify_from_imdb("tt0090557", _config())
-        assert hit is not None
-        assert hit.title == "Round Midnight"
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        hit = await dispatcher.identify_from_imdb("tt0090557", _config(movie_sources=["tmdb", "omdb"]))
+        assert hit is not None and hit.title == "Round Midnight" and hit.provider == "omdb"
+        assert hit.payload["imdb_id"] == "tt0090557"
+        assert calls == ["omdb:tt0090557"]
+        assert await dispatcher.identify_from_imdb("", _config()) is None
+        assert await dispatcher.identify_from_imdb("tt1", _config(movie_sources=[])) is None
+        assert dispatcher.has_imdb_lookup(_config(movie_sources=["tmdb", "omdb"]), "movie") is True
+        assert dispatcher.has_imdb_lookup(_config(movie_sources=["tmdb"]), "movie") is False  # tmdb unkeyed
+        assert dispatcher.has_imdb_lookup(_config(movie_sources=[]), "movie") is False
 
-        hit_nokey = await dispatcher.identify_from_imdb("tt0090557", _config(tmdb_api_key=None))
-        assert hit_nokey is None
 
-        hit_noid = await dispatcher.identify_from_imdb("", _config())
-        assert hit_noid is None
+async def test_identify_from_imdb_uses_the_kind_list():
+    from arm_backend.metadata.base import MetadataResult
+
+    kinds: list[str] = []
+
+    class Omdb:
+        id = "omdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_imdb(self, cfg, imdb_id):
+            kinds.append("called")
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"omdb": Omdb()})
+        cfg = _config(movie_sources=[], episode_sources=["tmdb", "tvmaze"])
+        # OMDb is not in the TV list: no TV source offers the lookup.
+        assert await dispatcher.identify_from_imdb("tt0411008", cfg, kind="tv") is None
+        assert dispatcher.has_imdb_lookup(cfg, "tv") is False
+        assert kinds == []
+        cfg = _config(movie_sources=["omdb"], episode_sources=[])
+        hit = await dispatcher.identify_from_imdb("tt0411008", cfg, kind="movie")
+        assert hit is not None and hit.kind == "tv" and kinds == ["called"]
+
+
+async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
+    """D-4: with `label` removed from disc_hint_sources the volume label is not
+    searched; only the hint title (and its year-free retry) is."""
+    searched: list[str] = []
+
+    class Tmdb:
+        id = "tmdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def search_title(self, cfg, kind, title, year):
+            searched.append(f"{kind}:{title}:{year}")
+            return None
+
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"tmdb": Tmdb()})
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT_1995")
+        cfg = _config(disc_hint_sources=["bd_title"], movie_sources=["tmdb"], episode_sources=["tmdb"])
+        assert await dispatcher.identify(scan, cfg) is None
+        assert searched == []
+        assert await dispatcher.identify(scan, cfg, title_hint="Heat") is None
+    # The label's year still narrows the hint search (D-4 gates the candidate, not the year).
+    assert searched == ["movie:Heat:1995", "tv:Heat:1995"]
+
+
+async def test_label_candidate_searched_when_the_label_hint_is_enabled():
+    searched: list[str] = []
+
+    class Tmdb:
+        id = "tmdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def search_title(self, cfg, kind, title, year):
+            searched.append(f"{kind}:{title}")
+            return None
+
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"tmdb": Tmdb()})
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT_1995")
+        cfg = _config(disc_hint_sources=["bd_title", "label"], movie_sources=["tmdb"], episode_sources=["tmdb"])
+        assert await dispatcher.identify(scan, cfg) is None
+    assert searched == ["movie:HEAT", "tv:HEAT"]
 
 
 @respx.mock

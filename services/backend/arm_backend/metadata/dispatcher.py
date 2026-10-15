@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 import httpx
 
-from arm_backend.identity.sources.registry import fingerprint_sources, sources_for
+from arm_backend.identity.sources.registry import fingerprint_sources, hint_sources_setting, sources_for
 from arm_backend.metadata.base import LookupError, MetadataResult
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
@@ -152,6 +152,10 @@ class MetadataDispatcher:
         label_year: int | None = None
         if scan.volume_label:
             label_title, label_year = _normalize_volume_label(scan.volume_label)
+        # D-4: the volume label is a search candidate only while the `label`
+        # disc hint is enabled; an operator who ignores disc text gets no
+        # label search at all. Its year still narrows the hint candidate.
+        label_enabled = "label" in hint_sources_setting(cfg)
 
         candidates: list[tuple[str, int | None, bool]] = []
         if title_hint and title_hint.strip():
@@ -163,7 +167,7 @@ class MetadataDispatcher:
             # the year.
             if without_year := _HINT_YEAR_SUFFIX_RE.sub("", hint).rstrip(" :,"):
                 candidates.append((without_year, label_year, title_hint_is_tv))
-        if label_title:
+        if label_title and label_enabled:
             candidates.append((label_title, label_year, False))
         seen: set[str] = set()
         unique: list[tuple[str, int | None, bool]] = []
@@ -202,22 +206,26 @@ class MetadataDispatcher:
                 return hit
         return None
 
-    async def identify_from_imdb(self, imdb_id: str, cfg: Config) -> MetadataResult | None:
-        """Exact-ID identify for a TheDiscDB-matched disc. TMDb's /find
-        endpoint resolves an IMDb id for both movies and TV; requires a TMDb
-        key. Returns None (caller falls back to fuzzy identify) otherwise.
-        PR 2 (spec D-1) replaces the fixed TMDb choice with a walk over
-        `sources_for`."""
-        tmdb = self._sources.get("tmdb")
-        if not imdb_id or tmdb is None or tmdb.configured(cfg) is not None:
+    def has_imdb_lookup(self, cfg: Config, kind: Kind) -> bool:
+        """True when an enabled source for `kind` can resolve an IMDb id (D-1)."""
+        return any(capability(s, "lookup_imdb") is not None for s in sources_for(cfg, kind, self._sources))
+
+    async def identify_from_imdb(self, imdb_id: str, cfg: Config, *, kind: Kind = "movie") -> MetadataResult | None:
+        """Exact-ID identify for a TheDiscDB-matched disc (spec D-1): the
+        enabled sources for `kind`, in rank order, first hit wins. None when
+        the id is empty, no source offers the lookup, or every source misses
+        (the caller falls back to the fuzzy identify in that last case)."""
+        if not imdb_id:
             return None
-        lookup = capability(tmdb, "lookup_imdb")
-        if lookup is None:
-            return None
-        hit = await self._call(tmdb.id, lookup(cfg, imdb_id))
-        if hit is not None:
-            hit.payload.setdefault("imdb_id", imdb_id)
-        return await self._with_tmdb_ids(hit, cfg)
+        for source in sources_for(cfg, kind, self._sources):
+            lookup = capability(source, "lookup_imdb")
+            if lookup is None:
+                continue
+            hit = await self._call(source.id, lookup(cfg, imdb_id))
+            if hit is not None:
+                hit.payload.setdefault("imdb_id", imdb_id)
+                return await self._with_tmdb_ids(hit, cfg)
+        return None
 
     async def _with_tmdb_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
         """Fill a TMDb hit's IMDb / TVDB ids (one `external_ids` call) so the
