@@ -205,7 +205,7 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 Enums stay VARCHAR and are validated in the app layer. The downgrade restores
 `metadata_provider` from `search_provider_movie` (lossy).
 
-`movie_auto_apply` and `music_auto_apply` exist as columns and in the view from PR 1 but are hidden from the editable surface until PR 3 reads them.
+`movie_auto_apply` and `music_auto_apply` exist as columns and in the view from PR 1; PR 3 reads them (with the existing `episode_auto_apply`) and exposes them on the editable surface.
 
 `config_metadata.py` gains the matching `ConfigFieldMeta` entries: ranked lists use
 `enum_values` from `known_source_ids` and `enum_requires` for keyed sources; the three
@@ -236,7 +236,7 @@ retagged `setup_step="identification"` (D-9).
 3. **PR 2b · Series search.** TVmaze and TVDB title-search clients and adapters (`search_title`,
    `search_candidates`, `lookup_imdb`, TV only); `fill_external_ids` (S-10); `search_provider_tv`
    offers `tmdb, omdb, tvmaze, tvdb`.
-4. **PR 3 · Auto-apply hold path**, as in #258, with D-10's precedence.
+4. **PR 3 · Auto-apply hold path.** `auto_apply_for(cfg, kind)` (movie / episode / music switch); a hit whose switch is off is stored as `metadata_json.identity_suggestion`, the job keeps the miss title and the `unidentified` flag and parks in `awaiting_review` with no countdown; `POST /jobs/{id}/identity/accept` applies it through the resolve path (gate off → rip released; gate on → countdown); any resolve clears it. The two toggles become editable.
 5. **PR 4 · Docs.** `02-job-lifecycle.md` gains the table in §2; the Identification tab help
    text, including D-10 and D-11.
 
@@ -300,3 +300,4 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
 - PR 4 help text: unchecking `label` in disc hints with no BDMT title means a DVD gets no automatic title search at all; the Step 1 help must say so.
 - Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`. PR 2b added `tvmaze` and `tvdb` to the select.
 - Automatic TVmaze matches must be close to the query (`title_is_close`: equal, whole-word containment, or 75% similar); TVmaze's single search is otherwise lenient enough to name any string. A far match is a miss. The search box is unfiltered.
+- Resolved in PR 3: TV title hits follow `episode_auto_apply` (one switch per media type, D-8); the TheDiscDB release-metadata identity goes through the same gate; accept while ripping is paused keeps the disc held until un-pause stamps a countdown. The review card's suggestion display and Accept button are the UI redesign PR's.
