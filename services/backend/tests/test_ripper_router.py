@@ -3152,10 +3152,10 @@ def test_identify_thediscdb_release_without_a_title_falls_through_to_fuzzy_ident
 
 
 def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None:
-    def _miss(scan: dict[str, Any]) -> str:
+    def _miss(scan: dict[str, Any], **cfg: Any) -> str:
         db = FakeSession()
         db.rows["drives"] = [_drive()]
-        db.rows["config"] = [_config(block_on_miss=True)]
+        db.rows["config"] = [_config(block_on_miss=True, **cfg)]
         app = _make_app(db, dispatcher=_Dispatcher(None))
         with TestClient(app) as client:
             r = client.post(
@@ -3167,9 +3167,8 @@ def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None
     bd = _scan_dict("bluray")
     bd["volume_label"] = "THE_OFFICE_S1_D2"
     bd["bd_meta"] = {"name": "The Office: Season One"}
-    # The BDMT hint keeps the season marker (the label fragment would be "the office"),
-    # but the hint cleaner lowercases it.
-    assert _miss(bd) == "the office: season one"
+    assert _miss(bd) == "The Office: Season One"  # the disc's name as written
+    assert _miss(bd, disc_hint_sources=["label"]) == "THE_OFFICE_S1_D2"  # bd_title off: gate
     dvd = _scan_dict()
     dvd["volume_label"] = "THE_OFFICE_S1_D2"
     assert _miss(dvd) == "THE_OFFICE_S1_D2"

@@ -806,8 +806,12 @@ async def identify(
             if timed_out:
                 diagnostic["dispatch_timeout"] = True
             release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
-            # The label hint is a lowercased, season-stripped fragment: never a title.
-            miss_title = hint_title(job, [s for s in hints if s.id != "label"]) or release_title or scan.volume_label
+            # The cleaned hint titles are search inputs only: a miss is named by
+            # the disc's own BDMT name as written, else the release, else the label.
+            bdmt_name = (
+                scan.bd_meta.name.strip() if scan.bd_meta is not None and any(h.id == "bd_title" for h in hints) else ""
+            )
+            miss_title = bdmt_name or release_title or scan.volume_label
             if cfg.block_on_miss:
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = miss_title

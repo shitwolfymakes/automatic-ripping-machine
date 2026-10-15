@@ -94,9 +94,9 @@ Each is the recommended option from the review. Override at spec review if you d
   `.env.example` line. No seeding: the Keys tab is the only place a key comes from.
 - **D-4 Ignoring the volume label means ignoring it everywhere (S-5).** The dispatcher
   adds the normalized label as a search candidate only when `label` is in
-  `enabled_hint_sources(cfg)`. On a miss, the job title is the BDMT hint title if there is one,
-  else the TheDiscDB release title, else the raw volume label (the label-derived hint is a
-  lowercased fragment and is never used as a title).
+  `enabled_hint_sources(cfg)`. On a miss, the job title is the BDMT disc name as the disc wrote it
+  (when the `bd_title` hint is enabled), else the TheDiscDB release title, else the raw
+  volume label; the cleaned hint titles are search inputs only.
 - **D-5 CDs get a list but no new flow (S-7).** `music_sources` holds `musicbrainz` only.
   Step 1 shows CDs as "Disc ID (track layout)" with a `CD` chip, not as a volume label. The
   CD path becomes a walk over `sources_for(cfg, "music")` with the disc-id capability, so an
