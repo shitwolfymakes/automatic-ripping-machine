@@ -484,6 +484,23 @@ describe('SchemaConfigForm TV episodes section', () => {
 		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#transcoding/tvdb_api_key');
 	});
 
+	it("links a setup step's missing key to the field's anchor on the same step", () => {
+		const keyField: ConfigFieldMeta = {
+			key: 'tvdb_api_key',
+			group: 'Keys',
+			tier: 'secret',
+			label: 'TVDB API key',
+			help: '',
+			type: 'str',
+			editable: true
+		};
+		const group: SettingsGroup = { name: 'setup:metadata', fields: [TV_FIELDS[1], keyField] };
+		renderComponent(SchemaConfigForm, {
+			props: { group, config: { episode_sources: ['tvdb'], tvdb_api_key: '' }, deferred: true, bare: true }
+		});
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#setting-tvdb_api_key');
+	});
+
 	it('places the two ranked lists in different column cells (side by side, not stacked)', () => {
 		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
 

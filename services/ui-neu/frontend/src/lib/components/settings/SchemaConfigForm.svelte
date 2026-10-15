@@ -43,7 +43,11 @@
 	const blurb = $derived(groupBlurb(group.name));
 	// A required key's field lives in this form's group when it has one; otherwise
 	// the chip falls back to Settings' schema context, or the field's own anchor.
-	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : undefined);
+	// A setup step (`setup:<step>`) is no Settings tab: its chips use the anchor.
+	const keyTab = (key: string) =>
+		!group.name.startsWith('setup:') && group.fields.some((f) => f.key === key)
+			? settingsTabFor(group.name)
+			: undefined;
 
 	let values = $state<Record<string, unknown>>({});
 

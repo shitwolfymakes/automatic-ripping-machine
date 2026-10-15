@@ -148,8 +148,10 @@
 			return; // re-runs once the field's tab has rendered
 		}
 		const el = document.getElementById(`setting-${key}`);
-		if (!el) return;
+		// One shot: a field that never renders must not keep pulling later tab
+		// clicks back to its tab.
 		pendingField = null;
+		if (!el) return;
 		el.scrollIntoView({ block: 'center' });
 		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
 		el.classList.add('settings-field-highlight');
