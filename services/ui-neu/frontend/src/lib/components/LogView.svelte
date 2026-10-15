@@ -132,7 +132,10 @@
 	});
 </script>
 
-<div class="flex flex-col gap-3">
+<!-- The filters and terminal share one bordered panel, so the log reads as a
+     bounded surface like the other panels on the page instead of floating in
+     the page stack (both the job-detail Log section and /logs/:id use it). -->
+<div class="panel flex flex-col gap-3" data-testid="log-view">
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="log-view-segment-group" role="radiogroup" aria-label="Log filter">
 			{#each SERVICE_FILTERS as f (f.key)}

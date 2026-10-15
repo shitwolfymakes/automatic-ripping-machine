@@ -132,4 +132,12 @@ describe('LogView', () => {
 		renderComponent(LogView, { props: { entries: ENTRIES, maxHeightClass: 'max-h-[70vh]' } });
 		expect(screen.getByTestId('job-log-view')).toHaveClass('max-h-[70vh]');
 	});
+
+	it('wraps the filters and terminal in a panel container', () => {
+		renderComponent(LogView, { props: { entries: ENTRIES } });
+		const root = screen.getByTestId('log-view');
+		expect(root).toHaveClass('panel');
+		expect(root).toContainElement(screen.getByTestId('job-log-view'));
+		expect(root).toContainElement(screen.getByTestId('job-log-filter-all'));
+	});
 });
