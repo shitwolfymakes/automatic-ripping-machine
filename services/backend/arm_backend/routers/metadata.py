@@ -2,21 +2,22 @@
 POST /api/config/keys/{name}/check (routers/config.py)."""
 
 import logging
+from collections.abc import Mapping
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.metadata.arm_server import ArmServerClient
+from arm_backend.identity.sources.registry import fingerprint_sources, online_source_ids, search_source, sources_for
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, external_ids_of, extract_poster_url
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
-from arm_backend.metadata.omdb import OMDBClient
-from arm_backend.metadata.tmdb import TMDBClient
+from arm_backend.metadata.sources import MUSICBRAINZ_USER_AGENT, OnlineSource, capability
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.schemas import (
@@ -29,11 +30,6 @@ from arm_common.schemas import (
 logger = logging.getLogger("arm_backend.routers.metadata")
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
-
-# MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
-# `AppName/version ( contact )` shape. No longer operator-configurable (Config.
-# musicbrainz_user_agent is dormant — see config_metadata.py); hardcoded here.
-MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +60,18 @@ def _to_candidate(r: MetadataResult) -> MetadataCandidate:
     )
 
 
+def _registry(request: Request) -> Mapping[str, OnlineSource]:
+    registry: Mapping[str, OnlineSource] = request.app.state.online_sources
+    return registry
+
+
+async def _config(db: AsyncSession) -> Config:
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="config not initialised")
+    return cfg
+
+
 @router.get("/search", response_model=MetadataSearchResponse)
 async def search_metadata(
     request: Request,
@@ -73,28 +81,28 @@ async def search_metadata(
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="config not initialised")
-    resolved = provider or (cfg.metadata_provider if cfg.metadata_provider in ("tmdb", "omdb") else None) or "tmdb"
-    http: httpx.AsyncClient = request.app.state.http
-    key = (cfg.tmdb_api_key if resolved == "tmdb" else cfg.omdb_api_key) or ""
-    if not key.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"no {resolved} key configured")
+    cfg = await _config(db)
+    registry = _registry(request)
+    if provider is not None:
+        source = registry.get(provider)
+        if source is None or source.configured(cfg) is not None:
+            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {provider} key configured")
+    else:
+        source = search_source(cfg, type, registry)
+        if source is None:
+            first = next(iter(online_source_ids(cfg, type)), "tmdb")
+            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {first} key configured")
+    search = capability(source, "search_candidates")
+    if search is None:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"{source.id} cannot search titles")
     try:
-        if resolved == "tmdb":
-            client = TMDBClient(key, http)
-            results = await (
-                client.search_movie_candidates(title) if type == "movie" else client.search_tv_candidates(title)
-            )
-        else:
-            results = await OMDBClient(key, http).search_candidates(title, kind=type)
+        results = await search(cfg, type, title)
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
-        return MetadataSearchResponse(candidates=[], detail=f"{resolved} unavailable: {exc}")
+        return MetadataSearchResponse(candidates=[], detail=f"{source.id} unavailable: {exc}")
     for r in results:
-        r.provider = r.provider or resolved
+        r.provider = source.id
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
 
 
@@ -108,33 +116,42 @@ async def lookup_metadata(
 ) -> MetadataSearchResponse:
     if (imdb_id is None) == (crc64 is None):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=http_status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="exactly one of imdb_id or crc64 is required",
         )
-    http: httpx.AsyncClient = request.app.state.http
+    registry = _registry(request)
     try:
         if imdb_id is not None:
-            # imdb lookup needs a provider key from config; the provider is chosen
-            # by metadata_provider (TMDb /find vs OMDb i=). crc64 (community DB)
-            # needs no key or config, so its guard lives in this branch only.
-            cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-            provider = (
-                cfg.metadata_provider if cfg is not None and cfg.metadata_provider in ("tmdb", "omdb") else "tmdb"
-            )
-            if provider == "tmdb":
-                key = (cfg.tmdb_api_key or "").strip() if cfg is not None else ""
-                if not key:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no tmdb key configured")
-                result = await TMDBClient(key, http).find_by_imdb_id(imdb_id)
-            else:
-                key = (cfg.omdb_api_key or "").strip() if cfg is not None else ""
-                if not key:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no omdb key configured")
-                result = await OMDBClient(key, http).lookup_by_imdb_id(imdb_id)
+            cfg = await _config(db)
+            ranked = [s for s in sources_for(cfg, "movie", registry) if capability(s, "lookup_imdb")]
+            if not ranked:
+                first = next(iter(online_source_ids(cfg, "movie")), "tmdb")
+                raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {first} key configured")
+            result = None
+            for source in ranked:
+                result = await capability(source, "lookup_imdb")(cfg, imdb_id)  # type: ignore[misc]
+                if result is not None:
+                    result.provider = source.id
+                    break
+            if result is None:
+                return MetadataSearchResponse(candidates=[], detail="no match")
         else:
-            # The XOR guard above guarantees crc64 is a str in this branch,
-            # but mypy can't narrow it across the if/else.
-            result = await ArmServerClient(http).lookup_by_crc64(crc64)  # type: ignore[arg-type]
+            # The community DB needs no key or Config; a missing Config row
+            # must not block it (today's behaviour), so read the row nullable.
+            fp_cfg = (
+                await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
+            ).scalar_one_or_none()
+            result = None
+            for source in fingerprint_sources(fp_cfg, registry):
+                lookup = capability(source, "lookup_fingerprint")
+                if lookup is None:
+                    continue
+                result = await lookup(fp_cfg, "crc64", crc64)
+                if result is not None:
+                    result.provider = source.id
+                    break
+            if result is None:
+                return MetadataSearchResponse(candidates=[], detail="no match")
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
@@ -153,10 +170,16 @@ async def search_music(
     country: str | None = None,
     status: str | None = None,
     _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
-    http: httpx.AsyncClient = request.app.state.http
+    cfg = await _config(db)
+    source = search_source(cfg, "music", _registry(request))
+    search = capability(source, "search_releases") if source is not None else None
+    if source is None or search is None:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="no music source configured")
     try:
-        results = await MusicBrainzClient(MUSICBRAINZ_USER_AGENT, http).search_releases(
+        results = await search(
+            cfg,
             query,
             artist=artist,
             track_count=track_count,
@@ -168,7 +191,7 @@ async def search_music(
     except (MetaLookupError, LookupTimeout) as exc:
         return MetadataSearchResponse(candidates=[], detail=str(exc))
     except httpx.HTTPError as exc:
-        return MetadataSearchResponse(candidates=[], detail=f"musicbrainz unavailable: {exc}")
+        return MetadataSearchResponse(candidates=[], detail=f"{source.id} unavailable: {exc}")
     return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
 
 
@@ -189,8 +212,10 @@ async def music_release_detail(
         # string ("...release not found") → 404; anything else (transport /
         # timeout / 5xx / bad status) is an upstream outage → 502.
         if "not found" in str(exc):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}") from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=http_status.HTTP_502_BAD_GATEWAY, detail=f"musicbrainz unavailable: {exc}"
+        ) from exc
     payload = result.payload or {}
     raw_tracks = payload.get("tracks") or []
     tracks = [

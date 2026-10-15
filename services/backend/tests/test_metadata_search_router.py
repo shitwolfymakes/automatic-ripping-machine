@@ -20,6 +20,7 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.metadata import musicbrainz as mb_mod  # noqa: E402
 from arm_backend.metadata import omdb as omdb_mod  # noqa: E402
 from arm_backend.metadata.base import LookupError as MetaLookupError  # noqa: E402
+from arm_backend.metadata.sources import build_online_sources  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
 from arm_common.models.user import GUEST_ROLE  # noqa: E402
@@ -41,6 +42,7 @@ def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.http = httpx.AsyncClient(timeout=5.0)
+    app.state.online_sources = build_online_sources(app.state.http)
     app.include_router(metadata_router.router)
 
     async def _override() -> FakeSession:
@@ -238,16 +240,15 @@ def test_search_omdb_provider_returns_candidates(signing_key: bytes) -> None:
 
 
 def test_lookup_imdb_no_omdb_key_returns_400(signing_key: bytes) -> None:
-    """imdb_id path with provider=omdb and no omdb key → 400. Must seed
-    metadata_provider="omdb" so this exercises the OMDb branch's missing-key
-    guard; without it the default ("tmdb") would route to the tmdb branch and
-    400 there, leaving the omdb guard untested."""
+    """imdb_id path with no key for any listed source → 400 naming the first
+    listed source (tmdb), whatever metadata_provider says."""
     db = FakeSession()
     _seed(db, metadata_provider="omdb", omdb_api_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
     assert r.status_code == 400
+    assert r.json()["detail"] == "no tmdb key configured"
 
 
 @respx.mock
@@ -499,8 +500,8 @@ def test_lookup_uses_tmdb_find_when_provider_tmdb(signing_key: bytes) -> None:
 
 
 @respx.mock
-def test_lookup_uses_omdb_when_provider_omdb(signing_key: bytes) -> None:
-    """metadata_provider=omdb → /lookup?imdb_id resolves via OMDb i=."""
+def test_lookup_uses_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None:
+    """No TMDb key, OMDb keyed → /lookup?imdb_id resolves via OMDb i= (walk)."""
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
@@ -656,3 +657,78 @@ def test_omdb_candidates_carry_imdb_without_tmdb_kind(signing_key: bytes) -> Non
     assert r.status_code == 200, r.text
     [cand] = r.json()["candidates"]
     assert _present(cand["external_ids"]) == {"imdb": "tt0083658"}
+
+
+def test_search_provider_literal_matches_registry() -> None:
+    """One spelling of the movie/TV source ids (spec S-8): the OpenAPI enum
+    and the registry cannot drift apart."""
+    from typing import get_args
+
+    from arm_backend.identity.sources.registry import known_source_ids
+
+    reg = build_online_sources(httpx.AsyncClient())
+    assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("movie", reg))
+    assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("tv", reg))
+
+
+def test_key_check_map_matches_registry_requires_key() -> None:
+    """The key-check route's name -> Config attribute map (routers/config.py
+    `_KEY_ATTR`) must agree with each keyed source's `requires_key`, so the
+    Keys tab checks the same key the source reads."""
+    from arm_backend.routers.config import _KEY_ATTR
+
+    reg = build_online_sources(httpx.AsyncClient())
+    for sid, source in reg.items():
+        if source.requires_key is not None:
+            assert _KEY_ATTR[sid] == source.requires_key, sid
+
+
+@respx.mock
+def test_search_provider_omdb_without_key_makes_no_call(signing_key: bytes) -> None:
+    omdb_route = respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, json={}))
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key=None)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "x", "provider": "omdb"}, headers=_auth(token))
+    assert r.status_code == 400 and r.json()["detail"] == "no omdb key configured"
+    assert not omdb_route.called
+
+
+@respx.mock
+def test_search_default_provider_is_first_configured_source(signing_key: bytes) -> None:
+    """No `provider` param and no TMDb key: the first usable listed source (OMDb) answers."""
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [{"Title": "Heat", "Year": "1995", "imdbID": "tt0113277", "Type": "movie"}],
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key=None, omdb_api_key="k", metadata_provider="tmdb")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "heat"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Heat"
+
+
+@respx.mock
+def test_lookup_imdb_walks_to_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None:
+    """/lookup?imdb_id tries the listed sources in order; with no TMDb key,
+    OMDb `i=` answers (today's metadata_provider=omdb behaviour, now by walk)."""
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200, json={"Response": "True", "Title": "Heat", "Year": "1995", "Type": "movie", "imdbID": "tt0113277"}
+        )
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key=None, omdb_api_key="k", metadata_provider="omdb")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Heat"
