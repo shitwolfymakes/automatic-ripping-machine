@@ -139,11 +139,11 @@ DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
 DEFAULT_MOVIE_SOURCES: tuple[str, ...] = ("tmdb", "omdb")
 DEFAULT_MUSIC_SOURCES: tuple[str, ...] = ("musicbrainz",)
 DEFAULT_SEARCH_PROVIDERS: dict[str, str] = {"movie": "tmdb", "tv": "tmdb", "music": "musicbrainz"}
-# Every id a ranked online list may name, by media type (the Config field
-# metadata's enum_values mirror these; a test pins them together).
+# ids a search-provider select or a ranked online list may name, by media type;
+# a test pins them to the field metadata.
 ONLINE_SOURCE_VALUES: dict[str, tuple[str, ...]] = {
     "movie": ("tmdb", "omdb"),
-    "tv": ("tmdb", "tvmaze", "tvdb"),
+    "tv": ("tmdb", "omdb"),
     "music": ("musicbrainz",),
 }
 _MOVIE_KNOWN = {sid: sid for sid in ONLINE_SOURCE_VALUES["movie"]}
@@ -182,7 +182,15 @@ def crc64service_enabled(cfg: Config | None) -> bool:
 
 def online_source_ids(cfg: Config | None, media_type: str) -> tuple[str, ...]:
     """Source ids for `media_type` in the order they are tried."""
-    return DEFAULT_ONLINE_SOURCES.get(media_type, ())
+    if media_type == "movie":
+        return movie_sources_setting(cfg)
+    if media_type == "music":
+        return music_sources_setting(cfg)
+    if media_type == "tv":
+        # the TV title-search order reads `episode_sources` once TVmaze/TVDB can
+        # search titles (PR 2b, then PR 2)
+        return DEFAULT_ONLINE_SOURCES["tv"]
+    return ()
 
 
 def sources_for(
@@ -214,7 +222,7 @@ def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "O
             return source
     fallback = ranked[0] if ranked else None
     if preferred and fallback is not None:
-        logger.info("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)
+        logger.debug("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)
     return fallback
 
 
@@ -231,7 +239,10 @@ def lookup_sources(
 
 
 def fingerprint_sources(cfg: Config | None, registry: Mapping[str, "OnlineSource"]) -> tuple["OnlineSource", ...]:
-    """Step 2 sources that answer a disc fingerprint, in order."""
+    """Step 2 sources that answer a disc fingerprint, in order; none when the
+    `crc64service_enabled` switch is off (it gates the whole fingerprint walk)."""
+    if not crc64service_enabled(cfg):
+        return ()
     out: list[OnlineSource] = []
     for sid in DEFAULT_FINGERPRINT_SOURCES:
         source = registry.get(sid)

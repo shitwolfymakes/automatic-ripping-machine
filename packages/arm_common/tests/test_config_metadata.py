@@ -106,12 +106,13 @@ def test_identity_settings_meta() -> None:
     assert (movie_sp.type, movie_sp.enum_values) == ("enum", ["tmdb", "omdb"])
     assert movie_sp.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"}
     tv_sp = by_key["search_provider_tv"]
-    assert (tv_sp.type, tv_sp.enum_values) == ("enum", ["tmdb", "tvmaze", "tvdb"])
-    assert tv_sp.enum_requires == {"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}
+    assert (tv_sp.type, tv_sp.enum_values) == ("enum", ["tmdb", "omdb"])
+    assert tv_sp.enum_labels == {"tmdb": "TMDb", "omdb": "OMDb"}
+    assert tv_sp.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"}
     music_sp = by_key["search_provider_music"]
     assert (music_sp.type, music_sp.enum_values, music_sp.enum_requires) == ("enum", ["musicbrainz"], None)
-    assert by_key["movie_auto_apply"].type == "bool"
-    assert by_key["music_auto_apply"].type == "bool"
+    assert "movie_auto_apply" not in by_key
+    assert "music_auto_apply" not in by_key
     assert by_key["crc64service_enabled"].type == "bool"
     assert "metadata_provider" not in by_key
     for key in (
@@ -120,8 +121,6 @@ def test_identity_settings_meta() -> None:
         "search_provider_movie",
         "search_provider_tv",
         "search_provider_music",
-        "movie_auto_apply",
-        "music_auto_apply",
         "crc64service_enabled",
     ):
         assert by_key[key].setup_step is None, key

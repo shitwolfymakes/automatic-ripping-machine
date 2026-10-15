@@ -194,7 +194,7 @@ async def update_config(
             if not (present or "").strip():
                 label = (meta.enum_labels or {}).get(value, value)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
-    for key in ("movie_auto_apply", "music_auto_apply", "crc64service_enabled"):
+    for key in ("crc64service_enabled",):
         if key in fields and fields[key] is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
     # The number inputs send null for an emptied box; these columns are NOT

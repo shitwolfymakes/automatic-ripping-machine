@@ -846,3 +846,62 @@ async def test_dispatcher_accepts_an_injected_registry():
         hit = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None))
     assert hit is not None and hit.title == "movie:BLADE RUNNER" and hit.provider == "omdb"
     assert dispatcher.sources["omdb"].id == "omdb"
+
+
+def _recording_source(sid, calls, media_types=frozenset({"movie", "tv"})):
+
+    class Fake:
+        id = sid
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def search_title(self, cfg, kind, title, year):
+            calls.append(f"{sid}:{kind}")
+            return None
+
+    Fake.media_types = media_types
+    return Fake()
+
+
+async def test_movie_order_follows_movie_sources():
+    calls: list[str] = []
+    reg = {"tmdb": _recording_source("tmdb", calls), "omdb": _recording_source("omdb", calls)}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT_1995")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        await dispatcher.identify(scan, _config(movie_sources=["omdb", "tmdb"]))
+        movie_calls = [c for c in calls if c.endswith(":movie")]
+        assert movie_calls == ["omdb:movie", "tmdb:movie"]
+        calls.clear()
+        await dispatcher.identify(scan, _config(movie_sources=[]))
+    assert [c for c in calls if c.endswith(":movie")] == []
+    assert calls == ["tmdb:tv", "omdb:tv"]
+
+
+async def test_crc64_lookup_skipped_when_the_switch_is_off():
+    from arm_backend.metadata.base import MetadataResult
+
+    calls: list[str] = []
+
+    class FakeArmServer:
+        id = "arm_server"
+        media_types = frozenset({"movie"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_fingerprint(self, cfg, algo, value):
+            calls.append(value)
+            return MetadataResult(title="Iron Man", year=2008, kind="movie")
+
+    reg = {"arm_server": FakeArmServer(), "tmdb": _recording_source("tmdb", [])}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="X", fingerprints=[{"algo": "crc64", "value": "abc"}])
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        await dispatcher.identify(scan, _config(crc64service_enabled=False))
+        assert calls == []
+        hit = await dispatcher.identify(scan, _config())
+    assert calls == ["abc"] and hit is not None and hit.title == "Iron Man"

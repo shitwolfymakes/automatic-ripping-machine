@@ -3,7 +3,8 @@
 Adds the per-media-type online-source lists, the job page's search provider
 per type, the per-type auto-apply gates and the ARM community CRC64 database
 switch to the config singleton, seeds the movie order and search providers
-from the old `metadata_provider` choice (D-8), then drops that column.
+from the old `metadata_provider` choice (D-8), then drops that column. The downgrade is lossy: only the movie search
+provider survives as `metadata_provider`.
 
 Revision ID: 0045_identification_sources
 Revises: 0044_previously_ripped
@@ -68,8 +69,7 @@ def upgrade() -> None:
         "config", sa.Column("crc64service_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true"))
     )
     # D-8: no install changes behaviour on upgrade. The old choice leads the
-    # movie order and stays the job page's movie search provider; the TV
-    # search provider is the first episode source.
+    # movie order and stays the job page's movie and TV search provider.
     op.execute(
         sa.text(
             "UPDATE config SET "
@@ -77,7 +77,8 @@ def upgrade() -> None:
             "ELSE '{tmdb,omdb}'::text[] END, "
             "search_provider_movie = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider "
             "ELSE 'tmdb' END, "
-            "search_provider_tv = COALESCE(episode_sources[1], 'tmdb')"
+            "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider "
+            "ELSE 'tmdb' END"
         )
     )
     op.drop_column("config", "metadata_provider")
@@ -89,8 +90,8 @@ def downgrade() -> None:
     )
     op.execute(
         sa.text(
-            "UPDATE config SET metadata_provider = CASE WHEN movie_sources[1] IN ('tmdb', 'omdb') "
-            "THEN movie_sources[1] ELSE 'tmdb' END"
+            "UPDATE config SET metadata_provider = CASE WHEN search_provider_movie IN ('tmdb', 'omdb') "
+            "THEN search_provider_movie ELSE 'tmdb' END"
         )
     )
     for name in reversed(_COLUMNS):

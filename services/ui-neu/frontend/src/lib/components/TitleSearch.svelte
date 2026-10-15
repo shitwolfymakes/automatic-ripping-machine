@@ -228,7 +228,7 @@
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="badge badge-sm" title="Default metadata provider configured in Settings">
+		<span class="badge badge-sm" title="Search provider configured in Settings">
 			{providerLabel}
 		</span>
 	</div>

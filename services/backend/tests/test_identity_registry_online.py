@@ -112,16 +112,16 @@ def test_search_source_reads_the_search_provider_setting(caplog):
     assert search_source(_cfg(search_provider_tv="tmdb"), "tv", reg).id == "tmdb"
     assert search_source(_cfg(), "music", reg).id == "musicbrainz"
     reg["omdb"]._reason = "no omdb key"
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
         assert search_source(_cfg(search_provider_movie="omdb"), "movie", reg).id == "tmdb"
     assert "search provider omdb is not available for movie; using tmdb" in caplog.text
 
 
 def test_search_source_falls_back_for_a_provider_with_no_adapter_yet(caplog):
-    """`search_provider_tv = tvmaze` is a valid setting before PR 2b adds the
-    adapter: the job page falls back to the first usable ranked source."""
+    """A row may hold an id the registry does not know (a downgrade, a hand
+    edit); the box falls back to the first usable ranked source."""
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
         assert search_source(_cfg(search_provider_tv="tvmaze"), "tv", reg).id == "tmdb"
     assert "search provider tvmaze is not available for tv; using tmdb" in caplog.text
 
@@ -160,3 +160,30 @@ def test_lookup_sources_puts_preferred_first():
     assert [s.id for s in lookup_sources(_cfg(), "movie", reg)] == ["tmdb", "omdb"]
     reg["omdb"]._reason = "no omdb key"
     assert [s.id for s in lookup_sources(_cfg(search_provider_movie="omdb"), "movie", reg)] == ["tmdb"]
+
+
+def test_online_source_ids_reads_the_movie_and_music_lists():
+    assert online_source_ids(_cfg(movie_sources=["omdb", "tmdb"]), "movie") == ("omdb", "tmdb")
+    assert online_source_ids(_cfg(movie_sources=[]), "movie") == ()
+    assert online_source_ids(_cfg(music_sources=[]), "music") == ()
+    assert online_source_ids(_cfg(episode_sources=["tvmaze"]), "tv") == ("tmdb", "omdb")
+
+
+def test_fingerprint_sources_honours_the_switch():
+    from arm_backend.identity.sources.registry import fingerprint_sources
+
+    reg = _registry(FakeSource("arm_server", {"movie"}))
+    assert [s.id for s in fingerprint_sources(_cfg(), reg)] == ["arm_server"]
+    assert fingerprint_sources(_cfg(crc64service_enabled=False), reg) == ()
+
+
+def test_online_source_values_match_the_field_metadata():
+    from arm_backend.identity.sources.registry import ONLINE_SOURCE_VALUES
+    from arm_common.config_metadata import CONFIG_FIELD_META
+
+    meta = {m.key: m for m in CONFIG_FIELD_META}
+    assert tuple(meta["movie_sources"].enum_values) == ONLINE_SOURCE_VALUES["movie"]
+    assert tuple(meta["search_provider_movie"].enum_values) == ONLINE_SOURCE_VALUES["movie"]
+    assert tuple(meta["search_provider_tv"].enum_values) == ONLINE_SOURCE_VALUES["tv"]
+    assert tuple(meta["music_sources"].enum_values) == ONLINE_SOURCE_VALUES["music"]
+    assert tuple(meta["search_provider_music"].enum_values) == ONLINE_SOURCE_VALUES["music"]

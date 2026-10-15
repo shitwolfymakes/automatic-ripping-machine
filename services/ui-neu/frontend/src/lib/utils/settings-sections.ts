@@ -60,11 +60,8 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 		{
 			title: 'Movies and music',
 			blurb: 'Online sources tried in order for movie discs and audio CDs.',
-			keys: ['movie_sources', 'music_sources', 'movie_auto_apply', 'music_auto_apply'],
-			columns: [
-				['movie_sources', 'movie_auto_apply'],
-				['music_sources', 'music_auto_apply']
-			]
+			keys: ['movie_sources', 'music_sources'],
+			columns: [['movie_sources'], ['music_sources']]
 		},
 		{
 			title: 'TV episodes',

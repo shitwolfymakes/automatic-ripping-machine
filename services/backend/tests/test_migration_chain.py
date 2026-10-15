@@ -121,14 +121,15 @@ def test_0045_upgrade_adds_the_identification_columns_and_seeds_them() -> None:
     # D-8: the old choice goes first in the movie order and stays the search provider.
     assert "WHEN metadata_provider = 'omdb' THEN '{omdb,tmdb}'::text[]" in sql
     assert "WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
-    assert "COALESCE(episode_sources[1], 'tmdb')" in sql
+    assert "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
+    assert "COALESCE(episode_sources" not in sql
     assert sql.index("UPDATE config SET") < sql.index("ALTER TABLE config DROP COLUMN metadata_provider")
 
 
-def test_0045_downgrade_restores_metadata_provider_from_the_movie_order() -> None:
+def test_0045_downgrade_restores_metadata_provider_from_the_movie_search_provider() -> None:
     sql = _render_sql(_IDENT_REV, _IDENT_PARENT, downgrade=True)
     assert "ALTER TABLE config ADD COLUMN metadata_provider VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
-    assert "WHEN movie_sources[1] IN ('tmdb', 'omdb') THEN movie_sources[1]" in sql
+    assert "WHEN search_provider_movie IN ('tmdb', 'omdb') THEN search_provider_movie" in sql
     for name in (
         "crc64service_enabled",
         "music_auto_apply",

@@ -110,7 +110,7 @@ Each is the recommended option from the review. Override at spec review if you d
 - **D-8 Migration seeds order from the old setting.** `movie_sources` is seeded as the
   former `metadata_provider` first, then the other movie source, so no install changes
   behaviour on upgrade. `search_provider_movie` is seeded from `metadata_provider`;
-  `search_provider_tv` from the first of `episode_sources`; `search_provider_music` to
+  `search_provider_tv` from `metadata_provider` as well (the TV search box used it before); `search_provider_music` to
   `musicbrainz`.
 - **D-9 Setup wizard.** The "metadata" wizard step is renamed Identification and shows the
   three API keys and the MakeMKV key only (`setup_step="identification"` on those fields).
@@ -195,7 +195,7 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 | `movie_sources` | ARRAY(str) | `{tmdb,omdb}` | `metadata_provider` first, the other second (D-8) |
 | `music_sources` | ARRAY(str) | `{musicbrainz}` | default |
 | `search_provider_movie` | str | `tmdb` | `metadata_provider` |
-| `search_provider_tv` | str | `tmdb` | `episode_sources[0]` |
+| `search_provider_tv` | str | `tmdb` | `metadata_provider` |
 | `search_provider_music` | str | `musicbrainz` | default |
 | `movie_auto_apply` | bool | true | default |
 | `music_auto_apply` | bool | true | default |
@@ -203,7 +203,9 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 | `metadata_provider` | dropped | | |
 
 Enums stay VARCHAR and are validated in the app layer. The downgrade restores
-`metadata_provider` from `movie_sources[0]`.
+`metadata_provider` from `search_provider_movie` (lossy).
+
+`movie_auto_apply` and `music_auto_apply` exist as columns and in the view from PR 1 but are hidden from the editable surface until PR 3 reads them.
 
 `config_metadata.py` gains the matching `ConfigFieldMeta` entries: ranked lists use
 `enum_values` from `known_source_ids` and `enum_requires` for keyed sources; the three
@@ -297,8 +299,4 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   list is `episode_sources` (`tmdb, tvmaze, tvdb`), which has no OMDb row. PR 2 must either
   add `omdb` as a TV source in that list's `enum_values` or accept that OMDb series search is
   dropped; decide before PR 2.
-- Resolved in PR 1: `search_provider_tv` offers `tmdb, tvmaze, tvdb` (no OMDb row, matching the
-  v4.2 TV list); a choice with no adapter yet falls back to the first usable ranked source with an
-  INFO log until PR 2b lands. Consequence for PR 2: once the dispatcher's TV order reads
-  `episode_sources`, OMDb series search is gone, so PR 2b (keyless TVmaze title search) must land
-  before PR 2, or an OMDb-only install loses TV title search.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`; the TV title-search order still reads the built-in default until PR 2b, then PR 2 switches it to `episode_sources` (the OMDb-series question above stands).

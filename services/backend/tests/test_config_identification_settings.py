@@ -116,7 +116,6 @@ def test_patch_ranked_lists_and_toggles(signing_key: bytes) -> None:
             json={
                 "movie_sources": ["omdb", "tmdb"],
                 "music_sources": [],
-                "movie_auto_apply": False,
                 "crc64service_enabled": False,
             },
             headers=_auth(token),
@@ -125,7 +124,6 @@ def test_patch_ranked_lists_and_toggles(signing_key: bytes) -> None:
     body = r.json()
     assert body["movie_sources"] == ["omdb", "tmdb"]
     assert body["music_sources"] == []
-    assert body["movie_auto_apply"] is False
     assert body["crc64service_enabled"] is False
     row = db.rows["config"][0]
     assert row.movie_sources == ["omdb", "tmdb"] and row.crc64service_enabled is False
@@ -140,7 +138,6 @@ def test_patch_ranked_lists_and_toggles(signing_key: bytes) -> None:
         ({"search_provider_movie": "netflix"}, "search_provider_movie must be one of tmdb, omdb"),
         ({"search_provider_movie": None}, "search_provider_movie must be one of tmdb, omdb"),
         ({"search_provider_music": "spotify"}, "search_provider_music must be one of musicbrainz"),
-        ({"movie_auto_apply": None}, "movie_auto_apply must be true or false"),
         ({"crc64service_enabled": None}, "crc64service_enabled must be true or false"),
     ],
 )
@@ -169,9 +166,20 @@ def test_patch_search_provider_needs_its_key(signing_key: bytes) -> None:
         assert r.status_code == 200, r.text
         assert r.json()["search_provider_movie"] == "omdb"
         # A keyless choice needs no key even when no key is stored.
-        r = client.patch("/api/config", json={"search_provider_tv": "tvmaze"}, headers=_auth(token))
+        r = client.patch("/api/config", json={"search_provider_music": "musicbrainz"}, headers=_auth(token))
         assert r.status_code == 200, r.text
-        assert r.json()["search_provider_tv"] == "tvmaze"
+
+
+def test_patch_search_provider_rejects_a_key_cleared_in_the_same_body(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/config", json={"search_provider_movie": "omdb", "omdb_api_key": ""}, headers=_auth(token)
+        )
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"] == "search_provider_movie: OMDb needs its API key"
 
 
 def test_patch_ranked_lists_do_not_require_keys(signing_key: bytes) -> None:

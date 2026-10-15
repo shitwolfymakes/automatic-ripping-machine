@@ -300,7 +300,7 @@ def test_search_tmdb_tv_candidates(signing_key: bytes) -> None:
 
 @respx.mock
 def test_tv_search_falls_back_when_the_tv_provider_has_no_adapter(signing_key: bytes) -> None:
-    """search_provider_tv=tvmaze is valid before PR 2b; the box uses the first usable ranked source."""
+    """A row may hold an id the registry does not know (a downgrade, a hand edit); the box falls back to the first usable ranked source."""
     tmdb_route = respx.get("https://api.themoviedb.org/3/search/tv").mock(
         return_value=httpx.Response(
             200, json={"results": [{"name": "Lost", "first_air_date": "2004-09-22", "id": 4607}]}

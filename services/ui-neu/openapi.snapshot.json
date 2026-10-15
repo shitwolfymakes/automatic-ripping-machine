@@ -10836,28 +10836,6 @@
             ],
             "title": "Search Provider Music"
           },
-          "movie_auto_apply": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Movie Auto Apply"
-          },
-          "music_auto_apply": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Music Auto Apply"
-          },
           "crc64service_enabled": {
             "anyOf": [
               {
