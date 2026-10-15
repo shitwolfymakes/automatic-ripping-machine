@@ -90,9 +90,8 @@ Each is the recommended option from the review. Override at spec review if you d
   "ARM community database (CRC64)", with a `DVD` chip, under TheDiscDB. Its help text says
   it sends the disc's CRC64 fingerprint to the ARM project's server.
 - **D-3 No key outside the Keys tab (S-4).** The `OMDB_API_KEY` environment override is
-  removed from the dispatcher. At boot, if the variable is set and the saved OMDb key is
-  blank, the backend writes it into the Config row once and logs that the variable is
-  deprecated. If both are set, the saved key wins and the variable is ignored with a log line.
+  removed outright in PR 0, together with the `Settings.OMDB_API_KEY` field and the
+  `.env.example` line. No seeding: the Keys tab is the only place a key comes from.
 - **D-4 Ignoring the volume label means ignoring it everywhere (S-5).** The dispatcher
   adds the normalized label as a search candidate only when `label` is in
   `enabled_hint_sources(cfg)`. On a miss, the job title is the hint title if there is one,
@@ -180,7 +179,7 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 | `dispatcher.identify_from_imdb` | TMDb `/find` only | walk `sources_for(cfg, kind)` with `lookup_imdb`; `kind` from the TheDiscDB release; none offered → return the release metadata (D-1) |
 | `dispatcher._identify_video` CRC64 | unconditional | `fingerprint_sources(cfg)` with `lookup_fingerprint` (D-2) |
 | `dispatcher._identify_video` label candidate | always | only when `label` is enabled; miss title per D-4 |
-| `dispatcher.__init__` | env OMDb override | removed (D-3); boot seeding lives in `main.py` next to the other startup hooks |
+| `dispatcher.__init__` | env OMDb override | removed in PR 0 (D-3) |
 | `_with_tmdb_ids` | TMDb only | renamed `fill_external_ids`: given any hit with an IMDb id, asks each enabled source of that type with `lookup_imdb` for its own id until TMDb and TVDB ids are filled (S-10) |
 | `routers/metadata.py search` | `metadata_provider` | `provider` param validated against `known_source_ids(type)`; default `search_source(cfg, type)`; uses `search_candidates` (S-6) |
 | `routers/metadata.py lookup` | `metadata_provider` | walks `sources_for(cfg, type)` with `lookup_imdb`; new `type` param, default `movie` |
@@ -228,8 +227,8 @@ retagged `setup_step="identification"` (D-9).
    `musicbrainz`), the dispatcher rewritten as walks, the metadata routes reading the
    registry (`search_source` maps `metadata_provider` until PR 1 replaces it),
    `_PROVIDER_BY_LABEL_PREFIX` removed. Closes S-8.
-1. **PR 1 · Model and metadata**, as in #258, plus `crc64service_enabled` and the env-override
-   seeding (D-2, D-3, D-7, D-8, D-9). Migration 0044. OpenAPI snapshot and TS types regenerated.
+1. **PR 1 · Model and metadata**, as in #258, plus `crc64service_enabled`
+   (D-2, D-7, D-8, D-9). Migration 0044. OpenAPI snapshot and TS types regenerated.
 2. **PR 2 · Read the columns.** `sources_for` reads the rows; exact-id walk (D-1); label
    gate (D-4); CRC64 gate (D-2); CD walk (D-5); re-resolve hook on the new lists. Closes #287.
 3. **PR 2b · Series search.** `search_show` on the TVmaze and TVDB adapters;
@@ -265,8 +264,8 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
 4. With `label` removed from disc hints, the volume label is neither searched nor used as the
    miss title while a hint title or release title exists.
 5. With `crc64service_enabled` off, no CRC64 request is made.
-6. With `OMDB_API_KEY` set and the saved key blank, the Keys tab shows the key after one boot
-   and the chip clears.
+6. With `OMDB_API_KEY` set in the environment and the saved key blank, OMDb is not called and
+   the "Needs OMDb key" chip shows: the variable has no effect.
 7. A Search card select set to an unkeyed source is rejected by `PATCH /api/config` with the
    "Needs key" reason.
 8. Upgrading a row with `metadata_provider = omdb` yields `movie_sources = {omdb,tmdb}` and

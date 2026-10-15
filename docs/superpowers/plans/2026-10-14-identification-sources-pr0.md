@@ -17,7 +17,7 @@
 - Source ids are exactly `tmdb`, `omdb`, `musicbrainz`, `arm_server`. `MetadataResult.provider` is always the source id.
 - Capability methods take `cfg` first; adapters construct a client per call from `cfg` so a key saved after boot is used on the next call (today's behaviour).
 - `PROVIDER_TIMEOUT_SECONDS` and `DISPATCH_TIMEOUT_SECONDS` stay in `arm_backend/metadata/dispatcher.py` (tests patch them there).
-- The `OMDB_API_KEY` environment override stays in this PR (its removal is PR 1, spec D-3); the OMDb adapter carries it.
+- The `OMDB_API_KEY` environment override is removed in this PR (owner decision during review, spec D-3): no `omdb_api_key_override` anywhere, no `Settings.OMDB_API_KEY`.
 - `routers/config.py` is not touched; its `metadata_provider` literal is deleted with the field in PR 1.
 - Error strings returned to the UI are unchanged: `no {id} key configured`, `{id} unavailable: {exc}`, `lookup unavailable: {exc}`, `musicbrainz unavailable: {exc}`.
 - No OpenAPI change in this PR, so no snapshot regeneration. `SearchProvider` stays a `Literal` and a test pins it to the registry.
@@ -31,7 +31,7 @@ Every place in `services/` and `packages/` that constructs a metadata client, re
 |---|---|---|
 | `metadata/dispatcher.py` | all four clients, provider walk | PR 0 Task 3 |
 | `routers/metadata.py` | TMDb/OMDb/MusicBrainz/ArmServer per route, `SearchProvider` literal | PR 0 Task 4 |
-| `main.py:202` | `OMDB_API_KEY` override into the dispatcher | PR 0 Task 3 (kept), PR 1 (removed) |
+| `main.py:202` | `OMDB_API_KEY` override into the dispatcher | PR 0 (removed after the final review) |
 | `routers/config.py:272-330` | `_KEY_ATTR` map and `_check_tmdb/_check_omdb/_check_tvdb` raw HTTP probes behind `POST /api/config/keys/{name}/check` | PR 0 Task 4 pins `_KEY_ATTR` to the registry's `requires_key`; probes stay as they are |
 | `routers/config.py:98,153-156` | `metadata_provider` in ConfigView and PATCH validation | PR 1 (field deleted) |
 | `arm_common/schemas/auth.py:80,116` | `metadata_provider` on ConfigView / ConfigUpdate | PR 1 |

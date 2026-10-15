@@ -68,15 +68,10 @@ class MetadataDispatcher:
         self,
         http: httpx.AsyncClient,
         *,
-        omdb_api_key_override: str | None = None,
         sources: Mapping[str, OnlineSource] | None = None,
     ) -> None:
         self._http = http
-        self._sources: dict[str, OnlineSource] = (
-            dict(sources)
-            if sources is not None
-            else build_online_sources(http, omdb_api_key_override=omdb_api_key_override)
-        )
+        self._sources: dict[str, OnlineSource] = dict(sources) if sources is not None else build_online_sources(http)
 
     @property
     def sources(self) -> Mapping[str, OnlineSource]:

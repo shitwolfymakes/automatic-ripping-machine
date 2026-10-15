@@ -90,13 +90,11 @@ class OmdbSource:
     media_types = frozenset({"movie", "tv"})
     requires_key: str | None = "omdb_api_key"
 
-    def __init__(self, http: httpx.AsyncClient, *, api_key_override: str | None = None) -> None:
+    def __init__(self, http: httpx.AsyncClient) -> None:
         self._http = http
-        # Backend env `OMDB_API_KEY` wins over the saved key (removed in PR 1, spec D-3).
-        self._override = api_key_override
 
     def _key(self, cfg: Config | None) -> str:
-        return (self._override or getattr(cfg, "omdb_api_key", None) or "").strip()
+        return (getattr(cfg, "omdb_api_key", None) or "").strip()
 
     def configured(self, cfg: Config | None) -> str | None:
         return "no omdb key" if not self._key(cfg) else None
@@ -174,13 +172,11 @@ class ArmServerSource:
         return await ArmServerClient(self._http).lookup_by_crc64(value)
 
 
-def build_online_sources(
-    http: httpx.AsyncClient, *, omdb_api_key_override: str | None = None
-) -> dict[str, OnlineSource]:
+def build_online_sources(http: httpx.AsyncClient) -> dict[str, OnlineSource]:
     """Every online source, keyed by id, sharing the app's httpx client."""
     sources: list[OnlineSource] = [
         TmdbSource(http),
-        OmdbSource(http, api_key_override=omdb_api_key_override),
+        OmdbSource(http),
         MusicBrainzSource(http),
         ArmServerSource(http),
     ]

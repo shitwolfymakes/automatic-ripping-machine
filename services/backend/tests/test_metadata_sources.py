@@ -51,12 +51,6 @@ async def test_keyless_sources_are_always_configured():
     assert reg["musicbrainz"].requires_key is None
 
 
-async def test_omdb_env_override_counts_as_configured():
-    async with httpx.AsyncClient() as http:
-        reg = build_online_sources(http, omdb_api_key_override="env-k")
-    assert reg["omdb"].configured(_config(omdb_api_key=None)) is None
-
-
 def test_capability_returns_none_for_missing_methods():
     class Bare:
         id = "x"
@@ -134,7 +128,7 @@ async def test_omdb_adapter_prefers_env_override_and_passes_kind(monkeypatch):
 
     monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
     async with httpx.AsyncClient() as http:
-        omdb = build_online_sources(http, omdb_api_key_override="env-k")["omdb"]
+        omdb = build_online_sources(http)["omdb"]
         cfg = _config(omdb_api_key="saved-k")
         assert await omdb.search_title(cfg, "tv", "lost", 2004) is None
         assert await omdb.search_candidates(cfg, "movie", "alien", limit=5) == []
@@ -142,7 +136,7 @@ async def test_omdb_adapter_prefers_env_override_and_passes_kind(monkeypatch):
     assert ("title", "lost", 2004, "tv") in calls
     assert ("cands", "alien", "movie", 5) in calls
     assert ("imdb", "tt2") in calls
-    assert all(c[1] == "env-k" for c in calls if c[0] == "init")
+    assert all(c[1] == "saved-k" for c in calls if c[0] == "init")
 
 
 async def test_musicbrainz_adapter_delegates(monkeypatch):
