@@ -293,6 +293,12 @@ export function ripAgain(id: string): Promise<RipAgainResponse> {
 	return apiFetch<RipAgainResponse>(`/api/jobs/${id}/rip-again`, { method: 'POST' });
 }
 
+// Apply the identity suggestion identify held for review (the media type's
+// auto-apply switch is off). Answers like resolve; 409 when none is held.
+export function acceptIdentitySuggestion(jobId: string): Promise<ResolveResponse> {
+	return post<ResolveResponse>(`/api/jobs/${jobId}/identity/accept`);
+}
+
 export function startWaitingJob(id: string): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/rip-start-review`, { method: 'POST' });
 }
