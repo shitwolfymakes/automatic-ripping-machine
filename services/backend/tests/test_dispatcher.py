@@ -182,7 +182,7 @@ async def test_omdb_config_key_used_by_dispatcher():
 async def test_identify_tries_title_hint_before_volume_label(monkeypatch):
     """The dispatcher searches the hint title first; a hit there must not
     reach the label-derived title at all."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     searched_titles: list[str] = []
@@ -201,7 +201,7 @@ async def test_identify_tries_title_hint_before_volume_label(monkeypatch):
                 return MetadataResult(title="The West Wing", year=1999, kind="tv")
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
@@ -215,7 +215,7 @@ async def test_identify_tries_title_hint_before_volume_label(monkeypatch):
 async def test_identify_falls_back_to_label_when_hint_misses(monkeypatch):
     """A hint that misses on every provider falls back to the normalized
     volume-label title as the next candidate."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     searched_titles: list[str] = []
@@ -234,7 +234,7 @@ async def test_identify_falls_back_to_label_when_hint_misses(monkeypatch):
                 return MetadataResult(title="The West Wing", year=1999, kind="tv")
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="WW_S3D2")
@@ -249,7 +249,7 @@ async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
     "Arrival") equal to the normalised label title (volume_label "ARRIVAL",
     case-insensitive) is searched only once per provider call, not once per
     candidate."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
 
     call_counts: dict[str, int] = {}
 
@@ -265,7 +265,7 @@ async def test_identify_dedupes_hint_equal_to_label(monkeypatch):
             call_counts[title] = call_counts.get(title, 0) + 1
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
@@ -280,7 +280,7 @@ async def test_identify_hint_is_tv_searches_tv_before_movie(monkeypatch):
     """A season-shaped hint (title_hint_is_tv=True) searches TMDb TV first for
     that candidate, so a TV-shaped label like `LOST_S2D3` doesn't mismatch to
     TMDb's top movie hit."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     call_order: list[str] = []
@@ -297,7 +297,7 @@ async def test_identify_hint_is_tv_searches_tv_before_movie(monkeypatch):
             call_order.append("tv")
             return MetadataResult(title="Lost", year=2004, kind="tv")
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
@@ -309,7 +309,7 @@ async def test_identify_hint_is_tv_searches_tv_before_movie(monkeypatch):
 async def test_identify_hint_not_tv_keeps_movie_first_order(monkeypatch):
     """title_hint_is_tv=False (the default) keeps the existing movie-first
     order for the hint candidate."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     call_order: list[str] = []
@@ -326,7 +326,7 @@ async def test_identify_hint_not_tv_keeps_movie_first_order(monkeypatch):
             call_order.append("tv")
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="ARRIVAL")
@@ -338,7 +338,7 @@ async def test_identify_hint_not_tv_keeps_movie_first_order(monkeypatch):
 async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch):
     """When title_hint_is_tv=True, the TV search runs first; if it misses,
     the movie search is tried as a fallback, and returns if it hits."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     call_order: list[str] = []
@@ -357,7 +357,7 @@ async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch)
             # TV search misses
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="TRON")
@@ -432,7 +432,7 @@ async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
     """The hint candidate has no year of its own; it must be searched with
     the same year the label candidate parsed (e.g. `ALIEN_1979` narrows
     the hint "alien" to 1979 too), not an unfiltered search."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
 
     seen_years: dict[str, int | None] = {}
 
@@ -447,7 +447,7 @@ async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
         async def search_tv(self, title):
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="ALIEN_1979")
@@ -459,7 +459,7 @@ async def test_identify_hint_candidate_reuses_label_year(monkeypatch):
 async def test_identify_retries_hint_without_trailing_year(monkeypatch):
     """A hint ending in a year is searched as given first (WONDER_WOMAN_1984),
     then without the year (THE_OFFICE_2005), before the label title."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     searched_titles: list[str] = []
@@ -478,7 +478,7 @@ async def test_identify_retries_hint_without_trailing_year(monkeypatch):
                 return MetadataResult(title="The Office", year=2005, kind="tv")
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_OFFICE_2005_S1_D2")
@@ -491,7 +491,7 @@ async def test_identify_retries_hint_without_trailing_year(monkeypatch):
 
 async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
     """A hint that is all year ("1917") is searched once, never as an empty title."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
 
     searched_titles: list[str] = []
 
@@ -507,7 +507,7 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
             searched_titles.append(title)
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="1917_D1")
@@ -518,7 +518,7 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
 
 
 async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     class FakeTMDB:
@@ -529,7 +529,7 @@ async def test_identify_from_imdb_uses_tmdb_find(monkeypatch):
             assert imdb_id == "tt0090557"
             return MetadataResult(title="Round Midnight", year=1986, kind="movie")
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         hit = await dispatcher.identify_from_imdb("tt0090557", _config())
@@ -565,31 +565,25 @@ async def test_omdb_skipped_when_config_key_empty():
 
 
 @pytest.mark.asyncio
-async def test_call_stamps_canonical_provider() -> None:
-    """_call is the one place that knows which client produced a hit; it
-    stamps MetadataResult.provider with the canonical name so identity and
-    provider_raw key on it (step 2 §3.4)."""
+async def test_call_stamps_the_source_id_as_provider() -> None:
+    """_call is the one place that knows which source produced a hit; it
+    stamps MetadataResult.provider with the source id so identity and
+    provider_raw key on it, overwriting anything the client set."""
     from arm_backend.metadata.base import MetadataResult
 
     dispatcher = MetadataDispatcher(httpx.AsyncClient())
 
     async def _hit() -> MetadataResult:
-        return MetadataResult(title="X", year=None, kind="movie", payload={})
+        return MetadataResult(title="X", year=None, kind="movie", payload={}, provider="spoofed")
 
-    for label, expected in (
-        ("tmdb_movie", "tmdb"),
-        ("tmdb_find_imdb", "tmdb"),
-        ("omdb_movie", "omdb"),
-        ("arm_server", "arm_server"),
-        ("musicbrainz", "musicbrainz"),
-    ):
-        result = await dispatcher._call(label, _hit())
-        assert result is not None and result.provider == expected, label
+    for sid in ("tmdb", "omdb", "arm_server", "musicbrainz"):
+        result = await dispatcher._call(sid, _hit())
+        assert result is not None and result.provider == sid, sid
 
     async def _miss() -> None:
         return None
 
-    assert await dispatcher._call("tmdb_movie", _miss()) is None
+    assert await dispatcher._call("tmdb", _miss()) is None
     await dispatcher.aclose()
 
 
@@ -597,7 +591,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
     """An episodic disc (prefer_tv) searches TMDb TV before movie for the hint
     AND the label candidate. Kolchak: TMDb's movie search returns a placeholder
     "Kolchak: The Night Stalker Collection" entry; TV finds the 1974 series."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
     calls: list[str] = []
@@ -619,7 +613,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
         async def get_external_id_map(self, tmdb_id, kind):
             return {}
 
-    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK_NIGHT_STALKER")
@@ -635,7 +629,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
 
 async def test_identify_prefer_tv_omdb_only_searches_series_then_movie(monkeypatch):
     """No TMDb key: an episodic disc asks OMDb for a series before a movie."""
-    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
 
     kinds: list[str] = []
 
@@ -647,7 +641,7 @@ async def test_identify_prefer_tv_omdb_only_searches_series_then_movie(monkeypat
             kinds.append(kind)
             return None
 
-    monkeypatch.setattr(dispatcher_mod, "OMDBClient", FakeOMDB)
+    monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
@@ -751,3 +745,61 @@ async def test_with_tmdb_ids_timeout_keeps_the_hit(monkeypatch):
         hit = MetadataResult(provider="tmdb", kind="tv", title="X", year=1999, payload={"id": 1})
         assert await MetadataDispatcher(client)._with_tmdb_ids(hit, _config()) is hit
     assert hit.payload == {"id": 1}
+
+
+async def test_title_search_is_kind_major(monkeypatch):
+    """All movie sources before any TV source for a movie-shaped candidate:
+    tmdb movie, omdb movie, tmdb tv, omdb tv (spec D-6)."""
+    from arm_backend.metadata import sources as sources_mod
+
+    order: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            order.append("tmdb:movie")
+            return None
+
+        async def search_tv(self, title):
+            order.append("tmdb:tv")
+            return None
+
+    class FakeOMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def lookup_by_title(self, title, year=None, kind="movie"):
+            order.append(f"omdb:{kind}")
+            return None
+
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="SOMETHING")
+        assert await dispatcher.identify(scan, _config()) is None
+    assert order == ["tmdb:movie", "omdb:movie", "tmdb:tv", "omdb:tv"]
+
+
+async def test_dispatcher_accepts_an_injected_registry():
+    from arm_backend.metadata.base import MetadataResult
+
+    class OnlyOmdb:
+        id = "omdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = "omdb_api_key"
+
+        def configured(self, cfg):
+            return None
+
+        async def search_title(self, cfg, kind, title, year):
+            return MetadataResult(title=f"{kind}:{title}", year=year, kind=kind)
+
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"omdb": OnlyOmdb()})
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="BLADE_RUNNER_1982")
+        hit = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None))
+    assert hit is not None and hit.title == "movie:BLADE RUNNER" and hit.provider == "omdb"
+    assert dispatcher.sources["omdb"].id == "omdb"

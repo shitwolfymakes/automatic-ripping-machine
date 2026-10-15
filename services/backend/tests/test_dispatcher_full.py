@@ -91,6 +91,10 @@ async def test_tmdb_movie_miss_tv_hit() -> None:
         respx.get("https://api.themoviedb.org/3/search/movie").mock(
             return_value=httpx.Response(200, json={"results": []})
         )
+        # Kind-major order (spec D-6): OMDb's movie search runs before TMDb TV.
+        respx.get("https://www.omdbapi.com/").mock(
+            return_value=httpx.Response(200, json={"Response": "False", "Error": "Movie not found!"})
+        )
         respx.get("https://api.themoviedb.org/3/search/tv").mock(
             return_value=httpx.Response(200, json={"results": [{"name": "Show", "first_air_date": "2015"}]})
         )
