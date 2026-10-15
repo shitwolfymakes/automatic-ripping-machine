@@ -88,6 +88,7 @@ from arm_common.schemas.job_metadata import (
     JobIdentity,
     JobMetadata,
     flag_is_set,
+    identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
 )
@@ -674,6 +675,11 @@ async def review_pause(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="this disc was ripped before; it has no countdown to pause",
+        )
+    if identity_suggestion_of(job.metadata_json) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="this disc is waiting for you to confirm its identity; it has no countdown to pause",
         )
     job.manual_pause = paused
     if not paused:

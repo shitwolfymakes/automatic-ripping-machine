@@ -101,6 +101,19 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+_SUGGESTION = {
+    "provider": "tmdb",
+    "title": "Iron Man",
+    "year": 2008,
+    "kind": "movie",
+    "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
+    "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
+    "overview": "Tony Stark.",
+    "payload": {"id": 1726, "poster_path": "/abc.jpg"},
+    "suggested_at": "2026-10-15T10:00:00Z",
+}
+
+
 def _job(
     job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001",
     *,
@@ -358,6 +371,20 @@ def test_review_pause_sets_manual_pause(signing_key: bytes) -> None:
     assert r.status_code == 200
     assert db.rows["jobs"][0].manual_pause is True
     assert any(e["event_type"] == "review.pause" for e in hub.events)
+
+
+def test_review_pause_409_on_a_suggestion_hold(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(
+        status=JobStatus.AWAITING_REVIEW, meta={"identity_suggestion": _SUGGESTION, "flags": {"unidentified": True}}
+    )
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/review-pause?paused=true", headers=_auth(token))
+    assert r.status_code == 409
+    assert "confirm its identity" in r.json()["detail"]
+    assert job.manual_pause is False
 
 
 def test_review_resume_clears_pause_and_resets_countdown(signing_key: bytes) -> None:

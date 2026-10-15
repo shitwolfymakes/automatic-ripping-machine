@@ -54,6 +54,17 @@ from tests._fakes import FakeSession  # noqa: E402
 
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
 _PRIOR = "job_01M4Q4V53S8AC69YM5CKHE11DX"
+_SUGGESTION = {
+    "provider": "tmdb",
+    "title": "Iron Man",
+    "year": 2008,
+    "kind": "movie",
+    "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
+    "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
+    "overview": "Tony Stark.",
+    "payload": {"id": 1726, "poster_path": "/abc.jpg"},
+    "suggested_at": "2026-10-15T10:00:00Z",
+}
 _FP = {"algo": "matrix256", "value": "79eea299"}
 
 
@@ -560,3 +571,18 @@ def test_unpausing_does_not_start_a_countdown_on_a_previously_ripped_hold() -> N
     with client:
         assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
     assert held.wait_start_time is None
+
+
+def test_unpausing_does_not_start_a_countdown_on_a_suggestion_hold() -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    db.rows["config"][0].ripping_paused = True
+    suggested = _held("job_01M4R7CH6DK8PA8MPD79PATMPS")
+    suggested.metadata_json = {"identity_suggestion": _SUGGESTION, "flags": {"unidentified": True}}
+    plain = _held("job_01M4R7CH6DK8PA8MPD79PATMPP")
+    plain.metadata_json = {}
+    db.rows["jobs"].extend([suggested, plain])
+    client, auth = _config_client(db)
+    with client:
+        assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
+    assert suggested.wait_start_time is None
+    assert plain.wait_start_time is not None

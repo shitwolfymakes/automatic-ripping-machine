@@ -60,6 +60,7 @@ from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
     IsoPrepareReport,
     flag_is_set,
+    identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
     HeldJobView,
@@ -1195,8 +1196,13 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     # paused = the hold survives a reboot: global ripping_paused OR this disc's
     # per-job manual_pause. Either means the operator deliberately held it.
     global_paused = bool(cfg.ripping_paused) if cfg is not None else False
-    # A previously-ripped hold waits for the operator however it got there.
-    paused = global_paused or bool(rows[0].manual_pause) or previously_ripped_job_id(rows[0].metadata_json) is not None
+    # A previously-ripped hold or a held suggestion waits for the operator however it got there.
+    paused = (
+        global_paused
+        or bool(rows[0].manual_pause)
+        or previously_ripped_job_id(rows[0].metadata_json) is not None
+        or identity_suggestion_of(rows[0].metadata_json) is not None
+    )
     return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
 
 

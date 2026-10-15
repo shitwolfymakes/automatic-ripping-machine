@@ -1308,6 +1308,19 @@ def test_held_job_paused_flag_from_global() -> None:
     assert r.json()["paused"] is True
 
 
+_SUGGESTION = {
+    "provider": "tmdb",
+    "title": "Iron Man",
+    "year": 2008,
+    "kind": "movie",
+    "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
+    "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
+    "overview": "Tony Stark.",
+    "payload": {"id": 1726, "poster_path": "/abc.jpg"},
+    "suggested_at": "2026-10-15T10:00:00Z",
+}
+
+
 def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     """paused is global ripping_paused OR this disc's manual_pause — a per-job
     pause alone (global off) still marks it paused for reboot recovery."""
@@ -1316,6 +1329,21 @@ def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     db.rows["config"] = [_config(ripping_paused=False)]
     held = _job("job_01JZXR7K3M5Q8N4VWA0000H07", status=JobStatus.AWAITING_REVIEW)
     held.manual_pause = True
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
+def test_held_job_paused_flag_from_a_suggestion_hold() -> None:
+    """A held identity suggestion waits for the operator with no pause flag set."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job("job_01JZXR7K3M5Q8N4VWA0000H08", status=JobStatus.AWAITING_REVIEW)
+    held.manual_pause = False
+    held.metadata_json = {"identity_suggestion": _SUGGESTION, "flags": {"unidentified": True}}
     db.rows["jobs"] = [held]
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
