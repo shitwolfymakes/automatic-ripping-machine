@@ -1343,6 +1343,7 @@
           "jobs"
         ],
         "summary": "List Jobs",
+        "description": "One page of jobs, newest first with a stable `id` tiebreak so a page\ndoes not shuffle between polls. The filtered total rides in the\n`X-Total-Count` header; the body stays a plain `JobView[]`.",
         "operationId": "list_jobs_api_jobs_get",
         "parameters": [
           {
@@ -1383,9 +1384,9 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 500,
+              "maximum": 200,
               "minimum": 1,
-              "default": 50,
+              "default": 48,
               "title": "Limit"
             }
           },
@@ -1428,6 +1429,14 @@
                     "$ref": "#/components/schemas/JobView"
                   },
                   "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            },
+            "headers": {
+              "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
