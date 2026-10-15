@@ -276,15 +276,15 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
 
 ## 9. Design changes for v4.2
 
-- Step 2: second row "ARM community database (CRC64)" with a `DVD` chip (D-2).
-- Step 1: CD row reads "Disc ID (track layout)" with a `CD` chip (D-5).
-- Step 2 copy ends "…and ARM confirms the title with the first online source below." (D-1).
-- Keys tab help: keys live here only; environment variables are read once at boot (D-3).
-- Trust step help names Ripping › Review as the global gate (D-10).
-- Tolerance help restores the range and the narrowing rule (D-11).
+- Step 2: second row "ARM community database (CRC64)" with a `DVD` chip (D-2). — landed in the UI PR
+- Step 1: CD row reads "Disc ID (track layout)" with a `CD` chip (D-5). — landed in the UI PR
+- Step 2 copy ends "…and ARM confirms the title with the first online source below." (D-1). — landed in the UI PR
+- Keys tab help: keys live here only; environment variables are read once at boot (D-3). — landed in the UI PR
+- Trust step help names Ripping › Review as the global gate (D-10). — landed in the UI PR
+- Tolerance help restores the range and the narrowing rule (D-11). — landed in the UI PR
 - Repo mirror `2026-10-12-identity-settings-design.md` Part 5 is updated to v4.2 strings
   ("Disc text ignored", "No sources on", "Waits for review", Preview panel) and its §9a is
-  struck.
+  struck. The mirror file is outside this tree, so that update is not part of the UI PR.
 
 ## 10. Open items
 
@@ -301,3 +301,4 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
 - Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`. PR 2b added `tvmaze` and `tvdb` to the select.
 - Automatic TVmaze matches must be close to the query (`title_is_close`: equal, whole-word containment, or 75% similar); TVmaze's single search is otherwise lenient enough to name any string. A far match is a miss. The search box is unfiltered.
 - Resolved in PR 3: TV title hits follow `episode_auto_apply` (one switch per media type, D-8); the TheDiscDB release-metadata identity goes through the same gate; accept while ripping is paused keeps the disc held until un-pause stamps a countdown. The review card's suggestion display and Accept button are the UI redesign PR's.
+- Resolved in the UI PR: the wizard step keeps its wire id "metadata" with the visible label Identification (D-9's literal setup_step rename would have changed stored progress keys); MakeMKV keeps its own step. The Playwright visual snapshots for Settings are refreshed by the owner.
