@@ -248,7 +248,7 @@ The UI tab and card land with PR 1 (fields) and PR 2 (behaviour), as #258 alread
 | `tests/test_metadata_router.py` | none | new: provider validation, default from `search_provider_*`, lookup walk with `type`, music default |
 | `tests/test_config_router.py` | existing | ranked-list and `search_provider_*` validation, re-resolve on the new lists, env-key seeding at boot |
 | `packages/arm_common/tests/test_config_metadata.py` | existing | `enum_values` come from `known_source_ids`; `setup_step` retag |
-| migration test | existing pattern | 0044 upgrade seeds per D-8; downgrade restores `metadata_provider` |
+| migration test | existing pattern | 0045 upgrade seeds per D-8; downgrade restores `metadata_provider` |
 
 All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at HTTP.
 
