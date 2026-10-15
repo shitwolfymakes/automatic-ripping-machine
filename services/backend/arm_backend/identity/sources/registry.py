@@ -5,11 +5,15 @@ accessors below: `episode_sources_setting`/`enabled_episode_source_ids`,
 `source_ranks`, `episode_tolerance`, and `episode_auto_apply`."""
 
 from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability, Source
 from arm_backend.identity.sources.bd_title import BD_TITLE
 from arm_backend.identity.sources.label_hints import LABEL
 from arm_common import Config
+
+if TYPE_CHECKING:
+    from arm_backend.metadata.sources import OnlineSource
 
 SOURCE_TIERS: dict[str, int] = {
     "manual": TIER_BY_CAPABILITY[Capability.MANUAL],
@@ -113,3 +117,62 @@ def episode_tolerance(cfg: Config | None) -> int:
 def episode_auto_apply(cfg: Config | None) -> bool:
     value = getattr(cfg, "episode_auto_apply", None)
     return EPISODE_AUTO_APPLY if value is None else bool(value)
+
+
+# ---------------------------------------------------------------------------
+# Online sources (spec §5.2). PR 2 makes `online_source_ids` read the operator's
+# `movie_sources` / `episode_sources` / `music_sources` columns; until then the
+# order is the one the dispatcher hard-coded before PR 0.
+# ---------------------------------------------------------------------------
+
+DEFAULT_ONLINE_SOURCES: dict[str, tuple[str, ...]] = {
+    "movie": ("tmdb", "omdb"),
+    "tv": ("tmdb", "omdb"),
+    "music": ("musicbrainz",),
+}
+# Step 2 fingerprint sources (PR 1 adds the `crc64service_enabled` switch).
+DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
+
+
+def online_source_ids(cfg: Config | None, media_type: str) -> tuple[str, ...]:
+    """Source ids for `media_type` in the order they are tried."""
+    return DEFAULT_ONLINE_SOURCES.get(media_type, ())
+
+
+def sources_for(
+    cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]
+) -> tuple["OnlineSource", ...]:
+    """The sources to try for `media_type`, in order: listed, present in the
+    registry, serving that media type, and configured. The only function that
+    decides online order or enablement."""
+    out: list[OnlineSource] = []
+    for sid in online_source_ids(cfg, media_type):
+        source = registry.get(sid)
+        if source is None or media_type not in source.media_types:
+            continue
+        if source.configured(cfg) is not None:
+            continue
+        out.append(source)
+    return tuple(out)
+
+
+def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
+    """The source behind the job page's search box for `media_type` (PR 1 adds
+    the `search_provider_*` columns; until then the first usable listed source)."""
+    ranked = sources_for(cfg, media_type, registry)
+    return ranked[0] if ranked else None
+
+
+def fingerprint_sources(cfg: Config | None, registry: Mapping[str, "OnlineSource"]) -> tuple["OnlineSource", ...]:
+    """Step 2 sources that answer a disc fingerprint, in order."""
+    out: list[OnlineSource] = []
+    for sid in DEFAULT_FINGERPRINT_SOURCES:
+        source = registry.get(sid)
+        if source is not None and source.configured(cfg) is None:
+            out.append(source)
+    return tuple(out)
+
+
+def known_source_ids(media_type: str, registry: Mapping[str, "OnlineSource"]) -> tuple[str, ...]:
+    """Every registered source id that serves `media_type` (validation lists)."""
+    return tuple(sid for sid, source in registry.items() if media_type in source.media_types)
