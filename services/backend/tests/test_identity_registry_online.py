@@ -44,7 +44,7 @@ def _cfg(**kw) -> Config:
 
 
 def test_default_order_matches_today():
-    assert DEFAULT_ONLINE_SOURCES == {"movie": ("tmdb", "omdb"), "tv": ("tmdb", "omdb"), "music": ("musicbrainz",)}
+    assert DEFAULT_ONLINE_SOURCES == {"movie": ("tmdb", "omdb"), "music": ("musicbrainz",)}
     assert online_source_ids(_cfg(), "movie") == ("tmdb", "omdb")
     assert online_source_ids(None, "music") == ("musicbrainz",)
     assert online_source_ids(_cfg(), "data") == ()
@@ -166,7 +166,17 @@ def test_online_source_ids_reads_the_movie_and_music_lists():
     assert online_source_ids(_cfg(movie_sources=["omdb", "tmdb"]), "movie") == ("omdb", "tmdb")
     assert online_source_ids(_cfg(movie_sources=[]), "movie") == ()
     assert online_source_ids(_cfg(music_sources=[]), "music") == ()
-    assert online_source_ids(_cfg(episode_sources=["tvmaze"]), "tv") == ("tmdb", "omdb")
+    assert online_source_ids(_cfg(episode_sources=["tvmaze", "tmdb"]), "tv") == ("tvmaze", "tmdb")
+    assert online_source_ids(_cfg(episode_sources=[]), "tv") == ()
+    assert online_source_ids(None, "tv") == ("tmdb", "tvmaze", "tvdb")
+
+
+def test_sources_for_tv_skips_ids_without_an_adapter():
+    reg = _registry(
+        FakeSource("tmdb", {"movie", "tv"}, search_title=_noop), FakeSource("omdb", {"movie", "tv"}, search_title=_noop)
+    )
+    assert [s.id for s in sources_for(_cfg(episode_sources=["tvmaze", "tvdb", "tmdb"]), "tv", reg)] == ["tmdb"]
+    assert sources_for(_cfg(episode_sources=["tvmaze"]), "tv", reg) == ()
 
 
 def test_fingerprint_sources_honours_the_switch():

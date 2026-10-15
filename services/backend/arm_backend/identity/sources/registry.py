@@ -123,14 +123,13 @@ def episode_auto_apply(cfg: Config | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Online sources (spec §5.2). PR 2 makes `online_source_ids` read the operator's
-# `movie_sources` / `episode_sources` / `music_sources` columns; until then the
-# order is the one the dispatcher hard-coded before PR 0.
+# Online sources (spec §5.2). `online_source_ids` reads the operator's
+# `movie_sources` / `episode_sources` / `music_sources` columns; the dict below
+# holds the movie and music defaults only.
 # ---------------------------------------------------------------------------
 
 DEFAULT_ONLINE_SOURCES: dict[str, tuple[str, ...]] = {
     "movie": ("tmdb", "omdb"),
-    "tv": ("tmdb", "omdb"),
     "music": ("musicbrainz",),
 }
 # Step 2 fingerprint sources (PR 1 adds the `crc64service_enabled` switch).
@@ -181,15 +180,15 @@ def crc64service_enabled(cfg: Config | None) -> bool:
 
 
 def online_source_ids(cfg: Config | None, media_type: str) -> tuple[str, ...]:
-    """Source ids for `media_type` in the order they are tried."""
+    """Source ids for `media_type` in the order they are tried: the operator's
+    ranked list per type. The TV list is the episode list (spec D-7); ids whose
+    adapter does not exist yet are dropped by `sources_for`."""
     if media_type == "movie":
         return movie_sources_setting(cfg)
+    if media_type == "tv":
+        return episode_sources_setting(cfg)
     if media_type == "music":
         return music_sources_setting(cfg)
-    if media_type == "tv":
-        # the TV title-search order reads `episode_sources` once TVmaze/TVDB can
-        # search titles (PR 2b, then PR 2)
-        return DEFAULT_ONLINE_SOURCES["tv"]
     return ()
 
 
