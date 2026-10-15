@@ -186,3 +186,17 @@ Verify each named function exists on this branch (`grep -n "def <name>" services
 - Spec §6 item 5 → Tasks 1–2; D-10 interplay and D-11 tolerance rules → Task 1 table rows; §10 label-hint note → Task 1 Advanced row; D-3 → Keys paragraph.
 - The settings table rows are the field labels on this branch; Task 3 fixes the one string that named a field by a label it does not have.
 - Review Focus 1 → FAQ text; 2 → Advanced row; 3 → Task 2 verification step; 4 → Task 1 Step 6 grep; 5 → Task 3 Step 1.
+
+---
+
+### Task 4: The Search card is independent of the Online lookup lists
+
+**Files:**
+- Modify: `services/backend/arm_backend/identity/sources/registry.py` (`search_source`, `lookup_sources` unchanged in shape)
+- Test: `services/backend/tests/test_identity_registry_online.py` (or the file that tests `search_source`), `services/backend/tests/test_metadata_router.py`
+
+**Why:** `search_source` only picks from `sources_for(cfg, media_type)`, the ranked lookup list. `episode_sources` never contains `omdb`, so `search_provider_tv = "omdb"` silently falls back to the first TV source, and a source the operator unticked under Online lookup can never serve the search box. The Search card's help ("the service behind the job page's search box") and PR 2's note ("OMDb stays selectable in the manual TV select") both promise otherwise.
+
+- [ ] **Step 1: Failing tests.** `search_source` with `search_provider_tv="omdb"`, an OMDb key saved and `episode_sources=["tmdb","tvmaze","tvdb"]` returns the `omdb` source; with `search_provider_movie="omdb"` and `movie_sources=["tmdb"]` (OMDb unticked) returns `omdb`; with the chosen provider lacking its key it falls back to the first usable listed source (existing behaviour); with a chosen provider that does not serve the type (`search_provider_tv="musicbrainz"` is impossible by validation, so use a registry stub) it falls back. Router: `GET /api/metadata/search?type=tv` with `search_provider_tv="omdb"` and `episode_sources` without omdb calls the OMDb source's `search_candidates`.
+- [ ] **Step 2: Implement.** In `search_source`: resolve `preferred = search_provider_setting(cfg, media_type)` straight from `registry` (present, `media_type in source.media_types`, `configured(cfg) is None`) and return it; otherwise fall back to `sources_for(...)[0]` with the existing debug log. `lookup_sources` already composes preferred-first from `search_source`; keep it but make sure a preferred source outside the ranked list is still placed first (it is, by construction).
+- [ ] **Step 3:** `uv run pytest services/backend/tests -q -k "registry or metadata_router or search"` then the full backend suite; ruff/ruff-format/mypy via pre-commit. Commit `fix(metadata): the search box uses the chosen provider even when it is not in the lookup list` (no trailers).
