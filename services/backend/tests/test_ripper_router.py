@@ -126,6 +126,9 @@ def _config(
     ripping_paused: bool = False,
     thediscdb_enabled: bool = False,
     disc_hint_sources: list[str] | None = None,
+    movie_auto_apply: bool = True,
+    episode_auto_apply: bool = True,
+    music_auto_apply: bool = True,
 ) -> Config:
     return Config(
         id=1,
@@ -137,6 +140,9 @@ def _config(
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
         thediscdb_enabled=thediscdb_enabled,
+        movie_auto_apply=movie_auto_apply,
+        episode_auto_apply=episode_auto_apply,
+        music_auto_apply=music_auto_apply,
         **({"disc_hint_sources": disc_hint_sources} if disc_hint_sources is not None else {}),
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
@@ -3211,3 +3217,86 @@ def test_identify_miss_title_prefers_release_then_label() -> None:
             "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
         )
     assert r2.json()["title"] == "MY_DISC"
+
+
+# --- identify: auto-apply switches off -----------------------------------------
+
+
+def _identify_with(db: FakeSession, result: MetadataResult, scan: dict[str, Any], hub: _Hub | None = None) -> Any:
+    app = _make_app(db, dispatcher=_Dispatcher(result), hub=hub)
+    with TestClient(app) as client:
+        return client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+        )
+
+
+def _suggestion_db(**cfg: Any) -> FakeSession:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(**cfg)]
+    db.rows["rip_presets"] = [_movie_preset()]
+    return db
+
+
+def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> None:
+    """movie_auto_apply off + a confident movie hit -> the hit is stored, not
+    applied; the disc parks in AWAITING_REVIEW with no countdown, keeps the
+    miss title and the unidentified flag, persists its review tracks and
+    emits rip.awaiting_review."""
+    db = _suggestion_db(movie_auto_apply=False)
+    result = MetadataResult(
+        title="Iron Man", year=2008, kind="movie", payload={"id": 1726, "poster_path": "/abc.jpg"}, provider="tmdb"
+    )
+    hub = _Hub()
+    r = _identify_with(db, result, _scan_dict(), hub)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["title"] == "MY_DISC"  # the miss title, not the hit
+    assert out.get("year") is None and out.get("media_type") is None and out.get("poster_url") is None
+    assert out["metadata_json"].get("identity") is None
+    assert out["metadata_json"]["flags"]["unidentified"] is True
+    s = out["metadata_json"]["identity_suggestion"]
+    assert (s["provider"], s["title"], s["year"], s["kind"]) == ("tmdb", "Iron Man", 2008, "movie")
+    assert s["poster_url"] == "https://image.tmdb.org/t/p/w500/abc.jpg"
+    assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    assert {t.source_ref for t in tracks} == {"1"}
+
+
+def test_identify_hold_for_review_with_auto_apply_off_has_no_countdown() -> None:
+    db = _suggestion_db(hold_for_review=True, movie_auto_apply=False)
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["identity_suggestion"]["title"] == "Iron Man"
+    tracks = {id(row) for row in db.added if type(row).__name__ == "Track"}
+    assert len(tracks) == len(_scan_dict()["titles"])  # persisted once, not twice
+
+
+def test_identify_tv_hit_follows_the_episode_switch() -> None:
+    db = _suggestion_db(episode_auto_apply=False, movie_auto_apply=True)
+    result = MetadataResult(title="Lost", year=2004, kind="tv", payload={"id": 123}, provider="tvmaze")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "awaiting_review" and out["wait_start_time"] is None
+    assert out.get("media_type") is None
+    assert out["metadata_json"]["identity_suggestion"]["kind"] == "tv"
+
+
+def test_identify_music_hit_with_auto_apply_off_keeps_disc_number_unset() -> None:
+    db = _suggestion_db(music_auto_apply=False)
+    result = MetadataResult(title="Album", year=1999, kind="music", payload={"disc": 2}, provider="musicbrainz")
+    out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert out["status"] == "awaiting_review"
+    assert out.get("disc_number") is None
+    assert out["metadata_json"]["identity_suggestion"]["payload"]["disc"] == 2
+
+
+def test_identify_switch_off_for_another_kind_still_applies_this_one() -> None:
+    db = _suggestion_db(music_auto_apply=False, episode_auto_apply=False)
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "identified" and out["title"] == "Iron Man"
+    assert out["metadata_json"].get("identity_suggestion") is None

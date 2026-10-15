@@ -83,12 +83,19 @@ class _Dispatcher:
         return self.result
 
 
-def _config(action: PreviouslyRippedAction, *, hold_for_review: bool = False, block_on_miss: bool = True) -> Config:
+def _config(
+    action: PreviouslyRippedAction,
+    *,
+    hold_for_review: bool = False,
+    block_on_miss: bool = True,
+    movie_auto_apply: bool = True,
+) -> Config:
     return Config(
         id=CONFIG_SINGLETON_ID,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=block_on_miss,
+        movie_auto_apply=movie_auto_apply,
         hold_for_review=hold_for_review,
         ripping_paused=False,
         thediscdb_enabled=False,
@@ -201,6 +208,19 @@ def test_hold_overrides_the_timed_review_and_a_missed_identify() -> None:
     out = _identify(missed, _Hub(), miss=True).json()
     assert out["status"] == "awaiting_review"
     assert out["title"] == "RESIDENT_EVIL_RETRIBUTION"
+
+
+def test_hold_still_wins_over_a_held_suggestion() -> None:
+    """on_previously_ripped=hold + auto-apply off: one AWAITING_REVIEW hold
+    carrying both the previously_ripped reason and the suggestion."""
+    db = _db(PreviouslyRippedAction.HOLD, movie_auto_apply=False)
+    out = _identify(db, _Hub()).json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["previously_ripped"]["job_id"] == _PRIOR
+    assert out["metadata_json"]["identity_suggestion"]["title"] == "Resident Evil"
+    tracks = {id(t) for t in db.added if isinstance(t, Track)}
+    assert len(tracks) == 1  # persisted once, not twice
 
 
 def test_a_failed_or_abandoned_earlier_job_is_not_a_previous_rip() -> None:

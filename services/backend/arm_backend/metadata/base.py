@@ -33,7 +33,7 @@ class MetadataResult:
     provider: str | None = None
 
 
-def _first_str(*candidates: Any) -> str | None:
+def first_str(*candidates: Any) -> str | None:
     for c in candidates:
         if isinstance(c, str) and c and c != "N/A":
             return c
@@ -49,13 +49,13 @@ def external_ids_of(result: MetadataResult) -> ExternalIds:
     the title-search candidates, so both store the same ids."""
     payload = result.payload or {}
     provider = result.provider or "unknown"
-    tmdb = _first_str(payload.get("tmdb_id"), payload.get("id") if provider == "tmdb" else None)
+    tmdb = first_str(payload.get("tmdb_id"), payload.get("id") if provider == "tmdb" else None)
     return ExternalIds(
-        imdb=_first_str(payload.get("imdb_id"), payload.get("imdbID")),
+        imdb=first_str(payload.get("imdb_id"), payload.get("imdbID")),
         tmdb=tmdb,
-        tvdb=_first_str(payload.get("tvdb_id"), payload.get("id") if provider == "tvdb" else None),
-        tvmaze=_first_str(payload.get("tvmaze_id"), payload.get("id") if provider == "tvmaze" else None),
-        musicbrainz_release=_first_str(payload.get("id") if provider == "musicbrainz" else None),
+        tvdb=first_str(payload.get("tvdb_id"), payload.get("id") if provider == "tvdb" else None),
+        tvmaze=first_str(payload.get("tvmaze_id"), payload.get("id") if provider == "tvmaze" else None),
+        musicbrainz_release=first_str(payload.get("id") if provider == "musicbrainz" else None),
         tmdb_kind=result.kind if tmdb and result.kind in ("movie", "tv") else None,
     )
 
@@ -80,7 +80,7 @@ def metadata_with_identity(
     identity = JobIdentity(
         provider=provider,
         external_ids=external,
-        overview=_first_str(payload.get("overview"), payload.get("Plot")),
+        overview=first_str(payload.get("overview"), payload.get("Plot")),
         identified_at=identified_at,
     )
     md = dict(metadata_json or {})
@@ -88,8 +88,8 @@ def metadata_with_identity(
     md["provider_raw"] = {**(md.get("provider_raw") or {}), provider: payload}
     if result.kind == "music":
         music = MusicMeta(
-            artist=_first_str(payload.get("artist")),
-            album=_first_str(payload.get("album")),
+            artist=first_str(payload.get("artist")),
+            album=first_str(payload.get("album")),
             tracks=payload.get("tracks") or [],
         )
         md["music"] = music.model_dump(mode="json", exclude_none=True)

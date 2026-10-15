@@ -17,14 +17,15 @@ from arm_backend.auto_session import after_rip, cancel_parked_applications, reso
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.metadata.base import MetadataResult, extract_poster_url, metadata_with_identity
+from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_common.disc_shape import looks_episodic
+from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
-from arm_backend.identity.sources.registry import enabled_hint_sources
+from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import (
     SOURCE_ID as THEDISCDB,
     build_claims,
@@ -38,7 +39,6 @@ from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, se
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
-    MediaType,
     DiscFingerprint,
     DiscType,
     Drive,
@@ -772,23 +772,17 @@ async def identify(
             result = None
             timed_out = True
 
-        if result is not None:
-            job.title = result.title
-            job.year = result.year
-            # G-03: keep the identified kind — it is the routing input.
-            # result.kind is a subset of MediaType's values by construction.
-            job.media_type = MediaType(result.kind)
-            job.poster_url = extract_poster_url(result)
-            # §3.4: identity + provider_raw, never a top-level payload merge.
-            job.metadata_json = metadata_with_identity(
-                job.metadata_json, result, identified_at=datetime.now(timezone.utc)
-            )
-            # A MusicBrainz medium position is this disc's number; the {disc}
-            # naming token reads the column (G-14).
-            if result.kind == "music" and job.disc_number is None:
-                raw_disc = (result.payload or {}).get("disc")
-                if isinstance(raw_disc, int) and not isinstance(raw_disc, bool):
-                    job.disc_number = raw_disc
+        release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
+        # The cleaned hint titles are search inputs only: a miss (or a held
+        # hit) is named by the disc's own BDMT name as written, else the
+        # release, else the label.
+        bdmt_name = (
+            scan.bd_meta.name.strip() if scan.bd_meta is not None and any(h.id == "bd_title" for h in hints) else ""
+        )
+        miss_title = bdmt_name or release_title or scan.volume_label
+
+        if result is not None and auto_apply_for(cfg, result.kind):
+            apply_identity_result(job, result, now=datetime.now(timezone.utc))
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
             # for operator review when hold_for_review is on, stamping the countdown
@@ -801,17 +795,27 @@ async def identify(
                 await _persist_review_tracks(session, job, scan)
             else:
                 job.status = JobStatus.IDENTIFIED
+        elif result is not None:
+            # D-10: this kind's "Apply confident matches" switch is off. Keep
+            # the hit for the operator to confirm; the disc waits with no
+            # countdown (the ripper treats a null wait_start_time as "no
+            # countdown") and stays unidentified until they accept or
+            # resolve it. The review gate's own countdown never starts here.
+            job.title = miss_title
+            job.metadata_json = suggest_identity(job.metadata_json, result, now=datetime.now(timezone.utc))
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = None
+            await _persist_review_tracks(session, job, scan)
+            logger.info(
+                "identify job_id=%s: %s hit %r held for confirmation (auto-apply off)",
+                job.id,
+                result.kind,
+                result.title,
+            )
         else:
             diagnostic: dict[str, bool] = {}
             if timed_out:
                 diagnostic["dispatch_timeout"] = True
-            release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
-            # The cleaned hint titles are search inputs only: a miss is named by
-            # the disc's own BDMT name as written, else the release, else the label.
-            bdmt_name = (
-                scan.bd_meta.name.strip() if scan.bd_meta is not None and any(h.id == "bd_title" for h in hints) else ""
-            )
-            miss_title = bdmt_name or release_title or scan.volume_label
             if cfg.block_on_miss:
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = miss_title
