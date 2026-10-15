@@ -1167,7 +1167,8 @@ async def accept_identity_suggestion(
     episode stage). The status is settled first: a held disc is released to
     rip when the review gate is off, or gets the gate's countdown when it is
     on; a pause keeps it held with no countdown until un-pause stamps one;
-    a ripped placeholder follows resolve's promote rule.
+    a ripped placeholder follows resolve's promote rule. A job also held as
+    previously ripped keeps that hold untouched (status, no countdown).
     """
     job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
@@ -1188,7 +1189,11 @@ async def accept_identity_suggestion(
     result = suggestion_to_result(suggestion)
     job.metadata_json = without_identity_suggestion(job.metadata_json)
     apply_identity_result(job, result, now=now)
-    if job.status == JobStatus.AWAITING_REVIEW:
+    if previously_ripped_job_id(job.metadata_json) is not None:
+        # The previously-ripped hold still wins: identifying the disc neither
+        # releases it nor starts a countdown; Rip again / Discard leave it.
+        pass
+    elif job.status == JobStatus.AWAITING_REVIEW:
         paused = cfg is not None and bool(cfg.ripping_paused)
         if cfg is not None and cfg.hold_for_review:
             job.wait_start_time = None if paused else now

@@ -2213,3 +2213,43 @@ def test_resolve_clears_a_held_suggestion(signing_key: bytes) -> None:
         assert r.json()["job"]["metadata_json"]["flags"].get("unidentified", False) is False
         again = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
     assert again.status_code == 409
+
+
+def test_accept_with_the_gate_on_while_paused_stays_held_with_no_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=True, ripping_paused=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["metadata_json"].get("identity_suggestion") is None
+
+
+_PRIOR_JOB_ID = "job_01JZXR7K3M5Q8N4VWA0000PR10"
+
+
+@pytest.mark.parametrize("hold_for_review", [False, True])
+def test_accept_keeps_a_previously_ripped_hold_in_place(signing_key: bytes, hold_for_review: bool) -> None:
+    """A held hit on a disc ARM already ripped: accepting identifies it but
+    neither releases it to rip nor starts a countdown; the operator still
+    leaves the previously-ripped hold via Rip again or Discard."""
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["previously_ripped"] = {"job_id": _PRIOR_JOB_ID}
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=hold_for_review, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["title"] == "Iron Man"
+    assert body["metadata_json"].get("identity_suggestion") is None
+    assert body["metadata_json"]["previously_ripped"] == {"job_id": _PRIOR_JOB_ID}

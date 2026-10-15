@@ -2160,7 +2160,7 @@
           "jobs"
         ],
         "summary": "Accept Identity Suggestion",
-        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule.",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
         "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
         "parameters": [
           {
