@@ -1145,7 +1145,25 @@ async def resolve(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
-    before_identity = _identity_snapshot(job)
+    return await resolve_identity(session, job, req, hub=hub, stage_runner=stage_runner)
+
+
+async def resolve_identity(
+    session: AsyncSession,
+    job: Job,
+    req: ResolveRequest,
+    *,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None = None,
+) -> ResolveResponse:
+    """The resolve route's body, shared with the suggestion accept route.
+
+    `before_identity` lets a caller that already changed the job's identity
+    (accept) still get the episode stage scheduled: the snapshot is taken
+    here only when the caller passes none."""
+    if before_identity is None:
+        before_identity = _identity_snapshot(job)
 
     # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
     # matching typed sections of the existing metadata_json; everything else
