@@ -87,21 +87,21 @@ export const IDENTITY_METAS: ConfigFieldMeta[] = [
 		...base,
 		key: 'movie_auto_apply',
 		label: 'Apply confident movie matches',
-		help: 'When off, a movie match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Review first still holds every disc.',
+		help: 'When off, a movie match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Hold discs for review still holds every disc.',
 		type: 'bool'
 	},
 	{
 		...base,
 		key: 'episode_auto_apply',
 		label: 'Apply confident matches',
-		help: 'When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; the disc is held with no countdown. Ripping › Review first still holds every disc.',
+		help: 'When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; the disc is held with no countdown. Ripping › Hold discs for review still holds every disc.',
 		type: 'bool'
 	},
 	{
 		...base,
 		key: 'music_auto_apply',
 		label: 'Apply confident music matches',
-		help: 'When off, an audio CD match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Review first still holds every disc.',
+		help: 'When off, an audio CD match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Hold discs for review still holds every disc.',
 		type: 'bool'
 	},
 	{
