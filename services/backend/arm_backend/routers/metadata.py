@@ -44,7 +44,7 @@ router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 # ---------------------------------------------------------------------------
 
 SearchType = Literal["movie", "tv"]
-SearchProvider = Literal["tmdb", "omdb"]
+SearchProvider = Literal["tmdb", "omdb", "tvmaze", "tvdb"]
 
 
 def _to_candidate(r: MetadataResult) -> MetadataCandidate:

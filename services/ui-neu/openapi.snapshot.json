@@ -5878,7 +5878,9 @@
                 {
                   "enum": [
                     "tmdb",
-                    "omdb"
+                    "omdb",
+                    "tvmaze",
+                    "tvdb"
                   ],
                   "type": "string"
                 },

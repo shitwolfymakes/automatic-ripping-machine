@@ -117,7 +117,7 @@ async def test_dispatcher_all_miss_returns_none():
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="NOPE")
-        result = await dispatcher.identify(scan, _config())
+        result = await dispatcher.identify(scan, _config(episode_sources=["tmdb"]))
     assert result is None
 
 
@@ -369,10 +369,12 @@ async def test_identify_tv_first_falls_back_to_movie_when_tv_misses(monkeypatch)
 
 
 @respx.mock
-async def test_identify_hint_is_tv_without_a_tv_source_falls_to_the_movie_walk():
-    """No TMDb key and OMDb is not a TV source: the TV walk is empty, so a
-    TV-shaped hint falls to the movie walk (OMDb `type=movie`). TVmaze (PR 2b)
-    fills the TV walk for keyless installs."""
+async def test_identify_hint_is_tv_tvmaze_miss_then_movie_walk():
+    """No TMDb key: the TV walk is TVmaze (keyless; a miss here), then the movie
+    walk falls to OMDb `type=movie`."""
+    tvmaze_route = respx.get("https://api.tvmaze.com/singlesearch/shows").mock(
+        return_value=httpx.Response(404, json={})
+    )
     omdb_route = respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
@@ -384,8 +386,27 @@ async def test_identify_hint_is_tv_without_a_tv_source_falls_to_the_movie_walk()
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
         result = await dispatcher.identify(scan, _config(tmdb_api_key=None), title_hint="lost", title_hint_is_tv=True)
     assert result is not None and result.title == "Lost" and result.kind == "movie"
+    assert tvmaze_route.call_count == 1
     assert omdb_route.call_count == 1
     assert omdb_route.calls.last.request.url.params["type"] == "movie"
+
+
+@respx.mock
+async def test_keyless_install_identifies_tv_through_tvmaze():
+    tvmaze_route = respx.get("https://api.tvmaze.com/singlesearch/shows").mock(
+        return_value=httpx.Response(200, json={"id": 4607, "name": "Lost", "premiered": "2004-09-22"})
+    )
+    omdb_route = respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, json={}))
+    tmdb_route = respx.get(url__startswith="https://api.themoviedb.org/").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
+        result = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None), prefer_tv=True)
+    assert result is not None and result.provider == "tvmaze" and result.title == "Lost"
+    assert tvmaze_route.call_count == 1
+    assert omdb_route.call_count == 0 and tmdb_route.call_count == 0
 
 
 @respx.mock
@@ -403,7 +424,9 @@ async def test_identify_hint_is_tv_tmdb_tv_miss_then_movie_walk():
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3")
-        result = await dispatcher.identify(scan, _config(), title_hint="lost", title_hint_is_tv=True)
+        result = await dispatcher.identify(
+            scan, _config(episode_sources=["tmdb"]), title_hint="lost", title_hint_is_tv=True
+        )
     assert result is not None and result.title == "Lost"
     assert omdb_route.call_count == 1
     assert omdb_route.calls.last.request.url.params["type"] == "movie"
@@ -681,7 +704,7 @@ async def test_omdb_skipped_when_config_key_empty():
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE")
-        result = await dispatcher.identify(scan, _config(omdb_api_key=None))
+        result = await dispatcher.identify(scan, _config(omdb_api_key=None, episode_sources=["tmdb"]))
     assert result is None
     assert omdb_route.call_count == 0
 
@@ -792,8 +815,10 @@ async def test_two_candidates_walk_kind_major_per_candidate(monkeypatch):
     assert result is not None and result.title == "Hit" and result.provider == "tmdb"
 
 
-async def test_identify_prefer_tv_omdb_only_has_no_tv_source_and_searches_movie(monkeypatch):
-    """No TMDb key: OMDb is not a TV source, so an episodic disc only asks OMDb for a movie."""
+@respx.mock
+async def test_identify_prefer_tv_omdb_only_asks_tvmaze_then_movie(monkeypatch):
+    """No TMDb key: OMDb is not a TV source, so an episodic disc asks TVmaze
+    (a miss here) for the TV walk and only then OMDb for a movie."""
     from arm_backend.metadata import sources as sources_mod
 
     kinds: list[str] = []
@@ -807,11 +832,15 @@ async def test_identify_prefer_tv_omdb_only_has_no_tv_source_and_searches_movie(
             return None
 
     monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
+    tvmaze_route = respx.get("https://api.tvmaze.com/singlesearch/shows").mock(
+        return_value=httpx.Response(404, json={})
+    )
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
         result = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key="k"), prefer_tv=True)
     assert result is None
+    assert tvmaze_route.call_count >= 1
     assert kinds == ["movie"]
 
 
@@ -819,7 +848,12 @@ async def test_identify_prefer_tv_with_no_provider_finds_nothing(monkeypatch):
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
-        assert await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None), prefer_tv=True) is None
+        assert (
+            await dispatcher.identify(
+                scan, _config(tmdb_api_key=None, omdb_api_key=None, episode_sources=["tmdb"]), prefer_tv=True
+            )
+            is None
+        )
 
 
 @respx.mock

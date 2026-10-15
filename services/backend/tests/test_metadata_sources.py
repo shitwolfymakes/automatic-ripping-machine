@@ -19,12 +19,16 @@ def _config(**overrides) -> Config:
     return Config(**base)
 
 
-async def test_registry_has_the_four_sources_with_their_media_types():
+async def test_registry_has_the_six_sources_with_their_media_types():
     async with httpx.AsyncClient() as http:
         reg = build_online_sources(http)
-    assert set(reg) == {"tmdb", "omdb", "musicbrainz", "arm_server"}
+    assert set(reg) == {"tmdb", "omdb", "tvmaze", "tvdb", "musicbrainz", "arm_server"}
     assert reg["tmdb"].media_types == frozenset({"movie", "tv"})
     assert reg["omdb"].media_types == frozenset({"movie", "tv"})
+    assert reg["tvmaze"].media_types == frozenset({"tv"})
+    assert reg["tvdb"].media_types == frozenset({"tv"})
+    assert reg["tvmaze"].requires_key is None
+    assert reg["tvdb"].requires_key == "tvdb_api_key"
     assert reg["musicbrainz"].media_types == frozenset({"music"})
     assert reg["arm_server"].media_types == frozenset()
     for sid, source in reg.items():
@@ -35,7 +39,8 @@ async def test_registry_has_the_four_sources_with_their_media_types():
 async def test_keyed_sources_report_missing_key(key):
     async with httpx.AsyncClient() as http:
         reg = build_online_sources(http)
-    cfg = _config(tmdb_api_key=key, omdb_api_key=key)
+    cfg = _config(tmdb_api_key=key, omdb_api_key=key, tvdb_api_key=key)
+    assert reg["tvdb"].configured(cfg) == "no tvdb key"
     assert reg["tmdb"].configured(cfg) == "no tmdb key"
     assert reg["omdb"].configured(cfg) == "no omdb key"
     assert reg["tmdb"].requires_key == "tmdb_api_key"
@@ -181,3 +186,66 @@ async def test_arm_server_adapter_only_answers_crc64(monkeypatch):
         assert await arm.lookup_fingerprint(_config(), "sha256", "zzz") is None
         assert (await arm.lookup_fingerprint(_config(), "crc64", "abc")).title == "C"
     assert calls == ["abc"]
+
+
+async def test_tvmaze_adapter_is_tv_only_and_delegates(monkeypatch):
+    calls: list[tuple] = []
+
+    class FakeTVMaze:
+        def __init__(self, http):
+            pass
+
+        async def search_show(self, title):
+            calls.append(("show", title))
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+        async def search_candidates(self, title, limit=10):
+            calls.append(("cands", title, limit))
+            return []
+
+        async def lookup_by_imdb_id(self, imdb_id):
+            calls.append(("imdb", imdb_id))
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+    monkeypatch.setattr(sources_mod, "TVMazeClient", FakeTVMaze)
+    async with httpx.AsyncClient() as http:
+        tvmaze = build_online_sources(http)["tvmaze"]
+        cfg = _config()
+        assert await tvmaze.search_title(cfg, "movie", "lost", None) is None
+        assert await tvmaze.search_candidates(cfg, "movie", "lost") == []
+        assert (await tvmaze.search_title(cfg, "tv", "lost", 2004)).title == "Lost"
+        assert await tvmaze.search_candidates(cfg, "tv", "lost", limit=3) == []
+        assert (await tvmaze.lookup_imdb(cfg, "tt0411008")).title == "Lost"
+    assert calls == [("show", "lost"), ("cands", "lost", 3), ("imdb", "tt0411008")]
+
+
+async def test_tvdb_adapter_is_tv_only_and_passes_the_key(monkeypatch):
+    calls: list[tuple] = []
+
+    class FakeTVDB:
+        def __init__(self, api_key, http):
+            calls.append(("init", api_key))
+
+        async def search_series(self, title):
+            calls.append(("series", title))
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+        async def search_candidates(self, title, limit=10):
+            calls.append(("cands", title, limit))
+            return []
+
+        async def lookup_by_imdb_id(self, imdb_id):
+            calls.append(("imdb", imdb_id))
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+    monkeypatch.setattr(sources_mod, "TVDBClient", FakeTVDB)
+    async with httpx.AsyncClient() as http:
+        tvdb = build_online_sources(http)["tvdb"]
+        cfg = _config(tvdb_api_key="tvdb-k")
+        assert await tvdb.search_title(cfg, "movie", "lost", None) is None
+        assert await tvdb.search_candidates(cfg, "movie", "lost") == []
+        assert (await tvdb.search_title(cfg, "tv", "lost", 2004)).title == "Lost"
+        assert await tvdb.search_candidates(cfg, "tv", "lost", limit=2) == []
+        assert (await tvdb.lookup_imdb(cfg, "tt0411008")).title == "Lost"
+    assert ("series", "lost") in calls and ("cands", "lost", 2) in calls and ("imdb", "tt0411008") in calls
+    assert all(c[1] == "tvdb-k" for c in calls if c[0] == "init")

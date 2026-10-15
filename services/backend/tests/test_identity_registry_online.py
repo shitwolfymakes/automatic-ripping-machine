@@ -118,7 +118,7 @@ def test_search_source_reads_the_search_provider_setting(caplog):
 
 
 def test_search_source_falls_back_for_a_provider_with_no_adapter_yet(caplog):
-    """A row may hold an id the registry does not know (a downgrade, a hand
+    """A row may hold an unknown id the registry does not know (a downgrade, a hand
     edit); the box falls back to the first usable ranked source."""
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
     with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):

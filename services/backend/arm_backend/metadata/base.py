@@ -53,7 +53,8 @@ def external_ids_of(result: MetadataResult) -> ExternalIds:
     return ExternalIds(
         imdb=_first_str(payload.get("imdb_id"), payload.get("imdbID")),
         tmdb=tmdb,
-        tvdb=_first_str(payload.get("tvdb_id")),
+        tvdb=_first_str(payload.get("tvdb_id"), payload.get("id") if provider == "tvdb" else None),
+        tvmaze=_first_str(payload.get("tvmaze_id"), payload.get("id") if provider == "tvmaze" else None),
         musicbrainz_release=_first_str(payload.get("id") if provider == "musicbrainz" else None),
         tmdb_kind=result.kind if tmdb and result.kind in ("movie", "tv") else None,
     )
@@ -113,6 +114,11 @@ def extract_poster_url(result: MetadataResult) -> str | None:
     omdb_poster = payload.get("Poster")
     if isinstance(omdb_poster, str) and omdb_poster.startswith("http") and omdb_poster != "N/A":
         return omdb_poster
+
+    # TVmaze / TVDB adapters (and anything else) normalise a full URL here.
+    poster_url = payload.get("poster_url")
+    if isinstance(poster_url, str) and poster_url.startswith("http"):
+        return poster_url
 
     # MusicBrainz: per-release front cover as the primary, with the album's
     # release-group id appended as `fallback_group` (the image proxy falls back

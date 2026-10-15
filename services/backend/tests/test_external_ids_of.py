@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arm_backend.metadata.base import MetadataResult, external_ids_of, metadata_with_identity
+from arm_backend.metadata.base import MetadataResult, external_ids_of, extract_poster_url, metadata_with_identity
 
 
 def test_tmdb_tv_hit_records_all_ids_and_kind() -> None:
@@ -35,3 +35,35 @@ def test_metadata_with_identity_stores_the_kind() -> None:
     hit = MetadataResult(title="X", year=2000, kind="tv", payload={"id": 1}, provider="tmdb")
     md = metadata_with_identity({}, hit, identified_at=datetime.now(timezone.utc))
     assert md["identity"]["external_ids"] == {"tmdb": "1", "tmdb_kind": "tv"}
+
+
+def test_external_ids_of_reads_tvmaze_and_tvdb_provider_ids() -> None:
+    tvmaze = MetadataResult(
+        title="Lost",
+        year=2004,
+        kind="tv",
+        provider="tvmaze",
+        payload={"id": 4607, "imdb_id": "tt0411008", "tvdb_id": "73739"},
+    )
+    ids = external_ids_of(tvmaze)
+    assert (ids.tvmaze, ids.imdb, ids.tvdb, ids.tmdb) == ("4607", "tt0411008", "73739", None)
+    tvdb = MetadataResult(title="Lost", year=2004, kind="tv", provider="tvdb", payload={"id": 73739})
+    assert external_ids_of(tvdb).tvdb == "73739"
+    explicit = MetadataResult(
+        title="X", year=None, kind="tv", provider="omdb", payload={"tvmaze_id": "9", "tvdb_id": "8"}
+    )
+    assert (external_ids_of(explicit).tvmaze, external_ids_of(explicit).tvdb) == ("9", "8")
+    empty = MetadataResult(title="X", year=None, kind="tv", provider="tvmaze", payload={})
+    assert external_ids_of(empty).tvmaze is None
+
+
+def test_extract_poster_url_accepts_a_generic_poster_url() -> None:
+    url = MetadataResult(title="X", year=None, kind="tv", payload={"poster_url": "https://img/x.jpg"})
+    assert extract_poster_url(url) == "https://img/x.jpg"
+    bad = MetadataResult(title="X", year=None, kind="tv", payload={"poster_url": "not a url"})
+    assert extract_poster_url(bad) is None
+    both = MetadataResult(
+        title="X", year=None, kind="tv", payload={"poster_path": "/a.jpg", "poster_url": "https://img/x.jpg"}
+    )
+    poster = extract_poster_url(both)
+    assert poster is not None and poster.endswith("/a.jpg")

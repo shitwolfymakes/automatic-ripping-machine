@@ -307,7 +307,7 @@ def test_tv_search_falls_back_when_the_tv_provider_has_no_adapter(signing_key: b
         )
     )
     db = FakeSession()
-    _seed(db, tmdb_api_key="k", search_provider_tv="tvmaze")
+    _seed(db, tmdb_api_key="k", search_provider_tv="bogus")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
@@ -696,8 +696,9 @@ def test_search_provider_literal_matches_registry() -> None:
     from arm_backend.identity.sources.registry import known_source_ids
 
     reg = build_online_sources(httpx.AsyncClient())
-    assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("movie", reg))
-    assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("tv", reg))
+    assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("movie", reg)) | set(
+        known_source_ids("tv", reg)
+    )
 
 
 def test_key_check_map_matches_registry_requires_key() -> None:

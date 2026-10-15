@@ -8928,7 +8928,7 @@ export type SearchMetadataApiMetadataSearchGetData = {
         /**
          * Provider
          */
-        provider?: 'tmdb' | 'omdb' | null;
+        provider?: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb' | null;
     };
     url: '/api/metadata/search';
 };

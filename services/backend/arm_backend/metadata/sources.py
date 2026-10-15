@@ -18,6 +18,8 @@ from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
 from arm_backend.metadata.tmdb import TMDBClient
+from arm_backend.metadata.tvdb import TVDBClient
+from arm_backend.metadata.tvmaze import TVMazeClient
 
 Kind = Literal["movie", "tv"]
 
@@ -112,6 +114,70 @@ class OmdbSource:
         return await self._client(cfg).lookup_by_imdb_id(imdb_id)
 
 
+class TvmazeSource:
+    """TVmaze: keyless TV title search, candidates and IMDb lookup."""
+
+    id = "tvmaze"
+    media_types = frozenset({"tv"})
+    requires_key: str | None = None
+
+    def __init__(self, http: httpx.AsyncClient) -> None:
+        self._http = http
+
+    def configured(self, cfg: Config | None) -> str | None:
+        return None
+
+    async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
+        if kind != "tv":
+            return None
+        return await TVMazeClient(self._http).search_show(title)
+
+    async def search_candidates(
+        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10
+    ) -> list[MetadataResult]:
+        if kind != "tv":
+            return []
+        return await TVMazeClient(self._http).search_candidates(title, limit=limit)
+
+    async def lookup_imdb(self, cfg: Config | None, imdb_id: str) -> MetadataResult | None:
+        return await TVMazeClient(self._http).lookup_by_imdb_id(imdb_id)
+
+
+class TvdbSource:
+    """TVDB v4: keyed TV title search, candidates and IMDb lookup."""
+
+    id = "tvdb"
+    media_types = frozenset({"tv"})
+    requires_key: str | None = "tvdb_api_key"
+
+    def __init__(self, http: httpx.AsyncClient) -> None:
+        self._http = http
+
+    def _key(self, cfg: Config | None) -> str:
+        return (getattr(cfg, "tvdb_api_key", None) or "").strip()
+
+    def configured(self, cfg: Config | None) -> str | None:
+        return "no tvdb key" if not self._key(cfg) else None
+
+    def _client(self, cfg: Config | None) -> TVDBClient:
+        return TVDBClient(self._key(cfg), self._http)
+
+    async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
+        if kind != "tv":
+            return None
+        return await self._client(cfg).search_series(title)
+
+    async def search_candidates(
+        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10
+    ) -> list[MetadataResult]:
+        if kind != "tv":
+            return []
+        return await self._client(cfg).search_candidates(title, limit=limit)
+
+    async def lookup_imdb(self, cfg: Config | None, imdb_id: str) -> MetadataResult | None:
+        return await self._client(cfg).lookup_by_imdb_id(imdb_id)
+
+
 class MusicBrainzSource:
     id = "musicbrainz"
     media_types = frozenset({"music"})
@@ -177,6 +243,8 @@ def build_online_sources(http: httpx.AsyncClient) -> dict[str, OnlineSource]:
     sources: list[OnlineSource] = [
         TmdbSource(http),
         OmdbSource(http),
+        TvmazeSource(http),
+        TvdbSource(http),
         MusicBrainzSource(http),
         ArmServerSource(http),
     ]
