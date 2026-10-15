@@ -87,6 +87,17 @@ def test_search_no_key_returns_400(signing_key: bytes) -> None:
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "x", "type": "movie"}, headers=_auth(token))
     assert r.status_code == 400
+    assert r.json()["detail"] == "no tmdb key configured"
+
+
+def test_search_no_key_names_chosen_provider(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db, metadata_provider="omdb", tmdb_api_key=None, omdb_api_key=None)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "x"}, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "no omdb key configured"
 
 
 @respx.mock
@@ -240,15 +251,15 @@ def test_search_omdb_provider_returns_candidates(signing_key: bytes) -> None:
 
 
 def test_lookup_imdb_no_omdb_key_returns_400(signing_key: bytes) -> None:
-    """imdb_id path with no key for any listed source → 400 naming the first
-    listed source (tmdb), whatever metadata_provider says."""
+    """imdb_id path with no key for any listed source → 400 naming the
+    provider the operator chose (omdb)."""
     db = FakeSession()
     _seed(db, metadata_provider="omdb", omdb_api_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
     assert r.status_code == 400
-    assert r.json()["detail"] == "no tmdb key configured"
+    assert r.json()["detail"] == "no omdb key configured"
 
 
 @respx.mock

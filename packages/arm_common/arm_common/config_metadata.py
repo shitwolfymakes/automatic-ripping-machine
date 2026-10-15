@@ -163,7 +163,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
     # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
     # an OpenAPI change), but the value is no longer read: the backend hardcodes
-    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.dispatcher).
+    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.sources).
     # See tests/test_config_metadata.py::_DORMANT_EDITABLE_FIELDS.
     # --- Ripping ---
     ConfigFieldMeta(

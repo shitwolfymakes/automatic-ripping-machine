@@ -169,6 +169,18 @@ def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "O
     return ranked[0] if ranked else None
 
 
+def lookup_sources(
+    cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]
+) -> tuple["OnlineSource", ...]:
+    """`sources_for` with the Search card's preferred source first (spec: the
+    operator's chosen provider answers an exact-id lookup before the rest)."""
+    ranked = sources_for(cfg, media_type, registry)
+    preferred = search_source(cfg, media_type, registry)
+    if preferred is None:
+        return ranked
+    return (preferred, *(s for s in ranked if s is not preferred))
+
+
 def fingerprint_sources(cfg: Config | None, registry: Mapping[str, "OnlineSource"]) -> tuple["OnlineSource", ...]:
     """Step 2 sources that answer a disc fingerprint, in order."""
     out: list[OnlineSource] = []

@@ -10,6 +10,7 @@ from arm_backend.identity.sources.registry import (  # noqa: E402
     DEFAULT_ONLINE_SOURCES,
     fingerprint_sources,
     known_source_ids,
+    lookup_sources,
     online_source_ids,
     search_source,
     sources_for,
@@ -113,3 +114,11 @@ def test_search_source_honours_legacy_metadata_provider():
     reg["omdb"]._reason = None
     assert search_source(_cfg(metadata_provider="omdb"), "music", reg).id == "musicbrainz"
     assert search_source(_cfg(metadata_provider="bogus"), "movie", reg).id == "tmdb"
+
+
+def test_lookup_sources_puts_preferred_first():
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
+    assert [s.id for s in lookup_sources(_cfg(metadata_provider="omdb"), "movie", reg)] == ["omdb", "tmdb"]
+    assert [s.id for s in lookup_sources(_cfg(), "movie", reg)] == ["tmdb", "omdb"]
+    reg["omdb"]._reason = "no omdb key"
+    assert [s.id for s in lookup_sources(_cfg(metadata_provider="omdb"), "movie", reg)] == ["tmdb"]

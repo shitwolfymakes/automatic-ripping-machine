@@ -365,7 +365,7 @@ Two layers of defense against overlapping writes to the same output path:
 
 #### Online sources
 
-Every online title lookup goes through one registry (`arm_backend/metadata/sources.py`, accessors in `arm_backend/identity/sources/registry.py`). An adapter per provider (`tmdb`, `omdb`, `musicbrainz`, `arm_server`) wraps the HTTP client and reports whether it is configured; `sources_for(cfg, media_type, registry)` is the only function that decides which sources run and in which order. The dispatcher walks that list per kind (movie or TV, in the order the disc shape suggests), the job page's search and IMDb lookup routes read the same list, and `MetadataResult.provider` is always the source id. The order is a built-in default until the Identification settings (spec `2026-10-14-identification-sources-design.md`) make it operator-configurable.
+Every online title lookup goes through one registry (`arm_backend/metadata/sources.py`, accessors in `arm_backend/identity/sources/registry.py`). An adapter per provider (`tmdb`, `omdb`, `musicbrainz`, `arm_server`) wraps the HTTP client and reports whether it is configured; `sources_for(cfg, media_type, registry)` is the only function that decides which sources run and in which order, with `lookup_sources` and `search_source` as its two thin views. The dispatcher walks that list per kind (movie or TV, in the order the disc shape suggests), the job page's search and IMDb lookup routes read the same list, and `MetadataResult.provider` is always the source id. The order is a built-in default until the Identification settings (spec `2026-10-14-identification-sources-design.md`) make it operator-configurable.
 
 ### Unidentified and placeholder rips
 

@@ -13,7 +13,13 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
-from arm_backend.identity.sources.registry import fingerprint_sources, online_source_ids, search_source, sources_for
+from arm_backend.identity.sources.registry import (
+    fingerprint_sources,
+    known_source_ids,
+    lookup_sources,
+    online_source_ids,
+    search_source,
+)
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, external_ids_of, extract_poster_url
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
@@ -72,6 +78,15 @@ async def _config(db: AsyncSession) -> Config:
     return cfg
 
 
+def _preferred_id(cfg: Config | None, media_type: str, registry: Mapping[str, OnlineSource]) -> str:
+    """The provider a "no key configured" error names: the operator's chosen
+    one, else the first listed source, else tmdb."""
+    chosen = getattr(cfg, "metadata_provider", None)
+    if chosen in known_source_ids(media_type, registry):
+        return str(chosen)
+    return next(iter(online_source_ids(cfg, media_type)), "tmdb")
+
+
 @router.get("/search", response_model=MetadataSearchResponse)
 async def search_metadata(
     request: Request,
@@ -90,8 +105,8 @@ async def search_metadata(
     else:
         source = search_source(cfg, type, registry)
         if source is None:
-            first = next(iter(online_source_ids(cfg, type)), "tmdb")
-            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {first} key configured")
+            name = _preferred_id(cfg, type, registry)
+            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {name} key configured")
     search = capability(source, "search_candidates")
     if search is None:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"{source.id} cannot search titles")
@@ -123,17 +138,13 @@ async def lookup_metadata(
     try:
         if imdb_id is not None:
             cfg = await _config(db)
-            ranked = [s for s in sources_for(cfg, "movie", registry) if capability(s, "lookup_imdb")]
-            preferred = search_source(cfg, "movie", registry)
-            if preferred in ranked:
-                ranked.remove(preferred)
-                ranked.insert(0, preferred)
+            ranked = [(s, fn) for s in lookup_sources(cfg, "movie", registry) if (fn := capability(s, "lookup_imdb"))]
             if not ranked:
-                first = next(iter(online_source_ids(cfg, "movie")), "tmdb")
-                raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {first} key configured")
+                name = _preferred_id(cfg, "movie", registry)
+                raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {name} key configured")
             result = None
-            for source in ranked:
-                result = await capability(source, "lookup_imdb")(cfg, imdb_id)  # type: ignore[misc]
+            for source, imdb_lookup in ranked:
+                result = await imdb_lookup(cfg, imdb_id)
                 if result is not None:
                     result.provider = source.id
                     break

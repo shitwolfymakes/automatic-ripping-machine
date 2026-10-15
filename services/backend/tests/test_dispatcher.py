@@ -629,6 +629,47 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
     assert len(calls) == 2 and calls[1].startswith("tv:")
 
 
+async def test_two_candidates_walk_kind_major_per_candidate(monkeypatch):
+    """Per candidate, each kind asks every source before the next kind; the
+    second candidate starts only after the first is exhausted."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
+    from arm_backend.metadata import sources as sources_mod
+    from arm_backend.metadata.base import MetadataResult
+
+    calls: list[str] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def search_movie(self, title, year):
+            calls.append(f"tmdb:movie:{title}")
+
+        async def search_tv(self, title):
+            calls.append(f"tmdb:tv:{title}")
+
+    class FakeOMDB:
+        def __init__(self, api_key, http):
+            pass
+
+        async def lookup_by_title(self, title, year, kind):
+            calls.append(f"omdb:{kind}:{title}")
+            if kind == "tv" and title == "BETA":
+                return MetadataResult(title="Hit", year=None, kind="tv")
+
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
+    async with httpx.AsyncClient() as client:
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="BETA")
+        result = await MetadataDispatcher(client).identify(scan, _config(), title_hint="alpha")
+    assert calls == [
+        "tmdb:movie:alpha", "omdb:movie:alpha", "tmdb:tv:alpha", "omdb:tv:alpha",
+        "tmdb:movie:BETA", "omdb:movie:BETA", "tmdb:tv:BETA", "omdb:tv:BETA",
+    ]  # fmt: skip
+    assert result is not None and result.title == "Hit" and result.provider == "omdb"
+
+
 async def test_identify_prefer_tv_omdb_only_searches_series_then_movie(monkeypatch):
     """No TMDb key: an episodic disc asks OMDb for a series before a movie."""
     from arm_backend.metadata import sources as sources_mod
