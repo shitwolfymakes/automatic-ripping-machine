@@ -188,7 +188,7 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 | `routers/config.py` | literal validation | each ranked list and each `search_provider_*` validated against `known_source_ids`; the #219 re-resolve hook fires for `movie_sources` and `music_sources` too |
 | UI `RankedListField` chips | `#Metadata/{key}` | `keyTab` resolves across groups so chips link to `#Keys/{key}` (the #258 comment on #220) |
 
-### 5.4 Data model (migration 0044)
+### 5.4 Data model (migration 0045)
 
 | Column | Type | Default | Seeded from |
 |---|---|---|---|
@@ -228,7 +228,7 @@ retagged `setup_step="identification"` (D-9).
    registry (`search_source` maps `metadata_provider` until PR 1 replaces it),
    `_PROVIDER_BY_LABEL_PREFIX` removed. Closes S-8.
 1. **PR 1 · Model and metadata**, as in #258, plus `crc64service_enabled`
-   (D-2, D-7, D-8, D-9). Migration 0044. OpenAPI snapshot and TS types regenerated.
+   (D-2, D-7, D-8, D-9). Migration 0045. OpenAPI snapshot and TS types regenerated.
 2. **PR 2 · Read the columns.** `sources_for` reads the rows; exact-id walk (D-1); label
    gate (D-4); CRC64 gate (D-2); CD walk (D-5); re-resolve hook on the new lists. Closes #287.
 3. **PR 2b · Series search.** `search_show` on the TVmaze and TVDB adapters;
@@ -297,3 +297,8 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   list is `episode_sources` (`tmdb, tvmaze, tvdb`), which has no OMDb row. PR 2 must either
   add `omdb` as a TV source in that list's `enum_values` or accept that OMDb series search is
   dropped; decide before PR 2.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, tvmaze, tvdb` (no OMDb row, matching the
+  v4.2 TV list); a choice with no adapter yet falls back to the first usable ranked source with an
+  INFO log until PR 2b lands. Consequence for PR 2: once the dispatcher's TV order reads
+  `episode_sources`, OMDb series search is gone, so PR 2b (keyless TVmaze title search) must land
+  before PR 2, or an OMDb-only install loses TV title search.
