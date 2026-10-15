@@ -84,7 +84,7 @@ def test_enum_requires_names_real_secret_keys() -> None:
 def test_identity_settings_meta() -> None:
     by_key = {m.key: m for m in CONFIG_FIELD_META}
     eps = by_key["episode_sources"]
-    assert (eps.group, eps.tier, eps.type, eps.editable) == ("Metadata", "operator", "ranked", True)
+    assert (eps.group, eps.tier, eps.type, eps.editable) == ("Identification", "operator", "ranked", True)
     assert eps.enum_values == ["tmdb", "tvmaze", "tvdb"]
     assert eps.enum_labels == {"tmdb": "TMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"}
     assert eps.enum_requires == {"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}
@@ -95,7 +95,7 @@ def test_identity_settings_meta() -> None:
     assert by_key["episode_match_tolerance_seconds"].type == "int"
     assert by_key["episode_auto_apply"].type == "bool"
     movies = by_key["movie_sources"]
-    assert (movies.group, movies.tier, movies.type, movies.editable) == ("Metadata", "operator", "ranked", True)
+    assert (movies.group, movies.tier, movies.type, movies.editable) == ("Identification", "operator", "ranked", True)
     assert movies.enum_values == ["tmdb", "omdb"]
     assert movies.enum_labels == {"tmdb": "TMDb", "omdb": "OMDb"}
     assert movies.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"}
@@ -117,7 +117,7 @@ def test_identity_settings_meta() -> None:
     ):
         meta = by_key[key]
         # setup_step mirrors the movie_sources entry, which carries none.
-        assert (meta.type, meta.group, meta.editable, meta.setup_step) == ("bool", "Metadata", True, None)
+        assert (meta.type, meta.group, meta.editable, meta.setup_step) == ("bool", "Identification", True, None)
         assert meta.setup_step == by_key["movie_sources"].setup_step
         assert meta.label == label
         assert "Review first" in meta.help
@@ -193,7 +193,7 @@ def test_setup_step_tagging_matches_spec() -> None:
         return [m.key for m in sorted(tagged, key=lambda m: m.setup_order or 0)]
 
     assert keys("makemkv") == ["makemkv_key", "community_keydb_enabled", "makemkv_sdf_enabled"]
-    assert keys("metadata") == ["tmdb_api_key", "omdb_api_key", "tvdb_api_key", "thediscdb_enabled"]
+    assert keys("metadata") == ["tmdb_api_key", "omdb_api_key", "tvdb_api_key"]
     assert keys("discs") == ["auto_rip_on_insert", "on_previously_ripped"]
     assert keys("transcoding") == ["transcode_enabled", "max_parallel_transcodes"]
 
@@ -229,3 +229,26 @@ def test_setup_step_order() -> None:
         "notifications",
         "finish",
     ]
+
+
+def test_groups_split_identification_and_keys() -> None:
+    by_key = {m.key: m for m in CONFIG_FIELD_META}
+    keys = {"tmdb_api_key", "omdb_api_key", "tvdb_api_key", "makemkv_key", "thediscdb_refresh_days"}
+    identification = {
+        "search_provider_movie",
+        "search_provider_tv",
+        "search_provider_music",
+        "thediscdb_enabled",
+        "crc64service_enabled",
+        "movie_sources",
+        "episode_sources",
+        "music_sources",
+        "episode_match_tolerance_seconds",
+        "movie_auto_apply",
+        "episode_auto_apply",
+        "music_auto_apply",
+        "disc_hint_sources",
+    }
+    assert {k for k, m in by_key.items() if m.group == "Keys"} == keys
+    assert {k for k, m in by_key.items() if m.group == "Identification"} == identification
+    assert not any(m.group == "Metadata" for m in CONFIG_FIELD_META)
