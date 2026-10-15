@@ -174,6 +174,19 @@ def music_auto_apply(cfg: Config | None) -> bool:
     return True if value is None else bool(value)
 
 
+def auto_apply_for(cfg: Config | None, kind: str) -> bool:
+    """Whether a confident match of this kind is applied by identify (spec
+    D-10: one switch per media type; TV shares the episode switch). An
+    unknown kind applies: identify never holds a hit it cannot classify."""
+    if kind == "movie":
+        return movie_auto_apply(cfg)
+    if kind == "tv":
+        return episode_auto_apply(cfg)
+    if kind == "music":
+        return music_auto_apply(cfg)
+    return True
+
+
 def crc64service_enabled(cfg: Config | None) -> bool:
     value = getattr(cfg, "crc64service_enabled", None)
     return True if value is None else bool(value)

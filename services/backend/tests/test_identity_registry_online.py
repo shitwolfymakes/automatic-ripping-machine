@@ -197,3 +197,17 @@ def test_online_source_values_match_the_field_metadata():
     assert tuple(meta["search_provider_tv"].enum_values) == ONLINE_SOURCE_VALUES["tv"]
     assert tuple(meta["music_sources"].enum_values) == ONLINE_SOURCE_VALUES["music"]
     assert tuple(meta["search_provider_music"].enum_values) == ONLINE_SOURCE_VALUES["music"]
+
+
+def test_auto_apply_for_maps_each_kind_to_its_switch() -> None:
+    from arm_backend.identity.sources.registry import auto_apply_for
+
+    cfg = Config(id=1, movie_auto_apply=False, episode_auto_apply=True, music_auto_apply=False)
+    assert auto_apply_for(cfg, "movie") is False
+    assert auto_apply_for(cfg, "tv") is True
+    assert auto_apply_for(cfg, "music") is False
+    cfg.episode_auto_apply = False
+    assert auto_apply_for(cfg, "tv") is False
+    # Unknown kinds and a missing row apply (identify never holds what it cannot name).
+    assert auto_apply_for(cfg, "weird") is True
+    assert auto_apply_for(None, "movie") is True
