@@ -4,7 +4,7 @@
 	import SetupConfigFields from '../SetupConfigFields.svelte';
 	import type { StepCommitResult } from '../steps';
 
-	// Step 5 (optional): title lookup keys, tested in place (setup spec §5.6).
+	// Step 5 (optional): identification keys, tested in place (setup spec §5.6).
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 	let fields: SetupConfigFields | undefined = $state();
@@ -12,9 +12,7 @@
 	// Built-in services that need nothing from the operator: static facts, not settings.
 	const KEYLESS = [
 		{ name: 'TVmaze', what: 'TV episode lookup' },
-		{ name: 'MusicBrainz', what: 'Music CDs' },
-		{ name: 'ARM disc database', what: 'Disc fingerprints from other ARM users' },
-		{ name: 'TheDiscDB', what: 'Disc maps that label titles and pick the main feature' }
+		{ name: 'MusicBrainz', what: 'Music CDs' }
 	];
 
 	export async function commit(): Promise<StepCommitResult> {
@@ -28,7 +26,7 @@
 
 	<section class="panel stack">
 		<h2 class="metadata-step-title">Already working</h2>
-		<p class="metadata-step-help">TV episode lookup, music CDs and disc matching work without any key.</p>
+		<p class="metadata-step-help">TV episode lookup and music CDs work without any key.</p>
 		<ul class="metadata-step-keyless">
 			{#each KEYLESS as k (k.name)}
 				<li class="list-row list-row-compact metadata-step-row">
@@ -41,8 +39,8 @@
 	</section>
 
 	<p class="metadata-step-help">
-		<Glyph name="info" class="inline h-4 w-4" /> If you skip this step, ARM names files from the disc label and you'll confirm
-		titles by hand.
+		<Glyph name="info" class="inline h-4 w-4" /> If you skip this step, ARM still identifies discs with TVmaze and MusicBrainz,
+		which need no key, and you confirm the rest by hand.
 	</p>
 </div>
 

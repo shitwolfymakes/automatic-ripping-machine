@@ -17,6 +17,15 @@ describe('setup step registry', () => {
 		expect(STEPS.filter((s) => s.optional).map((s) => s.id)).toEqual(['metadata', 'transcoding', 'notifications']);
 	});
 
+	it('names the metadata step Identification', () => {
+		const m = stepMeta('metadata')!;
+		expect(m.label).toBe('Identification');
+		expect(m.title).toBe('Identification');
+		expect(m.intro).toBe(
+			'ARM looks up what is on each disc so your files get the right names. TVmaze and MusicBrainz need no key; the others do.'
+		);
+	});
+
 	it('walks forward and back', () => {
 		expect(nextStep('account')).toBe('system');
 		expect(nextStep('finish')).toBeNull();

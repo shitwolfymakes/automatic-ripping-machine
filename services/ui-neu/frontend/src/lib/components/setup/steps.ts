@@ -50,9 +50,10 @@ export const STEPS: StepMeta[] = [
 	},
 	{
 		id: 'metadata',
-		label: 'Find titles',
-		title: 'Find titles',
-		intro: 'ARM looks up what is on each disc so your files get the right names.',
+		label: 'Identification',
+		title: 'Identification',
+		intro:
+			'ARM looks up what is on each disc so your files get the right names. TVmaze and MusicBrainz need no key; the others do.',
 		optional: true,
 		saveHint: 'continue'
 	},
