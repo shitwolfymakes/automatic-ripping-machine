@@ -2154,6 +2154,66 @@
         }
       }
     },
+    "/api/jobs/{job_id}/identity/accept": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Accept Identity Suggestion",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule.",
+        "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{job_id}/transcode": {
       "post": {
         "tags": [
@@ -13216,6 +13276,83 @@
         "type": "object",
         "title": "IdentityClaims"
       },
+      "IdentitySuggestion": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "movie",
+              "tv",
+              "music"
+            ],
+            "title": "Kind"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/ExternalIds"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "suggested_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Suggested At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provider",
+          "title",
+          "kind",
+          "suggested_at"
+        ],
+        "title": "IdentitySuggestion",
+        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off (identification-sources\nspec D-10). The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+      },
       "IdentityView": {
         "properties": {
           "sources": {
@@ -14024,6 +14161,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PreviouslyRipped"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity_suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentitySuggestion"
               },
               {
                 "type": "null"

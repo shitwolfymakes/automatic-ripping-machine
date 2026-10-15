@@ -26,6 +26,7 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.path_template import TemplateValidationError  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
 from arm_common import (  # noqa: E402
+    Config,
     DiscFingerprint,
     DiscType,
     Drive,
@@ -42,6 +43,7 @@ from arm_common import (  # noqa: E402
 )
 from arm_common.enums import TrackKind, TrackRole  # noqa: E402
 from arm_common.models import Track  # noqa: E402
+from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -109,7 +111,8 @@ _SUGGESTION = {
     "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
     "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
     "overview": "Tony Stark.",
-    "payload": {"id": 1726, "poster_path": "/abc.jpg"},
+    # A real hit carries its ids in the payload; accept re-derives them from it.
+    "payload": {"id": 1726, "imdb_id": "tt0371746", "poster_path": "/abc.jpg"},
     "suggested_at": "2026-10-15T10:00:00Z",
 }
 
@@ -2028,3 +2031,185 @@ def test_patch_switches_media_type_and_reschedules_matching(signing_key: bytes) 
     assert r.json()["media_type"] == "tv"
     assert r.json()["metadata_json"]["identity"]["external_ids"]["tmdb"] == "1749913"  # ids kept
     assert runner.scheduled == [job.id]
+
+
+def _suggested_job(status: JobStatus = JobStatus.AWAITING_REVIEW) -> Job:
+    job = _job(status=status)
+    job.title = "MY_DISC"
+    job.year = None
+    job.media_type = None
+    job.wait_start_time = None
+    job.metadata_json = {"identity_suggestion": dict(_SUGGESTION), "flags": {"unidentified": True}}
+    return job
+
+
+def test_accept_applies_the_suggestion_and_releases_the_rip_when_the_gate_is_off(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "identified"
+    assert (body["title"], body["year"], body["media_type"]) == ("Iron Man", 2008, "movie")
+    assert body["poster_url"] == "https://image.tmdb.org/t/p/w500/abc.jpg"
+    assert body["metadata_json"]["identity"]["provider"] == "tmdb"
+    assert body["metadata_json"]["identity"]["external_ids"]["imdb"] == "tt0371746"
+    assert body["metadata_json"]["provider_raw"]["tmdb"]["id"] == 1726
+    assert body["metadata_json"].get("identity_suggestion") is None
+    assert body["metadata_json"]["flags"].get("unidentified", False) is False
+    assert any(e["event_type"] == "identify.resolved" for e in hub.events)
+
+
+def test_accept_with_the_review_gate_on_keeps_the_hold_and_starts_the_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=True, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is not None
+    assert body["title"] == "Iron Man"
+
+
+def test_accept_while_ripping_is_paused_stays_held_with_no_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["metadata_json"].get("identity_suggestion") is None
+
+
+def test_accept_on_a_ripped_placeholder_promotes_to_ripped(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job(JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["status"] == "ripped"
+    assert r.json()["job"]["title"] == "Iron Man"
+
+
+def test_accept_music_suggestion_sets_the_disc_number(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["identity_suggestion"].update(
+        {"provider": "musicbrainz", "kind": "music", "title": "Album", "year": 1999, "payload": {"disc": 2}}
+    )
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.json()["job"]["disc_number"] == 2
+
+
+def test_accept_409_without_a_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 409
+    assert "no identity suggestion" in r.json()["detail"]
+
+
+def test_accept_409_in_a_non_resolvable_status(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job(JobStatus.RIPPING)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 409
+    assert job.title == "MY_DISC"
+
+
+def test_accept_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/identity/accept", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_accept_requires_a_writer(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    app, _ = _make_app(signing_key, db)
+    db.rows["users"].append(
+        User(id="usr_guest", username="guest", password_hash="x", password_must_change=False, role=GUEST_ROLE)
+    )
+    guest_token, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(guest_token))
+    assert r.status_code == 403
+    # Nothing was applied: the job keeps its miss title, hold and suggestion.
+    assert (job.title, job.status) == ("MY_DISC", JobStatus.AWAITING_REVIEW)
+    assert "identity_suggestion" in job.metadata_json
+
+
+def test_accept_schedules_the_episode_stage_for_a_tv_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["identity_suggestion"].update(
+        {
+            "provider": "tvmaze",
+            "kind": "tv",
+            "title": "Some Show",
+            "year": 2010,
+            "external_ids": {"tvmaze": "123"},
+            "payload": {"id": 123},
+        }
+    )
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert (body["title"], body["media_type"]) == ("Some Show", "tv")
+    assert body["metadata_json"]["identity"]["external_ids"]["tvmaze"] == "123"
+    assert stage_runner.scheduled == [job.id]
+
+
+def test_resolve_clears_a_held_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{job.id}/resolve", json={"title": "Something Else", "year": 2001}, headers=_auth(token)
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["job"]["metadata_json"].get("identity_suggestion") is None
+        assert r.json()["job"]["metadata_json"]["flags"].get("unidentified", False) is False
+        again = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert again.status_code == 409

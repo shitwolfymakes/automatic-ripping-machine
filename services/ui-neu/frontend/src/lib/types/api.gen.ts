@@ -1955,6 +1955,55 @@ export type IdentityClaims = {
 };
 
 /**
+ * IdentitySuggestion
+ *
+ * A confident online match identify did not apply because the media
+ * type's "Apply confident matches" switch is off (identification-sources
+ * spec D-10). The job keeps its miss title and the `unidentified` flag and
+ * waits in AWAITING_REVIEW with no countdown until the operator accepts
+ * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
+ * way (any resolve clears this section).
+ */
+export type IdentitySuggestion = {
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Kind
+     */
+    kind: 'movie' | 'tv' | 'music';
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    external_ids?: ExternalIds;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Payload
+     */
+    payload?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Suggested At
+     */
+    suggested_at: string;
+    [key: string]: unknown;
+};
+
+/**
  * IdentityView
  *
  * `GET /api/jobs/{id}/identity` response.
@@ -2391,6 +2440,7 @@ export type JobMetadata = {
     } | null;
     flags?: JobFlags;
     previously_ripped?: PreviouslyRipped | null;
+    identity_suggestion?: IdentitySuggestion | null;
     /**
      * Provider Raw
      */
@@ -6752,6 +6802,42 @@ export type ResolveApiJobsJobIdResolvePostResponses = {
 };
 
 export type ResolveApiJobsJobIdResolvePostResponse = ResolveApiJobsJobIdResolvePostResponses[keyof ResolveApiJobsJobIdResolvePostResponses];
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/accept';
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostError = AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors[keyof AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors];
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ResolveResponse;
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponse = AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses[keyof AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses];
 
 export type ApplySessionApiJobsJobIdTranscodePostData = {
     body: ApplySessionRequest;

@@ -19,6 +19,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import (
@@ -29,6 +30,7 @@ from arm_backend.identity.proposals import (
 )
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.job_abandon import abandon_job_transition
+from arm_backend.metadata.base import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -91,6 +93,7 @@ from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
+    without_identity_suggestion,
 )
 from arm_common.ulid import is_valid_id
 
@@ -1148,6 +1151,60 @@ async def resolve(
     return await resolve_identity(session, job, req, hub=hub, stage_runner=stage_runner)
 
 
+@router.post("/{job_id}/identity/accept", response_model=ResolveResponse)
+async def accept_identity_suggestion(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+) -> ResolveResponse:
+    """Confirm the confident match identify held because the media type's
+    auto-apply switch was off (identification-sources spec D-10).
+
+    Applies the stored hit exactly as identify would have, then hands the
+    job to the resolve path (provenance, fan-out, `identify.resolved`, the
+    episode stage). The status is settled first: a held disc is released to
+    rip when the review gate is off, or gets the gate's countdown when it is
+    on; a pause keeps it held with no countdown until un-pause stamps one;
+    a ripped placeholder follows resolve's promote rule.
+    """
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    suggestion = identity_suggestion_of(job.metadata_json)
+    if suggestion is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"job {job_id} has no identity suggestion to accept"
+        )
+    if job.status not in RESOLVABLE_JOB_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
+        )
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    before_identity = _identity_snapshot(job)
+    now = datetime.now(timezone.utc)
+    result = suggestion_to_result(suggestion)
+    job.metadata_json = without_identity_suggestion(job.metadata_json)
+    apply_identity_result(job, result, now=now)
+    if job.status == JobStatus.AWAITING_REVIEW:
+        paused = cfg is not None and bool(cfg.ripping_paused)
+        if cfg is not None and cfg.hold_for_review:
+            job.wait_start_time = None if paused else now
+        elif paused:
+            job.wait_start_time = None
+        else:
+            job.status = JobStatus.IDENTIFIED
+    req = ResolveRequest(
+        title=result.title, year=result.year, media_type=MediaType(result.kind), external_ids=external_ids_of(result)
+    )
+    logger.info("accept job_id=%s: %s suggestion %r applied -> %s", job.id, result.kind, result.title, job.status.value)
+    return await resolve_identity(
+        session, job, req, hub=hub, stage_runner=stage_runner, before_identity=before_identity
+    )
+
+
 async def resolve_identity(
     session: AsyncSession,
     job: Job,
@@ -1246,6 +1303,8 @@ async def resolve_identity(
     # forever would misreport it after the operator has already identified
     # it.
     new_metadata.pop("unidentified", None)
+    # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
+    new_metadata.pop("identity_suggestion", None)
     if isinstance(new_metadata.get("flags"), dict):
         new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
