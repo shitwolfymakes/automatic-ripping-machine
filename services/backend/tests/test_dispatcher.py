@@ -591,6 +591,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
     """An episodic disc (prefer_tv) searches TMDb TV before movie for the hint
     AND the label candidate. Kolchak: TMDb's movie search returns a placeholder
     "Kolchak: The Night Stalker Collection" entry; TV finds the 1974 series."""
+    from arm_backend.metadata import dispatcher as dispatcher_mod
     from arm_backend.metadata import sources as sources_mod
     from arm_backend.metadata.base import MetadataResult
 
@@ -614,6 +615,7 @@ async def test_identify_prefer_tv_searches_tv_first_for_every_candidate(monkeypa
             return {}
 
     monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
+    monkeypatch.setattr(dispatcher_mod, "TMDBClient", FakeTMDB)  # the id enrichment in _with_tmdb_ids
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="KOLCHAK_NIGHT_STALKER")
