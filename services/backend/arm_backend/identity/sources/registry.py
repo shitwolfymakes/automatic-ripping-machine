@@ -4,6 +4,7 @@ accessors below: `episode_sources_setting`/`enabled_episode_source_ids`,
 `hint_sources_setting`/`enabled_hint_sources`, `disabled_source_ids`,
 `source_ranks`, `episode_tolerance`, and `episode_auto_apply`."""
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,8 @@ from arm_common import Config
 
 if TYPE_CHECKING:
     from arm_backend.metadata.sources import OnlineSource
+
+logger = logging.getLogger("arm_backend.identity.sources.registry")
 
 SOURCE_TIERS: dict[str, int] = {
     "manual": TIER_BY_CAPABILITY[Capability.MANUAL],
@@ -133,6 +136,49 @@ DEFAULT_ONLINE_SOURCES: dict[str, tuple[str, ...]] = {
 # Step 2 fingerprint sources (PR 1 adds the `crc64service_enabled` switch).
 DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
 
+DEFAULT_MOVIE_SOURCES: tuple[str, ...] = ("tmdb", "omdb")
+DEFAULT_MUSIC_SOURCES: tuple[str, ...] = ("musicbrainz",)
+DEFAULT_SEARCH_PROVIDERS: dict[str, str] = {"movie": "tmdb", "tv": "tmdb", "music": "musicbrainz"}
+# Every id a ranked online list may name, by media type (the Config field
+# metadata's enum_values mirror these; a test pins them together).
+ONLINE_SOURCE_VALUES: dict[str, tuple[str, ...]] = {
+    "movie": ("tmdb", "omdb"),
+    "tv": ("tmdb", "tvmaze", "tvdb"),
+    "music": ("musicbrainz",),
+}
+_MOVIE_KNOWN = {sid: sid for sid in ONLINE_SOURCE_VALUES["movie"]}
+_MUSIC_KNOWN = {sid: sid for sid in ONLINE_SOURCE_VALUES["music"]}
+
+
+def movie_sources_setting(cfg: Config | None) -> tuple[str, ...]:
+    return _ranked(getattr(cfg, "movie_sources", None), _MOVIE_KNOWN, DEFAULT_MOVIE_SOURCES)
+
+
+def music_sources_setting(cfg: Config | None) -> tuple[str, ...]:
+    return _ranked(getattr(cfg, "music_sources", None), _MUSIC_KNOWN, DEFAULT_MUSIC_SOURCES)
+
+
+def search_provider_setting(cfg: Config | None, media_type: str) -> str:
+    """The job page's search provider for `media_type` ("" for an unknown type)."""
+    default = DEFAULT_SEARCH_PROVIDERS.get(media_type, "")
+    value = getattr(cfg, f"search_provider_{media_type}", None)
+    return str(value) if value else default
+
+
+def movie_auto_apply(cfg: Config | None) -> bool:
+    value = getattr(cfg, "movie_auto_apply", None)
+    return True if value is None else bool(value)
+
+
+def music_auto_apply(cfg: Config | None) -> bool:
+    value = getattr(cfg, "music_auto_apply", None)
+    return True if value is None else bool(value)
+
+
+def crc64service_enabled(cfg: Config | None) -> bool:
+    value = getattr(cfg, "crc64service_enabled", None)
+    return True if value is None else bool(value)
+
 
 def online_source_ids(cfg: Config | None, media_type: str) -> tuple[str, ...]:
     """Source ids for `media_type` in the order they are tried."""
@@ -157,16 +203,19 @@ def sources_for(
 
 
 def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
-    """The source behind the job page's search box for `media_type`: the first
-    usable listed source. Honours the legacy `metadata_provider` setting until
-    PR 1 replaces it with `search_provider_*`."""
+    """The source behind the job page's search box for `media_type`: the
+    operator's `search_provider_<type>` when it is listed, registered and
+    configured, else the first usable listed source (logged, so a provider
+    chosen before its adapter exists — TVmaze/TVDB until PR 2b — is visible)."""
     ranked = sources_for(cfg, media_type, registry)
-    preferred = getattr(cfg, "metadata_provider", None)
-    if media_type in ("movie", "tv") and preferred is not None:
-        for source in ranked:
-            if source.id == preferred:
-                return source
-    return ranked[0] if ranked else None
+    preferred = search_provider_setting(cfg, media_type)
+    for source in ranked:
+        if source.id == preferred:
+            return source
+    fallback = ranked[0] if ranked else None
+    if preferred and fallback is not None:
+        logger.info("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)
+    return fallback
 
 
 def lookup_sources(

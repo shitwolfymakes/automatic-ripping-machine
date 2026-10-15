@@ -18,6 +18,7 @@ from arm_backend.identity.sources.registry import (
     known_source_ids,
     lookup_sources,
     online_source_ids,
+    search_provider_setting,
     search_source,
 )
 from arm_backend.metadata.base import LookupError as MetaLookupError
@@ -81,7 +82,7 @@ async def _config(db: AsyncSession) -> Config:
 def _preferred_id(cfg: Config | None, media_type: str, registry: Mapping[str, OnlineSource]) -> str:
     """The provider a "no key configured" error names: the operator's chosen
     one, else the first listed source, else tmdb."""
-    chosen = getattr(cfg, "metadata_provider", None)
+    chosen = search_provider_setting(cfg, media_type)
     if chosen in known_source_ids(media_type, registry):
         return str(chosen)
     return next(iter(online_source_ids(cfg, media_type)), "tmdb")

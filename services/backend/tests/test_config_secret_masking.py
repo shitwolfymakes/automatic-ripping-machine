@@ -45,7 +45,6 @@ def _seed(db: FakeSession, **kwargs) -> None:
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
         notification_apprise_urls=[],
         notifications_enabled=False,
-        metadata_provider="tmdb",
     )
     for k, v in kwargs.items():
         setattr(row, k, v)
@@ -83,7 +82,7 @@ def test_get_config_masks_set_secrets(signing_key):
     assert body["tmdb_api_key"] == HIDDEN_SECRET
     assert body["omdb_api_key"] == HIDDEN_SECRET
     assert body["makemkv_key"] == HIDDEN_SECRET
-    assert body["metadata_provider"] != HIDDEN_SECRET  # non-secret never masked
+    assert body["search_provider_movie"] != HIDDEN_SECRET  # non-secret never masked
 
 
 def test_get_config_unset_secret_is_null_not_hidden(signing_key):

@@ -102,23 +102,61 @@ def test_known_source_ids_reads_media_types_from_the_registry():
     assert known_source_ids("data", reg) == ()
 
 
-def test_search_source_honours_legacy_metadata_provider():
+def test_search_source_reads_the_search_provider_setting(caplog):
     reg = _registry(
         FakeSource("tmdb", {"movie", "tv"}),
         FakeSource("omdb", {"movie", "tv"}),
         FakeSource("musicbrainz", {"music"}),
     )
-    assert search_source(_cfg(metadata_provider="omdb"), "movie", reg).id == "omdb"
+    assert search_source(_cfg(search_provider_movie="omdb"), "movie", reg).id == "omdb"
+    assert search_source(_cfg(search_provider_tv="tmdb"), "tv", reg).id == "tmdb"
+    assert search_source(_cfg(), "music", reg).id == "musicbrainz"
     reg["omdb"]._reason = "no omdb key"
-    assert search_source(_cfg(metadata_provider="omdb"), "movie", reg).id == "tmdb"
-    reg["omdb"]._reason = None
-    assert search_source(_cfg(metadata_provider="omdb"), "music", reg).id == "musicbrainz"
-    assert search_source(_cfg(metadata_provider="bogus"), "movie", reg).id == "tmdb"
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+        assert search_source(_cfg(search_provider_movie="omdb"), "movie", reg).id == "tmdb"
+    assert "search provider omdb is not available for movie; using tmdb" in caplog.text
+
+
+def test_search_source_falls_back_for_a_provider_with_no_adapter_yet(caplog):
+    """`search_provider_tv = tvmaze` is a valid setting before PR 2b adds the
+    adapter: the job page falls back to the first usable ranked source."""
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+        assert search_source(_cfg(search_provider_tv="tvmaze"), "tv", reg).id == "tmdb"
+    assert "search provider tvmaze is not available for tv; using tmdb" in caplog.text
+
+
+def test_settings_readers_default_for_legacy_rows():
+    from arm_backend.identity.sources.registry import (
+        crc64service_enabled,
+        movie_auto_apply,
+        movie_sources_setting,
+        music_auto_apply,
+        music_sources_setting,
+        search_provider_setting,
+    )
+
+    assert movie_sources_setting(None) == ("tmdb", "omdb")
+    assert music_sources_setting(None) == ("musicbrainz",)
+    assert search_provider_setting(None, "movie") == "tmdb"
+    assert search_provider_setting(None, "tv") == "tmdb"
+    assert search_provider_setting(None, "music") == "musicbrainz"
+    assert search_provider_setting(None, "data") == ""
+    assert movie_auto_apply(None) is True
+    assert music_auto_apply(None) is True
+    assert crc64service_enabled(None) is True
+    cfg = _cfg(
+        movie_sources=["omdb", "bogus", "omdb"], music_sources=[], movie_auto_apply=False, crc64service_enabled=False
+    )
+    assert movie_sources_setting(cfg) == ("omdb",)
+    assert music_sources_setting(cfg) == ()
+    assert movie_auto_apply(cfg) is False
+    assert crc64service_enabled(cfg) is False
 
 
 def test_lookup_sources_puts_preferred_first():
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
-    assert [s.id for s in lookup_sources(_cfg(metadata_provider="omdb"), "movie", reg)] == ["omdb", "tmdb"]
+    assert [s.id for s in lookup_sources(_cfg(search_provider_movie="omdb"), "movie", reg)] == ["omdb", "tmdb"]
     assert [s.id for s in lookup_sources(_cfg(), "movie", reg)] == ["tmdb", "omdb"]
     reg["omdb"]._reason = "no omdb key"
-    assert [s.id for s in lookup_sources(_cfg(metadata_provider="omdb"), "movie", reg)] == ["tmdb"]
+    assert [s.id for s in lookup_sources(_cfg(search_provider_movie="omdb"), "movie", reg)] == ["tmdb"]

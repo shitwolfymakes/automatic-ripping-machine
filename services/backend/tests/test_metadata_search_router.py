@@ -92,7 +92,7 @@ def test_search_no_key_returns_400(signing_key: bytes) -> None:
 
 def test_search_no_key_names_chosen_provider(signing_key: bytes) -> None:
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", tmdb_api_key=None, omdb_api_key=None)
+    _seed(db, search_provider_movie="omdb", tmdb_api_key=None, omdb_api_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "x"}, headers=_auth(token))
@@ -128,7 +128,7 @@ def test_lookup_by_imdb_id(signing_key: bytes) -> None:
         return_value=httpx.Response(200, json={"Response": "True", "Title": "The Matrix", "Year": "1999"})
     )
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", omdb_api_key="k")
+    _seed(db, search_provider_movie="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
@@ -254,7 +254,7 @@ def test_lookup_imdb_no_omdb_key_returns_400(signing_key: bytes) -> None:
     """imdb_id path with no key for any listed source → 400 naming the
     provider the operator chose (omdb)."""
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", omdb_api_key=None)
+    _seed(db, search_provider_movie="omdb", omdb_api_key=None)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0133093"}, headers=_auth(token))
@@ -296,6 +296,24 @@ def test_search_tmdb_tv_candidates(signing_key: bytes) -> None:
         r = c.get("/api/metadata/search", params={"title": "breaking bad", "type": "tv"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["candidates"][0]["title"] == "Breaking Bad"
+
+
+@respx.mock
+def test_tv_search_falls_back_when_the_tv_provider_has_no_adapter(signing_key: bytes) -> None:
+    """search_provider_tv=tvmaze is valid before PR 2b; the box uses the first usable ranked source."""
+    tmdb_route = respx.get("https://api.themoviedb.org/3/search/tv").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"name": "Lost", "first_air_date": "2004-09-22", "id": 4607}]}
+        )
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", search_provider_tv="tvmaze")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["candidates"][0]["title"] == "Lost"
+    assert tmdb_route.called
 
 
 def test_search_config_not_initialised_returns_400(signing_key: bytes) -> None:
@@ -344,7 +362,7 @@ def test_search_httpx_error_returns_200_empty(signing_key: bytes) -> None:
 def test_lookup_httpx_error_returns_200_empty(signing_key: bytes) -> None:
     """httpx.HTTPError in lookup_metadata safety net."""
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", omdb_api_key="k")
+    _seed(db, search_provider_movie="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with mock.patch.object(omdb_mod.OMDBClient, "lookup_by_imdb_id", side_effect=httpx.RemoteProtocolError("bad")):
         with TestClient(app) as c:
@@ -370,7 +388,7 @@ def test_music_search_lookup_error_returns_200_empty(signing_key: bytes) -> None
 def test_lookup_lookup_error_returns_200_empty(signing_key: bytes) -> None:
     """MetaLookupError in lookup_metadata → 200 + empty + detail."""
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", omdb_api_key="k")
+    _seed(db, search_provider_movie="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with mock.patch.object(omdb_mod.OMDBClient, "lookup_by_imdb_id", side_effect=MetaLookupError("omdb miss")):
         with TestClient(app) as c:
@@ -448,7 +466,7 @@ def test_search_tmdb_candidates_carry_imdb_id(signing_key: bytes) -> None:
         return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
     )
     db = FakeSession()
-    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "iron man", "type": "movie"}, headers=_auth(token))
@@ -480,7 +498,7 @@ def test_search_tmdb_enrichment_failure_is_tolerated(signing_key: bytes) -> None
     )
     respx.get("https://api.themoviedb.org/3/movie/1727/external_ids").mock(return_value=httpx.Response(500))
     db = FakeSession()
-    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "iron man", "type": "movie"}, headers=_auth(token))
@@ -494,7 +512,7 @@ def test_search_tmdb_enrichment_failure_is_tolerated(signing_key: bytes) -> None
 
 @respx.mock
 def test_lookup_uses_tmdb_find_when_provider_tmdb(signing_key: bytes) -> None:
-    """metadata_provider=tmdb → /lookup?imdb_id resolves via TMDb /find."""
+    """search_provider_movie=tmdb → /lookup?imdb_id resolves via TMDb /find."""
     respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
         return_value=httpx.Response(
             200,
@@ -502,7 +520,7 @@ def test_lookup_uses_tmdb_find_when_provider_tmdb(signing_key: bytes) -> None:
         )
     )
     db = FakeSession()
-    _seed(db, metadata_provider="tmdb", tmdb_api_key="k")
+    _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0371746"}, headers=_auth(token))
@@ -526,7 +544,7 @@ def test_lookup_uses_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None:
         )
     )
     db = FakeSession()
-    _seed(db, metadata_provider="omdb", omdb_api_key="k")
+    _seed(db, search_provider_movie="omdb", omdb_api_key="k")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0371746"}, headers=_auth(token))
@@ -719,7 +737,7 @@ def test_search_default_provider_is_first_configured_source(signing_key: bytes) 
         )
     )
     db = FakeSession()
-    _seed(db, tmdb_api_key=None, omdb_api_key="k", metadata_provider="tmdb")
+    _seed(db, tmdb_api_key=None, omdb_api_key="k", search_provider_movie="tmdb")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "heat"}, headers=_auth(token))
@@ -730,14 +748,14 @@ def test_search_default_provider_is_first_configured_source(signing_key: bytes) 
 @respx.mock
 def test_lookup_imdb_walks_to_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None:
     """/lookup?imdb_id tries the listed sources in order; with no TMDb key,
-    OMDb `i=` answers (today's metadata_provider=omdb behaviour, now by walk)."""
+    OMDb `i=` answers (today's search_provider_movie=omdb behaviour, now by walk)."""
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200, json={"Response": "True", "Title": "Heat", "Year": "1995", "Type": "movie", "imdbID": "tt0113277"}
         )
     )
     db = FakeSession()
-    _seed(db, tmdb_api_key=None, omdb_api_key="k", metadata_provider="omdb")
+    _seed(db, tmdb_api_key=None, omdb_api_key="k", search_provider_movie="omdb")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
@@ -746,7 +764,7 @@ def test_lookup_imdb_walks_to_omdb_when_tmdb_unkeyed(signing_key: bytes) -> None
 
 
 @respx.mock
-def test_search_default_provider_honours_metadata_provider(signing_key: bytes) -> None:
+def test_search_default_provider_honours_search_provider_movie(signing_key: bytes) -> None:
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
@@ -758,7 +776,7 @@ def test_search_default_provider_honours_metadata_provider(signing_key: bytes) -
     )
     tmdb_route = respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={}))
     db = FakeSession()
-    _seed(db, tmdb_api_key="k", omdb_api_key="k", metadata_provider="omdb")
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", search_provider_movie="omdb")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "heat"}, headers=_auth(token))
@@ -768,7 +786,7 @@ def test_search_default_provider_honours_metadata_provider(signing_key: bytes) -
 
 
 @respx.mock
-def test_lookup_prefers_metadata_provider_when_both_keyed(signing_key: bytes) -> None:
+def test_lookup_prefers_search_provider_movie_when_both_keyed(signing_key: bytes) -> None:
     respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200, json={"Response": "True", "Title": "Heat", "Year": "1995", "Type": "movie", "imdbID": "tt0113277"}
@@ -778,7 +796,7 @@ def test_lookup_prefers_metadata_provider_when_both_keyed(signing_key: bytes) ->
         return_value=httpx.Response(200, json={})
     )
     db = FakeSession()
-    _seed(db, tmdb_api_key="k", omdb_api_key="k", metadata_provider="omdb")
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", search_provider_movie="omdb")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
