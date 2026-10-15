@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
@@ -57,11 +57,23 @@
 	// parent reloads settings), since the new prop is then the ground truth.
 	let savedOverrides = $state<Record<string, unknown>>({});
 	let configRef: Record<string, unknown> | null = null;
+	let fieldsRef: SettingsGroup['fields'] | null = null;
 
 	$effect(() => {
+		const fields = group.fields;
+		const prev = configRef;
+		const sameFields = fields === fieldsRef;
+		const current = untrack(() => values);
 		const next: Record<string, unknown> = {};
-		for (const f of group.fields) next[f.key] = config[f.key];
+		for (const f of fields) {
+			const v = config[f.key];
+			// A new `config` (another tab's save folded in, or a reload) replaces
+			// only the values it changed; an unsaved edit to any other field of
+			// this form survives, since Settings keeps every config tab mounted.
+			next[f.key] = sameFields && prev && f.key in current && unchanged(v, prev[f.key]) ? current[f.key] : v;
+		}
 		values = next;
+		fieldsRef = fields;
 		if (config !== configRef) {
 			configRef = config;
 			savedOverrides = {};

@@ -7,6 +7,7 @@ import { fetchGpus } from '$lib/api/gpus';
 import { get } from 'svelte/store';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
@@ -732,6 +733,87 @@ describe('Settings Page', () => {
 			expect(row).toHaveTextContent('container: running');
 			expect(row).toHaveTextContent('media: tray open');
 			expect(row).toHaveTextContent('OK');
+		});
+	});
+
+	// The Identity card's TVDB source needs `tvdb_api_key`, which lives on the
+	// Keys tab: the chip deep link and the way back must keep unsaved edits, and
+	// a key saved on Keys must clear the chip on Identification.
+	describe('Identification and Keys across tabs', () => {
+		function withIdentitySchema() {
+			vi.mocked(fetchSettings).mockResolvedValueOnce({
+				config: { ...mockConfig, ...IDENTITY_DEFAULTS, episode_sources: ['tmdb', 'tvmaze'], tvdb_api_key: '' },
+				schema: {
+					groups: [
+						{ name: 'Identification', fields: IDENTITY_METAS },
+						{
+							name: 'Keys',
+							fields: [
+								{
+									key: 'tvdb_api_key',
+									group: 'Keys',
+									tier: 'secret',
+									label: 'TVDB API key',
+									help: '',
+									type: 'string',
+									editable: true,
+									enum_values: null
+								}
+							]
+						},
+						...mockSchema.groups.slice(2)
+					]
+				},
+				infra: { RAW_ROOT: '/raw' },
+				arm_config: {},
+				transcoder_config: null
+			} as never);
+		}
+		const tab = (name: string) => screen.getByRole('tab', { name });
+		const useTvdb = () => screen.getByRole('checkbox', { name: 'Use TVDB' }) as HTMLInputElement;
+		const tvdbChip = () => screen.queryByRole('link', { name: /needs tvdb key/i });
+
+		it('an unsaved Identity edit survives a trip to the Keys tab and back', async () => {
+			withIdentitySchema();
+			await renderAndWait();
+			await fireEvent.click(useTvdb());
+			expect(useTvdb().checked).toBe(true);
+			await fireEvent.click(tab('Keys'));
+			expect(tab('Keys')).toHaveAttribute('aria-selected', 'true');
+			expect(screen.getByLabelText(/tvdb api key/i)).toBeVisible();
+			await fireEvent.click(tab('Identification'));
+			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
+			expect(useTvdb().checked).toBe(true);
+		});
+
+		it('a key saved on the Keys tab clears the Needs key chip on Identification', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			withIdentitySchema();
+			await renderAndWait();
+			expect(tvdbChip()).toBeInTheDocument();
+			await fireEvent.click(tab('Keys'));
+			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
+			await fireEvent.click(tab('Identification'));
+			expect(useTvdb()).toBeVisible();
+			await waitFor(() => expect(tvdbChip()).not.toBeInTheDocument());
+		});
+
+		it('saving a key keeps the unsaved edits on the Identification tab', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			withIdentitySchema();
+			await renderAndWait();
+			await fireEvent.click(useTvdb());
+			await fireEvent.click(tab('Keys'));
+			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
+			await fireEvent.click(tab('Identification'));
+			await waitFor(() => expect(tvdbChip()).not.toBeInTheDocument());
+			expect(useTvdb().checked).toBe(true);
 		});
 	});
 

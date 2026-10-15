@@ -340,6 +340,22 @@
 		}
 	}
 
+	// A form's saved values folded back into `settings.config`, so every other
+	// tab sees them: the Identity card's "Needs ... key" chip reads the keys
+	// from it, and a form diffs its next save against it. A saved secret is
+	// stored as the masked sentinel the backend returns for a set secret (a
+	// cleared one, sent as null, stays null).
+	function foldSaved(payload: Record<string, unknown>) {
+		if (!settings) return;
+		const secret = new Set(
+			(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
+		);
+		const saved = Object.fromEntries(
+			Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
+		);
+		settings = { ...settings, config: { ...settings.config, ...saved } };
+	}
+
 	// Keep the app-wide runtime toggle in step with a Settings save so an SPA
 	// navigation to /transcoder (banner) or an apply dialog (passthrough-only
 	// filter) reflects the new value without a reload. The saved values are
@@ -348,7 +364,7 @@
 	// disable-then-re-enable in one visit would diff against the stale
 	// original value and never send the re-enable.
 	function onTranscodingSaved(payload: Record<string, unknown>) {
-		if (settings) settings = { ...settings, config: { ...settings.config, ...payload } };
+		foldSaved(payload);
 		if ('transcode_enabled' in payload) {
 			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
 		}
@@ -396,20 +412,15 @@
 				</div>
 			</nav>
 
-			<!-- Identification config tab (schema-driven) -->
-			{#if activeTab === 'Identification' && identificationGroup}
-				<SchemaConfigForm group={identificationGroup} config={settings.config} />
-			{/if}
-
-			<!-- Keys config tab (schema-driven) -->
-			{#if activeTab === 'Keys' && keysGroup}
-				<SchemaConfigForm group={keysGroup} config={settings.config} />
-			{/if}
-
-			<!-- Ripping config tab (schema-driven) -->
-			{#if activeTab === 'Ripping' && rippingGroup}
-				<SchemaConfigForm group={rippingGroup} config={settings.config} />
-			{/if}
+			<!-- Identification, Keys and Ripping config tabs (schema-driven). All
+			 three stay mounted and the inactive ones are hidden, so a chip's deep
+			 link to a key on another tab (and the way back) keeps every unsaved
+			 edit. Each folds its save into settings.config for the others. -->
+			{#each [identificationGroup, keysGroup, rippingGroup].filter((g) => g !== undefined) as g (g.name)}
+				<div hidden={activeTab !== g.name}>
+					<SchemaConfigForm group={g} config={settings.config} onsaved={foldSaved} />
+				</div>
+			{/each}
 
 			<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
 			 GPU inventory) when this deployment can run transcode containers.
