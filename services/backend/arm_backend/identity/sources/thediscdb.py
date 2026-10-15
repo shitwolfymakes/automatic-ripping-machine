@@ -17,6 +17,7 @@ from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims, TrackClaim
 
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_backend.metadata.base import MetadataResult
 
 SOURCE_ID = "thediscdb"
 DURATION_WINDOW_SECONDS = 2
@@ -151,3 +152,18 @@ def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
         slug = slug[: m.start()]
     words = [w for w in slug.split("-") if w]
     return (" ".join(w.capitalize() for w in words) or None), year
+
+
+def release_result(match: DiscMatch, imdb_id: str) -> MetadataResult | None:
+    """The disc named by its TheDiscDB release alone (spec D-1, no online call);
+    None when the release has no usable title."""
+    title, year = release_identity(match)
+    if not title:
+        return None
+    return MetadataResult(
+        title=title,
+        year=year,
+        kind=release_kind(match),
+        payload={"imdb_id": imdb_id, "thediscdb_release": match.release_slug},
+        provider="thediscdb",
+    )

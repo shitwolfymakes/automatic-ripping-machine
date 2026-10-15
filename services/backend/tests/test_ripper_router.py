@@ -3119,8 +3119,64 @@ def test_identify_thediscdb_exact_miss_falls_through_to_fuzzy_identify() -> None
     assert dispatcher.received_kwargs  # identify() was called
 
 
-def test_identify_miss_title_prefers_hint_then_release_then_label() -> None:
-    """D-4 miss title: hint title → TheDiscDB release title → raw label."""
+def test_identify_thediscdb_release_without_a_title_falls_through_to_fuzzy_identify() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+    dispatcher = _NoLookup(MetadataResult(title="Iron Man", year=2008, kind="movie", provider="tmdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(
+        DiscMatch(
+            kind="movie",
+            title_slug="",
+            release_slug="r",
+            disc={"Titles": []},
+            metadata={"ExternalIds": {"Imdb": "tt1"}},
+            release={},
+        )
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Iron Man"
+    assert dispatcher.received_kwargs  # identify() was called
+
+
+def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None:
+    def _miss(scan: dict[str, Any]) -> str:
+        db = FakeSession()
+        db.rows["drives"] = [_drive()]
+        db.rows["config"] = [_config(block_on_miss=True)]
+        app = _make_app(db, dispatcher=_Dispatcher(None))
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+            )
+        assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+        return str(r.json()["title"])
+
+    bd = _scan_dict("bluray")
+    bd["volume_label"] = "THE_OFFICE_S1_D2"
+    bd["bd_meta"] = {"name": "The Office: Season One"}
+    # The BDMT hint keeps the season marker (the label fragment would be "the office"),
+    # but the hint cleaner lowercases it.
+    assert _miss(bd) == "the office: season one"
+    dvd = _scan_dict()
+    dvd["volume_label"] = "THE_OFFICE_S1_D2"
+    assert _miss(dvd) == "THE_OFFICE_S1_D2"
+
+
+def test_identify_miss_title_prefers_release_then_label() -> None:
+    """D-4 miss title: TheDiscDB release title → raw label (with every hint off)."""
     # 1. Release title beats the raw label when every lookup misses.
     db = FakeSession()
     db.rows["drives"] = [_drive()]

@@ -94,9 +94,9 @@ Each is the recommended option from the review. Override at spec review if you d
   `.env.example` line. No seeding: the Keys tab is the only place a key comes from.
 - **D-4 Ignoring the volume label means ignoring it everywhere (S-5).** The dispatcher
   adds the normalized label as a search candidate only when `label` is in
-  `enabled_hint_sources(cfg)`. On a miss, the job title is the hint title if there is one,
-  else the TheDiscDB release title, else the raw volume label (the raw label is the last
-  resort only, so a disc with every hint off still has a name).
+  `enabled_hint_sources(cfg)`. On a miss, the job title is the BDMT hint title if there is one,
+  else the TheDiscDB release title, else the raw volume label (the label-derived hint is a
+  lowercased fragment and is never used as a title).
 - **D-5 CDs get a list but no new flow (S-7).** `music_sources` holds `musicbrainz` only.
   Step 1 shows CDs as "Disc ID (track layout)" with a `CD` chip, not as a volume label. The
   CD path becomes a walk over `sources_for(cfg, "music")` with the disc-id capability, so an
@@ -295,5 +295,6 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   for tags on its own, outside the Backend. An empty Music list stops the Backend's disc-id
   lookup but not that tagging call; the Step 3 Music help text should say so, or PR 2 should
   pass the setting through to the ripper.
-- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search.
+- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search. Until TVmaze's title search lands (PR 2b, same merge), an install with no TMDb key has an empty automatic TV walk, so a TV-shaped disc can be identified as a movie by the movie walk; the stack does not ship without 2b.
+- PR 4 help text: unchecking `label` in disc hints with no BDMT title means a DVD gets no automatic title search at all; the Step 1 help must say so.
 - Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`.

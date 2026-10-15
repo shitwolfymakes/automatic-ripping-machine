@@ -557,6 +557,34 @@ async def test_identify_from_imdb_walks_the_ranked_sources():
         assert dispatcher.has_imdb_lookup(_config(movie_sources=[]), "movie") is False
 
 
+async def test_identify_from_imdb_falls_through_a_miss_to_the_next_source():
+    from arm_backend.metadata.base import MetadataResult
+
+    calls: list[str] = []
+
+    def _source(sid: str, hit: MetadataResult | None):
+        class S:
+            id = sid
+            media_types = frozenset({"movie", "tv"})
+            requires_key = None
+
+            def configured(self, cfg):
+                return None
+
+            async def lookup_imdb(self, cfg, imdb_id):
+                calls.append(f"{sid}:{imdb_id}")
+                return hit
+
+        return S()
+
+    reg = {"tmdb": _source("tmdb", None), "omdb": _source("omdb", MetadataResult(title="T", year=None, kind="movie"))}
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        hit = await dispatcher.identify_from_imdb("tt1", _config(movie_sources=["tmdb", "omdb"]))
+    assert hit is not None and hit.provider == "omdb"
+    assert calls == ["tmdb:tt1", "omdb:tt1"]
+
+
 async def test_identify_from_imdb_uses_the_kind_list():
     from arm_backend.metadata.base import MetadataResult
 

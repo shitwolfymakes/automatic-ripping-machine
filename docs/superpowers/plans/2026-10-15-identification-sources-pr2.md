@@ -28,7 +28,7 @@
 1. A TheDiscDB match whose IMDb id TMDb does not know (TMDb returns an empty `/find`) must fall through to the fuzzy identify, not to the release-metadata path (Task 3 router test: exact misses, `identify` is called).
 2. `episode_sources = ["tvmaze"]` with no TVmaze adapter must produce an empty TV walk and no HTTP call, and a movie-shaped disc still walks the movie list (Task 1 dispatcher test).
 3. A disc with every hint off (`disc_hint_sources = []`), no TheDiscDB match and a total miss must still get the raw label as its title (Task 3 router test).
-4. A TheDiscDB match with `kind = "series"` must ask the TV sources, so an OMDb-only install resolves a series IMDb id through OMDb `type=series`-capable lookup (Task 2 dispatcher test passes `kind="tv"` through to the adapter; Task 3 router test asserts `kind="tv"` received).
+4. A TheDiscDB match with `kind = "series"` must ask the TV sources; with no TV source able to resolve the id, the job is identified from the release metadata (Task 2 passes `kind="tv"` through; Task 3 asserts `kind="tv"` received and the release path).
 5. The release-metadata result must not be enriched by `_with_tmdb_ids` into a TMDb call (provider is `thediscdb`, so the guard skips it; Task 3 asserts no dispatcher `identify_from_imdb` or `identify` call and the stored provider).
 
 ---

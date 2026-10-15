@@ -31,6 +31,7 @@ from arm_backend.identity.sources.thediscdb import (
     external_imdb_id,
     release_identity,
     release_kind,
+    release_result,
 )
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
@@ -747,15 +748,9 @@ async def identify(
                         if not dispatcher.has_imdb_lookup(cfg, kind):
                             # D-1: no enabled source can resolve the id, so no
                             # online call; the release names the disc.
-                            title, year = release_identity(thediscdb_match)
-                            if title:
-                                return MetadataResult(
-                                    title=title,
-                                    year=year,
-                                    kind=kind,
-                                    payload={"imdb_id": imdb, "thediscdb_release": thediscdb_match.release_slug},
-                                    provider="thediscdb",
-                                )
+                            release = release_result(thediscdb_match, imdb)
+                            if release is not None:
+                                return release
                         else:
                             exact = await dispatcher.identify_from_imdb(imdb, cfg, kind=kind)
                             if exact is not None:
@@ -811,7 +806,8 @@ async def identify(
             if timed_out:
                 diagnostic["dispatch_timeout"] = True
             release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
-            miss_title = hint_title(job, hints) or release_title or scan.volume_label
+            # The label hint is a lowercased, season-stripped fragment: never a title.
+            miss_title = hint_title(job, [s for s in hints if s.id != "label"]) or release_title or scan.volume_label
             if cfg.block_on_miss:
                 job.status = JobStatus.AWAITING_USER_ID
                 job.title = miss_title

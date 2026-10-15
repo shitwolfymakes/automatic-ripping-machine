@@ -379,3 +379,13 @@ def test_release_identity_prefers_metadata_then_slug() -> None:
     assert release_identity(_release_match(metadata={}, title_slug="round-midnight-1986")) == ("Round Midnight", 1986)
     assert release_identity(_release_match(metadata={}, title_slug="lost")) == ("Lost", None)
     assert release_identity(_release_match(metadata={}, title_slug="")) == (None, None)
+
+
+def test_release_result_builds_the_thediscdb_identity() -> None:
+    from arm_backend.identity.sources.thediscdb import release_result
+
+    result = release_result(_release_match(kind="series", metadata={"Title": "Round Midnight", "Year": 1986}), "tt1")
+    assert result is not None
+    assert (result.title, result.year, result.kind, result.provider) == ("Round Midnight", 1986, "tv", "thediscdb")
+    assert result.payload == {"imdb_id": "tt1", "thediscdb_release": "r"}
+    assert release_result(_release_match(title_slug=""), "tt1") is None
