@@ -10775,7 +10775,35 @@
             ],
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "anyOf": [
               {
                 "type": "string"
@@ -10784,7 +10812,62 @@
                 "type": "null"
               }
             ],
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crc64Service Enabled"
           }
         },
         "type": "object",
@@ -10950,9 +11033,43 @@
             "type": "boolean",
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "type": "string",
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "type": "string",
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "type": "string",
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "type": "boolean",
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "type": "boolean",
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "type": "boolean",
+            "title": "Crc64Service Enabled"
           },
           "makemkv_key_valid": {
             "anyOf": [
@@ -11054,7 +11171,14 @@
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
-          "metadata_provider",
+          "movie_sources",
+          "music_sources",
+          "search_provider_movie",
+          "search_provider_tv",
+          "search_provider_music",
+          "movie_auto_apply",
+          "music_auto_apply",
+          "crc64service_enabled",
           "updated_by_user_id",
           "updated_at"
         ],

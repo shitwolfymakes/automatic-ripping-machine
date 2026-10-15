@@ -5,12 +5,7 @@
 	import PosterImage from './PosterImage.svelte';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
-	import { metadataProvider } from '$lib/stores/config';
-
-	// Pretty label for the configured default metadata provider; generic until
-	// the config store hydrates (layout load runs hydrateConfig once per load).
-	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb' };
-	let providerLabel = $derived(PROVIDER_LABELS[$metadataProvider ?? ''] ?? 'OMDb/TMDb');
+	import { searchProviders } from '$lib/stores/config';
 
 	interface Props {
 		job: JobView;
@@ -25,6 +20,13 @@
 	// disc that looks episodic.
 	let searchType = $state<'movie' | 'tv'>(
 		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
+	);
+
+	// Pretty label for the configured search provider of the current search
+	// type; generic until the config store hydrates.
+	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' };
+	let providerLabel = $derived(
+		PROVIDER_LABELS[(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie) ?? ''] ?? 'OMDb/TMDb'
 	);
 
 	function setSearchType(t: 'movie' | 'tv') {

@@ -683,9 +683,37 @@ export type ConfigUpdateRequest = {
      */
     notifications_enabled?: boolean | null;
     /**
-     * Metadata Provider
+     * Movie Sources
      */
-    metadata_provider?: string | null;
+    movie_sources?: Array<string> | null;
+    /**
+     * Music Sources
+     */
+    music_sources?: Array<string> | null;
+    /**
+     * Search Provider Movie
+     */
+    search_provider_movie?: string | null;
+    /**
+     * Search Provider Tv
+     */
+    search_provider_tv?: string | null;
+    /**
+     * Search Provider Music
+     */
+    search_provider_music?: string | null;
+    /**
+     * Movie Auto Apply
+     */
+    movie_auto_apply?: boolean | null;
+    /**
+     * Music Auto Apply
+     */
+    music_auto_apply?: boolean | null;
+    /**
+     * Crc64Service Enabled
+     */
+    crc64service_enabled?: boolean | null;
 };
 
 /**
@@ -805,9 +833,37 @@ export type ConfigView = {
      */
     notifications_enabled: boolean;
     /**
-     * Metadata Provider
+     * Movie Sources
      */
-    metadata_provider: string;
+    movie_sources: Array<string>;
+    /**
+     * Music Sources
+     */
+    music_sources: Array<string>;
+    /**
+     * Search Provider Movie
+     */
+    search_provider_movie: string;
+    /**
+     * Search Provider Tv
+     */
+    search_provider_tv: string;
+    /**
+     * Search Provider Music
+     */
+    search_provider_music: string;
+    /**
+     * Movie Auto Apply
+     */
+    movie_auto_apply: boolean;
+    /**
+     * Music Auto Apply
+     */
+    music_auto_apply: boolean;
+    /**
+     * Crc64Service Enabled
+     */
+    crc64service_enabled: boolean;
     /**
      * Makemkv Key Valid
      */

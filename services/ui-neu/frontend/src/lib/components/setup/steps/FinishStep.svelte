@@ -59,7 +59,7 @@
 		if (config) {
 			out.makemkv = `${config.makemkv_key ? 'Purchased key' : 'Free beta key'}${config.makemkv_key_valid ? ', valid' : ''}`;
 			out.metadata = keys
-				? `${keys} key${keys === 1 ? '' : 's'} saved. Titles looked up with ${config.metadata_provider === 'omdb' ? 'OMDb' : 'TMDb'}.`
+				? `${keys} key${keys === 1 ? '' : 's'} saved. Titles looked up with ${config.search_provider_movie === 'omdb' ? 'OMDb' : 'TMDb'}.`
 				: 'No lookup key yet';
 			out.discs = !config.auto_rip_on_insert ? 'Manual' : config.hold_for_review ? 'Review first' : 'Fully automatic';
 		}

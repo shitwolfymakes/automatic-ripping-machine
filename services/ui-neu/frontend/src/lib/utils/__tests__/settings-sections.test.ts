@@ -46,16 +46,16 @@ describe('sectionFields layout hints', () => {
 	});
 
 	it('drops the section entirely when none of its keys are present', () => {
-		const sections = sectionFields('Metadata', [meta('metadata_provider', 'enum')]);
+		const sections = sectionFields('Metadata', [meta('search_provider_movie', 'enum')]);
 		expect(sections.find((s) => s.title === 'TV episodes')).toBeUndefined();
 	});
 
 	it('returns empty columns and advanced for a section that declares neither', () => {
-		const sections = sectionFields('Metadata', [meta('metadata_provider', 'enum')]);
-		const lookup = sections.find((s) => s.title === 'Lookup');
-		expect(lookup?.columns).toEqual([]);
-		expect(lookup?.advanced).toEqual([]);
-		expect(lookup?.fields.map((f) => f.key)).toEqual(['metadata_provider']);
+		const sections = sectionFields('Metadata', [meta('tmdb_api_key', 'string')]);
+		const keys = sections.find((s) => s.title === 'API keys');
+		expect(keys?.columns).toEqual([]);
+		expect(keys?.advanced).toEqual([]);
+		expect(keys?.fields.map((f) => f.key)).toEqual(['tmdb_api_key']);
 	});
 
 	it('puts unmapped fields in a trailing card titled after the group', () => {
