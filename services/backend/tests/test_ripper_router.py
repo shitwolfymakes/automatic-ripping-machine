@@ -125,6 +125,7 @@ def _config(
     hold_for_review: bool = False,
     ripping_paused: bool = False,
     thediscdb_enabled: bool = False,
+    disc_hint_sources: list[str] | None = None,
 ) -> Config:
     return Config(
         id=1,
@@ -136,6 +137,7 @@ def _config(
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
         thediscdb_enabled=thediscdb_enabled,
+        **({"disc_hint_sources": disc_hint_sources} if disc_hint_sources is not None else {}),
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
@@ -988,9 +990,14 @@ class _ImdbExactDispatcher:
     def __init__(self, result: MetadataResult | None) -> None:
         self.result = result
         self.identify_from_imdb_calls: list[str] = []
+        self.kinds: list[Any] = []
 
-    async def identify_from_imdb(self, imdb_id: str, _cfg: Any) -> MetadataResult | None:
+    def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+        return True
+
+    async def identify_from_imdb(self, imdb_id: str, _cfg: Any, **kw: Any) -> MetadataResult | None:
         self.identify_from_imdb_calls.append(imdb_id)
+        self.kinds.append(kw.get("kind"))
         return self.result
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
@@ -1015,6 +1022,23 @@ def _thediscdb_match() -> DiscMatch:
         metadata={"ExternalIds": {"Imdb": "tt0090557"}},
         release={},
     )
+
+
+def _thediscdb_match_series() -> DiscMatch:
+    return DiscMatch(
+        kind="series",
+        title_slug="lost-2004",
+        release_slug="s1",
+        disc={"Titles": []},
+        metadata={"Title": "Lost", "Year": 2004, "ExternalIds": {"Imdb": "tt0411008"}},
+        release={},
+    )
+
+
+def _scan_dict_with_hash() -> dict[str, Any]:
+    scan = _scan_dict()
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+    return scan
 
 
 class _FakeStore:
@@ -1134,7 +1158,10 @@ def test_identify_thediscdb_lookup_raises_behaves_as_no_match() -> None:
 class _AllMissDispatcher:
     """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
 
-    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any) -> MetadataResult | None:
+    def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+        return True
+
+    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any, **_kw: Any) -> MetadataResult | None:
         return None
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
@@ -3002,3 +3029,130 @@ def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.L
     assert r.status_code == 200, r.text
     assert r.json()["pending_session_id"] is None
     assert "ses_deleted no longer exists" in caplog.text
+
+
+def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
+    """D-1: the route passes the TheDiscDB kind so a series id asks the TV sources."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+    dispatcher = _ImdbExactDispatcher(MetadataResult(title="Lost", year=2004, kind="tv", provider="omdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match_series())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert dispatcher.identify_from_imdb_calls == ["tt0411008"]
+    assert dispatcher.kinds == ["tv"]
+    assert r.json()["media_type"] == "tv"
+
+
+def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() -> None:
+    """D-1: no enabled source offers an IMDb lookup → no online call; the job is
+    identified from the release's own title/year/kind with provider thediscdb."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            self.calls.append("identify_from_imdb")
+            return None
+
+        async def identify(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            self.calls.append("identify")
+            return None
+
+    dispatcher = _NoLookup()
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    out = r.json()
+    assert r.status_code == 200, r.text
+    assert dispatcher.calls == []
+    assert out["status"] == "identified"
+    assert (out["title"], out["year"], out["media_type"]) == ("Round Midnight", 1986, "movie")
+    assert out["metadata_json"]["identity"]["provider"] == "thediscdb"
+    assert out["metadata_json"]["identity"]["external_ids"]["imdb"] == "tt0090557"
+    assert "thediscdb" in out["metadata_json"]["provider_raw"]
+
+
+def test_identify_thediscdb_exact_miss_falls_through_to_fuzzy_identify() -> None:
+    """A source exists but does not know the id (review focus 1): fuzzy identify runs."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _ExactMiss(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return True
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+    dispatcher = _ExactMiss(MetadataResult(title="Iron Man", year=2008, kind="movie", provider="tmdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Iron Man"
+    assert dispatcher.received_kwargs  # identify() was called
+
+
+def test_identify_miss_title_prefers_hint_then_release_then_label() -> None:
+    """D-4 miss title: hint title → TheDiscDB release title → raw label."""
+    # 1. Release title beats the raw label when every lookup misses.
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True, disc_hint_sources=[])]
+
+    class _AllMiss:
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return True
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+        async def identify(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+    app = _make_app(db, dispatcher=_AllMiss())
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+    assert r.json()["title"] == "Round Midnight"
+    # 2. With every hint off and no match, the raw label is the last resort (review focus 3).
+    db2 = FakeSession()
+    db2.rows["drives"] = [_drive()]
+    db2.rows["config"] = [_config(block_on_miss=True, disc_hint_sources=[])]
+    app2 = _make_app(db2, dispatcher=_Dispatcher(None))
+    with TestClient(app2) as client:
+        r2 = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    assert r2.json()["title"] == "MY_DISC"

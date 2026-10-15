@@ -8,8 +8,9 @@ in the window (ambiguity -> no join; a wrong label is worse than no label).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from arm_common.enums import TrackRole
 from arm_common.schemas import ScanResult
@@ -123,3 +124,30 @@ def external_imdb_id(match: DiscMatch) -> str | None:
         return None
     imdb = ids.get("Imdb")
     return str(imdb) if imdb else None
+
+
+def release_kind(match: DiscMatch) -> Literal["movie", "tv"]:
+    """TheDiscDB's top-level directory names the kind (`movies` / `series`)."""
+    return "movie" if str(match.kind or "").lower().startswith("movie") else "tv"
+
+
+_SLUG_YEAR_RE = re.compile(r"-(19\d{2}|20\d{2})$")
+
+
+def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
+    """The release's own title and year: the title metadata when present,
+    else derived from the title slug (`round-midnight-1986`)."""
+    title = match.metadata.get("Title")
+    year = _int_or_none(match.metadata.get("Year"))
+    if isinstance(title, str) and title.strip():
+        return title.strip(), year
+    slug = str(match.title_slug or "").strip()
+    if not slug:
+        return None, None
+    m = _SLUG_YEAR_RE.search(slug)
+    if m and year is None:
+        year = int(m.group(1))
+    if m:
+        slug = slug[: m.start()]
+    words = [w for w in slug.split("-") if w]
+    return (" ".join(w.capitalize() for w in words) or None), year

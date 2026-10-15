@@ -346,3 +346,36 @@ def test_external_imdb_id_malformed_external_ids_returns_none() -> None:
         release={},
     )
     assert external_imdb_id(match) is None
+
+
+def _release_match(**overrides: Any) -> DiscMatch:
+    base: dict[str, Any] = dict(
+        kind="movie", title_slug="round-midnight-1986", release_slug="r", disc={}, metadata={}, release={}
+    )
+    base.update(overrides)
+    return DiscMatch(**base)
+
+
+def test_release_kind_maps_thediscdb_directories() -> None:
+    from arm_backend.identity.sources.thediscdb import release_kind
+
+    assert release_kind(_release_match(kind="movies")) == "movie"
+    assert release_kind(_release_match(kind="movie")) == "movie"
+    assert release_kind(_release_match(kind="series")) == "tv"
+    assert release_kind(_release_match(kind="tv")) == "tv"
+
+
+def test_release_identity_prefers_metadata_then_slug() -> None:
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": 1986})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": "1986"})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={}, title_slug="round-midnight-1986")) == ("Round Midnight", 1986)
+    assert release_identity(_release_match(metadata={}, title_slug="lost")) == ("Lost", None)
+    assert release_identity(_release_match(metadata={}, title_slug="")) == (None, None)

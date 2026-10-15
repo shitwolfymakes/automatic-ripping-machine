@@ -25,7 +25,13 @@ from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.registry import enabled_hint_sources
-from arm_backend.identity.sources.thediscdb import SOURCE_ID as THEDISCDB, build_claims, external_imdb_id
+from arm_backend.identity.sources.thediscdb import (
+    SOURCE_ID as THEDISCDB,
+    build_claims,
+    external_imdb_id,
+    release_identity,
+    release_kind,
+)
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
@@ -737,16 +743,28 @@ async def identify(
                 if thediscdb_match is not None:
                     imdb = external_imdb_id(thediscdb_match)
                     if imdb:
-                        exact = await dispatcher.identify_from_imdb(imdb, cfg)
-                        if exact is not None:
-                            return exact
+                        kind = release_kind(thediscdb_match)
+                        if not dispatcher.has_imdb_lookup(cfg, kind):
+                            # D-1: no enabled source can resolve the id, so no
+                            # online call; the release names the disc.
+                            title, year = release_identity(thediscdb_match)
+                            if title:
+                                return MetadataResult(
+                                    title=title,
+                                    year=year,
+                                    kind=kind,
+                                    payload={"imdb_id": imdb, "thediscdb_release": thediscdb_match.release_slug},
+                                    provider="thediscdb",
+                                )
+                        else:
+                            exact = await dispatcher.identify_from_imdb(imdb, cfg, kind=kind)
+                            if exact is not None:
+                                return exact
                 return await dispatcher.identify(
                     scan,
                     cfg,
                     title_hint=hint_title(job, hints),
                     title_hint_is_tv=hint_is_tv(job, hints),
-                    # Several same-length episode titles and no feature: a TV
-                    # disc, whatever the label says (arm_common.disc_shape).
                     prefer_tv=looks_episodic(scan.titles),
                 )
 
@@ -790,14 +808,16 @@ async def identify(
             diagnostic: dict[str, bool] = {}
             if timed_out:
                 diagnostic["dispatch_timeout"] = True
+            release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
+            miss_title = hint_title(job, hints) or release_title or scan.volume_label
             if cfg.block_on_miss:
                 job.status = JobStatus.AWAITING_USER_ID
-                job.title = scan.volume_label
+                job.title = miss_title
                 if diagnostic:
                     job.metadata_json = with_flags(job.metadata_json, **diagnostic)
             else:
                 job.status = JobStatus.IDENTIFIED
-                job.title = scan.volume_label
+                job.title = miss_title
                 job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
 
         if previous is not None:
