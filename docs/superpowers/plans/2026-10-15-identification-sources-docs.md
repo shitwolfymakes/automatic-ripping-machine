@@ -171,6 +171,8 @@ Verify each named function exists on this branch (`grep -n "def <name>" services
 
 ### Task 3: "Review first" says the field's label
 
+> Withdrawn: `hold_for_review` is shown only as the "Review first" disc-handling mode, so the original strings were right (see the revert commit).
+
 **Files:**
 - Modify: `packages/arm_common/arm_common/config_metadata.py` (the three `*_auto_apply` helps), `services/ui-neu/frontend/src/lib/components/settings/IdentityCard.svelte` (Step 4 description)
 - Test: `packages/arm_common/tests/test_config_metadata.py` (the verbatim episode help assertion and the `"Review first" in help` checks), `services/ui-neu/frontend/src/lib/components/settings/__tests__/IdentityCard.test.ts` (if it asserts the description)
