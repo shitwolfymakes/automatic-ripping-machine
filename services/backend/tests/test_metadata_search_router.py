@@ -226,6 +226,28 @@ def test_lookup_by_crc64(signing_key: bytes) -> None:
 
 
 @respx.mock
+def test_search_tv_with_tvdb_provider(signing_key: bytes) -> None:
+    respx.post("https://api4.thetvdb.com/v4/login").mock(
+        return_value=httpx.Response(200, json={"data": {"token": "t"}})
+    )
+    respx.get("https://api4.thetvdb.com/v4/search").mock(
+        return_value=httpx.Response(200, json={"data": [{"tvdb_id": "73739", "name": "Lost", "year": "2004"}]})
+    )
+    db = FakeSession()
+    _seed(db, tvdb_api_key="k")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "lost", "type": "tv", "provider": "tvdb"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    cand = r.json()["candidates"][0]
+    assert cand["title"] == "Lost" and cand["external_ids"]["tvdb"] == "73739"
+
+
+@respx.mock
 def test_search_omdb_provider_returns_candidates(signing_key: bytes) -> None:
     """provider=omdb path in search_metadata."""
     respx.get("https://www.omdbapi.com/").mock(

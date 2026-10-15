@@ -231,8 +231,8 @@ class MetadataDispatcher:
         """Fill the ids a hit lacks so the stored identity lets every episode
         source find the show (spec S-10). A TMDb hit gets IMDb/TVDB ids from
         its `external_ids`; any other movie/TV hit with an IMDb id gets its
-        TMDb id (and TVDB id) from TMDb's /find through the tmdb source, when
-        that source is configured. Ids already in the payload win; a failure or
+        TMDb id from TMDb /find through the tmdb source, when that source is
+        configured. Ids already in the payload win; a failure or
         timeout (bounded by PROVIDER_TIMEOUT_SECONDS) changes nothing."""
         if hit is None or hit.kind not in ("movie", "tv"):
             return hit
@@ -251,9 +251,6 @@ class MetadataDispatcher:
         if found is None or found.kind != hit.kind or found.payload.get("id") is None:
             return hit
         hit.payload["tmdb_id"] = str(found.payload["id"])
-        tvdb = found.payload.get("tvdb_id")
-        if tvdb and not hit.payload.get("tvdb_id"):
-            hit.payload["tvdb_id"] = str(tvdb)
         return hit
 
     async def _fill_from_tmdb_external_ids(self, hit: MetadataResult, cfg: Config) -> MetadataResult:

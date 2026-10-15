@@ -89,6 +89,8 @@ class TVDBClient:
             if r.status_code == 401 and attempt == 1:
                 token = await self._login()  # expired token: one re-login
                 continue
+            if r.status_code == 401:
+                raise LookupError("tvdb auth failed after re-login")
             if r.status_code == 404:
                 raise LookupError("tvdb miss")
             if r.status_code != 200:
@@ -97,7 +99,6 @@ class TVDBClient:
                 return r.json()
             except ValueError as e:
                 raise LookupError("tvdb malformed response") from e
-        raise LookupError("tvdb auth failed after re-login")
 
     async def search_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:
         body = await self._get_authed("/search", {"query": title, "type": "series"})

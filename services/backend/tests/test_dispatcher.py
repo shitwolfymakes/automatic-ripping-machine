@@ -419,6 +419,18 @@ async def test_keyless_install_identifies_tv_through_tvmaze():
 
 
 @respx.mock
+async def test_keyless_install_does_not_take_a_far_tvmaze_match():
+    respx.get("https://api.tvmaze.com/singlesearch/shows").mock(
+        return_value=httpx.Response(200, json={"id": 4607, "name": "Lost", "premiered": "2004-09-22"})
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="BLADE_RUNNER_1982")
+        result = await dispatcher.identify(scan, _config(tmdb_api_key=None, omdb_api_key=None), prefer_tv=True)
+    assert result is None
+
+
+@respx.mock
 async def test_identify_hint_is_tv_tmdb_tv_miss_then_movie_walk():
     """With both keys: the TV walk is TMDb TV (miss); the movie walk is TMDb
     movie (miss) then OMDb `type=movie`."""
@@ -1136,9 +1148,7 @@ async def test_fill_external_ids_adds_the_tmdb_id_to_a_tvmaze_hit():
 
         async def lookup_imdb(self, cfg, imdb_id):
             calls.append(imdb_id)
-            return MetadataResult(
-                title="Lost", year=2004, kind="tv", payload={"id": 4607, "tvdb_id": "73739"}, provider="tmdb"
-            )
+            return MetadataResult(title="Lost", year=2004, kind="tv", payload={"id": 4607}, provider="tmdb")
 
     async with httpx.AsyncClient() as client:
         d = MetadataDispatcher(client, sources={"tmdb": Tmdb()})
@@ -1146,12 +1156,12 @@ async def test_fill_external_ids_adds_the_tmdb_id_to_a_tvmaze_hit():
             title="Lost", year=2004, kind="tv", payload={"id": 1, "imdb_id": "tt0411008"}, provider="tvmaze"
         )
         out = await d.fill_external_ids(hit, _config())
-        assert out is hit and out.payload["tmdb_id"] == "4607" and out.payload["tvdb_id"] == "73739"
+        assert out is hit and out.payload["tmdb_id"] == "4607"
         assert calls == ["tt0411008"]
         # Ids already present win; no second call for a hit that has tmdb_id.
         await d.fill_external_ids(hit, _config())
         assert calls == ["tt0411008"]
-        # Unconfigured TMDb: nothing happens (review focus 5).
+        # Unconfigured TMDb: nothing happens.
         other = MetadataResult(title="Lost", year=2004, kind="tv", payload={"imdb_id": "tt1"}, provider="tvmaze")
         assert (await d.fill_external_ids(other, _config(tmdb_api_key=None))).payload == {"imdb_id": "tt1"}
         assert calls == ["tt0411008"]

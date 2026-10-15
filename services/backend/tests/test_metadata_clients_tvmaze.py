@@ -10,7 +10,7 @@ import pytest  # noqa: E402
 import respx  # noqa: E402
 
 from arm_backend.metadata.base import LookupError, LookupTimeout  # noqa: E402
-from arm_backend.metadata.tvmaze import TVMazeClient, show_to_result  # noqa: E402
+from arm_backend.metadata.tvmaze import TVMazeClient, show_to_result, title_is_close  # noqa: E402
 
 _BASE = "https://api.tvmaze.com"
 _SHOW = {
@@ -89,3 +89,48 @@ async def test_timeout_and_transport_errors(http_client):
     respx.get(f"{_BASE}/lookup/shows").mock(return_value=httpx.Response(500))
     with pytest.raises(LookupError):
         await TVMazeClient(http_client).lookup_by_imdb_id("tt1")
+
+
+def test_title_is_close_rules():
+    assert title_is_close("the.office!", "The Office")
+    assert title_is_close("lost", "Lost")
+    assert title_is_close("the office", "The Office (US)")
+    assert title_is_close("heat", "Heat of the Night")  # deliberate: whole-word containment
+    assert not title_is_close("blade runner 1982", "Lost")
+    assert not title_is_close("", "Lost")
+    assert not title_is_close("lost", "")
+
+
+@respx.mock
+async def test_search_show_rejects_a_far_match(http_client):
+    respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(200, json=_SHOW))
+    with pytest.raises(LookupError, match="not close"):
+        await TVMazeClient(http_client).search_show("blade runner")
+
+
+@respx.mock
+async def test_search_show_non_json_body_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(200, content=b"<html>"))
+    with pytest.raises(LookupError):
+        await TVMazeClient(http_client).search_show("lost")
+
+
+@respx.mock
+async def test_search_candidates_non_list_body_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/search/shows").mock(return_value=httpx.Response(200, json={}))
+    with pytest.raises(LookupError):
+        await TVMazeClient(http_client).search_candidates("lost")
+
+
+@respx.mock
+async def test_search_candidates_caps_at_limit(http_client):
+    shows = [{"show": {**_SHOW, "id": i, "name": f"Lost {i}"}} for i in range(3)]
+    respx.get(f"{_BASE}/search/shows").mock(return_value=httpx.Response(200, json=shows))
+    assert len(await TVMazeClient(http_client).search_candidates("lost", limit=2)) == 2
+
+
+def test_show_to_result_poster_fallbacks():
+    original = show_to_result({"name": "X", "image": {"original": "https://x/o.jpg"}})
+    assert original is not None and original.payload["poster_url"] == "https://x/o.jpg"
+    bad = show_to_result({"name": "X", "image": {"medium": "ftp://x/m.jpg"}})
+    assert bad is not None and "poster_url" not in bad.payload

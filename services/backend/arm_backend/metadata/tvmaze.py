@@ -3,6 +3,8 @@ requests per 10 s, which a search box and identify stay well under.
 Episode listing lives in identity/episodes/providers/tvmaze.py."""
 
 import logging
+import re
+from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
@@ -15,6 +17,26 @@ logger = logging.getLogger("arm_backend.metadata.tvmaze")
 
 def _base_url() -> str:
     return settings.ARM_TVMAZE_BASE_URL
+
+
+def _normalise(text: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.casefold()).split())
+
+
+def title_is_close(query: str, name: str) -> bool:
+    """True when `name` is a credible answer to `query`: equal after
+    normalisation, one contains the other as whole words, or the two are
+    at least 75% similar (difflib). Used by the automatic identify path
+    only; the search box shows every candidate and lets the operator pick."""
+    q, n = _normalise(query), _normalise(name)
+    if not q or not n:
+        return False
+    if q == n:
+        return True
+    qw, nw = set(q.split()), set(n.split())
+    if qw <= nw or nw <= qw:
+        return True
+    return SequenceMatcher(None, q, n).ratio() >= 0.75
 
 
 def show_to_result(show: Any) -> MetadataResult | None:
@@ -71,6 +93,8 @@ class TVMazeClient:
         result = show_to_result(await self._get("/singlesearch/shows", {"q": title}))
         if result is None:
             raise LookupError("tvmaze hit missing name")
+        if not title_is_close(title, result.title):
+            raise LookupError(f"tvmaze best match {result.title!r} is not close to {title!r}")
         return result
 
     async def search_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:

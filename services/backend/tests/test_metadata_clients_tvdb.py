@@ -78,7 +78,7 @@ async def test_search_series_relogs_in_once_on_401(http_client):
 async def test_search_series_second_401_is_a_lookup_error(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(401))
-    with pytest.raises(LookupError):
+    with pytest.raises(LookupError, match="after re-login"):
         await TVDBClient("key", http_client).search_series("lost")
 
 
@@ -118,3 +118,28 @@ async def test_login_failure_and_timeout(http_client):
     respx.post(f"{_BASE}/login").mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(LookupTimeout):
         await TVDBClient("key", http_client).search_series("lost")
+
+
+@respx.mock
+async def test_lookup_by_imdb_id_empty_data_is_a_miss(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    respx.get(f"{_BASE}/search/remoteid/tt1").mock(return_value=httpx.Response(200, json={"data": []}))
+    with pytest.raises(LookupError):
+        await TVDBClient("key", http_client).lookup_by_imdb_id("tt1")
+
+
+@respx.mock
+async def test_lookup_by_imdb_id_nameless_series_is_a_miss(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    respx.get(f"{_BASE}/search/remoteid/tt1").mock(return_value=httpx.Response(200, json={"data": [{"series": {}}]}))
+    with pytest.raises(LookupError):
+        await TVDBClient("key", http_client).lookup_by_imdb_id("tt1")
+
+
+@respx.mock
+async def test_malformed_login_body_is_a_lookup_error(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json={"data": {}}))
+    with pytest.raises(LookupError):
+        await TVDBClient("key", http_client).search_series("lost")
+    with pytest.raises(LookupError):
+        await TVDBClient("key", http_client).validate_key()

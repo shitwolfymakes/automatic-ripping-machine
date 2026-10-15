@@ -117,13 +117,13 @@ def test_search_source_reads_the_search_provider_setting(caplog):
     assert "search provider omdb is not available for movie; using tmdb" in caplog.text
 
 
-def test_search_source_falls_back_for_a_provider_with_no_adapter_yet(caplog):
+def test_search_source_falls_back_for_an_unknown_id(caplog):
     """A row may hold an unknown id the registry does not know (a downgrade, a hand
     edit); the box falls back to the first usable ranked source."""
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
     with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
-        assert search_source(_cfg(search_provider_tv="tvmaze"), "tv", reg).id == "tmdb"
-    assert "search provider tvmaze is not available for tv; using tmdb" in caplog.text
+        assert search_source(_cfg(search_provider_tv="bogus"), "tv", reg).id == "tmdb"
+    assert "search provider bogus is not available for tv; using tmdb" in caplog.text
 
 
 def test_settings_readers_default_for_legacy_rows():

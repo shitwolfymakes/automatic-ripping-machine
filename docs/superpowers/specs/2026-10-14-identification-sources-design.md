@@ -298,4 +298,5 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   pass the setting through to the ripper.
 - Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb stays in the manual TV select. With PR 2b, TVmaze (keyless) is in the default TV list, so every install has an automatic TV title source.
 - PR 4 help text: unchecking `label` in disc hints with no BDMT title means a DVD gets no automatic title search at all; the Step 1 help must say so.
-- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`. PR 2b added them.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`. PR 2b added `tvmaze` and `tvdb` to the select.
+- Automatic TVmaze matches must be close to the query (`title_is_close`: equal, whole-word containment, or 75% similar); TVmaze's single search is otherwise lenient enough to name any string. A far match is a miss. The search box is unfiltered.
