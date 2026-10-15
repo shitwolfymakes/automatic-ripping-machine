@@ -99,6 +99,10 @@ def test_title_is_close_rules():
     assert not title_is_close("blade runner 1982", "Lost")
     assert not title_is_close("", "Lost")
     assert not title_is_close("lost", "")
+    assert title_is_close("君の名は", "君の名は")
+    assert title_is_close("Война и мир", "война и мир")
+    assert title_is_close("Amélie", "Amélie")
+    assert title_is_close("amelie", "Amélie")  # pinned: difflib ratio is above 0.75
 
 
 @respx.mock

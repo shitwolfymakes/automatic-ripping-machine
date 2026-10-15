@@ -20,7 +20,7 @@ def _base_url() -> str:
 
 
 def _normalise(text: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.casefold()).split())
+    return " ".join(re.sub(r"[^\w]+", " ", text.casefold()).replace("_", " ").split())
 
 
 def title_is_close(query: str, name: str) -> bool:
