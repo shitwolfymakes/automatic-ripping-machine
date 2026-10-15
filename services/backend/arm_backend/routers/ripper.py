@@ -765,6 +765,8 @@ async def identify(
                     cfg,
                     title_hint=hint_title(job, hints),
                     title_hint_is_tv=hint_is_tv(job, hints),
+                    # Several same-length episode titles and no feature: a TV
+                    # disc, whatever the label says (arm_common.disc_shape).
                     prefer_tv=looks_episodic(scan.titles),
                 )
 

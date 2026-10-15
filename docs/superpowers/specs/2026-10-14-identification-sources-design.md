@@ -176,9 +176,9 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 |---|---|---|
 | `dispatcher.identify` (video) | branches on disc type, hard-codes clients | kinds in heuristic order (D-6); for each kind, walk `sources_for(cfg, kind)` calling `search_title`; first hit wins; empty list makes no call |
 | `dispatcher.identify` (CD) | MusicBrainz direct | walk `sources_for(cfg, "music")` with `lookup_disc_id` (D-5) |
-| `dispatcher.identify_from_imdb` | TMDb `/find` only | walk `sources_for(cfg, kind)` with `lookup_imdb`; `kind` from the TheDiscDB release; none offered → return the release metadata (D-1) |
+| `dispatcher.identify_from_imdb` | TMDb `/find` only | walks `sources_for(cfg, kind, registry)` with `lookup_imdb`; `kind` from the TheDiscDB release; no capable source → the route identifies from the release metadata with provider `thediscdb` (D-1) |
 | `dispatcher._identify_video` CRC64 | unconditional | `fingerprint_sources(cfg)` with `lookup_fingerprint` (D-2) |
-| `dispatcher._identify_video` label candidate | always | only when `label` is enabled; miss title per D-4 |
+| `dispatcher._identify_video` label candidate | always | only when `label` is in `disc_hint_sources`; the label year still narrows the hint; miss title = hint title → release title → raw label (D-4) |
 | `dispatcher.__init__` | env OMDb override | removed in PR 0 (D-3) |
 | `_with_tmdb_ids` | TMDb only | renamed `fill_external_ids`: given any hit with an IMDb id, asks each enabled source of that type with `lookup_imdb` for its own id until TMDb and TVDB ids are filled (S-10) |
 | `routers/metadata.py search` | `metadata_provider` | `provider` param validated against `known_source_ids(type)`; default `search_source(cfg, type)`; uses `search_candidates` (S-6) |
@@ -231,8 +231,8 @@ retagged `setup_step="identification"` (D-9).
    `_PROVIDER_BY_LABEL_PREFIX` removed. Closes S-8.
 1. **PR 1 · Model and metadata**, as in #258, plus `crc64service_enabled`
    (D-2, D-7, D-8, D-9). Migration 0045. OpenAPI snapshot and TS types regenerated.
-2. **PR 2 · Read the columns.** `sources_for` reads the rows; exact-id walk (D-1); label
-   gate (D-4); CRC64 gate (D-2); CD walk (D-5); re-resolve hook on the new lists. Closes #287.
+2. **PR 2 · Read the columns.** `online_source_ids` reads the TV list; exact-id walk (D-1); label
+   gate (D-4). CRC64 gate, CD walk and the re-resolve hook landed in PR 1. Closes #287.
 3. **PR 2b · Series search.** `search_show` on the TVmaze and TVDB adapters;
    `fill_external_ids` (S-10).
 4. **PR 3 · Auto-apply hold path**, as in #258, with D-10's precedence.
@@ -295,8 +295,5 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   for tags on its own, outside the Backend. An empty Music list stops the Backend's disc-id
   lookup but not that tagging call; the Step 3 Music help text should say so, or PR 2 should
   pass the setting through to the ripper.
-- PR 0 keeps OMDb in the TV title-search order (`tmdb, omdb`), as today. The v4.2 card's TV
-  list is `episode_sources` (`tmdb, tvmaze, tvdb`), which has no OMDb row. PR 2 must either
-  add `omdb` as a TV source in that list's `enum_values` or accept that OMDb series search is
-  dropped; decide before PR 2.
-- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`; the TV title-search order still reads the built-in default until PR 2b, then PR 2 switches it to `episode_sources` (the OMDb-series question above stands).
+- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`.
