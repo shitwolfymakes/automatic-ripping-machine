@@ -1,0 +1,184 @@
+"""Online-source adapters: one per HTTP client, keyed per call from Config."""
+
+import httpx
+import pytest
+from arm_backend.metadata import sources as sources_mod
+from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.sources import build_online_sources, capability
+from arm_common import Config
+
+
+def _config(**overrides) -> Config:
+    base = {"id": 1, "tmdb_api_key": "tmdb-k", "omdb_api_key": "omdb-k", "musicbrainz_user_agent": "arm-test/0.0 (t@x)"}
+    base.update(overrides)
+    return Config(**base)
+
+
+async def test_registry_has_the_four_sources_with_their_media_types():
+    async with httpx.AsyncClient() as http:
+        reg = build_online_sources(http)
+    assert set(reg) == {"tmdb", "omdb", "musicbrainz", "arm_server"}
+    assert reg["tmdb"].media_types == frozenset({"movie", "tv"})
+    assert reg["omdb"].media_types == frozenset({"movie", "tv"})
+    assert reg["musicbrainz"].media_types == frozenset({"music"})
+    assert reg["arm_server"].media_types == frozenset()
+    for sid, source in reg.items():
+        assert source.id == sid
+
+
+@pytest.mark.parametrize("key", [None, "", "   "])
+async def test_keyed_sources_report_missing_key(key):
+    async with httpx.AsyncClient() as http:
+        reg = build_online_sources(http)
+    cfg = _config(tmdb_api_key=key, omdb_api_key=key)
+    assert reg["tmdb"].configured(cfg) == "no tmdb key"
+    assert reg["omdb"].configured(cfg) == "no omdb key"
+    assert reg["tmdb"].requires_key == "tmdb_api_key"
+    assert reg["omdb"].requires_key == "omdb_api_key"
+
+
+async def test_keyless_sources_are_always_configured():
+    async with httpx.AsyncClient() as http:
+        reg = build_online_sources(http)
+    cfg = _config(tmdb_api_key=None, omdb_api_key=None)
+    assert reg["musicbrainz"].configured(cfg) is None
+    assert reg["arm_server"].configured(cfg) is None
+    assert reg["musicbrainz"].requires_key is None
+
+
+async def test_omdb_env_override_counts_as_configured():
+    async with httpx.AsyncClient() as http:
+        reg = build_online_sources(http, omdb_api_key_override="env-k")
+    assert reg["omdb"].configured(_config(omdb_api_key=None)) is None
+
+
+def test_capability_returns_none_for_missing_methods():
+    class Bare:
+        id = "x"
+        media_types = frozenset()
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+    assert capability(Bare(), "search_title") is None
+    assert capability(Bare(), "configured") is not None
+
+
+async def test_tmdb_adapter_delegates_by_kind(monkeypatch):
+    calls: list[tuple] = []
+
+    class FakeTMDB:
+        def __init__(self, api_key, http):
+            calls.append(("init", api_key))
+
+        async def search_movie(self, title, year):
+            calls.append(("movie", title, year))
+            return MetadataResult(title="M", year=year, kind="movie")
+
+        async def search_tv(self, title):
+            calls.append(("tv", title))
+            return MetadataResult(title="T", year=None, kind="tv")
+
+        async def search_movie_candidates(self, title, year=None, limit=10):
+            calls.append(("movie_cands", title, limit))
+            return []
+
+        async def search_tv_candidates(self, title, limit=10):
+            calls.append(("tv_cands", title, limit))
+            return []
+
+        async def find_by_imdb_id(self, imdb_id):
+            calls.append(("find", imdb_id))
+            return MetadataResult(title="F", year=None, kind="movie")
+
+    monkeypatch.setattr(sources_mod, "TMDBClient", FakeTMDB)
+    async with httpx.AsyncClient() as http:
+        tmdb = build_online_sources(http)["tmdb"]
+        cfg = _config()
+        assert (await tmdb.search_title(cfg, "movie", "alien", 1979)).title == "M"
+        assert (await tmdb.search_title(cfg, "tv", "lost", 2004)).title == "T"
+        assert await tmdb.search_candidates(cfg, "movie", "alien", limit=3) == []
+        assert await tmdb.search_candidates(cfg, "tv", "lost", limit=4) == []
+        assert (await tmdb.lookup_imdb(cfg, "tt1")).title == "F"
+    assert ("movie", "alien", 1979) in calls
+    assert ("tv", "lost") in calls
+    assert ("movie_cands", "alien", 3) in calls
+    assert ("tv_cands", "lost", 4) in calls
+    assert ("find", "tt1") in calls
+    assert all(c[1] == "tmdb-k" for c in calls if c[0] == "init")
+
+
+async def test_omdb_adapter_prefers_env_override_and_passes_kind(monkeypatch):
+    calls: list[tuple] = []
+
+    class FakeOMDB:
+        def __init__(self, api_key, http):
+            calls.append(("init", api_key))
+
+        async def lookup_by_title(self, title, year=None, kind="movie"):
+            calls.append(("title", title, year, kind))
+
+        async def search_candidates(self, title, kind="movie", limit=10):
+            calls.append(("cands", title, kind, limit))
+            return []
+
+        async def lookup_by_imdb_id(self, imdb_id):
+            calls.append(("imdb", imdb_id))
+            return MetadataResult(title="I", year=None, kind="movie")
+
+    monkeypatch.setattr(sources_mod, "OMDBClient", FakeOMDB)
+    async with httpx.AsyncClient() as http:
+        omdb = build_online_sources(http, omdb_api_key_override="env-k")["omdb"]
+        cfg = _config(omdb_api_key="saved-k")
+        assert await omdb.search_title(cfg, "tv", "lost", 2004) is None
+        assert await omdb.search_candidates(cfg, "movie", "alien", limit=5) == []
+        assert (await omdb.lookup_imdb(cfg, "tt2")).title == "I"
+    assert ("title", "lost", 2004, "tv") in calls
+    assert ("cands", "alien", "movie", 5) in calls
+    assert ("imdb", "tt2") in calls
+    assert all(c[1] == "env-k" for c in calls if c[0] == "init")
+
+
+async def test_musicbrainz_adapter_delegates(monkeypatch):
+    calls: list[tuple] = []
+
+    class FakeMB:
+        def __init__(self, user_agent, http):
+            calls.append(("init", user_agent))
+
+        async def lookup_disc_id(self, disc_id):
+            calls.append(("disc", disc_id))
+            return MetadataResult(title="A", year=None, kind="music")
+
+        async def search_releases(self, query, limit=10, **filters):
+            calls.append(("search", query, filters))
+            return []
+
+    monkeypatch.setattr(sources_mod, "MusicBrainzClient", FakeMB)
+    async with httpx.AsyncClient() as http:
+        mb = build_online_sources(http)["musicbrainz"]
+        assert (await mb.lookup_disc_id(_config(), "d1")).title == "A"
+        assert await mb.search_releases(_config(), "abbey road", artist="beatles") == []
+    assert ("disc", "d1") in calls
+    assert calls[-1][1] == "abbey road" and calls[-1][2]["artist"] == "beatles"
+    assert calls[0][1] == sources_mod.MUSICBRAINZ_USER_AGENT
+
+
+async def test_arm_server_adapter_only_answers_crc64(monkeypatch):
+    calls: list[str] = []
+
+    class FakeArm:
+        def __init__(self, http):
+            pass
+
+        async def lookup_by_crc64(self, crc64):
+            calls.append(crc64)
+            return MetadataResult(title="C", year=None, kind="movie")
+
+    monkeypatch.setattr(sources_mod, "ArmServerClient", FakeArm)
+    async with httpx.AsyncClient() as http:
+        arm = build_online_sources(http)["arm_server"]
+        assert await arm.lookup_fingerprint(_config(), "sha256", "zzz") is None
+        assert (await arm.lookup_fingerprint(_config(), "crc64", "abc")).title == "C"
+    assert calls == ["abc"]
