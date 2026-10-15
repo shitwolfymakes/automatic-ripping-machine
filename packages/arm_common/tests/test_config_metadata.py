@@ -121,7 +121,10 @@ def test_identity_settings_meta() -> None:
         assert meta.setup_step == by_key["movie_sources"].setup_step
         assert meta.label == label
         assert "Review first" in meta.help
-    assert "Review first" in by_key["episode_auto_apply"].help
+    assert by_key["episode_auto_apply"].help == (
+        "When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; "
+        "the disc is held with no countdown. Ripping › Review first still holds every disc."
+    )
     assert by_key["crc64service_enabled"].type == "bool"
     assert "metadata_provider" not in by_key
     for key in (
