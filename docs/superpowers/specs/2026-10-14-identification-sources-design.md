@@ -142,9 +142,9 @@ class OnlineSource(Protocol):
     async def search_show(self, title, year) -> ShowHit | None: ...                     # PR 2b
 ```
 
-Adapters wrap the existing clients unchanged: `TMDBClient`, `OMDBClient`,
-`MusicBrainzClient`, `ArmServerClient`, and the TVmaze and TVDB HTTP already used by the
-episode providers. The adapter is the only place that knows which client method implements
+Adapters wrap the clients `TMDBClient`, `OMDBClient`, `MusicBrainzClient`, `ArmServerClient`,
+`TVMazeClient` and `TVDBClient` (the last two also serve title search for the TV list; episode
+listing keeps its own providers). The adapter is the only place that knows which client method implements
 which capability and which key it needs. `MetadataResult.provider` is always `source.id`;
 `_PROVIDER_BY_LABEL_PREFIX` goes away.
 
@@ -180,7 +180,7 @@ Capability presence is checked with `hasattr`-style helpers (`has_capability(sou
 | `dispatcher._identify_video` CRC64 | unconditional | `fingerprint_sources(cfg)` with `lookup_fingerprint` (D-2) |
 | `dispatcher._identify_video` label candidate | always | only when `label` is in `disc_hint_sources`; the label year still narrows the hint; miss title = hint title → release title → raw label (D-4) |
 | `dispatcher.__init__` | env OMDb override | removed in PR 0 (D-3) |
-| `_with_tmdb_ids` | TMDb only | renamed `fill_external_ids`: given any hit with an IMDb id, asks each enabled source of that type with `lookup_imdb` for its own id until TMDb and TVDB ids are filled (S-10) |
+| `_with_tmdb_ids` | TMDb only | renamed `fill_external_ids`: a TMDb hit gets IMDb/TVDB ids from `external_ids`; any other hit with an IMDb id gets its TMDb (and TVDB) id from TMDb `/find` through the tmdb source when configured (S-10) |
 | `routers/metadata.py search` | `metadata_provider` | `provider` param validated against `known_source_ids(type)`; default `search_source(cfg, type)`; uses `search_candidates` (S-6) |
 | `routers/metadata.py lookup` | `metadata_provider` | walks `sources_for(cfg, type)` with `lookup_imdb`; new `type` param, default `movie` |
 | `routers/metadata.py music/*` | hard-coded | `search_source(cfg, "music")`; `/music/{release_id}` keeps its MusicBrainz shape because the release detail endpoint is MusicBrainz-specific |
@@ -233,8 +233,9 @@ retagged `setup_step="identification"` (D-9).
    (D-2, D-7, D-8, D-9). Migration 0045. OpenAPI snapshot and TS types regenerated.
 2. **PR 2 · Read the columns.** `online_source_ids` reads the TV list; exact-id walk (D-1); label
    gate (D-4). CRC64 gate, CD walk and the re-resolve hook landed in PR 1. Closes #287.
-3. **PR 2b · Series search.** `search_show` on the TVmaze and TVDB adapters;
-   `fill_external_ids` (S-10).
+3. **PR 2b · Series search.** TVmaze and TVDB title-search clients and adapters (`search_title`,
+   `search_candidates`, `lookup_imdb`, TV only); `fill_external_ids` (S-10); `search_provider_tv`
+   offers `tmdb, omdb, tvmaze, tvdb`.
 4. **PR 3 · Auto-apply hold path**, as in #258, with D-10's precedence.
 5. **PR 4 · Docs.** `02-job-lifecycle.md` gains the table in §2; the Identification tab help
    text, including D-10 and D-11.
@@ -295,6 +296,6 @@ All stay zero-infra: adapters are faked at the `OnlineSource` boundary, not at H
   for tags on its own, outside the Backend. An empty Music list stops the Backend's disc-id
   lookup but not that tagging call; the Step 3 Music help text should say so, or PR 2 should
   pass the setting through to the ripper.
-- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search. Until TVmaze's title search lands (PR 2b, same merge), an install with no TMDb key has an empty automatic TV walk, so a TV-shaped disc can be identified as a movie by the movie walk; the stack does not ship without 2b.
+- Resolved in PR 2: the automatic TV title order is `episode_sources` (no OMDb row); OMDb series search remains available from the job page's TV search select. TVmaze/TVDB title search lands in PR 2b; until then a TV list naming only them yields no automatic TV title search. With PR 2b, TVmaze (keyless) is in the default TV list, so every install has an automatic TV title source.
 - PR 4 help text: unchecking `label` in disc hints with no BDMT title means a DVD gets no automatic title search at all; the Step 1 help must say so.
-- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`.
+- Resolved in PR 1: `search_provider_tv` offers `tmdb, omdb` (the providers that can answer today); TVmaze and TVDB join the select in PR 2b with their adapters. PR 2b added them. PR 1 already reads `movie_sources` and `music_sources` for the dispatcher's order and honours `crc64service_enabled`.
