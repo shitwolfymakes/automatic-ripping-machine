@@ -14,10 +14,10 @@ namespaced `armv3-*` vs `arm-*`). See [Upgrading](Upgrading).
 
 ## Do I need API keys?
 
-No, but they help. ARM tries the community CRC64 database first (no key), then
-TMDb and OMDb (keys improve naming hit rates a lot), and MusicBrainz for audio
-CDs (no key). Add TMDb/OMDb keys on the Settings page — see
-[Configuration](Configuring-ARM#metadata--identification).
+No, but they help. TheDiscDB, the ARM community CRC64 database (DVDs), TVmaze
+(TV shows) and MusicBrainz (audio CDs) need no key. A free TMDb key, or an OMDb
+key, is what names most movies. Add keys on **Settings, Keys** — see
+[Configuration](Configuring-ARM#identification-and-keys).
 
 ## Can I rip on Windows or macOS?
 
