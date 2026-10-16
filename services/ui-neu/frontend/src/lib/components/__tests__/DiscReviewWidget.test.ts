@@ -25,6 +25,7 @@ vi.mock('$lib/api/jobs', () => ({
 	deleteJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	resolveJob: vi.fn(() => Promise.resolve({})),
+	acceptIdentitySuggestion: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] })),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
 	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
@@ -266,6 +267,120 @@ describe('DiscReviewWidget', () => {
 					await screen.findByText('ARM ripped this disc before, but that job has since been deleted.')
 				).toBeInTheDocument();
 			} finally {
+				restore();
+			}
+		});
+	});
+
+	describe('held identity suggestion', () => {
+		const suggestionMeta = {
+			identity_suggestion: {
+				provider: 'tmdb',
+				title: 'Iron Man',
+				year: 2008,
+				kind: 'movie',
+				poster_url: 'https://image.tmdb.org/t/p/w500/abc.jpg',
+				external_ids: {},
+				overview: null,
+				payload: {},
+				suggested_at: '2026-10-15T10:00:00Z'
+			},
+			flags: { unidentified: true }
+		};
+		const heldFor = (disc_type: 'bluray' | 'cd' = 'bluray', extraMeta: Record<string, unknown> = {}) =>
+			createJob({
+				status: 'awaiting_review',
+				title: 'MY_DISC',
+				disc_type,
+				wait_start_time: null,
+				metadata_json: { ...suggestionMeta, ...extraMeta } as never
+			});
+
+		async function renderSuggested(disc_type: 'bluray' | 'cd' = 'bluray', extraMeta: Record<string, unknown> = {}) {
+			const held = heldFor(disc_type, extraMeta);
+			const { fetchJob } = await import('$lib/api/jobs');
+			const original = vi.mocked(fetchJob).getMockImplementation();
+			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: held });
+			const onrefresh = vi.fn();
+			renderComponent(DiscReviewWidget, { props: { job: held, driveNames: {}, paused: false, onrefresh } });
+			return { onrefresh, restore: () => vi.mocked(fetchJob).mockImplementation(original!) };
+		}
+
+		it('asks to confirm the title, shows the banner, keeps Start rip', async () => {
+			const { restore } = await renderSuggested();
+			try {
+				expect(await screen.findByText('Confirm the title: use it or search')).toBeInTheDocument();
+				expect(screen.getByText('CONFIRM TITLE')).toBeInTheDocument();
+				expect(screen.getByTestId('identity-suggestion')).toBeInTheDocument();
+				expect(screen.getByText('Iron Man (2008)')).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: 'Start rip' })).toBeInTheDocument();
+			} finally {
+				restore();
+			}
+		});
+
+		it('Use this title accepts, reloads the detail and refreshes the parent', async () => {
+			const { acceptIdentitySuggestion, fetchJob } = await import('$lib/api/jobs');
+			const { onrefresh, restore } = await renderSuggested();
+			try {
+				await waitFor(() => expect(fetchJob).toHaveBeenCalledTimes(1));
+				await fireEvent.click(await screen.findByRole('button', { name: 'Use this title' }));
+				await waitFor(() => expect(acceptIdentitySuggestion).toHaveBeenCalledWith('job_1'));
+				await waitFor(() => expect(onrefresh).toHaveBeenCalled());
+				await waitFor(() => expect(fetchJob).toHaveBeenCalledTimes(2));
+			} finally {
+				restore();
+			}
+		});
+
+		it('Search instead opens the title search for a video disc', async () => {
+			const { restore } = await renderSuggested();
+			try {
+				expect(screen.queryByPlaceholderText('Title...')).toBeNull();
+				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
+				expect(await screen.findByPlaceholderText('Title...')).toBeInTheDocument();
+			} finally {
+				restore();
+			}
+		});
+
+		it('Search instead opens the music search for a CD', async () => {
+			const { restore } = await renderSuggested('cd');
+			try {
+				expect(screen.queryByPlaceholderText('Album or title...')).toBeNull();
+				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
+				expect(await screen.findByPlaceholderText('Album or title...')).toBeInTheDocument();
+			} finally {
+				restore();
+			}
+		});
+
+		it('on a previously-ripped hold, keeps the hold label and badge and still offers the banner', async () => {
+			const { acceptIdentitySuggestion } = await import('$lib/api/jobs');
+			const { onrefresh, restore } = await renderSuggested('bluray', { previously_ripped: { job_id: 'job_old' } });
+			try {
+				expect(await screen.findByText('Already ripped: Rip again or Discard')).toBeInTheDocument();
+				expect(screen.getByText('ALREADY RIPPED')).toBeInTheDocument();
+				expect(screen.queryByText('CONFIRM TITLE')).toBeNull();
+				expect(screen.getByTestId('identity-suggestion')).toBeInTheDocument();
+				await fireEvent.click(screen.getByRole('button', { name: 'Use this title' }));
+				await waitFor(() => expect(acceptIdentitySuggestion).toHaveBeenCalledWith('job_1'));
+				await waitFor(() => expect(onrefresh).toHaveBeenCalled());
+			} finally {
+				restore();
+			}
+		});
+
+		it('a guest sees the banner without its buttons', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as { __setRole: (r: string | null) => void };
+			auth.__setRole('guest');
+			const { restore } = await renderSuggested();
+			try {
+				expect(await screen.findByTestId('identity-suggestion')).toBeInTheDocument();
+				expect(screen.queryByRole('button', { name: 'Use this title' })).toBeNull();
+				expect(screen.queryByRole('button', { name: 'Search instead' })).toBeNull();
+			} finally {
+				auth.__setRole('admin');
 				restore();
 			}
 		});

@@ -41,7 +41,8 @@ DEFAULT_RANKS: dict[str, int] = {
     "episodes_tvdb": 2,
 }
 
-# Disc-hint sources in default rank order (PR 4 makes this the operator's setting).
+# Disc-hint sources in their fixed rank order; the operator's setting only
+# switches each one on or off (`hint_sources_setting`).
 HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, LABEL)
 
 # Episode-match source id per operator-facing provider setting name.
@@ -91,7 +92,14 @@ def enabled_episode_source_ids(cfg: Config | None) -> tuple[str, ...]:
 
 
 def hint_sources_setting(cfg: Config | None) -> tuple[str, ...]:
-    return _ranked(getattr(cfg, "disc_hint_sources", None), HINT_SOURCE_BY_SETTING, _DEFAULT_HINT_SETTING)
+    """The enabled disc hints, always in `HINT_SOURCES` order: the setting is a
+    set (membership = enabled), and the disc's own metadata beats its label
+    whatever order the list was saved in."""
+    values = getattr(cfg, "disc_hint_sources", None)
+    if values is None:
+        return _DEFAULT_HINT_SETTING
+    stored = set(values)
+    return tuple(sid for sid in _DEFAULT_HINT_SETTING if sid in stored)
 
 
 def enabled_hint_sources(cfg: Config | None) -> tuple[Source, ...]:
@@ -106,7 +114,8 @@ def disabled_source_ids(cfg: Config | None) -> frozenset[str]:
 
 
 def source_ranks(cfg: Config | None) -> dict[str, int]:
-    """Within-tier rank per enabled source: its position in the operator's list."""
+    """Within-tier rank per enabled source: its position in the operator's list
+    (episode sources) or in the fixed `HINT_SOURCES` order (disc hints)."""
     ranks = {sid: i for i, sid in enumerate(enabled_episode_source_ids(cfg))}
     ranks.update({s.id: i for i, s in enumerate(enabled_hint_sources(cfg))})
     return ranks
@@ -224,14 +233,15 @@ def sources_for(
 
 def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
     """The source behind the job page's search box for `media_type`: the
-    operator's `search_provider_<type>` when it is listed, registered and
-    configured, else the first usable listed source (logged, so a provider
-    chosen before its adapter exists — TVmaze/TVDB until PR 2b — is visible)."""
-    ranked = sources_for(cfg, media_type, registry)
+    operator's `search_provider_<type>` when it is registered, serves the type
+    and is configured, whether or not it is in the Online lookup list (the
+    Search card is independent of that list), else the first usable listed
+    source (logged, so an unavailable choice is visible)."""
     preferred = search_provider_setting(cfg, media_type)
-    for source in ranked:
-        if source.id == preferred:
-            return source
+    chosen = registry.get(preferred) if preferred else None
+    if chosen is not None and media_type in chosen.media_types and chosen.configured(cfg) is None:
+        return chosen
+    ranked = sources_for(cfg, media_type, registry)
     fallback = ranked[0] if ranked else None
     if preferred and fallback is not None:
         logger.debug("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)

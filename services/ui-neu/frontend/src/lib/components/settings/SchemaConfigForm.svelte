@@ -1,10 +1,11 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import {
 		groupBlurb,
+		groupLabel,
 		sectionFields,
 		settingsTabFor,
 		KEY_CHECK_NAMES,
@@ -14,9 +15,7 @@
 	import { unchanged } from '$lib/utils/unchanged';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import TvEpisodesSummary, { tvEpisodesEmptyNote } from './TvEpisodesSummary.svelte';
-
-	const SECTION_SUMMARIES = { 'tv-episodes': TvEpisodesSummary };
+	import IdentityCard from './IdentityCard.svelte';
 
 	let {
 		group,
@@ -40,10 +39,19 @@
 	const HIDDEN = '<hidden>';
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
+	/** Id of a section's note; set only when the section hides its fields' own help. */
+	const noteId = (section: { title: string; note?: string; hideFieldHelp?: boolean }) =>
+		section.note && section.hideFieldHelp
+			? `section-note-${section.title.toLowerCase().replace(/\W+/g, '-')}`
+			: undefined;
 	const blurb = $derived(groupBlurb(group.name));
-	// A required key's field lives in this form's group when it has one; the API
-	// keys otherwise sit with the metadata settings.
-	const keyTab = (key: string) => (group.fields.some((f) => f.key === key) ? settingsTabFor(group.name) : 'Metadata');
+	// A required key's field lives in this form's group when it has one; otherwise
+	// the chip falls back to Settings' schema context, or the field's own anchor.
+	// A setup step (`setup:<step>`) is no Settings tab: its chips use the anchor.
+	const keyTab = (key: string) =>
+		!group.name.startsWith('setup:') && group.fields.some((f) => f.key === key)
+			? settingsTabFor(group.name)
+			: undefined;
 
 	let values = $state<Record<string, unknown>>({});
 
@@ -55,11 +63,23 @@
 	// parent reloads settings), since the new prop is then the ground truth.
 	let savedOverrides = $state<Record<string, unknown>>({});
 	let configRef: Record<string, unknown> | null = null;
+	let fieldsRef: SettingsGroup['fields'] | null = null;
 
 	$effect(() => {
+		const fields = group.fields;
+		const prev = configRef;
+		const sameFields = fields === fieldsRef;
+		const current = untrack(() => values);
 		const next: Record<string, unknown> = {};
-		for (const f of group.fields) next[f.key] = config[f.key];
+		for (const f of fields) {
+			const v = config[f.key];
+			// A new `config` (another tab's save folded in, or a reload) replaces
+			// only the values it changed; an unsaved edit to any other field of
+			// this form survives, since Settings keeps every config tab mounted.
+			next[f.key] = sameFields && prev && f.key in current && unchanged(v, prev[f.key]) ? current[f.key] : v;
+		}
 		values = next;
+		fieldsRef = fields;
 		if (config !== configRef) {
 			configRef = config;
 			savedOverrides = {};
@@ -180,13 +200,15 @@
 	}
 </script>
 
-{#snippet fieldRow(field: ConfigFieldMeta)}
+{#snippet fieldRow(field: ConfigFieldMeta, noteId?: string)}
 	{#if field.key in KEY_CHECK_NAMES && field.widget == null}
 		<ConfigSchemaField
 			{field}
 			bind:value={values[field.key]}
 			config={values}
 			context={config}
+			hideHelp={noteId !== undefined}
+			describedBy={noteId}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		>
 			{#snippet action()}
@@ -246,6 +268,8 @@
 			config={values}
 			context={config}
 			{keyTab}
+			hideHelp={noteId !== undefined}
+			describedBy={noteId}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		/>
 	{/if}
@@ -266,7 +290,7 @@
 		{/if}
 	{:else}
 		<div>
-			<h2 class="schema-config-form-title">{group.name}</h2>
+			<h2 class="schema-config-form-title">{groupLabel(group.name)}</h2>
 			{#if blurb}
 				<p class="schema-config-form-description mt-1">{blurb}</p>
 			{/if}
@@ -281,40 +305,34 @@
 					{:else}
 						<div class="schema-config-form-section-blurb"></div>
 					{/if}
-					{#if section.summary}
-						{@const Summary = SECTION_SUMMARIES[section.summary]}
-						{#if Summary}
-							<Summary {values} fields={group.fields} />
-						{/if}
+					{#if section.custom === 'identity'}
+						<IdentityCard bind:values fields={group.fields} {config} {keyTab} disabled={!editable.length} />
 					{/if}
 					{#if section.columns.length > 0}
 						<div class="schema-config-form-columns" data-testid="settings-section-columns">
 							{#each section.columns as columnFields, i (i)}
 								<div class="stack">
 									{#each columnFields as field (field.key)}
-										{@render fieldRow(field)}
+										{@render fieldRow(field, noteId(section))}
 									{/each}
 								</div>
 							{/each}
 						</div>
 					{/if}
-					{#if section.summary === 'tv-episodes'}
-						{@const emptyNote = tvEpisodesEmptyNote(values)}
-						{#if emptyNote}
-							<p class="schema-config-form-description mb-4" data-testid="tv-episodes-empty-note">{emptyNote}</p>
-						{/if}
-					{/if}
 					<div class="stack">
 						{#each section.fields as field (field.key)}
-							{@render fieldRow(field)}
+							{@render fieldRow(field, noteId(section))}
 						{/each}
 					</div>
+					{#if section.note}
+						<p class="schema-config-form-description" id={noteId(section)}>{section.note}</p>
+					{/if}
 					{#if section.advanced.length > 0}
 						<hr class="schema-config-form-advanced-divider" />
 						<span class="label-caps schema-config-form-advanced-label">Advanced</span>
 						<div class="stack">
 							{#each section.advanced as field (field.key)}
-								{@render fieldRow(field)}
+								{@render fieldRow(field, noteId(section))}
 							{/each}
 						</div>
 					{/if}
@@ -380,7 +398,7 @@
 	   panel without a media query. */
 	.schema-config-form-columns {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 		gap: 1.5rem;
 		margin-bottom: 1rem;
 	}

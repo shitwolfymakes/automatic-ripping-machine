@@ -1,4 +1,4 @@
-import type { JobView } from '$lib/types/api.gen';
+import type { IdentitySuggestion, JobView } from '$lib/types/api.gen';
 
 type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;
 
@@ -86,6 +86,34 @@ export function previouslyRippedJobId(
 }
 
 /**
+ * The confident match identify held for confirmation (the media type's
+ * auto-apply switch is off), or null. Accepting it applies the title.
+ */
+export function identitySuggestionOf(
+	job: { metadata_json?: JobView['metadata_json'] } | null | undefined
+): IdentitySuggestion | null {
+	return job?.metadata_json?.identity_suggestion ?? null;
+}
+
+/** Display names for identification provider ids. */
+export const PROVIDER_LABELS: Record<string, string> = {
+	tmdb: 'TMDb',
+	omdb: 'OMDb',
+	tvmaze: 'TVmaze',
+	tvdb: 'TVDB',
+	musicbrainz: 'MusicBrainz',
+	arm_server: 'ARM community database',
+	thediscdb: 'TheDiscDB'
+};
+
+/** A provider id's display name; an unknown id shows as itself. */
+export function providerLabel(provider: string): string {
+	return PROVIDER_LABELS[provider] ?? provider;
+}
+
+const CONFIRM_TITLE_STATUSES = new Set(['awaiting_review', 'awaiting_user_id', 'ripped_awaiting_identify']);
+
+/**
  * The header phase pill for any job rendered as a review card. Pre-rip statuses
  * map to REVIEW / IDENTIFY / READY; a post-rip job awaiting a session reads
  * RIPPED · NEEDS SESSION (or · NEEDS TITLE when a session is somehow present but
@@ -98,6 +126,8 @@ export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string
 	const s = job.status?.toLowerCase() ?? '';
 	if (s === 'awaiting_review' && previouslyRippedJobId(job))
 		return { label: 'ALREADY RIPPED', accent: 'var(--color-accent-4)' };
+	if (CONFIRM_TITLE_STATUSES.has(s) && identitySuggestionOf(job))
+		return { label: 'CONFIRM TITLE', accent: 'var(--color-accent-4)' };
 	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-accent-1)' };
 	if (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify')
 		return { label: 'IDENTIFY', accent: 'var(--color-accent-4)' };

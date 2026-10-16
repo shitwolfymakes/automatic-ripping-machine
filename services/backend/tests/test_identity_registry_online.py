@@ -211,3 +211,30 @@ def test_auto_apply_for_maps_each_kind_to_its_switch() -> None:
     # Unknown kinds and a missing row apply (identify never holds what it cannot name).
     assert auto_apply_for(cfg, "weird") is True
     assert auto_apply_for(None, "movie") is True
+
+
+def test_search_source_uses_a_provider_outside_the_ranked_list():
+    """The Search card is independent of Online lookup: OMDb is never in
+    `episode_sources`, and an unticked movie source can still serve the box."""
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
+    cfg = _cfg(search_provider_tv="omdb", episode_sources=["tmdb", "tvmaze", "tvdb"])
+    assert search_source(cfg, "tv", reg).id == "omdb"
+    cfg = _cfg(search_provider_movie="omdb", movie_sources=["tmdb"])
+    assert search_source(cfg, "movie", reg).id == "omdb"
+    # the identify walk still ignores it
+    assert [s.id for s in sources_for(cfg, "movie", reg)] == ["tmdb"]
+    # and an exact-id lookup asks it first, ahead of the ranked list
+    assert [s.id for s in lookup_sources(cfg, "movie", reg)] == ["omdb", "tmdb"]
+
+
+def test_search_source_unconfigured_outside_provider_falls_back(caplog):
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}, reason="no omdb key"))
+    cfg = _cfg(search_provider_movie="omdb", movie_sources=["tmdb"])
+    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
+        assert search_source(cfg, "movie", reg).id == "tmdb"
+    assert "search provider omdb is not available for movie; using tmdb" in caplog.text
+
+
+def test_search_source_provider_not_serving_the_type_falls_back():
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie"}))
+    assert search_source(_cfg(search_provider_tv="omdb"), "tv", reg).id == "tmdb"

@@ -890,3 +890,26 @@ def test_search_default_tv_provider_tvmaze_without_tmdb_key(signing_key: bytes) 
         r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["candidates"][0]["title"] == "Lost"
+
+
+@respx.mock
+def test_search_tv_uses_omdb_although_episode_sources_omit_it(signing_key: bytes) -> None:
+    """The Search card is independent of Online lookup: OMDb is never in
+    `episode_sources`, yet `search_provider_tv=omdb` serves the TV search box."""
+    route = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "Response": "True",
+                "Search": [{"Title": "Lost", "Year": "2004", "imdbID": "tt0411008", "Type": "series"}],
+            },
+        )
+    )
+    db = FakeSession()
+    _seed(db, omdb_api_key="k", search_provider_tv="omdb", episode_sources=["tmdb", "tvmaze", "tvdb"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert route.called
+    assert r.json()["candidates"][0]["title"] == "Lost"

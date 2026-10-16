@@ -15,7 +15,7 @@ from arm_common.schemas import SettingsGroup, SettingsSchemaResponse
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 # Group display order for the settings page.
-_GROUP_ORDER = ["Metadata", "Ripping", "Transcoding", "Notifications", "System"]
+_GROUP_ORDER = ["Identification", "Keys", "Ripping", "Transcoding", "Notifications", "System"]
 
 
 # Explicit allowlist: only these env Settings are surfaced read-only. An
