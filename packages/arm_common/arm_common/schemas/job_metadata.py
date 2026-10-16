@@ -54,6 +54,24 @@ class ExternalIds(BaseModel):
     tmdb_kind: Literal["movie", "tv"] | None = None
 
 
+class IdentityFacts(BaseModel):
+    """What a person uses to tell titles apart: run, plot, rating, people.
+    Filled from a provider payload by `arm_backend.metadata.facts`; shown in
+    the match picker and snapshotted on the job when a match is used."""
+
+    model_config = ConfigDict(extra="allow")
+
+    end_year: int | None = None
+    overview: str | None = None
+    rating: float | None = None  # 0-10
+    rating_source: Literal["imdb", "tmdb", "tvmaze"] | None = None
+    votes: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    creators: list[str] = Field(default_factory=list)  # series creators, or a movie's directors
+    cast: list[str] = Field(default_factory=list)  # top billed, at most three
+    episode_count: int | None = None
+
+
 class JobIdentity(BaseModel):
     """What identification concluded. Title/year/media_type/poster live on
     the Job row itself — this records where they came from and the ids that
@@ -65,6 +83,10 @@ class JobIdentity(BaseModel):
     external_ids: ExternalIds = Field(default_factory=ExternalIds)
     overview: str | None = None
     identified_at: datetime | None = None
+    # Snapshot of the picked match's facts (match picker spec 3.6). Not
+    # refreshed; a later identify or accept replaces the whole identity.
+    facts: IdentityFacts | None = None
+    facts_fetched_at: datetime | None = None
 
 
 class MusicTrackMeta(BaseModel):

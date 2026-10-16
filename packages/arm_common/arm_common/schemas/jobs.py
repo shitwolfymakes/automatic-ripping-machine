@@ -20,7 +20,20 @@ from arm_common.enums import (
 )
 from arm_common.disc_shape import looks_episodic as _looks_episodic
 from arm_common.schemas.identity import IdentityClaims
-from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
+from arm_common.schemas.job_metadata import ExternalIds, IdentityFacts, JobMetadata, MusicMeta
+
+
+class ResolveMatch(BaseModel):
+    """A search result the operator picked (match picker spec 3.6). Its
+    presence makes `external_ids` replace the stored show ids wholesale."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["tmdb", "omdb", "tvmaze", "tvdb"]
+    poster_url: str | None = None
+    # True when the operator edited the poster URL before using the match.
+    poster_is_manual: bool = False
+    facts: IdentityFacts | None = None
 
 
 class ResolveRequest(BaseModel):
@@ -58,6 +71,7 @@ class ResolveRequest(BaseModel):
     # Typed replacements for the last free-form uses.
     music: MusicMeta | None = None
     external_ids: ExternalIds | None = None
+    match: ResolveMatch | None = None
 
 
 class PreviousRipView(BaseModel):
