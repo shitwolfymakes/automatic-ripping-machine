@@ -160,7 +160,7 @@
 	});
 </script>
 
-<section class="panel" data-testid="gpus-card">
+<section class="panel gpus-card" data-testid="gpus-card">
 	<div class="gpus-card-head">
 		<h3 class="eyebrow">Transcode GPUs</h3>
 		{#if $isAdmin && gpus.length > 0}
@@ -185,7 +185,7 @@
 			list is empty and the backend restarts.
 		</p>
 	{:else}
-		<div class="stack stack-sm">
+		<div class="stack stack-sm gpus-card-list">
 			{#each gpus as g (g.id)}
 				<div class="panel-section gpus-card-row-wrap" data-testid="gpu-row-{g.id}">
 					<GpuInventoryRow gpu={g}>
@@ -262,6 +262,10 @@
 {/if}
 
 <style>
+	/* same padding as the Settings section cards it sits beside */
+	.gpus-card {
+		padding: 1.5rem;
+	}
 	.gpus-card-head {
 		display: flex;
 		align-items: center;
@@ -286,6 +290,10 @@
 		margin-top: 0.5rem;
 		font-size: 0.875rem;
 		color: var(--color-text);
+	}
+	/* keeps the first GPU row clear of the header row and its Test encoders button */
+	.gpus-card-list {
+		margin-top: 0.75rem;
 	}
 	.gpus-card-note {
 		font-size: 0.8125rem;

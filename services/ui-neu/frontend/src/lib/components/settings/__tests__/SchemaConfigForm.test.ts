@@ -77,6 +77,14 @@ describe('SchemaConfigForm', () => {
 		expect(extra.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
+	it('renders the beforeSections snippet above the first section card', () => {
+		const beforeSections = createRawSnippet(() => ({ render: () => '<div data-testid="before-sections">top</div>' }));
+		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG, beforeSections } });
+		const top = screen.getByTestId('before-sections');
+		const firstSection = screen.getAllByTestId('settings-section')[0];
+		expect(top.compareDocumentPosition(firstSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('renders a control per editable field, seeded from config', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		expect((screen.getByRole('combobox', { name: /provider/i }) as HTMLSelectElement).value).toBe('tmdb');

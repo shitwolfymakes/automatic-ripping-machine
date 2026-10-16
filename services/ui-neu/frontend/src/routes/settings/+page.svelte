@@ -394,7 +394,7 @@
 			{#if activeTab === 'transcoding'}
 				{#if $transcoderEnabled && transcodingGroup}
 					<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
-						{#snippet beforeSave()}
+						{#snippet beforeSections()}
 							<GpusCard />
 						{/snippet}
 					</SchemaConfigForm>
