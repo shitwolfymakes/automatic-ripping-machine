@@ -51,6 +51,22 @@ describe('IdentitySuggestionBanner', () => {
 		vi.clearAllMocks();
 	});
 
+	it('says when several releases fit the disc track layout', () => {
+		const toc_candidates = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+		renderBanner(heldJob({ kind: 'music', provider: 'musicbrainz', payload: { toc_candidates } }));
+		expect(
+			screen.getByText("One of 3 releases that fit this disc's track layout. Use Search instead to pick another.")
+		).toBeInTheDocument();
+	});
+
+	it('says nothing about the track layout for a single fit', () => {
+		renderBanner(heldJob({ payload: { toc_candidates: [{ id: 'a' }] } }));
+		expect(screen.queryByText(/track layout/)).not.toBeInTheDocument();
+		cleanup();
+		renderBanner(heldJob());
+		expect(screen.queryByText(/track layout/)).not.toBeInTheDocument();
+	});
+
 	it('shows the match, the source and the poster', () => {
 		renderBanner(heldJob());
 		expect(screen.getByTestId('identity-suggestion')).toBeInTheDocument();

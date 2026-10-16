@@ -3491,7 +3491,9 @@ def test_identify_switch_off_for_another_kind_still_applies_this_one() -> None:
     assert out["metadata_json"].get("identity_suggestion") is None
 
 
-def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on() -> None:
+def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     db = _suggestion_db(music_auto_apply=True)
     cands = [{"id": "a", "title": "Album", "date": "1999", "artist": "X"}, {"id": "b", "title": "Album (Deluxe)"}]
     result = MetadataResult(
@@ -3501,7 +3503,10 @@ def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on()
         payload={"toc_match": "fuzzy", "toc_candidates": cands},
         provider="musicbrainz",
     )
-    out = _identify_with(db, result, _scan_dict("cd")).json()
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.ripper"):
+        out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert "(several releases fit the track layout)" in caplog.text
+    assert "auto-apply off" not in caplog.text
     assert out["status"] == "awaiting_review"
     assert out["wait_start_time"] is None
     assert out["metadata_json"]["identity_suggestion"]["title"] == "Album"

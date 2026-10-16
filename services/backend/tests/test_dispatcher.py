@@ -1360,6 +1360,33 @@ async def test_cd_passes_toc_and_records_a_fuzzy_match():
     ]
 
 
+async def test_cd_fuzzy_toc_miss_records_a_miss_with_a_reason():
+    from arm_backend.metadata.base import LookupError
+
+    class Mb:
+        id = "musicbrainz"
+        media_types = frozenset({"music"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_disc_id(self, cfg, disc_id, toc=None):
+            raise LookupError("musicbrainz toc not found")
+
+    scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc", cd_toc="1 2 3 4 5")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"musicbrainz": Mb()})
+        await dispatcher.identify(scan, _config())
+    assert dispatcher.last_attempts[0] == {
+        "source": "musicbrainz",
+        "step": "disc_id",
+        "kind": "music",
+        "outcome": "miss",
+        "detail": "no release fits the track layout",
+    }
+
+
 async def test_overlapping_identifies_keep_their_own_attempts():
     """The dispatcher is shared by the app: two discs identified at once must
     not see each other's attempts (or suppress each other's skip entries)."""

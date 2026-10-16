@@ -853,10 +853,11 @@ async def identify(
             job.wait_start_time = None
             await _persist_review_tracks(session, job, scan)
             logger.info(
-                "identify job_id=%s: %s hit %r held for confirmation (auto-apply off)",
+                "identify job_id=%s: %s hit %r held for confirmation (%s)",
                 job.id,
                 result.kind,
                 result.title,
+                "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
             )
         else:
             diagnostic: dict[str, bool] = {}

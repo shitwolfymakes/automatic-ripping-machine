@@ -16,6 +16,7 @@ from arm_backend.identity.sources.registry import (
     sources_for,
 )
 from arm_backend.metadata.base import LookupError, MetadataResult
+from arm_backend.metadata.musicbrainz import TOC_NOT_FOUND
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_common import Config, DiscType
@@ -392,6 +393,9 @@ class MetadataDispatcher:
         except LookupError as e:
             logger.info("metadata.%s miss: %s", source_id, e)
             result, outcome = None, "error"
+            if str(e) == TOC_NOT_FOUND:
+                # The fuzzy TOC fallback ran and nothing fit: an answer, not a fault.
+                outcome, detail = "miss", "no release fits the track layout"
         if step is not None:
             self._record(source_id, step, kind, outcome, detail)
         return result
