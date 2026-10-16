@@ -369,9 +369,14 @@
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
 	}
+	/* Each source list (Movies, TV shows) in its own box inside step 3. */
 	.identity-card-column {
+		min-width: 0;
 		scroll-margin-top: 6rem;
-		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: color-mix(in srgb, var(--color-text) 3%, var(--color-surface));
+		padding: 0.875rem 1rem;
 		transition: box-shadow var(--motion-base) var(--ease);
 	}
 	/* Same fit-width grid as SchemaConfigForm's columns: side by side on
