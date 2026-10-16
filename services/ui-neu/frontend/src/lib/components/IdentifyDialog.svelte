@@ -117,7 +117,14 @@
 			</p>
 		{/if}
 
-		<form class="mt-4" onsubmit={submit}>
+		{#if !isCd}
+			<div class="mt-4 mb-3">
+				<TitleSearch {job} onresolved={onidentified} />
+			</div>
+			<p class="field-help mt-4 mb-2">Or enter the title yourself</p>
+		{/if}
+
+		<form class={isCd ? 'mt-4' : 'mt-2'} onsubmit={submit}>
 			{#if isCd}
 				<div class="mb-3 flex gap-3">
 					<label class="field identify-dialog-field-wide">
@@ -166,10 +173,6 @@
 					</p>
 				{/if}
 			{:else}
-				<div class="mb-3">
-					<TitleSearch {job} onresolved={onidentified} />
-				</div>
-				<p class="field-help mb-2">Or enter the title yourself</p>
 				<div class="mb-3 flex gap-3">
 					<label class="field identify-dialog-field-wide">
 						<span class="field-label">Title</span>

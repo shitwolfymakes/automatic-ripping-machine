@@ -114,10 +114,34 @@ describe('IdentifyDialog', () => {
 			await fireEvent.click(screen.getByText('Firefly'));
 			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 			await waitFor(() => expect(onidentified).toHaveBeenCalledWith(resp));
+			expect(onidentified).toHaveBeenCalledTimes(1);
+			expect(resolveJobMock).toHaveBeenCalledTimes(1);
 			expect(resolveJobMock).toHaveBeenCalledWith(
 				'job_s',
 				expect.objectContaining({ media_type: 'tv', external_ids: { tmdb_series_id: 1437 } })
 			);
+		});
+
+		it('Search on a movie job does not resolve', async () => {
+			searchMock.mockResolvedValue({ candidates: [] } as never);
+			const job = createJob({ disc_type: 'bluray', status: 'awaiting_user_id', media_type: 'movie', title: 'Alien' });
+			renderComponent(IdentifyDialog, { props: { job, onclose: vi.fn(), onidentified: vi.fn() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1));
+			expect(resolveJobMock).not.toHaveBeenCalled();
+		});
+
+		it('Enter in the search title searches once and does not resolve', async () => {
+			searchMock.mockResolvedValue({ candidates: [] } as never);
+			const job = createJob({ disc_type: 'bluray', status: 'awaiting_user_id', media_type: 'movie', title: 'Alien' });
+			const { container } = renderComponent(IdentifyDialog, {
+				props: { job, onclose: vi.fn(), onidentified: vi.fn() }
+			});
+			const input = container.ownerDocument.querySelector('input[type="text"]') as HTMLInputElement;
+			expect(input.form).toBeNull();
+			await fireEvent.keyDown(input, { key: 'Enter' });
+			await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1));
+			expect(resolveJobMock).not.toHaveBeenCalled();
 		});
 
 		it('episodic job: manual submit warns and resolves only on Save without a match', async () => {

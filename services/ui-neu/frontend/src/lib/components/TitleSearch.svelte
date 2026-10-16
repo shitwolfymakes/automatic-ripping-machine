@@ -255,6 +255,7 @@
 			{/each}
 		</div>
 		<button
+			type="button"
 			onclick={handleSearch}
 			disabled={searching || (!query.trim() && !imdbInput.trim())}
 			class="btn btn-primary title-search-action-btn"
@@ -300,6 +301,7 @@
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each results as result, i (i)}
 				<button
+					type="button"
 					onclick={() => handleSelect(result)}
 					class="group flex flex-col overflow-hidden title-search-card"
 					data-selected={selected === result}
@@ -344,7 +346,7 @@
 		<div class="panel">
 			<div class="stack">
 				{#if results.length > 0}
-					<button onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
+					<button type="button" onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
 						<Glyph name="arrow-left" /> Back to results
 					</button>
 				{/if}
@@ -373,6 +375,7 @@
 				<div class="flex items-center gap-2">
 					{#if $isAdmin}
 						<button
+							type="button"
 							onclick={applyResult}
 							disabled={applying}
 							class="btn title-search-success-btn title-search-action-btn"
