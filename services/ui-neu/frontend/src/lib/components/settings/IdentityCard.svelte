@@ -86,7 +86,7 @@
 	<div class="identity-card-row" data-testid="identity-row-{hint}">
 		<div class="identity-card-row-head">
 			<span class="identity-card-row-name">{HINT_LABELS[hint]}</span>
-			{#each chips as chip (chip)}<span class="chip chip-sm">{chip}</span>{/each}
+			{#each chips as chip (chip)}<span class="chip identity-card-kind">{chip}</span>{/each}
 		</div>
 		{#if isIgnored(hint)}
 			<p class="identity-card-row-note">Ignored (see Advanced)</p>
@@ -96,7 +96,7 @@
 
 <div class="identity-card stack stack-lg" data-testid="identity-card">
 	<div class="identity-card-step stack" data-step="preview">
-		<span class="label-caps">Preview</span>
+		<span class="identity-card-caption">Preview</span>
 		<div class="identity-card-segment" role="radiogroup" aria-label="Disc kind">
 			{#each KINDS as k (k)}
 				<button
@@ -119,19 +119,19 @@
 			<div class="identity-card-row" data-testid="identity-row-disc_id">
 				<div class="identity-card-row-head">
 					<span class="identity-card-row-name">Disc ID (track layout)</span>
-					<span class="chip chip-sm">CD</span>
+					<span class="chip identity-card-kind">CD</span>
 				</div>
 			</div>
 			<div class="identity-card-row identity-card-planned" data-testid="identity-row-cd_text" aria-disabled="true">
 				<div class="identity-card-row-head">
 					<span class="identity-card-row-name">CD-TEXT</span>
-					<span class="chip chip-sm">CD</span>
-					<span class="chip chip-sm">Planned</span>
+					<span class="chip identity-card-kind">CD</span>
+					<span class="chip identity-card-kind identity-card-kind-planned">Planned</span>
 				</div>
 				<p class="identity-card-row-note">Album, artist and track names. Not built yet.</p>
 			</div>
 		</div>
-		<p class="identity-card-note">
+		<p class="identity-card-footer">
 			ARM reads all of these. When they disagree, the disc's own metadata beats its label.
 		</p>
 	</div>
@@ -154,7 +154,7 @@
 							/>
 							<span class="field-label">{db.label}</span>
 						</label>
-						{#each db.chips as chip (chip)}<span class="chip chip-sm">{chip}</span>{/each}
+						{#each db.chips as chip (chip)}<span class="chip identity-card-kind">{chip}</span>{/each}
 					</div>
 					<p class="field-help" id="identity-help-{db.key}">{db.description ?? field.help}</p>
 				</div>
@@ -201,7 +201,7 @@
 								<div class="list-row-main">
 									<div class="identity-card-row-head">
 										<span class="identity-card-row-name">CDDB</span>
-										<span class="chip chip-sm">Planned</span>
+										<span class="chip identity-card-kind identity-card-kind-planned">Planned</span>
 									</div>
 									<div class="identity-card-row-note">Not built yet, so never ranked</div>
 								</div>
@@ -234,7 +234,7 @@
 				{/if}
 			{/each}
 		</div>
-		<p class="field-help" id="identity-help-trust">
+		<p class="field-help identity-card-footer" id="identity-help-trust">
 			When off, a match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping ›
 			Review first still holds every disc.
 		</p>
@@ -264,7 +264,7 @@
 					<p class="field-help" id="identity-help-ignore-{box.hint}">{box.help}</p>
 				</div>
 			{/each}
-			<p class="field-help">
+			<p class="field-help identity-card-footer">
 				For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead.
 			</p>
 		</div>
@@ -280,41 +280,110 @@
 		background: var(--color-surface);
 		padding: 1rem;
 	}
+	.identity-card-caption {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.identity-card-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+		font-size: 1.0625rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.identity-card-badge {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 50%;
+		border: 1px solid color-mix(in srgb, var(--color-primary) 60%, transparent);
+		background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+		color: var(--color-primary);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		line-height: 1;
+	}
 	.identity-card-rows {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+	}
+	.identity-card-row {
+		padding: 0.875rem 0;
+	}
+	.identity-card-row + .identity-card-row {
+		border-top: 1px solid var(--color-border);
 	}
 	.identity-card-row-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.375rem;
+		gap: 0.5rem;
 	}
 	.identity-card-row-name {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--color-text-secondary);
+		font-size: 1.0625rem;
+		color: var(--color-text);
 	}
-	.identity-card-row-note,
+	.identity-card-planned .identity-card-row-name {
+		color: var(--color-text-muted);
+	}
+	.identity-card-row-note {
+		margin-top: 0.25rem;
+		font-size: 0.875rem;
+		line-height: 1.25rem;
+		color: var(--color-text-muted);
+	}
 	.identity-card-note {
 		font-size: 0.8125rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
-	.identity-card-planned .identity-card-row-name {
+	.identity-card-footer {
+		margin-top: 0.25rem;
+		border-top: 1px dashed var(--color-border);
+		padding-top: 0.75rem;
+		font-size: 0.9375rem;
 		color: var(--color-text-muted);
 	}
-	.identity-card-planned {
-		opacity: 0.75;
+	/* Outline kind chips; scoped, so the global .chip stays as it is. */
+	.identity-card-kind {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm, 0.25rem);
+		background: transparent;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+		cursor: default;
+	}
+	.identity-card-kind:hover {
+		background: transparent;
+	}
+	.identity-card-kind-planned {
+		border-style: dashed;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-text-muted);
 	}
 	.identity-card-option {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+		padding: 0.625rem 0;
 		scroll-margin-top: 6rem;
 		border-radius: var(--radius-lg);
 		transition: box-shadow var(--motion-base) var(--ease);
+	}
+	.identity-card-option + .identity-card-option {
+		border-top: 1px solid var(--color-border);
+		border-radius: 0;
+	}
+	.identity-card-option .field-help:not(.identity-card-footer) {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
 	}
 	.identity-card-column {
 		scroll-margin-top: 6rem;
@@ -339,56 +408,36 @@
 	.identity-card-trust {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
 	}
-	.identity-card-heading {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: var(--color-text-secondary);
-	}
-	.identity-card-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.375rem;
-		height: 1.375rem;
-		border-radius: 9999px;
-		background: var(--color-primary-tint-3);
-		color: var(--color-primary);
-		font-size: 0.75rem;
-		font-weight: 600;
-		line-height: 1;
-	}
-	/* InterfaceSettings' segmented radiogroup, copied (scoped CSS). */
+	/* Segmented radiogroup: one outlined group, the selected kind filled. */
 	.identity-card-segment {
-		display: flex;
+		display: inline-flex;
 		align-self: flex-start;
-		gap: 0.25rem;
-		border-radius: var(--radius-lg);
-		background: var(--color-primary-tint-1);
-		padding: 0.25rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		background: transparent;
 	}
 	.identity-card-segment-btn {
-		border-radius: var(--radius-md);
-		padding: 0.375rem 0.75rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
+		padding: 0.5rem 1.125rem;
+		font-size: 0.9375rem;
 		font-weight: 500;
-		color: var(--color-text-secondary);
-		background: var(--color-primary-tint-2);
+		line-height: 1.25rem;
+		background: transparent;
+		color: var(--color-text);
 		cursor: pointer;
 		transition:
 			background-color var(--motion-fast) var(--ease),
 			color var(--motion-fast) var(--ease);
 	}
+	.identity-card-segment-btn + .identity-card-segment-btn {
+		border-left: 1px solid var(--color-border);
+	}
 	.identity-card-segment-btn:hover {
-		background: var(--color-primary-tint-3);
+		background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 	}
 	.identity-card-segment-btn[aria-checked='true'] {
 		background: var(--color-primary);
-		color: var(--color-on-primary);
+		color: var(--color-primary-contrast, var(--color-on-primary));
 	}
 </style>

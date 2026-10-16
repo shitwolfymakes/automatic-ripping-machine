@@ -33,7 +33,7 @@ describe('IdentityCard', () => {
 
 	it('the Preview block has its caption, the control, then the panel', () => {
 		render();
-		const caption = screen.getByText('Preview', { selector: '.label-caps' });
+		const caption = screen.getByText('Preview', { selector: '.identity-card-caption' });
 		const group = screen.getByRole('radiogroup', { name: 'Disc kind' });
 		expect(caption.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(group.compareDocumentPosition(preview()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
