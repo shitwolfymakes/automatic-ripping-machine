@@ -106,7 +106,10 @@ type MissAttempt = { source?: unknown; step?: unknown; outcome?: unknown; detail
  * attempts (jobs identified before the list existed).
  */
 export function missReason(
-	job: Pick<JobView, 'status' | 'title'> & { metadata_json?: JobView['metadata_json'] }
+	job: Pick<JobView, 'status' | 'title'> & {
+		disc_type?: JobView['disc_type'];
+		metadata_json?: JobView['metadata_json'];
+	}
 ): string | null {
 	const meta = job.metadata_json;
 	if (job.status !== 'awaiting_user_id' && meta?.flags?.unidentified !== true) return null;
@@ -122,6 +125,8 @@ export function missReason(
 		(a) => a.step === 'title' && a.source != null && typeof a.detail === 'string' && a.detail
 	)?.detail as string | undefined;
 	const title = searched || job.title?.trim() || 'this disc';
+	// The CD card's search is MusicSearch: there is no source to switch.
+	if (job.disc_type === 'cd') return `No source found a close match for "${title}".`;
 	return `No source found a close match for "${title}". Try another source in the search below.`;
 }
 

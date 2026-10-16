@@ -56,7 +56,7 @@
 
 	// A TV disc saved by hand has no show id, so episodes cannot be matched
 	// automatically; the operator confirms that with a second click.
-	const isEpisodic = $derived(!isCd && (job.looks_episodic || job.media_type === 'tv'));
+	const isEpisodic = $derived(!isCd && (job.looks_episodic || job.media_type === 'tv') && !job.has_series);
 	let confirmNoMatch = $state(false);
 
 	async function submit(event: Event): Promise<void> {

@@ -274,6 +274,11 @@ describe('missReason', () => {
 			missReason(missed([a('miss', { detail: 'MY DISC' }), a('miss', { detail: 'MY DISC 2' }), a('timeout')]))
 		).toBe('No source found a close match for "MY DISC 2". Try another source in the search below.');
 	});
+	it('a CD miss has no source-switch hint', () => {
+		expect(missReason(missed([a('miss', { detail: 'ALBUM' })], { disc_type: 'cd' }))).toBe(
+			'No source found a close match for "ALBUM".'
+		);
+	});
 	it('falls back to the job title when no title attempt carries one', () => {
 		expect(missReason(missed([a('miss', { step: 'imdb', detail: 'tt1' })]))).toBe(
 			'No source found a close match for "MY_DISC". Try another source in the search below.'

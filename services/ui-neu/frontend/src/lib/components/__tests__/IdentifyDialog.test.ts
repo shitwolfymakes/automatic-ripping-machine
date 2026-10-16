@@ -164,6 +164,21 @@ describe('IdentifyDialog', () => {
 			expect(onidentified).toHaveBeenCalledTimes(1);
 		});
 
+		it('TV job with a show already identified resolves on the first submit', async () => {
+			resolveJobMock.mockResolvedValue(makeResp());
+			const job = createJob({
+				disc_type: 'dvd',
+				status: 'awaiting_user_id',
+				media_type: 'tv',
+				has_series: true,
+				title: 'Firefly'
+			});
+			renderComponent(IdentifyDialog, { props: { job, onclose: vi.fn(), onidentified: vi.fn() } });
+			await fireEvent.click(screen.getByTestId('identify-submit'));
+			await waitFor(() => expect(resolveJobMock).toHaveBeenCalledTimes(1));
+			expect(screen.queryByText(warning)).not.toBeInTheDocument();
+		});
+
 		it('looks_episodic job warns too', async () => {
 			const job = createJob({ disc_type: 'dvd', status: 'awaiting_user_id', looks_episodic: true, title: 'X' });
 			renderComponent(IdentifyDialog, { props: { job, onclose: vi.fn(), onidentified: vi.fn() } });
