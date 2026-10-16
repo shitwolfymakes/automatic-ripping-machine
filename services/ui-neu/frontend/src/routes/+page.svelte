@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { fetchDashboard } from '$lib/api/dashboard';
-	import { fetchJobs, bulkDeleteJobs } from '$lib/api/jobs';
+	import { fetchJobsPage, bulkDeleteJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
 	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
@@ -16,10 +16,12 @@
 	import SectionFrame from '$lib/components/SectionFrame.svelte';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
 	import BulkActionsMenu from '$lib/components/BulkActionsMenu.svelte';
+	import JobPagination from '$lib/components/JobPagination.svelte';
+	import CloseButton from '$lib/components/CloseButton.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
-	import { fade } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { isAwaitingAction } from '$lib/utils/job-status';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
@@ -107,10 +109,14 @@
 	}
 
 	// --- Jobs section state ---
-	// v3 GET /api/jobs returns a flat JobView[] (no pagination envelope, no
-	// stats, no progress endpoint). The BFF's page/per_page/search/sort and the
-	// stats cards are gone.
+	// GET /api/jobs pages server-side: the body is one page of JobView[] and
+	// the filtered total rides in X-Total-Count. 48 per page fills the card
+	// grid evenly at both two and three columns.
 	let jobs = $state<JobView[] | null>(null);
+	let total = $state(0);
+	let page = $state(1);
+	const perPage = 48;
+	let pages = $derived(Math.max(1, Math.ceil(total / perPage)));
 	let jobsError = $state<Error | null>(null);
 	let jobsLoading = $state(true);
 	let pageReady = $derived(!dashLoading && !jobsLoading);
@@ -130,12 +136,28 @@
 	// Derived
 	let allVisibleSelected = $derived(jobs !== null && jobs.length > 0 && jobs.every((j) => selectedJobs.has(j.id)));
 
+	// Reloads the current page only (the poll and ripper events call this too).
 	async function loadJobs() {
 		if (!jobs) jobsLoading = true;
 		jobsError = null;
-		selectedJobs.clear();
 		try {
-			jobs = await fetchJobs({ status: statusFilter || undefined });
+			const result = await fetchJobsPage({
+				status: statusFilter || undefined,
+				limit: perPage,
+				offset: (page - 1) * perPage
+			});
+			jobs = result.jobs;
+			total = result.total;
+			// A delete (here or elsewhere) can empty the page we are on: step
+			// back to the last page that still has rows.
+			if (jobs.length === 0 && page > 1 && total > 0) {
+				page = Math.max(1, Math.ceil(total / perPage));
+				return loadJobs();
+			}
+			// Selection only ever covers rows on the visible page.
+			for (const id of [...selectedJobs]) {
+				if (!jobs.some((j) => j.id === id)) selectedJobs.delete(id);
+			}
 		} catch (e) {
 			jobsError = e instanceof Error ? e : new Error('Failed to load jobs');
 		} finally {
@@ -145,6 +167,14 @@
 
 	const setStatusFilter = (v: string) => {
 		statusFilter = v;
+		page = 1;
+		selectedJobs.clear();
+		loadJobs();
+	};
+
+	const setPage = (p: number) => {
+		page = p;
+		selectedJobs.clear();
 		loadJobs();
 	};
 
@@ -186,6 +216,7 @@
 						? `Deleted ${result.deleted_ids.length}, skipped ${skipped} in-flight job(s)`
 						: `Deleted ${result.deleted_ids.length} job(s)`
 			};
+			selectedJobs.clear();
 			await loadJobs();
 		} catch (e) {
 			bulkFeedback = {
@@ -195,6 +226,11 @@
 		} finally {
 			bulkBusy = false;
 		}
+	}
+
+	function deleteSelected() {
+		const ids = [...selectedJobs];
+		handleBulkAction('delete', { job_ids: ids }, `delete ${ids.length} selected job(s)`);
 	}
 
 	// Sortable columns (v3 JobRow renders Title / Year / Rip / Transcode / Type / Disc).
@@ -419,50 +455,56 @@
 		</div>
 	{/if}
 
-	<!-- All Jobs -->
-	<section id="all-jobs" class="stack">
-		<!-- Controls panel -->
-		<div class="dashboard-jobs-panel">
-			<!-- Header: Title + View toggle + Bulk actions -->
-			<div class="flex flex-wrap items-center justify-between gap-3 dashboard-jobs-header">
-				<h2 class="dashboard-jobs-title">All Jobs</h2>
-				<div class="flex items-center gap-3">
-					<div class="flex gap-1">
-						<button onclick={() => (viewMode = 'card')} class="dashboard-view-toggle" aria-pressed={viewMode === 'card'}
-							>Cards</button
-						>
-						<button
-							onclick={() => (viewMode = 'table')}
-							class="dashboard-view-toggle"
-							aria-pressed={viewMode === 'table'}>Table</button
-						>
-					</div>
-					{#if $isAdmin}
-						<div class="dashboard-jobs-divider"></div>
-						<BulkActionsMenu {selectedJobs} {bulkBusy} onaction={handleBulkAction} />
-					{/if}
-				</div>
+	<!-- All Jobs: one panel (header, selection bar, list, footer). Plain divs
+	     inside, not header/footer/.panel: the winamp-97 scheme styles those
+	     as the app titlebar and would rebuild the old two-row layout. -->
+	<section id="all-jobs" class="dashboard-jobs">
+		<div class="dashboard-jobs-header">
+			<h2 class="dashboard-jobs-title">All Jobs</h2>
+			<span class="dashboard-jobs-count">{total} {total === 1 ? 'job' : 'jobs'}</span>
+			<JobFilterBar {statusFilter} onstatusfilter={setStatusFilter} />
+			<span class="flex-1"></span>
+			<div class="dashboard-view-group">
+				<button
+					onclick={() => (viewMode = 'card')}
+					class="btn btn-sm dashboard-view-toggle"
+					aria-pressed={viewMode === 'card'}>Cards</button
+				>
+				<button
+					onclick={() => (viewMode = 'table')}
+					class="btn btn-sm dashboard-view-toggle"
+					aria-pressed={viewMode === 'table'}>Table</button
+				>
 			</div>
-
-			<!-- Filters -->
-			<div class="dashboard-jobs-section">
-				<JobFilterBar {statusFilter} onstatusfilter={setStatusFilter} />
-			</div>
-
-			<!-- Bulk feedback banner -->
-			{#if bulkFeedback}
-				<div class="dashboard-jobs-section dashboard-bulk-feedback" data-tone={bulkFeedback.type}>
-					{bulkFeedback.message}
-					<button onclick={() => (bulkFeedback = null)} class="dashboard-bulk-dismiss">&times;</button>
-				</div>
+			{#if $isAdmin}
+				<BulkActionsMenu {selectedJobs} {bulkBusy} onaction={handleBulkAction} />
 			{/if}
 		</div>
+
+		{#if $isAdmin && selectedJobs.size > 0}
+			<div class="dashboard-jobs-selection" data-testid="jobs-selection-bar" transition:slide={{ duration: 120 }}>
+				<span class="dashboard-jobs-selection-count">{selectedJobs.size} selected</span>
+				<span class="dashboard-jobs-selection-divider"></span>
+				<button onclick={deleteSelected} disabled={bulkBusy} class="btn btn-sm btn-danger">Delete selected</button>
+				<span class="flex-1"></span>
+				<button onclick={() => selectedJobs.clear()} class="btn btn-link dashboard-jobs-selection-clear"
+					>Clear selection</button
+				>
+			</div>
+		{/if}
+
+		{#if bulkFeedback}
+			<div class="dashboard-jobs-feedback" data-tone={bulkFeedback.type}>
+				<span>{bulkFeedback.message}</span>
+				<CloseButton onclick={() => (bulkFeedback = null)} label="Dismiss" />
+			</div>
+		{/if}
 
 		<div class="dashboard-jobs-body">
 			<LoadState data={jobs} loading={jobsLoading} error={jobsError} transitionKey="dashboard-recent-jobs">
 				{#snippet loadingSlot()}
 					{#if viewMode === 'table'}
-						<div class="overflow-x-auto dashboard-table-scroll">
+						<div class="overflow-x-auto">
 							<table class="table responsive-table">
 								<thead>
 									<tr>
@@ -473,14 +515,14 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each { length: 25 } as _, i (i)}
+									{#each { length: 12 } as _, i (i)}
 										<JobRow />
 									{/each}
 								</tbody>
 							</table>
 						</div>
 					{:else}
-						<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+						<div class="dashboard-jobs-grid grid md:grid-cols-2 xl:grid-cols-3">
 							{#each { length: 6 } as _, i (i)}
 								<JobCard />
 							{/each}
@@ -489,7 +531,7 @@
 				{/snippet}
 				{#snippet ready(list)}
 					{#if viewMode === 'table'}
-						<div class="overflow-x-auto dashboard-table-scroll">
+						<div class="overflow-x-auto">
 							<table class="table responsive-table">
 								<thead>
 									<tr>
@@ -516,7 +558,7 @@
 							</table>
 						</div>
 					{:else}
-						<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+						<div class="dashboard-jobs-grid grid md:grid-cols-2 xl:grid-cols-3">
 							{#each list as job (job.id)}
 								<JobCard {job} />
 							{/each}
@@ -527,6 +569,10 @@
 					<p class="dashboard-empty-jobs">No jobs found.</p>
 				{/snippet}
 			</LoadState>
+		</div>
+
+		<div class="dashboard-jobs-footer">
+			<JobPagination {page} {pages} {perPage} {total} onpage={setPage} />
 		</div>
 	</section>
 </div>
@@ -542,13 +588,18 @@
 		border-radius: 9999px;
 		background: var(--color-warning);
 	}
-	.dashboard-jobs-panel {
+	.dashboard-jobs {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
 		background: var(--color-surface);
 		box-shadow: var(--shadow-1);
+		overflow: hidden;
 	}
 	.dashboard-jobs-header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.625rem 0.875rem;
 		padding: 0.75rem 1rem;
 	}
 	.dashboard-jobs-title {
@@ -557,56 +608,79 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	.dashboard-view-toggle {
+	.dashboard-jobs-count {
+		font-size: 0.8125rem;
+		color: var(--color-text-muted);
+	}
+	/* Cards / Table: one tinted track, the active view filled in primary */
+	.dashboard-view-group {
+		display: flex;
+		gap: 2px;
+		padding: 3px;
 		border-radius: var(--radius-md);
-		padding: 0.375rem 0.75rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		font-weight: 500;
+		background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+	}
+	.dashboard-view-toggle {
+		border-color: transparent;
+		border-radius: calc(var(--radius-md) * 0.75);
+		padding: 0.3125rem 0.75rem;
 		color: var(--color-text-secondary);
-		background: var(--color-primary-tint-2);
-		transition: background-color var(--motion-fast) var(--ease);
 	}
 	.dashboard-view-toggle:hover {
-		background: var(--color-primary-tint-3);
+		background: var(--color-primary-tint-2);
 	}
 	.dashboard-view-toggle[aria-pressed='true'] {
 		background: var(--color-primary);
 		color: var(--color-on-primary);
 	}
-	.dashboard-jobs-divider {
-		height: 1.25rem;
+	.dashboard-jobs-selection {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 1rem;
+		border-top: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+		background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+	}
+	.dashboard-jobs-selection-count {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--color-primary-text);
+	}
+	.dashboard-jobs-selection-divider {
 		width: 1px;
-		background: var(--color-border);
+		height: 18px;
+		background: color-mix(in srgb, var(--color-primary) 30%, transparent);
 	}
-	.dashboard-jobs-section {
+	.dashboard-jobs-selection-clear {
+		font-size: 0.8125rem;
+	}
+	.dashboard-jobs-feedback {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.375rem 0.5rem 0.375rem 1rem;
 		border-top: 1px solid var(--color-border);
-		padding: 0.75rem 1rem;
-	}
-	.dashboard-bulk-feedback {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 	}
-	.dashboard-bulk-feedback[data-tone='success'] {
+	.dashboard-jobs-feedback[data-tone='success'] {
 		color: var(--color-success);
 	}
-	.dashboard-bulk-feedback[data-tone='error'] {
+	.dashboard-jobs-feedback[data-tone='error'] {
 		color: var(--color-danger);
 	}
-	.dashboard-bulk-dismiss {
-		margin-left: 0.5rem;
-		font-weight: 700;
-		opacity: 0.6;
-	}
-	.dashboard-bulk-dismiss:hover {
-		opacity: 1;
-	}
 	.dashboard-jobs-body {
-		min-height: 60vh;
+		border-top: 1px solid var(--color-border);
 	}
-	.dashboard-table-scroll {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+	.dashboard-jobs-grid {
+		padding: 0.75rem;
+		gap: 0.75rem;
+	}
+	.dashboard-jobs-footer {
+		padding: 0.625rem 1rem;
+		border-top: 1px solid var(--color-border);
 	}
 	.dashboard-select-all-checkbox {
 		width: 1rem;

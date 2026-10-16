@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -69,3 +71,11 @@ class SystemResourcesResponse(BaseModel):
     cpu_temp: float
     memory: MemoryInfo
     storage: list[StorageRoot]
+
+
+class JobLogFileView(BaseModel):
+    """One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`)."""
+
+    job_id: str
+    size_bytes: int
+    modified_at: datetime  # UTC, timezone-aware
