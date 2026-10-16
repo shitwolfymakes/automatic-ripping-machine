@@ -27,7 +27,7 @@ describe('sectionFields layout hints', () => {
 	];
 	const SEARCH_KEYS = ['search_provider_movie', 'search_provider_tv', 'search_provider_music'];
 
-	it('lays out Identification as a three-column Search card and the custom Identity card', () => {
+	it('lays out Identification as a two-column Search card (music hidden) and the custom Identity card', () => {
 		const fields = [...SEARCH_KEYS, ...IDENTITY_KEYS].map((k) => meta(k));
 		const sections = sectionFields('Identification', fields);
 
@@ -35,10 +35,13 @@ describe('sectionFields layout hints', () => {
 		const [search, identity] = sections;
 		expect(search.columns.map((col) => col.map((f) => f.key))).toEqual([
 			['search_provider_movie'],
-			['search_provider_tv'],
-			['search_provider_music']
+			['search_provider_tv']
 		]);
+		// Music has a single search service, so the select is owned but not rendered.
 		expect(search.fields).toEqual([]);
+		expect(sections.flatMap((s) => [...s.columns.flat(), ...s.fields]).map((f) => f.key)).not.toContain(
+			'search_provider_music'
+		);
 		expect(search.custom).toBeUndefined();
 
 		expect(identity.custom).toBe('identity');

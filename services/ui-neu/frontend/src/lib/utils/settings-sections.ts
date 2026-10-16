@@ -24,6 +24,9 @@ export interface SettingsSection {
 	note?: string;
 	/** Hide each field's own help text in this section (the `note` covers it). */
 	hideFieldHelp?: boolean;
+	/** Keys this section owns but does not render (a setting with a single
+	 *  option, kept at its default until a second option exists). */
+	hidden?: string[];
 }
 
 /** The section shape `sectionFields()` hands the form: keys already split
@@ -53,7 +56,9 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			note: "The service the job page's search box uses for each media type.",
 			hideFieldHelp: true,
 			keys: ['search_provider_movie', 'search_provider_tv', 'search_provider_music'],
-			columns: [['search_provider_movie'], ['search_provider_tv'], ['search_provider_music']]
+			columns: [['search_provider_movie'], ['search_provider_tv']],
+			// Music has one search service (MusicBrainz); nothing to choose yet.
+			hidden: ['search_provider_music']
 		},
 		{
 			title: 'Identity',
@@ -207,7 +212,8 @@ export function sectionFields(group: string, allFields: ConfigFieldMeta[]): Sect
 			.filter((f): f is ConfigFieldMeta => f !== undefined);
 		const advancedKeys = new Set(advanced.map((f) => f.key));
 
-		const plainFields = own.filter((f) => !columnKeys.has(f.key) && !advancedKeys.has(f.key));
+		const hiddenKeys = new Set(section.hidden ?? []);
+		const plainFields = own.filter((f) => !columnKeys.has(f.key) && !advancedKeys.has(f.key) && !hiddenKeys.has(f.key));
 
 		out.push({
 			title: section.title,

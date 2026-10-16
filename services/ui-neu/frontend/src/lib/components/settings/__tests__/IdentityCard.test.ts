@@ -114,32 +114,28 @@ describe('IdentityCard', () => {
 		);
 	});
 
-	it('Step 3 shows the three ranked lists, the tolerance under TV and the planned CDDB row', () => {
+	it('Step 3 shows the Movies and TV shows ranked lists with the tolerance under TV, and no Music list', () => {
 		render();
 		const s3 = step(3);
 		expect(within(s3).getByRole('heading', { name: '3 Online lookup' })).toBeInTheDocument();
 		expect(s3).toHaveTextContent('Tried top to bottom; the first confident match wins.');
-		for (const name of ['Movie sources', 'Episode sources', 'Music sources']) {
+		for (const name of ['Movie sources', 'Episode sources']) {
 			expect(within(s3).getByRole('list', { name })).toBeInTheDocument();
 		}
-		expect(within(s3).getAllByText('Rank 1')).toHaveLength(3);
-		expect(screen.getAllByText('Rank 1')).toHaveLength(3);
+		expect(within(s3).queryByRole('list', { name: 'Music sources' })).toBeNull();
+		expect(s3.querySelector('#setting-music_sources')).toBeNull();
+		expect(within(s3).queryByText('CDDB')).toBeNull();
+		expect(within(s3).getAllByText('Rank 1')).toHaveLength(2);
 		const tv = s3.querySelector('#setting-episode_sources') as HTMLElement;
 		expect(within(tv).getByRole('heading', { name: 'TV shows' })).toBeInTheDocument();
 		expect(within(tv).getByRole('spinbutton', { name: 'Episode match tolerance (seconds)' })).toHaveValue(300);
-		const music = s3.querySelector('#setting-music_sources') as HTMLElement;
-		const cddb = within(music).getByTestId('identity-cddb');
-		expect(cddb).toHaveAttribute('aria-disabled', 'true');
-		expect(cddb).toHaveTextContent('CDDB');
-		expect(cddb).toHaveTextContent('Planned');
-		expect(cddb).toHaveTextContent('Not built yet, so never ranked');
 		expect(s3).not.toHaveTextContent('No sources on');
 	});
 
 	it('an empty list shows No sources on under its heading', () => {
-		render({ initial: { ...IDENTITY_DEFAULTS, music_sources: [] } });
-		const music = step(3).querySelector('#setting-music_sources') as HTMLElement;
-		expect(music).toHaveTextContent('No sources on');
+		render({ initial: { ...IDENTITY_DEFAULTS, movie_sources: [] } });
+		const movies = step(3).querySelector('#setting-movie_sources') as HTMLElement;
+		expect(movies).toHaveTextContent('No sources on');
 	});
 
 	it('Step 4 stacks the three Apply confident matches boxes with no caption, bound to the auto-apply fields', async () => {

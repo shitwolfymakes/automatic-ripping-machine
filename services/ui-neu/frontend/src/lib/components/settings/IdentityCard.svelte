@@ -50,8 +50,7 @@
 	];
 	const LISTS = [
 		{ key: 'movie_sources', heading: 'Movies' },
-		{ key: 'episode_sources', heading: 'TV shows' },
-		{ key: 'music_sources', heading: 'Music' }
+		{ key: 'episode_sources', heading: 'TV shows' }
 	];
 	const TRUST = [
 		{ key: 'movie_auto_apply', label: 'Apply confident matches · Movies' },
@@ -191,21 +190,6 @@
 								context={config}
 								{disabled}
 							/>
-						{/if}
-						{#if list.key === 'music_sources'}
-							<div
-								class="list-row list-row-compact identity-card-planned identity-card-cddb"
-								data-testid="identity-cddb"
-								aria-disabled="true"
-							>
-								<div class="list-row-main">
-									<div class="identity-card-row-head">
-										<span class="identity-card-row-name">CDDB</span>
-										<span class="chip identity-card-kind identity-card-kind-planned">Planned</span>
-									</div>
-									<div class="identity-card-row-note">Not built yet, so never ranked</div>
-								</div>
-							</div>
 						{/if}
 					</div>
 				{/if}
@@ -396,14 +380,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 		gap: 1.5rem;
-	}
-	.identity-card-cddb {
-		grid-template-columns: 1fr;
-		cursor: default;
-		max-width: 36rem;
-	}
-	.identity-card-cddb:hover {
-		background: transparent;
 	}
 	.identity-card-trust {
 		display: flex;
