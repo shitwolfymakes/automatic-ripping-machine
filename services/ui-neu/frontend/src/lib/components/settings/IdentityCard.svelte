@@ -10,7 +10,7 @@
 	} from '$lib/utils/identity-card';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import RankedListField from './RankedListField.svelte';
-	import IdentityStrip from './IdentityStrip.svelte';
+	import IdentityPreview from './IdentityPreview.svelte';
 
 	// Settings › Identification › Identity: the four pipeline steps over the
 	// form's own `values` (bound), so Save, change detection and guest gating
@@ -54,19 +54,33 @@
 		{ key: 'music_sources', heading: 'Music' }
 	];
 	const TRUST = [
-		{ key: 'movie_auto_apply', label: 'Movies' },
-		{ key: 'episode_auto_apply', label: 'TV shows' },
-		{ key: 'music_auto_apply', label: 'Music' }
+		{ key: 'movie_auto_apply', label: 'Apply confident matches · Movies' },
+		{ key: 'episode_auto_apply', label: 'Apply confident matches · TV shows' },
+		{ key: 'music_auto_apply', label: 'Apply confident matches · Music' }
 	];
-	const IGNORE: { hint: DiscHint; label: string }[] = [
-		{ hint: 'bd_title', label: 'Ignore the disc title metadata' },
-		{ hint: 'label', label: 'Ignore the volume label' }
+	const IGNORE: { hint: DiscHint; label: string; help: string }[] = [
+		{
+			hint: 'bd_title',
+			label: 'Ignore the disc title metadata',
+			help: "Blu-ray and UHD only. ARM won't use the title stored on the disc and identifies it from the volume label, TheDiscDB and online lookup instead."
+		},
+		{
+			hint: 'label',
+			label: 'Ignore the volume label',
+			help: "ARM won't use the volume label and identifies the disc from its title metadata, TheDiscDB and online lookup instead. A DVD with no title metadata then gets no automatic title search."
+		}
 	];
 
 	const hasHints = $derived(meta('disc_hint_sources') !== undefined);
 	const isIgnored = (hint: DiscHint) => hasHints && hintIgnored(values, hint);
 	const isEmpty = (key: string) => Array.isArray(values[key]) && (values[key] as unknown[]).length === 0;
 </script>
+
+{#snippet heading(n: number, title: string)}
+	<h4 class="identity-card-heading" aria-label="{n} {title}">
+		<span class="identity-card-badge" aria-hidden="true">{n}</span>{title}
+	</h4>
+{/snippet}
 
 {#snippet hintRow(hint: DiscHint, chips: string[])}
 	<div class="identity-card-row" data-testid="identity-row-{hint}">
@@ -81,22 +95,24 @@
 {/snippet}
 
 <div class="identity-card stack stack-lg" data-testid="identity-card">
-	<div class="identity-card-segment" role="radiogroup" aria-label="Disc kind">
-		{#each KINDS as k (k)}
-			<button
-				type="button"
-				role="radio"
-				aria-checked={kind === k}
-				class="identity-card-segment-btn"
-				onclick={() => (kind = k)}>{DISC_KIND_LABELS[k]}</button
-			>
-		{/each}
+	<div class="identity-card-step stack" data-step="preview">
+		<span class="label-caps">Preview</span>
+		<div class="identity-card-segment" role="radiogroup" aria-label="Disc kind">
+			{#each KINDS as k (k)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={kind === k}
+					class="identity-card-segment-btn"
+					onclick={() => (kind = k)}>{DISC_KIND_LABELS[k]}</button
+				>
+			{/each}
+		</div>
+		<IdentityPreview {kind} {values} {fields} />
 	</div>
 
-	<IdentityStrip {kind} {values} {fields} />
-
 	<div class="identity-card-step stack" data-step="1">
-		<h4 class="label-caps">Step 1 · On the disc</h4>
+		{@render heading(1, 'On the disc')}
 		<div class="identity-card-rows">
 			{@render hintRow('bd_title', ['Blu-ray', 'UHD'])}
 			{@render hintRow('label', ['All discs'])}
@@ -121,7 +137,7 @@
 	</div>
 
 	<div class="identity-card-step stack" data-step="2">
-		<h4 class="label-caps">Step 2 · Disc database</h4>
+		{@render heading(2, 'Disc database')}
 		{#each DISC_DB as db (db.key)}
 			{@const field = meta(db.key)}
 			{#if field}
@@ -147,7 +163,7 @@
 	</div>
 
 	<div class="identity-card-step stack" data-step="3">
-		<h4 class="label-caps">Step 3 · Online lookup</h4>
+		{@render heading(3, 'Online lookup')}
 		<p class="identity-card-note" id="identity-help-lookup">Tried top to bottom; the first confident match wins.</p>
 		<div class="identity-card-columns">
 			{#each LISTS as list (list.key)}
@@ -169,7 +185,7 @@
 						{#if list.key === 'episode_sources' && meta('episode_match_tolerance_seconds')}
 							{@const tolerance = meta('episode_match_tolerance_seconds')!}
 							<ConfigSchemaField
-								field={tolerance}
+								field={{ ...tolerance, label: 'Episode match tolerance (seconds)' }}
 								bind:value={values[tolerance.key]}
 								config={values}
 								context={config}
@@ -198,9 +214,8 @@
 	</div>
 
 	<div class="identity-card-step stack" data-step="4">
-		<h4 class="label-caps">Step 4 · Trust</h4>
-		<span class="field-label" id="identity-trust-caption">Apply confident matches</span>
-		<div class="identity-card-trust" role="group" aria-labelledby="identity-trust-caption">
+		{@render heading(4, 'Trust')}
+		<div class="identity-card-trust">
 			{#each TRUST as t (t.key)}
 				{#if meta(t.key)}
 					<div class="identity-card-option" id="setting-{t.key}" data-testid="setting-{t.key}">
@@ -230,25 +245,28 @@
 			<hr class="identity-card-divider" />
 			<span class="label-caps">Advanced</span>
 			{#each IGNORE as box (box.hint)}
-				<label class="field field-row">
-					<input
-						type="checkbox"
-						aria-label={box.label}
-						checked={isIgnored(box.hint)}
-						disabled={off('disc_hint_sources')}
-						onchange={(e) =>
-							(values.disc_hint_sources = withHintIgnored(
-								values,
-								box.hint,
-								(e.currentTarget as HTMLInputElement).checked
-							))}
-					/>
-					<span class="field-label">{box.label}</span>
-				</label>
+				<div class="identity-card-option">
+					<label class="field field-row">
+						<input
+							type="checkbox"
+							aria-label={box.label}
+							aria-describedby="identity-help-ignore-{box.hint}"
+							checked={isIgnored(box.hint)}
+							disabled={off('disc_hint_sources')}
+							onchange={(e) =>
+								(values.disc_hint_sources = withHintIgnored(
+									values,
+									box.hint,
+									(e.currentTarget as HTMLInputElement).checked
+								))}
+						/>
+						<span class="field-label">{box.label}</span>
+					</label>
+					<p class="field-help" id="identity-help-ignore-{box.hint}">{box.help}</p>
+				</div>
 			{/each}
 			<p class="field-help">
-				For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead. With
-				the volume label ignored, a DVD with no disc title metadata gets no automatic title search.
+				For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead.
 			</p>
 		</div>
 	{/if}
@@ -316,8 +334,29 @@
 	}
 	.identity-card-trust {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1.5rem;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.identity-card-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+	}
+	.identity-card-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.375rem;
+		height: 1.375rem;
+		border-radius: 9999px;
+		background: var(--color-primary-tint-3);
+		color: var(--color-primary);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1;
 	}
 	.identity-card-divider {
 		margin: 0 0 0.5rem;

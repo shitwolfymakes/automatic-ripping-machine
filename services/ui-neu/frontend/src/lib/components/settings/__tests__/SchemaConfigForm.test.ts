@@ -428,7 +428,7 @@ describe('SchemaConfigForm Identity section', () => {
 
 	it('Save still submits a changed movie_auto_apply', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: IDENTIFICATION, config: { ...IDENTITY_DEFAULTS } } });
-		await fireEvent.click(screen.getByRole('checkbox', { name: 'Movies' }));
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0]).toEqual({ movie_auto_apply: false });

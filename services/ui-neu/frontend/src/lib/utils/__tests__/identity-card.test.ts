@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hintIgnored, withHintIgnored, enabledLabels, stripCells } from '../identity-card';
+import { hintIgnored, withHintIgnored, enabledLabels, previewRows } from '../identity-card';
 import { IDENTITY_METAS, IDENTITY_DEFAULTS } from './fixtures/identity-metas';
 
 const v = (over: Record<string, unknown> = {}) => ({ ...IDENTITY_DEFAULTS, ...over });
@@ -44,103 +44,70 @@ describe('enabledLabels', () => {
 	});
 });
 
-describe('stripCells with the defaults', () => {
+const MOVIES = [
+	{ rank: 1, label: 'TMDb' },
+	{ rank: 2, label: 'OMDb' }
+];
+const TV = [
+	{ rank: 1, label: 'TMDb' },
+	{ rank: 2, label: 'TVmaze' },
+	{ rank: 3, label: 'TVDB' }
+];
+const TRUSTED = 'Applies confident matches';
+
+describe('previewRows with the defaults', () => {
 	it('Blu-ray', () => {
-		expect(stripCells('bluray', v(), IDENTITY_METAS)).toEqual([
-			{ label: 'On the disc', value: 'Disc title metadata, Volume label', sub: 'ARM reads all of these' },
-			{ label: 'Disc database', value: 'TheDiscDB disc map', sub: "A match wins over the disc's labels" },
-			{
-				label: 'Online lookup',
-				value: 'Movies: TMDb, OMDb · TV shows: TMDb, TVmaze, TVDB',
-				sub: 'Tried top to bottom; the first confident match wins'
-			},
-			{
-				label: 'Trust',
-				value: 'Movies: Apply confident matches · TV shows: Apply confident matches',
-				sub: 'Others wait for review on the job page'
-			}
+		expect(previewRows('bluray', v(), IDENTITY_METAS)).toEqual([
+			{ key: 'disc', label: 'Disc', sentence: 'Disc title metadata and volume label, then TheDiscDB' },
+			{ key: 'movie', label: 'Movies', sources: MOVIES, trust: TRUSTED },
+			{ key: 'tv', label: 'TV shows', sources: TV, trust: TRUSTED }
 		]);
 	});
 
-	it('DVD', () => {
-		expect(stripCells('dvd', v(), IDENTITY_METAS)).toEqual([
-			{ label: 'On the disc', value: 'Volume label', sub: 'ARM reads all of these' },
-			{
-				label: 'Disc database',
-				value: 'TheDiscDB disc map, ARM community database (CRC64)',
-				sub: "A match wins over the disc's labels"
-			},
-			{
-				label: 'Online lookup',
-				value: 'Movies: TMDb, OMDb · TV shows: TMDb, TVmaze, TVDB',
-				sub: 'Tried top to bottom; the first confident match wins'
-			},
-			{
-				label: 'Trust',
-				value: 'Movies: Apply confident matches · TV shows: Apply confident matches',
-				sub: 'Others wait for review on the job page'
-			}
-		]);
+	it('DVD with CRC64 on names both databases', () => {
+		const rows = previewRows('dvd', v(), IDENTITY_METAS);
+		expect(rows.map((r) => r.key)).toEqual(['disc', 'movie', 'tv']);
+		expect(rows[0].sentence).toBe('Volume label, then TheDiscDB and the ARM community database');
 	});
 
-	it('CD', () => {
-		expect(stripCells('cd', v(), IDENTITY_METAS)).toEqual([
-			{ label: 'On the disc', value: 'Volume label, Disc ID (track layout)', sub: 'CD-TEXT planned' },
-			{ label: 'Disc database', value: 'Not used for CDs' },
-			{
-				label: 'Online lookup',
-				value: 'Music: MusicBrainz',
-				sub: 'Tried top to bottom; the first confident match wins'
-			},
-			{ label: 'Trust', value: 'Music: Apply confident matches', sub: 'Others wait for review on the job page' }
+	it('CD has a disc row and a single music row', () => {
+		expect(previewRows('cd', v(), IDENTITY_METAS)).toEqual([
+			{ key: 'disc', label: 'Disc', sentence: 'Volume label and disc ID (track layout)' },
+			{ key: 'music', label: 'Music', sources: [{ rank: 1, label: 'MusicBrainz' }], trust: TRUSTED }
 		]);
 	});
 });
 
-describe('stripCells states', () => {
-	it('an empty episode list reads No sources on', () => {
-		expect(stripCells('bluray', v({ episode_sources: [] }), IDENTITY_METAS)[2].value).toBe(
-			'Movies: TMDb, OMDb · TV shows: No sources on'
-		);
-		expect(stripCells('cd', v({ music_sources: [] }), IDENTITY_METAS)[2].value).toBe('Music: No sources on');
+describe('previewRows states', () => {
+	const disc = (kind: 'bluray' | 'dvd' | 'cd', over: Record<string, unknown>) =>
+		previewRows(kind, v(over), IDENTITY_METAS)[0].sentence;
+
+	it('both databases off leaves the volume label alone; one off drops only that one', () => {
+		expect(disc('dvd', { thediscdb_enabled: false, crc64service_enabled: false })).toBe('Volume label');
+		expect(disc('dvd', { thediscdb_enabled: false })).toBe('Volume label, then the ARM community database');
+		expect(disc('bluray', { thediscdb_enabled: false })).toBe('Disc title metadata and volume label');
 	});
 
-	it('both disc databases off reads Off', () => {
-		const cells = stripCells('dvd', v({ thediscdb_enabled: false, crc64service_enabled: false }), IDENTITY_METAS);
-		expect(cells[1].value).toBe('Off');
-		expect(stripCells('bluray', v({ thediscdb_enabled: false }), IDENTITY_METAS)[1].value).toBe('Off');
-		expect(stripCells('dvd', v({ thediscdb_enabled: false }), IDENTITY_METAS)[1].value).toBe(
-			'ARM community database (CRC64)'
-		);
+	it('an ignored hint drops out of the Disc sentence', () => {
+		expect(disc('bluray', { disc_hint_sources: ['label'] })).toBe('Volume label, then TheDiscDB');
+		expect(disc('bluray', { disc_hint_sources: ['bd_title'] })).toBe('Disc title metadata, then TheDiscDB');
+		expect(disc('cd', { disc_hint_sources: ['bd_title'] })).toBe('Disc ID (track layout)');
 	});
 
-	it('every hint ignored reads Disc text ignored / See Advanced', () => {
-		expect(stripCells('bluray', v({ disc_hint_sources: [] }), IDENTITY_METAS)[0]).toEqual({
-			label: 'On the disc',
-			value: 'Disc text ignored',
-			sub: 'See Advanced'
-		});
-		expect(stripCells('dvd', v({ disc_hint_sources: ['bd_title'] }), IDENTITY_METAS)[0].value).toBe(
-			'Disc text ignored'
-		);
+	it('no hint left reads Disc text ignored', () => {
+		expect(disc('bluray', { disc_hint_sources: [] })).toBe('Disc text ignored');
+		expect(disc('dvd', { disc_hint_sources: ['bd_title'] })).toBe('Disc text ignored');
 	});
 
-	it('an ignored hint drops out of cell 1', () => {
-		expect(stripCells('bluray', v({ disc_hint_sources: ['label'] }), IDENTITY_METAS)[0].value).toBe('Volume label');
-		expect(stripCells('cd', v({ disc_hint_sources: ['bd_title'] }), IDENTITY_METAS)[0].value).toBe(
-			'Disc ID (track layout)'
-		);
+	it('an empty list has no pills and reads No sources on', () => {
+		const movie = previewRows('bluray', v({ movie_sources: [] }), IDENTITY_METAS)[1];
+		expect(movie).toEqual({ key: 'movie', label: 'Movies', sources: [], empty: 'No sources on', trust: TRUSTED });
 	});
 
-	it('movie_auto_apply off reads Waits for review', () => {
-		expect(stripCells('bluray', v({ movie_auto_apply: false }), IDENTITY_METAS)[3].value).toBe(
-			'Movies: Waits for review · TV shows: Apply confident matches'
-		);
-		expect(stripCells('cd', v({ music_auto_apply: false }), IDENTITY_METAS)[3].value).toBe('Music: Waits for review');
-	});
-
-	it('CD cell 2 is Not used for CDs with no sub', () => {
-		const cell = stripCells('cd', v({ thediscdb_enabled: false }), IDENTITY_METAS)[1];
-		expect(cell).toEqual({ label: 'Disc database', value: 'Not used for CDs' });
+	it('an auto-apply switch off reads Waits for review', () => {
+		const rows = previewRows('bluray', v({ movie_auto_apply: false }), IDENTITY_METAS);
+		expect(rows[1].trust).toBe('Waits for review');
+		expect(rows[2].trust).toBe(TRUSTED);
+		expect(previewRows('cd', v({ music_auto_apply: false }), IDENTITY_METAS)[1].trust).toBe('Waits for review');
 	});
 });

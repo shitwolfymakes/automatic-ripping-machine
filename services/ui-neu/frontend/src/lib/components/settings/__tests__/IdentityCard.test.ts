@@ -10,7 +10,15 @@ const render = (props: Record<string, unknown> = {}) =>
 		props: { initial: { ...IDENTITY_DEFAULTS }, fields: IDENTITY_METAS, ...props }
 	});
 const step = (n: number) => document.querySelector(`.identity-card-step[data-step="${n}"]`) as HTMLElement;
-const strip = () => screen.getByRole('group', { name: 'Identity summary' });
+const preview = () => screen.getByRole('group', { name: 'Identity preview' });
+const previewRowLabels = () =>
+	within(preview())
+		.getAllByTestId(/^identity-preview-(disc|movie|tv|music)$/)
+		.map((r) => r.querySelector('.identity-preview-label')?.textContent?.trim());
+const pillText = (key: string) =>
+	within(screen.getByTestId(`identity-preview-${key}`))
+		.queryAllByTestId('identity-preview-pill')
+		.map((p) => p.textContent?.replace(/\s+/g, ' ').trim());
 
 describe('IdentityCard', () => {
 	it('renders the card root and the Disc kind radiogroup with Blu-ray checked', () => {
@@ -23,19 +31,50 @@ describe('IdentityCard', () => {
 		expect(within(group).getByRole('radio', { name: 'CD' })).toHaveAttribute('aria-checked', 'false');
 	});
 
-	it('clicking CD switches the strip to the CD view', async () => {
+	it('the Preview block has its caption, the control, then the panel', () => {
 		render();
-		expect(strip()).toHaveTextContent('Movies: TMDb, OMDb · TV shows: TMDb, TVmaze, TVDB');
+		const caption = screen.getByText('Preview', { selector: '.label-caps' });
+		const group = screen.getByRole('radiogroup', { name: 'Disc kind' });
+		expect(caption.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(group.compareDocumentPosition(preview()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(preview().compareDocumentPosition(step(1)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('clicking CD leaves Disc and Music only; Blu-ray restores Movies and TV shows', async () => {
+		render();
+		expect(previewRowLabels()).toEqual(['Disc', 'Movies', 'TV shows']);
 		await fireEvent.click(screen.getByRole('radio', { name: 'CD' }));
 		expect(screen.getByRole('radio', { name: 'CD' })).toHaveAttribute('aria-checked', 'true');
-		expect(strip()).toHaveTextContent('Music: MusicBrainz');
-		expect(strip()).toHaveTextContent('Not used for CDs');
+		expect(previewRowLabels()).toEqual(['Disc', 'Music']);
+		expect(pillText('music')).toEqual(['1 MusicBrainz']);
+		await fireEvent.click(screen.getByRole('radio', { name: 'Blu-ray' }));
+		expect(previewRowLabels()).toEqual(['Disc', 'Movies', 'TV shows']);
+	});
+
+	it('unticking OMDb in Step 3 drops its pill and leaves 1 TMDb', async () => {
+		render();
+		expect(pillText('movie')).toEqual(['1 TMDb', '2 OMDb']);
+		const movies = within(step(3)).getByRole('list', { name: 'Movie sources' });
+		await fireEvent.click(within(movies).getByRole('checkbox', { name: 'Use OMDb' }));
+		expect(pillText('movie')).toEqual(['1 TMDb']);
+		expect(pillText('tv')).toEqual(['1 TMDb', '2 TVmaze', '3 TVDB']);
+	});
+
+	it('step headings carry the number and the sentence-case title; Advanced has no badge', () => {
+		render();
+		const names = ['1 On the disc', '2 Disc database', '3 Online lookup', '4 Trust'];
+		names.forEach((name, i) => {
+			const h = within(step(i + 1)).getByRole('heading', { name });
+			expect(h.querySelector('.identity-card-badge')).toHaveTextContent(String(i + 1));
+		});
+		const advanced = document.querySelector('.identity-card-step[data-step="advanced"]') as HTMLElement;
+		expect(advanced.querySelector('.identity-card-badge')).toBeNull();
 	});
 
 	it('Step 1 lists the four disc rows with their chips and no controls', () => {
 		render();
 		const s1 = step(1);
-		expect(within(s1).getByRole('heading', { name: 'Step 1 · On the disc' })).toBeInTheDocument();
+		expect(within(s1).getByRole('heading', { name: '1 On the disc' })).toBeInTheDocument();
 		const rows = within(s1).getAllByTestId(/^identity-row-/);
 		expect(rows.map((r) => r.querySelector('.identity-card-row-name')?.textContent?.trim())).toEqual([
 			'Disc title metadata',
@@ -59,7 +98,7 @@ describe('IdentityCard', () => {
 	it('Step 2 has the two disc database checkboxes with their chips and descriptions', () => {
 		render();
 		const s2 = step(2);
-		expect(within(s2).getByRole('heading', { name: 'Step 2 · Disc database' })).toBeInTheDocument();
+		expect(within(s2).getByRole('heading', { name: '2 Disc database' })).toBeInTheDocument();
 		const discdb = within(s2).getByRole('checkbox', { name: 'TheDiscDB disc map' });
 		expect(discdb).toBeChecked();
 		expect(within(s2).getByRole('checkbox', { name: 'ARM community database (CRC64)' })).toBeChecked();
@@ -78,7 +117,7 @@ describe('IdentityCard', () => {
 	it('Step 3 shows the three ranked lists, the tolerance under TV and the planned CDDB row', () => {
 		render();
 		const s3 = step(3);
-		expect(within(s3).getByRole('heading', { name: 'Step 3 · Online lookup' })).toBeInTheDocument();
+		expect(within(s3).getByRole('heading', { name: '3 Online lookup' })).toBeInTheDocument();
 		expect(s3).toHaveTextContent('Tried top to bottom; the first confident match wins.');
 		for (const name of ['Movie sources', 'Episode sources', 'Music sources']) {
 			expect(within(s3).getByRole('list', { name })).toBeInTheDocument();
@@ -87,7 +126,7 @@ describe('IdentityCard', () => {
 		expect(screen.getAllByText('Rank 1')).toHaveLength(3);
 		const tv = s3.querySelector('#setting-episode_sources') as HTMLElement;
 		expect(within(tv).getByRole('heading', { name: 'TV shows' })).toBeInTheDocument();
-		expect(within(tv).getByRole('spinbutton', { name: 'Match tolerance (seconds)' })).toHaveValue(300);
+		expect(within(tv).getByRole('spinbutton', { name: 'Episode match tolerance (seconds)' })).toHaveValue(300);
 		const music = s3.querySelector('#setting-music_sources') as HTMLElement;
 		const cddb = within(music).getByTestId('identity-cddb');
 		expect(cddb).toHaveAttribute('aria-disabled', 'true');
@@ -103,24 +142,29 @@ describe('IdentityCard', () => {
 		expect(music).toHaveTextContent('No sources on');
 	});
 
-	it('Step 4 has Movies / TV shows / Music checkboxes under the caption, bound to the auto-apply fields', async () => {
+	it('Step 4 stacks the three Apply confident matches boxes with no caption, bound to the auto-apply fields', async () => {
 		const { component } = render();
 		const s4 = step(4);
-		expect(within(s4).getByRole('heading', { name: 'Step 4 · Trust' })).toBeInTheDocument();
-		const group = within(s4).getByRole('group', { name: 'Apply confident matches' });
-		expect(
-			within(group)
-				.getAllByRole('checkbox')
-				.map((c) => c.getAttribute('aria-label'))
-		).toEqual(['Movies', 'TV shows', 'Music']);
+		expect(within(s4).getByRole('heading', { name: '4 Trust' })).toBeInTheDocument();
+		expect(s4.querySelector('#identity-trust-caption')).toBeNull();
+		expect(within(s4).queryByText('Apply confident matches', { exact: true })).toBeNull();
+		const boxes = within(s4).getAllByRole('checkbox');
+		const labels = [
+			'Apply confident matches · Movies',
+			'Apply confident matches · TV shows',
+			'Apply confident matches · Music'
+		];
+		expect(boxes.map((c) => c.getAttribute('aria-label'))).toEqual(labels);
+		for (const l of labels) expect(within(s4).getByText(l)).toBeInTheDocument();
 		expect(s4).toHaveTextContent(
 			'When off, a match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Review first still holds every disc.'
 		);
-		await fireEvent.click(within(group).getByRole('checkbox', { name: 'Movies' }));
+		await fireEvent.click(within(s4).getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
 		expect((component as unknown as { getValues: () => Record<string, unknown> }).getValues().movie_auto_apply).toBe(
 			false
 		);
-		expect(strip()).toHaveTextContent('Movies: Waits for review · TV shows: Apply confident matches');
+		expect(screen.getByTestId('identity-preview-movie')).toHaveTextContent('Waits for review');
+		expect(screen.getByTestId('identity-preview-tv')).toHaveTextContent('Applies confident matches');
 	});
 
 	it('Advanced: ignoring the volume label marks its Step 1 row and drops it from disc_hint_sources', async () => {
@@ -138,8 +182,20 @@ describe('IdentityCard', () => {
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the volume label' }));
 		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'label']);
 		expect(screen.getByRole('checkbox', { name: 'Ignore the disc title metadata' })).not.toBeChecked();
-		expect(screen.getByTestId('identity-card')).toHaveTextContent(
-			"For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead. With the volume label ignored, a DVD with no disc title metadata gets no automatic title search."
+		const advanced = document.querySelector('.identity-card-step[data-step="advanced"]') as HTMLElement;
+		expect(advanced).toHaveTextContent(
+			"For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead."
+		);
+		expect(advanced).not.toHaveTextContent('With the volume label ignored');
+	});
+
+	it('Advanced: each Ignore box has its sub-line', () => {
+		render();
+		expect(screen.getByRole('checkbox', { name: 'Ignore the disc title metadata' })).toHaveAccessibleDescription(
+			"Blu-ray and UHD only. ARM won't use the title stored on the disc and identifies it from the volume label, TheDiscDB and online lookup instead."
+		);
+		expect(screen.getByRole('checkbox', { name: 'Ignore the volume label' })).toHaveAccessibleDescription(
+			"ARM won't use the volume label and identifies the disc from its title metadata, TheDiscDB and online lookup instead. A DVD with no title metadata then gets no automatic title search."
 		);
 	});
 
@@ -154,7 +210,9 @@ describe('IdentityCard', () => {
 		for (const el of controls) expect(el).toBeDisabled();
 		for (const r of radios) expect(r).toBeEnabled();
 		await fireEvent.click(screen.getByRole('radio', { name: 'DVD' }));
-		expect(strip()).toHaveTextContent('ARM community database (CRC64)');
+		expect(screen.getByTestId('identity-preview-disc')).toHaveTextContent(
+			'Volume label, then TheDiscDB and the ARM community database'
+		);
 	});
 
 	it('skips a control whose meta is missing instead of throwing', () => {
