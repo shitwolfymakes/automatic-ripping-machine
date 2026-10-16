@@ -236,6 +236,7 @@
 		border-radius: var(--radius-sm);
 		object-fit: cover;
 	}
+	/* :global: forwarded through PosterImage's class prop; CD covers are square */
 	:global(.logs-panel-poster-square) {
 		width: 2.5rem;
 	}
