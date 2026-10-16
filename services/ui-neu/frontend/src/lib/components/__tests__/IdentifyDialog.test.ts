@@ -96,7 +96,8 @@ describe('IdentifyDialog', () => {
 						kind: 'tv',
 						poster_url: null,
 						provider_id: '1437',
-						external_ids: { tmdb_series_id: 1437 }
+						provider: 'tmdb',
+						external_ids: { tmdb: '1437', tmdb_kind: 'tv' }
 					}
 				]
 			} as never);
@@ -110,15 +111,17 @@ describe('IdentifyDialog', () => {
 			});
 			renderComponent(IdentifyDialog, { props: { job, onclose: vi.fn(), onidentified } });
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
-			await waitFor(() => expect(screen.getByText('Firefly')).toBeInTheDocument());
-			await fireEvent.click(screen.getByText('Firefly'));
-			await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+			await screen.findByRole('heading', { name: 'Firefly' });
+			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
 			await waitFor(() => expect(onidentified).toHaveBeenCalledWith(resp));
 			expect(onidentified).toHaveBeenCalledTimes(1);
 			expect(resolveJobMock).toHaveBeenCalledTimes(1);
 			expect(resolveJobMock).toHaveBeenCalledWith(
 				'job_s',
-				expect.objectContaining({ media_type: 'tv', external_ids: { tmdb_series_id: 1437 } })
+				expect.objectContaining({
+					media_type: 'tv',
+					external_ids: { imdb: null, tmdb: '1437', tmdb_kind: 'tv', tvdb: null, tvmaze: null }
+				})
 			);
 		});
 

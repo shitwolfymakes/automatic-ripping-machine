@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Glyph from '$lib/components/Glyph.svelte';
-	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
-	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
-	import PosterImage from './PosterImage.svelte';
+	import type { ExternalIds, JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
+	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob, type MatchProvider } from '$lib/api/jobs';
+	import MatchPicker from './match/MatchPicker.svelte';
+	import { isSeriesKind } from '$lib/utils/match';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
@@ -65,9 +65,7 @@
 		const t = searchType;
 		if (lastSearchType !== undefined && t !== lastSearchType) {
 			pickedSource = null;
-			results = [];
-			selected = null;
-			detail = null;
+			closeResults();
 			searchError = null;
 		}
 		lastSearchType = t;
@@ -81,8 +79,6 @@
 	let searchError = $state<string | null>(null);
 
 	let selected = $state<MetadataCandidate | null>(null);
-	let detail = $state<MetadataCandidate | null>(null);
-	let loadingDetail = $state(false);
 
 	let applying = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -98,14 +94,41 @@
 
 	let canResolve = $derived(job.actions.can_resolve);
 
-	$effect(() => {
-		if (detail) {
-			editTitle = detail.title;
-			editYear = detail.year != null ? String(detail.year) : '';
-			editType = detail.kind === 'series' || detail.kind === 'tv' ? 'series' : 'movie';
-			editPosterUrl = detail.poster_url ?? '';
+	// "Edit before using": the edit fields start from the selected match and,
+	// once opened, are what Use applies (spec 4.2).
+	let editing = $state(false);
+	let selectedIndex = $state(-1);
+
+	function fillEdit(c: MetadataCandidate) {
+		editTitle = c.title;
+		editYear = c.year != null ? String(c.year) : '';
+		editType = isSeriesKind(c.kind) ? 'series' : 'movie';
+		editPosterUrl = c.poster_url ?? '';
+	}
+
+	function handlePickerSelect(c: MetadataCandidate, index: number) {
+		if (index !== selectedIndex) {
+			editing = false;
+			feedback = null;
 		}
-	});
+		selectedIndex = index;
+		selected = c;
+	}
+
+	function toggleEdit() {
+		if (!editing && selected) fillEdit(selected);
+		editing = !editing;
+	}
+
+	function closeResults() {
+		results = [];
+		selected = null;
+		selectedIndex = -1;
+		editing = false;
+	}
+
+	let providerLabel = $derived(sourceOptions.find((o) => o.id === source)?.label ?? '');
+	let parsedSearchYear = $derived(/^\d{4}$/.test(yearInput.trim()) ? Number(yearInput.trim()) : null);
 
 	async function handleSearch() {
 		const imdb = imdbInput.trim();
@@ -113,14 +136,11 @@
 			// Direct IMDb ID lookup — skip search
 			searching = true;
 			searchError = null;
-			results = [];
-			selected = null;
-			detail = null;
+			closeResults();
 			try {
 				const resp = await fetchMediaDetail(imdb);
-				detail = resp.candidates[0] ?? null;
-				selected = detail;
-				if (!detail) searchError = 'No match found for that IMDb ID.';
+				results = resp.candidates.slice(0, 1);
+				if (!results.length) searchError = 'No match found for that IMDb ID.';
 			} catch (e) {
 				searchError = e instanceof Error ? e.message : 'IMDb lookup failed';
 			} finally {
@@ -131,11 +151,9 @@
 		if (!query.trim()) return;
 		searching = true;
 		searchError = null;
-		results = [];
-		selected = null;
-		detail = null;
+		closeResults();
 		try {
-			const resp = await searchMetadata(query.trim(), searchType, source);
+			const resp = await searchMetadata(query.trim(), searchType, source, parsedSearchYear);
 			results = resp.candidates;
 			if (results.length === 0) {
 				searchError = 'No results found. Try a different search term.';
@@ -147,48 +165,64 @@
 		}
 	}
 
-	function handleSelect(result: MetadataCandidate) {
-		if (selected === result) {
-			selected = null;
-			detail = null;
-			return;
-		}
-		selected = result;
-		detail = result;
-	}
-
-	async function applyResult() {
-		const title = editTitle.trim();
-		if (!title) {
+	async function applyResult(c: MetadataCandidate) {
+		selected = c;
+		const values = editing
+			? {
+					title: editTitle.trim(),
+					year: editYear.trim(),
+					isSeries: editType === 'series',
+					poster: editPosterUrl.trim() || null
+				}
+			: {
+					title: c.title,
+					year: c.year != null ? String(c.year) : '',
+					isSeries: isSeriesKind(c.kind),
+					poster: c.poster_url ?? null
+				};
+		if (!values.title) {
 			feedback = { type: 'error', message: 'Title is required' };
 			return;
 		}
 		applying = true;
 		feedback = null;
-		const parsedYear = editYear.trim() ? Number(editYear.trim()) : null;
+		const parsedYear = values.year ? Number(values.year) : null;
 		const year = Number.isFinite(parsedYear as number) ? parsedYear : null;
-		const poster = editPosterUrl.trim() || null;
-		const isSeries = editType === 'series';
-		// Only send the candidate's ids when the form's type still matches its kind.
-		const candidateIsSeries = selected?.kind === 'series' || selected?.kind === 'tv';
-		const candidateIds = selected && candidateIsSeries === isSeries ? selected.external_ids : null;
-		// Resolve reads an explicit null as "clear this id": send only the ids the candidate has.
-		const presentIds = Object.entries(candidateIds ?? {}).filter(([, v]) => v != null);
+		const mediaType = values.isSeries ? 'tv' : 'movie';
+		// The candidate's ids name a title of its own kind; after a type edit they don't apply.
+		const idsApply = isSeriesKind(c.kind) === values.isSeries;
 		let resolved: ResolveResponse | undefined;
-		const externalIds = presentIds.length ? Object.fromEntries(presentIds) : undefined;
 		try {
-			if (canResolve) {
-				const resp = await resolveJob(job.id, {
-					title,
+			if (canResolve && idsApply && c.provider) {
+				// A picked match states the whole show (spec 3.6): every show id,
+				// nulls included, plus provider, poster and facts in one call.
+				const ids = c.external_ids ?? {};
+				const externalIds: ExternalIds = {
+					imdb: ids.imdb ?? null,
+					tmdb: ids.tmdb ?? null,
+					tmdb_kind: ids.tmdb_kind ?? null,
+					tvdb: ids.tvdb ?? null,
+					tvmaze: ids.tvmaze ?? null
+				};
+				resolved = await resolveJob(job.id, {
+					title: values.title,
 					year,
-					media_type: isSeries ? 'tv' : 'movie',
-					external_ids: externalIds
+					media_type: mediaType,
+					external_ids: externalIds,
+					match: {
+						provider: c.provider as MatchProvider,
+						poster_url: values.poster,
+						poster_is_manual: values.poster !== (c.poster_url ?? null),
+						facts: c.facts ?? null
+					}
 				});
-				resolved = resp;
+				feedback = { type: 'success', message: 'Identified' };
+			} else if (canResolve) {
+				resolved = await resolveJob(job.id, { title: values.title, year, media_type: mediaType });
 				let message = 'Identified';
-				if (poster !== (job.poster_url_manual ?? null)) {
+				if (values.poster !== (job.poster_url_manual ?? null)) {
 					try {
-						await updateJobTitle(job.id, { poster_url_manual: poster });
+						await updateJobTitle(job.id, { poster_url_manual: values.poster });
 					} catch {
 						message = 'Identified; poster not saved';
 					}
@@ -196,23 +230,18 @@
 				feedback = { type: 'success', message };
 			} else {
 				// Non-resolvable status (created/ripping/failed/abandoned): poster only.
-				await updateJobTitle(job.id, { poster_url_manual: poster });
+				await updateJobTitle(job.id, { poster_url_manual: values.poster });
 				feedback = { type: 'success', message: 'Poster updated' };
 			}
 			if (resolved) onresolved?.(resolved);
 			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
-			if (isSeries && canResolve) onseries?.();
+			if (values.isSeries && canResolve) onseries?.();
 			else onapply?.();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };
 		} finally {
 			applying = false;
 		}
-	}
-
-	function backToResults() {
-		detail = null;
-		selected = null;
 	}
 
 	function handleSearchKeydown(e: KeyboardEvent) {
@@ -284,101 +313,51 @@
 		{/if}
 	{/if}
 
-	<!-- Results grid (hidden when detail is shown) -->
-	{#if !detail && results.length > 0}
-		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			{#each results as result, i (i)}
-				<button
-					type="button"
-					onclick={() => handleSelect(result)}
-					class="group flex flex-col overflow-hidden title-search-card"
-					data-selected={selected === result}
-				>
-					{#if result.poster_url}
-						<PosterImage url={result.poster_url} alt={result.title} class="title-search-poster w-full object-cover" />
-					{:else}
-						<div class="flex title-search-poster w-full items-center justify-center title-search-placeholder">
-							<svg class="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="1.5"
-									d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
-								/>
-							</svg>
-						</div>
-					{/if}
-					<div class="p-2">
-						<p class="title-search-card-title line-clamp-2">
-							{result.title}
-						</p>
-						<div class="mt-1 flex items-center gap-1.5">
-							<span class="title-search-card-year">{result.year ?? ''}</span>
-							<span
-								class="badge badge-sm"
-								data-kind={result.kind === 'series' || result.kind === 'tv' ? 'series' : 'movie'}
-							>
-								{result.kind}
-							</span>
-						</div>
-					</div>
+	{#if results.length > 0}
+		<MatchPicker
+			{results}
+			query={query.trim()}
+			year={yearInput.trim()}
+			{providerLabel}
+			canUse={$isAdmin}
+			useLabel={canResolve ? 'Use this match' : 'Use poster'}
+			{applying}
+			onclose={closeResults}
+			onselect={handlePickerSelect}
+			onuse={applyResult}
+		>
+			{#if $isAdmin}
+				<button type="button" class="title-search-edit-toggle" aria-expanded={editing} onclick={toggleEdit}>
+					Edit before using
 				</button>
-			{/each}
-		</div>
-	{/if}
-
-	<!-- Detail panel with editable fields -->
-	{#if loadingDetail}
-		<div class="panel-section title-search-loading">Loading details...</div>
-	{:else if detail}
-		<div class="panel">
-			<div class="stack">
-				{#if results.length > 0}
-					<button type="button" onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
-						<Glyph name="arrow-left" /> Back to results
-					</button>
+				{#if editing}
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<label class="field sm:col-span-2">
+							<span class="field-label">Title</span>
+							<input type="text" bind:value={editTitle} />
+						</label>
+						<label class="field">
+							<span class="field-label">Year</span>
+							<input type="text" bind:value={editYear} />
+						</label>
+						<label class="field">
+							<span class="field-label">Type</span>
+							<select bind:value={editType}>
+								<option value="movie">Movie</option>
+								<option value="series">Series</option>
+							</select>
+						</label>
+						<label class="field sm:col-span-2">
+							<span class="field-label">Poster URL</span>
+							<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
+						</label>
+					</div>
 				{/if}
-				<!-- Editable fields -->
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<label class="field sm:col-span-2">
-						<span class="field-label">Title</span>
-						<input type="text" bind:value={editTitle} />
-					</label>
-					<label class="field">
-						<span class="field-label">Year</span>
-						<input type="text" bind:value={editYear} />
-					</label>
-					<label class="field">
-						<span class="field-label">Type</span>
-						<select bind:value={editType}>
-							<option value="movie">Movie</option>
-							<option value="series">Series</option>
-						</select>
-					</label>
-					<label class="field sm:col-span-2">
-						<span class="field-label">Poster URL</span>
-						<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
-					</label>
-				</div>
-				<div class="flex items-center gap-2">
-					{#if $isAdmin}
-						<button
-							type="button"
-							onclick={applyResult}
-							disabled={applying}
-							class="btn title-search-success-btn title-search-action-btn"
-						>
-							{applying ? 'Applying...' : canResolve ? 'Apply' : 'Apply Poster'}
-						</button>
-					{/if}
-					{#if feedback}
-						<span in:reveal class="title-search-feedback" data-tone={feedback.type}>
-							{feedback.message}
-						</span>
-					{/if}
-				</div>
-			</div>
-		</div>
+			{/if}
+			{#if feedback}
+				<span in:reveal class="title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
+			{/if}
+		</MatchPicker>
 	{/if}
 </div>
 
@@ -400,15 +379,6 @@
 	.title-search-min {
 		min-width: 200px;
 	}
-	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
-	   narrower than .btn's default 1rem/0.5rem */
-	.title-search-action-btn {
-		padding: 0.375rem 0.75rem;
-	}
-	/* :global: also passed as PosterImage's class prop, landing on its own <img> */
-	:global(.title-search-poster) {
-		aspect-ratio: 2 / 3;
-	}
 	.title-search-alert-title {
 		font-weight: 500;
 	}
@@ -423,50 +393,6 @@
 		line-height: 1rem;
 		color: var(--color-on-warning-soft);
 	}
-	.title-search-card {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		text-align: left;
-		transition: border-color var(--motion-fast) var(--ease);
-	}
-	.title-search-card:hover {
-		border-color: var(--color-border-strong);
-	}
-	.title-search-card[data-selected='true'] {
-		border-color: var(--color-primary);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 30%, transparent);
-	}
-	.title-search-placeholder {
-		background: var(--color-primary-tint-2);
-		color: var(--color-text-faint);
-	}
-	.title-search-card-title {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		font-weight: 500;
-		color: var(--color-text);
-	}
-	.title-search-card:hover .title-search-card-title {
-		color: var(--color-primary-text);
-	}
-	.title-search-card-year {
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-muted);
-	}
-	.title-search-loading {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		color: var(--color-text-muted);
-	}
-	.title-search-success-btn {
-		border: 0;
-		background: var(--color-success);
-		color: var(--color-on-primary);
-	}
-	.title-search-success-btn:hover {
-		filter: brightness(0.9);
-	}
 	.title-search-feedback {
 		font-size: 0.75rem;
 		line-height: 1rem;
@@ -477,16 +403,10 @@
 	.title-search-feedback[data-tone='error'] {
 		color: var(--color-danger);
 	}
-	/* result kind pill: series -> accent-3 (violet, no tone matches purple);
-	   movie -> success tone (closest to the original's green) */
-	.badge[data-kind='series'] {
-		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
-		color: var(--color-accent-3);
-		text-transform: uppercase;
-	}
-	.badge[data-kind='movie'] {
-		background: var(--color-success-soft);
-		color: var(--color-on-success-soft);
-		text-transform: uppercase;
+	.title-search-edit-toggle {
+		align-self: flex-start;
+		font-size: 0.75rem;
+		color: var(--color-primary-text);
+		text-decoration: underline;
 	}
 </style>
