@@ -280,6 +280,7 @@
 			<SectionFrame
 				variant="full"
 				accent="var(--color-primary)"
+				emphasis
 				label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
 			>
 				<div class="grid gap-4">

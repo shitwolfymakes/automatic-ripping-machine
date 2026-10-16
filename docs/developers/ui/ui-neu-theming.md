@@ -131,7 +131,7 @@ A scheme may select:
 - the published data attributes: `[data-scheme]`, `[data-active]`,
   `[data-status]`, `[data-selected]`, `[data-progress-track]`,
   `[data-progress-fill]`, `[data-indeterminate]`, `[data-bar]`,
-  `[data-frame-variant]`, `[data-dialog]`, `[data-logo]`,
+  `[data-frame-variant]`, `[data-frame-emphasis]`, `[data-dialog]`, `[data-logo]`,
   `[data-sidebar-stats]`, `[data-poster]` (every PosterImage img and its
   fallback tile, plus the job-detail track posters — the hook for framing
   cover art), plus the ARIA state attributes (`[aria-selected]`,
@@ -230,7 +230,7 @@ contract; this table is a copy of it.
 | `nav` | `nav-item`, `nav-badge`, `nav-logo` | none | `[data-active="true"]` on `nav-item` |
 | `panel` | `panel-title`, `panel-hint`, `panel-actions`, `panel-body`, `panel-section` | `panel-compact` | `[aria-expanded]` on a collapsible `button.panel-title` |
 | `progress` | `progress-track`, `progress-fill` (keep the `data-progress-track` / `data-progress-fill` attributes: schemes hook them) | `progress-sm` | `[data-indeterminate="true"]`, `[data-status]`, `[data-bar="danger"\|"warning"\|"cpu"\|"mem"\|"disk"]` |
-| `section-frame` | `section-frame-bar-top`, `section-frame-bar-bottom`, `section-frame-sidebar`, `section-frame-body` | none | `[data-frame-variant]`; accent via `--frame-accent` |
+| `section-frame` | `section-frame-bar-top`, `section-frame-bar-bottom`, `section-frame-sidebar`, `section-frame-body` | none | `[data-frame-variant]`, `[data-frame-emphasis]` (opt-in tinted attention frame, mixed from the accent); accent via `--frame-accent` |
 | `skeleton` | none | `skeleton-text`, `skeleton-block`, `skeleton-card` | none |
 | `slide-over` | `slide-over-panel`, `slide-over-header` | none | none |
 | `stat` | `stat-label`, `stat-value` | `stat-danger`, `stat-warning`, `stat-success`, `stat-info`, `stat-muted` | none |
