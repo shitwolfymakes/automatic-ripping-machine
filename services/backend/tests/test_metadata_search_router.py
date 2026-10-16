@@ -484,8 +484,8 @@ def test_search_tmdb_candidates_carry_imdb_id(signing_key: bytes) -> None:
             json={"results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]},
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    respx.get("https://api.themoviedb.org/3/movie/1726").mock(
+        return_value=httpx.Response(200, json={"id": 1726, "external_ids": {"imdb_id": "tt0371746"}})
     )
     db = FakeSession()
     _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
@@ -515,10 +515,10 @@ def test_search_tmdb_enrichment_failure_is_tolerated(signing_key: bytes) -> None
             },
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    respx.get("https://api.themoviedb.org/3/movie/1726").mock(
+        return_value=httpx.Response(200, json={"id": 1726, "external_ids": {"imdb_id": "tt0371746"}})
     )
-    respx.get("https://api.themoviedb.org/3/movie/1727/external_ids").mock(return_value=httpx.Response(500))
+    respx.get("https://api.themoviedb.org/3/movie/1727").mock(return_value=httpx.Response(500))
     db = FakeSession()
     _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
     app, token = _make_app(signing_key, db)
@@ -667,8 +667,8 @@ def test_tv_search_candidates_carry_all_ids(signing_key: bytes) -> None:
             json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]},
         )
     )
-    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    respx.get("https://api.themoviedb.org/3/tv/5084").mock(
+        return_value=httpx.Response(200, json={"id": 5084, "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170}})
     )
     db = FakeSession()
     _seed(db, tmdb_api_key="k")
@@ -913,3 +913,83 @@ def test_search_tv_uses_omdb_although_episode_sources_omit_it(signing_key: bytes
     assert r.status_code == 200, r.text
     assert route.called
     assert r.json()["candidates"][0]["title"] == "Lost"
+
+
+@respx.mock
+def test_search_candidates_carry_provider_and_facts(signing_key: bytes) -> None:
+    respx.get("https://api.tvmaze.com/search/shows").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "show": {
+                        "id": 1,
+                        "name": "Kolchak",
+                        "premiered": "1974-09-13",
+                        "ended": "1975-03-28",
+                        "rating": {"average": 8},
+                        "genres": ["Horror"],
+                    }
+                }
+            ],
+        )
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "kolchak", "type": "tv", "provider": "tvmaze"},
+            headers=_auth(token),
+        )
+    cand = r.json()["candidates"][0]
+    assert cand["provider"] == "tvmaze"
+    assert (
+        cand["facts"]["end_year"] == 1975 and cand["facts"]["rating"] == 8.0 and cand["facts"]["genres"] == ["Horror"]
+    )
+
+
+@respx.mock
+def test_search_year_sorts_nearest_first_and_drops_nothing(signing_key: bytes) -> None:
+    shows = [
+        {"show": {"id": 1, "name": "Night Stalker", "premiered": "2005-09-29"}},
+        {"show": {"id": 2, "name": "No Year"}},
+        {"show": {"id": 3, "name": "Kolchak", "premiered": "1974-09-13"}},
+        {"show": {"id": 4, "name": "The Night Stalker", "premiered": "1972-01-11"}},
+        {"show": {"id": 5, "name": "Also 1974", "premiered": "1974-01-01"}},
+    ]
+    route = respx.get("https://api.tvmaze.com/search/shows").mock(return_value=httpx.Response(200, json=shows))
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search",
+            params={"title": "night stalker", "type": "tv", "provider": "tvmaze", "year": 1974},
+            headers=_auth(token),
+        )
+    titles = [c["title"] for c in r.json()["candidates"]]
+    assert titles == ["Kolchak", "Also 1974", "The Night Stalker", "Night Stalker", "No Year"]
+    assert "year" not in route.calls.last.request.url.params
+
+
+@respx.mock
+def test_search_without_year_keeps_provider_order(signing_key: bytes) -> None:
+    respx.get("https://api.tvmaze.com/search/shows").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"show": {"id": 1, "name": "B", "premiered": "2005-01-01"}},
+                {"show": {"id": 2, "name": "A", "premiered": "1974-01-01"}},
+            ],
+        )
+    )
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get(
+            "/api/metadata/search", params={"title": "x", "type": "tv", "provider": "tvmaze"}, headers=_auth(token)
+        )
+    assert [c["title"] for c in r.json()["candidates"]] == ["B", "A"]

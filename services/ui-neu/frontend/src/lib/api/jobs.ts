@@ -13,6 +13,7 @@ import type {
 	NamingVariablesResponse,
 	MediaType,
 	MusicMeta,
+	ResolveMatch,
 	ResolveResponse,
 	ApplySessionResponse,
 	ManualTriggerRequest,
@@ -134,7 +135,7 @@ export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<
 // v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, disc_number?, disc_total?, media_type?, music? }.
 // Stamps the chosen identity onto the job (status → identified). `year` defaults
 // to null; `music`/`media_type` are only sent by callers that have something
-// typed to say (the free-form `metadata` bag is gone — unknown keys 422).
+// typed to say; `external_ids` and `match` carry a picked candidate (the free-form `metadata` bag is gone — unknown keys 422).
 //
 // disc_number/disc_total are a classification like media_type/season on the
 // Backend, not part of the identity statement: omitted keeps whatever value
@@ -152,6 +153,7 @@ export function resolveJob(
 		media_type?: MediaType | null;
 		music?: MusicMeta;
 		external_ids?: ExternalIds | null;
+		match?: ResolveMatch;
 	}
 ): Promise<ResolveResponse> {
 	const payload: Record<string, unknown> = {
@@ -168,6 +170,9 @@ export function resolveJob(
 	payload.music = body.music;
 	if (body.external_ids !== undefined) {
 		payload.external_ids = body.external_ids;
+	}
+	if (body.match !== undefined) {
+		payload.match = body.match;
 	}
 	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, payload);
 }
@@ -194,15 +199,29 @@ export function applySession(
 // Metadata search / lookup (EXISTS in v3)
 // ---------------------------------------------------------------------------
 
+export type MatchProvider = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+
 export function searchMetadata(
 	query: string,
 	type?: 'movie' | 'tv',
-	provider?: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb'
+	provider?: MatchProvider,
+	year?: number | null
 ): Promise<MetadataSearchResponse> {
 	const params = new URLSearchParams({ title: query });
 	if (type) params.set('type', type);
 	if (provider) params.set('provider', provider);
+	if (year != null) params.set('year', String(year));
 	return apiFetch<MetadataSearchResponse>(`/api/metadata/search?${params}`);
+}
+
+// One title's full record for the match picker's detail pane (cached server side).
+export function fetchMatchDetails(
+	provider: MatchProvider,
+	type: 'movie' | 'tv',
+	id: string
+): Promise<MetadataSearchResponse> {
+	const params = new URLSearchParams({ provider, type, id });
+	return apiFetch<MetadataSearchResponse>(`/api/metadata/details?${params}`);
 }
 
 // v3 lookup by IMDb id (or crc64). Returns the same candidate envelope.

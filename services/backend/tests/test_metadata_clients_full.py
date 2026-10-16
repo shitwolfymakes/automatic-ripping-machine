@@ -425,3 +425,110 @@ def test_to_candidate_populates_music_facets() -> None:
     assert c.country == "GB"
     assert c.status == "Official"
     assert c.track_count == 17
+
+
+# --- TMDb detail call in search ---------------------------------------------
+
+_TMDB = "https://api.themoviedb.org/3"
+
+
+@respx.mock
+async def test_tmdb_search_candidates_fetch_detail_with_credits(http_client):
+    respx.get(f"{_TMDB}/search/tv").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"id": 5084, "name": "Kolchak", "first_air_date": "1974-09-13"}]}
+        )
+    )
+    detail = respx.get(f"{_TMDB}/tv/5084").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 5084,
+                "name": "Kolchak",
+                "number_of_episodes": 20,
+                "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170},
+                "aggregate_credits": {"cast": [{"name": "Darren McGavin", "order": 0}]},
+            },
+        )
+    )
+    external = respx.get(f"{_TMDB}/tv/5084/external_ids")
+    [r] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
+    assert detail.calls.last.request.url.params["append_to_response"] == "external_ids,aggregate_credits"
+    assert not external.called
+    assert r.payload["imdb_id"] == "tt0071003" and r.payload["tvdb_id"] == "77170"
+    assert r.payload["number_of_episodes"] == 20
+    assert r.payload["aggregate_credits"]["cast"][0]["name"] == "Darren McGavin"
+
+
+@respx.mock
+async def test_tmdb_movie_search_asks_for_credits(http_client):
+    respx.get(f"{_TMDB}/search/movie").mock(
+        return_value=httpx.Response(
+            200, json={"results": [{"id": 603, "title": "The Matrix", "release_date": "1999-03-31"}]}
+        )
+    )
+    detail = respx.get(f"{_TMDB}/movie/603").mock(return_value=httpx.Response(200, json={"id": 603}))
+    await TMDBClient("k", http_client).search_movie_candidates("matrix")
+    assert detail.calls.last.request.url.params["append_to_response"] == "external_ids,credits"
+
+
+@respx.mock
+async def test_tmdb_search_keeps_a_candidate_whose_detail_fails(http_client):
+    respx.get(f"{_TMDB}/search/tv").mock(
+        return_value=httpx.Response(200, json={"results": [{"id": 1, "name": "A", "overview": "Plot."}]})
+    )
+    respx.get(f"{_TMDB}/tv/1").mock(return_value=httpx.Response(500))
+    [r] = await TMDBClient("k", http_client).search_tv_candidates("a")
+    assert r.payload["imdb_id"] is None and r.payload["overview"] == "Plot."
+
+
+@respx.mock
+async def test_tmdb_detail_result_raises_on_miss_and_maps_ids(http_client):
+    respx.get(f"{_TMDB}/tv/404").mock(return_value=httpx.Response(404))
+    with pytest.raises(LookupError):
+        await TMDBClient("k", http_client).detail_result(404, "tv")
+    respx.get(f"{_TMDB}/tv/5").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 5, "name": "K", "first_air_date": "1974-01-01", "external_ids": {"imdb_id": "tt1"}},
+        )
+    )
+    r = await TMDBClient("k", http_client).detail_result(5, "tv")
+    assert (r.title, r.year, r.kind, r.payload["imdb_id"], r.payload["tvdb_id"]) == ("K", 1974, "tv", "tt1", None)
+
+
+@respx.mock
+async def test_tmdb_fetch_detail_error_branches(http_client):
+    c = TMDBClient("k", http_client)
+    route = respx.get(f"{_TMDB}/movie/9")
+    route.mock(side_effect=httpx.ReadTimeout("slow"))
+    with pytest.raises(LookupTimeout):
+        await c.fetch_detail(9, "movie")
+    route.mock(side_effect=httpx.ConnectError("down"))
+    with pytest.raises(LookupError, match="transport"):
+        await c.fetch_detail(9, "movie")
+    route.mock(return_value=httpx.Response(500))
+    with pytest.raises(LookupError, match="status=500"):
+        await c.fetch_detail(9, "movie")
+    route.mock(return_value=httpx.Response(200, content=b"not json"))
+    with pytest.raises(LookupError, match="malformed"):
+        await c.fetch_detail(9, "movie")
+    route.mock(return_value=httpx.Response(200, json=[1]))
+    with pytest.raises(LookupError, match="malformed"):
+        await c.fetch_detail(9, "movie")
+
+
+@respx.mock
+async def test_tmdb_detail_result_missing_title_raises(http_client):
+    respx.get(f"{_TMDB}/movie/7").mock(return_value=httpx.Response(200, json={"id": 7}))
+    with pytest.raises(LookupError, match="missing title"):
+        await TMDBClient("k", http_client).detail_result(7, "movie")
+
+
+@respx.mock
+async def test_tmdb_detail_result_tolerates_non_dict_external_ids(http_client):
+    respx.get(f"{_TMDB}/movie/8").mock(
+        return_value=httpx.Response(200, json={"id": 8, "title": "T", "external_ids": None})
+    )
+    r = await TMDBClient("k", http_client).detail_result(8, "movie")
+    assert r.payload["imdb_id"] is None

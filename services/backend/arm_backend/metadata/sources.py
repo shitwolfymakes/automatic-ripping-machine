@@ -43,6 +43,7 @@ class OnlineSource(Protocol):
     #   search_title(cfg, kind, title, year) -> MetadataResult | None
     #   search_candidates(cfg, kind, title, limit=10) -> list[MetadataResult]
     #   lookup_imdb(cfg, imdb_id) -> MetadataResult | None
+    #   details(cfg, kind, provider_id) -> MetadataResult
     #   lookup_disc_id(cfg, disc_id, toc=None) -> MetadataResult | None
     #   lookup_fingerprint(cfg, algo, value) -> MetadataResult | None
     #   search_releases(cfg, query, *, artist, track_count, release_type,
@@ -86,6 +87,9 @@ class TmdbSource:
     async def lookup_imdb(self, cfg: Config, imdb_id: str) -> MetadataResult | None:
         return await self._client(cfg).find_by_imdb_id(imdb_id)
 
+    async def details(self, cfg: Config, kind: Kind, provider_id: str) -> MetadataResult:
+        return await self._client(cfg).detail_result(provider_id, kind)
+
 
 class OmdbSource:
     id = "omdb"
@@ -112,6 +116,9 @@ class OmdbSource:
 
     async def lookup_imdb(self, cfg: Config, imdb_id: str) -> MetadataResult | None:
         return await self._client(cfg).lookup_by_imdb_id(imdb_id)
+
+    async def details(self, cfg: Config, kind: Kind, provider_id: str) -> MetadataResult:
+        return await self._client(cfg).lookup_by_imdb_id(provider_id)
 
 
 class TvmazeSource:
@@ -141,6 +148,9 @@ class TvmazeSource:
 
     async def lookup_imdb(self, cfg: Config | None, imdb_id: str) -> MetadataResult | None:
         return await TVMazeClient(self._http).lookup_by_imdb_id(imdb_id)
+
+    async def details(self, cfg: Config | None, kind: Kind, provider_id: str) -> MetadataResult:
+        return await TVMazeClient(self._http).show_details(provider_id)
 
 
 class TvdbSource:
@@ -176,6 +186,9 @@ class TvdbSource:
 
     async def lookup_imdb(self, cfg: Config | None, imdb_id: str) -> MetadataResult | None:
         return await self._client(cfg).lookup_by_imdb_id(imdb_id)
+
+    async def details(self, cfg: Config | None, kind: Kind, provider_id: str) -> MetadataResult:
+        return await self._client(cfg).series_details(provider_id)
 
 
 class MusicBrainzSource:

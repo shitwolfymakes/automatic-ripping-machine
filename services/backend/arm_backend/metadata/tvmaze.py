@@ -115,3 +115,10 @@ class TVMazeClient:
         if result is None:
             raise LookupError("tvmaze lookup missing name")
         return result
+
+    async def show_details(self, tvmaze_id: str) -> MetadataResult:
+        """One show with its cast and episode list embedded (details endpoint)."""
+        result = show_to_result(await self._get(f"/shows/{tvmaze_id}", {"embed[]": ["cast", "episodes"]}))
+        if result is None:
+            raise LookupError("tvmaze show missing name")
+        return result

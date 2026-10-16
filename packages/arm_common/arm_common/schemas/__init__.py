@@ -67,6 +67,7 @@ from arm_common.schemas.iso import (
 )
 from arm_common.schemas.job_metadata import (
     ExternalIds,
+    IdentityFacts,
     JobFlags,
     IdentitySuggestion,
     JobIdentity,
@@ -96,6 +97,7 @@ from arm_common.schemas.jobs import (
     ManualTriggerResponse,
     ApplySkippedReason,
     ResolveFanOutOutcomeView,
+    ResolveMatch,
     ResolveRequest,
     ResolveResponse,
     RipProgressSummary,
@@ -355,6 +357,7 @@ __all__ = [
     "RipperHeartbeatRequest",
     "ApplySkippedReason",
     "ExternalIds",
+    "IdentityFacts",
     "JobFlags",
     "IdentitySuggestion",
     "JobIdentity",
@@ -368,6 +371,7 @@ __all__ = [
     "flag_is_set",
     "with_flags",
     "ResolveFanOutOutcomeView",
+    "ResolveMatch",
     "ResolveRequest",
     "ResolveResponse",
     "RipPresetCreateRequest",

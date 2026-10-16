@@ -711,8 +711,8 @@ async def test_tmdb_search_candidate_without_id_skips_enrichment(http_client):
             },
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/42/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0000042"})
+    respx.get("https://api.themoviedb.org/3/movie/42").mock(
+        return_value=httpx.Response(200, json={"id": 42, "external_ids": {"imdb_id": "tt0000042"}})
     )
     client = TMDBClient("k", http_client)
     results = await client.search_movie_candidates("x")
@@ -1326,8 +1326,8 @@ async def test_tmdb_tv_candidates_carry_tvdb_id(http_client) -> None:
             200, json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]}
         )
     )
-    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    respx.get("https://api.themoviedb.org/3/tv/5084").mock(
+        return_value=httpx.Response(200, json={"id": 5084, "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170}})
     )
     [hit] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
     assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
@@ -1533,3 +1533,29 @@ async def test_musicbrainz_toc_unreadable_offsets_use_first_count_match(http_cli
     result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", toc)
     # "2 1 …" has no positive track count, so it keeps the first medium.
     assert result.payload["disc"] == (1 if toc.startswith("2 1") else 2)
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_keeps_the_queried_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200, json={"movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0371746")
+    assert r.payload["imdb_id"] == "tt0371746"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_does_not_clobber_existing_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt1").mock(
+        return_value=httpx.Response(
+            200, json={"tv_results": [{"id": 9, "name": "X", "first_air_date": "2011-01-01", "imdb_id": "tt2"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt1")
+    assert r.payload["imdb_id"] == "tt2"

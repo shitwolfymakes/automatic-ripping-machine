@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from arm_common.schemas.job_metadata import ExternalIds
+from arm_common.schemas.job_metadata import ExternalIds, IdentityFacts
 
 MetadataProvider = Literal["omdb", "tmdb", "tvdb", "makemkv"]
 
@@ -21,6 +21,10 @@ class MetadataCandidate(BaseModel):
     # Every id this result carries (tmdb with its kind, imdb, tvdb), so
     # applying it stores the identity that was picked (spec 3.4).
     external_ids: ExternalIds | None = None
+    # The source that produced this candidate (tmdb/omdb/tvmaze/tvdb), and
+    # what it knows about the title (match picker spec 3.1).
+    provider: str | None = None
+    facts: IdentityFacts | None = None
 
 
 class MetadataReleaseTrack(BaseModel):
