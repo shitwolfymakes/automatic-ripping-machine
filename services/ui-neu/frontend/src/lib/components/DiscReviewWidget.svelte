@@ -27,6 +27,7 @@
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
 	import IsoSourceChip from './IsoSourceChip.svelte';
 	import IdentitySuggestionBanner from './IdentitySuggestionBanner.svelte';
+	import MediaTypeSwitch from './episodes/MediaTypeSwitch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
@@ -77,6 +78,10 @@
 	let errorMessage = $state<string | null>(null);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
+	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
+	let handSetCount = $derived(
+		tracks.filter((t) => ['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')).length
+	);
 	let scanTitles = $derived((data?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles ?? []);
 
 	// v3 classifies disc kind via disc_type. cd → music, data → data, the rest
@@ -465,6 +470,10 @@
 					aria-pressed={showTitleSearch}>Search</button
 				>
 			{/if}
+			<!-- The type picks what Search looks for, so the search row has no Movie/TV toggle of its own. -->
+			{#if isVideo && $isAdmin}
+				<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleTitleApply} />
+			{/if}
 			{#if isMusic}
 				<button
 					onclick={() => toggleSection('music')}
@@ -510,7 +519,7 @@
 		<!-- Expanded sections -->
 		{#if showTitleSearch && isVideo}
 			<div class="disc-review-widget-panel">
-				<TitleSearch {job} onapply={handleTitleApply} />
+				<TitleSearch job={displayJob} onapply={handleTitleApply} />
 			</div>
 		{/if}
 

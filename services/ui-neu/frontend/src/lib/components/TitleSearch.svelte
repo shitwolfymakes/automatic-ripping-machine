@@ -18,15 +18,15 @@
 
 	let { job, onapply, onresolved, onseries, initialType }: Props = $props();
 
-	// Search type: the caller's hint, else the job's known type, else TV for a
-	// disc that looks episodic.
-	let searchType = $state<'movie' | 'tv'>(
+	// Search type: the caller's hint, else the job's type (set by the Movie/TV
+	// switch on the job), else TV for a disc that looks episodic.
+	let searchType = $derived<'movie' | 'tv'>(
 		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
 	);
 
-	// Source switch: the provider for this search. Defaults to the Settings
-	// choice for the search type (until the operator picks one); switching
-	// Movie/TV drops the pick. A keyed source without a saved key is disabled.
+	// Source picker: the provider for this search. Defaults to the Settings
+	// choice for the search type (until the operator picks one); a type change
+	// drops the pick. A keyed source without a saved key is disabled.
 	type Source = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
 	const SOURCES: Record<'movie' | 'tv', { id: Source; label: string }[]> = {
 		movie: [
@@ -43,7 +43,7 @@
 	let pickedSource = $state<Source | null>(null);
 	let sourceOptions = $derived(SOURCES[searchType]);
 	let source = $derived.by<Source | undefined>(() => {
-		if (pickedSource) return pickedSource;
+		if (pickedSource && sourceOptions.some((o) => o.id === pickedSource)) return pickedSource;
 		const fromSettings = searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie;
 		const settingsSource = sourceOptions.find((o) => o.id === fromSettings)?.id;
 		// The default's key was removed after it was chosen: start on the first
@@ -58,15 +58,20 @@
 		return id === 'tvmaze' || $keyedSources[id];
 	}
 
-	function setSearchType(t: 'movie' | 'tv') {
-		if (t === searchType) return;
-		searchType = t;
-		pickedSource = null;
-		results = [];
-		selected = null;
-		detail = null;
-		searchError = null;
-	}
+	// The job's type changed (Movie/TV switch): the old pick and results belong
+	// to the other type.
+	let lastSearchType: 'movie' | 'tv' | undefined;
+	$effect(() => {
+		const t = searchType;
+		if (lastSearchType !== undefined && t !== lastSearchType) {
+			pickedSource = null;
+			results = [];
+			selected = null;
+			detail = null;
+			searchError = null;
+		}
+		lastSearchType = t;
+	});
 
 	let query = $state(job.title || '');
 	let yearInput = $state(job.year != null ? String(job.year) : '');
@@ -218,67 +223,50 @@
 <div class="stack">
 	<!-- Search form -->
 	<div class="flex flex-wrap gap-2">
-		<input
-			type="text"
-			bind:value={query}
-			onkeydown={handleSearchKeydown}
-			onfocus={(e) => (e.target as HTMLInputElement).select()}
-			placeholder="Title..."
-			class="field-control flex-1 title-search-min"
-		/>
+		<div class="flex flex-1 title-search-min title-search-query">
+			<select
+				aria-label="Search with"
+				value={source}
+				onchange={(e) => (pickedSource = (e.target as HTMLSelectElement).value as Source)}
+				class="field-control title-search-source"
+			>
+				{#each sourceOptions as opt (opt.id)}
+					{@const keyed = sourceKeyed(opt.id)}
+					<option value={opt.id} disabled={!keyed}>{keyed ? opt.label : `${opt.label} (needs API key)`}</option>
+				{/each}
+			</select>
+			<input
+				type="text"
+				bind:value={query}
+				onkeydown={handleSearchKeydown}
+				onfocus={(e) => (e.target as HTMLInputElement).select()}
+				placeholder="Title..."
+				aria-label="Title"
+				class="field-control flex-1"
+			/>
+		</div>
 		<input
 			type="text"
 			bind:value={yearInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="Year"
-			class="field-control w-20"
+			class="field-control w-28"
 		/>
 		<input
 			type="text"
 			bind:value={imdbInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="IMDb ID (tt...)"
-			class="field-control w-36"
+			class="field-control w-48"
 		/>
-		<div class="tabs tabs-pills" role="radiogroup" aria-label="Search type">
-			{#each [{ id: 'movie', label: 'Movie' }, { id: 'tv', label: 'TV' }] as opt (opt.id)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={searchType === opt.id}
-					data-selected={searchType === opt.id}
-					onclick={() => setSearchType(opt.id as 'movie' | 'tv')}
-					class="tabs-tab"
-				>
-					{opt.label}
-				</button>
-			{/each}
-		</div>
 		<button
 			type="button"
 			onclick={handleSearch}
 			disabled={searching || (!query.trim() && !imdbInput.trim())}
-			class="btn btn-primary title-search-action-btn"
+			class="btn btn-primary"
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<div class="tabs tabs-pills" role="radiogroup" aria-label="Search with">
-			{#each sourceOptions as opt (opt.id)}
-				{@const keyed = sourceKeyed(opt.id)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={source === opt.id}
-					data-selected={source === opt.id}
-					disabled={!keyed}
-					title={keyed ? undefined : `Needs ${opt.label} API key`}
-					onclick={() => (pickedSource = opt.id)}
-					class="tabs-tab title-search-source"
-				>
-					{opt.label}
-				</button>
-			{/each}
-		</div>
 	</div>
 
 	{#if searchError}
@@ -395,10 +383,19 @@
 </div>
 
 <style>
-	/* a source with no saved API key: shown, not selectable */
-	.title-search-source:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
+	/* source picker joined to the title box as one control */
+	.title-search-source {
+		width: auto;
+		flex: none;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+		background: var(--color-primary-tint-2);
+	}
+	.title-search-query > input {
+		min-width: 0;
+		margin-left: -1px;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
 	}
 	.title-search-min {
 		min-width: 200px;

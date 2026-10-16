@@ -26,6 +26,7 @@ vi.mock('$lib/api/jobs', () => ({
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	resolveJob: vi.fn(() => Promise.resolve(createJob())),
+	setJobMediaType: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -57,7 +58,7 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 
-import { fetchJob, abandonJob, updateTrack, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
+import { fetchJob, abandonJob, updateTrack, startWaitingJob, pauseWaitingJob, setJobMediaType } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockCancel = vi.mocked(abandonJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
@@ -143,6 +144,23 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => {
 				expect(screen.getByText('Search')).toBeInTheDocument();
 			});
+		});
+
+		it('shows the Movie/TV switch beside Search, and switching saves the type and reloads', async () => {
+			vi.mocked(fetchJob).mockResolvedValue(detail({ disc_type: 'bluray', media_type: 'movie' }));
+			renderWidget({ disc_type: 'bluray', media_type: 'movie' });
+			const tv = await screen.findByRole('radio', { name: 'TV' });
+			expect(screen.getByRole('radiogroup', { name: 'Media type' })).toBeInTheDocument();
+			const calls = vi.mocked(fetchJob).mock.calls.length;
+			await fireEvent.click(tv);
+			await waitFor(() => expect(setJobMediaType).toHaveBeenCalledWith(expect.any(String), 'tv'));
+			await waitFor(() => expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThan(calls));
+		});
+
+		it('has no Movie/TV switch on a music disc', async () => {
+			renderWidget({ disc_type: 'cd' });
+			await waitFor(() => expect(screen.getByText('Search')).toBeInTheDocument());
+			expect(screen.queryByRole('radiogroup', { name: 'Media type' })).toBeNull();
 		});
 
 		it('does NOT show the removed Transcode/Settings buttons', async () => {
