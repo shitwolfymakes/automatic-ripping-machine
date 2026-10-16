@@ -1,6 +1,8 @@
 import asyncio
 import logging
+from collections.abc import Awaitable
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -551,6 +553,9 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
 # away; the ripper ejects on it.
 PREVIOUSLY_RIPPED_REASON = "previously_ripped"
 
+# A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
+MAX_IDENTIFY_ATTEMPTS = 20
+
 
 async def _reject_previously_ripped(
     session: AsyncSession, hub: WSHub, drive: Drive, previous: Job, scan: ScanResult
@@ -739,6 +744,19 @@ async def identify(
         result = None
         timed_out = False
     else:
+        # Every source the exact and the fuzzy walks tried, kept on a miss so
+        # the review card can say why the automatic match missed. The
+        # dispatcher keeps each call's attempts in the calling task's context,
+        # so they are read here, inside the task that ran the call: after it
+        # returns, or as wait_for cancels it when the whole dispatch times out.
+        attempts: list[dict[str, Any]] = []
+
+        async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
+            try:
+                return await call
+            finally:
+                attempts.extend(dispatcher.last_attempts)
+
         try:
 
             async def _identify() -> MetadataResult | None:
@@ -753,17 +771,19 @@ async def identify(
                             if release is not None:
                                 return release
                         else:
-                            exact = await dispatcher.identify_from_imdb(imdb, cfg, kind=kind)
+                            exact = await _collected(dispatcher.identify_from_imdb(imdb, cfg, kind=kind))
                             if exact is not None:
                                 return exact
-                return await dispatcher.identify(
-                    scan,
-                    cfg,
-                    title_hint=hint_title(job, hints),
-                    title_hint_is_tv=hint_is_tv(job, hints),
-                    # Several same-length episode titles and no feature: a TV
-                    # disc, whatever the label says (arm_common.disc_shape).
-                    prefer_tv=looks_episodic(scan.titles),
+                return await _collected(
+                    dispatcher.identify(
+                        scan,
+                        cfg,
+                        title_hint=hint_title(job, hints),
+                        title_hint_is_tv=hint_is_tv(job, hints),
+                        # Several same-length episode titles and no feature: a TV
+                        # disc, whatever the label says (arm_common.disc_shape).
+                        prefer_tv=looks_episodic(scan.titles),
+                    )
                 )
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
@@ -772,6 +792,15 @@ async def identify(
             logger.info("identify dispatch_timeout job_id=%s", job.id)
             result = None
             timed_out = True
+            attempts.append(
+                {
+                    "source": None,
+                    "step": "title",
+                    "kind": None,
+                    "outcome": "timeout",
+                    "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
+                }
+            )
 
         release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
         # The cleaned hint titles are search inputs only: a miss (or a held
@@ -782,7 +811,23 @@ async def identify(
         )
         miss_title = bdmt_name or release_title or scan.volume_label
 
-        if result is not None and auto_apply_for(cfg, result.kind):
+        # The miss reasons belong to a miss only; any hit (applied or held)
+        # leaves no list behind.
+        metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
+        if result is None:
+            # The most recent ones; a whole-dispatch timeout entry is last.
+            metadata["identify_attempts"] = attempts[-MAX_IDENTIFY_ATTEMPTS:]
+        job.metadata_json = metadata
+
+        # A CD matched only by track layout where several releases fit is a
+        # guess between pressings: hold it for the operator whatever the
+        # music auto-apply switch says.
+        ambiguous_toc = (
+            result is not None
+            and result.provider == "musicbrainz"
+            and len(result.payload.get("toc_candidates") or []) > 1
+        )
+        if result is not None and not ambiguous_toc and auto_apply_for(cfg, result.kind):
             apply_identity_result(job, result, now=datetime.now(timezone.utc))
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
@@ -808,10 +853,11 @@ async def identify(
             job.wait_start_time = None
             await _persist_review_tracks(session, job, scan)
             logger.info(
-                "identify job_id=%s: %s hit %r held for confirmation (auto-apply off)",
+                "identify job_id=%s: %s hit %r held for confirmation (%s)",
                 job.id,
                 result.kind,
                 result.title,
+                "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
             )
         else:
             diagnostic: dict[str, bool] = {}

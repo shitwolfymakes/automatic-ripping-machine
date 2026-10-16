@@ -151,8 +151,8 @@ async def test_musicbrainz_adapter_delegates(monkeypatch):
         def __init__(self, user_agent, http):
             calls.append(("init", user_agent))
 
-        async def lookup_disc_id(self, disc_id):
-            calls.append(("disc", disc_id))
+        async def lookup_disc_id(self, disc_id, toc=None):
+            calls.append(("disc", disc_id, toc))
             return MetadataResult(title="A", year=None, kind="music")
 
         async def search_releases(self, query, limit=10, **filters):
@@ -162,9 +162,9 @@ async def test_musicbrainz_adapter_delegates(monkeypatch):
     monkeypatch.setattr(sources_mod, "MusicBrainzClient", FakeMB)
     async with httpx.AsyncClient() as http:
         mb = build_online_sources(http)["musicbrainz"]
-        assert (await mb.lookup_disc_id(_config(), "d1")).title == "A"
+        assert (await mb.lookup_disc_id(_config(), "d1", "1 2 3 4 5")).title == "A"
         assert await mb.search_releases(_config(), "abbey road", artist="beatles") == []
-    assert ("disc", "d1") in calls
+    assert ("disc", "d1", "1 2 3 4 5") in calls
     assert calls[-1][1] == "abbey road" and calls[-1][2]["artist"] == "beatles"
     assert calls[0][1] == sources_mod.MUSICBRAINZ_USER_AGENT
 

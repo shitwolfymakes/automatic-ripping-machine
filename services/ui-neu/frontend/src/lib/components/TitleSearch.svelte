@@ -1,42 +1,77 @@
 <script lang="ts">
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
+	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
-	import { searchProviders } from '$lib/stores/config';
+	import { searchProviders, keyedSources } from '$lib/stores/config';
 
 	interface Props {
 		job: JobView;
 		onapply?: () => void;
+		/** Called with the resolve response when Apply identified the job. */
+		onresolved?: (resp: ResolveResponse) => void;
 		onseries?: () => void;
 		initialType?: 'movie' | 'tv';
 	}
 
-	let { job, onapply, onseries, initialType }: Props = $props();
+	let { job, onapply, onresolved, onseries, initialType }: Props = $props();
 
-	// Search type: the caller's hint, else the job's known type, else TV for a
-	// disc that looks episodic.
-	let searchType = $state<'movie' | 'tv'>(
+	// Search type: the caller's hint, else the job's type (set by the Movie/TV
+	// switch on the job), else TV for a disc that looks episodic.
+	let searchType = $derived<'movie' | 'tv'>(
 		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
 	);
 
-	// Pretty label for the configured search provider of the current search
-	// type; generic until the config store hydrates.
-	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' };
-	let providerLabel = $derived(
-		PROVIDER_LABELS[(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie) ?? ''] ?? 'OMDb/TMDb'
-	);
+	// Source picker: the provider for this search. Defaults to the Settings
+	// choice for the search type (until the operator picks one); a type change
+	// drops the pick. A keyed source without a saved key is disabled.
+	type Source = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+	const SOURCES: Record<'movie' | 'tv', { id: Source; label: string }[]> = {
+		movie: [
+			{ id: 'tmdb', label: 'TMDb' },
+			{ id: 'omdb', label: 'OMDb' }
+		],
+		tv: [
+			{ id: 'tmdb', label: 'TMDb' },
+			{ id: 'omdb', label: 'OMDb' },
+			{ id: 'tvmaze', label: 'TVmaze' },
+			{ id: 'tvdb', label: 'TVDB' }
+		]
+	};
+	let pickedSource = $state<Source | null>(null);
+	let sourceOptions = $derived(SOURCES[searchType]);
+	let source = $derived.by<Source | undefined>(() => {
+		if (pickedSource && sourceOptions.some((o) => o.id === pickedSource)) return pickedSource;
+		const fromSettings = searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie;
+		const settingsSource = sourceOptions.find((o) => o.id === fromSettings)?.id;
+		// The default's key was removed after it was chosen: start on the first
+		// usable source; with none usable keep the default (the backend's 400 shows).
+		if (settingsSource && !sourceKeyed(settingsSource)) {
+			return sourceOptions.find((o) => sourceKeyed(o.id))?.id ?? settingsSource;
+		}
+		return settingsSource;
+	});
 
-	function setSearchType(t: 'movie' | 'tv') {
-		if (t === searchType) return;
-		searchType = t;
-		results = [];
-		selected = null;
-		detail = null;
-		searchError = null;
+	function sourceKeyed(id: Source): boolean {
+		return id === 'tvmaze' || $keyedSources[id];
 	}
+
+	// The job's type changed (Movie/TV switch): the old pick and results belong
+	// to the other type.
+	let lastSearchType: 'movie' | 'tv' | undefined;
+	$effect(() => {
+		const t = searchType;
+		if (lastSearchType !== undefined && t !== lastSearchType) {
+			pickedSource = null;
+			results = [];
+			selected = null;
+			detail = null;
+			searchError = null;
+		}
+		lastSearchType = t;
+	});
 
 	let query = $state(job.title || '');
 	let yearInput = $state(job.year != null ? String(job.year) : '');
@@ -100,7 +135,7 @@
 		selected = null;
 		detail = null;
 		try {
-			const resp = await searchMetadata(query.trim(), searchType);
+			const resp = await searchMetadata(query.trim(), searchType, source);
 			results = resp.candidates;
 			if (results.length === 0) {
 				searchError = 'No results found. Try a different search term.';
@@ -139,15 +174,17 @@
 		const candidateIds = selected && candidateIsSeries === isSeries ? selected.external_ids : null;
 		// Resolve reads an explicit null as "clear this id": send only the ids the candidate has.
 		const presentIds = Object.entries(candidateIds ?? {}).filter(([, v]) => v != null);
+		let resolved: ResolveResponse | undefined;
 		const externalIds = presentIds.length ? Object.fromEntries(presentIds) : undefined;
 		try {
 			if (canResolve) {
-				await resolveJob(job.id, {
+				const resp = await resolveJob(job.id, {
 					title,
 					year,
 					media_type: isSeries ? 'tv' : 'movie',
 					external_ids: externalIds
 				});
+				resolved = resp;
 				let message = 'Identified';
 				if (poster !== (job.poster_url_manual ?? null)) {
 					try {
@@ -162,6 +199,7 @@
 				await updateJobTitle(job.id, { poster_url_manual: poster });
 				feedback = { type: 'success', message: 'Poster updated' };
 			}
+			if (resolved) onresolved?.(resolved);
 			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
 			if (isSeries && canResolve) onseries?.();
 			else onapply?.();
@@ -185,52 +223,50 @@
 <div class="stack">
 	<!-- Search form -->
 	<div class="flex flex-wrap gap-2">
-		<input
-			type="text"
-			bind:value={query}
-			onkeydown={handleSearchKeydown}
-			onfocus={(e) => (e.target as HTMLInputElement).select()}
-			placeholder="Title..."
-			class="field-control flex-1 title-search-min"
-		/>
+		<div class="flex flex-1 title-search-min title-search-query">
+			<select
+				aria-label="Search with"
+				value={source}
+				onchange={(e) => (pickedSource = (e.target as HTMLSelectElement).value as Source)}
+				class="field-control title-search-source"
+			>
+				{#each sourceOptions as opt (opt.id)}
+					{@const keyed = sourceKeyed(opt.id)}
+					<option value={opt.id} disabled={!keyed}>{keyed ? opt.label : `${opt.label} (needs API key)`}</option>
+				{/each}
+			</select>
+			<input
+				type="text"
+				bind:value={query}
+				onkeydown={handleSearchKeydown}
+				onfocus={(e) => (e.target as HTMLInputElement).select()}
+				placeholder="Title..."
+				aria-label="Title"
+				class="field-control flex-1"
+			/>
+		</div>
 		<input
 			type="text"
 			bind:value={yearInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="Year"
-			class="field-control w-20"
+			class="field-control w-28"
 		/>
 		<input
 			type="text"
 			bind:value={imdbInput}
 			onkeydown={handleSearchKeydown}
 			placeholder="IMDb ID (tt...)"
-			class="field-control w-36"
+			class="field-control w-48"
 		/>
-		<div class="tabs tabs-pills" role="radiogroup" aria-label="Search type">
-			{#each [{ id: 'movie', label: 'Movie' }, { id: 'tv', label: 'TV' }] as opt (opt.id)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={searchType === opt.id}
-					data-selected={searchType === opt.id}
-					onclick={() => setSearchType(opt.id as 'movie' | 'tv')}
-					class="tabs-tab"
-				>
-					{opt.label}
-				</button>
-			{/each}
-		</div>
 		<button
+			type="button"
 			onclick={handleSearch}
 			disabled={searching || (!query.trim() && !imdbInput.trim())}
-			class="btn btn-primary title-search-action-btn"
+			class="btn btn-primary"
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="badge badge-sm" title="Search provider configured in Settings">
-			{providerLabel}
-		</span>
 	</div>
 
 	{#if searchError}
@@ -253,6 +289,7 @@
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 			{#each results as result, i (i)}
 				<button
+					type="button"
 					onclick={() => handleSelect(result)}
 					class="group flex flex-col overflow-hidden title-search-card"
 					data-selected={selected === result}
@@ -297,7 +334,7 @@
 		<div class="panel">
 			<div class="stack">
 				{#if results.length > 0}
-					<button onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
+					<button type="button" onclick={backToResults} class="btn inline-flex items-center gap-1 self-start">
 						<Glyph name="arrow-left" /> Back to results
 					</button>
 				{/if}
@@ -326,6 +363,7 @@
 				<div class="flex items-center gap-2">
 					{#if $isAdmin}
 						<button
+							type="button"
 							onclick={applyResult}
 							disabled={applying}
 							class="btn title-search-success-btn title-search-action-btn"
@@ -345,6 +383,20 @@
 </div>
 
 <style>
+	/* source picker joined to the title box as one control */
+	.title-search-source {
+		width: auto;
+		flex: none;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+		background: var(--color-primary-tint-2);
+	}
+	.title-search-query > input {
+		min-width: 0;
+		margin-left: -1px;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
+	}
 	.title-search-min {
 		min-width: 200px;
 	}

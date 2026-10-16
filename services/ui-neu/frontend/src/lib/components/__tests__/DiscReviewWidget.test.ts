@@ -393,4 +393,46 @@ describe('DiscReviewWidget', () => {
 			expect(container.querySelector('.disc-review-widget-actions')).toHaveClass('flex-wrap');
 		});
 	});
+
+	describe('why the automatic match missed', () => {
+		async function renderMissed(meta: Record<string, unknown>) {
+			const missed = createJob({
+				status: 'awaiting_user_id',
+				title: 'MY_DISC',
+				disc_type: 'dvd',
+				metadata_json: meta as never
+			});
+			const { fetchJob } = await import('$lib/api/jobs');
+			const original = vi.mocked(fetchJob).getMockImplementation();
+			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: missed });
+			renderComponent(DiscReviewWidget, { props: { job: missed, driveNames: {}, paused: false } });
+			return () => vi.mocked(fetchJob).mockImplementation(original!);
+		}
+
+		it('says which title no source matched', async () => {
+			const restore = await renderMissed({
+				flags: {},
+				identify_attempts: [{ source: 'tmdb', step: 'title', kind: 'movie', outcome: 'miss', detail: 'MY DISC' }]
+			});
+			try {
+				expect(await screen.findByTestId('identify-miss-reason')).toHaveTextContent(
+					'No source found a close match for "MY DISC". Try another source in the search below.'
+				);
+			} finally {
+				restore();
+			}
+		});
+
+		it('shows no line for an older job with no attempts', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			const restore = await renderMissed({ flags: {} });
+			try {
+				await waitFor(() => expect(fetchJob).toHaveBeenCalled());
+				expect(await screen.findByText('MY_DISC')).toBeInTheDocument();
+				expect(screen.queryByTestId('identify-miss-reason')).toBeNull();
+			} finally {
+				restore();
+			}
+		});
+	});
 });

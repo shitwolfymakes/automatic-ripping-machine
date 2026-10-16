@@ -252,6 +252,8 @@
 
 	onMount(() => {
 		let stopped = false;
+		// The review card's episode line links here as #episodes.
+		if (window.location.hash === '#episodes') activePanel = 'episodes';
 		startWS();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))

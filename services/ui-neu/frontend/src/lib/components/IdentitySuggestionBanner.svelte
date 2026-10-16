@@ -17,6 +17,12 @@
 	// A confident match identify held because the media type's auto-apply
 	// switch is off. Accept applies it; Search hands off to the manual search.
 	let suggestion = $derived(identitySuggestionOf(job));
+	// A CD matched by track layout where several releases fit: the backend
+	// ranked them, so this is the closest, but not the only, candidate.
+	let tocCandidateCount = $derived.by(() => {
+		const cands = (suggestion?.payload as { toc_candidates?: unknown } | undefined)?.toc_candidates;
+		return Array.isArray(cands) ? cands.length : 0;
+	});
 	let accepting = $state(false);
 	// The suggestion this banner accepted: its button stays disabled until the
 	// parent's refresh drops the banner (a second accept would only get a 409).
@@ -49,6 +55,11 @@
 			<p class="identity-suggestion-match">
 				{suggestion.year != null ? `${suggestion.title} (${suggestion.year})` : suggestion.title}
 			</p>
+			{#if tocCandidateCount > 1}
+				<p class="identity-suggestion-source">
+					One of {tocCandidateCount} releases that fit this disc's track layout. Use Search instead to pick another.
+				</p>
+			{/if}
 			<p class="identity-suggestion-source">from {providerLabel(suggestion.provider)}</p>
 			{#if errorMessage}
 				<div class="alert alert-danger mt-2">{errorMessage}</div>

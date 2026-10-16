@@ -2450,6 +2450,12 @@ export type JobMetadata = {
     previously_ripped?: PreviouslyRipped | null;
     identity_suggestion?: IdentitySuggestion | null;
     /**
+     * Identify Attempts
+     */
+    identify_attempts?: Array<{
+        [key: string]: unknown;
+    }> | null;
+    /**
      * Provider Raw
      */
     provider_raw?: {
@@ -4131,6 +4137,10 @@ export type ScanResult = {
      * Musicbrainz Disc Id
      */
     musicbrainz_disc_id?: string | null;
+    /**
+     * Cd Toc
+     */
+    cd_toc?: string | null;
     /**
      * Fingerprints
      */

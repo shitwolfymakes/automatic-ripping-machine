@@ -26,6 +26,7 @@ vi.mock('$lib/api/jobs', () => ({
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	resolveJob: vi.fn(() => Promise.resolve(createJob())),
+	setJobMediaType: vi.fn(() => Promise.resolve(createJob())),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	patchJob: vi.fn(() => Promise.resolve(createJob())),
 	applySession: vi.fn(() => Promise.resolve({ created_task_ids: [], collisions: [] })),
@@ -57,7 +58,7 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 
-import { fetchJob, abandonJob, updateTrack, startWaitingJob, pauseWaitingJob } from '$lib/api/jobs';
+import { fetchJob, abandonJob, updateTrack, startWaitingJob, pauseWaitingJob, setJobMediaType } from '$lib/api/jobs';
 const mockFetchJob = vi.mocked(fetchJob);
 const mockCancel = vi.mocked(abandonJob);
 const mockUpdateTrack = vi.mocked(updateTrack);
@@ -143,6 +144,23 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => {
 				expect(screen.getByText('Search')).toBeInTheDocument();
 			});
+		});
+
+		it('shows the Movie/TV switch under the title, and switching saves the type and reloads', async () => {
+			vi.mocked(fetchJob).mockResolvedValue(detail({ disc_type: 'bluray', media_type: 'movie' }));
+			renderWidget({ disc_type: 'bluray', media_type: 'movie' });
+			const tv = await screen.findByRole('radio', { name: 'TV' });
+			expect(screen.getByRole('radiogroup', { name: 'Media type' })).toBeInTheDocument();
+			const calls = vi.mocked(fetchJob).mock.calls.length;
+			await fireEvent.click(tv);
+			await waitFor(() => expect(setJobMediaType).toHaveBeenCalledWith(expect.any(String), 'tv'));
+			await waitFor(() => expect(vi.mocked(fetchJob).mock.calls.length).toBeGreaterThan(calls));
+		});
+
+		it('has no Movie/TV switch on a music disc', async () => {
+			renderWidget({ disc_type: 'cd' });
+			await waitFor(() => expect(screen.getByText('Search')).toBeInTheDocument());
+			expect(screen.queryByRole('radiogroup', { name: 'Media type' })).toBeNull();
 		});
 
 		it('does NOT show the removed Transcode/Settings buttons', async () => {
@@ -433,6 +451,42 @@ describe('DiscReviewWidget', () => {
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(screen.queryByText(/^Session: /)).not.toBeInTheDocument();
+		});
+	});
+
+	describe('episode lead-in', () => {
+		async function renderTv(over: Record<string, unknown>) {
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', media_type: 'tv', ...over } as never));
+			renderWidget({ status: 'awaiting_review', media_type: 'tv', ...over } as never);
+		}
+
+		it('asks to pick the show when none is known, without a link', async () => {
+			await renderTv({ has_series: false });
+			const line = await screen.findByTestId('episode-status');
+			expect(line).toHaveTextContent('Pick the show to match episodes.');
+			expect(line.querySelector('a')).toBeNull();
+		});
+
+		it('names the matching source and links to the episodes panel', async () => {
+			await renderTv({
+				has_series: true,
+				metadata_json: { flags: {}, identity_claims: { sources: { episodes_tvmaze: { status: 'ok' } } } }
+			});
+			const line = await screen.findByTestId('episode-status');
+			expect(line).toHaveTextContent('Episodes matched from TVmaze.');
+			expect(line.querySelector('a')).toHaveAttribute('href', expect.stringMatching(/\/jobs\/[^/]+#episodes$/));
+		});
+
+		it('is absent for a movie', async () => {
+			await renderTv({ media_type: 'movie', has_series: false });
+			expect(await screen.findByText('Test Movie')).toBeInTheDocument();
+			expect(screen.queryByTestId('episode-status')).toBeNull();
+		});
+
+		it('is absent for a post-rip job', async () => {
+			await renderTv({ status: 'ripped', has_series: true });
+			expect(await screen.findByText('Test Movie')).toBeInTheDocument();
+			expect(screen.queryByTestId('episode-status')).toBeNull();
 		});
 	});
 });
