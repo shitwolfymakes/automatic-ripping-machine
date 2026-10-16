@@ -1452,3 +1452,84 @@ async def test_musicbrainz_toc_fuzzy_no_matching_medium_uses_first(http_client):
     )
     result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
     assert result.payload["disc"] == 1
+
+
+# Two tracks of 180 s and 200 s (75 sectors per second).
+_TOC_180_200 = "1 2 28650 150 13650"
+
+
+def _medium(position, lengths_ms):
+    return {
+        "position": position,
+        "track-count": len(lengths_ms),
+        "tracks": [
+            {"title": f"d{position}t{i + 1}", "position": i + 1, "length": ms} for i, ms in enumerate(lengths_ms)
+        ],
+    }
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_picks_medium_by_track_lengths(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [100_000, 300_000]), _medium(2, [180_500, 199_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.payload["disc"] == 2
+    assert [t["title"] for t in result.payload["tracks"]] == ["d2t1", "d2t2"]
+    assert {t["disc_number"] for t in result.payload["tracks"]} == {2}
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_missing_length_is_penalised(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [180_000, 200_000]), _medium(2, [100_000, 300_000])]
+    del media[0]["tracks"][1]["length"]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.payload["disc"] == 2
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_ranks_releases_by_track_lengths(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    releases = [
+        _fuzzy_release("far", "Far", media=[_medium(1, [120_000, 260_000])]),
+        _fuzzy_release("nocount", "No Count", media=[_medium(1, [180_000, 200_000, 10_000])]),
+        _fuzzy_release("close", "Close", media=[_medium(1, [9_000, 9_000]), _medium(2, [181_000, 200_000])]),
+    ]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": releases})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.title == "Close"
+    assert result.payload["disc"] == 2
+    assert [c["id"] for c in result.payload["toc_candidates"]] == ["close", "far", "nocount"]
+
+
+@respx.mock
+async def test_musicbrainz_toc_malformed_falls_back_to_first_medium(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [100_000, 300_000]), _medium(2, [180_000, 200_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", "1 two x")
+    assert result.payload["disc"] == 1
+    assert result.payload["tracks"][0]["title"] == "d1t1"
+
+
+@pytest.mark.parametrize("toc", ["1 2 x 150 13650", "1 2 28650 150", "2 1 28650 150 13650"])
+@respx.mock
+async def test_musicbrainz_toc_unreadable_offsets_use_first_count_match(http_client, toc):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [1_000]), _medium(2, [100_000, 300_000]), _medium(3, [180_000, 200_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", toc)
+    # "2 1 …" has no positive track count, so it keeps the first medium.
+    assert result.payload["disc"] == (1 if toc.startswith("2 1") else 2)

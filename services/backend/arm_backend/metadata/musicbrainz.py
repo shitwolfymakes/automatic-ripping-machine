@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import time
 from typing import Any
 
@@ -38,7 +39,7 @@ async def _rate_limit() -> None:
 
 _DISC_NOT_FOUND = "musicbrainz disc_id not found"
 _DISC_NO_RELEASES = "musicbrainz disc_id has no releases"
-_TOC_NOT_FOUND = "musicbrainz toc not found"
+TOC_NOT_FOUND = "musicbrainz toc not found"
 _TOC_CANDIDATES = 5
 
 
@@ -107,11 +108,16 @@ class MusicBrainzClient:
         body = await self._get(
             "/discid/-",
             params={"toc": "+".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
-            not_found_detail=_TOC_NOT_FOUND,
+            not_found_detail=TOC_NOT_FOUND,
         )
         releases = body.get("releases") or []
         if not releases:
-            raise LookupError(_TOC_NOT_FOUND)
+            raise LookupError(TOC_NOT_FOUND)
+        # Closest fit first (best medium per release); a stable sort keeps
+        # MusicBrainz's order among equal fits.
+        lengths = _toc_track_lengths(toc)
+        if lengths is not None:
+            releases = sorted(releases, key=lambda r: _best_toc_distance(r.get("media") or [], lengths))
         return self._project_disc(releases, None, toc)
 
     def _project_disc(self, releases: list[dict[str, Any]], disc_id: str | None, toc: str | None) -> MetadataResult:
@@ -129,7 +135,7 @@ class MusicBrainzClient:
         if disc_id is not None:
             medium, disc_number = _pick_medium_for_disc(top.get("media") or [], disc_id)
         else:
-            medium, disc_number = _pick_medium_for_toc(top.get("media") or [], _toc_track_count(toc))
+            medium, disc_number = _pick_medium_for_toc(top.get("media") or [], toc)
         tracks = _extract_tracks(medium, disc_number)
 
         payload: dict[str, Any] = {
@@ -296,14 +302,64 @@ def _toc_track_count(toc: str | None) -> int | None:
     return last - first + 1
 
 
-def _pick_medium_for_toc(media: list[dict[str, Any]], track_count: int | None) -> tuple[dict[str, Any] | None, int]:
-    """Fuzzy hit: the first medium with the TOC's track count, else media[0]."""
-    for i, medium in enumerate(media):
-        count = medium.get("track-count")
-        if not isinstance(count, int):
-            count = len(medium.get("tracks") or [])
-        if track_count is not None and count == track_count:
-            return medium, i + 1
+# CD sectors per second: libdiscid TOC offsets are sector addresses.
+_SECTORS_PER_SECOND = 75
+# Distance charged for a track whose MusicBrainz length is unknown, in seconds.
+_MISSING_LENGTH_PENALTY_S = 3600.0
+
+
+def _toc_track_lengths(toc: str | None) -> list[float] | None:
+    """Per-track lengths in seconds from a TOC string, or None when malformed."""
+    try:
+        first, last, leadout, *offsets = (int(x) for x in (toc or "").split())
+    except ValueError:
+        return None
+    if last < first or len(offsets) != last - first + 1:
+        return None
+    bounds = [*offsets, leadout]
+    return [(bounds[i + 1] - bounds[i]) / _SECTORS_PER_SECOND for i in range(len(offsets))]
+
+
+def _medium_track_count(medium: dict[str, Any]) -> int:
+    count = medium.get("track-count")
+    return count if isinstance(count, int) else len(medium.get("tracks") or [])
+
+
+def _toc_distance(medium: dict[str, Any], lengths: list[float]) -> float:
+    """Total |MusicBrainz length - TOC length| in seconds over the disc's
+    tracks; a missing length (or track) costs a large flat penalty."""
+    tracks = medium.get("tracks") or []
+    total = 0.0
+    for i, seconds in enumerate(lengths):
+        ms = tracks[i].get("length") if i < len(tracks) else None
+        total += abs(ms / 1000 - seconds) if isinstance(ms, (int, float)) else _MISSING_LENGTH_PENALTY_S
+    return total
+
+
+def _best_toc_distance(media: list[dict[str, Any]], lengths: list[float]) -> float:
+    """Distance of a release's closest medium with the TOC's track count;
+    infinity when none has it."""
+    return min(
+        (_toc_distance(m, lengths) for m in media if _medium_track_count(m) == len(lengths)),
+        default=math.inf,
+    )
+
+
+def _pick_medium_for_toc(media: list[dict[str, Any]], toc: str | None) -> tuple[dict[str, Any] | None, int]:
+    """Fuzzy hit: among the media with the TOC's track count, the one whose
+    track lengths fit the TOC best (the first on a tie or when the lengths
+    can't be read); else media[0]."""
+    track_count = _toc_track_count(toc)
+    lengths = _toc_track_lengths(toc)
+    matching = [
+        (i, m) for i, m in enumerate(media) if track_count is not None and _medium_track_count(m) == track_count
+    ]
+    if matching:
+        if lengths is not None:
+            i, medium = min(matching, key=lambda im: _toc_distance(im[1], lengths))
+        else:
+            i, medium = matching[0]
+        return medium, i + 1
     if media:
         return media[0], 1
     return None, 1
