@@ -411,8 +411,9 @@ describe('Settings Page', () => {
 			window.location.hash = '#appearance';
 			renderComponent(SettingsPage);
 			await waitFor(() => {
-				expect(screen.getByText('Image Cache')).toBeInTheDocument();
+				expect(screen.getByLabelText('Dark mode')).toBeInTheDocument();
 			});
+			expect(screen.queryByText('Image Cache')).toBeNull();
 		});
 
 		it('renders page title', () => {
@@ -470,8 +471,8 @@ describe('Settings Page', () => {
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
 
-		it('image cache section loads when Themes tab active', async () => {
-			await renderAndOpenTab('Themes');
+		it('image cache section loads when Interface tab active', async () => {
+			await renderAndOpenTab('Interface');
 			await waitFor(() => {
 				expect(screen.getByText('Image Cache')).toBeInTheDocument();
 			});
@@ -485,7 +486,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows cache feedback after clearing image cache', async () => {
-			await renderAndOpenTab('Themes');
+			await renderAndOpenTab('Interface');
 			await waitFor(() => {
 				expect(screen.getByText('Clear Cache')).toBeInTheDocument();
 			});

@@ -242,7 +242,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'themes') loadCacheStats();
+		if (tab === 'interface') loadCacheStats();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -267,7 +267,7 @@
 			.then(() => drives.start());
 		loadSettings();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'themes') loadCacheStats();
+		if (activeTab === 'interface') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -277,7 +277,7 @@
 			const tab = parseHash();
 			activeTab = tab;
 			pendingField = parseHashField();
-			if (tab === 'themes') loadCacheStats();
+			if (tab === 'interface') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -499,7 +499,38 @@
 
 			<!-- Appearance Tab -->
 			{#if activeTab === 'interface'}
-				<InterfaceSettings />
+				<div class="stack stack-lg">
+					<InterfaceSettings />
+
+					<!-- Image Cache -->
+					<div class="panel settings-page-panel-wide">
+						<div class="flex items-center justify-between">
+							<div>
+								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
+								<p class="settings-page-description mt-1">
+									{#if cacheLoading}Loading...
+									{:else if cacheStats}{cacheStats.count} cached image{cacheStats.count !== 1 ? 's' : ''} ({cacheStats.size_mb}
+										MB)
+									{:else}Unable to load cache stats
+									{/if}
+								</p>
+							</div>
+							<button
+								type="button"
+								onclick={() => (cacheConfirmOpen = true)}
+								disabled={cacheBusy || !cacheStats?.count}
+								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
+							>
+								Clear Cache
+							</button>
+						</div>
+						{#if cacheFeedback}
+							<p class="mt-2 settings-page-feedback" data-error={cacheFeedback.type !== 'success'}>
+								{cacheFeedback.message}
+							</p>
+						{/if}
+					</div>
+				</div>
 			{/if}
 
 			{#if activeTab === 'themes'}
@@ -608,35 +639,6 @@
 								</div>
 							{/if}
 						</div>
-					</div>
-
-					<!-- Image Cache -->
-					<div class="panel settings-page-panel-wide">
-						<div class="flex items-center justify-between">
-							<div>
-								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
-								<p class="settings-page-description mt-1">
-									{#if cacheLoading}Loading...
-									{:else if cacheStats}{cacheStats.count} cached image{cacheStats.count !== 1 ? 's' : ''} ({cacheStats.size_mb}
-										MB)
-									{:else}Unable to load cache stats
-									{/if}
-								</p>
-							</div>
-							<button
-								type="button"
-								onclick={() => (cacheConfirmOpen = true)}
-								disabled={cacheBusy || !cacheStats?.count}
-								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
-							>
-								Clear Cache
-							</button>
-						</div>
-						{#if cacheFeedback}
-							<p class="mt-2 settings-page-feedback" data-error={cacheFeedback.type !== 'success'}>
-								{cacheFeedback.message}
-							</p>
-						{/if}
 					</div>
 				</section>
 			{/if}
