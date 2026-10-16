@@ -36,6 +36,12 @@ async def _rate_limit() -> None:
         _last_call_at = time.monotonic()
 
 
+_DISC_NOT_FOUND = "musicbrainz disc_id not found"
+_DISC_NO_RELEASES = "musicbrainz disc_id has no releases"
+_TOC_NOT_FOUND = "musicbrainz toc not found"
+_TOC_CANDIDATES = 5
+
+
 class MusicBrainzClient:
     def __init__(self, user_agent: str, http: httpx.AsyncClient) -> None:
         if not user_agent:
@@ -75,19 +81,40 @@ class MusicBrainzClient:
 
         return r.json()  # type: ignore[no-any-return]
 
-    async def lookup_disc_id(self, disc_id: str) -> MetadataResult:
-        body = await self._get(
-            f"/discid/{disc_id}",
-            # release-groups: so extract_poster_url can prefer the (more often
-            # populated) release-group cover over the specific release's.
-            params={"inc": "artists+recordings+release-groups", "fmt": "json"},
-            not_found_detail="musicbrainz disc_id not found",
-        )
+    async def lookup_disc_id(self, disc_id: str, toc: str | None = None) -> MetadataResult:
+        """Exact disc-ID lookup. When that disc isn't listed (404 or no
+        releases) and `toc` is given, fall back to MusicBrainz's fuzzy TOC
+        match (track count and lengths): other pressings of a listed album."""
+        inc = "artists+recordings+release-groups"
+        try:
+            body = await self._get(
+                f"/discid/{disc_id}",
+                # release-groups: so extract_poster_url can prefer the (more often
+                # populated) release-group cover over the specific release's.
+                params={"inc": inc, "fmt": "json"},
+                not_found_detail=_DISC_NOT_FOUND,
+            )
+            releases = body.get("releases") or []
+            if not releases:
+                raise LookupError(_DISC_NO_RELEASES)
+        except LookupError as e:
+            if not toc or str(e) not in (_DISC_NOT_FOUND, _DISC_NO_RELEASES):
+                raise
+            return await self._lookup_toc(toc, inc)
+        return self._project_disc(releases, disc_id, None)
 
+    async def _lookup_toc(self, toc: str, inc: str) -> MetadataResult:
+        body = await self._get(
+            "/discid/-",
+            params={"toc": "+".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
+            not_found_detail=_TOC_NOT_FOUND,
+        )
         releases = body.get("releases") or []
         if not releases:
-            raise LookupError("musicbrainz disc_id has no releases")
+            raise LookupError(_TOC_NOT_FOUND)
+        return self._project_disc(releases, None, toc)
 
+    def _project_disc(self, releases: list[dict[str, Any]], disc_id: str | None, toc: str | None) -> MetadataResult:
         top = releases[0]
         title_val = top.get("title")
         year_val = _parse_year(top.get("date") or "")
@@ -99,7 +126,10 @@ class MusicBrainzClient:
         # extract_poster_url() can still derive the Cover Art Archive URL
         # from release["id"], and downstream debugging has the full payload.
         artist = _join_artist_credit(top.get("artist-credit") or [])
-        medium, disc_number = _pick_medium_for_disc(top.get("media") or [], disc_id)
+        if disc_id is not None:
+            medium, disc_number = _pick_medium_for_disc(top.get("media") or [], disc_id)
+        else:
+            medium, disc_number = _pick_medium_for_toc(top.get("media") or [], _toc_track_count(toc))
         tracks = _extract_tracks(medium, disc_number)
 
         payload: dict[str, Any] = {
@@ -115,6 +145,19 @@ class MusicBrainzClient:
         # apply of a job whose disc_number is unset).
         if medium is not None and medium.get("position"):
             payload["disc"] = medium["position"]
+
+        if toc is not None:
+            payload["toc_match"] = "fuzzy"
+            if len(releases) > 1:
+                payload["toc_candidates"] = [
+                    {
+                        "id": r.get("id"),
+                        "title": r.get("title"),
+                        "date": r.get("date"),
+                        "artist": _join_artist_credit(r.get("artist-credit") or []),
+                    }
+                    for r in releases[:_TOC_CANDIDATES]
+                ]
 
         return MetadataResult(title=title_val, year=year_val, kind="music", payload=payload)
 
@@ -239,6 +282,28 @@ def _pick_medium_for_disc(media: list[dict[str, Any]], disc_id: str) -> tuple[di
         for disc in medium.get("discs") or []:
             if isinstance(disc, dict) and disc.get("id") == disc_id:
                 return medium, i + 1
+    if media:
+        return media[0], 1
+    return None, 1
+
+
+def _toc_track_count(toc: str | None) -> int | None:
+    """Track count of a libdiscid TOC string ("first last leadout offsets…")."""
+    try:
+        first, last = (int(x) for x in (toc or "").split()[:2])
+    except ValueError:
+        return None
+    return last - first + 1
+
+
+def _pick_medium_for_toc(media: list[dict[str, Any]], track_count: int | None) -> tuple[dict[str, Any] | None, int]:
+    """Fuzzy hit: the first medium with the TOC's track count, else media[0]."""
+    for i, medium in enumerate(media):
+        count = medium.get("track-count")
+        if not isinstance(count, int):
+            count = len(medium.get("tracks") or [])
+        if track_count is not None and count == track_count:
+            return medium, i + 1
     if media:
         return media[0], 1
     return None, 1

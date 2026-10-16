@@ -149,7 +149,9 @@ class MetadataDispatcher:
             lookup = capability(source, "lookup_disc_id")
             if lookup is None:
                 continue
-            hit = await self._call(source.id, lookup(cfg, disc_id), step="disc_id", kind="music", detail=disc_id)
+            hit = await self._call(
+                source.id, lookup(cfg, disc_id, scan.cd_toc), step="disc_id", kind="music", detail=disc_id
+            )
             if hit is not None:
                 return hit
         return None
@@ -382,6 +384,8 @@ class MetadataDispatcher:
                 # The source id keys provider_raw and identity.provider.
                 result.provider = source_id
             outcome = "miss" if result is None else "hit"
+            if step == "disc_id" and result is not None and (result.payload or {}).get("toc_match") == "fuzzy":
+                detail = "matched by track layout"
         except asyncio.TimeoutError:
             logger.info("metadata.%s timeout", source_id)
             result, outcome = None, "timeout"

@@ -1315,7 +1315,7 @@ async def test_cd_attempts_record_the_disc_id_step():
         def configured(self, cfg):
             return None
 
-        async def lookup_disc_id(self, cfg, disc_id):
+        async def lookup_disc_id(self, cfg, disc_id, toc=None):
             return MetadataResult(title="Album", year=None, kind="music")
 
     scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc")
@@ -1324,6 +1324,39 @@ async def test_cd_attempts_record_the_disc_id_step():
         assert await dispatcher.identify(scan, _config()) is not None
     assert dispatcher.last_attempts == [
         {"source": "musicbrainz", "step": "disc_id", "kind": "music", "outcome": "hit", "detail": "abc"}
+    ]
+
+
+async def test_cd_passes_toc_and_records_a_fuzzy_match():
+    from arm_backend.metadata.base import MetadataResult
+
+    seen = []
+
+    class Mb:
+        id = "musicbrainz"
+        media_types = frozenset({"music"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_disc_id(self, cfg, disc_id, toc=None):
+            seen.append(toc)
+            return MetadataResult(title="Album", year=None, kind="music", payload={"toc_match": "fuzzy"})
+
+    scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc", cd_toc="1 2 3 4 5")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"musicbrainz": Mb()})
+        assert await dispatcher.identify(scan, _config()) is not None
+    assert seen == ["1 2 3 4 5"]
+    assert dispatcher.last_attempts == [
+        {
+            "source": "musicbrainz",
+            "step": "disc_id",
+            "kind": "music",
+            "outcome": "hit",
+            "detail": "matched by track layout",
+        }
     ]
 
 
