@@ -14,7 +14,7 @@ function textResponse(body: string, ok = true, status = 200) {
 	return { ok, status, statusText: ok ? 'OK' : 'Error', text: () => Promise.resolve(body) };
 }
 
-import { fetchJobLog, jobLogDownloadUrl, toLogEntry } from '../logs';
+import { fetchJobLog, fetchJobLogIndex, jobLogDownloadUrl, toLogEntry } from '../logs';
 
 beforeEach(() => {
 	mockFetch.mockReset();
@@ -136,5 +136,21 @@ describe('toLogEntry', () => {
 			label: null,
 			service: 'arm-ripper-ABCD'
 		});
+	});
+});
+
+describe('fetchJobLogIndex', () => {
+	it('GETs /api/logs with a bearer token and returns the parsed JSON list', async () => {
+		const rows = [{ job_id: 'job_a', size_bytes: 12, modified_at: '2026-10-16T08:18:00Z' }];
+		mockFetch.mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			headers: new Headers({ 'content-type': 'application/json' }),
+			json: () => Promise.resolve(rows),
+			text: () => Promise.resolve(JSON.stringify(rows))
+		});
+		await expect(fetchJobLogIndex()).resolves.toEqual(rows);
+		expect(mockFetch.mock.calls[0][0]).toBe('/api/logs');
 	});
 });
