@@ -37,7 +37,7 @@ describe('IdentityCard', () => {
 		const group = screen.getByRole('radiogroup', { name: 'Disc kind' });
 		expect(caption.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(group.compareDocumentPosition(preview()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-		expect(preview().compareDocumentPosition(step(1)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(preview().compareDocumentPosition(step(2)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
 	it('clicking CD leaves Disc and Music only; Blu-ray restores Movies and TV shows', async () => {
@@ -60,41 +60,21 @@ describe('IdentityCard', () => {
 		expect(pillText('tv')).toEqual(['1 TMDb', '2 TVmaze', '3 TVDB']);
 	});
 
-	it('step headings carry the number and the sentence-case title; Advanced has no badge', () => {
+	it('step headings are plain sentence-case titles with no number badge', () => {
 		render();
-		const names = ['1 On the disc', '2 Disc database', '3 Online lookup', '4 Trust'];
+		const names = ['Disc database', 'Online lookup', 'Trust'];
 		names.forEach((name, i) => {
-			const h = within(step(i + 1)).getByRole('heading', { name });
-			expect(h.querySelector('.identity-card-badge')).toHaveTextContent(String(i + 1));
+			expect(within(step(i + 2)).getByRole('heading', { name })).toBeInTheDocument();
 		});
-		const advanced = document.querySelector('.identity-card-step[data-step="advanced"]') as HTMLElement;
-		expect(advanced.querySelector('.identity-card-badge')).toBeNull();
-	});
-
-	it('Step 1 lists the three disc rows with their chips and no controls', () => {
-		render();
-		const s1 = step(1);
-		expect(within(s1).getByRole('heading', { name: '1 On the disc' })).toBeInTheDocument();
-		const rows = within(s1).getAllByTestId(/^identity-row-/);
-		expect(rows.map((r) => r.querySelector('.identity-card-row-name')?.textContent?.trim())).toEqual([
-			'Disc title metadata',
-			'Volume label',
-			'Disc ID (track layout)'
-		]);
-		const chips = (r: HTMLElement) => Array.from(r.querySelectorAll('.chip')).map((c) => c.textContent?.trim());
-		expect(chips(rows[0])).toEqual(['Blu-ray', 'UHD']);
-		expect(chips(rows[1])).toEqual(['All discs']);
-		expect(chips(rows[2])).toEqual(['CD']);
-		expect(s1.querySelectorAll('input, select, button')).toHaveLength(0);
-		expect(s1).toHaveTextContent(
-			"ARM reads all of these. When they disagree, the disc's own metadata beats its label."
-		);
+		expect(document.querySelector('.identity-card-badge')).toBeNull();
+		expect(step(1)).toBeNull();
+		expect(screen.queryByText('On the disc')).toBeNull();
 	});
 
 	it('Step 2 has the two disc database checkboxes with their chips and descriptions', () => {
 		render();
 		const s2 = step(2);
-		expect(within(s2).getByRole('heading', { name: '2 Disc database' })).toBeInTheDocument();
+		expect(within(s2).getByRole('heading', { name: 'Disc database' })).toBeInTheDocument();
 		const discdb = within(s2).getByRole('checkbox', { name: 'TheDiscDB disc map' });
 		expect(discdb).toBeChecked();
 		expect(within(s2).getByRole('checkbox', { name: 'ARM community database (CRC64)' })).toBeChecked();
@@ -113,7 +93,7 @@ describe('IdentityCard', () => {
 	it('Step 3 shows the Movies and TV shows ranked lists with the tolerance under TV, and no Music list', () => {
 		render();
 		const s3 = step(3);
-		expect(within(s3).getByRole('heading', { name: '3 Online lookup' })).toBeInTheDocument();
+		expect(within(s3).getByRole('heading', { name: 'Online lookup' })).toBeInTheDocument();
 		expect(s3).toHaveTextContent('Tried top to bottom; the first confident match wins.');
 		for (const name of ['Movie sources', 'Episode sources']) {
 			expect(within(s3).getByRole('list', { name })).toBeInTheDocument();
@@ -137,7 +117,7 @@ describe('IdentityCard', () => {
 	it('Step 4 stacks the three Apply confident matches boxes with no caption, bound to the auto-apply fields', async () => {
 		const { component } = render();
 		const s4 = step(4);
-		expect(within(s4).getByRole('heading', { name: '4 Trust' })).toBeInTheDocument();
+		expect(within(s4).getByRole('heading', { name: 'Trust' })).toBeInTheDocument();
 		expect(s4.querySelector('#identity-trust-caption')).toBeNull();
 		expect(within(s4).queryByText('Apply confident matches', { exact: true })).toBeNull();
 		const boxes = within(s4).getAllByRole('checkbox');
@@ -159,17 +139,12 @@ describe('IdentityCard', () => {
 		expect(screen.getByTestId('identity-preview-tv')).toHaveTextContent('Applies confident matches');
 	});
 
-	it('Advanced: ignoring the volume label marks its Step 1 row and drops it from disc_hint_sources', async () => {
+	it('Advanced: ignoring the volume label drops it from disc_hint_sources', async () => {
 		const { component } = render();
 		const getValues = (component as unknown as { getValues: () => Record<string, unknown> }).getValues;
 		expect(screen.getByText('Advanced')).toBeInTheDocument();
-		const row = screen.getByTestId('identity-row-label');
-		expect(row).not.toHaveTextContent('Ignored (see Advanced)');
-
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the volume label' }));
-		expect(row).toHaveTextContent('Ignored (see Advanced)');
 		expect(getValues().disc_hint_sources).toEqual(['bd_title']);
-		expect(screen.getByTestId('identity-row-bd_title')).not.toHaveTextContent('Ignored (see Advanced)');
 
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the volume label' }));
 		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'label']);

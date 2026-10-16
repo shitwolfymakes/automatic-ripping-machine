@@ -67,18 +67,19 @@ always use MusicBrainz, so there is nothing to pick for them. Every service is l
 refused. The search box uses the service you chose even when it is unticked
 under Online lookup.
 
-**Identity** shows the pipeline as four steps, in the order ARM runs them. The
-Blu-ray | DVD | CD selector above the summary only changes what the summary
-shows; nothing is saved for it.
+**Identity** shows the pipeline in the order ARM runs it. Before any of it, ARM
+reads the disc itself: the volume label on every disc, the disc title metadata on
+a Blu-ray and the track layout on a CD. When they disagree, the disc's own
+metadata beats its label. The Blu-ray | DVD | CD selector above the summary only
+changes what the summary shows; nothing is saved for it.
 
 | Step | Setting | Default | Effect |
 |---|---|---|---|
-| 1 On the disc | — | — | ARM reads the volume label on every disc, the disc title metadata on a Blu-ray, and the track layout on a CD. When they disagree, the disc's own metadata beats its label. |
-| 2 Disc database | **TheDiscDB disc map** | on | Matches the disc itself against a local snapshot of TheDiscDB, labels its titles and picks the main feature. A match beats the disc's labels; ARM then resolves the match's IMDb id through the first online source in your lists that can look one up, and with none, the TheDiscDB release itself names the disc. |
-| 2 Disc database | **ARM community database (CRC64)** | on | Sends a DVD's CRC64 fingerprint to the ARM project's database and takes its title when it has one. DVDs only, no key. |
-| 3 Online lookup | **Movies**, **TV shows** | TMDb, OMDb · TMDb, TVmaze, TVDB | Tried top to bottom; the first confident match wins. Audio CDs are looked up on MusicBrainz by their track layout. Untick a source to skip it, move it to change the order. A source whose key is not saved shows "Needs … key" and is skipped. With every source unticked, ARM makes no online lookup for that type. |
-| 3 Online lookup | **Match tolerance (seconds)** | 300 | How far a track's runtime may differ from an episode's and still match, 1 to 1800. ARM narrows it to a tenth of the episode's runtime, but not below 60 seconds or above the value you set. |
-| 4 Trust | **Apply confident matches** (Movies, TV shows, Music) | on | With a switch on, a match is applied and the disc rips (or waits in the review gate when **Ripping › Review first** is on). With it off, the match waits on the job page for you to confirm it and the disc is held with no countdown. |
+| Disc database | **TheDiscDB disc map** | on | Matches the disc itself against a local snapshot of TheDiscDB, labels its titles and picks the main feature. A match beats the disc's labels; ARM then resolves the match's IMDb id through the first online source in your lists that can look one up, and with none, the TheDiscDB release itself names the disc. |
+| Disc database | **ARM community database (CRC64)** | on | Sends a DVD's CRC64 fingerprint to the ARM project's database and takes its title when it has one. DVDs only, no key. |
+| Online lookup | **Movies**, **TV shows** | TMDb, OMDb · TMDb, TVmaze, TVDB | Tried top to bottom; the first confident match wins. Audio CDs are looked up on MusicBrainz by their track layout. Untick a source to skip it, move it to change the order. A source whose key is not saved shows "Needs … key" and is skipped. With every source unticked, ARM makes no online lookup for that type. |
+| Online lookup | **Match tolerance (seconds)** | 300 | How far a track's runtime may differ from an episode's and still match, 1 to 1800. ARM narrows it to a tenth of the episode's runtime, but not below 60 seconds or above the value you set. |
+| Trust | **Apply confident matches** (Movies, TV shows, Music) | on | With a switch on, a match is applied and the disc rips (or waits in the review gate when **Ripping › Review first** is on). With it off, the match waits on the job page for you to confirm it and the disc is held with no countdown. |
 | Advanced | **Ignore the disc title metadata**, **Ignore the volume label** | off | For collections where the disc's own text is usually wrong. ARM stops reading that hint on every disc; fix a single disc from its job page instead. With the volume label ignored, a DVD with no disc title metadata gets no automatic title search at all. |
 
 A disc with no confident match follows **Ripping › Block on metadata miss**:

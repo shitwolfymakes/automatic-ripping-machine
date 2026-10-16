@@ -2,7 +2,6 @@
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import {
 		DISC_KIND_LABELS,
-		HINT_LABELS,
 		hintIgnored,
 		withHintIgnored,
 		type DiscHint,
@@ -75,23 +74,10 @@
 	const isEmpty = (key: string) => Array.isArray(values[key]) && (values[key] as unknown[]).length === 0;
 </script>
 
-{#snippet heading(n: number, title: string)}
-	<h4 class="identity-card-heading" aria-label="{n} {title}">
-		<span class="identity-card-badge" aria-hidden="true">{n}</span>{title}
-	</h4>
+{#snippet heading(title: string)}
+	<h4 class="identity-card-heading">{title}</h4>
 {/snippet}
 
-{#snippet hintRow(hint: DiscHint, chips: string[])}
-	<div class="identity-card-row" data-testid="identity-row-{hint}">
-		<div class="identity-card-row-head">
-			<span class="identity-card-row-name">{HINT_LABELS[hint]}</span>
-			{#each chips as chip (chip)}<span class="chip identity-card-kind">{chip}</span>{/each}
-		</div>
-		{#if isIgnored(hint)}
-			<p class="identity-card-row-note">Ignored (see Advanced)</p>
-		{/if}
-	</div>
-{/snippet}
 
 <div class="identity-card stack stack-lg" data-testid="identity-card">
 	<div class="identity-card-step stack" data-step="preview">
@@ -110,25 +96,8 @@
 		<IdentityPreview {kind} {values} {fields} />
 	</div>
 
-	<div class="identity-card-step stack" data-step="1">
-		{@render heading(1, 'On the disc')}
-		<div class="identity-card-rows">
-			{@render hintRow('bd_title', ['Blu-ray', 'UHD'])}
-			{@render hintRow('label', ['All discs'])}
-			<div class="identity-card-row" data-testid="identity-row-disc_id">
-				<div class="identity-card-row-head">
-					<span class="identity-card-row-name">Disc ID (track layout)</span>
-					<span class="chip identity-card-kind">CD</span>
-				</div>
-			</div>
-		</div>
-		<p class="identity-card-footer">
-			ARM reads all of these. When they disagree, the disc's own metadata beats its label.
-		</p>
-	</div>
-
 	<div class="identity-card-step stack" data-step="2">
-		{@render heading(2, 'Disc database')}
+		{@render heading('Disc database')}
 		{#each DISC_DB as db (db.key)}
 			{@const field = meta(db.key)}
 			{#if field}
@@ -154,7 +123,7 @@
 	</div>
 
 	<div class="identity-card-step stack" data-step="3">
-		{@render heading(3, 'Online lookup')}
+		{@render heading('Online lookup')}
 		<p class="identity-card-note" id="identity-help-lookup">Tried top to bottom; the first confident match wins.</p>
 		<div class="identity-card-columns">
 			{#each LISTS as list (list.key)}
@@ -190,7 +159,7 @@
 	</div>
 
 	<div class="identity-card-step stack" data-step="4">
-		{@render heading(4, 'Trust')}
+		{@render heading('Trust')}
 		<div class="identity-card-trust">
 			{#each TRUST as t (t.key)}
 				{#if meta(t.key)}
@@ -270,45 +239,11 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	.identity-card-badge {
-		display: grid;
-		place-items: center;
-		flex: none;
-		width: 1.75rem;
-		height: 1.75rem;
-		border-radius: 50%;
-		border: 1px solid color-mix(in srgb, var(--color-primary) 60%, transparent);
-		background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-		color: var(--color-primary);
-		font-size: 0.8125rem;
-		font-weight: 600;
-		line-height: 1;
-	}
-	.identity-card-rows {
-		display: flex;
-		flex-direction: column;
-	}
-	.identity-card-row {
-		padding: 0.875rem 0;
-	}
-	.identity-card-row + .identity-card-row {
-		border-top: 1px solid var(--color-border);
-	}
 	.identity-card-row-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
-	}
-	.identity-card-row-name {
-		font-size: 1.0625rem;
-		color: var(--color-text);
-	}
-	.identity-card-row-note {
-		margin-top: 0.25rem;
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		color: var(--color-text-muted);
 	}
 	.identity-card-note {
 		font-size: 0.8125rem;
