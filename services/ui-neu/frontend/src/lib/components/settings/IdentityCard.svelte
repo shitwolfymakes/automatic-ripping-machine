@@ -121,14 +121,6 @@
 					<span class="chip identity-card-kind">CD</span>
 				</div>
 			</div>
-			<div class="identity-card-row identity-card-planned" data-testid="identity-row-cd_text" aria-disabled="true">
-				<div class="identity-card-row-head">
-					<span class="identity-card-row-name">CD-TEXT</span>
-					<span class="chip identity-card-kind">CD</span>
-					<span class="chip identity-card-kind identity-card-kind-planned">Planned</span>
-				</div>
-				<p class="identity-card-row-note">Album, artist and track names. Not built yet.</p>
-			</div>
 		</div>
 		<p class="identity-card-footer">
 			ARM reads all of these. When they disagree, the disc's own metadata beats its label.
@@ -312,9 +304,6 @@
 		font-size: 1.0625rem;
 		color: var(--color-text);
 	}
-	.identity-card-planned .identity-card-row-name {
-		color: var(--color-text-muted);
-	}
 	.identity-card-row-note {
 		margin-top: 0.25rem;
 		font-size: 0.875rem;
@@ -345,12 +334,6 @@
 	}
 	.identity-card-kind:hover {
 		background: transparent;
-	}
-	.identity-card-kind-planned {
-		border-style: dashed;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--color-text-muted);
 	}
 	.identity-card-option {
 		display: flex;

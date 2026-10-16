@@ -73,7 +73,7 @@ shows; nothing is saved for it.
 
 | Step | Setting | Default | Effect |
 |---|---|---|---|
-| 1 On the disc | — | — | ARM reads the volume label on every disc, the disc title metadata on a Blu-ray, and the track layout on a CD. When they disagree, the disc's own metadata beats its label. CD-TEXT is planned. |
+| 1 On the disc | — | — | ARM reads the volume label on every disc, the disc title metadata on a Blu-ray, and the track layout on a CD. When they disagree, the disc's own metadata beats its label. |
 | 2 Disc database | **TheDiscDB disc map** | on | Matches the disc itself against a local snapshot of TheDiscDB, labels its titles and picks the main feature. A match beats the disc's labels; ARM then resolves the match's IMDb id through the first online source in your lists that can look one up, and with none, the TheDiscDB release itself names the disc. |
 | 2 Disc database | **ARM community database (CRC64)** | on | Sends a DVD's CRC64 fingerprint to the ARM project's database and takes its title when it has one. DVDs only, no key. |
 | 3 Online lookup | **Movies**, **TV shows** | TMDb, OMDb · TMDb, TVmaze, TVDB | Tried top to bottom; the first confident match wins. Audio CDs are looked up on MusicBrainz by their track layout; when that exact disc isn't listed, ARM matches the track lengths instead and asks you to confirm when several releases fit. Untick a source to skip it, move it to change the order. A source whose key is not saved shows "Needs … key" and is skipped. With every source unticked, ARM makes no online lookup for that type. |
