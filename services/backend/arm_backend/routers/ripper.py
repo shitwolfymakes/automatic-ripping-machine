@@ -819,7 +819,15 @@ async def identify(
             metadata["identify_attempts"] = attempts[-MAX_IDENTIFY_ATTEMPTS:]
         job.metadata_json = metadata
 
-        if result is not None and auto_apply_for(cfg, result.kind):
+        # A CD matched only by track layout where several releases fit is a
+        # guess between pressings: hold it for the operator whatever the
+        # music auto-apply switch says.
+        ambiguous_toc = (
+            result is not None
+            and result.provider == "musicbrainz"
+            and len(result.payload.get("toc_candidates") or []) > 1
+        )
+        if result is not None and not ambiguous_toc and auto_apply_for(cfg, result.kind):
             apply_identity_result(job, result, now=datetime.now(timezone.utc))
             # Timed review gate: a GENUINELY identified disc (result is not None — not
             # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks

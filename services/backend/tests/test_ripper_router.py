@@ -3489,3 +3489,30 @@ def test_identify_switch_off_for_another_kind_still_applies_this_one() -> None:
     out = _identify_with(db, result, _scan_dict()).json()
     assert out["status"] == "identified" and out["title"] == "Iron Man"
     assert out["metadata_json"].get("identity_suggestion") is None
+
+
+def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on() -> None:
+    db = _suggestion_db(music_auto_apply=True)
+    cands = [{"id": "a", "title": "Album", "date": "1999", "artist": "X"}, {"id": "b", "title": "Album (Deluxe)"}]
+    result = MetadataResult(
+        title="Album",
+        year=1999,
+        kind="music",
+        payload={"toc_match": "fuzzy", "toc_candidates": cands},
+        provider="musicbrainz",
+    )
+    out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["identity_suggestion"]["title"] == "Album"
+    assert out["metadata_json"].get("identity") is None
+
+
+def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> None:
+    db = _suggestion_db(music_auto_apply=True)
+    result = MetadataResult(
+        title="Album", year=1999, kind="music", payload={"toc_match": "fuzzy"}, provider="musicbrainz"
+    )
+    out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert out["status"] == "identified" and out["title"] == "Album"
+    assert out["metadata_json"].get("identity_suggestion") is None
