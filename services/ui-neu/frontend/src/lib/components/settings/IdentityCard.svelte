@@ -242,7 +242,6 @@
 
 	{#if hasHints}
 		<div class="identity-card-step stack" data-step="advanced" id="setting-disc_hint_sources">
-			<hr class="identity-card-divider" />
 			<span class="label-caps">Advanced</span>
 			{#each IGNORE as box (box.hint)}
 				<div class="identity-card-option">
@@ -275,6 +274,11 @@
 <style>
 	.identity-card-step {
 		gap: 0.5rem;
+		min-width: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-surface);
+		padding: 1rem;
 	}
 	.identity-card-rows {
 		display: flex;
@@ -357,11 +361,6 @@
 		font-size: 0.75rem;
 		font-weight: 600;
 		line-height: 1;
-	}
-	.identity-card-divider {
-		margin: 0 0 0.5rem;
-		border: none;
-		border-top: 1px solid var(--color-border);
 	}
 	/* InterfaceSettings' segmented radiogroup, copied (scoped CSS). */
 	.identity-card-segment {
