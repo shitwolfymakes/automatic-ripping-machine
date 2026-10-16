@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { JobView, MetadataCandidate } from '$lib/types/api.gen';
+	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 	import { reveal } from '$lib/transitions';
@@ -10,11 +10,13 @@
 	interface Props {
 		job: JobView;
 		onapply?: () => void;
+		/** Called with the resolve response when Apply identified the job. */
+		onresolved?: (resp: ResolveResponse) => void;
 		onseries?: () => void;
 		initialType?: 'movie' | 'tv';
 	}
 
-	let { job, onapply, onseries, initialType }: Props = $props();
+	let { job, onapply, onresolved, onseries, initialType }: Props = $props();
 
 	// Search type: the caller's hint, else the job's known type, else TV for a
 	// disc that looks episodic.
@@ -167,15 +169,17 @@
 		const candidateIds = selected && candidateIsSeries === isSeries ? selected.external_ids : null;
 		// Resolve reads an explicit null as "clear this id": send only the ids the candidate has.
 		const presentIds = Object.entries(candidateIds ?? {}).filter(([, v]) => v != null);
+		let resolved: ResolveResponse | undefined;
 		const externalIds = presentIds.length ? Object.fromEntries(presentIds) : undefined;
 		try {
 			if (canResolve) {
-				await resolveJob(job.id, {
+				const resp = await resolveJob(job.id, {
 					title,
 					year,
 					media_type: isSeries ? 'tv' : 'movie',
 					external_ids: externalIds
 				});
+				resolved = resp;
 				let message = 'Identified';
 				if (poster !== (job.poster_url_manual ?? null)) {
 					try {
@@ -190,6 +194,7 @@
 				await updateJobTitle(job.id, { poster_url_manual: poster });
 				feedback = { type: 'success', message: 'Poster updated' };
 			}
+			if (resolved) onresolved?.(resolved);
 			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
 			if (isSeries && canResolve) onseries?.();
 			else onapply?.();
