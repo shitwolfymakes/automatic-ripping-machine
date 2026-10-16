@@ -55,7 +55,10 @@ Two smaller gaps ride along:
 
 ### 3.1 Schema
 
-`MetadataCandidate` gains optional fields, all defaulting to `None` or empty:
+`MetadataCandidate` gains `provider: str | None` (the source that produced
+it: `tmdb`, `omdb`, `tvmaze`, `tvdb`) and `facts: IdentityFacts | None`.
+`IdentityFacts` (in `arm_common/schemas/job_metadata.py`, shared with the
+snapshot in 3.6) holds these fields, all defaulting to `None` or empty:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -68,7 +71,6 @@ Two smaller gaps ride along:
 | `creators` | `list[str]` | Series creators, or a movie's directors |
 | `cast` | `list[str]` | Top three billed |
 | `episode_count` | `int \| None` | Series only |
-| `provider` | `str \| None` | Source that produced the candidate (`tmdb`, `omdb`, `tvmaze`, `tvdb`) |
 
 `provider` plus `external_ids` lets the UI ask for details without a separate
 opaque id. Existing clients ignore the new fields.
@@ -76,7 +78,7 @@ opaque id. Existing clients ignore the new fields.
 ### 3.2 Facts extraction
 
 A new module `metadata/facts.py` holds one pure function per provider that
-reads a raw payload and returns the facts above (`MatchFacts`). It has no I/O.
+reads a raw payload and returns `IdentityFacts`. It has no I/O.
 `_to_candidate` in `routers/metadata.py` calls it, so search and details share
 one mapping. `MetadataResult` is unchanged; its `payload` already carries the
 raw body.
@@ -123,7 +125,8 @@ shape, so error handling matches search).
 - `id` is the provider's own id: TMDb id, IMDb id for OMDb, TVmaze id, TVDB id.
 - Upstream calls: TMDb `get_detail`; OMDb `?i=&plot=short`; TVmaze
   `/shows/{id}?embed[]=cast&embed[]=episodes`; TVDB
-  `/series/{id}/extended?meta=translations&short=true` plus characters.
+  `/series/{id}/extended?meta=translations` (without `short`, so characters
+  are included).
 - A missing key, an upstream error or a miss returns 200 with no candidate
   and a `detail` message, as search does. A bad `provider`/`type` is a 422.
 - Results are cached in process for one hour, keyed by
@@ -182,9 +185,8 @@ Without `match` the endpoint behaves exactly as today (Edit identity, the
 Info form and the suggestion accept path are unchanged).
 
 **Snapshot model.** `IdentityFacts` in `arm_common/schemas/job_metadata.py`
-holds the `MatchFacts` fields from 3.1 except `provider` (`end_year`,
-`overview`, `rating`, `rating_source`, `votes`, `genres`, `creators`, `cast`,
-`episode_count`). `JobIdentity` gains `facts: IdentityFacts | None` and
+is the model from 3.1 (`end_year`, `overview`, `rating`, `rating_source`,
+`votes`, `genres`, `creators`, `cast`, `episode_count`). `JobIdentity` gains `facts: IdentityFacts | None` and
 `facts_fetched_at: datetime | None`. Both live in `metadata_json`, a JSON
 column, so **no migration** is needed. The facts are sent by the UI (it
 already holds the fetched details); the backend validates the shape but does
@@ -218,7 +220,8 @@ Regenerate `openapi.snapshot.json` and `api.gen.ts`
   then a Genres / Creator (Director for a movie) / Stars list. Buttons:
   **Use this match** and **Open on IMDb ↗** (only with an IMDb id).
 - **`lib/utils/match.ts`**: pure helpers: `formatYears(year, end_year, kind)`
-  ("1974–1975", "2005–", "1972"), `kindLabel` ("TV Series", "TV Movie",
+  ("1974–1975", "1972"; no end year shows the start year alone, since a
+  running show and an unknown end look the same), `kindLabel` ("TV Series",
   "Movie"), `formatVotes` ("9.8K votes").
 
 `TitleSearch.svelte` keeps the search row and the apply logic and replaces its
