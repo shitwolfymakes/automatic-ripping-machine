@@ -6,6 +6,7 @@ its detail pane can't disagree."""
 
 from __future__ import annotations
 
+import math
 import re
 from html import unescape
 from typing import Any, Literal
@@ -38,13 +39,15 @@ def _number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
+        number = float(value)
+    elif isinstance(value, str):
         try:
-            return float(value.replace(",", ""))
+            number = float(value.replace(",", ""))
         except ValueError:
             return None
-    return None
+    else:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _count(value: Any) -> int | None:

@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
@@ -193,3 +195,25 @@ def test_malformed_shapes_do_not_crash() -> None:
     }
     for provider in ("tmdb", "omdb", "tvmaze", "tvdb"):
         assert isinstance(facts_for(provider, "tv", weird), IdentityFacts)
+
+
+@pytest.mark.parametrize("raw", ["inf", "-inf", "nan"])
+def test_omdb_non_finite_strings_are_absent_not_raised(raw: str) -> None:
+    f = omdb_facts({"Year": raw, "imdbRating": raw, "imdbVotes": raw}, "tv")
+    assert (f.rating, f.rating_source, f.votes) == (None, None, None)
+
+
+def test_omdb_infinite_votes_drop_only_the_votes() -> None:
+    f = omdb_facts({"imdbVotes": "inf", "imdbRating": "7"}, "tv")
+    assert (f.rating, f.rating_source, f.votes) == (7.0, "imdb", None)
+
+
+def test_helpers_reject_bools_non_numeric_and_container_values() -> None:
+    f = omdb_facts({"imdbRating": "abc", "imdbVotes": ["1"]}, "tv")
+    assert (f.rating, f.votes) == (None, None)
+    movie = tmdb_facts({"vote_average": True, "vote_count": [1]}, "movie")
+    assert (movie.rating, movie.votes) == (None, None)
+
+
+def test_tvmaze_integer_ended_year_is_used_as_is() -> None:
+    assert tvmaze_facts({"ended": 1975}).end_year == 1975
