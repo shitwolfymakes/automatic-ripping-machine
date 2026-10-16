@@ -65,7 +65,7 @@ notification history and the transcode queue.
 
 **`/settings`** is the Settings page, split into tabs:
 
-- **Identification**, **Keys** and **Ripping**: how discs are identified, the API
+- **API Keys**, **Identification** and **Ripping**: how discs are identified, the API
   keys, and rip behaviour. Every field is documented in
   [Configuration § Identification and Keys](Configuring-ARM#identification-and-keys)
   and [§ Rip / transcode behaviour](Configuring-ARM#rip--transcode-behaviour).

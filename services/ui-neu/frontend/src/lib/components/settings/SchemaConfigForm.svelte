@@ -5,6 +5,7 @@
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import {
 		groupBlurb,
+		groupLabel,
 		sectionFields,
 		settingsTabFor,
 		KEY_CHECK_NAMES,
@@ -289,7 +290,7 @@
 		{/if}
 	{:else}
 		<div>
-			<h2 class="schema-config-form-title">{group.name}</h2>
+			<h2 class="schema-config-form-title">{groupLabel(group.name)}</h2>
 			{#if blurb}
 				<p class="schema-config-form-description mt-1">{blurb}</p>
 			{/if}

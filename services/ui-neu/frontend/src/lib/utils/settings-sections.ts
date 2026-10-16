@@ -170,6 +170,14 @@ export function legacyTab(tab: string): string {
 	return tab;
 }
 
+/** Display names for config groups whose tab reads differently from the
+ *  schema group id (the id stays in `#<group>/<key>` links). */
+const GROUP_LABELS: Record<string, string> = { Keys: 'API Keys' };
+
+export function groupLabel(group: string): string {
+	return GROUP_LABELS[group] ?? group;
+}
+
 export function groupBlurb(group: string): string | undefined {
 	return GROUP_BLURBS[group];
 }

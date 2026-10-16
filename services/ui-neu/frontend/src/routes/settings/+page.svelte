@@ -17,7 +17,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT, groupLabel, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -69,9 +69,16 @@
 	// Ripping have no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
 	// tabs; System read-only rows fold into the system tab — see template.)
-	const configGroupNames = ['Identification', 'Keys', 'Ripping'] as const;
+	const configGroupNames = ['Keys', 'Identification', 'Ripping'] as const;
 	const configGroups = $derived(
-		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+		(settings?.schema?.groups ?? [])
+			.filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+			// Tab order is this page's, not the schema's (API Keys first).
+			.sort(
+				(a, b) =>
+					(configGroupNames as readonly string[]).indexOf(a.name) -
+					(configGroupNames as readonly string[]).indexOf(b.name)
+			)
 	);
 	// Full visible-tab list: config groups first, then screen-tabs. The
 	// Transcoding tab always shows (even on a ripper-only, not-capable
@@ -101,7 +108,7 @@
 		system: 'System'
 	};
 	function tabLabel(id: string): string {
-		return TAB_LABELS[id] ?? id;
+		return TAB_LABELS[id] ?? groupLabel(id);
 	}
 
 	function parseHash(): Tab {

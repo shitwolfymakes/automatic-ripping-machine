@@ -426,11 +426,11 @@ describe('Settings Page', () => {
 			expect(screen.getByText('Settings')).toBeInTheDocument();
 		});
 
-		it('lists the tabs in order: Identification, Keys, Ripping, then the screen tabs', async () => {
+		it('lists the tabs in order: API Keys, Identification, Ripping, then the screen tabs', async () => {
 			await renderAndWait();
 			expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
+				'API Keys',
 				'Identification',
-				'Keys',
 				'Ripping',
 				'Sessions',
 				'Transcoding',
@@ -459,7 +459,7 @@ describe('Settings Page', () => {
 				await waitFor(() => {
 					expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
 				});
-				expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+				expect(screen.getByRole('tab', { name: 'API Keys' })).toHaveAttribute('aria-selected', 'true');
 				expect(scrollIntoView).toHaveBeenCalled();
 				expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
 			}
@@ -812,8 +812,8 @@ describe('Settings Page', () => {
 			await renderAndWait();
 			await fireEvent.click(useTvdb());
 			expect(useTvdb().checked).toBe(true);
-			await fireEvent.click(tab('Keys'));
-			expect(tab('Keys')).toHaveAttribute('aria-selected', 'true');
+			await fireEvent.click(tab('API Keys'));
+			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 			expect(screen.getByLabelText(/tvdb api key/i)).toBeVisible();
 			await fireEvent.click(tab('Identification'));
 			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
@@ -826,7 +826,7 @@ describe('Settings Page', () => {
 			withIdentitySchema();
 			await renderAndWait();
 			expect(tvdbChip()).toBeInTheDocument();
-			await fireEvent.click(tab('Keys'));
+			await fireEvent.click(tab('API Keys'));
 			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
@@ -841,7 +841,7 @@ describe('Settings Page', () => {
 			withIdentitySchema();
 			await renderAndWait();
 			await fireEvent.click(useTvdb());
-			await fireEvent.click(tab('Keys'));
+			await fireEvent.click(tab('API Keys'));
 			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));

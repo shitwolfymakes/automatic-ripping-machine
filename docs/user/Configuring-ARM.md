@@ -56,7 +56,7 @@ and apply immediately. The full set:
 ### Identification and Keys
 
 Two tabs cover how ARM names a disc. **Identification** is what ARM reads from
-the disc, which services it asks, and when it trusts the answer. **Keys** holds
+the disc, which services it asks, and when it trusts the answer. **API Keys** holds
 the API keys those services need.
 
 #### Identification
