@@ -17,7 +17,13 @@ vi.mock('$lib/stores/auth', async () => {
 
 vi.mock('$lib/stores/config', async () => {
 	const { writable } = await import('svelte/store');
-	return { searchProviders: writable({ movie: 'omdb', tv: 'tmdb' }) };
+	const keyed = writable({ tmdb: true, omdb: true, tvdb: true });
+	return {
+		searchProviders: writable({ movie: 'omdb', tv: 'tmdb' }),
+		keyedSources: { subscribe: keyed.subscribe },
+		// Test-only helper - not part of the real module's public API.
+		__setKeyed: (v: { tmdb: boolean; omdb: boolean; tvdb: boolean }) => keyed.set(v)
+	};
 });
 
 vi.mock('$lib/api/jobs', () => ({
@@ -28,6 +34,8 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
+import * as configStore from '$lib/stores/config';
+const setKeyed = (configStore as unknown as { __setKeyed: (v: Record<string, boolean>) => void }).__setKeyed;
 const mockSearchMetadata = vi.mocked(searchMetadata);
 const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTitle = vi.mocked(updateJobTitle);
@@ -50,12 +58,58 @@ describe('TitleSearch', () => {
 		vi.clearAllMocks();
 	});
 
-	describe('provider badge', () => {
-		it('follows the search type', async () => {
+	describe('source switch', () => {
+		afterEach(() => setKeyed({ tmdb: true, omdb: true, tvdb: true }));
+
+		const sourceGroup = () => screen.getByRole('radiogroup', { name: 'Search with' });
+		const sourceNames = () =>
+			Array.from(sourceGroup().querySelectorAll('[role="radio"]')).map((el) => el.textContent?.trim());
+		const checkedSource = () => sourceGroup().querySelector('[aria-checked="true"]')?.textContent?.trim();
+
+		it('lists TMDb and OMDb for movies, and all four for TV, in order', async () => {
 			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
-			expect(screen.getByTitle(/search provider configured/i)).toHaveTextContent('OMDb');
+			expect(sourceNames()).toEqual(['TMDb', 'OMDb']);
 			await fireEvent.click(screen.getByRole('radio', { name: 'TV' }));
-			expect(screen.getByTitle(/search provider configured/i)).toHaveTextContent('TMDb');
+			expect(sourceNames()).toEqual(['TMDb', 'OMDb', 'TVmaze', 'TVDB']);
+		});
+
+		it('defaults to the Settings choice per type, and switching type resets it', async () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(checkedSource()).toBe('OMDb');
+			await fireEvent.click(screen.getByRole('radio', { name: 'TMDb' }));
+			expect(checkedSource()).toBe('TMDb');
+			await fireEvent.click(screen.getByRole('radio', { name: 'TV' }));
+			expect(checkedSource()).toBe('TMDb');
+			await fireEvent.click(screen.getByRole('radio', { name: 'TVmaze' }));
+			await fireEvent.click(screen.getByRole('radio', { name: 'Movie' }));
+			expect(checkedSource()).toBe('OMDb');
+		});
+
+		it('disables a source whose key is not saved, and never TVmaze', async () => {
+			setKeyed({ tmdb: false, omdb: true, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'tv' }) } });
+			const tmdb = screen.getByRole('radio', { name: 'TMDb' });
+			expect(tmdb).toBeDisabled();
+			expect(tmdb).toHaveAttribute('title', 'Needs TMDb API key');
+			expect(screen.getByRole('radio', { name: 'TVDB' })).toHaveAttribute('title', 'Needs TVDB API key');
+			expect(screen.getByRole('radio', { name: 'TVDB' })).toBeDisabled();
+			expect(screen.getByRole('radio', { name: 'TVmaze' })).not.toBeDisabled();
+			expect(screen.getByRole('radio', { name: 'OMDb' })).not.toBeDisabled();
+		});
+
+		it('searches the chosen source: TVmaze with no TMDb key never sends tmdb', async () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: false });
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
+			renderComponent(TitleSearch, { props: { job: createJob({ title: 'Kolchak', media_type: 'tv' }) } });
+			await fireEvent.click(screen.getByRole('radio', { name: 'TVmaze' }));
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(mockSearchMetadata).toHaveBeenCalledWith('Kolchak', 'tv', 'tvmaze'));
+			expect(mockSearchMetadata.mock.calls.every((c) => c[2] !== 'tmdb')).toBe(true);
+		});
+
+		it('replaces the provider badge', () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(screen.queryByTitle(/search provider configured/i)).toBeNull();
 		});
 	});
 
@@ -90,7 +144,7 @@ describe('TitleSearch', () => {
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
-				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', 'movie');
+				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', 'movie', 'omdb');
 				expect(screen.getByText('Result 1')).toBeInTheDocument();
 			});
 		});
@@ -346,7 +400,7 @@ describe('TitleSearch', () => {
 			});
 			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'true');
 			await fireEvent.click(screen.getByText('Search'));
-			expect(mockSearchMetadata).toHaveBeenCalledWith('kolchak', 'tv');
+			expect(mockSearchMetadata).toHaveBeenCalledWith('kolchak', 'tv', 'tmdb');
 		});
 
 		it('changing the toggle clears results', async () => {

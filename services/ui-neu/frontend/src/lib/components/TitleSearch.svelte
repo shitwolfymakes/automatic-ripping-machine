@@ -5,7 +5,7 @@
 	import PosterImage from './PosterImage.svelte';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
-	import { searchProviders } from '$lib/stores/config';
+	import { searchProviders, keyedSources } from '$lib/stores/config';
 
 	interface Props {
 		job: JobView;
@@ -22,16 +22,38 @@
 		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
 	);
 
-	// Pretty label for the configured search provider of the current search
-	// type; generic until the config store hydrates.
-	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' };
-	let providerLabel = $derived(
-		PROVIDER_LABELS[(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie) ?? ''] ?? 'OMDb/TMDb'
-	);
+	// Source switch: the provider for this search. Defaults to the Settings
+	// choice for the search type (until the operator picks one); switching
+	// Movie/TV drops the pick. A keyed source without a saved key is disabled.
+	type Source = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+	const SOURCES: Record<'movie' | 'tv', { id: Source; label: string }[]> = {
+		movie: [
+			{ id: 'tmdb', label: 'TMDb' },
+			{ id: 'omdb', label: 'OMDb' }
+		],
+		tv: [
+			{ id: 'tmdb', label: 'TMDb' },
+			{ id: 'omdb', label: 'OMDb' },
+			{ id: 'tvmaze', label: 'TVmaze' },
+			{ id: 'tvdb', label: 'TVDB' }
+		]
+	};
+	let pickedSource = $state<Source | null>(null);
+	let sourceOptions = $derived(SOURCES[searchType]);
+	let source = $derived.by<Source | undefined>(() => {
+		if (pickedSource) return pickedSource;
+		const fromSettings = searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie;
+		return sourceOptions.find((o) => o.id === fromSettings)?.id;
+	});
+
+	function sourceKeyed(id: Source): boolean {
+		return id === 'tvmaze' || $keyedSources[id];
+	}
 
 	function setSearchType(t: 'movie' | 'tv') {
 		if (t === searchType) return;
 		searchType = t;
+		pickedSource = null;
 		results = [];
 		selected = null;
 		detail = null;
@@ -100,7 +122,7 @@
 		selected = null;
 		detail = null;
 		try {
-			const resp = await searchMetadata(query.trim(), searchType);
+			const resp = await searchMetadata(query.trim(), searchType, source);
 			results = resp.candidates;
 			if (results.length === 0) {
 				searchError = 'No results found. Try a different search term.';
@@ -228,9 +250,23 @@
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="badge badge-sm" title="Search provider configured in Settings">
-			{providerLabel}
-		</span>
+		<div class="tabs tabs-pills" role="radiogroup" aria-label="Search with">
+			{#each sourceOptions as opt (opt.id)}
+				{@const keyed = sourceKeyed(opt.id)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={source === opt.id}
+					data-selected={source === opt.id}
+					disabled={!keyed}
+					title={keyed ? undefined : `Needs ${opt.label} API key`}
+					onclick={() => (pickedSource = opt.id)}
+					class="tabs-tab title-search-source"
+				>
+					{opt.label}
+				</button>
+			{/each}
+		</div>
 	</div>
 
 	{#if searchError}
@@ -345,6 +381,11 @@
 </div>
 
 <style>
+	/* a source with no saved API key: shown, not selectable */
+	.title-search-source:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
 	.title-search-min {
 		min-width: 200px;
 	}
