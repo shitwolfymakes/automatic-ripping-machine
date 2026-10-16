@@ -42,6 +42,12 @@ Two smaller gaps ride along:
   Identify dialog all use `TitleSearch`, which renders the new picker.
 - **Year sorts, never filters.** Results are ordered nearest the Year box
   first; a wrong disc year cannot hide the right title.
+- **A picked match replaces the identity.** Use this match states the whole
+  show: its ids replace the stored set, and the job records the provider,
+  the poster and a snapshot of the facts. Other resolve callers keep today's
+  merge rules.
+- **Facts are snapshotted on the job** (option b). Refreshing a stale
+  snapshot is left for later.
 - **Allowlist** gains `static.tvmaze.com` and `artworks.thetvdb.com`
   (checked 2026-10-16: both serve posters with a direct 200, no redirect).
 
@@ -129,7 +135,70 @@ shape, so error handling matches search).
 
 Add `static.tvmaze.com` and `artworks.thetvdb.com` to `_ALLOWED_IMAGE_HOSTS`.
 
-### 3.6 Wire contract
+### 3.6 Saving a match (resolve)
+
+Today `POST /api/jobs/{id}/resolve` merges ids one by one, and the UI sends
+only the ids the picked candidate has. Two failures follow once operators
+switch providers and search again:
+
+- **Mixed shows.** A job holding `tmdb=A` that gets a TVmaze or OMDb result
+  for show B (no TMDb id) keeps `tmdb=A` beside `imdb=B, tvdb=B`; the show
+  change rule (`jobs.py` ~1255) only fires when a stored id is *replaced*.
+  The episode stage tries TMDb first by default and matches show A.
+- **Lost TVmaze id.** `_SHOW_ID_FIELDS` excludes `tvmaze`, so a picked TVmaze
+  result drops the one id it is sure of.
+
+Also, `identity.provider` is never updated by resolve, and the picker saves
+the poster as `poster_url_manual`, which then hides any later automatic
+poster.
+
+**Change.** `ResolveRequest` gains an optional `match`:
+
+```
+match: {
+  provider: "tmdb" | "omdb" | "tvmaze" | "tvdb"
+  poster_url: str | None      # the candidate's poster
+  poster_is_manual: bool      # true when edited under "Edit before using"
+  facts: IdentityFacts | None # snapshot, see below
+}
+```
+
+When `match` is present:
+
+- `external_ids` **replaces** `identity.external_ids` wholesale, `tvmaze`
+  included; ids the request lacks become `None`. (`musicbrainz_release` and
+  `anidb` are not show ids for this path and are kept.)
+- `identity.provider = match.provider`, `identity.identified_at = now`,
+  `identity.overview = facts.overview`.
+- `identity.facts = match.facts` with `identity.facts_fetched_at = now`.
+- Poster: when `poster_is_manual` is false, `poster_url = match.poster_url`
+  and `poster_url_manual = None`; when true, `poster_url_manual =
+  match.poster_url` and `poster_url` is left alone.
+- Everything else (title, year, media_type, status promotion, fan-out,
+  episode re-run via `_identity_snapshot`, `forget_episode_show_ids` on a show
+  change) runs as today. Ids that changed count as a show change.
+
+Without `match` the endpoint behaves exactly as today (Edit identity, the
+Info form and the suggestion accept path are unchanged).
+
+**Snapshot model.** `IdentityFacts` in `arm_common/schemas/job_metadata.py`
+holds the `MatchFacts` fields from 3.1 except `provider` (`end_year`,
+`overview`, `rating`, `rating_source`, `votes`, `genres`, `creators`, `cast`,
+`episode_count`). `JobIdentity` gains `facts: IdentityFacts | None` and
+`facts_fetched_at: datetime | None`. Both live in `metadata_json`, a JSON
+column, so **no migration** is needed. The facts are sent by the UI (it
+already holds the fetched details); the backend validates the shape but does
+not refetch. A later identify or accept replaces `identity` wholesale, which
+drops the snapshot, as it should for a different identification.
+
+`JobView` exposes nothing new in this change; a later change can show the
+snapshot on the job page.
+
+**UI side.** `TitleSearch.applyResult` sends every show id field of the
+picked candidate (nulls included) plus `match`, instead of filtering to the
+non-null ids.
+
+### 3.7 Wire contract
 
 Regenerate `openapi.snapshot.json` and `api.gen.ts`
 (`devtools/regen-openapi-snapshot.sh`, `services/ui-neu/scripts/codegen.sh`).
@@ -163,9 +232,9 @@ poster grid and detail panel with `MatchPicker`.
   row shows its known facts in the pane at once and fetches details; missing
   fields show skeleton lines until the fetch lands. A details error shows a
   one-line note in the pane and keeps the row's facts.
-- **Use this match** runs today's `applyResult` with the merged candidate
-  (resolve plus poster, or poster only when the job cannot resolve).
-  Admin only, as today.
+- **Use this match** resolves with the merged candidate and `match` (3.6),
+  so ids, provider, poster and facts save in one call. When the job cannot
+  resolve, it saves the poster only, as today. Admin only, as today.
 - **Edit before using**: a toggle under the buttons reveals today's editable
   Title / Year / Type / Poster URL fields, prefilled; Use applies the edited
   values.
@@ -185,6 +254,12 @@ poster grid and detail panel with `MatchPicker`.
   - Details endpoint: each provider, cache hit skips upstream, errors not
     cached, missing key, 422 on bad params.
   - Allowlist: the two new hosts pass; a look-alike host fails.
+  - Resolve with `match`: ids replaced wholesale (stale `tmdb=A` cleared when
+    a TVmaze result for B is applied); `tvmaze` saved; provider, overview,
+    facts and `facts_fetched_at` written; poster to `poster_url` with manual
+    cleared, or to `poster_url_manual` when `poster_is_manual`; episode stage
+    rescheduled and episode show ids forgotten on a show change.
+  - Resolve without `match`: today's merge tests still pass unchanged.
 - **UI** (vitest): `match.ts` helpers; `MatchResultRow` (cast present /
   absent, rating); `MatchDetailPane` (skeleton, filled, IMDb link
   present/absent); `MatchPicker` (first selected, pick fetches details,
@@ -199,4 +274,6 @@ poster grid and detail panel with `MatchPicker`.
 - Caching search responses or adding rate limiting to the metadata clients.
 - Sending the year to providers as a filter.
 - TVDB ratings.
+- Refreshing a stale facts snapshot, and showing the snapshot on the job
+  page.
 - Changing episode matching or the identify pipeline's own provider calls.
