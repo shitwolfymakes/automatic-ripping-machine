@@ -98,17 +98,21 @@
 	// once opened, are what Use applies (spec 4.2).
 	let editing = $state(false);
 	let selectedIndex = $state(-1);
+	// True once the operator typed in the poster field; only then is the poster theirs.
+	let posterEdited = $state(false);
 
 	function fillEdit(c: MetadataCandidate) {
 		editTitle = c.title;
 		editYear = c.year != null ? String(c.year) : '';
 		editType = isSeriesKind(c.kind) ? 'series' : 'movie';
 		editPosterUrl = c.poster_url ?? '';
+		posterEdited = false;
 	}
 
 	function handlePickerSelect(c: MetadataCandidate, index: number) {
 		if (index !== selectedIndex) {
 			editing = false;
+			posterEdited = false;
 			feedback = null;
 		}
 		selectedIndex = index;
@@ -125,6 +129,7 @@
 		selected = null;
 		selectedIndex = -1;
 		editing = false;
+		posterEdited = false;
 	}
 
 	let providerLabel = $derived(sourceOptions.find((o) => o.id === source)?.label ?? '');
@@ -172,7 +177,7 @@
 					title: editTitle.trim(),
 					year: editYear.trim(),
 					isSeries: editType === 'series',
-					poster: editPosterUrl.trim() || null
+					poster: posterEdited ? editPosterUrl.trim() || null : (c.poster_url ?? null)
 				}
 			: {
 					title: c.title,
@@ -212,7 +217,7 @@
 					match: {
 						provider: c.provider as MatchProvider,
 						poster_url: values.poster,
-						poster_is_manual: values.poster !== (c.poster_url ?? null),
+						poster_is_manual: editing && posterEdited,
 						facts: c.facts ?? null
 					}
 				});
@@ -349,7 +354,12 @@
 						</label>
 						<label class="field sm:col-span-2">
 							<span class="field-label">Poster URL</span>
-							<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
+							<input
+								type="text"
+								bind:value={editPosterUrl}
+								oninput={() => (posterEdited = true)}
+								placeholder="https://..."
+							/>
 						</label>
 					</div>
 				{/if}

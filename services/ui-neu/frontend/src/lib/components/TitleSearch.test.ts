@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TitleSearch from './TitleSearch.svelte';
 import { createJob } from './__fixtures__/job';
@@ -34,10 +35,11 @@ vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] }))
 }));
 
-import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
+import { searchMetadata, fetchMatchDetails, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
 import * as configStore from '$lib/stores/config';
 const setKeyed = (configStore as unknown as { __setKeyed: (v: Record<string, boolean>) => void }).__setKeyed;
 const mockSearchMetadata = vi.mocked(searchMetadata);
+const mockMatchDetails = vi.mocked(fetchMatchDetails);
 const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTitle = vi.mocked(updateJobTitle);
 const mockResolve = vi.mocked(resolveJob);
@@ -495,7 +497,7 @@ describe('TitleSearch', () => {
 			});
 		});
 
-		it('sends no ids when every candidate id is null', async () => {
+		it('a candidate without a provider sends no ids even when its ids are all null', async () => {
 			const ids = { tmdb: null, imdb: null, tvdb: null, tmdb_kind: null };
 			mockSearchMetadata.mockResolvedValue({
 				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
@@ -513,7 +515,7 @@ describe('TitleSearch', () => {
 		it('does not send a TV candidate ids when the form type is switched to Movie', async () => {
 			const ids = { tmdb: '5084', tmdb_kind: 'tv' as const };
 			mockSearchMetadata.mockResolvedValue({
-				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', external_ids: ids })]
+				candidates: [createCandidate({ title: 'Kolchak', year: 1974, kind: 'tv', provider: 'tmdb', external_ids: ids })]
 			});
 			const onseries = vi.fn();
 			const onapply = vi.fn();
@@ -527,6 +529,7 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
 			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
 			expect(mockResolve.mock.calls[0][1].external_ids).toBeUndefined();
+			expect(mockResolve.mock.calls[0][1].match).toBeUndefined();
 			expect(mockResolve.mock.calls[0][1].media_type).toBe('movie');
 			expect(onapply).toHaveBeenCalled();
 			expect(onseries).not.toHaveBeenCalled();
@@ -638,6 +641,86 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
 			expect(screen.queryByText('1 RESULT')).toBeNull();
+		});
+	});
+
+	describe('details arriving after Edit is opened', () => {
+		const row = createCandidate({
+			title: 'Kolchak',
+			year: 1974,
+			kind: 'tv',
+			provider: 'tvmaze',
+			provider_id: '1',
+			poster_url: 'https://row/p.jpg',
+			external_ids: { tvmaze: '1' }
+		});
+		const job = () => createJob({ id: 'job_9', status: 'awaiting_user_id', title: 'Kolchak', media_type: 'tv' });
+		// The search box is also labelled Title; the edit field is the one without an aria-label.
+		const editTitleInput = () =>
+			screen.getAllByLabelText('Title').find((el) => !el.hasAttribute('aria-label')) as HTMLElement;
+		const flush = async () => {
+			await tick();
+			await new Promise((r) => setTimeout(r, 0));
+		};
+
+		async function openEditBeforeDetails() {
+			let resolveDetails!: (v: { candidates: MetadataCandidate[] }) => void;
+			mockMatchDetails.mockReturnValue(new Promise((r) => (resolveDetails = r)));
+			mockSearchMetadata.mockResolvedValue({ candidates: [row] });
+			renderComponent(TitleSearch, { props: { job: job() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit before using' }));
+			return async () => {
+				resolveDetails({ candidates: [{ ...row, poster_url: 'https://detail/p.jpg' }] });
+				await flush();
+			};
+		}
+
+		it('an untouched poster follows the details and is not manual', async () => {
+			const land = await openEditBeforeDetails();
+			await fireEvent.input(editTitleInput(), { target: { value: 'Kolchak edited' } });
+			await land();
+			expect(editTitleInput()).toHaveValue('Kolchak edited');
+			expect(screen.getByLabelText('Poster URL')).toHaveValue('https://row/p.jpg');
+			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			const body = mockResolve.mock.calls[0][1];
+			expect(body.title).toBe('Kolchak edited');
+			expect(body.match).toMatchObject({ poster_url: 'https://detail/p.jpg', poster_is_manual: false });
+		});
+
+		it('a typed poster is manual and keeps the typed value', async () => {
+			const land = await openEditBeforeDetails();
+			await fireEvent.input(screen.getByLabelText('Poster URL'), { target: { value: 'https://typed/p.jpg' } });
+			await land();
+			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].match).toMatchObject({
+				poster_url: 'https://typed/p.jpg',
+				poster_is_manual: true
+			});
+		});
+
+		it('picking another row closes Edit and reopening shows that row', async () => {
+			const row2 = createCandidate({
+				title: 'Second Show',
+				year: 1980,
+				kind: 'tv',
+				provider: 'tvmaze',
+				provider_id: '2'
+			});
+			mockMatchDetails.mockResolvedValue({ candidates: [] });
+			mockSearchMetadata.mockResolvedValue({ candidates: [row, row2] });
+			renderComponent(TitleSearch, { props: { job: job() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit before using' }));
+			expect(editTitleInput()).toHaveValue('Kolchak');
+			await fireEvent.click(screen.getByRole('button', { name: /^Second Show/ }));
+			await flush();
+			expect(screen.getAllByLabelText('Title')).toHaveLength(1);
+			await fireEvent.click(screen.getByRole('button', { name: 'Edit before using' }));
+			expect(editTitleInput()).toHaveValue('Second Show');
+			expect(screen.getByLabelText('Year')).toHaveValue('1980');
 		});
 	});
 });
