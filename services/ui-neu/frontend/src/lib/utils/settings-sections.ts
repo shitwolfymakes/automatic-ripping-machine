@@ -42,8 +42,29 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 	Metadata: [
 		{
 			title: 'Lookup',
-			blurb: 'Which service identifies a disc, and whether TheDiscDB matching is used.',
-			keys: ['metadata_provider', 'thediscdb_enabled', 'thediscdb_refresh_days']
+			blurb: 'Which services identify a disc and answer the job page search box, and the disc databases ARM consults.',
+			keys: [
+				'search_provider_movie',
+				'search_provider_tv',
+				'search_provider_music',
+				'thediscdb_enabled',
+				'crc64service_enabled',
+				'thediscdb_refresh_days'
+			],
+			columns: [
+				['search_provider_movie', 'search_provider_tv', 'search_provider_music'],
+				['thediscdb_enabled', 'crc64service_enabled']
+			],
+			advanced: ['thediscdb_refresh_days']
+		},
+		{
+			title: 'Movies and music',
+			blurb: 'Online sources tried in order for movie discs and audio CDs.',
+			keys: ['movie_sources', 'music_sources', 'movie_auto_apply', 'music_auto_apply'],
+			columns: [
+				['movie_sources', 'movie_auto_apply'],
+				['music_sources', 'music_auto_apply']
+			]
 		},
 		{
 			title: 'TV episodes',

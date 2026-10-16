@@ -28,7 +28,7 @@ const GROUP: SettingsGroup = {
 	name: 'Metadata',
 	fields: [
 		{
-			key: 'metadata_provider',
+			key: 'search_provider_movie',
 			group: 'Metadata',
 			tier: 'operator',
 			label: 'Provider',
@@ -59,7 +59,7 @@ const GROUP: SettingsGroup = {
 		}
 	]
 };
-const CONFIG = { metadata_provider: 'tmdb', tmdb_api_key: '<hidden>', makemkv_key: '<hidden>' };
+const CONFIG = { search_provider_movie: 'tmdb', tmdb_api_key: '<hidden>', makemkv_key: '<hidden>' };
 
 afterEach(() => {
 	cleanup();
@@ -89,7 +89,7 @@ describe('SchemaConfigForm', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		const payload = saveArmConfig.mock.calls[0][0];
-		expect(payload.metadata_provider).toBe('omdb');
+		expect(payload.search_provider_movie).toBe('omdb');
 		expect('tmdb_api_key' in payload).toBe(false);
 	});
 
@@ -110,12 +110,12 @@ describe('SchemaConfigForm', () => {
 		await fireEvent.change(select, { target: { value: 'omdb' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
-		expect(saveArmConfig.mock.calls[0][0]).toEqual({ metadata_provider: 'omdb' });
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ search_provider_movie: 'omdb' });
 
 		await fireEvent.change(select, { target: { value: 'tmdb' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
-		expect(saveArmConfig.mock.calls[1][0]).toEqual({ metadata_provider: 'tmdb' });
+		expect(saveArmConfig.mock.calls[1][0]).toEqual({ search_provider_movie: 'tmdb' });
 	});
 
 	it('holds a saved secret as <hidden> in the baseline and clears the field back to its masked state', async () => {

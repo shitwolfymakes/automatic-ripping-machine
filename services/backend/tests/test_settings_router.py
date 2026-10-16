@@ -60,7 +60,7 @@ def test_schema_returns_grouped_fields():
     all_fields = [f for g in r.json()["groups"] for f in g["fields"]]
     by_key = {f["key"]: f for f in all_fields}
     assert by_key["omdb_api_key"]["tier"] == "secret"
-    assert by_key["metadata_provider"]["type"] == "enum"
+    assert by_key["search_provider_movie"]["type"] == "enum"
     assert by_key["MEDIA_ROOT"]["editable"] is False
 
 

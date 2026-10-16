@@ -157,7 +157,7 @@ class TMDBClient:
 
     async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         """Resolve an imdb_id to a TMDB record via /find. Used by the
-        provider-driven detail lookup when metadata_provider == 'tmdb'."""
+        provider-driven detail lookup when TMDb is the movie search provider."""
         try:
             r = await self._http.get(
                 f"{_base_url()}/find/{imdb_id}",

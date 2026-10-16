@@ -15,6 +15,11 @@ vi.mock('$lib/stores/auth', async () => {
 	};
 });
 
+vi.mock('$lib/stores/config', async () => {
+	const { writable } = await import('svelte/store');
+	return { searchProviders: writable({ movie: 'omdb', tv: 'tmdb' }) };
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
@@ -43,6 +48,15 @@ describe('TitleSearch', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+	});
+
+	describe('provider badge', () => {
+		it('follows the search type', async () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(screen.getByTitle(/search provider configured/i)).toHaveTextContent('OMDb');
+			await fireEvent.click(screen.getByRole('radio', { name: 'TV' }));
+			expect(screen.getByTitle(/search provider configured/i)).toHaveTextContent('TMDb');
+		});
 	});
 
 	describe('rendering', () => {

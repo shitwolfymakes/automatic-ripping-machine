@@ -35,19 +35,6 @@ class ConfigFieldMeta(BaseModel):
 CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # --- Metadata ---
     ConfigFieldMeta(
-        key="metadata_provider",
-        group="Metadata",
-        tier="operator",
-        label="Look up titles with",
-        help="The service ARM searches when it identifies a disc.",
-        type="enum",
-        editable=True,
-        enum_values=["tmdb", "omdb"],
-        enum_labels={"tmdb": "TMDb", "omdb": "OMDb"},
-        setup_step="metadata",
-        setup_order=4,
-    ),
-    ConfigFieldMeta(
         key="tmdb_api_key",
         group="Metadata",
         tier="secret",
@@ -156,14 +143,108 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         group="Metadata",
         tier="operator",
         label="Apply confident matches",
-        help="When off, every match is kept as a suggestion to review on the job page.",
+        help=(
+            "When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; "
+            "the disc is held with no countdown. Ripping › Review first still holds every disc."
+        ),
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="movie_sources",
+        group="Metadata",
+        tier="operator",
+        label="Movie sources",
+        help="Tried top to bottom when a disc looks like a movie. ARM stops at the first confident match.",
+        type="ranked",
+        editable=True,
+        enum_values=["tmdb", "omdb"],
+        enum_labels={"tmdb": "TMDb", "omdb": "OMDb"},
+        enum_requires={"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"},
+    ),
+    ConfigFieldMeta(
+        key="movie_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident movie matches",
+        help=(
+            "When off, a movie match waits on the job page for you to confirm it and the disc is held with no "
+            "countdown. Ripping › Review first still holds every disc."
+        ),
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="music_sources",
+        group="Metadata",
+        tier="operator",
+        label="Music sources",
+        help="Tried top to bottom for audio CDs, matched by the disc's track layout. MusicBrainz needs no key.",
+        type="ranked",
+        editable=True,
+        enum_values=["musicbrainz"],
+        enum_labels={"musicbrainz": "MusicBrainz"},
+    ),
+    ConfigFieldMeta(
+        key="music_auto_apply",
+        group="Metadata",
+        tier="operator",
+        label="Apply confident music matches",
+        help=(
+            "When off, an audio CD match waits on the job page for you to confirm it and the disc is held with no "
+            "countdown. Ripping › Review first still holds every disc."
+        ),
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="search_provider_movie",
+        group="Metadata",
+        tier="operator",
+        label="Search movies with",
+        help="The service behind the job page's search box for movies.",
+        type="enum",
+        editable=True,
+        enum_values=["tmdb", "omdb"],
+        enum_labels={"tmdb": "TMDb", "omdb": "OMDb"},
+        enum_requires={"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"},
+    ),
+    ConfigFieldMeta(
+        key="search_provider_tv",
+        group="Metadata",
+        tier="operator",
+        label="Search TV with",
+        help="The service behind the job page's search box for TV. TVmaze needs no key.",
+        type="enum",
+        editable=True,
+        enum_values=["tmdb", "omdb", "tvmaze", "tvdb"],
+        enum_labels={"tmdb": "TMDb", "omdb": "OMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"},
+        enum_requires={"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key"},
+    ),
+    ConfigFieldMeta(
+        key="search_provider_music",
+        group="Metadata",
+        tier="operator",
+        label="Search music with",
+        help="The service behind the job page's search box for audio CDs.",
+        type="enum",
+        editable=True,
+        enum_values=["musicbrainz"],
+        enum_labels={"musicbrainz": "MusicBrainz"},
+    ),
+    ConfigFieldMeta(
+        key="crc64service_enabled",
+        group="Metadata",
+        tier="operator",
+        label="ARM community database (CRC64)",
+        help="Send a DVD's CRC64 fingerprint to the ARM project's community database and take its title when it has one. DVDs only; no key needed.",
         type="bool",
         editable=True,
     ),
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
     # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
     # an OpenAPI change), but the value is no longer read: the backend hardcodes
-    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.dispatcher).
+    # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.sources).
     # See tests/test_config_metadata.py::_DORMANT_EDITABLE_FIELDS.
     # --- Ripping ---
     ConfigFieldMeta(
