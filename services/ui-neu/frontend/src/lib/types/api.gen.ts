@@ -2006,7 +2006,6 @@ export type IdentityFacts = {
      * Episode Count
      */
     episode_count?: number | null;
-    [key: string]: unknown;
 };
 
 /**

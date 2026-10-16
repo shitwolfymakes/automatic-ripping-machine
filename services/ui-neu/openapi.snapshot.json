@@ -13498,7 +13498,6 @@
             "title": "Episode Count"
           }
         },
-        "additionalProperties": true,
         "type": "object",
         "title": "IdentityFacts",
         "description": "What a person uses to tell titles apart: run, plot, rating, people.\nFilled from a provider payload by `arm_backend.metadata.facts`; shown in\nthe match picker and snapshotted on the job when a match is used."

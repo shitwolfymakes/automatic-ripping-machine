@@ -1127,7 +1127,8 @@ async def update_job(
 #      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
 #      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
 #      because there are no WAITING_IDENTIFY apps on an already-identified job.
-# Show ids an operator can send on /resolve; tvmaze is only ever derived.
+# Show ids the /resolve merge path accepts; tvmaze is never accepted there,
+# but a picked match (`match`) stores it (see _MATCH_ID_FIELDS).
 _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
 # Ids a picked match states; the rest (musicbrainz_release, anidb) are kept.
 _MATCH_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")

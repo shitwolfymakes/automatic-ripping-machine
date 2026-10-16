@@ -70,7 +70,7 @@
 		{#if error}<p class="field-help">{error}</p>{/if}
 		<div class="match-pane-actions">
 			{#if canUse}
-				<button type="button" class="btn btn-primary" disabled={applying} onclick={onuse}>
+				<button type="button" class="btn btn-primary" disabled={applying || loading} onclick={onuse}>
 					{applying ? 'Applying...' : useLabel}
 				</button>
 			{/if}

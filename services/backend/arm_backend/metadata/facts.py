@@ -149,6 +149,15 @@ def tvmaze_facts(payload: dict[str, Any]) -> IdentityFacts:
     )
 
 
+def _tvdb_genres(items: Any) -> list[str]:
+    """Search entries list genres as plain strings, detail records as
+    {"name": ...} dicts."""
+    if not isinstance(items, list):
+        return []
+    named = [{"name": g} if isinstance(g, str) else g for g in items]
+    return _names(named)
+
+
 def tvdb_facts(payload: dict[str, Any]) -> IdentityFacts:
     status = str(_dict(payload.get("status")).get("name") or "").lower()
     english = next(
@@ -163,7 +172,7 @@ def tvdb_facts(payload: dict[str, Any]) -> IdentityFacts:
     return IdentityFacts(
         end_year=_year(payload.get("lastAired")) if status in _ENDED else None,
         overview=_text(english) or _text(payload.get("overview")),
-        genres=_names(payload.get("genres")),
+        genres=_tvdb_genres(payload.get("genres")),
         creators=_names([p for p in people if p.get("peopleType") == "Creator"], key="personName"),
         cast=_names([p for p in people if p.get("peopleType") == "Actor"], key="personName")[:_CAST_LIMIT],
     )

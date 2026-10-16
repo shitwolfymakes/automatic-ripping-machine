@@ -1533,3 +1533,29 @@ async def test_musicbrainz_toc_unreadable_offsets_use_first_count_match(http_cli
     result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", toc)
     # "2 1 …" has no positive track count, so it keeps the first medium.
     assert result.payload["disc"] == (1 if toc.startswith("2 1") else 2)
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_keeps_the_queried_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200, json={"movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0371746")
+    assert r.payload["imdb_id"] == "tt0371746"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_does_not_clobber_existing_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt1").mock(
+        return_value=httpx.Response(
+            200, json={"tv_results": [{"id": 9, "name": "X", "first_air_date": "2011-01-01", "imdb_id": "tt2"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt1")
+    assert r.payload["imdb_id"] == "tt2"

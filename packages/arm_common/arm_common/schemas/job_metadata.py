@@ -59,7 +59,7 @@ class IdentityFacts(BaseModel):
     Filled from a provider payload by `arm_backend.metadata.facts`; shown in
     the match picker and snapshotted on the job when a match is used."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="ignore")
 
     end_year: int | None = None
     overview: str | None = None

@@ -45,6 +45,15 @@ describe('MatchDetailPane', () => {
 		expect(screen.queryByTestId('match-pane-skeleton')).toBeNull();
 	});
 
+	it('disables Use while loading and keeps its label', async () => {
+		const { rerender } = renderComponent(MatchDetailPane, {
+			props: { ...base, loading: true, candidate: { title: 'X', kind: 'tv' }, onuse: vi.fn() }
+		});
+		expect(screen.getByRole('button', { name: 'Use this match' })).toBeDisabled();
+		await rerender({ ...base, loading: false, candidate: { title: 'X', kind: 'tv' }, onuse: vi.fn() });
+		expect(screen.getByRole('button', { name: 'Use this match' })).toBeEnabled();
+	});
+
 	it('labels a movie director as Director and hides the IMDb link without an id', () => {
 		renderComponent(MatchDetailPane, {
 			props: {

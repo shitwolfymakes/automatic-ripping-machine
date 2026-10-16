@@ -203,6 +203,13 @@ class TMDBClient:
         """The result's IMDb id only (kept for callers that need just that)."""
         return (await self.get_external_id_map(tmdb_id, kind)).get("imdb_id")
 
+    @staticmethod
+    def _with_imdb_id(parsed: MetadataResult, imdb_id: str) -> MetadataResult:
+        """/find payloads carry no imdb_id; keep the one that was looked up."""
+        if not parsed.payload.get("imdb_id"):
+            parsed.payload["imdb_id"] = imdb_id
+        return parsed
+
     async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         """Resolve an imdb_id to a TMDB record via /find. Used by the
         provider-driven detail lookup when TMDb is the movie search provider."""
@@ -228,12 +235,12 @@ class TMDBClient:
             parsed = self._parse_one(data["movie_results"][0], "movie")
             if parsed is None:
                 raise LookupError("tmdb find result missing title")
-            return parsed
+            return self._with_imdb_id(parsed, imdb_id)
         if data.get("tv_results"):
             parsed = self._parse_one(data["tv_results"][0], "tv")
             if parsed is None:
                 raise LookupError("tmdb find result missing title")
-            return parsed
+            return self._with_imdb_id(parsed, imdb_id)
         raise LookupError(f"tmdb find no results for {imdb_id}")
 
     async def _search(

@@ -81,6 +81,23 @@ describe('MatchPicker', () => {
 		expect(screen.queryByText('A')).not.toBeInTheDocument();
 	});
 
+	it('Use is disabled until the pending details fetch resolves', async () => {
+		let release!: (v: unknown) => void;
+		mockDetails.mockImplementation(() => new Promise((r) => (release = r)) as never);
+		renderComponent(MatchPicker, { props: props() });
+		expect(screen.getByRole('button', { name: 'Use this match' })).toBeDisabled();
+		release(detail('Kolchak: The Night Stalker', ['Darren McGavin']));
+		await screen.findByText('Darren McGavin');
+		expect(screen.getByRole('button', { name: 'Use this match' })).toBeEnabled();
+	});
+
+	it('Use is enabled again when the details fetch fails', async () => {
+		mockDetails.mockRejectedValue(new Error('network down'));
+		renderComponent(MatchPicker, { props: props() });
+		await screen.findByText('network down');
+		expect(screen.getByRole('button', { name: 'Use this match' })).toBeEnabled();
+	});
+
 	it('a details error keeps the row and shows a note', async () => {
 		mockDetails.mockResolvedValue({ candidates: [], detail: 'tvmaze: miss' });
 		renderComponent(MatchPicker, { props: props() });

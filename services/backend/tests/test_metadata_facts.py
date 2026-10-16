@@ -217,3 +217,14 @@ def test_helpers_reject_bools_non_numeric_and_container_values() -> None:
 
 def test_tvmaze_integer_ended_year_is_used_as_is() -> None:
     assert tvmaze_facts({"ended": 1975}).end_year == 1975
+
+
+def test_tvdb_genres_accept_plain_strings_and_name_dicts() -> None:
+    assert tvdb_facts({"genres": ["Horror", "Drama"]}).genres == ["Horror", "Drama"]
+    assert tvdb_facts({"genres": [{"name": "Horror"}, "Drama", "Horror", 3]}).genres == ["Horror", "Drama"]
+
+
+def test_identity_facts_drops_unknown_keys() -> None:
+    f = IdentityFacts.model_validate({"overview": "x", "evil": "payload"})
+    assert f.overview == "x"
+    assert "evil" not in f.model_dump()
