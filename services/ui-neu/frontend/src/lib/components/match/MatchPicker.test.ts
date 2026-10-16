@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { tick } from 'svelte';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import MatchPicker from './MatchPicker.svelte';
 
 vi.mock('$lib/api/jobs', () => ({ fetchMatchDetails: vi.fn() }));
@@ -71,10 +72,13 @@ describe('MatchPicker', () => {
 		renderComponent(MatchPicker, { props: props({ onselect }) });
 		await fireEvent.click(screen.getByRole('button', { name: /^The Night Stalker/ }));
 		await screen.findByText('B');
+		const callsBefore = onselect.mock.calls.length;
 		release(detail('Kolchak: The Night Stalker', ['A']));
-		await waitFor(() => expect(mockDetails).toHaveBeenCalledTimes(2));
+		await tick();
+		await new Promise((r) => setTimeout(r, 0));
+		expect(onselect.mock.calls.length).toBe(callsBefore);
 		expect(screen.getByRole('heading', { name: 'The Night Stalker' })).toBeInTheDocument();
-		expect(onselect.mock.lastCall?.[1]).toBe(1);
+		expect(screen.queryByText('A')).not.toBeInTheDocument();
 	});
 
 	it('a details error keeps the row and shows a note', async () => {
@@ -109,5 +113,47 @@ describe('MatchPicker', () => {
 		renderComponent(MatchPicker, { props: props({ results: [{ title: 'X', kind: 'movie', provider: null }] }) });
 		expect(mockDetails).not.toHaveBeenCalled();
 		expect(screen.getByText('1 RESULT')).toBeInTheDocument();
+	});
+
+	it('a new results list resets to its first row and drops old details', async () => {
+		mockDetails.mockImplementation(async (_p, _t, id) =>
+			detail(id === '1' ? 'Kolchak: The Night Stalker' : 'New', [`cast${id}`])
+		);
+		const onselect = vi.fn();
+		const { rerender } = renderComponent(MatchPicker, { props: props({ onselect }) });
+		await screen.findByText('cast1');
+		await fireEvent.click(screen.getByRole('button', { name: /^The Night Stalker/ }));
+		await screen.findByText('cast2');
+		const fresh = [
+			{ title: 'Fresh', year: 2000, kind: 'tv', provider: 'tvmaze', external_ids: { tvmaze: '9' }, facts: null }
+		];
+		onselect.mockClear();
+		await rerender(props({ onselect, results: fresh }));
+		await screen.findByText('cast9');
+		expect(screen.queryByText('cast2')).not.toBeInTheDocument();
+		expect(screen.getAllByRole('button', { pressed: true })).toHaveLength(1);
+		expect(onselect.mock.calls[0][1]).toBe(0);
+		expect(onselect.mock.calls[0][0]).toMatchObject({ title: 'Fresh' });
+	});
+
+	it('a stale fetch from the old list does not touch the new list state', async () => {
+		const releases: Record<string, (v: unknown) => void> = {};
+		mockDetails.mockImplementation(
+			(_p, _t, id) => new Promise((r) => (releases[`${id}${Object.keys(releases).length}`] = r)) as never
+		);
+		const one = [rows[0]];
+		const { rerender } = renderComponent(MatchPicker, { props: props({ results: one }) });
+		expect(mockDetails).toHaveBeenCalledTimes(1);
+		await rerender(props({ results: [{ ...rows[0] }] }));
+		expect(mockDetails).toHaveBeenCalledTimes(2);
+		expect(screen.getByTestId('match-pane-skeleton')).toBeInTheDocument();
+		releases['10']({ candidates: [], detail: 'stale error' });
+		await tick();
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.getByTestId('match-pane-skeleton')).toBeInTheDocument();
+		expect(screen.queryByText('stale error')).not.toBeInTheDocument();
+		releases['11'](detail('Kolchak: The Night Stalker', ['fresh cast']));
+		await screen.findByText('fresh cast');
+		expect(screen.queryByTestId('match-pane-skeleton')).not.toBeInTheDocument();
 	});
 });

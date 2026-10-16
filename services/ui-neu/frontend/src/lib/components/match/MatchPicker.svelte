@@ -36,10 +36,15 @@
 		selectedRow && selectedKey && details[selectedKey] ? mergeCandidate(selectedRow, details[selectedKey]) : selectedRow
 	);
 
+	// Bumped whenever the result list changes; a fetch started for an older list
+	// must not write into the new list's state. Plain let: it is never rendered.
+	let generation = 0;
+
 	// A new result list starts on its first row.
 	$effect(() => {
 		const list = results;
 		untrack(() => {
+			generation++;
 			details = {};
 			errors = {};
 			loading = {};
@@ -55,11 +60,13 @@
 		onselect?.(details[key] ? mergeCandidate(row, details[key]) : row, index);
 		const id = detailsId(row);
 		if (!row.provider || !id || details[key] || loading[key]) return;
+		const gen = generation;
 		loading = { ...loading, [key]: true };
 		const { [key]: _drop, ...rest } = errors;
 		errors = rest;
 		try {
 			const resp = await fetchMatchDetails(row.provider as MatchProvider, isSeriesKind(row.kind) ? 'tv' : 'movie', id);
+			if (gen !== generation) return;
 			const found = resp.candidates[0];
 			if (found) {
 				details = { ...details, [key]: found };
@@ -69,9 +76,10 @@
 				errors = { ...errors, [key]: resp.detail ?? 'No details found.' };
 			}
 		} catch (e) {
+			if (gen !== generation) return;
 			errors = { ...errors, [key]: e instanceof Error ? e.message : 'Could not load details' };
 		} finally {
-			loading = { ...loading, [key]: false };
+			if (gen === generation) loading = { ...loading, [key]: false };
 		}
 	}
 </script>
