@@ -43,7 +43,13 @@
 	let source = $derived.by<Source | undefined>(() => {
 		if (pickedSource) return pickedSource;
 		const fromSettings = searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie;
-		return sourceOptions.find((o) => o.id === fromSettings)?.id;
+		const settingsSource = sourceOptions.find((o) => o.id === fromSettings)?.id;
+		// The default's key was removed after it was chosen: start on the first
+		// usable source; with none usable keep the default (the backend's 400 shows).
+		if (settingsSource && !sourceKeyed(settingsSource)) {
+			return sourceOptions.find((o) => sourceKeyed(o.id))?.id ?? settingsSource;
+		}
+		return settingsSource;
 	});
 
 	function sourceKeyed(id: Source): boolean {

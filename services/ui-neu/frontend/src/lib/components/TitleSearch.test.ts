@@ -107,6 +107,27 @@ describe('TitleSearch', () => {
 			expect(mockSearchMetadata.mock.calls.every((c) => c[2] !== 'tmdb')).toBe(true);
 		});
 
+		it('starts on the first usable source when the TV default has no key', async () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: true });
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
+			renderComponent(TitleSearch, { props: { job: createJob({ title: 'Kolchak', media_type: 'tv' }) } });
+			expect(checkedSource()).toBe('TVmaze');
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(mockSearchMetadata).toHaveBeenCalledWith('Kolchak', 'tv', 'tvmaze'));
+		});
+
+		it('starts on TMDb when the movie default OMDb has no key', () => {
+			setKeyed({ tmdb: true, omdb: false, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(checkedSource()).toBe('TMDb');
+		});
+
+		it('keeps the unkeyed default when no movie source is usable', () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(checkedSource()).toBe('OMDb');
+		});
+
 		it('replaces the provider badge', () => {
 			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
 			expect(screen.queryByTitle(/search provider configured/i)).toBeNull();
