@@ -484,8 +484,8 @@ def test_search_tmdb_candidates_carry_imdb_id(signing_key: bytes) -> None:
             json={"results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]},
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    respx.get("https://api.themoviedb.org/3/movie/1726").mock(
+        return_value=httpx.Response(200, json={"id": 1726, "external_ids": {"imdb_id": "tt0371746"}})
     )
     db = FakeSession()
     _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
@@ -515,10 +515,10 @@ def test_search_tmdb_enrichment_failure_is_tolerated(signing_key: bytes) -> None
             },
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/1726/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0371746"})
+    respx.get("https://api.themoviedb.org/3/movie/1726").mock(
+        return_value=httpx.Response(200, json={"id": 1726, "external_ids": {"imdb_id": "tt0371746"}})
     )
-    respx.get("https://api.themoviedb.org/3/movie/1727/external_ids").mock(return_value=httpx.Response(500))
+    respx.get("https://api.themoviedb.org/3/movie/1727").mock(return_value=httpx.Response(500))
     db = FakeSession()
     _seed(db, search_provider_movie="tmdb", tmdb_api_key="k")
     app, token = _make_app(signing_key, db)
@@ -667,8 +667,8 @@ def test_tv_search_candidates_carry_all_ids(signing_key: bytes) -> None:
             json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]},
         )
     )
-    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    respx.get("https://api.themoviedb.org/3/tv/5084").mock(
+        return_value=httpx.Response(200, json={"id": 5084, "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170}})
     )
     db = FakeSession()
     _seed(db, tmdb_api_key="k")

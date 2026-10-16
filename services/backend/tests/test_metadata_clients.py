@@ -711,8 +711,8 @@ async def test_tmdb_search_candidate_without_id_skips_enrichment(http_client):
             },
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/42/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0000042"})
+    respx.get("https://api.themoviedb.org/3/movie/42").mock(
+        return_value=httpx.Response(200, json={"id": 42, "external_ids": {"imdb_id": "tt0000042"}})
     )
     client = TMDBClient("k", http_client)
     results = await client.search_movie_candidates("x")
@@ -1326,8 +1326,8 @@ async def test_tmdb_tv_candidates_carry_tvdb_id(http_client) -> None:
             200, json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]}
         )
     )
-    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    respx.get("https://api.themoviedb.org/3/tv/5084").mock(
+        return_value=httpx.Response(200, json={"id": 5084, "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170}})
     )
     [hit] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
     assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
