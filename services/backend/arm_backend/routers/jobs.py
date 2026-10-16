@@ -87,6 +87,7 @@ from arm_common.enums import (
 )
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
 from arm_common.schemas.job_metadata import (
+    ExternalIds,
     JobIdentity,
     JobMetadata,
     flag_is_set,
@@ -1128,6 +1129,35 @@ async def update_job(
 #      because there are no WAITING_IDENTIFY apps on an already-identified job.
 # Show ids an operator can send on /resolve; tvmaze is only ever derived.
 _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
+# Ids a picked match states; the rest (musicbrainz_release, anidb) are kept.
+_MATCH_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")
+
+
+def _apply_match(md: JobMetadata, req: ResolveRequest, now: datetime) -> bool:
+    """A picked search result states the whole show (match picker spec 3.6):
+    its ids replace the stored show ids wholesale, tvmaze included, and the
+    identity records the provider and a facts snapshot. Returns whether a
+    stored show id changed or was cleared (a show change)."""
+    assert req.match is not None
+    sent = req.external_ids or ExternalIds()
+    old = md.identity.external_ids if md.identity is not None else ExternalIds()
+    show_changed = any(
+        getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
+        for name in ("imdb", "tmdb", "tvdb", "tvmaze")
+    )
+    ids = old.model_copy()
+    for name in _MATCH_ID_FIELDS:
+        setattr(ids, name, getattr(sent, name))
+    facts = req.match.facts
+    md.identity = JobIdentity(
+        provider=req.match.provider,
+        external_ids=ids,
+        overview=facts.overview if facts is not None else None,
+        identified_at=now,
+        facts=facts,
+        facts_fetched_at=now if facts is not None else None,
+    )
+    return show_changed
 
 
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
@@ -1241,7 +1271,9 @@ async def resolve_identity(
     # omitted=keep / explicit-null=clears, via model_fields_set rather than
     # `is not None` (which can't tell "sent null" from "not sent" once
     # Pydantic has already collapsed both to None).
-    if req.external_ids is not None:
+    if req.match is not None:
+        show_changed = _apply_match(md, req, datetime.now(UTC))
+    elif req.external_ids is not None:
         if md.identity is None:
             md.identity = JobIdentity(provider="manual")
         # Per-field overlay, not a wholesale replace: a request that only
@@ -1285,6 +1317,14 @@ async def resolve_identity(
 
     job.title = req.title
     job.year = req.year
+    if req.match is not None:
+        # A picked match's poster is the automatic one; an operator-edited
+        # URL stays a manual override (match picker spec 3.6).
+        if req.match.poster_is_manual:
+            job.poster_url_manual = req.match.poster_url
+        else:
+            job.poster_url = req.match.poster_url
+            job.poster_url_manual = None
     # Fix 75-5: media_type is a classification, not part of the identity
     # statement -- omitted keeps the stored value, but an EXPLICIT null
     # clears it (the operator saying "clear the kind"). model_fields_set is
