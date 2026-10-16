@@ -349,6 +349,12 @@
 						{/if}
 					</h3>
 				</div>
+				<!-- The type picks what Search looks for, so the search row has no Movie/TV toggle of its own. -->
+				{#if isVideo && $isAdmin}
+					<div class="disc-review-widget-type">
+						<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleTitleApply} />
+					</div>
+				{/if}
 				{#if missLine}
 					<p class="disc-review-widget-miss" data-testid="identify-miss-reason">{missLine}</p>
 				{/if}
@@ -469,10 +475,6 @@
 					class="btn disc-review-widget-action-btn"
 					aria-pressed={showTitleSearch}>Search</button
 				>
-			{/if}
-			<!-- The type picks what Search looks for, so the search row has no Movie/TV toggle of its own. -->
-			{#if isVideo && $isAdmin}
-				<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleTitleApply} />
 			{/if}
 			{#if isMusic}
 				<button
@@ -668,6 +670,9 @@
 		line-height: 1.75rem;
 		font-weight: 600;
 		color: var(--color-text);
+	}
+	.disc-review-widget-type {
+		margin-top: 0.375rem;
 	}
 	.disc-review-widget-title-year {
 		font-weight: 400;

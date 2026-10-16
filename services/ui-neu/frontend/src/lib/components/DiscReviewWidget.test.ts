@@ -146,7 +146,7 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('shows the Movie/TV switch beside Search, and switching saves the type and reloads', async () => {
+		it('shows the Movie/TV switch under the title, and switching saves the type and reloads', async () => {
 			vi.mocked(fetchJob).mockResolvedValue(detail({ disc_type: 'bluray', media_type: 'movie' }));
 			renderWidget({ disc_type: 'bluray', media_type: 'movie' });
 			const tv = await screen.findByRole('radio', { name: 'TV' });
