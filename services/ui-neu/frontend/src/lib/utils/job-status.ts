@@ -95,6 +95,34 @@ export function identitySuggestionOf(
 	return job?.metadata_json?.identity_suggestion ?? null;
 }
 
+type MissAttempt = { source?: unknown; step?: unknown; outcome?: unknown; detail?: unknown };
+
+/**
+ * One line saying why identify's automatic match missed, from the attempts
+ * it stored (`metadata_json.identify_attempts`), or null: the job is not a
+ * miss (neither `flags.unidentified` nor awaiting_user_id), or it has no
+ * attempts (jobs identified before the list existed).
+ */
+export function missReason(
+	job: Pick<JobView, 'status' | 'title'> & { metadata_json?: JobView['metadata_json'] }
+): string | null {
+	const meta = job.metadata_json;
+	if (job.status !== 'awaiting_user_id' && meta?.flags?.unidentified !== true) return null;
+	const attempts = (meta?.identify_attempts ?? []) as MissAttempt[];
+	if (attempts.length === 0) return null;
+	const outcomes = attempts.map((a) => a.outcome);
+	if (outcomes.includes('no_sources')) return 'No online source is switched on for this kind of disc.';
+	if (outcomes.every((o) => o === 'not_configured')) return 'No API keys are saved for the sources in your lists.';
+	if (outcomes.includes('timeout') && !outcomes.includes('miss')) return 'The lookup timed out. Try the search below.';
+	// The searched title: the last title search that names one. The
+	// whole-dispatch timeout entry (no source) carries a message, not a title.
+	const searched = attempts.findLast(
+		(a) => a.step === 'title' && a.source != null && typeof a.detail === 'string' && a.detail
+	)?.detail as string | undefined;
+	const title = searched || job.title?.trim() || 'this disc';
+	return `No source found a close match for "${title}". Try another source in the search below.`;
+}
+
 /** Display names for identification provider ids. */
 export const PROVIDER_LABELS: Record<string, string> = {
 	tmdb: 'TMDb',

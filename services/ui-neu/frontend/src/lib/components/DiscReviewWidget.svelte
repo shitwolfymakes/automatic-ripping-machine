@@ -6,7 +6,7 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
-	import { identitySuggestionOf, previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-status';
+	import { identitySuggestionOf, missReason, previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-status';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -112,6 +112,7 @@
 	let previous = $derived(data?.previous_rip ?? null);
 	// A confident match identify held for confirmation (auto-apply off).
 	let suggestion = $derived(identitySuggestionOf(displayJob));
+	let missLine = $derived(missReason(displayJob));
 
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
@@ -336,6 +337,9 @@
 						{/if}
 					</h3>
 				</div>
+				{#if missLine}
+					<p class="disc-review-widget-miss" data-testid="identify-miss-reason">{missLine}</p>
+				{/if}
 				<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
 					{#if isoName}
 						<IsoSourceChip
@@ -580,6 +584,11 @@
 		font-weight: 600;
 		color: var(--color-primary);
 		text-decoration: underline;
+	}
+	.disc-review-widget-miss {
+		margin-top: 0.25rem;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
 	}
 	.disc-review-widget-previous-sub {
 		margin-top: 0.25rem;

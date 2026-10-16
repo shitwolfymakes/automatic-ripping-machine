@@ -5,6 +5,7 @@ import {
 	reviewPhaseBadge,
 	hasTitleMatch,
 	identitySuggestionOf,
+	missReason,
 	providerLabel,
 	PROVIDER_LABELS
 } from '$lib/utils/job-status';
@@ -209,5 +210,81 @@ describe('transcodeColumnStatus', () => {
 			label: 'Transcoding 2/4',
 			badgeStatus: 'transcoding'
 		});
+	});
+});
+
+describe('missReason', () => {
+	const a = (outcome: string, extra: Record<string, unknown> = {}) => ({
+		source: 'tmdb',
+		step: 'title',
+		kind: 'movie',
+		outcome,
+		detail: null,
+		...extra
+	});
+	const missed = (attempts: unknown[] | null | undefined, over: Record<string, unknown> = {}) =>
+		({
+			status: 'awaiting_user_id',
+			title: 'MY_DISC',
+			metadata_json: { flags: {}, identify_attempts: attempts },
+			...over
+		}) as any;
+
+	it('no attempts (an older job) gives no line', () => {
+		expect(missReason(missed(undefined))).toBeNull();
+		expect(missReason(missed(null))).toBeNull();
+		expect(missReason(missed([]))).toBeNull();
+		expect(missReason({ status: 'awaiting_user_id', title: 'X', metadata_json: null } as any)).toBeNull();
+	});
+	it('a job that is not a miss gives no line', () => {
+		expect(missReason(missed([a('miss')], { status: 'awaiting_review' }))).toBeNull();
+	});
+	it('an unidentified job past the review gate still gets the line', () => {
+		const job = missed([a('miss', { detail: 'HEAT' })], {
+			status: 'identified',
+			metadata_json: { flags: { unidentified: true }, identify_attempts: [a('miss', { detail: 'HEAT' })] }
+		});
+		expect(missReason(job)).toContain('"HEAT"');
+	});
+	it('any no_sources wins', () => {
+		expect(missReason(missed([a('miss'), a('no_sources', { source: null, kind: 'tv' })]))).toBe(
+			'No online source is switched on for this kind of disc.'
+		);
+	});
+	it('every attempt not_configured', () => {
+		expect(missReason(missed([a('not_configured'), a('not_configured', { source: 'omdb' })]))).toBe(
+			'No API keys are saved for the sources in your lists.'
+		);
+	});
+	it('a timeout with no miss', () => {
+		expect(missReason(missed([a('timeout'), a('error', { source: 'omdb' })]))).toBe(
+			'The lookup timed out. Try the search below.'
+		);
+		expect(
+			missReason(
+				missed([
+					{ source: null, step: 'title', kind: null, outcome: 'timeout', detail: 'lookup took longer than 25 s' }
+				])
+			)
+		).toBe('The lookup timed out. Try the search below.');
+	});
+	it('otherwise names the last searched title', () => {
+		expect(
+			missReason(missed([a('miss', { detail: 'MY DISC' }), a('miss', { detail: 'MY DISC 2' }), a('timeout')]))
+		).toBe('No source found a close match for "MY DISC 2". Try another source in the search below.');
+	});
+	it('falls back to the job title when no title attempt carries one', () => {
+		expect(missReason(missed([a('miss', { step: 'imdb', detail: 'tt1' })]))).toBe(
+			'No source found a close match for "MY_DISC". Try another source in the search below.'
+		);
+	});
+	it('the whole-dispatch timeout entry is not a searched title', () => {
+		const attempts = [
+			a('miss', { detail: 'HEAT' }),
+			{ source: null, step: 'title', kind: null, outcome: 'timeout', detail: 'lookup took longer than 25 s' }
+		];
+		expect(missReason(missed(attempts))).toBe(
+			'No source found a close match for "HEAT". Try another source in the search below.'
+		);
 	});
 });
