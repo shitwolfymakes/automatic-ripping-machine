@@ -5,6 +5,7 @@ import {
 	jobTypeConfig,
 	formatShortDateTime,
 	orderByLastModified,
+	indexLogFiles,
 	logRelativeTime,
 	shortJobId
 } from './log-list';
@@ -30,13 +31,16 @@ describe('discPosition', () => {
 
 describe('discKindLabel', () => {
 	it('uses the disc type label', () => {
-		expect(discKindLabel({ ...base, disc_type: 'bluray' })).toBe('Blu-ray');
+		expect(discKindLabel({ ...base, disc_type: 'bluray', drive_id: 'drv_1' }, {})).toBe('Blu-ray');
 	});
-	it('names ISO and folder sources', () => {
-		const iso = { provider_raw: { arm_server: { source_type: 'iso' } } };
-		const folder = { provider_raw: { arm_server: { source_type: 'folder' } } };
-		expect(discKindLabel({ ...base, metadata_json: iso })).toBe('ISO');
-		expect(discKindLabel({ ...base, metadata_json: folder })).toBe('Folder');
+	it('names ISO and folder sources from the drive, retired drives included', () => {
+		const kinds = { drv_iso: 'iso', drv_dir_retired: 'folder' } as const;
+		expect(discKindLabel({ ...base, drive_id: 'drv_iso' }, kinds)).toBe('ISO');
+		expect(discKindLabel({ ...base, drive_id: 'drv_dir_retired' }, kinds)).toBe('Folder');
+	});
+	it('falls back to the disc type with no drive or no map', () => {
+		expect(discKindLabel({ ...base, drive_id: null }, { drv_iso: 'iso' })).toBe('DVD');
+		expect(discKindLabel({ ...base, drive_id: 'drv_iso' })).toBe('DVD');
 	});
 });
 
@@ -51,10 +55,28 @@ describe('jobTypeConfig', () => {
 });
 
 describe('formatShortDateTime', () => {
+	const now = new Date(2026, 9, 16, 12, 0);
 	it('formats month, day and time', () => {
-		const out = formatShortDateTime('2026-10-16T12:18:00Z');
-		expect(out).toMatch(/Oct 1[56]/);
-		expect(out).toMatch(/\d{1,2}:18/);
+		const out = formatShortDateTime(new Date(2026, 9, 16, 8, 18).toISOString(), now);
+		expect(out).toMatch(/Oct 16/);
+		expect(out).toMatch(/8:18/);
+		expect(out).not.toMatch(/2026/);
+	});
+	it('adds the year when it is not the current year', () => {
+		expect(formatShortDateTime(new Date(2025, 11, 30, 9, 5).toISOString(), now)).toMatch(/2025/);
+	});
+	it('is empty for an unparseable date', () => {
+		expect(formatShortDateTime('not a date', now)).toBe('');
+	});
+});
+
+describe('indexLogFiles', () => {
+	it('maps job id to modified_at, dropping unparseable dates', () => {
+		const map = indexLogFiles([
+			{ job_id: 'job_a', size_bytes: 1, modified_at: '2026-10-16T10:00:00Z' },
+			{ job_id: 'job_b', size_bytes: 1, modified_at: 'garbage' }
+		]);
+		expect([...map.entries()]).toEqual([['job_a', '2026-10-16T10:00:00Z']]);
 	});
 });
 
@@ -89,6 +111,9 @@ describe('logRelativeTime', () => {
 	it('counts days up to six', () => {
 		expect(logRelativeTime(at(2026, 9, 14, 20, 0), now)).toBe('2 days ago');
 		expect(logRelativeTime(at(2026, 9, 10, 1, 0), now)).toBe('6 days ago');
+	});
+	it('is null for an unparseable date', () => {
+		expect(logRelativeTime('garbage', now)).toBeNull();
 	});
 	it('is null past six days, so only the absolute date shows', () => {
 		expect(logRelativeTime(at(2026, 9, 9, 23, 0), now)).toBeNull();

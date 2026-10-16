@@ -16,6 +16,7 @@
 		formatShortDateTime,
 		jobTypeConfig,
 		orderByLastModified,
+		indexLogFiles,
 		logRelativeTime,
 		shortJobId
 	} from '$lib/utils/log-list';
@@ -59,7 +60,7 @@
 			error = e instanceof Error ? e : new Error(String(e));
 		}
 		if (index.status === 'fulfilled') {
-			modified = new Map(index.value.map((f) => [f.job_id, f.modified_at]));
+			modified = indexLogFiles(index.value);
 		}
 		loading = false;
 	});
@@ -99,70 +100,74 @@
 				{#if filtered.length === 0}
 					<p class="logs-panel-muted logs-panel-message">No jobs match.</p>
 				{:else}
-					<table class="table responsive-table">
-						<thead>
-							<tr>
-								{#each COLUMNS as col (col)}
-									<th class="table-header">{col}</th>
-								{/each}
-							</tr>
-						</thead>
-						<tbody>
-							{#each filtered as job (job.id)}
-								{@const type = jobTypeConfig(job)}
-								{@const drive = driveLabel(job.drive_id, $dashboard.drive_names)}
-								{@const logAt = modified.get(job.id)}
-								<tr class="table-row">
-									<td class="table-cell" data-label="Title">
-										<div class="logs-panel-title-cell">
-											<PosterImage
-												url={jobPoster(job)}
-												alt=""
-												class="logs-panel-poster {job.disc_type === 'cd' ? 'logs-panel-poster-square' : ''}"
-											/>
-											<div class="min-w-0">
-												<a href="/logs/{job.id}" class="logs-panel-title-link">{job.title || job.id}</a>
-												<div class="logs-panel-id" title={job.id}>{shortJobId(job.id)}</div>
-											</div>
-										</div>
-									</td>
-									<td class="table-cell" data-label="Status">
-										<StatusBadge status={effectiveJobStatus(job)} />
-									</td>
-									<td class="table-cell" data-label="Type">
-										<span class="logs-panel-chips">
-											<span class="logs-panel-chip" style:--jt-bg={type.badgeBg} style:--jt-text={type.badgeText}
-												>{type.label}</span
-											>
-											<span class="logs-panel-chip logs-panel-chip-neutral">{discKindLabel(job)}</span>
-										</span>
-									</td>
-									<td class="table-cell logs-panel-nowrap" data-label="Disc">{discPosition(job)}</td>
-									<td class="table-cell" data-label="Drive">
-										{#if drive}
-											<span class="logs-panel-drive" title={drive}>{drive}</span>
-										{:else}
-											-
-										{/if}
-									</td>
-									<td class="table-cell" data-label="Year">{job.year ?? '-'}</td>
-									<td class="table-cell logs-panel-nowrap" data-label="Last modified">
-										{#if logAt}
-											{@const relative = logRelativeTime(logAt)}
-											{#if relative}
-												<div>{relative}</div>
-												<div class="logs-panel-muted logs-panel-small">{formatShortDateTime(logAt)}</div>
-											{:else}
-												<div>{formatShortDateTime(logAt)}</div>
-											{/if}
-										{:else}
-											<span class="logs-panel-muted">No log yet</span>
-										{/if}
-									</td>
+					<div class="overflow-x-auto">
+						<table class="table responsive-table">
+							<thead>
+								<tr>
+									{#each COLUMNS as col (col)}
+										<th class="table-header">{col}</th>
+									{/each}
 								</tr>
-							{/each}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{#each filtered as job (job.id)}
+									{@const type = jobTypeConfig(job)}
+									{@const drive = driveLabel(job.drive_id, $dashboard.drive_names)}
+									{@const logAt = modified.get(job.id)}
+									<tr class="table-row">
+										<td class="table-cell" data-label="Title">
+											<div class="logs-panel-title-cell">
+												<PosterImage
+													url={jobPoster(job)}
+													alt=""
+													class="logs-panel-poster {job.disc_type === 'cd' ? 'logs-panel-poster-square' : ''}"
+												/>
+												<div class="min-w-0">
+													<a href="/logs/{job.id}" class="logs-panel-title-link">{job.title || job.id}</a>
+													<div class="logs-panel-id" title={job.id}>{shortJobId(job.id)}</div>
+												</div>
+											</div>
+										</td>
+										<td class="table-cell" data-label="Status">
+											<StatusBadge status={effectiveJobStatus(job)} />
+										</td>
+										<td class="table-cell" data-label="Type">
+											<span class="logs-panel-chips">
+												<span class="logs-panel-chip" style:--jt-bg={type.badgeBg} style:--jt-text={type.badgeText}
+													>{type.label}</span
+												>
+												<span class="logs-panel-chip logs-panel-chip-neutral"
+													>{discKindLabel(job, $dashboard.drive_source_kinds)}</span
+												>
+											</span>
+										</td>
+										<td class="table-cell logs-panel-nowrap" data-label="Disc">{discPosition(job)}</td>
+										<td class="table-cell" data-label="Drive">
+											{#if drive}
+												<span class="logs-panel-drive" title={drive}>{drive}</span>
+											{:else}
+												-
+											{/if}
+										</td>
+										<td class="table-cell" data-label="Year">{job.year ?? '-'}</td>
+										<td class="table-cell logs-panel-nowrap" data-label="Last modified">
+											{#if logAt}
+												{@const relative = logRelativeTime(logAt)}
+												{#if relative}
+													<div>{relative}</div>
+													<div class="logs-panel-muted logs-panel-small">{formatShortDateTime(logAt)}</div>
+												{:else}
+													<div>{formatShortDateTime(logAt)}</div>
+												{/if}
+											{:else}
+												<span class="logs-panel-muted">No log yet</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				{/if}
 			{/snippet}
 		</LoadState>

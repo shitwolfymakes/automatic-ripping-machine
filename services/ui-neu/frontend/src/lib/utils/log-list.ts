@@ -1,10 +1,12 @@
 // Pure helpers for the Logs page's job list (routes/logs/+page.svelte).
-import type { JobView } from '$lib/types/api.gen';
+import type { JobLogFileView, JobView } from '$lib/types/api.gen';
+import type { IsoSourceKind } from '$lib/api/dashboard';
 import { discTypeLabel, getVideoTypeConfig, type VideoTypeConfig } from './job-type';
 import { readJobMetadata } from './job-fields';
 
 type DiscFields = Partial<Pick<JobView, 'season' | 'disc_number' | 'disc_total'>>;
-type TypeFields = Pick<JobView, 'metadata_json' | 'disc_type'> & Partial<Pick<JobView, 'media_type' | 'season'>>;
+type TypeFields = Pick<JobView, 'metadata_json' | 'disc_type'> &
+	Partial<Pick<JobView, 'media_type' | 'season' | 'drive_id'>>;
 
 const CD_DISCTYPES = new Set(['cd']);
 
@@ -18,11 +20,14 @@ export function discPosition(job: DiscFields): string {
 	return parts.length ? parts.join(' · ') : '-';
 }
 
-/** The disc chip: `ISO` / `Folder` for virtual sources (as the job page decides it), else the disc type. */
-export function discKindLabel(job: TypeFields): string {
-	const source = readJobMetadata(job.metadata_json, job).source_type;
-	if (source === 'iso') return 'ISO';
-	if (source === 'folder') return 'Folder';
+/**
+ * The disc chip: `ISO` / `Folder` when the job's drive is a virtual one (the
+ * dashboard's drive_source_kinds, which keeps retired drives), else the disc type.
+ */
+export function discKindLabel(job: TypeFields, driveSourceKinds?: Record<string, IsoSourceKind> | null): string {
+	const kind = job.drive_id ? driveSourceKinds?.[job.drive_id] : undefined;
+	if (kind === 'iso') return 'ISO';
+	if (kind === 'folder') return 'Folder';
 	return discTypeLabel(job.disc_type);
 }
 
@@ -35,14 +40,25 @@ export function jobTypeConfig(job: TypeFields): VideoTypeConfig {
 	return getVideoTypeConfig(videoType ?? null, job.disc_type);
 }
 
-/** `Oct 16, 8:18 AM` in the viewer's locale and time zone. */
-export function formatShortDateTime(iso: string): string {
-	return new Date(iso).toLocaleString(undefined, {
+/**
+ * `Oct 16, 8:18 AM` in the viewer's locale and time zone, with the year when
+ * it is not the current one; empty for an unparseable date.
+ */
+export function formatShortDateTime(iso: string, now: Date = new Date()): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return '';
+	return d.toLocaleString(undefined, {
 		month: 'short',
 		day: 'numeric',
+		...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
 		hour: 'numeric',
 		minute: '2-digit'
 	});
+}
+
+/** job id -> log modified_at; an unparseable date is dropped, so it reads (and sorts) as no log. */
+export function indexLogFiles(files: JobLogFileView[]): Map<string, string> {
+	return new Map(files.filter((f) => !Number.isNaN(Date.parse(f.modified_at))).map((f) => [f.job_id, f.modified_at]));
 }
 
 /**
@@ -69,6 +85,7 @@ function startOfDay(d: Date): number {
  */
 export function logRelativeTime(iso: string, now: Date = new Date()): string | null {
 	const then = new Date(iso);
+	if (Number.isNaN(then.getTime())) return null;
 	const ms = Math.max(0, now.getTime() - then.getTime());
 	if (ms < MINUTE) return 'Just now';
 	if (ms < 60 * MINUTE) return `${Math.floor(ms / MINUTE)} min ago`;

@@ -26,7 +26,7 @@ const JOBS = [
 		status: 'ripped',
 		title: 'Bravo',
 		year: null,
-		metadata_json: { provider_raw: { arm_server: { source_type: 'iso' } } }
+		metadata_json: {}
 	},
 	{
 		id: 'job_c',
@@ -41,12 +41,25 @@ const JOBS = [
 
 const INDEX = [
 	{ job_id: 'job_b', size_bytes: 10, modified_at: minutesAgo(42) },
+	{ job_id: 'job_c', size_bytes: 10, modified_at: 'not a date' },
 	{ job_id: 'job_alpha9A41', size_bytes: 10, modified_at: minutesAgo(60 * 24 * 10) }
 ];
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJobsPage: vi.fn(() => Promise.resolve({ jobs: JOBS, total: JOBS.length }))
 }));
+// drv_iso_with_a_long_name is a retired virtual drive: the ISO chip must
+// still come from it.
+vi.mock('$lib/stores/dashboard', async () => {
+	const { readable } = await import('svelte/store');
+	return {
+		dashboard: readable({
+			drive_names: {},
+			drive_source_kinds: { drv_iso_with_a_long_name: 'iso' }
+		})
+	};
+});
+
 vi.mock('$lib/api/logs', () => ({
 	fetchJobLogIndex: vi.fn(() => Promise.resolve(INDEX))
 }));
@@ -131,7 +144,21 @@ describe('Logs job-list page', () => {
 		const alphaWhen = alpha.querySelector('[data-label="Last modified"]')!;
 		expect(alphaWhen.textContent).not.toMatch(/ago|Yesterday|Just now/);
 		expect(alphaWhen.textContent?.trim()).toMatch(/\d{1,2}:\d{2}/);
+		// an unparseable modified_at reads as no log
 		expect(within(nolog).getByText('No log yet')).toBeInTheDocument();
+		expect(nolog.textContent).not.toMatch(/Invalid Date/);
+	});
+
+	it('wraps the table so it scrolls instead of clipping', async () => {
+		await ready();
+		expect(screen.getByRole('table').parentElement).toHaveClass('overflow-x-auto');
+	});
+
+	it('shows the error state when the jobs fail to load', async () => {
+		const { fetchJobsPage } = await import('$lib/api/jobs');
+		vi.mocked(fetchJobsPage).mockRejectedValueOnce(new Error('jobs down'));
+		renderComponent(LogsPage);
+		await waitFor(() => expect(screen.getByText(/Failed to load: jobs down/)).toBeInTheDocument());
 	});
 
 	it('filters by free text over title and id, showing the shown count', async () => {
