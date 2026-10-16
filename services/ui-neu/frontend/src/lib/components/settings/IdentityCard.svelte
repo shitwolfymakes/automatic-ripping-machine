@@ -78,7 +78,6 @@
 	<h4 class="identity-card-heading">{title}</h4>
 {/snippet}
 
-
 <div class="identity-card stack stack-lg" data-testid="identity-card">
 	<div class="identity-card-step stack" data-step="preview">
 		<span class="identity-card-caption">Preview</span>
