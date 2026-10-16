@@ -6,7 +6,13 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
-	import { identitySuggestionOf, missReason, previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-status';
+	import {
+		episodeStatus,
+		identitySuggestionOf,
+		missReason,
+		previouslyRippedJobId,
+		reviewPhaseBadge
+	} from '$lib/utils/job-status';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -113,6 +119,7 @@
 	// A confident match identify held for confirmation (auto-apply off).
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
+	let episodeLine = $derived(episodeStatus(displayJob));
 
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
@@ -339,6 +346,13 @@
 				</div>
 				{#if missLine}
 					<p class="disc-review-widget-miss" data-testid="identify-miss-reason">{missLine}</p>
+				{/if}
+				{#if episodeLine}
+					<p class="disc-review-widget-miss" data-testid="episode-status">
+						{#if episodeLine.href}<a href={episodeLine.href} class="disc-review-widget-episode-link"
+								>{episodeLine.text}</a
+							>{:else}{episodeLine.text}{/if}
+					</p>
 				{/if}
 				<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
 					{#if isoName}
@@ -589,6 +603,10 @@
 		margin-top: 0.25rem;
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
+	}
+	.disc-review-widget-episode-link {
+		color: var(--color-primary);
+		text-decoration: underline;
 	}
 	.disc-review-widget-previous-sub {
 		margin-top: 0.25rem;

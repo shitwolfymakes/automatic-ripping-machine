@@ -435,4 +435,40 @@ describe('DiscReviewWidget', () => {
 			expect(screen.queryByText(/^Session: /)).not.toBeInTheDocument();
 		});
 	});
+
+	describe('episode lead-in', () => {
+		async function renderTv(over: Record<string, unknown>) {
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', media_type: 'tv', ...over } as never));
+			renderWidget({ status: 'awaiting_review', media_type: 'tv', ...over } as never);
+		}
+
+		it('asks to pick the show when none is known, without a link', async () => {
+			await renderTv({ has_series: false });
+			const line = await screen.findByTestId('episode-status');
+			expect(line).toHaveTextContent('Pick the show to match episodes.');
+			expect(line.querySelector('a')).toBeNull();
+		});
+
+		it('names the matching source and links to the episodes panel', async () => {
+			await renderTv({
+				has_series: true,
+				metadata_json: { flags: {}, identity_claims: { sources: { episodes_tvmaze: { status: 'ok' } } } }
+			});
+			const line = await screen.findByTestId('episode-status');
+			expect(line).toHaveTextContent('Episodes matched from TVmaze.');
+			expect(line.querySelector('a')).toHaveAttribute('href', expect.stringMatching(/\/jobs\/[^/]+#episodes$/));
+		});
+
+		it('is absent for a movie', async () => {
+			await renderTv({ media_type: 'movie', has_series: false });
+			expect(await screen.findByText('Test Movie')).toBeInTheDocument();
+			expect(screen.queryByTestId('episode-status')).toBeNull();
+		});
+
+		it('is absent for a post-rip job', async () => {
+			await renderTv({ status: 'ripped', has_series: true });
+			expect(await screen.findByText('Test Movie')).toBeInTheDocument();
+			expect(screen.queryByTestId('episode-status')).toBeNull();
+		});
+	});
 });

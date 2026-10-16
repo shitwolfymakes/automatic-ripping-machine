@@ -1,4 +1,5 @@
 import type { IdentitySuggestion, JobView } from '$lib/types/api.gen';
+import { isPostRipStatus } from './job-status-groups';
 
 type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;
 
@@ -121,6 +122,28 @@ export function missReason(
 	)?.detail as string | undefined;
 	const title = searched || job.title?.trim() || 'this disc';
 	return `No source found a close match for "${title}". Try another source in the search below.`;
+}
+
+/**
+ * The episode-matching line on a TV job's review card, or null for a movie or
+ * a post-rip job. `href` is the Match Episodes panel once a series is known.
+ */
+export function episodeStatus(
+	job: Pick<JobView, 'id' | 'status' | 'media_type' | 'has_series'> & { metadata_json?: JobView['metadata_json'] }
+): { text: string; href: string | null } | null {
+	if (job.media_type !== 'tv' || isPostRipStatus(job.status)) return null;
+	if (!job.has_series) return { text: 'Pick the show to match episodes.', href: null };
+	const href = `/jobs/${job.id}#episodes`;
+	const claims = job.metadata_json?.identity_claims as
+		{ sources?: Record<string, { status?: string } | undefined> } | null | undefined;
+	const episodes = Object.entries(claims?.sources ?? {}).filter(([id]) => id.startsWith('episodes_'));
+	const ok = episodes.find(([, c]) => c?.status === 'ok');
+	if (ok) {
+		const id = ok[0].slice('episodes_'.length);
+		return { text: `Episodes matched from ${providerLabel(id)}.`, href };
+	}
+	if (episodes.length > 0) return { text: 'No source could place the episodes.', href };
+	return { text: 'Matching episodes…', href };
 }
 
 /** Display names for identification provider ids. */

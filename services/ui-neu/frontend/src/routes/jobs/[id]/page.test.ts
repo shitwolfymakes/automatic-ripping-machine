@@ -670,6 +670,25 @@ describe('Job detail page (v3)', () => {
 			expect(switchRoot.nextElementSibling).toBe(editIdentity);
 		});
 
+		it('opens the Match Episodes panel when the URL hash is #episodes', async () => {
+			window.location.hash = '#episodes';
+			try {
+				mockFetchJob.mockResolvedValue(tvJob());
+				renderComponent(Page);
+				await waitFor(() =>
+					expect(screen.getByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'true')
+				);
+			} finally {
+				window.location.hash = '';
+			}
+		});
+
+		it('leaves the panel closed without the hash', async () => {
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'false');
+		});
+
 		it('hides Match Episodes for a movie job', async () => {
 			mockFetchJob.mockResolvedValue(tvJob({ media_type: 'movie', has_series: false }));
 			renderComponent(Page);

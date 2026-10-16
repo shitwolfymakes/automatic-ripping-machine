@@ -6,6 +6,7 @@ import {
 	hasTitleMatch,
 	identitySuggestionOf,
 	missReason,
+	episodeStatus,
 	providerLabel,
 	PROVIDER_LABELS
 } from '$lib/utils/job-status';
@@ -286,5 +287,44 @@ describe('missReason', () => {
 		expect(missReason(missed(attempts))).toBe(
 			'No source found a close match for "HEAT". Try another source in the search below.'
 		);
+	});
+});
+
+describe('episodeStatus', () => {
+	const tv = (over: Record<string, unknown> = {}, claims?: Record<string, { status: string }>) =>
+		({
+			id: 'job_1',
+			status: 'awaiting_review',
+			media_type: 'tv',
+			has_series: true,
+			metadata_json: claims ? { identity_claims: { sources: claims } } : {},
+			...over
+		}) as any;
+
+	it('no series known asks for the show, without a link', () => {
+		expect(episodeStatus(tv({ has_series: false }))).toEqual({ text: 'Pick the show to match episodes.', href: null });
+	});
+	it('an ok episode claim names its source and links to the panel', () => {
+		expect(episodeStatus(tv({}, { episodes_tvmaze: { status: 'ok' }, episodes_tmdb: { status: 'miss' } }))).toEqual({
+			text: 'Episodes matched from TVmaze.',
+			href: '/jobs/job_1#episodes'
+		});
+		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TVDB.');
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TMDb.');
+	});
+	it('claims present but none ok', () => {
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error' } }))).toEqual({
+			text: 'No source could place the episodes.',
+			href: '/jobs/job_1#episodes'
+		});
+	});
+	it('no episode claims yet', () => {
+		expect(episodeStatus(tv())).toEqual({ text: 'Matching episodes…', href: '/jobs/job_1#episodes' });
+		expect(episodeStatus(tv({}, { tmdb: { status: 'ok' } }))?.text).toBe('Matching episodes…');
+	});
+	it('absent for movies and post-rip jobs', () => {
+		expect(episodeStatus(tv({ media_type: 'movie' }))).toBeNull();
+		expect(episodeStatus(tv({ status: 'ripped' }))).toBeNull();
+		expect(episodeStatus(tv({ status: 'ripped_partial' }))).toBeNull();
 	});
 });
