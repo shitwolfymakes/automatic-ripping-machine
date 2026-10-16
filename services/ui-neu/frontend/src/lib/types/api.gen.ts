@@ -4138,6 +4138,10 @@ export type ScanResult = {
      */
     musicbrainz_disc_id?: string | null;
     /**
+     * Cd Toc
+     */
+    cd_toc?: string | null;
+    /**
      * Fingerprints
      */
     fingerprints?: Array<DiscFingerprintInput>;

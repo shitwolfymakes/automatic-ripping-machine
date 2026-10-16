@@ -33,9 +33,11 @@ class _FakeTrack:
 
 
 class _FakeDisc:
-    def __init__(self, disc_id: str, tracks: list[_FakeTrack]) -> None:
+    def __init__(self, disc_id: str, tracks: list[_FakeTrack], toc_string: str | None = None) -> None:
         self.id = disc_id
         self.tracks = tracks
+        if toc_string is not None:
+            self.toc_string = toc_string
 
     def __enter__(self) -> "_FakeDisc":
         return self
@@ -123,3 +125,23 @@ async def test_scan_cd_returns_none_when_discid_read_raises(monkeypatch, caplog)
         result = await scan_cd("/dev/sr0")
     assert result is None
     assert any("discid read failed" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_scan_cd_carries_the_toc_string(monkeypatch):
+    disc = _FakeDisc("id", [_FakeTrack(1, 180), _FakeTrack(2, 240)], toc_string="1 2 30000 150 15000")
+    _install_fake_discid(monkeypatch, disc=disc)
+
+    result = await scan_cd("/dev/sr0")
+    assert result is not None
+    assert result.cd_toc == "1 2 30000 150 15000"
+
+
+@pytest.mark.asyncio
+async def test_scan_cd_toc_is_none_without_toc_string(monkeypatch):
+    disc = _FakeDisc("id", [_FakeTrack(1, 180)])
+    _install_fake_discid(monkeypatch, disc=disc)
+
+    result = await scan_cd("/dev/sr0")
+    assert result is not None
+    assert result.cd_toc is None

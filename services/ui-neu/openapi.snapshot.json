@@ -17247,6 +17247,17 @@
             ],
             "title": "Musicbrainz Disc Id"
           },
+          "cd_toc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cd Toc"
+          },
           "fingerprints": {
             "items": {
               "$ref": "#/components/schemas/DiscFingerprintInput"
