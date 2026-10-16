@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/api/client', () => ({
 	apiFetch: vi.fn().mockResolvedValue({}),
+	apiFetchResponse: vi.fn().mockResolvedValue({ data: [], headers: new Headers() }),
 	post: vi.fn().mockResolvedValue({})
 }));
 
-import { apiFetch, post } from '$lib/api/client';
+import { apiFetch, apiFetchResponse, post } from '$lib/api/client';
 import {
 	fetchJobs,
+	fetchJobsPage,
 	fetchJob,
 	abandonJob,
 	deleteJob,
@@ -24,10 +26,12 @@ import {
 } from '../api/jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);
+const mockApiFetchResponse = vi.mocked(apiFetchResponse);
 const mockPost = vi.mocked(post);
 
 beforeEach(() => {
 	mockApiFetch.mockClear();
+	mockApiFetchResponse.mockClear();
 	mockPost.mockClear();
 });
 
@@ -172,5 +176,25 @@ describe('triggerManual (EXISTS in v3)', () => {
 			drive_id: 'drv_1',
 			session_id: null
 		});
+	});
+});
+
+describe('fetchJobsPage', () => {
+	it('returns the page body and the X-Total-Count total', async () => {
+		mockApiFetchResponse.mockResolvedValueOnce({
+			data: [{ id: 'job_1' }],
+			headers: new Headers({ 'X-Total-Count': '142' })
+		});
+		const page = await fetchJobsPage({ status: 'ripped', limit: 48, offset: 96 });
+		const url = mockApiFetchResponse.mock.calls[0][0] as string;
+		expect(url).toBe('/api/jobs?status=ripped&limit=48&offset=96');
+		expect(page).toEqual({ jobs: [{ id: 'job_1' }], total: 142 });
+	});
+
+	it('falls back to the page length when the header is missing', async () => {
+		mockApiFetchResponse.mockResolvedValueOnce({ data: [{ id: 'a' }, { id: 'b' }], headers: new Headers() });
+		const page = await fetchJobsPage();
+		expect(mockApiFetchResponse.mock.calls[0][0]).toBe('/api/jobs');
+		expect(page.total).toBe(2);
 	});
 });

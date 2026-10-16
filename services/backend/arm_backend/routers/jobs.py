@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -273,22 +274,43 @@ def _summarize_transcode_progress(
     )
 
 
-@router.get("", response_model=list[JobView])
+_LIST_JOBS_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "headers": {
+            "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {"type": "integer"},
+            }
+        }
+    }
+}
+
+
+@router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
 async def list_jobs(
+    response: Response,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
     status_filter: JobStatus | None = Query(default=None, alias="status"),
     drive_id: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=500),
+    limit: int = Query(default=48, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[JobView]:
-    stmt = select(Job).order_by(col(Job.created_at).desc()).limit(limit).offset(offset)
+    """One page of jobs, newest first with a stable `id` tiebreak so a page
+    does not shuffle between polls. The filtered total rides in the
+    `X-Total-Count` header; the body stays a plain `JobView[]`."""
+    filters = []
     if status_filter is not None:
-        stmt = stmt.where(col(Job.status) == status_filter)
+        filters.append(col(Job.status) == status_filter)
     if drive_id is not None:
-        stmt = stmt.where(col(Job.drive_id) == drive_id)
+        filters.append(col(Job.drive_id) == drive_id)
+    stmt = (
+        select(Job).where(*filters).order_by(col(Job.created_at).desc(), col(Job.id).desc()).limit(limit).offset(offset)
+    )
     result = await session.execute(stmt)
     jobs = list(result.scalars().all())
+    total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
 
     # One batched track lookup keyed on the ripping-job IDs feeds the
     # dashboard's "Track N of M" line without an N+1 fetch. Skipped

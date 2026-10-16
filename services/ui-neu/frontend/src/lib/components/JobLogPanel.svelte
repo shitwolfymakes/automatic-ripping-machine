@@ -44,43 +44,44 @@
 	});
 </script>
 
-<section>
-	<div class="flex flex-wrap items-center justify-between gap-2">
-		<button
-			type="button"
-			onclick={() => {
-				open = !open;
-			}}
-			class="job-log-panel-toggle"
-			aria-expanded={open}
-		>
-			<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-			</svg>
-			Log
-			<span class="job-log-panel-count">({log.entries.length} lines)</span>
-			{#if log.live}
-				<span class="job-log-panel-live">
-					<span class="job-log-panel-live-dot"></span>
-					live
-				</span>
-			{/if}
-		</button>
-		<div class="flex items-center gap-3">
-			<a href="/logs/{jobId}" data-testid="job-log-open" class="btn btn-link"> Open full log </a>
-			<a href={jobLogDownloadUrl(jobId)} data-testid="job-log-download" class="btn btn-link"> Download .zip </a>
-		</div>
+<!-- The toggle, counts and links render inside LogView's title bar, so the
+     whole section is one terminal window (collapsed = title bar only). -->
+{#snippet titlebar()}
+	<button
+		type="button"
+		onclick={() => {
+			open = !open;
+		}}
+		class="job-log-panel-toggle"
+		aria-expanded={open}
+	>
+		<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+		</svg>
+		Log
+		<span class="job-log-panel-count">({log.entries.length} lines)</span>
+		{#if log.live}
+			<span class="job-log-panel-live">
+				<span class="job-log-panel-live-dot"></span>
+				live
+			</span>
+		{/if}
+	</button>
+	<div class="flex items-center gap-3">
+		<a href="/logs/{jobId}" data-testid="job-log-open" class="btn btn-link"> Open full log </a>
+		<a href={jobLogDownloadUrl(jobId)} data-testid="job-log-download" class="btn btn-link"> Download .zip </a>
 	</div>
+{/snippet}
 
-	{#if open}
-		<div class="mt-3">
-			{#if log.loading && log.entries.length === 0}
-				<p class="job-log-panel-loading">Loading log...</p>
-			{:else}
-				<LogView entries={log.entries} error={log.error} />
-			{/if}
-		</div>
-	{/if}
+<section>
+	<LogView
+		entries={log.entries}
+		error={log.error}
+		loading={log.loading && log.entries.length === 0}
+		search
+		header={titlebar}
+		collapsed={!open}
+	/>
 </section>
 
 <style>
@@ -88,10 +89,10 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 1.125rem;
-		line-height: 1.75rem;
+		font-size: 0.9375rem;
+		line-height: 1.5rem;
 		font-weight: 600;
-		color: var(--color-text);
+		color: var(--color-terminal-ink);
 	}
 	.job-log-panel-toggle .chevron {
 		transition: transform var(--motion-fast) var(--ease);
@@ -100,16 +101,13 @@
 		transform: rotate(90deg);
 	}
 	.job-log-panel-count {
-		font-size: 0.875rem;
+		font-size: 0.8125rem;
 		line-height: 1.25rem;
 		font-weight: 400;
-		color: var(--color-text-muted);
+		color: color-mix(in srgb, var(--color-terminal-ink) 55%, transparent);
 	}
-	.job-log-panel-loading {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		color: var(--color-text-muted);
-	}
+	/* success reads on the fixed dark well in both modes; mixed towards the
+	   ink so the light-mode green is not too dim there */
 	.job-log-panel-live {
 		display: flex;
 		align-items: center;
@@ -117,7 +115,7 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		font-weight: 400;
-		color: var(--color-success);
+		color: color-mix(in srgb, var(--color-success) 70%, var(--color-terminal-ink));
 	}
 	.job-log-panel-live-dot {
 		height: 0.5rem;

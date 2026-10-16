@@ -165,6 +165,59 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
     assert len(by_drive.json()) == 2
 
 
+def _dated_job(job_id: str, *, day: int, status: JobStatus = JobStatus.RIPPED) -> Job:
+    j = _job(job_id, status=status)
+    j.created_at = datetime(2026, 1, day, tzinfo=timezone.utc)
+    return j
+
+
+def test_list_jobs_total_count_header_reflects_filter_not_page(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=2),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3, status=JobStatus.FAILED),
+    ]
+    with TestClient(app) as client:
+        page = client.get("/api/jobs?limit=1", headers=_auth(token))
+        failed = client.get("/api/jobs?status=failed", headers=_auth(token))
+    assert page.status_code == 200
+    assert len(page.json()) == 1
+    assert page.headers["X-Total-Count"] == "3"
+    assert failed.headers["X-Total-Count"] == "1"
+
+
+def test_list_jobs_pages_newest_first_with_id_tiebreak(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000004", day=2),
+    ]
+    with TestClient(app) as client:
+        first = client.get("/api/jobs?limit=2&offset=0", headers=_auth(token))
+        second = client.get("/api/jobs?limit=2&offset=2", headers=_auth(token))
+    assert [j["id"] for j in first.json()] == ["job_01JZXR7K3M5Q8N4VWA00000003", "job_01JZXR7K3M5Q8N4VWA00000002"]
+    assert [j["id"] for j in second.json()] == ["job_01JZXR7K3M5Q8N4VWA00000004", "job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_list_jobs_limit_defaults_to_48_and_caps_at_200(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i % 28) for i in range(60)]
+    with TestClient(app) as client:
+        default = client.get("/api/jobs", headers=_auth(token))
+        too_big = client.get("/api/jobs?limit=201", headers=_auth(token))
+        max_ok = client.get("/api/jobs?limit=200", headers=_auth(token))
+    assert len(default.json()) == 48
+    assert default.headers["X-Total-Count"] == "60"
+    assert too_big.status_code == 422
+    assert max_ok.status_code == 200
+
+
 # --- get_job_detail ----------------------------------------------------------
 
 

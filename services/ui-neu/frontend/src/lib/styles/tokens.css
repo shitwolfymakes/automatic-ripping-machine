@@ -73,6 +73,13 @@
 	--color-frame-accent: rgb(255, 153, 0);
 	--color-on-frame-accent: rgb(0, 0, 0);
 
+	/* log terminal: a fixed dark well in both modes, tinted by primary.
+	   Mode-invariant on purpose (not repeated in .dark); a scheme may
+	   override them under [data-scheme]. */
+	--color-terminal-base: rgb(9, 10, 13);
+	--color-terminal-ink: rgb(226, 228, 233);
+	--color-terminal-bg: color-mix(in srgb, var(--color-primary) 8%, var(--color-terminal-base));
+
 	--radius-sm: calc(var(--radius) * 0.25);
 	--radius-md: calc(var(--radius) * 0.75);
 	--radius-lg: var(--radius);
