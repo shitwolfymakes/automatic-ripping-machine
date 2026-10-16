@@ -638,14 +638,6 @@
 							</p>
 						{/if}
 					</div>
-
-					<!-- Feature request prompt -->
-					<div class="flex justify-center pt-2">
-						<span class="badge settings-page-feature-request">
-							<Glyph name="info" class="h-3.5 w-3.5" />
-							Not seeing what you want? Submit your feature requests on GitHub.
-						</span>
-					</div>
 				</section>
 			{/if}
 
@@ -693,7 +685,7 @@
 							class="btn settings-page-diag-toggle"
 						>
 							<Glyph name="shield-check" />
-							Udev & Drive Diagnostics
+							Drive Diagnostics
 							<Glyph name="chevron-down" class="chevron ml-auto" />
 						</button>
 
@@ -976,13 +968,7 @@
 		}
 	}
 
-	.settings-page-feature-request {
-		gap: 0.375rem;
-		background: var(--color-primary-tint-2);
-		padding: 0.5rem 1rem;
-	}
-
-	/* Udev & Drive Diagnostics disclosure: a full-width outlined toggle
+	/* Drive Diagnostics disclosure: a full-width outlined toggle
 	   button over a collapsible detail panel, none of it matching .panel's
 	   metrics (this reuses .panel-section's tint but at its own padding). */
 	/* the original `<hr class="my-2">` sat in a `space-y-6` (margin) stack:

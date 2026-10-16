@@ -52,7 +52,7 @@ export const GLYPH_PATHS: Record<GlyphName, string> = {
 	// to fit the shared 24x24 viewBox all other glyphs use).
 	'question-circle':
 		'M12 21a9 9 0 100-18 9 9 0 000 18zm-1-14a1 1 0 112 0 1 1 0 01-2 0zm0 3a1 1 0 011-1h0a1 1 0 011 1v4a1 1 0 11-2 0v-4z',
-	// The udev/drive diagnostics disclosure button's shield-check icon
+	// The drive diagnostics disclosure button's shield-check icon
 	// (Settings > Drives).
 	'shield-check':
 		'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
