@@ -38,6 +38,11 @@
 	const HIDDEN = '<hidden>';
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
+	/** Id of a section's note; set only when the section hides its fields' own help. */
+	const noteId = (section: { title: string; note?: string; hideFieldHelp?: boolean }) =>
+		section.note && section.hideFieldHelp
+			? `section-note-${section.title.toLowerCase().replace(/\W+/g, '-')}`
+			: undefined;
 	const blurb = $derived(groupBlurb(group.name));
 	// A required key's field lives in this form's group when it has one; otherwise
 	// the chip falls back to Settings' schema context, or the field's own anchor.
@@ -194,13 +199,15 @@
 	}
 </script>
 
-{#snippet fieldRow(field: ConfigFieldMeta)}
+{#snippet fieldRow(field: ConfigFieldMeta, noteId?: string)}
 	{#if field.key in KEY_CHECK_NAMES && field.widget == null}
 		<ConfigSchemaField
 			{field}
 			bind:value={values[field.key]}
 			config={values}
 			context={config}
+			hideHelp={noteId !== undefined}
+			describedBy={noteId}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		>
 			{#snippet action()}
@@ -260,6 +267,8 @@
 			config={values}
 			context={config}
 			{keyTab}
+			hideHelp={noteId !== undefined}
+			describedBy={noteId}
 			onclear={() => (cleared = { ...cleared, [field.key]: true })}
 		/>
 	{/if}
@@ -303,7 +312,7 @@
 							{#each section.columns as columnFields, i (i)}
 								<div class="stack">
 									{#each columnFields as field (field.key)}
-										{@render fieldRow(field)}
+										{@render fieldRow(field, noteId(section))}
 									{/each}
 								</div>
 							{/each}
@@ -311,15 +320,18 @@
 					{/if}
 					<div class="stack">
 						{#each section.fields as field (field.key)}
-							{@render fieldRow(field)}
+							{@render fieldRow(field, noteId(section))}
 						{/each}
 					</div>
+					{#if section.note}
+						<p class="schema-config-form-description" id={noteId(section)}>{section.note}</p>
+					{/if}
 					{#if section.advanced.length > 0}
 						<hr class="schema-config-form-advanced-divider" />
 						<span class="label-caps schema-config-form-advanced-label">Advanced</span>
 						<div class="stack">
 							{#each section.advanced as field (field.key)}
-								{@render fieldRow(field)}
+								{@render fieldRow(field, noteId(section))}
 							{/each}
 						</div>
 					{/if}

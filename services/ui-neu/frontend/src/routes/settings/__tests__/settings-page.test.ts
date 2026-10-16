@@ -465,6 +465,40 @@ describe('Settings Page', () => {
 			}
 		);
 
+		it('deep-links #Keys/makemkv_key to the MakeMKV field, with MakeMKV as the first section', async () => {
+			window.location.hash = '#Keys/makemkv_key';
+			Element.prototype.scrollIntoView = vi.fn();
+			vi.mocked(fetchSettings).mockResolvedValueOnce({
+				config: { ...mockConfig, makemkv_key: '', tmdb_api_key: '' },
+				schema: {
+					groups: [
+						mockSchema.groups[0],
+						{
+							name: 'Keys',
+							fields: ['tmdb_api_key', 'makemkv_key'].map((key) => ({
+								key,
+								group: 'Keys',
+								tier: 'secret',
+								label: key === 'makemkv_key' ? 'MakeMKV key' : 'TMDB API key',
+								help: '',
+								type: 'string',
+								editable: true,
+								enum_values: null
+							}))
+						},
+						...mockSchema.groups.slice(2)
+					]
+				},
+				infra: { RAW_ROOT: '/raw' },
+				arm_config: {},
+				transcoder_config: null
+			} as never);
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByLabelText(/makemkv key/i)).toHaveFocus());
+			const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+			expect(headings.slice(0, 2)).toEqual(['MakeMKV', 'API keys']);
+		});
+
 		it('renders the Identification config tab with the provider select', async () => {
 			await renderAndWait();
 			// Identification is the default tab — its SchemaConfigForm renders the enum field.

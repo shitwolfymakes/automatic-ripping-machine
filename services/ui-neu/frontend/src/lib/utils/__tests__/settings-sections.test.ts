@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legacyTab, sectionFields, settingsFieldHref, settingsTabFor } from '../settings-sections';
+import { groupBlurb, legacyTab, sectionFields, settingsFieldHref, settingsTabFor } from '../settings-sections';
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 
 const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
@@ -48,17 +48,30 @@ describe('sectionFields layout hints', () => {
 		expect(identity.advanced).toEqual([]);
 	});
 
-	it('lays out Keys as API keys, TheDiscDB, MakeMKV', () => {
+	it('gives the Search card one help line and hides the per-select help', () => {
+		const sections = sectionFields(
+			'Identification',
+			SEARCH_KEYS.map((k) => meta(k))
+		);
+		expect(sections[0].note).toBe("The service the job page's search box uses for each media type.");
+		expect(sections[0].hideFieldHelp).toBe(true);
+	});
+
+	it('words the Identification tab blurb', () => {
+		expect(groupBlurb('Identification')).toBe('How ARM works out what a disc is, and where it looks titles up.');
+	});
+
+	it('lays out Keys as MakeMKV, API keys, TheDiscDB', () => {
 		const sections = sectionFields(
 			'Keys',
 			['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key', 'thediscdb_refresh_days', 'makemkv_key'].map((k) =>
 				meta(k, 'string')
 			)
 		);
-		expect(sections.map((s) => s.title)).toEqual(['API keys', 'TheDiscDB', 'MakeMKV']);
-		expect(sections[0].fields.map((f) => f.key)).toEqual(['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key']);
-		expect(sections[1].fields.map((f) => f.key)).toEqual(['thediscdb_refresh_days']);
-		expect(sections[2].fields.map((f) => f.key)).toEqual(['makemkv_key']);
+		expect(sections.map((s) => s.title)).toEqual(['MakeMKV', 'API keys', 'TheDiscDB']);
+		expect(sections[0].fields.map((f) => f.key)).toEqual(['makemkv_key']);
+		expect(sections[1].fields.map((f) => f.key)).toEqual(['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key']);
+		expect(sections[2].fields.map((f) => f.key)).toEqual(['thediscdb_refresh_days']);
 	});
 
 	it('drops the section entirely when none of its keys are present', () => {

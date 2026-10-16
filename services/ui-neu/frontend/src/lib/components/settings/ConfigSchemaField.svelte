@@ -20,7 +20,9 @@
 		context = {},
 		onclear,
 		keyTab,
-		disabled = false
+		disabled = false,
+		hideHelp = false,
+		describedBy
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
@@ -32,6 +34,10 @@
 		keyTab?: (key: string) => string | undefined;
 		/** The editable control rendered but disabled (a guest's view of a bespoke card). */
 		disabled?: boolean;
+		/** Skip the field's own help paragraph (a section note covers it). */
+		hideHelp?: boolean;
+		/** Id of the element describing the control, instead of the field's own help. */
+		describedBy?: string;
 	} = $props();
 
 	const HIDDEN = '<hidden>';
@@ -96,6 +102,7 @@
 				{#if field.type === 'enum'}
 					<select
 						aria-label={field.label}
+						aria-describedby={describedBy}
 						value={value ?? ''}
 						{disabled}
 						onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
@@ -115,6 +122,7 @@
 						step="1"
 						inputmode="numeric"
 						aria-label={field.label}
+						aria-describedby={describedBy}
 						value={value ?? ''}
 						{disabled}
 						oninput={(e) => {
@@ -127,6 +135,7 @@
 					<input
 						type={isSecret && !reveal ? 'password' : 'text'}
 						aria-label={field.label}
+						aria-describedby={describedBy}
 						value={displayValue}
 						{placeholder}
 						oninput={(e) => {
@@ -168,7 +177,7 @@
 			{/if}
 		{/if}
 	{/if}
-	{#if field.help && field.widget == null}
+	{#if field.help && field.widget == null && !hideHelp}
 		<p class="field-help" id={helpId}>{field.help}</p>
 	{/if}
 </div>

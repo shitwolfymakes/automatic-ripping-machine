@@ -352,6 +352,39 @@ describe('SchemaConfigForm section layout hints', () => {
 	});
 });
 
+describe('SchemaConfigForm section note', () => {
+	const mk = (key: string, label: string): ConfigFieldMeta => ({
+		key,
+		group: 'Identification',
+		tier: 'operator',
+		label,
+		help: 'Own help for ' + label,
+		type: 'enum',
+		editable: true,
+		enum_values: ['a', 'b']
+	});
+	const a = mk('a', 'Field A');
+	const b = mk('b', 'Field B');
+	const c = mk('c', 'Field C');
+	const G: SettingsGroup = { name: 'Identification', fields: [a, b, c] };
+
+	it('renders the note once, hides field help in that section only, and points the controls at the note', () => {
+		vi.mocked(sectionFields).mockReturnValueOnce([
+			{ title: 'Search', note: 'One shared line.', hideFieldHelp: true, columns: [[a], [b]], fields: [], advanced: [] },
+			{ title: 'Other', columns: [], fields: [c], advanced: [] }
+		]);
+		renderComponent(SchemaConfigForm, { props: { group: G, config: { a: 'a', b: 'a', c: 'a' } } });
+		const note = screen.getAllByText('One shared line.');
+		expect(note).toHaveLength(1);
+		expect(note[0].id).toBeTruthy();
+		expect(screen.queryByText('Own help for Field A')).not.toBeInTheDocument();
+		expect(screen.queryByText('Own help for Field B')).not.toBeInTheDocument();
+		expect(screen.getByText('Own help for Field C')).toBeInTheDocument();
+		expect(screen.getByLabelText('Field A')).toHaveAttribute('aria-describedby', note[0].id);
+		expect(screen.getByLabelText('Field B')).toHaveAttribute('aria-describedby', note[0].id);
+	});
+});
+
 describe('SchemaConfigForm missing-key chip links', () => {
 	const EPISODE_SOURCES: ConfigFieldMeta = {
 		key: 'episode_sources',

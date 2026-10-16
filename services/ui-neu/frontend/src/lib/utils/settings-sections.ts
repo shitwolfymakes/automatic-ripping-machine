@@ -20,6 +20,10 @@ export interface SettingsSection {
 	 *  fields (its keys are claimed here, so none fall through to the
 	 *  trailing card). The section keeps no columns, fields or advanced. */
 	custom?: 'identity';
+	/** One help line rendered under the section's fields. */
+	note?: string;
+	/** Hide each field's own help text in this section (the `note` covers it). */
+	hideFieldHelp?: boolean;
 }
 
 /** The section shape `sectionFields()` hands the form: keys already split
@@ -28,13 +32,15 @@ export interface SectionFieldGroups {
 	title: string;
 	blurb?: string;
 	custom?: 'identity';
+	note?: string;
+	hideFieldHelp?: boolean;
 	columns: ConfigFieldMeta[][];
 	fields: ConfigFieldMeta[];
 	advanced: ConfigFieldMeta[];
 }
 
 const GROUP_BLURBS: Record<string, string> = {
-	Identification: 'Where ARM looks up titles and disc data, and when it trusts the answer.',
+	Identification: 'How ARM works out what a disc is, and where it looks titles up.',
 	Keys: 'Keys and the service snapshots ARM uses to identify discs.',
 	Ripping: 'What happens when a disc goes in.',
 	Transcoding: 'When finished rips are handed to the transcoder.'
@@ -44,7 +50,8 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 	Identification: [
 		{
 			title: 'Search',
-			blurb: "What the job page's search box uses when you look a title up by hand.",
+			note: "The service the job page's search box uses for each media type.",
+			hideFieldHelp: true,
 			keys: ['search_provider_movie', 'search_provider_tv', 'search_provider_music'],
 			columns: [['search_provider_movie'], ['search_provider_tv'], ['search_provider_music']]
 		},
@@ -67,6 +74,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 		}
 	],
 	Keys: [
+		{ title: 'MakeMKV', keys: ['makemkv_key'] },
 		{
 			title: 'API keys',
 			blurb:
@@ -77,8 +85,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			title: 'TheDiscDB',
 			blurb: 'The local snapshot ARM matches discs against.',
 			keys: ['thediscdb_refresh_days']
-		},
-		{ title: 'MakeMKV', keys: ['makemkv_key'] }
+		}
 	],
 	Ripping: [
 		{
@@ -205,6 +212,8 @@ export function sectionFields(group: string, allFields: ConfigFieldMeta[]): Sect
 		out.push({
 			title: section.title,
 			blurb: section.blurb,
+			note: section.note,
+			hideFieldHelp: section.hideFieldHelp,
 			columns,
 			fields: plainFields,
 			advanced
