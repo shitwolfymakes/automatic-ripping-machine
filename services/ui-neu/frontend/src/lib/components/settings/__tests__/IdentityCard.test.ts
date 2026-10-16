@@ -71,7 +71,7 @@ describe('IdentityCard', () => {
 		expect(advanced.querySelector('.identity-card-badge')).toBeNull();
 	});
 
-	it('Step 1 lists the four disc rows with their chips and no controls', () => {
+	it('Step 1 lists the three disc rows with their chips and no controls', () => {
 		render();
 		const s1 = step(1);
 		expect(within(s1).getByRole('heading', { name: '1 On the disc' })).toBeInTheDocument();
@@ -79,16 +79,12 @@ describe('IdentityCard', () => {
 		expect(rows.map((r) => r.querySelector('.identity-card-row-name')?.textContent?.trim())).toEqual([
 			'Disc title metadata',
 			'Volume label',
-			'Disc ID (track layout)',
-			'CD-TEXT'
+			'Disc ID (track layout)'
 		]);
 		const chips = (r: HTMLElement) => Array.from(r.querySelectorAll('.chip')).map((c) => c.textContent?.trim());
 		expect(chips(rows[0])).toEqual(['Blu-ray', 'UHD']);
 		expect(chips(rows[1])).toEqual(['All discs']);
 		expect(chips(rows[2])).toEqual(['CD']);
-		expect(chips(rows[3])).toEqual(['CD', 'Planned']);
-		expect(rows[3]).toHaveAttribute('aria-disabled', 'true');
-		expect(rows[3]).toHaveTextContent('Album, artist and track names. Not built yet.');
 		expect(s1.querySelectorAll('input, select, button')).toHaveLength(0);
 		expect(s1).toHaveTextContent(
 			"ARM reads all of these. When they disagree, the disc's own metadata beats its label."
