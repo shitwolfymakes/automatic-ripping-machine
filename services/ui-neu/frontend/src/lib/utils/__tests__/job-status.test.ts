@@ -312,6 +312,15 @@ describe('episodeStatus', () => {
 		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TVDB.');
 		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TMDb.');
 	});
+	it('a pinned source wins over an earlier ok source', () => {
+		const c = { episodes_tmdb: { status: 'ok' }, episodes_tvmaze: { status: 'ok' } };
+		const j = tv({ metadata_json: { identity_claims: { sources: c, pin: { episode: 'episodes_tvmaze' } } } });
+		expect(episodeStatus(j)?.text).toBe('Episodes matched from TVmaze.');
+	});
+	it('an ok non-suggestion beats an earlier ok suggestion', () => {
+		const c = { episodes_tmdb: { status: 'ok', suggestion: true }, episodes_tvdb: { status: 'ok' } };
+		expect(episodeStatus(tv({}, c as any))?.text).toBe('Episodes matched from TVDB.');
+	});
 	it('claims present but none ok', () => {
 		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error' } }))).toEqual({
 			text: 'No source could place the episodes.',

@@ -1,4 +1,5 @@
-import type { IdentitySuggestion, JobView } from '$lib/types/api.gen';
+import type { IdentityClaims, IdentitySuggestion, IdentityView, JobView } from '$lib/types/api.gen';
+import { activeSource, SOURCE_LABEL } from '$lib/components/episodes/episodeModel';
 import { isPostRipStatus } from './job-status-groups';
 
 type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;
@@ -134,13 +135,15 @@ export function episodeStatus(
 	if (job.media_type !== 'tv' || isPostRipStatus(job.status)) return null;
 	if (!job.has_series) return { text: 'Pick the show to match episodes.', href: null };
 	const href = `/jobs/${job.id}#episodes`;
-	const claims = job.metadata_json?.identity_claims as
-		{ sources?: Record<string, { status?: string } | undefined> } | null | undefined;
-	const episodes = Object.entries(claims?.sources ?? {}).filter(([id]) => id.startsWith('episodes_'));
-	const ok = episodes.find(([, c]) => c?.status === 'ok');
-	if (ok) {
-		const id = ok[0].slice('episodes_'.length);
-		return { text: `Episodes matched from ${providerLabel(id)}.`, href };
+	const claims = (job.metadata_json?.identity_claims ?? {}) as IdentityClaims;
+	const sources = claims.sources ?? {};
+	const episodes = Object.keys(sources).filter((id) => id.startsWith('episodes_'));
+	// The card has no per-track provenance, so activeSource falls back to its
+	// pin, then first ok non-suggestion, then first ok suggestion: the panel's
+	// answer unless provenance says another ok source won.
+	const active = activeSource({ pin: claims.pin, sources } as unknown as IdentityView);
+	if (active && sources[active]?.status === 'ok') {
+		return { text: `Episodes matched from ${SOURCE_LABEL[active] ?? active}.`, href };
 	}
 	if (episodes.length > 0) return { text: 'No source could place the episodes.', href };
 	return { text: 'Matching episodes…', href };
