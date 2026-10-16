@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -23,6 +23,8 @@ from arm_backend.identity.sources.registry import (
 )
 from arm_backend.metadata.base import LookupError as MetaLookupError
 from arm_backend.metadata.base import LookupTimeout, MetadataResult, external_ids_of, extract_poster_url
+from arm_backend.metadata.details_cache import TtlCache
+from arm_backend.metadata.facts import facts_for
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.sources import MUSICBRAINZ_USER_AGENT, OnlineSource, capability
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -64,7 +66,21 @@ def _to_candidate(r: MetadataResult) -> MetadataCandidate:
         status=payload.get("status"),
         track_count=int(track_count) if isinstance(track_count, int) else None,
         external_ids=external_ids_of(r),
+        provider=r.provider,
+        facts=facts_for(r.provider, r.kind, payload),
     )
+
+
+def _nearest_year_first(candidates: list[MetadataCandidate], year: int | None) -> list[MetadataCandidate]:
+    """Stable sort by distance from `year`; candidates without a year go
+    last. Nothing is dropped: a wrong disc year must not hide the title."""
+    if year is None:
+        return candidates
+    return sorted(candidates, key=lambda c: (c.year is None, abs(c.year - year) if c.year is not None else 0))
+
+
+# (provider, type, id) -> details response; errors are never cached.
+_details_cache: TtlCache[tuple[str, str, str], MetadataSearchResponse] = TtlCache()
 
 
 def _registry(request: Request) -> Mapping[str, OnlineSource]:
@@ -94,6 +110,7 @@ async def search_metadata(
     title: str,
     type: SearchType = "movie",
     provider: SearchProvider | None = None,
+    year: int | None = None,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
@@ -123,7 +140,44 @@ async def search_metadata(
         return MetadataSearchResponse(candidates=[], detail=f"{source.id} unavailable: {exc}")
     for r in results:
         r.provider = source.id
-    return MetadataSearchResponse(candidates=[_to_candidate(r) for r in results])
+    candidates = [_to_candidate(r) for r in results]
+    return MetadataSearchResponse(candidates=_nearest_year_first(candidates, year))
+
+
+@router.get("/details", response_model=MetadataSearchResponse)
+async def match_details(
+    request: Request,
+    provider: SearchProvider,
+    provider_id: str = Query(alias="id", pattern=r"^[A-Za-z0-9]{1,32}$"),
+    type: SearchType = "movie",
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> MetadataSearchResponse:
+    """One title's full record for the match picker's detail pane. `id` is
+    the provider's own id (TMDb id, IMDb id for OMDb, TVmaze id, TVDB id)."""
+    cfg = await _config(db)
+    source = _registry(request).get(provider)
+    if source is None or type not in source.media_types:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"{provider} has no {type} details")
+    if source.configured(cfg) is not None:
+        return MetadataSearchResponse(candidates=[], detail=f"no {provider} key configured")
+    key = (provider, type, provider_id)
+    cached = _details_cache.get(key)
+    if cached is not None:
+        return cached
+    fetch = capability(source, "details")
+    if fetch is None:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"{provider} has no details")
+    try:
+        result = await fetch(cfg, type, provider_id)
+    except (MetaLookupError, LookupTimeout) as exc:
+        return MetadataSearchResponse(candidates=[], detail=f"{provider}: {exc}")
+    except httpx.HTTPError as exc:
+        return MetadataSearchResponse(candidates=[], detail=f"{provider} unavailable: {exc}")
+    result.provider = source.id
+    response = MetadataSearchResponse(candidates=[_to_candidate(result)])
+    _details_cache.put(key, response)
+    return response
 
 
 @router.get("/lookup", response_model=MetadataSearchResponse)
