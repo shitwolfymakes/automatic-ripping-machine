@@ -5952,6 +5952,111 @@
             }
           },
           {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/details": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Match Details",
+        "description": "One title's full record for the match picker's detail pane. `id` is\nthe provider's own id (TMDb id, IMDb id for OMDb, TVmaze id, TVDB id).",
+        "operationId": "match_details_api_metadata_details_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "omdb",
+                "tvmaze",
+                "tvdb"
+              ],
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,32}$",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "movie",
+                "tv"
+              ],
+              "type": "string",
+              "default": "movie",
+              "title": "Type"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -13298,6 +13403,106 @@
         "type": "object",
         "title": "IdentityClaims"
       },
+      "IdentityFacts": {
+        "properties": {
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "rating_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "imdb",
+                  "tmdb",
+                  "tvmaze"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating Source"
+          },
+          "votes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Votes"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genres"
+          },
+          "creators": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Creators"
+          },
+          "cast": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cast"
+          },
+          "episode_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Count"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "IdentityFacts",
+        "description": "What a person uses to tell titles apart: run, plot, rating, people.\nFilled from a provider payload by `arm_backend.metadata.facts`; shown in\nthe match picker and snapshotted on the job when a match is used."
+      },
       "IdentitySuggestion": {
         "properties": {
           "provider": {
@@ -14119,6 +14324,28 @@
               }
             ],
             "title": "Identified At"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts_fetched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts Fetched At"
           }
         },
         "additionalProperties": true,
@@ -15218,6 +15445,27 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
               },
               {
                 "type": "null"
@@ -16731,6 +16979,53 @@
         "title": "ResolveFanOutOutcomeView",
         "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface.\n`skipped_reason='no_tracks'` is the benign case: the rip has not started\nyet (no Track rows exist), so the application fans out at rip-complete."
       },
+      "ResolveMatch": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "tmdb",
+              "omdb",
+              "tvmaze",
+              "tvdb"
+            ],
+            "title": "Provider"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_is_manual": {
+            "type": "boolean",
+            "title": "Poster Is Manual",
+            "default": false
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "ResolveMatch",
+        "description": "A search result the operator picked (match picker spec 3.6). Its\npresence makes `external_ids` replace the stored show ids wholesale."
+      },
       "ResolveRequest": {
         "properties": {
           "title": {
@@ -16805,6 +17100,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolveMatch"
               },
               {
                 "type": "null"

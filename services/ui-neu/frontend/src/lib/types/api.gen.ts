@@ -1963,6 +1963,53 @@ export type IdentityClaims = {
 };
 
 /**
+ * IdentityFacts
+ *
+ * What a person uses to tell titles apart: run, plot, rating, people.
+ * Filled from a provider payload by `arm_backend.metadata.facts`; shown in
+ * the match picker and snapshotted on the job when a match is used.
+ */
+export type IdentityFacts = {
+    /**
+     * End Year
+     */
+    end_year?: number | null;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Rating
+     */
+    rating?: number | null;
+    /**
+     * Rating Source
+     */
+    rating_source?: 'imdb' | 'tmdb' | 'tvmaze' | null;
+    /**
+     * Votes
+     */
+    votes?: number | null;
+    /**
+     * Genres
+     */
+    genres?: Array<string>;
+    /**
+     * Creators
+     */
+    creators?: Array<string>;
+    /**
+     * Cast
+     */
+    cast?: Array<string>;
+    /**
+     * Episode Count
+     */
+    episode_count?: number | null;
+    [key: string]: unknown;
+};
+
+/**
  * IdentitySuggestion
  *
  * A confident online match identify did not apply because the media
@@ -2430,6 +2477,11 @@ export type JobIdentity = {
      * Identified At
      */
     identified_at?: string | null;
+    facts?: IdentityFacts | null;
+    /**
+     * Facts Fetched At
+     */
+    facts_fetched_at?: string | null;
     [key: string]: unknown;
 };
 
@@ -3001,6 +3053,11 @@ export type MetadataCandidate = {
      */
     track_count?: number | null;
     external_ids?: ExternalIds | null;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    facts?: IdentityFacts | null;
 };
 
 /**
@@ -3842,6 +3899,28 @@ export type ResolveFanOutOutcomeView = {
 };
 
 /**
+ * ResolveMatch
+ *
+ * A search result the operator picked (match picker spec 3.6). Its
+ * presence makes `external_ids` replace the stored show ids wholesale.
+ */
+export type ResolveMatch = {
+    /**
+     * Provider
+     */
+    provider: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    /**
+     * Poster Is Manual
+     */
+    poster_is_manual?: boolean;
+    facts?: IdentityFacts | null;
+};
+
+/**
  * ResolveRequest
  *
  * POST /api/jobs/{id}/resolve body.
@@ -3889,6 +3968,7 @@ export type ResolveRequest = {
     season?: number | null;
     music?: MusicMeta | null;
     external_ids?: ExternalIds | null;
+    match?: ResolveMatch | null;
 };
 
 /**
@@ -9033,6 +9113,10 @@ export type SearchMetadataApiMetadataSearchGetData = {
          * Provider
          */
         provider?: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb' | null;
+        /**
+         * Year
+         */
+        year?: number | null;
     };
     url: '/api/metadata/search';
 };
@@ -9054,6 +9138,50 @@ export type SearchMetadataApiMetadataSearchGetResponses = {
 };
 
 export type SearchMetadataApiMetadataSearchGetResponse = SearchMetadataApiMetadataSearchGetResponses[keyof SearchMetadataApiMetadataSearchGetResponses];
+
+export type MatchDetailsApiMetadataDetailsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query: {
+        /**
+         * Provider
+         */
+        provider: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+        /**
+         * Id
+         */
+        id: string;
+        /**
+         * Type
+         */
+        type?: 'movie' | 'tv';
+    };
+    url: '/api/metadata/details';
+};
+
+export type MatchDetailsApiMetadataDetailsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MatchDetailsApiMetadataDetailsGetError = MatchDetailsApiMetadataDetailsGetErrors[keyof MatchDetailsApiMetadataDetailsGetErrors];
+
+export type MatchDetailsApiMetadataDetailsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataSearchResponse;
+};
+
+export type MatchDetailsApiMetadataDetailsGetResponse = MatchDetailsApiMetadataDetailsGetResponses[keyof MatchDetailsApiMetadataDetailsGetResponses];
 
 export type LookupMetadataApiMetadataLookupGetData = {
     body?: never;
