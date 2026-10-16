@@ -745,20 +745,17 @@ async def identify(
         timed_out = False
     else:
         # Every source the exact and the fuzzy walks tried, kept on a miss so
-        # the review card can say why the automatic match missed. Each
-        # dispatcher call starts a fresh `last_attempts` list; it is collected
-        # after the call returns, or, when the whole dispatch times out, the
-        # in-flight call's partial list is collected in the except arm.
+        # the review card can say why the automatic match missed. The
+        # dispatcher keeps each call's attempts in the calling task's context,
+        # so they are read here, inside the task that ran the call: after it
+        # returns, or as wait_for cancels it when the whole dispatch times out.
         attempts: list[dict[str, Any]] = []
-        in_flight = False
 
         async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
-            nonlocal in_flight
-            in_flight = True
-            found = await call
-            in_flight = False
-            attempts.extend(dispatcher.last_attempts)
-            return found
+            try:
+                return await call
+            finally:
+                attempts.extend(dispatcher.last_attempts)
 
         try:
 
@@ -795,8 +792,6 @@ async def identify(
             logger.info("identify dispatch_timeout job_id=%s", job.id)
             result = None
             timed_out = True
-            if in_flight:
-                attempts.extend(dispatcher.last_attempts)
             attempts.append(
                 {
                     "source": None,
@@ -820,7 +815,8 @@ async def identify(
         # leaves no list behind.
         metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
         if result is None:
-            metadata["identify_attempts"] = attempts[:MAX_IDENTIFY_ATTEMPTS]
+            # The most recent ones; a whole-dispatch timeout entry is last.
+            metadata["identify_attempts"] = attempts[-MAX_IDENTIFY_ATTEMPTS:]
         job.metadata_json = metadata
 
         if result is not None and auto_apply_for(cfg, result.kind):

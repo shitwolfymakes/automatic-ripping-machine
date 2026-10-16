@@ -911,7 +911,54 @@ def test_identify_miss_keeps_at_most_twenty_attempts() -> None:
     many = [{**_MISS, "detail": f"T{i}"} for i in range(30)]
     out = _identify(_make_app(db, dispatcher=_Dispatcher(None, attempts=many)))
     assert out["metadata_json"]["flags"]["unidentified"] is True
-    assert out["metadata_json"]["identify_attempts"] == many[:20]
+    assert out["metadata_json"]["identify_attempts"] == many[-20:]
+
+
+def test_identify_timeout_keeps_the_timeout_entry_last_under_the_cap() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    many = [{**_MISS, "detail": f"T{i}"} for i in range(30)]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(raise_timeout=True, attempts=many)))
+    stored = out["metadata_json"]["identify_attempts"]
+    assert len(stored) == 20
+    assert stored[:-1] == many[-19:]
+    assert stored[-1]["outcome"] == "timeout" and stored[-1]["source"] is None
+
+
+def test_identify_real_dispatch_timeout_keeps_the_partial_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """wait_for cancels identify mid-walk: what it tried so far is still stored."""
+
+    import contextvars
+
+    # Like the real dispatcher, the attempts live in the identify call's own
+    # context, so the route must read them inside the task wait_for runs.
+    attempts_var: contextvars.ContextVar[list[dict[str, Any]]] = contextvars.ContextVar("attempts", default=[])
+
+    class _Slow(_Dispatcher):
+        @property  # type: ignore[override]
+        def last_attempts(self) -> list[dict[str, Any]]:
+            return attempts_var.get()
+
+        @last_attempts.setter
+        def last_attempts(self, value: list[dict[str, Any]]) -> None:
+            pass
+
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+            attempts_var.set([_MISS])
+            await asyncio.sleep(5)
+            return None
+
+    monkeypatch.setattr(ripper_router, "DISPATCH_TIMEOUT_SECONDS", 0.05)
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    out = _identify(_make_app(db, dispatcher=_Slow()))
+    assert out["metadata_json"]["flags"]["dispatch_timeout"] is True
+    stored = out["metadata_json"]["identify_attempts"]
+    assert stored[0] == _MISS
+    assert stored[-1]["outcome"] == "timeout" and stored[-1]["detail"].startswith("lookup took longer than")
+    assert len(stored) == 2
 
 
 def test_identify_hit_stores_no_attempts() -> None:

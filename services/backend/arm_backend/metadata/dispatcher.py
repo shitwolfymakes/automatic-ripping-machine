@@ -1,8 +1,10 @@
 import asyncio
+import contextvars
 import logging
 import re
 import unicodedata
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import httpx
@@ -52,6 +54,21 @@ AttemptKind = Literal["movie", "tv", "music"]
 AttemptOutcome = Literal["hit", "miss", "timeout", "error", "not_configured", "no_sources"]
 
 
+@dataclass
+class _AttemptLog:
+    """One identify call's attempts, plus the skips it already recorded."""
+
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+    skips_seen: set[tuple[str | None, str, str | None, str]] = field(default_factory=set)
+
+
+# The current identify call's log. A context variable, not an attribute of the
+# shared dispatcher: each request handler runs in its own asyncio task with its
+# own copy of the context, so two discs identified at once never see (or
+# suppress) each other's attempts.
+_attempt_log: contextvars.ContextVar[_AttemptLog | None] = contextvars.ContextVar("identify_attempt_log", default=None)
+
+
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
     # Fold compatibility glyphs WITHOUT dropping non-ASCII: NFKC turns
     # "Blu-ray™" → "Blu-rayTM" and full-width forms → half-width, but keeps
@@ -84,13 +101,16 @@ class MetadataDispatcher:
     ) -> None:
         self._http = http
         self._sources: dict[str, OnlineSource] = dict(sources) if sources is not None else build_online_sources(http)
-        # The attempts of the identify / identify_from_imdb call just made.
-        # The dispatcher is shared by the whole app, so concurrent calls would
-        # interleave here; identify runs once per inserted disc and the route
-        # reads this right after awaiting, which is acceptable for ARM. Each
-        # call starts a new list, so a reference taken earlier stays intact.
-        self.last_attempts: list[dict[str, Any]] = []
-        self._skips_seen: set[tuple[str | None, str, str | None, str]] = set()
+
+    @property
+    def last_attempts(self) -> list[dict[str, Any]]:
+        """The attempts of the identify / identify_from_imdb call last made in
+        the caller's context (task). Each call starts a fresh list in its own
+        context (see `_attempt_log`), so concurrent identifies on this shared
+        dispatcher are isolated; read it in the same task, after (or while
+        cancelling) the call."""
+        log = _attempt_log.get()
+        return log.attempts if log is not None else []
 
     @property
     def sources(self) -> Mapping[str, OnlineSource]:
@@ -297,8 +317,14 @@ class MetadataDispatcher:
         return hit
 
     def _reset_attempts(self) -> None:
-        self.last_attempts = []
-        self._skips_seen = set()
+        _attempt_log.set(_AttemptLog())
+
+    def _log(self) -> _AttemptLog:
+        log = _attempt_log.get()
+        if log is None:
+            log = _AttemptLog()
+            _attempt_log.set(log)
+        return log
 
     def _record(
         self,
@@ -308,7 +334,9 @@ class MetadataDispatcher:
         outcome: AttemptOutcome,
         detail: str | None,
     ) -> None:
-        self.last_attempts.append({"source": source, "step": step, "kind": kind, "outcome": outcome, "detail": detail})
+        self._log().attempts.append(
+            {"source": source, "step": step, "kind": kind, "outcome": outcome, "detail": detail}
+        )
 
     def _walk(self, cfg: Config, kind: AttemptKind, step: AttemptStep, detail: str | None) -> tuple[OnlineSource, ...]:
         """`sources_for(cfg, kind)`, recording the listed sources skipped for a
@@ -331,8 +359,9 @@ class MetadataDispatcher:
         self, source: str | None, step: AttemptStep, kind: AttemptKind, outcome: AttemptOutcome, detail: str | None
     ) -> None:
         key = (source, step, kind, outcome)
-        if key not in self._skips_seen:
-            self._skips_seen.add(key)
+        seen = self._log().skips_seen
+        if key not in seen:
+            seen.add(key)
             self._record(source, step, kind, outcome, detail)
 
     async def _call(  # type: ignore[no-untyped-def]

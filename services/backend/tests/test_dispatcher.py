@@ -1325,3 +1325,36 @@ async def test_cd_attempts_record_the_disc_id_step():
     assert dispatcher.last_attempts == [
         {"source": "musicbrainz", "step": "disc_id", "kind": "music", "outcome": "hit", "detail": "abc"}
     ]
+
+
+async def test_overlapping_identifies_keep_their_own_attempts():
+    """The dispatcher is shared by the app: two discs identified at once must
+    not see each other's attempts (or suppress each other's skip entries)."""
+    import asyncio
+
+    class Interleaving:
+        id = "tmdb"
+        media_types = frozenset({"movie", "tv"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def search_title(self, cfg, kind, title, year):
+            await asyncio.sleep(0)
+            return None
+
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"tmdb": Interleaving()})
+        cfg = _config(movie_sources=["tmdb"], episode_sources=[])
+
+        async def run(label: str) -> list[dict]:
+            await dispatcher.identify(ScanResult(disc_type=DiscType.DVD, volume_label=label), cfg)
+            return dispatcher.last_attempts
+
+        a, b = await asyncio.gather(run("ALPHA"), run("BRAVO"))
+    assert a and {x["detail"] for x in a} == {"ALPHA"}
+    assert b and {x["detail"] for x in b} == {"BRAVO"}
+    # Each call records its own no_sources entry for the empty TV list.
+    assert sum(1 for x in a if x["outcome"] == "no_sources") == 1
+    assert sum(1 for x in b if x["outcome"] == "no_sources") == 1
