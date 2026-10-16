@@ -970,6 +970,25 @@ def test_identify_hit_stores_no_attempts() -> None:
     assert out["metadata_json"].get("identify_attempts") is None
 
 
+def test_identify_hit_removes_stale_attempts() -> None:
+    """A hit drops an identify_attempts list already on the job. A reused job never
+    re-identifies, so the stale list is planted on the fresh job mid-dispatch."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    hit = MetadataResult(title="Heat", year=1995, kind="movie", provider="tmdb")
+
+    class _Stale(_Dispatcher):
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+            for row in db.added:
+                if isinstance(row, Job):
+                    row.metadata_json = {**(row.metadata_json or {}), "identify_attempts": [_MISS]}
+            return hit
+
+    out = _identify(_make_app(db, dispatcher=_Stale(hit, attempts=[])))
+    assert "identify_attempts" not in out["metadata_json"]
+
+
 def test_identify_dispatch_timeout_stores_the_timeout_attempt() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
