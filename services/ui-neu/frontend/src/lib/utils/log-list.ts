@@ -55,3 +55,32 @@ export function orderByLastModified<T extends { id: string }>(jobs: T[], modifie
 	withLog.sort((a, b) => Date.parse(modified.get(b.id)!) - Date.parse(modified.get(a.id)!));
 	return [...withLog, ...withoutLog];
 }
+
+const MINUTE = 60_000;
+
+function startOfDay(d: Date): number {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * The log list's relative time: `Just now`, `42 min ago`, `3h ago` (same
+ * day), `Yesterday`, `2 days ago` up to six days. Older than that it returns
+ * null and the row shows only the absolute date. Local calendar days.
+ */
+export function logRelativeTime(iso: string, now: Date = new Date()): string | null {
+	const then = new Date(iso);
+	const ms = Math.max(0, now.getTime() - then.getTime());
+	if (ms < MINUTE) return 'Just now';
+	if (ms < 60 * MINUTE) return `${Math.floor(ms / MINUTE)} min ago`;
+	// Math.round absorbs a DST shift (a 23h or 25h day)
+	const days = Math.round((startOfDay(now) - startOfDay(then)) / (24 * 60 * MINUTE));
+	if (days <= 0) return `${Math.floor(ms / (60 * MINUTE))}h ago`;
+	if (days === 1) return 'Yesterday';
+	if (days <= 6) return `${days} days ago`;
+	return null;
+}
+
+/** `job_` plus the id's last four characters, lowercased: `job_9a41`. */
+export function shortJobId(id: string): string {
+	return `job_${id.slice(-4).toLowerCase()}`;
+}

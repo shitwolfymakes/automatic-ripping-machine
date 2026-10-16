@@ -6,7 +6,7 @@ const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString(
 
 const JOBS = [
 	{
-		id: 'job_a',
+		id: 'job_alpha9A41',
 		drive_id: 'drv_1',
 		disc_type: 'bluray',
 		media_type: 'tv',
@@ -41,7 +41,7 @@ const JOBS = [
 
 const INDEX = [
 	{ job_id: 'job_b', size_bytes: 10, modified_at: minutesAgo(42) },
-	{ job_id: 'job_a', size_bytes: 10, modified_at: minutesAgo(60 * 30) }
+	{ job_id: 'job_alpha9A41', size_bytes: 10, modified_at: minutesAgo(60 * 24 * 10) }
 ];
 
 vi.mock('$lib/api/jobs', () => ({
@@ -90,7 +90,7 @@ describe('Logs job-list page', () => {
 	it('orders rows by last modified, jobs without a log last', async () => {
 		await ready();
 		const order = rows().map((r) => within(r).getByRole('link').getAttribute('href'));
-		expect(order).toEqual(['/logs/job_b', '/logs/job_a', '/logs/job_c']);
+		expect(order).toEqual(['/logs/job_b', '/logs/job_alpha9A41', '/logs/job_c']);
 	});
 
 	it('renders each column of a row', async () => {
@@ -98,8 +98,9 @@ describe('Logs job-list page', () => {
 		const [bravo, alpha, nolog] = rows();
 
 		// Title: link + id beneath, title falls back to the id
-		expect(within(alpha).getByRole('link', { name: 'Alpha' })).toHaveAttribute('href', '/logs/job_a');
-		expect(within(alpha).getByText('job_a')).toBeInTheDocument();
+		expect(within(alpha).getByRole('link', { name: 'Alpha' })).toHaveAttribute('href', '/logs/job_alpha9A41');
+		const shortId = within(alpha).getByText('job_9a41');
+		expect(shortId).toHaveAttribute('title', 'job_alpha9A41');
 		expect(within(nolog).getByRole('link', { name: 'job_c' })).toHaveAttribute('href', '/logs/job_c');
 
 		// Status
@@ -125,8 +126,11 @@ describe('Logs job-list page', () => {
 		expect(bravo.querySelector('[data-label="Year"]')?.textContent?.trim()).toBe('-');
 
 		// Last modified: relative over absolute
-		expect(within(bravo).getByText('42m ago')).toBeInTheDocument();
-		expect(within(alpha).getByText('1d ago')).toBeInTheDocument();
+		expect(within(bravo).getByText('42 min ago')).toBeInTheDocument();
+		// older than six days: only the absolute date, no relative line
+		const alphaWhen = alpha.querySelector('[data-label="Last modified"]')!;
+		expect(alphaWhen.textContent).not.toMatch(/ago|Yesterday|Just now/);
+		expect(alphaWhen.textContent?.trim()).toMatch(/\d{1,2}:\d{2}/);
 		expect(within(nolog).getByText('No log yet')).toBeInTheDocument();
 	});
 

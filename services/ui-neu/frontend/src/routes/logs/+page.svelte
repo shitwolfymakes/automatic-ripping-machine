@@ -10,13 +10,14 @@
 	import { effectiveJobStatus } from '$lib/utils/job-status';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { jobPoster } from '$lib/utils/poster';
-	import { timeAgo } from '$lib/utils/format';
 	import {
 		discKindLabel,
 		discPosition,
 		formatShortDateTime,
 		jobTypeConfig,
-		orderByLastModified
+		orderByLastModified,
+		logRelativeTime,
+		shortJobId
 	} from '$lib/utils/log-list';
 	import { dashboard } from '$lib/stores/dashboard';
 
@@ -121,7 +122,7 @@
 											/>
 											<div class="min-w-0">
 												<a href="/logs/{job.id}" class="logs-panel-title-link">{job.title || job.id}</a>
-												<div class="logs-panel-id">{job.id}</div>
+												<div class="logs-panel-id" title={job.id}>{shortJobId(job.id)}</div>
 											</div>
 										</div>
 									</td>
@@ -147,8 +148,13 @@
 									<td class="table-cell" data-label="Year">{job.year ?? '-'}</td>
 									<td class="table-cell logs-panel-nowrap" data-label="Last modified">
 										{#if logAt}
-											<div>{timeAgo(logAt)}</div>
-											<div class="logs-panel-muted logs-panel-small">{formatShortDateTime(logAt)}</div>
+											{@const relative = logRelativeTime(logAt)}
+											{#if relative}
+												<div>{relative}</div>
+												<div class="logs-panel-muted logs-panel-small">{formatShortDateTime(logAt)}</div>
+											{:else}
+												<div>{formatShortDateTime(logAt)}</div>
+											{/if}
 										{:else}
 											<span class="logs-panel-muted">No log yet</span>
 										{/if}
