@@ -87,6 +87,8 @@ class _Hub:
 
 
 class _Dispatcher:
+    last_attempts: list[dict[str, Any]] = []
+
     def __init__(self, result: MetadataResult | None) -> None:
         self.result = result
 

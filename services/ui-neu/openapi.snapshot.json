@@ -14199,6 +14199,21 @@
               }
             ]
           },
+          "identify_attempts": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identify Attempts"
+          },
           "provider_raw": {
             "additionalProperties": {
               "additionalProperties": true,

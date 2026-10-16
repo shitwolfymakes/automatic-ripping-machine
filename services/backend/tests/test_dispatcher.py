@@ -1192,3 +1192,136 @@ async def test_fill_external_ids_ignores_a_kind_mismatch_and_failures():
         tmdb.mode = "raise"
         assert "tmdb_id" not in (await d.fill_external_ids(hit, _config())).payload
         assert await d.fill_external_ids(None, _config()) is None
+
+
+# --- Miss reasons: the attempts each identify call records -----------------
+
+
+def _attempt_source(sid, behaviour, media_types=frozenset({"movie", "tv"}), *, configured=None):
+    """A fake source whose search/lookup does `behaviour`: "hit", "miss",
+    "timeout" (raises TimeoutError) or "error" (raises LookupError)."""
+    import asyncio
+
+    from arm_backend.metadata.base import LookupError as MetaLookupError
+    from arm_backend.metadata.base import MetadataResult
+
+    async def _act(kind, title):
+        if behaviour == "hit":
+            return MetadataResult(title=title, year=None, kind=kind)
+        if behaviour == "timeout":
+            raise asyncio.TimeoutError
+        if behaviour == "error":
+            raise MetaLookupError("boom")
+        return None
+
+    class Fake:
+        id = sid
+        requires_key = None
+
+        def configured(self, cfg):
+            return configured
+
+        async def search_title(self, cfg, kind, title, year):
+            return await _act(kind, title)
+
+        async def lookup_imdb(self, cfg, imdb_id):
+            return await _act("movie", imdb_id)
+
+    Fake.media_types = media_types
+    return Fake()
+
+
+async def test_attempts_record_hit_and_miss_with_the_searched_title():
+    reg = {"tmdb": _attempt_source("tmdb", "miss"), "omdb": _attempt_source("omdb", "hit")}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT_1995")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        hit = await dispatcher.identify(scan, _config(movie_sources=["tmdb", "omdb"], episode_sources=[]))
+    assert hit is not None
+    assert dispatcher.last_attempts == [
+        {"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "HEAT"},
+        {"source": "omdb", "step": "title", "kind": "movie", "outcome": "hit", "detail": "HEAT"},
+    ]
+
+
+async def test_attempts_record_timeout_and_error():
+    reg = {"tmdb": _attempt_source("tmdb", "timeout"), "omdb": _attempt_source("omdb", "error")}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        assert await dispatcher.identify(scan, _config(movie_sources=["tmdb", "omdb"], episode_sources=[])) is None
+    outcomes = [(a["source"], a["kind"], a["outcome"]) for a in dispatcher.last_attempts]
+    assert ("tmdb", "movie", "timeout") in outcomes
+    assert ("omdb", "movie", "error") in outcomes
+
+
+async def test_attempts_reset_on_each_call():
+    reg = {"tmdb": _attempt_source("tmdb", "miss")}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT")
+    cfg = _config(movie_sources=["tmdb"], episode_sources=["tmdb"])
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        await dispatcher.identify(scan, cfg)
+        first = len(dispatcher.last_attempts)
+        await dispatcher.identify(scan, cfg)
+        assert len(dispatcher.last_attempts) == first
+        await dispatcher.identify_from_imdb("tt0113277", cfg)
+    assert dispatcher.last_attempts == [
+        {"source": "tmdb", "step": "imdb", "kind": "movie", "outcome": "miss", "detail": "tt0113277"}
+    ]
+
+
+async def test_an_empty_tv_walk_records_no_sources():
+    reg = {"tmdb": _attempt_source("tmdb", "miss")}
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="SHOW_DISC_1")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        cfg = _config(movie_sources=["tmdb"], episode_sources=[])
+        assert await dispatcher.identify(scan, cfg, prefer_tv=True) is None
+    assert {"source": None, "step": "title", "kind": "tv", "outcome": "no_sources", "detail": "SHOW DISC 1"} in (
+        dispatcher.last_attempts
+    )
+    # Recorded once per kind, however many candidates were searched.
+    assert sum(1 for a in dispatcher.last_attempts if a["outcome"] == "no_sources") == 1
+
+
+async def test_listed_sources_without_a_key_record_not_configured():
+    reg = {
+        "tmdb": _attempt_source("tmdb", "hit", configured="no tmdb key"),
+        "omdb": _attempt_source("omdb", "hit", configured="no omdb key"),
+    }
+    scan = ScanResult(disc_type=DiscType.DVD, volume_label="HEAT")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources=reg)
+        cfg = _config(movie_sources=["tmdb", "omdb"], episode_sources=["tmdb"])
+        assert await dispatcher.identify(scan, cfg) is None
+    assert dispatcher.last_attempts
+    assert all(a["outcome"] == "not_configured" for a in dispatcher.last_attempts)
+    assert {(a["source"], a["kind"]) for a in dispatcher.last_attempts} == {
+        ("tmdb", "movie"),
+        ("omdb", "movie"),
+        ("tmdb", "tv"),
+    }
+
+
+async def test_cd_attempts_record_the_disc_id_step():
+    from arm_backend.metadata.base import MetadataResult
+
+    class Mb:
+        id = "musicbrainz"
+        media_types = frozenset({"music"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return None
+
+        async def lookup_disc_id(self, cfg, disc_id):
+            return MetadataResult(title="Album", year=None, kind="music")
+
+    scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc")
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client, sources={"musicbrainz": Mb()})
+        assert await dispatcher.identify(scan, _config()) is not None
+    assert dispatcher.last_attempts == [
+        {"source": "musicbrainz", "step": "disc_id", "kind": "music", "outcome": "hit", "detail": "abc"}
+    ]

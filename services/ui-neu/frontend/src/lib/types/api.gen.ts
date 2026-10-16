@@ -2450,6 +2450,12 @@ export type JobMetadata = {
     previously_ripped?: PreviouslyRipped | null;
     identity_suggestion?: IdentitySuggestion | null;
     /**
+     * Identify Attempts
+     */
+    identify_attempts?: Array<{
+        [key: string]: unknown;
+    }> | null;
+    /**
      * Provider Raw
      */
     provider_raw?: {

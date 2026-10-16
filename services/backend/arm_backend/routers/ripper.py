@@ -1,6 +1,8 @@
 import asyncio
 import logging
+from collections.abc import Awaitable
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -551,6 +553,9 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
 # away; the ripper ejects on it.
 PREVIOUSLY_RIPPED_REASON = "previously_ripped"
 
+# A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
+MAX_IDENTIFY_ATTEMPTS = 20
+
 
 async def _reject_previously_ripped(
     session: AsyncSession, hub: WSHub, drive: Drive, previous: Job, scan: ScanResult
@@ -739,6 +744,22 @@ async def identify(
         result = None
         timed_out = False
     else:
+        # Every source the exact and the fuzzy walks tried, kept on a miss so
+        # the review card can say why the automatic match missed. Each
+        # dispatcher call starts a fresh `last_attempts` list; it is collected
+        # after the call returns, or, when the whole dispatch times out, the
+        # in-flight call's partial list is collected in the except arm.
+        attempts: list[dict[str, Any]] = []
+        in_flight = False
+
+        async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
+            nonlocal in_flight
+            in_flight = True
+            found = await call
+            in_flight = False
+            attempts.extend(dispatcher.last_attempts)
+            return found
+
         try:
 
             async def _identify() -> MetadataResult | None:
@@ -753,17 +774,19 @@ async def identify(
                             if release is not None:
                                 return release
                         else:
-                            exact = await dispatcher.identify_from_imdb(imdb, cfg, kind=kind)
+                            exact = await _collected(dispatcher.identify_from_imdb(imdb, cfg, kind=kind))
                             if exact is not None:
                                 return exact
-                return await dispatcher.identify(
-                    scan,
-                    cfg,
-                    title_hint=hint_title(job, hints),
-                    title_hint_is_tv=hint_is_tv(job, hints),
-                    # Several same-length episode titles and no feature: a TV
-                    # disc, whatever the label says (arm_common.disc_shape).
-                    prefer_tv=looks_episodic(scan.titles),
+                return await _collected(
+                    dispatcher.identify(
+                        scan,
+                        cfg,
+                        title_hint=hint_title(job, hints),
+                        title_hint_is_tv=hint_is_tv(job, hints),
+                        # Several same-length episode titles and no feature: a TV
+                        # disc, whatever the label says (arm_common.disc_shape).
+                        prefer_tv=looks_episodic(scan.titles),
+                    )
                 )
 
             result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
@@ -772,6 +795,17 @@ async def identify(
             logger.info("identify dispatch_timeout job_id=%s", job.id)
             result = None
             timed_out = True
+            if in_flight:
+                attempts.extend(dispatcher.last_attempts)
+            attempts.append(
+                {
+                    "source": None,
+                    "step": "title",
+                    "kind": None,
+                    "outcome": "timeout",
+                    "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
+                }
+            )
 
         release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
         # The cleaned hint titles are search inputs only: a miss (or a held
@@ -781,6 +815,13 @@ async def identify(
             scan.bd_meta.name.strip() if scan.bd_meta is not None and any(h.id == "bd_title" for h in hints) else ""
         )
         miss_title = bdmt_name or release_title or scan.volume_label
+
+        # The miss reasons belong to a miss only; any hit (applied or held)
+        # leaves no list behind.
+        metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
+        if result is None:
+            metadata["identify_attempts"] = attempts[:MAX_IDENTIFY_ATTEMPTS]
+        job.metadata_json = metadata
 
         if result is not None and auto_apply_for(cfg, result.kind):
             apply_identity_result(job, result, now=datetime.now(timezone.utc))
