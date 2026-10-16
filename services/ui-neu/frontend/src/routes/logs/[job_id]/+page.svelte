@@ -70,11 +70,7 @@
 		</p>
 	{/if}
 
-	{#if loading}
-		<p class="log-detail-page-loading">Loading log...</p>
-	{:else}
-		<LogView {entries} {error} search={true} maxHeightClass="max-h-[70vh]" />
-	{/if}
+	<LogView {entries} {error} {loading} search={true} maxHeightClass="max-h-[70vh]" />
 </div>
 
 <style>
@@ -90,11 +86,6 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-on-warning-soft);
-	}
-	.log-detail-page-loading {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		color: var(--color-text-muted);
 	}
 	/* original was px-3 py-2 (0.75rem/0.5rem), not .btn's default 0.5rem
 	   1rem; text-sm matches .btn's own bundled font-size/line-height so no
