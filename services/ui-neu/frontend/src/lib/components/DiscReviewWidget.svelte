@@ -28,6 +28,8 @@
 	import IsoSourceChip from './IsoSourceChip.svelte';
 	import IdentitySuggestionBanner from './IdentitySuggestionBanner.svelte';
 	import MediaTypeSwitch from './episodes/MediaTypeSwitch.svelte';
+	import EpisodeMatchPanel from './episodes/EpisodeMatchPanel.svelte';
+	import { EpisodeMatching, onJobEvents } from '$lib/stores/episodeMatching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
@@ -71,6 +73,13 @@
 	let showInfo = $state(false);
 	let showTitleSearch = $state(false);
 	let showMusicSearch = $state(false);
+	let showEpisodes = $state(false);
+	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
+	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
+	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
+	// "Matching episodes…" while the Backend re-matches after a series pick or a
+	// flip to TV; job.identity_updated for this job (or a timeout) ends it.
+	const matching = new EpisodeMatching();
 	let showApplySession = $state(false);
 	let cancelling = $state(false);
 	let deleting = $state(false);
@@ -107,6 +116,8 @@
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
 	let displayJob = $derived((data?.job ?? job) as JobView);
+	// Episode matching is for TV video discs only, as on the job page.
+	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
 	// An ISO rip's drive_id is a still-enrolled virtual drive; once the rip
 	// completes that drive retires and drops out of isoSources, matching the
 	// card leaving the dashboard.
@@ -165,6 +176,24 @@
 	function handleTitleApply() {
 		onrefresh?.();
 		loadDetail();
+	}
+
+	// Picking a show in the match picker goes straight to episode matching.
+	function handleSeriesApplied() {
+		openSection('episodes');
+		matching.start();
+		handleTitleApply();
+	}
+
+	function handleMediaTypeChanged(type: 'movie' | 'tv') {
+		if (type === 'tv') {
+			openSection('episodes');
+			matching.start();
+		} else {
+			matching.stop();
+			showEpisodes = false;
+		}
+		handleTitleApply();
 	}
 
 	function handleSessionApplied() {
@@ -258,25 +287,23 @@
 		}
 	}
 
-	function toggleSection(section: 'info' | 'title' | 'music') {
-		const closeAll = () => {
-			showInfo = false;
-			showTitleSearch = false;
-			showMusicSearch = false;
-		};
-		if (section === 'info') {
-			const next = !showInfo;
-			closeAll();
-			showInfo = next;
-		} else if (section === 'title') {
-			const next = !showTitleSearch;
-			closeAll();
-			showTitleSearch = next;
-		} else {
-			const next = !showMusicSearch;
-			closeAll();
-			showMusicSearch = next;
-		}
+	type Section = 'info' | 'title' | 'music' | 'episodes';
+
+	// One section open at a time.
+	function openSection(section: Section | null) {
+		showInfo = section === 'info';
+		showTitleSearch = section === 'title';
+		showMusicSearch = section === 'music';
+		showEpisodes = section === 'episodes';
+	}
+
+	function isOpen(section: Section): boolean {
+		return { info: showInfo, title: showTitleSearch, music: showMusicSearch, episodes: showEpisodes }[section];
+	}
+
+	function toggleSection(section: Section) {
+		if (section === 'title') titleInitialType = undefined;
+		openSection(isOpen(section) ? null : section);
 	}
 
 	async function loadSessions() {
@@ -290,6 +317,21 @@
 	onMount(() => {
 		loadDetail();
 		loadSessions();
+		// The dashboard refreshes the job prop on every event; the card's own
+		// detail (tracks) and the episode panel refresh only for this job.
+		const offJobEvents = onJobEvents(
+			() => job?.id,
+			(identityUpdated) => {
+				loadDetail().then(async () => {
+					await episodePanel?.reload();
+					if (identityUpdated) matching.stop();
+				});
+			}
+		);
+		return () => {
+			offJobEvents();
+			matching.stop();
+		};
 	});
 </script>
 
@@ -352,7 +394,7 @@
 				<!-- The type picks what Search looks for, so the search row has no Movie/TV toggle of its own. -->
 				{#if isVideo && $isAdmin}
 					<div class="disc-review-widget-type">
-						<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleTitleApply} />
+						<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleMediaTypeChanged} />
 					</div>
 				{/if}
 				{#if missLine}
@@ -360,8 +402,10 @@
 				{/if}
 				{#if episodeLine}
 					<p class="disc-review-widget-miss" data-testid="episode-status">
-						{#if episodeLine.href}<a href={episodeLine.href} class="disc-review-widget-episode-link"
-								>{episodeLine.text}</a
+						{#if episodeLine.href}<button
+								type="button"
+								class="disc-review-widget-episode-link"
+								onclick={() => openSection('episodes')}>{episodeLine.text}</button
 							>{:else}{episodeLine.text}{/if}
 					</p>
 				{/if}
@@ -448,9 +492,7 @@
 						onrefresh?.();
 					}}
 					onsearch={() => {
-						showInfo = false;
-						showTitleSearch = !isMusic;
-						showMusicSearch = isMusic;
+						openSection(isMusic ? 'music' : 'title');
 					}}
 				/>
 			</div>
@@ -474,6 +516,13 @@
 					onclick={() => toggleSection('title')}
 					class="btn disc-review-widget-action-btn"
 					aria-pressed={showTitleSearch}>Search</button
+				>
+			{/if}
+			{#if isTv}
+				<button
+					onclick={() => toggleSection('episodes')}
+					class="btn disc-review-widget-action-btn"
+					aria-pressed={showEpisodes}>Episodes</button
 				>
 			{/if}
 			{#if isMusic}
@@ -521,7 +570,27 @@
 		<!-- Expanded sections -->
 		{#if showTitleSearch && isVideo}
 			<div class="disc-review-widget-panel">
-				<TitleSearch job={displayJob} onapply={handleTitleApply} />
+				<TitleSearch
+					job={displayJob}
+					onapply={handleTitleApply}
+					onseries={handleSeriesApplied}
+					initialType={titleInitialType}
+				/>
+			</div>
+		{/if}
+
+		{#if showEpisodes && isTv}
+			<div class="disc-review-widget-panel" data-testid="episode-panel">
+				<EpisodeMatchPanel
+					bind:this={episodePanel}
+					job={displayJob}
+					{tracks}
+					matching={matching.active}
+					onsearchseries={() => {
+						openSection('title');
+						titleInitialType = 'tv';
+					}}
+				/>
 			</div>
 		{/if}
 
@@ -616,6 +685,12 @@
 		color: var(--color-text-muted);
 	}
 	.disc-review-widget-episode-link {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
 		color: var(--color-primary);
 		text-decoration: underline;
 	}
