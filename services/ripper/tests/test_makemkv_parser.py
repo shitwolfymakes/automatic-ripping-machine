@@ -84,3 +84,22 @@ def test_hd_dvd_does_not_match_dvd_branch():
     lines = ['CINFO:1,6207,"HD-DVD"']
     _, _, disc_type = parse_makemkvcon_info(lines)
     assert disc_type is None  # no enum yet — caller falls back to probe/heuristic
+
+
+def test_parses_a_99_title_decoy_playlist_dvd():
+    """A structure-protected DVD (synthetic fixture): 99 titles, ~90 of them
+    decoys within seconds of the real feature (title 37, 1:43:21, 28
+    chapters), some decoys longer than it. The parser must keep every title
+    with its index, since track selection and the review card work from them."""
+    lines = (FIXTURES / "makemkvcon_dvd_99_titles.txt").read_text().splitlines()
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
+
+    assert volume_label == "DECOY_PLAYLIST_DVD"
+    assert disc_type == DiscType.DVD
+    assert [t.index for t in titles] == list(range(99))
+    assert titles[37].duration_seconds == 6201
+    assert titles[37].chapter_count == 28
+    assert titles[98].source_file == "title98.mkv"
+    near_feature = [t for t in titles if abs(t.duration_seconds - 6201) <= 5]
+    assert len(near_feature) == 93  # the feature + 92 decoys
+    assert max(t.duration_seconds for t in titles) == 6206  # a decoy outlasts the feature

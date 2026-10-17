@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Seed the running dev DB with comprehensive test data to exercise the whole UI:
-# 1 drive + 9 status-spanning jobs + video/audio tracks (full enriched column
-# set) + disc fingerprints (crc64 / aacs / musicbrainz) + music CDs (single +
+# 1 drive + 10 status-spanning jobs + video/audio tracks (full enriched column
+# set, incl. a 99-title decoy-playlist DVD) + disc fingerprints (crc64 / aacs / musicbrainz) + music CDs (single +
 # multi-disc) carrying a MusicBrainz-shaped tracklist in metadata_json, plus a
 # per-job aggregated log file for each job (so the Logs screen has data).
 #
@@ -26,8 +26,9 @@ usage() {
 Usage: bash devtools/seed-test-data.sh [--clean] [-h|--help]
 
   (no args)   Clean any existing seed rows, then insert a fresh fixture:
-              1 drive + 9 jobs (spanning statuses) + tracks + fingerprints +
-              music tracklists (single + multi-disc) + per-job logs.
+              1 drive + 10 jobs (spanning statuses) + tracks + fingerprints +
+              music tracklists (single + multi-disc) + a 99-title decoy
+              DVD + per-job logs.
   --clean     Remove the seed rows (jobs+tracks+fingerprints+drive) + logs.
   -h, --help  Show this help.
 
@@ -94,8 +95,9 @@ PY
 }
 
 # --- write a per-job aggregated log for each seeded job ---
-# Args: the 9 job ULIDs in fixture order (Blade Runner, Matrix, Dune, untitled,
-# Oppenheimer, Scratched Disc, Abbey Road, The Wall, Cult Double Feature). Emits
+# Args: the 10 job ULIDs in fixture order (Blade Runner, Matrix, Dune, untitled,
+# Oppenheimer, Scratched Disc, Abbey Road, The Wall, Cult Double Feature, Decoy
+# Playlist DVD). Emits
 # appropriate NDJSON in the arm_common log shape so the Logs screen + its
 # level/text filters have data. Status is derived from the job's position
 # (matches the INSERT order below).
@@ -116,6 +118,7 @@ META = [
     ("Abbey Road",        "ripped"),
     ("The Wall",          "awaiting_user_id"),
     ("Cult Double Feature", "ripped"),
+    ("Decoy Playlist DVD", "identified"),
 ]
 
 def script(title, status):
@@ -195,25 +198,50 @@ EOF
 fi
 
 # --- generate real ULIDs via the backend (authoritative; matches route patterns) ---
-# 1 drive + 9 jobs + 26 tracks + 4 fingerprints. The 9th job is a multi-title DVD
+# 1 drive + 10 jobs + 125 tracks + 4 fingerprints. The 9th job is a multi-title DVD
 # (Cult Double Feature) whose 3 video tracks are each matched independently; the
-# detail routes validate the ULID pattern, so these must be real backend ULIDs.
+# 10th is a 99-title decoy-playlist DVD (99 of the tracks). The detail routes
+# validate the ULID pattern, so these must be real backend ULIDs.
 ids="$(backend_exec arm-backend python -c "
 from arm_common.ulid import new_id
 print(new_id('drv'))
-for _ in range(9): print(new_id('job'))
-for _ in range(26): print(new_id('trk'))
+for _ in range(10): print(new_id('job'))
+for _ in range(125): print(new_id('trk'))
 for _ in range(4): print(new_id('dfp'))
 ")"
 mapfile -t ID <<<"$ids"
-if [[ "${#ID[@]}" -ne 40 ]]; then
-    echo "ULID generation failed (expected 40 ids, got ${#ID[@]})" >&2
+if [[ "${#ID[@]}" -ne 140 ]]; then
+    echo "ULID generation failed (expected 140 ids, got ${#ID[@]})" >&2
     exit 1
 fi
 DRV="${ID[0]}"
-J=("${ID[@]:1:9}")
-T=("${ID[@]:10:26}")
-F=("${ID[@]:36:4}")
+J=("${ID[@]:1:10}")
+T=("${ID[@]:11:125}")
+F=("${ID[@]:136:4}")
+
+# --- 99-title decoy-playlist DVD (J9): structure protection as MakeMKV sees it ---
+# Mirrors services/ripper/tests/fixtures/makemkvcon_dvd_99_titles.txt: the real
+# feature is title 37 (6201s), 92 decoys sit within 5s of it (some longer), and 6
+# short titles are warnings/menus/trailers. Review defaults keep only what
+# MAIN_FEATURE picks today, the longest title, which is a decoy (title 8).
+DECOY_OFFSETS=(0 -1 2 -3 1 5 -2 0 3 -4 1 -1)
+declare -A DECOY_SHORT=([0]=21 [1]=44 [2]=95 [96]=137 [97]=151 [98]=302)
+DECOY_ROWS=""
+k=0
+for i in $(seq 0 98); do
+    if [[ $i -eq 37 ]]; then
+        secs=6201
+    elif [[ -n "${DECOY_SHORT[$i]:-}" ]]; then
+        secs=${DECOY_SHORT[$i]}
+    else
+        secs=$((6201 + DECOY_OFFSETS[k % 12]))
+        k=$((k + 1))
+    fi
+    excluded=true
+    [[ $i -eq 8 ]] && excluded=false
+    DECOY_ROWS+="${DECOY_ROWS:+,}
+ ('${T[$((26 + i))]}', '${J[9]}', 'video_title', $i, 'title$(printf %02d "$i")', 'Title $i', 'queued', 0, NULL, $secs, NULL, $((secs * 711000)), $excluded)"
+done
 
 # --- MusicBrainz-shaped tracklists (ASCII only) for the CD jobs ---
 # Abbey Road (single disc, 17 tracks) for the ripped music CD.
@@ -256,7 +284,7 @@ ${CLEAN_SQL}
 INSERT INTO drives (id, hostname, device_path, display_name, status, media_status, media_status_at, drive_mode, uhd_capable)
 VALUES ('${DRV}', 'seed-host', '/dev/sr-seed', 'Test Drive (seed)', 'online', 'loaded', now(), 'auto', false);
 
--- 9 jobs spanning statuses + disc types (incl. a multi-title DVD). resumed_from_crash on one; disc_number/total on the multi-disc CD.
+-- 10 jobs spanning statuses + disc types (incl. a multi-title DVD and a 99-title decoy DVD). resumed_from_crash on one; disc_number/total on the multi-disc CD.
 INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, resumed_from_crash, disc_number, disc_total, started_at, ripped_at, created_at, poster_url) VALUES
  ('${J[0]}', '${DRV}', 'bluray', 'Blade Runner 2049', 2017, 'ripping',          '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '5 min',  NULL,                    now()-interval '5 min',  'https://image.tmdb.org/t/p/w300/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg'),
  ('${J[1]}', '${DRV}', 'dvd',    'The Matrix',         1999, 'ripped',           '{"seed":true}'::jsonb,                                              true,  NULL, NULL, now()-interval '2 hour', now()-interval '90 min', now()-interval '2 hour', 'https://image.tmdb.org/t/p/w300/p96dm7sCMn4VYAStA6siNz30G1r.jpg'),
@@ -266,7 +294,8 @@ INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, r
  ('${J[5]}', '${DRV}', 'dvd',    'Scratched Disc',     2010, 'failed',           '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '1 day',  NULL,                    now()-interval '1 day',  NULL),
  ('${J[6]}', '${DRV}', 'cd',     'Abbey Road',         1969, 'ripped',           jsonb_build_object('seed',true,'artist','The Beatles','album','Abbey Road','tracks', '${ABBEY_TRACKS}'::jsonb), false, 1, 1, now()-interval '6 hour', now()-interval '5 hour', now()-interval '6 hour', 'https://coverartarchive.org/release/6bb3793b-f991-378e-9bff-0bd3117f2298/front'),
  ('${J[7]}', '${DRV}', 'cd',     'The Wall',           1979, 'awaiting_user_id', jsonb_build_object('seed',true,'artist','Pink Floyd','album','The Wall','tracks', '${WALL_TRACKS}'::jsonb),  false, 2, 2, NULL,                    NULL,                    now()-interval '20 min', NULL),
- ('${J[8]}', '${DRV}', 'dvd',    'Cult Double Feature', NULL, 'ripped',          jsonb_build_object('seed',true,'multi_title',true),                  false, NULL, NULL, now()-interval '4 hour', now()-interval '3 hour', now()-interval '4 hour', NULL);
+ ('${J[8]}', '${DRV}', 'dvd',    'Cult Double Feature', NULL, 'ripped',          jsonb_build_object('seed',true,'multi_title',true),                  false, NULL, NULL, now()-interval '4 hour', now()-interval '3 hour', now()-interval '4 hour', NULL),
+ ('${J[9]}', '${DRV}', 'dvd',    'Decoy Playlist DVD',  2003, 'identified',      '{"seed":true}'::jsonb,                                              false, NULL, NULL, NULL,                    NULL,                    now()-interval '1 min',  NULL);
 
 -- Video tracks for The Matrix (J1): main feature + special feature (excluded + custom filename) + a FAILED audio track with last_error.
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, size_bytes, expected_size_bytes, output_path, last_error, excluded, custom_filename, title) VALUES
@@ -315,6 +344,10 @@ INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts
  ('${T[9]}',  '${J[8]}', 'video_title', 1, 'title01', 'Feature B', 'done', 1, 5280, 5280, 6600000000, 6600000000, '/media/movie/Cult Double Feature/title01.mkv', false),
  ('${T[10]}', '${J[8]}', 'video_title', 2, 'title02', 'Trailers',  'done', 1, 540,  540,  700000000,  700000000,  '/media/movie/Cult Double Feature/title02.mkv', true);
 
+-- 99-title decoy-playlist DVD (J9, identified): every title persisted for review,
+-- only the longest (a decoy) kept by default. Rows built above in DECOY_ROWS.
+INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, size_bytes, expected_size_bytes, excluded) VALUES${DECOY_ROWS};
+
 -- Disc fingerprints (read-only fingerprints section): DVD crc64, Blu-ray aacs, CD musicbrainz, multi-DVD crc64.
 INSERT INTO disc_fingerprints (id, job_id, algo, value, created_at) VALUES
  ('${F[0]}', '${J[1]}', 'crc64',       'A1B2C3D4E5F60789',                      now()-interval '2 hour'),
@@ -326,12 +359,13 @@ COMMIT;
 EOF
 
 # Seed logs: prune any prior seed log files (their job ids were regenerated),
-# then write a fresh per-job log for each of the 9 new job ids.
+# then write a fresh per-job log for each of the 10 new job ids.
 clean_seed_logs >/dev/null
 seed_logs "${J[*]}"
 
-echo "seeded 1 drive + 9 jobs + 26 tracks + 4 fingerprints + per-job logs (tagged metadata_json {\"seed\":true})"
+echo "seeded 1 drive + 10 jobs + 125 tracks + 4 fingerprints + per-job logs (tagged metadata_json {\"seed\":true})"
 echo "  spans: ripping / ripped / identified / awaiting_user_id / ripped_partial / failed,"
 echo "  video tracks (excluded, custom_filename, failed+last_error, mixed status), CD music"
-echo "  tracklists (single + multi-disc), crc64/aacs/musicbrainz fingerprints, and per-job logs."
+echo "  tracklists (single + multi-disc), a 99-title decoy-playlist DVD awaiting review,
+  crc64/aacs/musicbrainz fingerprints, and per-job logs."
 echo "  view at https://localhost:8081 (login admin / admin); re-run is safe; --clean to remove"

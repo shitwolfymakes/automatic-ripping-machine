@@ -64,10 +64,11 @@ Phase 9 + 15 backend crash-recovery drill. Injects a synthetic in-flight job int
 ## seed-test-data.sh
 
 Populates the running dev DB with a fixture so the UI shows real data instead
-of the empty state: one seed drive + 9 jobs spanning statuses
+of the empty state: one seed drive + 10 jobs spanning statuses
 (ripping / ripped / identified / awaiting-id / ripped-partial / failed, mixed
-disc types incl. music CDs and a multi-title DVD, real titles + TMDB posters),
-26 tracks (video + audio, excluded / custom-filename / failed variants), disc
+disc types incl. music CDs, a multi-title DVD and a 99-title decoy-playlist DVD,
+real titles + TMDB posters), 125 tracks (video + audio, excluded /
+custom-filename / failed variants, 99 of them on the decoy DVD), disc
 fingerprints, and a per-job log file for each job.
 
 ```bash
