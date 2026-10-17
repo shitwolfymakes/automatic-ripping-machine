@@ -464,17 +464,17 @@ describe('DiscReviewWidget', () => {
 			await renderTv({ has_series: false });
 			const line = await screen.findByTestId('episode-status');
 			expect(line).toHaveTextContent('Pick the show to match episodes.');
-			expect(line.querySelector('a')).toBeNull();
+			expect(line.querySelector('button')).toBeNull();
 		});
 
-		it('names the matching source and links to the episodes panel', async () => {
+		it('names the matching source as a button that opens the episodes panel', async () => {
 			await renderTv({
 				has_series: true,
 				metadata_json: { flags: {}, identity_claims: { sources: { episodes_tvmaze: { status: 'ok' } } } }
 			});
 			const line = await screen.findByTestId('episode-status');
 			expect(line).toHaveTextContent('Episodes matched from TVmaze.');
-			expect(line.querySelector('a')).toHaveAttribute('href', expect.stringMatching(/\/jobs\/[^/]+#episodes$/));
+			expect(line.querySelector('button')).toHaveTextContent('Episodes matched from TVmaze.');
 		});
 
 		it('is absent for a movie', async () => {
