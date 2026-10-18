@@ -97,7 +97,7 @@ describe('Logs job-list page', () => {
 	it('shows the columns in order', async () => {
 		await ready();
 		const headers = screen.getAllByRole('columnheader').map((h) => h.textContent?.trim());
-		expect(headers).toEqual(['Title', 'Status', 'Type', 'Disc', 'Drive', 'Year', 'Last modified']);
+		expect(headers).toEqual(['Title', 'Status', 'Type', 'Disc', 'Drive', 'Last modified']);
 	});
 
 	it('orders rows by last modified, jobs without a log last', async () => {
@@ -134,9 +134,9 @@ describe('Logs job-list page', () => {
 		expect(drive).toHaveAttribute('title', 'drv_iso_with_a_long_name');
 		expect(nolog.querySelector('[data-label="Drive"]')?.textContent?.trim()).toBe('-');
 
-		// Year
-		expect(within(alpha).getByText('2001')).toBeInTheDocument();
-		expect(bravo.querySelector('[data-label="Year"]')?.textContent?.trim()).toBe('-');
+		// No Year column
+		expect(alpha.querySelector('[data-label="Year"]')).toBeNull();
+		expect(within(alpha).queryByText('2001')).not.toBeInTheDocument();
 
 		// Last modified: relative over absolute
 		expect(within(bravo).getByText('42 min ago')).toBeInTheDocument();

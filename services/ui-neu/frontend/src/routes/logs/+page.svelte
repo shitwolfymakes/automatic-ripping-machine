@@ -22,7 +22,7 @@
 	} from '$lib/utils/log-list';
 	import { dashboard } from '$lib/stores/dashboard';
 
-	const COLUMNS = ['Title', 'Status', 'Type', 'Disc', 'Drive', 'Year', 'Last modified'];
+	const COLUMNS = ['Title', 'Status', 'Type', 'Disc', 'Drive', 'Last modified'];
 
 	let jobs = $state<JobView[]>([]);
 	let total = $state(0);
@@ -149,7 +149,6 @@
 												-
 											{/if}
 										</td>
-										<td class="table-cell" data-label="Year">{job.year ?? '-'}</td>
 										<td class="table-cell logs-panel-nowrap" data-label="Last modified">
 											{#if logAt}
 												{@const relative = logRelativeTime(logAt)}
