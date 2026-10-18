@@ -3,7 +3,7 @@
 	cursor: crosshair;
 }
 
-[data-scheme="terminal"] aside::before {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer)::before {
 	content: "";
 	display: block;
 	position: absolute;
@@ -17,42 +17,42 @@
 	animation: crt-flicker 0.15s infinite;
 }
 
-[data-scheme="terminal"] aside {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) {
 	position: relative;
 	text-shadow: 0 0 5px rgb(57 255 20 / 0.4);
 	box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5), inset -2px 0 10px rgb(57 255 20 / 0.15);
 }
 
-[data-scheme="terminal"] aside .nav-item {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-item {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	border-radius: 0;
 	font-size: 0.8rem;
 }
 
-[data-scheme="terminal"] aside .nav-item::before {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-item::before {
 	content: "> ";
 	flex-shrink: 0;
 }
 
-[data-scheme="terminal"] aside .nav-item svg {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-item svg {
 	display: none;
 }
 
-[data-scheme="terminal"] aside .nav-item[data-active="true"] {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-item[data-active="true"] {
 	border: 1px solid rgb(57 255 20);
 	background: rgb(10 26 5) !important;
 	text-shadow: 0 0 8px rgb(57 255 20 / 0.6);
 }
 
-[data-scheme="terminal"] aside .nav-item:hover {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-item:hover {
 	background: rgb(57 255 20) !important;
 	color: rgb(5 5 5) !important;
 	text-shadow: none;
 	box-shadow: 0 0 15px rgb(57 255 20 / 0.5);
 }
 
-[data-scheme="terminal"] aside .nav-logo {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) .nav-logo {
 	border: 1px solid rgb(57 255 20);
 	text-shadow: 0 0 5px rgb(57 255 20 / 0.4);
 	margin-left: 0.75rem;
@@ -93,6 +93,6 @@
 
 /* The CPU temperature readout in the sidebar stats reads the
    accent-1 role. */
-[data-scheme="terminal"] aside {
+[data-scheme="terminal"] aside:where(.sidebar, .layout-drawer) {
 	--color-accent-1: rgb(57 255 20);
 }

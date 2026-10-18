@@ -1,7 +1,7 @@
 [data-scheme="library-archive"] {
 	font-family: 'Georgia', serif;
 }
-[data-scheme="library-archive"] aside {
+[data-scheme="library-archive"] aside:where(.sidebar, .layout-drawer) {
 	background-color: rgb(240, 235, 220) !important;
 	border-right: 2px solid #ddd !important;
 }
