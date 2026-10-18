@@ -31,6 +31,13 @@ const COMPLETED_JOB = createJob({
 	disc_type: 'dvd'
 });
 
+// jsdom cannot run Web Animations, so an outro would keep the selection bar
+// mounted forever; a transition with no duration finishes synchronously.
+vi.mock('svelte/transition', () => ({
+	fade: () => ({ duration: 0 }),
+	slide: () => ({ duration: 0 })
+}));
+
 vi.mock('$lib/api/dashboard', () => ({
 	fetchDashboard: vi.fn(() =>
 		Promise.resolve({
@@ -52,6 +59,7 @@ vi.mock('$lib/api/dashboard', () => ({
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJobs: vi.fn(() => Promise.resolve([COMPLETED_JOB])),
+	fetchJobsPage: vi.fn(() => Promise.resolve({ jobs: [COMPLETED_JOB], total: 1 })),
 	bulkDeleteJobs: vi.fn(() => Promise.resolve({ deleted_ids: [], skipped_non_terminal: [] })),
 	abandonJob: vi.fn(),
 	deleteJob: vi.fn()
@@ -198,21 +206,73 @@ describe('Dashboard Page', () => {
 	});
 
 	it('shows no jobs found when job list is empty', async () => {
-		const { fetchJobs } = await import('$lib/api/jobs');
-		(fetchJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+		const { fetchJobsPage } = await import('$lib/api/jobs');
+		(fetchJobsPage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ jobs: [], total: 0 });
 		renderComponent(DashboardPage);
 		await waitFor(() => expect(screen.getByText('No jobs found.')).toBeInTheDocument());
 	});
 
-	it('calls fetchJobs (no pagination/search/sort params in v3)', async () => {
-		const { fetchJobs } = await import('$lib/api/jobs');
+	it('loads the first page of 48 jobs', async () => {
+		const { fetchJobsPage } = await import('$lib/api/jobs');
 		await renderDashboard();
-		await waitFor(() => expect(fetchJobs).toHaveBeenCalled());
-		// v3 GET /api/jobs takes only status/drive_id/limit/offset.
-		const call = (fetchJobs as ReturnType<typeof vi.fn>).mock.calls[0][0];
-		expect(call).not.toHaveProperty('page');
-		expect(call).not.toHaveProperty('per_page');
-		expect(call).not.toHaveProperty('sort_by');
+		await waitFor(() => expect(fetchJobsPage).toHaveBeenCalled());
+		expect((fetchJobsPage as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual({
+			status: undefined,
+			limit: 48,
+			offset: 0
+		});
+	});
+
+	describe('one jobs panel', () => {
+		afterEach(async () => {
+			const { fetchJobsPage } = await import('$lib/api/jobs');
+			(fetchJobsPage as ReturnType<typeof vi.fn>).mockImplementation(() =>
+				Promise.resolve({ jobs: [COMPLETED_JOB], total: 1 })
+			);
+			vi.restoreAllMocks();
+		});
+
+		it('shows the job count beside the title and the page summary in the footer', async () => {
+			await renderDashboard();
+			await waitFor(() => expect(screen.getByText('1 job')).toBeInTheDocument());
+			expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–1 of 1');
+			expect(screen.queryByText('Next')).toBeNull();
+		});
+
+		it('opens the selection bar while jobs are checked and clears it again', async () => {
+			await renderDashboardTable();
+			expect(screen.queryByTestId('jobs-selection-bar')).toBeNull();
+			const [, rowCheckbox] = screen.getAllByRole('checkbox');
+			await fireEvent.click(rowCheckbox);
+			const bar = await screen.findByTestId('jobs-selection-bar');
+			expect(bar).toHaveTextContent('1 selected');
+			expect(screen.getAllByText('1 selected')).toHaveLength(1);
+			await fireEvent.click(screen.getByText('Clear selection'));
+			await waitFor(() => expect(screen.queryByTestId('jobs-selection-bar')).toBeNull());
+		});
+
+		it('Delete selected in the bar bulk-deletes the checked jobs', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(true);
+			const { bulkDeleteJobs } = await import('$lib/api/jobs');
+			await renderDashboardTable();
+			const [, rowCheckbox] = screen.getAllByRole('checkbox');
+			await fireEvent.click(rowCheckbox);
+			await fireEvent.click(await screen.findByText('Delete selected'));
+			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['job_2'] }));
+		});
+
+		it('pages through the API and resets to page 1 on a filter change', async () => {
+			const { fetchJobsPage } = await import('$lib/api/jobs');
+			const mock = fetchJobsPage as ReturnType<typeof vi.fn>;
+			mock.mockImplementation(() => Promise.resolve({ jobs: [COMPLETED_JOB], total: 100 }));
+			await renderDashboard();
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+			await fireEvent.click(screen.getByText('2'));
+			await waitFor(() => expect(mock).toHaveBeenLastCalledWith({ status: undefined, limit: 48, offset: 48 }));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 49–96 of 100'));
+			await fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'failed' } });
+			await waitFor(() => expect(mock).toHaveBeenLastCalledWith({ status: 'failed', limit: 48, offset: 0 }));
+		});
 	});
 
 	describe('guest write-control gating', () => {

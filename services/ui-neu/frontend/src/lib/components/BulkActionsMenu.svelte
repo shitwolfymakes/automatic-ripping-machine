@@ -52,12 +52,8 @@
 	}
 </script>
 
-<!-- Selection count -->
-{#if selectedJobs.size > 0}
-	<span class="bulk-actions-count">{selectedJobs.size} selected</span>
-{/if}
-
-<!-- Gear menu -->
+<!-- Gear menu. The selection count lives in the dashboard's selection bar;
+     "Delete Selected" stays in the flyout for keyboard users who open the menu. -->
 <Flyout align="right" width="w-56" label="Bulk actions">
 	{#snippet trigger({ toggle })}
 		<button onclick={toggle} disabled={bulkBusy} class="chip bulk-actions-trigger inline-flex items-center gap-1">
@@ -100,11 +96,6 @@
 </Flyout>
 
 <style>
-	.bulk-actions-count {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
 	.bulk-actions-trigger:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;

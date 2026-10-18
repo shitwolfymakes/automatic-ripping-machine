@@ -1,4 +1,5 @@
-import { ApiError, getToken, notifyUnauthorized } from './client';
+import type { JobLogFileView } from '$lib/types/api.gen';
+import { ApiError, apiFetch, getToken, notifyUnauthorized } from './client';
 
 // v3 logs are JOB-ID scoped. The screen browses jobs (GET /api/jobs) and views
 // one job's aggregated log via GET /api/logs/{job_id} (NDJSON; every line tagged
@@ -76,4 +77,9 @@ export async function fetchJobLog(jobId: string, limit?: number): Promise<LogEnt
 /** Per-job bug-report zip URL (used by a download link). */
 export function jobLogDownloadUrl(jobId: string): string {
 	return `/api/logs/${encodeURIComponent(jobId)}.zip`;
+}
+
+/** Index of per-job log files (size + last-modified), newest first. */
+export function fetchJobLogIndex(): Promise<JobLogFileView[]> {
+	return apiFetch<JobLogFileView[]>('/api/logs');
 }

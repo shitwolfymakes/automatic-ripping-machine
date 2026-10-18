@@ -737,33 +737,35 @@
 {/if}
 
 <style>
-	/* the widget's own emphasis ring (ring-2 ring-primary) is a stronger
-	   highlight than card's default 1px border, since this card is meant to
-	   grab attention on the dashboard */
+	/* Attention comes from the tinted status bar (primary mixed into the
+	   surface) rather than a solid primary fill and ring, so the card reads
+	   as the same family as the other cards across every scheme. The parent
+	   SectionFrame carries the emphasis for the section as a whole. */
 	.disc-review-widget {
 		overflow: hidden;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		box-shadow:
-			0 0 0 2px var(--color-primary),
-			var(--shadow-2);
+		box-shadow: var(--shadow-2);
 		background: var(--color-surface);
 	}
 	.disc-review-widget-status-bar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		background: var(--color-primary);
+		background: color-mix(in srgb, var(--color-primary) 32%, var(--color-surface));
+		border-bottom: 1px solid var(--color-border-strong);
 		padding: 0.375rem 1rem;
 	}
 	.disc-review-widget-suggestion {
 		margin: 0 1rem 0.75rem;
 	}
+	/* mixed from text + surface rather than --color-surface-raised, which
+	   most schemes leave unset (the box used to show the default navy) */
 	.disc-review-widget-previous {
 		margin: 0 1rem 0.75rem;
 		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
-		background: var(--color-surface-raised);
+		background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
 		padding: 0.625rem 0.75rem;
 		font-size: 0.875rem;
 	}
@@ -781,7 +783,7 @@
 		width: 0.5rem;
 		flex-shrink: 0;
 		border-radius: 9999px;
-		background: color-mix(in srgb, var(--color-on-primary) 80%, transparent);
+		background: var(--color-primary);
 		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 	}
 	@keyframes pulse {
@@ -821,7 +823,7 @@
 		font-size: 1rem;
 		line-height: 1.5rem;
 		font-weight: 600;
-		color: var(--color-on-primary);
+		color: var(--color-primary-text);
 	}
 	.disc-review-widget-phase-badge {
 		flex-shrink: 0;

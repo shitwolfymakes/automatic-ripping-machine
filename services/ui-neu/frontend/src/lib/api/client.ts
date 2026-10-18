@@ -104,6 +104,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 	return handle<T>(res);
 }
 
+/** Like apiFetch, but also hands back the response headers (for paged
+ *  endpoints that report their total in `X-Total-Count`). */
+export async function apiFetchResponse<T>(path: string, init?: RequestInit): Promise<{ data: T; headers: Headers }> {
+	const res = await fetch(path, { ...init, headers: authHeaders(init?.headers) });
+	return { data: await handle<T>(res), headers: res.headers };
+}
+
 export async function apiFormPost<T>(path: string, formData: FormData): Promise<T> {
 	// FormData sets its own multipart Content-Type; only attach auth.
 	const headers: Record<string, string> = {};
