@@ -282,6 +282,41 @@
 	flex: 1 1 100%;
 	margin: -0.75rem -1rem 0;
 }
+/* Logs page — the panel is a winamp window like All Jobs: the "Job logs"
+   title (an h1, so the h2 titlebar rule below misses it) becomes the same
+   titlebar band spanning the top edge, and the count, filter and search
+   wrap onto the row below it. */
+[data-scheme='winamp-97'] main .logs-panel {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	border-radius: 0;
+	background-color: rgb(34, 36, 56);
+}
+[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title {
+	display: flex;
+	align-items: center;
+	flex: 1 1 100%;
+	margin: -0.75rem -1rem 0;
+	padding: 0.35rem 0.75rem;
+	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	border: 1px solid rgb(12, 13, 22);
+	border-top-color: rgb(85, 90, 125);
+	color: rgb(214, 218, 235);
+	font-size: 0.68rem;
+	line-height: calc(1.75 / 1.125);
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	text-transform: uppercase;
+	text-shadow: 1px 1px 0 rgb(0, 0, 0);
+}
+[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title::before,
+[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title::after {
+	content: '';
+	flex: 1;
+	height: 6px;
+	margin: 0 0.75rem;
+	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+}
 /* card headings — winamp titlebar band with gold ridge stripes */
 [data-scheme='winamp-97'][data-scheme] main h2 {
 	display: flex;
