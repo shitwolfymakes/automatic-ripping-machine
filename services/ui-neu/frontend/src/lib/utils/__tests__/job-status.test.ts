@@ -305,36 +305,60 @@ describe('episodeStatus', () => {
 			metadata_json: claims ? { identity_claims: { sources: claims } } : {},
 			...over
 		}) as any;
+	const ep = (n: number | null, over: Record<string, unknown> = {}) =>
+		({ kind: 'video_title', excluded: false, episode_number: n, role: n == null ? null : 'episode', ...over }) as any;
 
-	it('no series known asks for the show, without a link', () => {
-		expect(episodeStatus(tv({ has_series: false }))).toEqual({ text: 'Pick the show to match episodes.', href: null });
-	});
-	it('an ok episode claim names its source and links to the panel', () => {
-		expect(episodeStatus(tv({}, { episodes_tvmaze: { status: 'ok' }, episodes_tmdb: { status: 'miss' } }))).toEqual({
-			text: 'Episodes matched from TVmaze.',
-			href: '/jobs/job_1#episodes'
+	it('no series known waits for the show', () => {
+		expect(episodeStatus(tv({ has_series: false }))).toEqual({
+			state: 'waiting',
+			source: null,
+			total: null,
+			unmatched: null
 		});
-		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TVDB.');
-		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.text).toBe('Episodes matched from TMDb.');
+	});
+	it('an ok episode claim with every title placed is matched, naming its source', () => {
+		const c = { episodes_tvmaze: { status: 'ok' }, episodes_tmdb: { status: 'miss' } };
+		expect(episodeStatus(tv({}, c), [ep(1), ep(2), ep(null, { role: 'extra' })])).toEqual({
+			state: 'matched',
+			source: 'TVmaze',
+			total: 3,
+			unmatched: 0
+		});
+		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.source).toBe('TVDB');
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.source).toBe('TMDb');
+	});
+	it('an ok claim with unplaced titles needs attention, counting only selected video titles', () => {
+		const tracks = [ep(1), ep(null), ep(null, { excluded: true }), ep(null, { kind: 'audio_track' })];
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }), tracks)).toEqual({
+			state: 'attention',
+			source: 'TMDb',
+			total: 2,
+			unmatched: 1
+		});
 	});
 	it('a pinned source wins over an earlier ok source', () => {
 		const c = { episodes_tmdb: { status: 'ok' }, episodes_tvmaze: { status: 'ok' } };
 		const j = tv({ metadata_json: { identity_claims: { sources: c, pin: { episode: 'episodes_tvmaze' } } } });
-		expect(episodeStatus(j)?.text).toBe('Episodes matched from TVmaze.');
+		expect(episodeStatus(j)?.source).toBe('TVmaze');
 	});
 	it('an ok non-suggestion beats an earlier ok suggestion', () => {
 		const c = { episodes_tmdb: { status: 'ok', suggestion: true }, episodes_tvdb: { status: 'ok' } };
-		expect(episodeStatus(tv({}, c as any))?.text).toBe('Episodes matched from TVDB.');
+		expect(episodeStatus(tv({}, c as any))?.source).toBe('TVDB');
 	});
-	it('claims present but none ok', () => {
-		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error' } }))).toEqual({
-			text: 'No source could place the episodes.',
-			href: '/jobs/job_1#episodes'
+	it('claims present but none ok needs attention', () => {
+		const c = { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error' } };
+		expect(episodeStatus(tv({}, c), [ep(null), ep(null)])).toEqual({
+			state: 'attention',
+			source: null,
+			total: 2,
+			unmatched: 2
 		});
 	});
-	it('no episode claims yet', () => {
-		expect(episodeStatus(tv())).toEqual({ text: 'Matching episodes…', href: '/jobs/job_1#episodes' });
-		expect(episodeStatus(tv({}, { tmdb: { status: 'ok' } }))?.text).toBe('Matching episodes…');
+	it('no episode claims yet, or a re-match running, is matching', () => {
+		expect(episodeStatus(tv())?.state).toBe('matching');
+		expect(episodeStatus(tv({}, { tmdb: { status: 'ok' } }))?.state).toBe('matching');
+		const running = episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }), [ep(1), ep(null)], true);
+		expect(running).toEqual({ state: 'matching', source: 'TMDb', total: 2, unmatched: 1 });
 	});
 	it('absent for movies and post-rip jobs', () => {
 		expect(episodeStatus(tv({ media_type: 'movie' }))).toBeNull();

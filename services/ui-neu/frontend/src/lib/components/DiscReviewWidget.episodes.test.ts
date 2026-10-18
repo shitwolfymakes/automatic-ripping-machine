@@ -127,7 +127,7 @@ describe('DiscReviewWidget episode matching', () => {
 		} as Partial<JobView>);
 		const line = await screen.findByTestId('episode-status');
 		expect(line.querySelector('a')).toBeNull();
-		await fireEvent.click(within(line).getByRole('button', { name: 'Episodes matched from TVmaze.' }));
+		await fireEvent.click(within(line).getByRole('button', { name: 'Episodes matched from TVmaze' }));
 		expect(await screen.findByTestId('episode-panel')).toBeInTheDocument();
 	});
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DiscReviewWidget from './DiscReviewWidget.svelte';
 import type { JobView, TrackView } from '$lib/types/api.gen';
 import { createJob, createJobDetail, createTrack } from './__fixtures__/job';
@@ -361,8 +361,8 @@ describe('DiscReviewWidget', () => {
 		await waitFor(() => expect(screen.getByText('Scanned titles (2)')).toBeInTheDocument());
 	});
 
-	describe('header metadata strip', () => {
-		it('renders Type / Disc# / Titles / Season chips when present', async () => {
+	describe('labeled rows', () => {
+		it('joins disc type, disc number and title count on the Disc row, and the season on the Show row', async () => {
 			// The widget renders chips from `displayJob` = data.job (the loaded
 			// detail), not the prop — so drive the metadata through fetchJob.
 			mockFetchJob.mockResolvedValueOnce(
@@ -372,8 +372,11 @@ describe('DiscReviewWidget', () => {
 					disc_number: 1,
 					disc_total: 3,
 					season: 2,
+					media_type: 'tv',
+					has_series: true,
+					year: 1974,
 					metadata_json: {
-						provider_raw: { arm_server: { video_type: 'series' } },
+						identity: { provider: 'tmdb', external_ids: { imdb: 'tt0071003' }, facts: { end_year: 1975 } },
 						scan_result: {
 							disc_type: 'bluray',
 							titles: [
@@ -385,10 +388,22 @@ describe('DiscReviewWidget', () => {
 				})
 			);
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText('Series')).toBeInTheDocument());
-			expect(screen.getByText('Disc 1/3')).toBeInTheDocument();
-			expect(screen.getByText('2 titles')).toBeInTheDocument();
-			expect(screen.getByText('S02')).toBeInTheDocument();
+			await waitFor(() => expect(screen.getByText('Blu-ray · Disc 1/3 · 2 titles')).toBeInTheDocument());
+			const show = screen.getByTestId('match-row');
+			expect(show).toHaveTextContent('Show');
+			expect(within(show).getByText('tt0071003')).toHaveAttribute('href', 'https://www.imdb.com/title/tt0071003');
+			expect(show).toHaveTextContent('· TV Series · 1974–1975 · Season 2');
+			// The TYPE toggle replaces the old "Series" chip.
+			expect(screen.queryByText('Series')).not.toBeInTheDocument();
+		});
+
+		it('labels the source row by what the disc came from, with the full value as a tooltip', async () => {
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review' }));
+			renderWidget({ status: 'awaiting_review' });
+			const drive = await screen.findByText('Drive');
+			expect(drive.tagName).toBe('DT');
+			const value = drive.nextElementSibling?.querySelector('span');
+			expect(value?.getAttribute('title')).toBe(value?.textContent);
 		});
 
 		it('renders no metadata chips for a bare disc', async () => {
@@ -396,12 +411,12 @@ describe('DiscReviewWidget', () => {
 			renderWidget({ status: 'awaiting_review' });
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(screen.queryByText(/titles$/)).not.toBeInTheDocument();
-			expect(screen.queryByText(/^Disc /)).not.toBeInTheDocument();
-			expect(screen.queryByText(/^Session: /)).not.toBeInTheDocument();
+			expect(screen.queryByText(/Disc \d/)).not.toBeInTheDocument();
+			expect(screen.queryByText('Session')).not.toBeInTheDocument();
 		});
 	});
 
-	describe('applied-session chip', () => {
+	describe('applied-session row', () => {
 		it('shows the resolved session name', async () => {
 			const { fetchSessions } = await import('$lib/api/sessions');
 			vi.mocked(fetchSessions).mockResolvedValueOnce([
@@ -409,7 +424,7 @@ describe('DiscReviewWidget', () => {
 			]);
 			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', pending_session_id: 'sess_42' }));
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText('Session: 4K Remux')).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('4K Remux')).toBeInTheDocument());
 		});
 
 		it('falls back to a short id when the session is not in the list', async () => {
@@ -419,7 +434,7 @@ describe('DiscReviewWidget', () => {
 				detail({ status: 'awaiting_review', pending_session_id: 'sess_0123456789ABCDEF' })
 			);
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText(/^Session: sess_0123456789\.\.\.$/)).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText(/^sess_0123456789\.\.\.$/)).toBeInTheDocument());
 		});
 
 		it('shows a parked session on a held disc', async () => {
@@ -429,9 +444,7 @@ describe('DiscReviewWidget', () => {
 			]);
 			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', parked_session_ids: ['ses_a'] }));
 			renderWidget({ status: 'awaiting_review', parked_session_ids: ['ses_a'] });
-			await waitFor(() =>
-				expect(screen.getByText('Session: Plex 1080p, applies when the rip finishes')).toBeInTheDocument()
-			);
+			await waitFor(() => expect(screen.getByText('Plex 1080p, applies when the rip finishes')).toBeInTheDocument());
 		});
 
 		it('falls back to the pending session when nothing is parked', async () => {
@@ -443,7 +456,7 @@ describe('DiscReviewWidget', () => {
 				detail({ status: 'identified', parked_session_ids: [], pending_session_id: 'ses_a' })
 			);
 			renderWidget({ status: 'identified' });
-			await waitFor(() => expect(screen.getByText('Session: Plex 1080p')).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('Plex 1080p')).toBeInTheDocument());
 		});
 
 		it('shows no session chip when none is pinned', async () => {
@@ -460,21 +473,46 @@ describe('DiscReviewWidget', () => {
 			renderWidget({ status: 'awaiting_review', media_type: 'tv', ...over } as never);
 		}
 
-		it('asks to pick the show when none is known, without a link', async () => {
+		it('waits for the show when none is known, and the Show row asks for one', async () => {
 			await renderTv({ has_series: false });
 			const line = await screen.findByTestId('episode-status');
-			expect(line).toHaveTextContent('Pick the show to match episodes.');
+			expect(line).toHaveTextContent('Waiting for show');
 			expect(line.querySelector('button')).toBeNull();
+			expect(screen.getByTestId('match-row')).toHaveTextContent('Needs show · pick a show with Search');
 		});
 
-		it('names the matching source as a button that opens the episodes panel', async () => {
+		it('names the matching source as a link that opens the episodes panel', async () => {
 			await renderTv({
 				has_series: true,
 				metadata_json: { flags: {}, identity_claims: { sources: { episodes_tvmaze: { status: 'ok' } } } }
 			});
 			const line = await screen.findByTestId('episode-status');
-			expect(line).toHaveTextContent('Episodes matched from TVmaze.');
-			expect(line.querySelector('button')).toHaveTextContent('Episodes matched from TVmaze.');
+			expect(line).toHaveAttribute('data-state', 'matched');
+			await fireEvent.click(within(line).getByRole('button', { name: 'Episodes matched from TVmaze' }));
+			expect(await screen.findByTestId('episode-panel')).toBeInTheDocument();
+		});
+
+		it('counts the unplaced titles when matching needs attention, with a Review action', async () => {
+			mockFetchJob.mockResolvedValueOnce(
+				detail(
+					{
+						status: 'awaiting_review',
+						media_type: 'tv',
+						has_series: true,
+						metadata_json: { flags: {}, identity_claims: { sources: { episodes_tmdb: { status: 'miss' } } } }
+					} as never,
+					[
+						createTrack({ kind: 'video_title', episode_number: 1, role: 'episode' }),
+						createTrack({ kind: 'video_title', episode_number: null, role: null }),
+						createTrack({ kind: 'video_title', episode_number: null, role: null })
+					]
+				)
+			);
+			renderWidget({ status: 'awaiting_review', media_type: 'tv', has_series: true } as never);
+			const line = await screen.findByTestId('episode-status');
+			await waitFor(() => expect(line).toHaveTextContent('Episodes need attention · 2 of 3 titles unmatched · Review'));
+			await fireEvent.click(within(line).getByRole('button', { name: 'Review' }));
+			expect(await screen.findByTestId('episode-panel')).toBeInTheDocument();
 		});
 
 		it('is absent for a movie', async () => {
