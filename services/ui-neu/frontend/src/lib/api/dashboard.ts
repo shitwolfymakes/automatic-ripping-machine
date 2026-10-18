@@ -49,6 +49,10 @@ export interface DashboardData {
 	// drive id -> 'iso' / 'folder' for the same drives, so the source chip
 	// says ISO or Folder.
 	iso_source_kinds: Record<string, IsoSourceKind>;
+	// drive id -> 'iso' / 'folder' for EVERY virtual drive, retired ones
+	// included, so a finished ISO job (whose drive is retired) still reads as
+	// ISO / Folder (the log list's disc chip).
+	drive_source_kinds: Record<string, IsoSourceKind>;
 	// ISO rips with no job yet (scanning / unpacking the image), so the
 	// dashboard can show them before identify creates the job.
 	preparing: IsoPreparing[];
@@ -110,10 +114,12 @@ export async function fetchDashboard(): Promise<DashboardData> {
 	const driveNames: Record<string, string> = {};
 	const isoSources: Record<string, string> = {};
 	const isoSourceKinds: Record<string, IsoSourceKind> = {};
+	const driveSourceKinds: Record<string, IsoSourceKind> = {};
 	// `drives` includes retired rows so a finished ISO job keeps its label in
 	// drive_names; the live-only maps below skip them.
 	for (const d of drives ?? []) {
 		driveNames[d.id] = d.display_name ?? d.device_path;
+		if (d.kind === 'virtual') driveSourceKinds[d.id] = d.source_kind === 'folder' ? 'folder' : 'iso';
 		if (d.kind === 'virtual' && d.lifecycle !== 'retired') {
 			// display_name is the ISO's file name for a virtual drive; fall back
 			// to the last path segment of source_path if it's ever missing.
@@ -141,6 +147,7 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		drive_names: driveNames,
 		iso_sources: isoSources,
 		iso_source_kinds: isoSourceKinds,
+		drive_source_kinds: driveSourceKinds,
 		preparing,
 		notification_count: notifications?.unseen ?? 0,
 		ripping_enabled: config ? !config.ripping_paused : true,

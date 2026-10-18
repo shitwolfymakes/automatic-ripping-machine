@@ -122,6 +122,13 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 		expect(keys).toContain('manual_wait_seconds');
 		expect(keys).not.toContain('hold_for_review');
 	});
+
+	it('puts the ISO rip limit in its own ISO Ripping section, not a leftover Ripping one', () => {
+		const out = sectionFields('Ripping', [f('auto_rip_on_insert'), f('max_parallel_iso_rips', { type: 'int' })]);
+		const iso = out.find((s) => s.fields.some((x) => x.key === 'max_parallel_iso_rips'));
+		expect(iso?.title).toBe('ISO Ripping');
+		expect(out.map((s) => s.title)).not.toContain('Ripping');
+	});
 });
 
 describe('settingsTabFor', () => {

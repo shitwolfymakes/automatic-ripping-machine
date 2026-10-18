@@ -136,4 +136,18 @@ describe('fetchDashboard', () => {
 		expect(dash.iso_source_kinds).toEqual({ drv_iso: 'iso', drv_dir: 'folder', drv_old: 'iso' });
 		expect(dash.preparing[0].iso_kind).toBe('folder');
 	});
+
+	it('records the source kind of every virtual drive, retired ones included', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_live', kind: 'virtual', lifecycle: 'enrolled', display_name: 'a.iso', source_kind: 'iso' },
+			{ id: 'drv_done', kind: 'virtual', lifecycle: 'retired', display_name: 'Disc 1', source_kind: 'folder' },
+			{ id: 'drv_gone', kind: 'virtual', lifecycle: 'retired', display_name: 'b.iso' },
+			{ id: 'drv_opt', kind: 'optical', lifecycle: 'enrolled', display_name: 'sr0' }
+		] as DriveView[]);
+
+		const dash = await fetchDashboard();
+
+		expect(dash.drive_source_kinds).toEqual({ drv_live: 'iso', drv_done: 'folder', drv_gone: 'iso' });
+		expect(dash.iso_source_kinds).toEqual({ drv_live: 'iso' });
+	});
 });
