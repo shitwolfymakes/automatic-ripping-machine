@@ -482,3 +482,152 @@
 	box-shadow: 0 0 5px rgba(0, 255, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 	flex: none;
 }
+/* Settings tab strip — its own winamp window, titled like the sidebar's
+   NAVIGATION panel, with the tab buttons inside it */
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	background-color: rgb(34, 36, 56);
+	padding: 0 0.75rem 0.75rem;
+	margin-bottom: 0.75rem;
+}
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs']::before {
+	content: 'SECTIONS';
+	display: block;
+	margin: 0 -0.75rem 0.75rem;
+	padding: 0.35rem 0.75rem;
+	text-align: center;
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	color: rgb(214, 218, 235);
+	text-shadow: 1px 1px 0 rgb(0, 0, 0);
+	background:
+		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) right 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	border-top: 1px solid rgb(85, 90, 125);
+	border-bottom: 1px solid rgb(12, 13, 22);
+}
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] > .tabs {
+	margin-bottom: 0;
+	border-bottom: none;
+	box-shadow: none;
+	/* every section button stays in view: they wrap inside the window
+	   instead of scrolling sideways out of it */
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+/* Settings tabs — each tab is one winamp window: the tab's content (every
+   sibling after the tab strip; inactive ones are [hidden]) gets the
+   container bevel, and its page heading becomes the titlebar spanning the
+   window's top edge (negative margins cancel the window's side padding). */
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :not([hidden], h2) {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	background-color: rgb(34, 36, 56);
+	padding: 0 1rem 1rem;
+}
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ * :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title) {
+	flex: 1 1 100%;
+	margin: 0 -1rem 0.75rem;
+}
+/* the heading's block takes a whole flex header row (Sessions), and a row
+   the heading shares with buttons (Drives) wraps them below it */
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)),
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ * :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)) {
+	flex: 1 1 100%;
+	flex-wrap: wrap;
+}
+/* a heading, or a heading row, placed straight after the tab strip (Themes,
+   Drives) is the window's top; the sibling under it joins it as the body */
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ h2 {
+	margin-bottom: 0;
+}
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)) {
+	border-bottom: none;
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :is(h2, :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title))) + * {
+	border-top: none;
+	padding-top: 1rem;
+}
+/* Files page — the root tabs are a LOCATIONS window like the settings
+   SECTIONS one, and the breadcrumb row plus the listing below it are one
+   browser window: the row is its titlebar (breadcrumb left, gold ridge
+   filling the middle, toolbar right) and the listing its body. */
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > [aria-label='File root tabs'] {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	background-color: rgb(34, 36, 56);
+	padding: 0 0.75rem 0.75rem;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	box-shadow: none;
+	overflow: visible;
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > [aria-label='File root tabs']::before {
+	content: 'LOCATIONS';
+	flex: 1 1 100%;
+	margin: 0 -0.75rem 0.25rem;
+	padding: 0.35rem 0.75rem;
+	text-align: center;
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	color: rgb(214, 218, 235);
+	text-shadow: 1px 1px 0 rgb(0, 0, 0);
+	background:
+		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) right 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	border-top: 1px solid rgb(85, 90, 125);
+	border-bottom: 1px solid rgb(12, 13, 22);
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(12, 13, 22) rgb(85, 90, 125);
+	border-bottom-width: 1px;
+	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+	color: rgb(214, 218, 235);
+	text-shadow: 1px 1px 0 rgb(0, 0, 0);
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) > nav.breadcrumb {
+	order: 0;
+	min-width: 0;
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb)::after {
+	content: '';
+	order: 1;
+	flex: 1;
+	height: 6px;
+	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) > :not(nav) {
+	order: 2;
+}
+[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) + div {
+	margin-top: -1rem;
+	border: 2px solid;
+	border-top: none;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	background-color: rgb(34, 36, 56);
+	padding: 0.75rem;
+}
+/* Transcoder page — the Transcode Jobs section (titlebar, filter tabs and
+   task list) is one winamp window; its heading spans the top edge. */
+[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) {
+	border: 2px solid;
+	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	background-color: rgb(34, 36, 56);
+	padding: 0 1rem 1rem;
+}
+[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) > h2 {
+	margin: 0 -1rem 0.75rem;
+}
+[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) > .tabs {
+	box-shadow: none;
+	flex-wrap: wrap;
+}
