@@ -282,7 +282,7 @@
 				accent="var(--color-primary)"
 				label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
 			>
-				<div class="grid gap-4">
+				<div class="grid grid-cols-1 gap-4">
 					{#each waitingJobs as job (job.id)}
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
 							<DiscReviewWidget
