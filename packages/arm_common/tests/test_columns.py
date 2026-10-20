@@ -45,3 +45,21 @@ def test_str_enum_string_rejects_unknown_value_on_bind():
     col = _StrEnumString(JobStatus)
     with pytest.raises(ValueError, match="not a valid JobStatus value"):
         col.process_bind_param("bogus", None)
+
+
+def test_str_enum_string_cache_key_includes_enum_class():
+    # D-188: cache_ok types are keyed on __init__ args stored under the same
+    # name; otherwise every enum column type shares one compilation cache key.
+    from sqlalchemy import literal, select
+
+    from arm_common import DriveStatus
+
+    job_t, drive_t = _StrEnumString(JobStatus), _StrEnumString(DriveStatus)
+    assert job_t._static_cache_key != drive_t._static_cache_key
+    assert _StrEnumString(JobStatus)._static_cache_key == job_t._static_cache_key
+
+    job_stmt = select(literal(JobStatus.RIPPING, type_=job_t))
+    drive_stmt = select(literal(DriveStatus.ONLINE, type_=drive_t))
+    job_key, drive_key = job_stmt._generate_cache_key(), drive_stmt._generate_cache_key()
+    assert job_key is not None and drive_key is not None
+    assert job_key.key != drive_key.key
