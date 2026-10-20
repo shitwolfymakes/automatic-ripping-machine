@@ -220,7 +220,15 @@ async def _check_ui_user(user_id: str) -> None:
 
 async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) -> None:
     while True:
-        raw = await websocket.receive_json()
+        try:
+            raw = await websocket.receive_json()
+        except WebSocketDisconnect:
+            raise
+        except Exception:
+            # Non-JSON text or a binary frame: a client protocol error, answered
+            # like the same frame before auth instead of a 1011 + traceback (D-167).
+            await _send_error(websocket, CLOSE_BAD_MESSAGE, "message must be JSON")
+            continue
         try:
             msg = _inbound_adapter.validate_python(raw)
         except ValidationError:

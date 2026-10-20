@@ -428,6 +428,27 @@ def test_ui_jwt_account_checks_reject(
             assert err["reason"] == reason
 
 
+def test_non_json_frames_after_auth_get_error_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    # D-167: bad text and binary frames after auth answer with an error frame
+    # and the connection keeps serving.
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            assert ws.receive_json()["op"] == "ack"
+            ws.send_text("not json at all")
+            err = ws.receive_json()
+            assert err["code"] == ws_router.CLOSE_BAD_MESSAGE
+            assert err["reason"] == "message must be JSON"
+            ws.send_bytes(b"\x00\x01")
+            assert ws.receive_json()["code"] == ws_router.CLOSE_BAD_MESSAGE
+            ws.send_json({"op": "subscribe", "topic": "ripper.events"})
+            assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
+
+
 # --- UI principal (anonymous guest, empty auth token) -------------------------
 
 
