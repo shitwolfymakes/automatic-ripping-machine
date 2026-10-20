@@ -334,8 +334,10 @@ if [[ "${ACTION}" == "up" ]]; then
     #    beyond the built images.
     guard_running_spawned
 
-    # 3. Write the detected GPUs to .env as ARM_GPUS.
+    # 3. Write the detected GPUs to .env as ARM_GPUS, and re-issue the UI
+    #    certificate when the host has an address it does not name.
     refresh_arm_gpus
+    refresh_ui_leaf
 
     # 4. Back up the running database before migrations can touch it.
     backup_db
@@ -355,6 +357,7 @@ if [[ "${ACTION}" == "up" ]]; then
     else
         compose up -d
     fi
+    restart_ui_for_new_leaf
     respawn_rippers_if_needed "${BACKEND_STARTED_BEFORE}"
 
     # 7. Wait for the backend to answer its health check.

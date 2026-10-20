@@ -208,10 +208,12 @@ This is a one-time action per device. The per-service leaf certs are
 regenerated whenever you rerun the installer, but they're all signed by this CA,
 so trusting the CA is enough: you never re-import after a leaf changes.
 
-The UI certificate names `localhost`, the host's name and the IPv4 addresses
-the host had when you installed. If the host later gets a new address (a DHCP
-change, a new network card), browsers warn on the new address until you issue
-a fresh certificate: run `armctl down`, then `armctl install`.
+The UI certificate names `localhost`, the host's name and the host's IPv4
+addresses. If the host later gets a new address (a DHCP change, a new network
+card), browsers warn on the new address until the certificate names it: run
+`armctl up`, which issues a fresh certificate when the host has an address the
+current one lacks and restarts the UI with it. If that does not clear the
+warning, run `armctl down`, then `armctl install`.
 
 ## Your first rip
 

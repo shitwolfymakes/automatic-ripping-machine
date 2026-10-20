@@ -354,7 +354,7 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 2. **Host**: checks Docker (installed, version 24 or newer, compose plugin, running daemon, group membership) and fixes what it can with consent; it automates only Debian and Ubuntu. On a fresh install (no `.env` yet) it stops if containers named `armv3-*` exist, since the fixed project name would take over that stack (the dev stack, or another install). Also takes the lock, checks for `openssl` and creates the folder layout.
 3. **Storage**: asks for the raw and media locations, creates them, checks they are writable.
 4. **Remote transcode offload**: runs the offload walkthrough (`deploy/install/offload.sh`) for the offload profile; for any other profile it prints "not used by the <profile> profile".
-5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant. The UI leaf carries `localhost`, the host name and every non-loopback IPv4 address the host has at install time (`ui_leaf_sans` in `deploy/lib/certs.sh`), so a device that trusts the CA can open `https://<host-ip>:8081` without a warning.
+5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant. The UI leaf carries `localhost`, the host name and every non-loopback IPv4 address the host has at install time (`ui_leaf_sans` in `deploy/lib/certs.sh`), so a device that trusts the CA can open `https://<host-ip>:8081` without a warning. `armctl up` re-issues that leaf when the host has gained an address the certificate does not name (`refresh_ui_leaf`).
 6. **Configuration**: writes `.env` (secrets generated once, ids and GPUs detected, release pinned, profile recorded, `ARM_TRANSCODE_CAPABLE` set from the profile) and the host overlay. Offers the NVIDIA toolkit on the full profile when an NVIDIA GPU is found, offers the udev rule, and offers the PATH link (`~/.local/bin` when it is on the PATH, otherwise `/usr/local/bin` with sudo; `--no-host-changes` makes neither).
 7. **Start**: runs the same path as `armctl up`, including the health wait. On by default; `--no-start` skips it.
 8. **Finish**: the offload verification table when relevant, then the summary: the URL (`https://localhost:8081`), the first-login command, the certificate-trust hint, the everyday commands and any steps that were skipped.
@@ -369,10 +369,10 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 
 1. **Pull** the images this host needs: the base transcode image unless the profile is ripper-only, the Intel or AMD variants only when that GPU is present, and no variants when transcodes are offloaded (`--no-pull` skips the pull). A failed pull stops here with the running stack untouched. A check that every needed image is present on the host follows, and stops the same way.
 2. **Guard**: refuses while a rip or transcode is active, unless `--force`.
-3. **Refresh** the detected GPUs in `.env`.
+3. **Refresh** the detected GPUs in `.env`, and the UI certificate when the host has an address it does not name.
 4. **Back up** the database into `~/arm/backups/`, keeping the newest five. `--no-backup` skips it.
 5. **Remove** the spawned rippers and transcoders, and containers of retired services.
-6. **Start** from the pulled images, and recreate rippers if the backend kept running.
+6. **Start** from the pulled images, restart the UI if its certificate was re-issued, and recreate rippers if the backend kept running.
 7. **Wait** up to 90 seconds for the backend's health check, then print the URL.
 
 **`armctl upgrade [--version <tag>]`:**

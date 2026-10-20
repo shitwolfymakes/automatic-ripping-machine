@@ -141,7 +141,7 @@ has "a missing image during an upgrade: the hint names the live .env" "ARM_IMAGE
 lacks "a missing image during an upgrade: the hint does not name .env.next" ".env.next" "$out"
 
 # --- up and down ordering ---------------------------------------------------------
-STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus backup_db remove_spawned_containers remove_retired_services respawn_rippers_if_needed wait_for_backend)
+STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus refresh_ui_leaf backup_db remove_spawned_containers remove_retired_services restart_ui_for_new_leaf respawn_rippers_if_needed wait_for_backend)
 # run_cmd <install name> <FAIL_AT step or ''> <command> [args...]: run an
 # armctl command with every step replaced by a recorder; print the order.
 run_cmd() {
@@ -166,7 +166,7 @@ run_cmd() {
     )
 }
 check "up: pull and verify come before anything changes" \
-    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;respawn_rippers_if_needed;wait_for_backend;FORCE=0 NO_BACKUP=0;" \
+    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;FORCE=0 NO_BACKUP=0;" \
     "$(run_cmd up-ok '' cmd_up)"
 check "up: a missing image stops before the guard, backup and removal" \
     "select_up_services;pull_images;verify_images_present;FORCE=0 NO_BACKUP=0;" \
@@ -850,6 +850,46 @@ else
     echo "skip - openssl not available"
 fi
 
+# --- UI certificate refresh -------------------------------------------------------------
+# ui_refresh <name> <SANs on the certificate, 'none' for no certificate, '' for
+# one openssl cannot read> <hostname -I output>: run refresh_ui_leaf with
+# openssl, hostname and make_leaf stubbed; print what it said and did.
+ui_refresh() {
+    (
+        ARM_CERTS_DIR="${TMPROOT}/$1/certs"; mkdir -p "${ARM_CERTS_DIR}"
+        stub_sans="$2" stub_ips="$3"; calls="${ARM_CERTS_DIR}/calls"; : > "${calls}"
+        [[ "${stub_sans}" == none ]] || echo cert > "${ARM_CERTS_DIR}/arm-ui.crt"
+        openssl() {
+            echo "openssl $1" >> "${calls}"
+            [[ -n "${stub_sans}" ]] || return 1
+            printf 'X509v3 Subject Alternative Name: \n    %s\n' "${stub_sans}"
+        }
+        hostname() { case "${1:-}" in -f) echo nas.lan ;; -I) echo "${stub_ips}" ;; esac; }
+        make_leaf() { echo "make_leaf $*"; }
+        refresh_ui_leaf
+        echo "REISSUED=${UI_LEAF_REISSUED}"
+        cat "${calls}"
+    ) 2>&1 | tr '\n' ';'
+}
+out="$(ui_refresh ui-new-addr "DNS:arm-ui, DNS:localhost, DNS:nas.lan, IP Address:192.168.1.20" "192.168.1.20 10.0.0.5")"
+check "UI leaf: an address missing from the certificate re-issues it with every current address" \
+    "  re-issuing the UI certificate: 10.0.0.5 is not on it;make_leaf arm-ui localhost nas.lan 192.168.1.20 10.0.0.5;REISSUED=1;openssl x509;" "$out"
+out="$(ui_refresh ui-covered "DNS:arm-ui, DNS:localhost, DNS:nas.lan, IP Address:192.168.1.20, IP Address:10.0.0.5" "192.168.1.20")"
+check "UI leaf: a certificate naming every current address is kept, also with an address the host lost" \
+    "REISSUED=0;openssl x509;" "$out"
+out="$(ui_refresh ui-renamed "DNS:arm-ui, DNS:localhost, DNS:old.lan, IP Address:192.168.1.20" "192.168.1.20")"
+has "UI leaf: a new host name re-issues it" "re-issuing the UI certificate: nas.lan is not on it;make_leaf arm-ui localhost nas.lan 192.168.1.20;" "$out"
+check "UI leaf: no certificate yet, nothing is issued and openssl is not asked" \
+    "REISSUED=0;" "$(ui_refresh ui-none none "192.168.1.20")"
+out="$(ui_refresh ui-unreadable "" "192.168.1.20")"
+check "UI leaf: a certificate openssl cannot read is re-issued" \
+    "  re-issuing the UI certificate: its addresses cannot be read;make_leaf arm-ui localhost nas.lan 192.168.1.20;REISSUED=1;openssl x509;" "$out"
+out="$( (UI_SERVICE=arm-ui; compose() { echo "compose $*"; }; UI_LEAF_REISSUED=1; restart_ui_for_new_leaf) )"
+check "UI leaf: a re-issued leaf restarts arm-ui once the stack is up" \
+    "  restarting arm-ui to load the new UI certificate
+compose restart arm-ui" "$out"
+check "UI leaf: no re-issue, no restart" "" "$( (UI_SERVICE=arm-ui; compose() { echo "compose $*"; }; UI_LEAF_REISSUED=0; restart_ui_for_new_leaf) )"
+
 # --- NVIDIA container toolkit -----------------------------------------------------------
 # nv_case: an NVIDIA GPU on an apt host. NV_* variables shape docker and curl.
 # Run standalone with errexit live, as in armctl, then report what was called.
@@ -1048,7 +1088,7 @@ apply_case() {
 }
 out="$(apply_case apply-ok '')"
 has "apply: pull, verify, guard and backup all come before the switch" \
-    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;respawn_rippers_if_needed;wait_for_backend;rc=0;" "$out"
+    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;rc=0;" "$out"
 has "apply: .env is on the new release" "TAG=v3.2.0;RIPPER=reg/arm-ripper:v3.2.0;" "$out"
 has "apply: current points at the new release" "CURRENT=releases/v3.2.0;" "$out"
 has "apply: the previous release is kept, older ones pruned" "RELEASES=v3.1.0 v3.2.0;" "$out"

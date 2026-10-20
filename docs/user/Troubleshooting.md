@@ -137,7 +137,9 @@ openssl x509 -in ~/arm/certs/arm-ui.crt -noout -ext subjectAltName
 ```
 
 If the address is missing (the host's IP changed after install), run
-`armctl down`, then `armctl install` to issue a new certificate.
+`armctl up`: it issues a new certificate when the host has an address the
+current one lacks and restarts the UI with it. If the address is still missing
+afterwards, run `armctl down`, then `armctl install`.
 
 ## "Password change required" / everything returns 403
 

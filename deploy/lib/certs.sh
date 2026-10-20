@@ -27,6 +27,11 @@ ensure_ca() {
     chmod 444 "$ca_crt"
 }
 
+# san_is_ipv4 <value>: true for a dotted IPv4 address.
+san_is_ipv4() {
+    [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+}
+
 # make_leaf <name> [extra SAN ...]: issue a leaf signed by the CA. The name is
 # always a DNS SAN; each extra SAN is an IP when it looks like one, DNS otherwise.
 # Keys are 440 and group-owned by ARM_PGID so a stack whose PUID differs from
@@ -41,7 +46,7 @@ make_leaf() {
     local san="DNS:${name}" s
     for s in "${extra_sans[@]:-}"; do
         [[ -z "$s" ]] && continue
-        if [[ "$s" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        if san_is_ipv4 "$s"; then
             san+=",IP:${s}"
         else
             san+=",DNS:${s}"
@@ -68,15 +73,49 @@ EOF
 # ui_leaf_sans: the extra SANs for the UI leaf, one per line: localhost, the
 # host name, and every non-loopback IPv4 address. Without the addresses a
 # browser that trusts the CA still rejects https://<host-ip>:8081, the way
-# other devices on the LAN reach the UI. Addresses are read at issue time; a
-# host whose address changes needs its leaves re-issued.
+# other devices on the LAN reach the UI. Addresses are read at issue time;
+# refresh_ui_leaf re-issues the leaf on `up` when the host has gained one.
 ui_leaf_sans() {
     echo localhost
     hostname -f 2>/dev/null || hostname 2>/dev/null || echo localhost
     local ip
     for ip in $(hostname -I 2>/dev/null); do
-        if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ && "$ip" != 127.* ]]; then
+        if san_is_ipv4 "$ip" && [[ "$ip" != 127.* ]]; then
             echo "$ip"
         fi
     done
+}
+
+# refresh_ui_leaf: re-issue the UI leaf when an address from ui_leaf_sans is
+# missing from the certificate (a DHCP change, a new network card), so `up`
+# covers a changed host without a reinstall. A certificate that names every
+# current address is kept, also when it names addresses the host no longer
+# has. Without a certificate the installer has not run; nothing is issued
+# here. The new leaf is a new file behind arm-ui's single-file bind mount,
+# so the running container keeps the old one until restart_ui_for_new_leaf
+# (deploy/lib/lifecycle.sh) restarts it once the stack is up.
+UI_LEAF_REISSUED=0
+refresh_ui_leaf() {
+    local crt="${ARM_CERTS_DIR}/arm-ui.crt" listed ui_sans san entry reason=""
+    [[ -f "$crt" ]] || return 0
+    # One SAN per line as openssl spells them: "DNS:nas.lan", "IP Address:10.0.0.5".
+    listed="$(openssl x509 -in "$crt" -noout -ext subjectAltName 2>/dev/null \
+        | tail -n +2 | tr ',' '\n' | sed 's/^[[:space:]]*//' || true)"
+    mapfile -t ui_sans < <(ui_leaf_sans)
+    if [[ -z "$listed" ]]; then
+        reason="its addresses cannot be read"
+    else
+        for san in "${ui_sans[@]}"; do
+            if san_is_ipv4 "$san"; then entry="IP Address:${san}"; else entry="DNS:${san}"; fi
+            if ! grep -qxF "$entry" <<<"$listed"; then
+                reason="${san} is not on it"
+                break
+            fi
+        done
+    fi
+    [[ -n "$reason" ]] || return 0
+    arm_say "re-issuing the UI certificate: ${reason}"
+    make_leaf arm-ui "${ui_sans[@]}"
+    # shellcheck disable=SC2034  # read by restart_ui_for_new_leaf in deploy/lib/lifecycle.sh
+    UI_LEAF_REISSUED=1
 }

@@ -104,6 +104,8 @@ check "no retired container: nothing removed" \
     "$(retired armv3 '')"
 check "unreadable compose config: no docker calls" "" "$(retired '' c0ffee)"
 present "up removes retired services"   '^    remove_retired_services$' "${SETUP}"
+present "up re-issues the UI certificate for a new address" '^    refresh_ui_leaf$' "${SETUP}"
+present "up restarts arm-ui after a re-issued certificate"  '^    restart_ui_for_new_leaf$' "${SETUP}"
 
 # remove_spawned_containers + respawn_rippers_if_needed, run for real against
 # stubbed compose/docker: prints RIPPERS_REMOVED and whether the backend was
