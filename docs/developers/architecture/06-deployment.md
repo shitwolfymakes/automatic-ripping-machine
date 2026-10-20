@@ -165,8 +165,14 @@ docker socket:
 
 Unenroll stops and removes the container. On every backend boot the `drives`
 table is reconciled against the labelled containers: missing → created, exited
-→ started, orphan → removed, and a container running an image that no longer
-matches `ARM_RIPPER_IMAGE` is recreated when the drive is idle. These
+→ started, orphan → removed, and a container that has drifted is recreated
+when the drive is idle (adopted as-is while it is ripping, and picked up at the
+next boot). A container has drifted when its image no longer matches
+`ARM_RIPPER_IMAGE`, or when its `arm.spec_hash` label (a hash of the
+`containers.run` kwargs it was created with) differs from the spec the current
+settings produce: a changed `ARM_RIPPER_*` tunable, `PUID`/`PGID`/`CDROM_GID`
+or `ARM_LOG_LEVEL` reaches the ripper on the next backend start. A container
+from before the label existed counts as drifted and is recreated once. These
 containers are **outside the compose project** — `docker compose down` leaves
 them (`armctl down` removes them); `bash devtools/ripper-containers.sh {list|stop|remove}` manages them.
 

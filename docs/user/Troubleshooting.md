@@ -47,10 +47,12 @@ ls /sys/class/block/sr0/device/scsi_generic/    # e.g. -> sg5
 The ripper creates `sg0` to `sg15` and `sr0` to `sr7`. On a host with many SCSI
 devices the drive can land above that (for example `sg18`). Raise the range in
 `~/arm/.armctl/.env` with `ARM_RIPPER_OPTICAL_SG_MAX` (and
-`ARM_RIPPER_OPTICAL_SR_MAX` for the block node). While the drive is idle,
-remove its ripper with `docker rm -f <ripper-name>`, then run `armctl up`; the
-backend recreates the ripper for every enrolled drive when it starts, now with
-the new range. The ripper logs the range it created at start
+`ARM_RIPPER_OPTICAL_SR_MAX` for the block node), then run `armctl up` while
+the drive is idle. When the backend starts it recreates every idle ripper whose
+settings no longer match `.env`, so the new range applies without removing
+anything by hand. A ripper that is mid-rip at that moment keeps its old
+settings and is recreated at the next backend start once it is idle. The
+ripper logs the range it created at start
 (`optical nodes: created ... (sr0..sr7, sg0..sg15)`).
 
 ## Disc won't eject after a rip
