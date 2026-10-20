@@ -481,7 +481,7 @@ def test_manual_trigger_in_flight_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "in-flight RIPPING" in r.json()["detail"]
+    assert "job in progress (ripping)" in r.json()["detail"]
 
 
 def test_manual_trigger_media_not_ready_400(signing_key: bytes) -> None:

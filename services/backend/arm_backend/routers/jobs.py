@@ -131,7 +131,9 @@ _IDENTITY_JOB_ATTRS = frozenset(JOB_CLAIM_FIELDS.values()).intersection(JobUpdat
 # Manual-trigger pre-check (drive media status). The ripper posts every
 # HEARTBEAT_INTERVAL_SECONDS (currently 30s); a 90s window forgives
 # heartbeats delayed by transient network blips while still catching
-# tray-open/no-disc clicks made seconds after the ripper noticed.
+# tray-open/no-disc clicks made seconds after the ripper noticed. A reading
+# older than this means the ripper stopped beating, and the trigger is
+# refused rather than sent to nobody (D-241).
 _MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
 _MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
 _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
@@ -986,28 +988,49 @@ async def manual_trigger(
             detail="ripping is paused; no new jobs accepted",
         )
 
-    in_flight = (
-        await db.execute(
-            select(Job).where(col(Job.drive_id) == req.drive_id).where(col(Job.status) == JobStatus.RIPPING)
+    # The ripper drops a trigger while it owns any job, and no ripper acts on
+    # one for a detached drive or after it stopped beating. Refuse those here,
+    # in the DriveCard's order and wording (D-208), so the click gets a reason
+    # it can show instead of a 202 nothing follows. The card gates the first
+    # two itself; heartbeat age it cannot judge against the browser clock.
+    live = (
+        (
+            await db.execute(
+                select(Job)
+                .where(col(Job.drive_id) == req.drive_id)
+                .where(col(Job.status).in_(NON_TERMINAL_JOB_STATUSES))
+                .limit(1)
+            )
         )
-    ).first()
-    if in_flight is not None:
+        .scalars()
+        .first()
+    )
+    if live is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"drive {req.drive_id} already has an in-flight RIPPING job",
+            detail=f"the drive already has a job in progress ({enum_value_str(live.status)})",
+        )
+    if not drive.present:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="the drive is not connected")
+    if drive.media_status_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="the drive's ripper is offline (no heartbeat yet)",
+        )
+    age = datetime.now(timezone.utc) - drive.media_status_at
+    if age >= _MEDIA_STATUS_FRESHNESS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"the drive's ripper is offline (last heartbeat {int(age.total_seconds())}s ago)",
         )
 
-    # Fast-fail when the user clicks Start without loading a disc.
-    # Heartbeat-fed; we only honour readings that arrived within the
-    # freshness window (a stale row is equivalent to "we don't know" —
-    # let the request through and let identify do the talking).
-    if drive.media_status_at is not None and drive.media_status is not None:
-        age = datetime.now(timezone.utc) - drive.media_status_at
-        if age < _MEDIA_STATUS_FRESHNESS and drive.media_status not in _MEDIA_STATUS_READY:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_MEDIA_STATUS_DETAIL[drive.media_status],
-            )
+    # Fast-fail when the user clicks Start without loading a disc. The
+    # reading is from the heartbeat that just passed the freshness check.
+    if drive.media_status is not None and drive.media_status not in _MEDIA_STATUS_READY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_MEDIA_STATUS_DETAIL[drive.media_status],
+        )
 
     if req.session_id is not None:
         sess = (await db.execute(select(Session).where(col(Session.id) == req.session_id))).scalar_one_or_none()

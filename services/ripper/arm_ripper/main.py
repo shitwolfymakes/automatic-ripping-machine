@@ -127,8 +127,8 @@ async def maybe_reacquire_current_job(
 async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
     """Post the current media status to the backend every
     HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
-    the heartbeat is best-effort and stale rows fall back to
-    "unknown" on the manual-trigger pre-check.
+    the heartbeat is best-effort; a row that goes stale makes the
+    manual-trigger pre-check refuse clicks until the next beat lands.
 
     Reads the shared DriveHandle every beat, so a drive that moved to a
     new srN is probed at its new node with no restart. While the drive is
