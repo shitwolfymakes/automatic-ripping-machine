@@ -105,10 +105,10 @@ async def update_rip_preset(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown rip_preset_id: {preset_id}")
 
     fields = req.model_dump(exclude_unset=True)
-    if row.is_builtin and set(fields.keys()) - {"name"}:
+    if row.is_builtin and fields:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="built-in rip preset: only `name` can be edited; clone it via a new preset to customise",
+            detail="built-in rip preset is read-only; create a new preset to customise",
         )
 
     new_track_selection = fields.get("track_selection", row.track_selection)

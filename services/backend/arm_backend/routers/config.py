@@ -20,6 +20,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -220,6 +221,13 @@ async def update_config(
             )
     if "episode_auto_apply" in fields and fields["episode_auto_apply"] is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="episode_auto_apply must be true or false")
+    # Catch-all for the rest of the NOT NULL columns (the boolean toggles): a
+    # JSON null would otherwise reach the commit and 500 (D-164). The checks
+    # above keep their field-specific messages.
+    columns = sa_inspect(Config).columns
+    for key, value in fields.items():
+        if value is None and key in columns and not columns[key].nullable:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must not be null")
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

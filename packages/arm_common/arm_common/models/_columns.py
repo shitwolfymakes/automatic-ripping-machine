@@ -17,21 +17,31 @@ class _StrEnumString(TypeDecorator[StrEnum]):
     the row is serialized to JSON. With this, the column round-trips
     StrEnum ↔ str at the SQL boundary and the field always carries the typed
     enum.
+
+    Writes are strict: binding a value that is not a member of `enum_cls` (by
+    instance or exact string value) raises ValueError, so this is the
+    write-time guardrail the VARCHAR-enum convention relies on. Reads stay
+    tolerant (see `process_result_value`).
     """
 
     impl = String
     cache_ok = True
 
     def __init__(self, enum_cls: type[StrEnum]) -> None:
-        self._enum_cls = enum_cls
+        # Stored under the same name as the __init__ parameter: SQLAlchemy builds
+        # a cache_ok type's cache key from __init__ argument names it finds in
+        # __dict__, so a differently named attribute would give every enum column
+        # the same key.
+        self.enum_cls = enum_cls
         super().__init__()
 
     def process_bind_param(self, value: Any, dialect: Dialect) -> str | None:
         if value is None:
             return None
-        if isinstance(value, self._enum_cls):
-            return value.value
-        return str(value)
+        try:
+            return self.enum_cls(value).value
+        except ValueError:
+            raise ValueError(f"{value!r} is not a valid {self.enum_cls.__name__} value") from None
 
     def process_result_value(self, value: Any, dialect: Dialect) -> StrEnum | None:
         # The declared return type matches TypeDecorator's supertype (StrEnum | None)
@@ -41,7 +51,7 @@ class _StrEnumString(TypeDecorator[StrEnum]):
         if value is None:
             return None
         try:
-            return self._enum_cls(value)
+            return self.enum_cls(value)
         except ValueError:
             # Tolerant coercion: a value written by a NEWER build (an enum member
             # this build doesn't know) must not raise on load — a single such row
@@ -51,7 +61,7 @@ class _StrEnumString(TypeDecorator[StrEnum]):
             # rollback-safe (old build reading a new row degrades, not crashes).
             logger.warning(
                 "unknown %s value %r loaded from DB; returning raw string (forward-compat)",
-                self._enum_cls.__name__,
+                self.enum_cls.__name__,
                 value,
             )
             return str(value)  # type: ignore[return-value]  # intentional runtime-only widening

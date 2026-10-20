@@ -12,25 +12,22 @@ that folder. Deleting the failed job with its files must not remove it.
 
 from __future__ import annotations
 
-import os
 import secrets
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-from sqlmodel import SQLModel  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
 
-import arm_common.models  # noqa: E402,F401  (populate SQLModel.metadata)
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import (  # noqa: E402
+import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import jobs as jobs_router
+from arm_common import (
     DiscType,
     Job,
     JobStatus,
@@ -40,7 +37,7 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     User,
 )
-from tests.e2e.test_dispatcher_real_session import (  # noqa: E402
+from tests.e2e.test_dispatcher_real_session import (
     _restore_column_types,
     _retype_pg_columns_to_json,
 )

@@ -6,16 +6,13 @@ as static assets); the backend stores only user-uploaded themes.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import json  # noqa: E402
-import pytest  # noqa: E402
+import json
+import pytest
 
-from arm_backend import theme_service  # noqa: E402
+from arm_backend import theme_service
 
 
 @pytest.fixture

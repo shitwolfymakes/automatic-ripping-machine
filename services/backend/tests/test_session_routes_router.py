@@ -3,25 +3,22 @@ media-type-mismatch 422, non-writer 403. Modeled on test_rip_presets_router.py."
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import session_routes as session_routes_router  # noqa: E402
-from arm_common import DiscType, MediaType, Session, SessionRoute, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import session_routes as session_routes_router
+from arm_common import DiscType, MediaType, Session, SessionRoute, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture

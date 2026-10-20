@@ -43,7 +43,9 @@ class _FakeProc:
         return self.returncode
 
 
-async def _noop_progress(_pct: int, _eta: int | None, _current: str | None) -> None:
+async def _noop_progress(
+    _pct: int, _eta: int | None, _current: str | None, _fps: float | None, _avg_fps: float | None
+) -> None:
     return None
 
 

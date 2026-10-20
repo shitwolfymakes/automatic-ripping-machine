@@ -3,21 +3,18 @@ and the session-reference delete guard. Mirrors test_rip_presets_router.py."""
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import transcode_presets as tp_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import transcode_presets as tp_router
+from arm_common import (
     ContainerFormat,
     MediaType,
     Session,
@@ -26,7 +23,7 @@ from arm_common import (  # noqa: E402
     User,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -234,6 +231,26 @@ def test_patch_null_encoder_leaves_it_unchanged(signing_key: bytes) -> None:
     assert r.json()["name"] == "renamed"
 
 
+def test_patch_null_not_null_fields_leaves_them_unchanged(signing_key: bytes) -> None:
+    # D-154: tool/container/name are nullable in the update schema but NOT
+    # NULL in the table; an explicit null must not reach the row (500).
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    row = _preset("tpr_nulls", name="keep")
+    db.rows["transcode_presets"] = [row]
+    before = (row.tool, row.container)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/transcode-presets/tpr_nulls",
+            json={"name": None, "tool": None, "container": None, "extra_args": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "keep"
+    assert (row.tool, row.container) == before
+    assert row.extra_args is None
+
+
 def test_create_empty_encoder_422(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -262,7 +279,7 @@ def test_patch_builtin_encoder_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.patch("/api/transcode-presets/tpr_bi", json={"encoder": "cpu_h265"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "only `name` can be edited" in r.json()["detail"]
+    assert "read-only" in r.json()["detail"]
 
 
 def test_patch_updates_fields(signing_key: bytes) -> None:
@@ -288,21 +305,22 @@ def test_patch_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_patch_builtin_name_only_allowed(signing_key: bytes) -> None:
+def test_patch_builtin_is_read_only(signing_key: bytes) -> None:
+    # `name` included: the seeder re-syncs it on every boot (D-146).
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["transcode_presets"] = [_preset("tpr_b", name="builtin", is_builtin=True)]
     with TestClient(app) as client:
-        ok = client.patch("/api/transcode-presets/tpr_b", json={"name": "renamed"}, headers=_auth(token))
+        renamed = client.patch("/api/transcode-presets/tpr_b", json={"name": "renamed"}, headers=_auth(token))
         rejected = client.patch(
             "/api/transcode-presets/tpr_b",
             json={"extra_args": "--nope"},
             headers=_auth(token),
         )
-    assert ok.status_code == 200
-    assert ok.json()["name"] == "renamed"
+    assert renamed.status_code == 409
+    assert db.rows["transcode_presets"][0].name == "builtin"
     assert rejected.status_code == 409
-    assert "only `name` can be edited" in rejected.json()["detail"]
+    assert "read-only" in rejected.json()["detail"]
 
 
 def test_delete_404(signing_key: bytes) -> None:

@@ -10,23 +10,20 @@ configured to raise. The end-to-end channel routing / dispatch-log /
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.notification_dispatcher import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.notification_dispatcher import (
     MessageDispatcher,
     redact_apprise_url,
 )
-from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_common import (
     Config,
     DiscType,
     Event,
@@ -35,7 +32,7 @@ from arm_common import (  # noqa: E402
     NotificationChannel,
     RetentionPolicy,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _settings() -> Settings:

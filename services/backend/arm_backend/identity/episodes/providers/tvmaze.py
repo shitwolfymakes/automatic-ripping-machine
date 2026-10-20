@@ -12,6 +12,8 @@ regardless of how many seasons the episode-match stage asks for.
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from arm_common import Config
 from arm_common.schemas import ExternalIds
 
@@ -59,7 +61,7 @@ class TvmazeEpisodes:
 
     async def _episodes(self, show_id: str) -> list[object]:
         body = await self.http.get_json(
-            f"{settings.ARM_TVMAZE_BASE_URL}/shows/{show_id}/episodes",
+            f"{settings.ARM_TVMAZE_BASE_URL}/shows/{quote(show_id, safe='')}/episodes",
             params={"specials": "1"},
             cache_key=f"tvmaze:episodes:{show_id}",
         )

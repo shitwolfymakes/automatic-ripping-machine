@@ -6,26 +6,23 @@ collision paths are covered by test_jobs_delete.py / test_apply_session.py.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.routers import jobs as jobs_router
+from arm_common import (
     DiscFingerprint,
     DiscType,
     Drive,
@@ -40,10 +37,10 @@ from arm_common import (  # noqa: E402
     TrackStatus,
     User,
 )
-from arm_common.enums import TrackKind, TrackRole  # noqa: E402
-from arm_common.models import Track  # noqa: E402
+from arm_common.enums import TrackKind, TrackRole
+from arm_common.models import Track
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -212,6 +209,31 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
         r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", headers=_auth(token))
     assert r.status_code == 409
     assert "terminal status" in r.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/abandon", None),
+        ("DELETE", "", None),
+        ("POST", "/resolve", {"title": "T"}),
+    ],
+)
+def test_status_409_survives_raw_string_status(
+    signing_key: bytes, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409 on abandon / delete / resolve, not an
+    AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.request(method, f"/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001{path}", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
@@ -456,7 +478,7 @@ def test_manual_trigger_in_flight_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "in-flight RIPPING" in r.json()["detail"]
+    assert "job in progress (ripping)" in r.json()["detail"]
 
 
 def test_manual_trigger_media_not_ready_400(signing_key: bytes) -> None:

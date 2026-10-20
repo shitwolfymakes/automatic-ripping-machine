@@ -99,33 +99,15 @@
         ],
         "summary": "Change Password",
         "operationId": "change_password_api_auth_password_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PasswordChangeRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -133,10 +115,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": "boolean"
                   },
+                  "type": "object",
                   "title": "Response Change Password Api Auth Password Post"
                 }
               }
@@ -152,7 +134,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/ripper/config": {
@@ -163,6 +150,11 @@
         "summary": "Get Ripper Config",
         "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\n(setup spec 2026-10-01 D1). Rippers that omit it get the global value.",
         "operationId": "get_ripper_config_api_ripper_config_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -178,22 +170,6 @@
                 }
               ],
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -229,33 +205,15 @@
         "summary": "Heartbeat",
         "description": "Each ripper posts here every HEARTBEAT_INTERVAL_SECONDS with the\ncurrent CDROM_DRIVE_STATUS reading. The manual-trigger endpoint\nreads `media_status` + `media_status_at` to refuse clicks made\nagainst an empty / open tray, instead of letting identify land an\nempty scan_result.\n\n`last_seen_at` is bumped on every call so the drive's online state\nis implicitly refreshed too \u2014 no separate liveness ping needed.",
         "operationId": "heartbeat_api_ripper_heartbeat_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RipperHeartbeatRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "204": {
@@ -271,7 +229,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/iso-prepare": {
@@ -282,33 +245,15 @@
         "summary": "Iso Prepare Report",
         "description": "An ISO ripper's phase before its job exists (scanning, extracting with\nprogress). Kept in memory (`iso_prepare`) and pushed to the dashboard\nthrough a non-persisted `ripper.events` event, which wakes its refresh.",
         "operationId": "iso_prepare_report_api_ripper_iso_prepare_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IsoPrepareReport"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "204": {
@@ -324,7 +269,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/drives/{drive_id}": {
@@ -335,6 +285,11 @@
         "summary": "Get Drive",
         "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
         "operationId": "get_drive_api_ripper_drives__drive_id__get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -343,22 +298,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -394,6 +333,11 @@
         "summary": "Update Device Path",
         "description": "Ripper \u2192 backend on a node move (replug under a new srN), so the UI\nnever shows a stale node. Identity is untouched \u2014 only where it lives.",
         "operationId": "update_device_path_api_ripper_drives__drive_id__device_path_patch",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -402,22 +346,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -456,33 +384,15 @@
         "summary": "Makemkv Key Status",
         "description": "A ripper reports its disc-free makemkv probe outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across multiple rippers,\nby design). the key check, preflight and config view read it back.",
         "operationId": "makemkv_key_status_api_ripper_makemkv_key_status_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MakemkvKeyStatusReport"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "204": {
@@ -498,7 +408,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/keydb-status": {
@@ -509,33 +424,15 @@
         "summary": "Keydb Status",
         "description": "A ripper reports its community-keydb fetch outcome. Global fact \u2014\nwritten to the Config singleton (last writer wins across rippers, by\ndesign). /api/system/preflight reads it back. `age_days` is accepted for\nsymmetry with the ripper's status line but not persisted (no column for\nit); only state + vuk_count are durable.",
         "operationId": "keydb_status_api_ripper_keydb_status_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/KeydbStatusReport"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "204": {
@@ -551,7 +448,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/sdf-status": {
@@ -562,33 +464,15 @@
         "summary": "Sdf Status",
         "description": "A ripper reports its MakeMKV SDF fetch outcome. Global fact \u2014 written\nto the Config singleton (last writer wins across rippers). preflight reads\nit back. `age_days` is accepted for symmetry with the status line but not\npersisted (no column).",
         "operationId": "sdf_status_api_ripper_sdf_status_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SdfStatusReport"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "204": {
@@ -604,7 +488,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/register": {
@@ -615,33 +504,15 @@
         "summary": "Register",
         "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
         "operationId": "register_api_ripper_register_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -664,7 +535,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/identify": {
@@ -674,33 +550,15 @@
         ],
         "summary": "Identify",
         "operationId": "identify_api_ripper_identify_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IdentifyRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -723,7 +581,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/ripper/jobs/{job_id}": {
@@ -733,6 +596,11 @@
         ],
         "summary": "Get Job",
         "operationId": "get_job_api_ripper_jobs__job_id__get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -741,22 +609,6 @@
             "schema": {
               "type": "string",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -791,6 +643,11 @@
         ],
         "summary": "Rip Start",
         "operationId": "rip_start_api_ripper_jobs__job_id__rip_start_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -815,22 +672,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -866,6 +707,11 @@
         "summary": "Resume",
         "description": "Phase 9 \u2014 per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
         "operationId": "resume_api_ripper_jobs__job_id__resume_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -890,22 +736,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -941,6 +771,11 @@
         "summary": "Get In Flight Job",
         "description": "Phase 9 \u2014 boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
         "operationId": "get_in_flight_job_api_ripper_drives__drive_id__in_flight_job_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -949,22 +784,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1000,6 +819,11 @@
         "summary": "Get Current Job",
         "description": "The drive's single non-terminal job, if any (any pre-rip status OR\nripping). Lets an idle ripper re-acquire a disc whose resolution landed after\nthe in-memory wait timed out. 404 when the drive is unknown or no live job.",
         "operationId": "get_current_job_api_ripper_drives__drive_id__current_job_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -1008,22 +832,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1059,6 +867,11 @@
         "summary": "Get Held Job",
         "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
         "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -1067,22 +880,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1118,6 +915,11 @@
         "summary": "Recovery Abandon",
         "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
         "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1126,22 +928,6 @@
             "schema": {
               "type": "string",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1176,6 +962,11 @@
         ],
         "summary": "Update Track",
         "operationId": "update_track_api_ripper_tracks__track_id__patch",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "track_id",
@@ -1200,22 +991,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1260,6 +1035,11 @@
         ],
         "summary": "Rip Complete",
         "operationId": "rip_complete_api_ripper_jobs__job_id__rip_complete_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1284,22 +1064,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1344,6 +1108,12 @@
         ],
         "summary": "List Jobs",
         "operationId": "list_jobs_api_jobs_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "status",
@@ -1399,22 +1169,6 @@
               "default": 0,
               "title": "Offset"
             }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -1451,6 +1205,11 @@
         "summary": "Delete All Jobs",
         "description": "Hard-delete terminal jobs. An optional body filters the set:\n`job_ids` (only those), `status` (only that JobStatus), or neither\n(all terminal jobs \u2014 legacy). `job_ids` wins over `status`. Non-terminal\njobs are always skipped and reported in `skipped_non_terminal`.\n\n`delete_raw=true` runs the filesystem cleanup (raw rmtree + media file\nunlink + empty-parent prune) for each deleted job. Cleanups are\nindependent \u2014 a failure on one job is logged and the next continues.",
         "operationId": "delete_all_jobs_api_jobs_delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "delete_raw",
@@ -1460,22 +1219,6 @@
               "type": "boolean",
               "default": false,
               "title": "Delete Raw"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1528,24 +1271,6 @@
         "summary": "Job Stats",
         "description": "Dashboard aggregates. Full-scan + count in Python (mirrors the\ndispatcher pattern) so the in-memory FakeSession stays sufficient;\njob counts are small at the hobbyist scale this serves.",
         "operationId": "job_stats_api_jobs_stats_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1556,18 +1281,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/jobs/{job_id}": {
@@ -1577,6 +1298,12 @@
         ],
         "summary": "Get Job Detail",
         "operationId": "get_job_detail_api_jobs__job_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1586,22 +1313,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1635,6 +1346,11 @@
         "summary": "Delete Job",
         "description": "Hard-delete a Job. Tracks, fingerprints, session_applications,\ntranscode_tasks, and events cascade via Postgres FK ondelete=CASCADE.\n\nRefuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /\nRIPPING) \u2014 caller must `POST /abandon` first if they want a job in\nflight gone. This keeps the active-rip cancel logic in one place.\n\n`delete_raw=true` also unlinks every transcode output recorded for the\njob and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths\ndirectly, so the cleanup runs synchronously here \u2014 no WS roundtrip,\nno dependency on the ripper container being up. Per-file unlink for\nmedia (sibling re-rips share the `media/<Title>/` parent dir); empty\nparents are pruned after the unlink phase.",
         "operationId": "delete_job_api_jobs__job_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1654,22 +1370,6 @@
               "type": "boolean",
               "default": false,
               "title": "Delete Raw"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1696,6 +1396,11 @@
         "summary": "Update Job",
         "description": "Edit user-controlled fields on a Job + optional per-track operator edits.\nJob title/year stay behind identify/resolve; track `status` stays ripper-owned\n(not in TrackEditRequest).",
         "operationId": "update_job_api_jobs__job_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1705,22 +1410,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1766,6 +1455,11 @@
         "summary": "Abandon Job",
         "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op (and used to,\npre-fix). Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
         "operationId": "abandon_job_api_jobs__job_id__abandon_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1775,22 +1469,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1843,6 +1521,11 @@
         "summary": "Rip Start Review",
         "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
         "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1852,22 +1535,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1903,6 +1570,11 @@
         "summary": "Rip Again",
         "description": "Operator \"Rip again\" on a ripped job (on_previously_ripped hold/reject).\n\nIf a copy of this disc is held right now (a previously-ripped hold sharing\na fingerprint with this job, whichever earlier rip it names), start that\none. Otherwise flag this job so the next identify of the disc skips the\npreviously-ripped check once.",
         "operationId": "rip_again_api_jobs__job_id__rip_again_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1912,22 +1584,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -1963,6 +1619,11 @@
         "summary": "Review Pause",
         "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
         "operationId": "review_pause_api_jobs__job_id__review_pause_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1982,22 +1643,6 @@
               "type": "boolean",
               "default": true,
               "title": "Paused"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2033,33 +1678,15 @@
         "summary": "Manual Trigger",
         "description": "Kick the ripper to run a job on a drive that already has a disc in\nthe tray. The ripper handles the WS command, scans the disc, and\nthreads `pending_session_id` through identify so the resulting Job's\n`pending_session_id` column carries it. `rip-complete` then auto-applies\nthat session.",
         "operationId": "manual_trigger_api_jobs_manual_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ManualTriggerRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "202": {
@@ -2082,7 +1709,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/jobs/{job_id}/resolve": {
@@ -2092,6 +1724,11 @@
         ],
         "summary": "Resolve",
         "operationId": "resolve_api_jobs__job_id__resolve_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2101,22 +1738,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2161,6 +1782,11 @@
         ],
         "summary": "Apply Session",
         "operationId": "apply_session_api_jobs__job_id__transcode_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2170,22 +1796,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2230,6 +1840,12 @@
         ],
         "summary": "Get Identity",
         "operationId": "get_identity_api_jobs__job_id__identity_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2239,22 +1855,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2289,6 +1889,11 @@
         ],
         "summary": "Match Identity",
         "operationId": "match_identity_api_jobs__job_id__identity_match_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2298,22 +1903,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2358,6 +1947,11 @@
         ],
         "summary": "Clear Identity Pin",
         "operationId": "clear_identity_pin_api_jobs__job_id__identity_pin_delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2367,22 +1961,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2417,6 +1995,12 @@
         ],
         "summary": "Browse Episodes",
         "operationId": "browse_episodes_api_jobs__job_id__identity_episodes_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2451,22 +2035,6 @@
               "minimum": 0,
               "title": "Season"
             }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -2500,6 +2068,12 @@
         ],
         "summary": "List Drives",
         "operationId": "list_drives_api_drives_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "include_retired",
@@ -2512,22 +2086,6 @@
               "title": "Include Retired"
             },
             "description": "Include retired (one-shot ISO rip) drive rows."
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -2566,24 +2124,6 @@
         "summary": "Drive Diagnostic",
         "description": "\"Look for issues\": every drive row judged against the lifecycle model,\nplus the health of the parts that make the model work (scanner, ripper\nmanager, the host's by-id mount). Never 503s \u2014 a missing subsystem is\nitself a finding. Virtual (ISO) drives are excluded entirely: they have\nno scanner/by-id/container health to report, and the lifecycle-else\nbranch below (\"ignored\") assumes only an optical row can be here.",
         "operationId": "drive_diagnostic_api_drives_diagnostic_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2594,18 +2134,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/drives/rescan": {
@@ -2616,6 +2152,12 @@
         "summary": "Rescan Drives",
         "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "force",
@@ -2628,22 +2170,6 @@
               "title": "Force"
             },
             "description": "Prune detected drives that are not present right now (admin only)."
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -2677,6 +2203,11 @@
         ],
         "summary": "Update Drive",
         "operationId": "update_drive_api_drives__drive_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2685,22 +2216,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2743,6 +2258,11 @@
         ],
         "summary": "Delete Drive",
         "operationId": "delete_drive_api_drives__drive_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2751,22 +2271,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2795,6 +2299,11 @@
         "summary": "Enroll Drive",
         "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
         "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2803,22 +2312,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2854,6 +2347,11 @@
         "summary": "Ignore Drive",
         "description": "detected -> ignored: \"not ARM's\". Persisted so the scanner never re-nags,\nand never pruned.",
         "operationId": "ignore_drive_api_drives__drive_id__ignore_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2862,22 +2360,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2912,6 +2394,11 @@
         ],
         "summary": "Unignore Drive",
         "operationId": "unignore_drive_api_drives__drive_id__unignore_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2920,22 +2407,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -2971,6 +2442,11 @@
         "summary": "Unenroll Drive",
         "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
         "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -2979,22 +2455,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3032,6 +2492,12 @@
         ],
         "summary": "Library",
         "operationId": "library_api_iso_library_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "subpath",
@@ -3041,22 +2507,6 @@
               "type": "string",
               "default": "",
               "title": "Subpath"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3092,24 +2542,6 @@
         "summary": "Folders",
         "description": "Every disc folder (BDMV / VIDEO_TS at its root) in the library, as one\nflat list sorted by path, for \"Rip from folder\" (`disc_folders`).",
         "operationId": "folders_api_iso_folders_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3120,18 +2552,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/iso/rips/preparing": {
@@ -3142,50 +2570,28 @@
         "summary": "Preparing",
         "description": "ISO rips whose ripper is still scanning or unpacking the image, before\nidentify creates the job (`iso_prepare`).",
         "operationId": "preparing_api_iso_rips_preparing_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/IsoPrepareView"
                   },
+                  "type": "array",
                   "title": "Response Preparing Api Iso Rips Preparing Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/iso/rips": {
@@ -3195,33 +2601,15 @@
         ],
         "summary": "Create Rip",
         "operationId": "create_rip_api_iso_rips_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IsoRipRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -3244,7 +2632,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/iso/rips/{drive_id}": {
@@ -3254,6 +2647,11 @@
         ],
         "summary": "Cancel Rip",
         "operationId": "cancel_rip_api_iso_rips__drive_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "drive_id",
@@ -3262,22 +2660,6 @@
             "schema": {
               "type": "string",
               "title": "Drive Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3305,50 +2687,28 @@
         ],
         "summary": "List Sessions",
         "operationId": "list_sessions_api_sessions_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SessionView"
                   },
+                  "type": "array",
                   "title": "Response List Sessions Api Sessions Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       },
       "post": {
         "tags": [
@@ -3356,33 +2716,15 @@
         ],
         "summary": "Create Session",
         "operationId": "create_session_api_sessions_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SessionCreateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -3405,7 +2747,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/sessions/{session_id}": {
@@ -3415,6 +2762,12 @@
         ],
         "summary": "Get Session By Id",
         "operationId": "get_session_by_id_api_sessions__session_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -3423,22 +2776,6 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3471,6 +2808,11 @@
         ],
         "summary": "Update Session",
         "operationId": "update_session_api_sessions__session_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -3479,22 +2821,6 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3537,6 +2863,11 @@
         ],
         "summary": "Delete Session",
         "operationId": "delete_session_api_sessions__session_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -3545,22 +2876,6 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3588,6 +2903,11 @@
         ],
         "summary": "Clone Session",
         "operationId": "clone_session_api_sessions__session_id__clone_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -3596,22 +2916,6 @@
             "schema": {
               "type": "string",
               "title": "Session Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3656,33 +2960,15 @@
         ],
         "summary": "Preview Template",
         "operationId": "preview_template_api_sessions_preview_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TemplatePreviewRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3705,7 +2991,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/session-routes": {
@@ -3715,50 +3007,28 @@
         ],
         "summary": "List Session Routes",
         "operationId": "list_session_routes_api_session_routes_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SessionRouteView"
                   },
+                  "type": "array",
                   "title": "Response List Session Routes Api Session Routes Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       },
       "put": {
         "tags": [
@@ -3766,33 +3036,15 @@
         ],
         "summary": "Upsert Session Route",
         "operationId": "upsert_session_route_api_session_routes_put",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SessionRouteUpsert"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3815,7 +3067,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/session-routes/{route_id}": {
@@ -3825,6 +3082,11 @@
         ],
         "summary": "Delete Session Route",
         "operationId": "delete_session_route_api_session_routes__route_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "route_id",
@@ -3833,22 +3095,6 @@
             "schema": {
               "type": "string",
               "title": "Route Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3876,6 +3122,12 @@
         ],
         "summary": "List Rip Presets",
         "operationId": "list_rip_presets_api_rip_presets_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "media_type",
@@ -3891,22 +3143,6 @@
                 }
               ],
               "title": "Media Type"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -3943,22 +3179,9 @@
         ],
         "summary": "Create Rip Preset",
         "operationId": "create_rip_preset_api_rip_presets_post",
-        "parameters": [
+        "security": [
           {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
+            "UserJWT": []
           }
         ],
         "requestBody": {
@@ -4002,6 +3225,12 @@
         ],
         "summary": "Get Rip Preset",
         "operationId": "get_rip_preset_api_rip_presets__preset_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4010,22 +3239,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4058,6 +3271,11 @@
         ],
         "summary": "Update Rip Preset",
         "operationId": "update_rip_preset_api_rip_presets__preset_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4066,22 +3284,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4124,6 +3326,11 @@
         ],
         "summary": "Delete Rip Preset",
         "operationId": "delete_rip_preset_api_rip_presets__preset_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4132,22 +3339,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4175,6 +3366,12 @@
         ],
         "summary": "List Transcode Presets",
         "operationId": "list_transcode_presets_api_transcode_presets_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "media_type",
@@ -4190,22 +3387,6 @@
                 }
               ],
               "title": "Media Type"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4242,22 +3423,9 @@
         ],
         "summary": "Create Transcode Preset",
         "operationId": "create_transcode_preset_api_transcode_presets_post",
-        "parameters": [
+        "security": [
           {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
+            "UserJWT": []
           }
         ],
         "requestBody": {
@@ -4301,6 +3469,12 @@
         ],
         "summary": "Get Transcode Preset",
         "operationId": "get_transcode_preset_api_transcode_presets__preset_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4309,22 +3483,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4357,6 +3515,11 @@
         ],
         "summary": "Update Transcode Preset",
         "operationId": "update_transcode_preset_api_transcode_presets__preset_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4365,22 +3528,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4423,6 +3570,11 @@
         ],
         "summary": "Delete Transcode Preset",
         "operationId": "delete_transcode_preset_api_transcode_presets__preset_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "preset_id",
@@ -4431,22 +3583,6 @@
             "schema": {
               "type": "string",
               "title": "Preset Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4474,33 +3610,15 @@
         ],
         "summary": "Register",
         "operationId": "register_api_transcoder_register_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterTranscoderRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4523,7 +3641,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ]
       }
     },
     "/api/transcoder/tasks/{task_id}/claim": {
@@ -4533,6 +3656,11 @@
         ],
         "summary": "Claim",
         "operationId": "claim_api_transcoder_tasks__task_id__claim_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -4557,22 +3685,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4607,6 +3719,11 @@
         ],
         "summary": "Heartbeat",
         "operationId": "heartbeat_api_transcoder_tasks__task_id__heartbeat_patch",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -4631,22 +3748,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4691,6 +3792,11 @@
         ],
         "summary": "Complete",
         "operationId": "complete_api_transcoder_tasks__task_id__complete_patch",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -4715,22 +3821,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4775,6 +3865,11 @@
         ],
         "summary": "Fail",
         "operationId": "fail_api_transcoder_tasks__task_id__fail_patch",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -4799,22 +3894,6 @@
                 }
               ],
               "title": "X-Arm-Hostname"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4859,6 +3938,12 @@
         ],
         "summary": "List Transcodes",
         "operationId": "list_transcodes_api_transcodes_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "status",
@@ -4890,22 +3975,6 @@
                 }
               ],
               "title": "Session Application Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -4944,24 +4013,6 @@
         ],
         "summary": "Transcode Stats",
         "operationId": "transcode_stats_api_transcodes_stats_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4972,18 +4023,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/transcodes/workers": {
@@ -4993,50 +4040,28 @@
         ],
         "summary": "Transcode Workers",
         "operationId": "transcode_workers_api_transcodes_workers_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/TranscodeWorkerView"
                   },
+                  "type": "array",
                   "title": "Response Transcode Workers Api Transcodes Workers Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/transcodes/{task_id}/retry": {
@@ -5046,6 +4071,11 @@
         ],
         "summary": "Retry Transcode",
         "operationId": "retry_transcode_api_transcodes__task_id__retry_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -5054,22 +4084,6 @@
             "schema": {
               "type": "string",
               "title": "Task Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5104,6 +4118,12 @@
         ],
         "summary": "Download Transcode Log Zip",
         "operationId": "download_transcode_log_zip_api_transcodes__task_id__log_zip_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -5112,22 +4132,6 @@
             "schema": {
               "type": "string",
               "title": "Task Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5160,6 +4164,12 @@
         ],
         "summary": "Stream Transcode Log",
         "operationId": "stream_transcode_log_api_transcodes__task_id__log_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -5185,22 +4195,6 @@
                 }
               ],
               "title": "Limit"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5233,6 +4227,11 @@
         ],
         "summary": "Delete Transcode",
         "operationId": "delete_transcode_api_transcodes__task_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -5241,22 +4240,6 @@
             "schema": {
               "type": "string",
               "title": "Task Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5284,50 +4267,28 @@
         ],
         "summary": "List Gpus",
         "operationId": "list_gpus_api_gpus_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/GpuView"
                   },
+                  "type": "array",
                   "title": "Response List Gpus Api Gpus Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/gpus/{gpu_id}": {
@@ -5337,6 +4298,11 @@
         ],
         "summary": "Update Gpu",
         "operationId": "update_gpu_api_gpus__gpu_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "gpu_id",
@@ -5345,22 +4311,6 @@
             "schema": {
               "type": "string",
               "title": "Gpu Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5403,6 +4353,11 @@
         ],
         "summary": "Delete Gpu",
         "operationId": "delete_gpu_api_gpus__gpu_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "gpu_id",
@@ -5411,22 +4366,6 @@
             "schema": {
               "type": "string",
               "title": "Gpu Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5455,24 +4394,6 @@
         "summary": "Probe All Gpus",
         "description": "Re-probe every enabled row that isn't running a transcode. Rows already\nbeing probed are left to that probe and not listed.",
         "operationId": "probe_all_gpus_api_gpus_probe_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -5483,18 +4404,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/gpus/{gpu_id}/probe": {
@@ -5505,6 +4421,11 @@
         "summary": "Probe Gpu",
         "description": "Re-probe one row (enabled or not: a disabled row may be re-probed\nbefore an operator turns it back on).",
         "operationId": "probe_gpu_api_gpus__gpu_id__probe_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "gpu_id",
@@ -5513,22 +4434,6 @@
             "schema": {
               "type": "string",
               "title": "Gpu Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5563,50 +4468,28 @@
         ],
         "summary": "List Encoders",
         "operationId": "list_encoders_api_encoders_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/EncoderAvailabilityView"
                   },
+                  "type": "array",
                   "title": "Response List Encoders Api Encoders Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/config": {
@@ -5616,24 +4499,6 @@
         ],
         "summary": "Get Config",
         "operationId": "get_config_api_config_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5644,18 +4509,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       },
       "patch": {
         "tags": [
@@ -5663,33 +4524,15 @@
         ],
         "summary": "Update Config",
         "operationId": "update_config_api_config_patch",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ConfigUpdateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5712,7 +4555,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/config/keys/{name}/check": {
@@ -5722,6 +4570,11 @@
         ],
         "summary": "Check Key",
         "operationId": "check_key_api_config_keys__name__check_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "name",
@@ -5736,22 +4589,6 @@
               ],
               "type": "string",
               "title": "Name"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -5796,24 +4633,6 @@
         ],
         "summary": "Get Diagnostics",
         "operationId": "get_diagnostics_api_diagnostics_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5824,18 +4643,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/metadata/search": {
@@ -5845,6 +4660,12 @@
         ],
         "summary": "Search Metadata",
         "operationId": "search_metadata_api_metadata_search_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "title",
@@ -5888,22 +4709,6 @@
               ],
               "title": "Provider"
             }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -5937,6 +4742,12 @@
         ],
         "summary": "Lookup Metadata",
         "operationId": "lookup_metadata_api_metadata_lookup_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "imdb_id",
@@ -5968,22 +4779,6 @@
                 }
               ],
               "title": "Crc64"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6018,6 +4813,12 @@
         ],
         "summary": "Search Music",
         "operationId": "search_music_api_metadata_music_search_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "query",
@@ -6123,22 +4924,6 @@
               ],
               "title": "Status"
             }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -6172,6 +4957,12 @@
         ],
         "summary": "Music Release Detail",
         "operationId": "music_release_detail_api_metadata_music__release_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "release_id",
@@ -6180,22 +4971,6 @@
             "schema": {
               "type": "string",
               "title": "Release Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6230,6 +5005,12 @@
         ],
         "summary": "Naming Variables",
         "operationId": "naming_variables_api_naming_variables_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "media_type",
@@ -6245,22 +5026,6 @@
                 }
               ],
               "title": "Media Type"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6295,6 +5060,12 @@
         ],
         "summary": "Job Naming Preview",
         "operationId": "job_naming_preview_api_jobs__job_id__naming_preview_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -6323,22 +5094,6 @@
               "title": "Session Id"
             },
             "description": "Preview this session instead of the job's effective one"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
           }
         ],
         "responses": {
@@ -6372,33 +5127,15 @@
         ],
         "summary": "Naming Validate",
         "operationId": "naming_validate_api_naming_validate_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NamingValidateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -6421,7 +5158,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/naming/preview": {
@@ -6431,33 +5174,15 @@
         ],
         "summary": "Naming Preview",
         "operationId": "naming_preview_api_naming_preview_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NamingPreviewRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -6480,7 +5205,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/notifications/channels": {
@@ -6490,50 +5221,28 @@
         ],
         "summary": "List Channels",
         "operationId": "list_channels_api_notifications_channels_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/NotificationChannelView"
                   },
+                  "type": "array",
                   "title": "Response List Channels Api Notifications Channels Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       },
       "post": {
         "tags": [
@@ -6541,33 +5250,15 @@
         ],
         "summary": "Create Channel",
         "operationId": "create_channel_api_notifications_channels_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NotificationChannelCreateRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -6590,7 +5281,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/channels/{channel_id}": {
@@ -6600,6 +5296,12 @@
         ],
         "summary": "Get Channel",
         "operationId": "get_channel_api_notifications_channels__channel_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "channel_id",
@@ -6608,22 +5310,6 @@
             "schema": {
               "type": "string",
               "title": "Channel Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6656,6 +5342,11 @@
         ],
         "summary": "Patch Channel",
         "operationId": "patch_channel_api_notifications_channels__channel_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "channel_id",
@@ -6664,22 +5355,6 @@
             "schema": {
               "type": "string",
               "title": "Channel Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6722,6 +5397,11 @@
         ],
         "summary": "Delete Channel",
         "operationId": "delete_channel_api_notifications_channels__channel_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "channel_id",
@@ -6730,22 +5410,6 @@
             "schema": {
               "type": "string",
               "title": "Channel Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6773,24 +5437,6 @@
         ],
         "summary": "Get Services",
         "operationId": "get_services_api_notifications_services_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6801,18 +5447,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/notifications/scripts": {
@@ -6822,50 +5464,27 @@
         ],
         "summary": "Get Scripts",
         "operationId": "get_scripts_api_notifications_scripts_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/BashScriptSummary"
                   },
+                  "type": "array",
                   "title": "Response Get Scripts Api Notifications Scripts Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/scripts/preview": {
@@ -6875,33 +5494,15 @@
         ],
         "summary": "Preview Script",
         "operationId": "preview_script_api_notifications_scripts_preview_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BashPreviewRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -6924,7 +5525,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/scripts/{name}": {
@@ -6934,6 +5540,11 @@
         ],
         "summary": "Get Script",
         "operationId": "get_script_api_notifications_scripts__name__get",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "name",
@@ -6942,22 +5553,6 @@
             "schema": {
               "type": "string",
               "title": "Name"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -6992,6 +5587,12 @@
         ],
         "summary": "Compose Url",
         "operationId": "compose_url_api_notifications_services__service_id__compose_url_post",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "service_id",
@@ -7000,22 +5601,6 @@
             "schema": {
               "type": "string",
               "title": "Service Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7060,50 +5645,28 @@
         ],
         "summary": "Event Types",
         "operationId": "event_types_api_notifications_event_types_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/EventTypeInfo"
                   },
+                  "type": "array",
                   "title": "Response Event Types Api Notifications Event Types Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/notifications/channels/{channel_id}/test": {
@@ -7113,6 +5676,11 @@
         ],
         "summary": "Test Channel",
         "operationId": "test_channel_api_notifications_channels__channel_id__test_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "channel_id",
@@ -7121,22 +5689,6 @@
             "schema": {
               "type": "string",
               "title": "Channel Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7181,33 +5733,15 @@
         ],
         "summary": "Test Config",
         "operationId": "test_config_api_notifications_test_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/NotificationTestRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -7230,7 +5764,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/dispatch-log": {
@@ -7240,6 +5779,12 @@
         ],
         "summary": "Dispatch Log",
         "operationId": "dispatch_log_api_notifications_dispatch_log_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "channel_id",
@@ -7267,22 +5812,6 @@
               "minimum": 1,
               "default": 50,
               "title": "Limit"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7321,6 +5850,12 @@
         ],
         "summary": "List Inbox",
         "operationId": "list_inbox_api_notifications_inbox_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "include_cleared",
@@ -7342,22 +5877,6 @@
               "minimum": 1,
               "default": 50,
               "title": "Limit"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7396,24 +5915,6 @@
         ],
         "summary": "Inbox Count",
         "operationId": "inbox_count_api_notifications_inbox_count_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7424,18 +5925,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/notifications/inbox/dismiss-all": {
@@ -7445,50 +5942,27 @@
         ],
         "summary": "Inbox Dismiss All",
         "operationId": "inbox_dismiss_all_api_notifications_inbox_dismiss_all_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": "integer"
                   },
+                  "type": "object",
                   "title": "Response Inbox Dismiss All Api Notifications Inbox Dismiss All Post"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/inbox/purge": {
@@ -7498,50 +5972,27 @@
         ],
         "summary": "Inbox Purge",
         "operationId": "inbox_purge_api_notifications_inbox_purge_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": "integer"
                   },
+                  "type": "object",
                   "title": "Response Inbox Purge Api Notifications Inbox Purge Post"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/notifications/inbox/{inbox_id}": {
@@ -7551,6 +6002,11 @@
         ],
         "summary": "Patch Inbox",
         "operationId": "patch_inbox_api_notifications_inbox__inbox_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "inbox_id",
@@ -7559,22 +6015,6 @@
             "schema": {
               "type": "string",
               "title": "Inbox Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7620,6 +6060,12 @@
         "summary": "Download Job Logs Zip",
         "description": "In-memory zip of every line tagged with `job_id`.\n\nSource preference:\n  1. `/logs/jobs/{job_id}.log` \u2014 the per-job aggregated file written\n     by `LogTailer`. Single zip entry, named `<job_id>.log`.\n  2. Fallback (per-job file absent, e.g. jobs predating the tailer's\n     per-job append): walk `/logs/*.log` and write one entry per\n     service that contributed any matching lines.",
         "operationId": "download_job_logs_zip_api_logs__job_id__zip_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -7629,22 +6075,6 @@
               "type": "string",
               "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
               "title": "Job Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7678,6 +6108,12 @@
         "summary": "Stream Job Logs",
         "description": "NDJSON stream of every line tagged with `job_id`.\n\nReads `/logs/jobs/{job_id}.log` directly when present; otherwise\nfalls back to scanning `/logs/*.log` (alphabetical order; lines\nwithin a file in append order; no cross-file resort \u2014 the consumer\ncan sort by `ts` if global ordering matters).",
         "operationId": "stream_job_logs_api_logs__job_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -7704,22 +6140,6 @@
                 }
               ],
               "title": "Limit"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -7796,48 +6216,26 @@
         "summary": "Image Cache Stats",
         "description": "Image-cache statistics (count, size).",
         "operationId": "image_cache_stats_api_images_cache_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": true,
+                  "type": "object",
                   "title": "Response Image Cache Stats Api Images Cache Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/images/cache/clear": {
@@ -7848,48 +6246,25 @@
         "summary": "Image Cache Clear",
         "description": "Clear the image cache. Returns {success, cleared, freed_bytes}.",
         "operationId": "image_cache_clear_api_images_cache_clear_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": true,
+                  "type": "object",
                   "title": "Response Image Cache Clear Api Images Cache Clear Post"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/themes": {
@@ -7900,51 +6275,29 @@
         "summary": "List Themes",
         "description": "List all themes (metadata only, no CSS).",
         "operationId": "list_themes_api_themes_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
-                    "type": "object",
-                    "additionalProperties": true
+                    "additionalProperties": true,
+                    "type": "object"
                   },
+                  "type": "array",
                   "title": "Response List Themes Api Themes Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       },
       "post": {
         "tags": [
@@ -7953,33 +6306,15 @@
         "summary": "Upload Theme",
         "description": "Upload a user theme (JSON file + optional CSS).",
         "operationId": "upload_theme_api_themes_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_upload_theme_api_themes_post"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -7987,8 +6322,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": true,
+                  "type": "object",
                   "title": "Response Upload Theme Api Themes Post"
                 }
               }
@@ -8007,7 +6342,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/themes/{theme_id}": {
@@ -8018,6 +6358,12 @@
         "summary": "Get Theme",
         "description": "Full theme data including CSS.",
         "operationId": "get_theme_api_themes__theme_id__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "theme_id",
@@ -8026,22 +6372,6 @@
             "schema": {
               "type": "string",
               "title": "Theme Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -8080,6 +6410,11 @@
         "summary": "Delete Theme",
         "description": "Delete a user theme. Built-ins cannot be deleted.",
         "operationId": "delete_theme_api_themes__theme_id__delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "theme_id",
@@ -8088,22 +6423,6 @@
             "schema": {
               "type": "string",
               "title": "Theme Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -8188,50 +6507,28 @@
         "summary": "Settings Infra",
         "description": "Read-only values for the infra-tier (deploy-time) settings shown in the\nSystem section. Allowlisted + stringified; never secrets/bootstrap.",
         "operationId": "settings_infra_api_settings_infra_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": "string"
                   },
+                  "type": "object",
                   "title": "Response Settings Infra Api Settings Infra Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/settings/schema": {
@@ -8241,24 +6538,6 @@
         ],
         "summary": "Settings Schema",
         "operationId": "settings_schema_api_settings_schema_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8269,18 +6548,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/system/diagnostics": {
@@ -8290,24 +6565,6 @@
         ],
         "summary": "Diagnostics",
         "operationId": "diagnostics_api_system_diagnostics_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8318,18 +6575,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/system/stats": {
@@ -8339,24 +6592,6 @@
         ],
         "summary": "Stats",
         "operationId": "stats_api_system_stats_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8367,18 +6602,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/system/resources": {
@@ -8388,24 +6619,6 @@
         ],
         "summary": "Resources",
         "operationId": "resources_api_system_resources_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8416,18 +6629,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/system/version": {
@@ -8437,24 +6646,6 @@
         ],
         "summary": "System Version",
         "operationId": "system_version_api_system_version_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8465,18 +6656,14 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/system/thediscdb/refresh": {
@@ -8487,48 +6674,25 @@
         "summary": "Thediscdb Refresh Now",
         "description": "Rebuild the TheDiscDB snapshot index from GitHub, on demand.",
         "operationId": "thediscdb_refresh_now_api_system_thediscdb_refresh_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": true,
+                  "type": "object",
                   "title": "Response Thediscdb Refresh Now Api System Thediscdb Refresh Post"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/status": {
@@ -8560,24 +6724,6 @@
         ],
         "summary": "Get Setup",
         "operationId": "get_setup_api_setup_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8588,18 +6734,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/steps/{step}": {
@@ -8609,6 +6750,11 @@
         ],
         "summary": "Put Step",
         "operationId": "put_step_api_setup_steps__step__put",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "step",
@@ -8617,22 +6763,6 @@
             "schema": {
               "type": "string",
               "title": "Step"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -8677,24 +6807,6 @@
         ],
         "summary": "Complete Setup",
         "operationId": "complete_setup_api_setup_complete_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8705,18 +6817,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/restart": {
@@ -8727,24 +6834,6 @@
         "summary": "Restart Setup",
         "description": "Settings > System \"Run setup again\": keep what was recorded, reopen the walkthrough.\n\nA finished walkthrough has every step recorded, so the current step would be\nFinish. Reopen the system check along with Finish so the walkthrough starts\nfrom its first step again, wherever the operator returns to /setup.",
         "operationId": "restart_setup_api_setup_restart_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8755,18 +6844,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/defer": {
@@ -8777,24 +6861,6 @@
         "summary": "Defer Setup",
         "description": "The walkthrough's Finish later: stop the first-run redirect for every browser and sign-in\n(the dashboard checklist still lists what is left). Settings > \"Run setup\nagain\" (`/restart`) picks it back up.",
         "operationId": "defer_setup_api_setup_defer_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8805,18 +6871,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/checklist/dismiss": {
@@ -8826,24 +6887,6 @@
         ],
         "summary": "Dismiss Checklist",
         "operationId": "dismiss_checklist_api_setup_checklist_dismiss_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8854,18 +6897,13 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/setup/disc-routes": {
@@ -8876,50 +6914,27 @@
         "summary": "Disc Routes",
         "description": "What each kind of disc gets with no drive default and no per-rip choice:\nthe session route for that media type, else the first built-in session of\nthat type by name (what an operator picking by type would get). Read-only.",
         "operationId": "disc_routes_api_setup_disc_routes_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/DiscRouteSummary"
                   },
+                  "type": "array",
                   "title": "Response Disc Routes Api Setup Disc Routes Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/files/roots": {
@@ -8929,50 +6944,28 @@
         ],
         "summary": "Roots",
         "operationId": "roots_api_files_roots_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/FileRoot"
                   },
+                  "type": "array",
                   "title": "Response Roots Api Files Roots Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/files/list": {
@@ -8982,6 +6975,12 @@
         ],
         "summary": "List Directory",
         "operationId": "list_directory_api_files_list_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
         "parameters": [
           {
             "name": "root",
@@ -9000,22 +6999,6 @@
               "type": "string",
               "default": "",
               "title": "Subpath"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -9050,33 +7033,15 @@
         ],
         "summary": "Mkdir",
         "operationId": "mkdir_api_files_mkdir_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MkdirRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -9099,7 +7064,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/files/rename": {
@@ -9109,33 +7079,15 @@
         ],
         "summary": "Rename",
         "operationId": "rename_api_files_rename_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RenameRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -9158,7 +7110,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/files/move": {
@@ -9168,33 +7125,15 @@
         ],
         "summary": "Move",
         "operationId": "move_api_files_move_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MoveRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -9217,7 +7156,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/files/fix-permissions": {
@@ -9227,33 +7171,15 @@
         ],
         "summary": "Fix Permissions",
         "operationId": "fix_permissions_api_files_fix_permissions_post",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/FilePathRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -9276,7 +7202,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/files": {
@@ -9286,6 +7217,11 @@
         ],
         "summary": "Delete",
         "operationId": "delete_api_files_delete",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "root",
@@ -9303,22 +7239,6 @@
             "schema": {
               "type": "string",
               "title": "Subpath"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -9357,50 +7277,27 @@
         ],
         "summary": "List Users",
         "operationId": "list_users_api_users_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/UserView"
                   },
+                  "type": "array",
                   "title": "Response List Users Api Users Get"
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
       }
     },
     "/api/users/{user_id}": {
@@ -9410,6 +7307,11 @@
         ],
         "summary": "Set Disabled",
         "operationId": "set_disabled_api_users__user_id__patch",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "user_id",
@@ -9418,22 +7320,6 @@
             "schema": {
               "type": "string",
               "title": "User Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -9478,6 +7364,11 @@
         ],
         "summary": "Set Password",
         "operationId": "set_password_api_users__user_id__password_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
         "parameters": [
           {
             "name": "user_id",
@@ -9486,22 +7377,6 @@
             "schema": {
               "type": "string",
               "title": "User Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           }
         ],
@@ -11907,7 +9782,6 @@
         "enum": [
           "online",
           "offline",
-          "ripping",
           "error"
         ],
         "title": "DriveStatus"
@@ -13028,6 +10902,30 @@
               }
             ],
             "title": "Eta Seconds"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "avg_fps": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Fps"
           }
         },
         "type": "object",
@@ -18615,6 +16513,28 @@
               }
             ]
           },
+          "transcode_fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Fps"
+          },
+          "transcode_avg_fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcode Avg Fps"
+          },
           "output_path": {
             "anyOf": [
               {
@@ -19278,6 +17198,62 @@
             ],
             "title": "Claim Heartbeat At"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "current_pass": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Pass"
+          },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "avg_fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Fps"
+          },
           "last_error": {
             "anyOf": [
               {
@@ -19522,6 +17498,19 @@
           "type"
         ],
         "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "UserJWT": {
+        "type": "http",
+        "description": "UI session JWT from POST /api/auth/login. Omit it to act as the guest account when enabled.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ServiceToken": {
+        "type": "http",
+        "description": "Shared ARM_SERVICE_TOKEN used by ripper and transcoder containers.",
+        "scheme": "bearer"
       }
     }
   }

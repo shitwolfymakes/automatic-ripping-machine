@@ -7,16 +7,13 @@ ssl.create_default_context so we can assert the per-mode mutations.
 
 from __future__ import annotations
 
-import os
 import ssl
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import db as db_mod  # noqa: E402
-from arm_backend.db import _build_engine  # noqa: E402
+from arm_backend import db as db_mod
+from arm_backend.db import _build_engine
 
 
 @pytest.fixture

@@ -70,6 +70,17 @@ remove_retired_services() {
     done
 }
 
+# A UI leaf that refresh_ui_leaf (deploy/lib/certs.sh) re-issued is a new file
+# behind the container's single-file bind mount: the running arm-ui keeps the
+# old inode, and `compose up -d` leaves a service whose configuration did not
+# change running. Restart it so nginx loads the new certificate.
+restart_ui_for_new_leaf() {
+    [[ "${UI_LEAF_REISSUED:-0}" -eq 1 ]] || return 0
+    # shellcheck disable=SC2153  # UI_SERVICE is set by the scripts that source this file
+    arm_say "restarting ${UI_SERVICE} to load the new UI certificate"
+    compose restart "${UI_SERVICE}"
+}
+
 # Minimum size for a gzipped pg_dump to count as real. gzip of empty input is
 # ~20 bytes; a postgres:18 dump of a database with NO tables is ~400 bytes, so
 # anything under this is a failed or truncated dump, never a valid one.

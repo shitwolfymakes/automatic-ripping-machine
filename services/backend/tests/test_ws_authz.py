@@ -7,17 +7,14 @@ limitation that blocks in-memory SQLite.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
-from arm_backend.ws.authz import can_publish, can_subscribe  # noqa: E402
-from arm_backend.ws.principal import ServicePrincipal, UIPrincipal  # noqa: E402
-from arm_common import DiscType, Drive, DriveStatus, Job, JobStatus  # noqa: E402
+from arm_backend.ws.authz import can_publish, can_subscribe
+from arm_backend.ws.principal import ServicePrincipal, UIPrincipal
+from arm_common import DiscType, Drive, DriveStatus, Job, JobStatus
 
 
 class _FakeResult:

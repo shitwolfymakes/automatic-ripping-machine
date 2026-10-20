@@ -3,25 +3,22 @@ and the not-capable guard (ripper-only deployments can't turn it on)."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import config as config_router  # noqa: E402
-from arm_common import Config, JobStatus, SessionApplication, SessionApplicationStatus, User  # noqa: E402
-from arm_common.enums import RetentionPolicy  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import config as config_router
+from arm_common import Config, JobStatus, SessionApplication, SessionApplicationStatus, User
+from arm_common.enums import RetentionPolicy
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _settings(**overrides: object) -> Settings:
@@ -322,3 +319,35 @@ def test_reenable_redrain_failure_never_fails_the_patch(
     assert r.status_code == 200
     assert r.json()["transcode_enabled"] is True
     assert calls["n"] == 1
+
+
+async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A drain that raises rolls back and the loop moves on to the next job."""
+    from types import SimpleNamespace
+
+    from arm_common import DiscType, Job
+
+    db = FakeSession()
+    db.rows["jobs"] = [
+        Job(id="job_a", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(id="job_b", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id=f"sap_{j}", session_id="ses_x", job_id=j, status=SessionApplicationStatus.WAITING_IDENTIFY
+        )
+        for j in ("job_a", "job_b")
+    ]
+    drained: list[str] = []
+
+    async def _drain(_session: Any, job: Any, _hub: Any, *, trigger: str) -> None:
+        drained.append(job.id)
+        if job.id == "job_a":
+            raise RuntimeError("drain blew up")
+
+    monkeypatch.setattr(config_router, "drain_parked_applications_after_rip", _drain)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+
+    assert drained == ["job_a", "job_b"]
+    assert db.call_log.count("rollback") == 1

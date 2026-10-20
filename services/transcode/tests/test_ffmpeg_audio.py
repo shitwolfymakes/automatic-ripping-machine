@@ -110,7 +110,7 @@ async def test_transcode_audio_flac_emits_monotonic_progress_and_returns_size(mo
 
     progress: list[tuple[int, int | None, str | None]] = []
 
-    async def cb(pct: int, tcount: int | None, note: str | None) -> None:
+    async def cb(pct: int, tcount: int | None, note: str | None, fps: float | None, avg_fps: float | None) -> None:
         progress.append((pct, tcount, note))
 
     size = await transcode_audio(
@@ -141,7 +141,7 @@ async def test_transcode_audio_passes_explicit_format_flag(monkeypatch, tmp_path
     out_path = tmp_path / f"out.{preset}.arm-inprogress"
     out_path.write_bytes(b"x" * 20)
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         return None
 
     await transcode_audio(
@@ -163,7 +163,7 @@ async def test_transcode_audio_mp3_succeeds(monkeypatch, tmp_path):
     out_path = tmp_path / "out.mp3"
     out_path.write_bytes(b"\xff\xfb" + b"\x00" * 100)
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         return None
 
     size = await transcode_audio(
@@ -186,7 +186,7 @@ async def test_transcode_audio_unknown_preset_rejects_before_spawn(monkeypatch, 
 
     monkeypatch.setattr(ffmpeg_audio.asyncio, "create_subprocess_exec", must_not_call)
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         return None
 
     with pytest.raises(RuntimeError, match="unsupported audio preset_ref"):
@@ -212,7 +212,7 @@ async def test_transcode_audio_nonzero_exit_raises_with_stderr_tail(monkeypatch,
         returncode=1,
     )
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         return None
 
     with pytest.raises(RuntimeError) as exc:
@@ -235,7 +235,7 @@ async def test_transcode_audio_duration_none_skips_progress_callback(monkeypatch
 
     called = {"n": 0}
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         called["n"] += 1
 
     size = await transcode_audio(
@@ -256,7 +256,7 @@ async def test_transcode_audio_progress_callback_exception_does_not_propagate(mo
     out_path = tmp_path / "out.flac"
     out_path.write_bytes(b"x" * 20)
 
-    async def cb(_p: int, _t: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         raise ValueError("cb-bug")
 
     # No raise → cb's exception is swallowed at the call site (logged at debug).

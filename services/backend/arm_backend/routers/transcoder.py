@@ -6,7 +6,9 @@ Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
-- `PATCH /tasks/{task_id}/heartbeat` — `claim_heartbeat_at` + `progress_pct`.
+- `PATCH /tasks/{task_id}/heartbeat` — `claim_heartbeat_at` + `progress_pct`,
+  plus the encoder telemetry (`current_pass`, `eta_seconds`, `fps`,
+  `avg_fps`) so polling clients see the same numbers as the live event.
   The transcoder also publishes `transcode.progress.{task_id}` over WS at
   ~1 Hz; the REST heartbeat is the durable surface the stale-claim sweep
   reads.
@@ -160,8 +162,13 @@ async def claim(
     task.status = TranscodeTaskStatus.IN_PROGRESS
     task.claimed_by = x_arm_hostname
     task.claim_heartbeat_at = now
+    task.started_at = now
     task.attempts = (task.attempts or 0) + 1
     task.progress_pct = 0
+    task.current_pass = None
+    task.eta_seconds = None
+    task.fps = None
+    task.avg_fps = None
     await db.flush()
 
     application = (
@@ -217,6 +224,10 @@ async def heartbeat(
         )
     task.claim_heartbeat_at = datetime.now(UTC)
     task.progress_pct = req.progress_pct
+    task.current_pass = req.current_pass
+    task.eta_seconds = req.eta_seconds
+    task.fps = req.fps
+    task.avg_fps = req.avg_fps
     await db.commit()
     await db.refresh(task)
     return task

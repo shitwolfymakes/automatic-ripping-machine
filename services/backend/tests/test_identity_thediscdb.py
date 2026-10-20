@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.identity.sources.thediscdb import (  # noqa: E402
+from arm_backend.identity.sources.thediscdb import (
     build_claims,
     external_imdb_id,
     parse_duration,
     role_for_disc_type,
 )
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
-from arm_common import DiscType  # noqa: E402
-from arm_common.enums import TrackRole  # noqa: E402
-from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_common import DiscType
+from arm_common.enums import TrackRole
+from arm_common.schemas import ScanResult, ScanTitle
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 

@@ -6,14 +6,10 @@ override > derived-variant > base precedence.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.transcode_images import image_for, split_reference, variant_image, vendor_override  # noqa: E402
-from arm_common import GpuVendor  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.transcode_images import image_for, split_reference, variant_image, vendor_override
+from arm_common import GpuVendor
 
 
 def _settings(**overrides: object) -> Settings:

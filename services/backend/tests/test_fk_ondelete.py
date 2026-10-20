@@ -14,15 +14,11 @@ authoritative state we don't want auto-orphaned).
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-import arm_common.models  # noqa: E402,F401  ensure all models are imported
-from sqlmodel import SQLModel  # noqa: E402
+import arm_common.models  # noqa: F401  ensure all models are imported
+from sqlmodel import SQLModel
 
 
 _EXPECTED: dict[tuple[str, str], str] = {
@@ -40,6 +36,9 @@ _EXPECTED: dict[tuple[str, str], str] = {
     # so a future model rewrite can't quietly downgrade these.
     ("tracks", "job_id"): "CASCADE",
     ("session_applications", "job_id"): "CASCADE",
+    # session_applications → sessions: RESTRICT so an applied session keeps
+    # its history; DELETE /api/sessions/{id} pre-checks and answers 409.
+    ("session_applications", "session_id"): "RESTRICT",
     ("events", "job_id"): "CASCADE",
     ("disc_fingerprints", "job_id"): "CASCADE",
     # gpus.claimed_by_task_id → transcode_tasks: SET NULL because a

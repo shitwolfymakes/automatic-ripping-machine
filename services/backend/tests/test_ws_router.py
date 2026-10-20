@@ -9,24 +9,21 @@ and UI principals.
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from starlette.websockets import WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.seeders import GUEST_USERNAME  # noqa: E402
-from arm_backend.ws import router as ws_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.ws import router as ws_router
+from arm_common import (
     Drive,
     DriveStatus,
     Job,
@@ -34,10 +31,10 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     User,
 )
-from arm_common.models import TranscodeTask  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.models import TranscodeTask
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _SIGNING_KEY = secrets.token_bytes(32)
 
@@ -172,7 +169,7 @@ def test_auth_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         with client.websocket_connect("/ws") as ws:
             err = ws.receive_json()
             assert err["op"] == "error"
-            assert err["code"] == ws_router.CLOSE_UNAUTHORIZED
+            assert err["code"] == ws_router.CLOSE_AUTH_TIMEOUT
             assert "timeout" in err["reason"]
 
 
@@ -393,6 +390,60 @@ def test_ui_jwt_principal_subscribe(monkeypatch: pytest.MonkeyPatch) -> None:
             ws.send_json({"op": "subscribe", "topic": "ripper.events"})
             assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
     assert "ripper.events" in hub.subscribed
+
+
+@pytest.mark.parametrize(
+    ("user", "code", "reason"),
+    [
+        (None, ws_router.CLOSE_UNAUTHORIZED, "unknown user"),
+        (
+            User(id="usr_1", username="guest", password_hash="x", password_must_change=False, disabled=True),
+            ws_router.CLOSE_UNAUTHORIZED,
+            "account disabled",
+        ),
+        (
+            User(id="usr_1", username="admin", password_hash="x", password_must_change=True),
+            ws_router.CLOSE_FORBIDDEN,
+            "password change required",
+        ),
+    ],
+)
+def test_ui_jwt_account_checks_reject(
+    monkeypatch: pytest.MonkeyPatch, user: User | None, code: int, reason: str
+) -> None:
+    # D-163: a validly signed JWT for a missing, disabled, or must-change
+    # account is refused at the handshake, matching REST require_jwt.
+    db = FakeSession()
+    db.rows["users"] = [user] if user is not None else []
+    app = _make_app(db, _Hub(), monkeypatch)
+    token, _ = issue_access_token("usr_1", "admin", _SIGNING_KEY)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": token})
+            err = ws.receive_json()
+            assert err["code"] == code
+            assert err["reason"] == reason
+
+
+def test_non_json_frames_after_auth_get_error_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    # D-167: bad text and binary frames after auth answer with an error frame
+    # and the connection keeps serving.
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    hub = _Hub()
+    app = _make_app(db, hub, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": ""})
+            assert ws.receive_json()["op"] == "ack"
+            ws.send_text("not json at all")
+            err = ws.receive_json()
+            assert err["code"] == ws_router.CLOSE_BAD_MESSAGE
+            assert err["reason"] == "message must be JSON"
+            ws.send_bytes(b"\x00\x01")
+            assert ws.receive_json()["code"] == ws_router.CLOSE_BAD_MESSAGE
+            ws.send_json({"op": "subscribe", "topic": "ripper.events"})
+            assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
 
 
 # --- UI principal (anonymous guest, empty auth token) -------------------------

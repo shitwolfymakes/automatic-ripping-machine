@@ -20,24 +20,21 @@ the claim; the worker env carries the resolved catalog encoder id.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.transcode_dispatcher import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.transcode_dispatcher import (
     TranscodeDispatcher,
     gpu_awaiting_probe,
     set_active_dispatcher,
 )
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.ws import WSHub
+from arm_common import (
     Gpu,
     GpuStatus,
     GpuVendor,
@@ -48,8 +45,8 @@ from arm_common import (  # noqa: E402
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_common.enums import ContainerFormat, MediaType, TranscodeTool  # noqa: E402
-from tests._fakes import FakeSession  # noqa: E402
+from arm_common.enums import ContainerFormat, MediaType, TranscodeTool
+from tests._fakes import FakeSession
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -187,6 +184,7 @@ async def test_no_gpus_on_host_spawns_cpu(encoder: str) -> None:
     assert "ARM_GPU_VENDOR" not in kwargs["environment"]
     assert "devices" not in kwargs
     assert "runtime" not in kwargs
+    assert kwargs["log_config"] == {"type": "json-file", "config": {"max-size": "10m", "max-file": "3"}}
 
 
 # --- CPU encoder ----------------------------------------------------------------

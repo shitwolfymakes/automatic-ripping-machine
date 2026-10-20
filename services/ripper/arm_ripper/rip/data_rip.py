@@ -99,7 +99,7 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
         stderr = b""
         if proc.stderr is not None:
             stderr = await proc.stderr.read()
-        msg = stderr.decode(errors="replace").strip()[:400] or f"exit={proc.returncode}"
+        msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
         return RipResult(ok=False, error=f"dd failed: {msg}")
 
     if not output_path.exists() or output_path.stat().st_size == 0:

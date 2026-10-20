@@ -15,9 +15,16 @@ like a JWT (3 dot-separated segments). This enforces the
 from [05-cross-cutting.md § Authorization rules](../../../docs/developers/architecture/05-cross-cutting.md#authorization-rules).
 """
 
+from collections.abc import Callable, Iterator, Sequence
+from typing import Any
+
 import jwt
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, Security, status
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIRoute
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.routing import BaseRoute
 from sqlmodel import col, select
 
 from arm_backend.config import settings
@@ -39,13 +46,35 @@ def looks_like_jwt(token: str) -> bool:
     return bool(token) and token.count(".") == 2
 
 
+class _BearerHeader(HTTPBearer):
+    """Declares a bearer scheme in the OpenAPI schema but hands the dep the raw
+    `Authorization` header, so the checks below keep their exact semantics
+    (absent vs malformed header matters for the guest fallback)."""
+
+    async def __call__(self, request: Request) -> str | None:  # type: ignore[override]
+        return request.headers.get("authorization")
+
+
+_user_jwt = _BearerHeader(
+    scheme_name="UserJWT",
+    bearerFormat="JWT",
+    description="UI session JWT from POST /api/auth/login. Omit it to act as the guest account when enabled.",
+    auto_error=False,
+)
+_service_token = _BearerHeader(
+    scheme_name="ServiceToken",
+    description="Shared ARM_SERVICE_TOKEN used by ripper and transcoder containers.",
+    auto_error=False,
+)
+
+
 def _extract_bearer(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
     return authorization.removeprefix("Bearer ").strip()
 
 
-async def require_service_token(authorization: str | None = Header(default=None)) -> None:
+async def require_service_token(authorization: str | None = Security(_service_token)) -> None:
     token = _extract_bearer(authorization)
     if looks_like_jwt(token):
         # A JWT-shaped token reaching a ripper/transcoder endpoint is the
@@ -73,7 +102,7 @@ _MUST_CHANGE_GET_EXACT: frozenset[str] = frozenset({"/api/setup", "/api/system/r
 
 async def require_jwt(
     request: Request,
-    authorization: str | None = Header(default=None),
+    authorization: str | None = Security(_user_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     if authorization is None:
@@ -140,6 +169,30 @@ async def require_writer(user: User = Depends(require_jwt)) -> User:
             detail="read-only role: write access required",
         )
     return user
+
+
+def guest_readable(route: APIRoute) -> bool:
+    """True when the route authenticates through `require_jwt` without the
+    writer gate, so an absent token is served as the guest account."""
+    calls = set(_dependency_calls(route.dependant))
+    return require_jwt in calls and require_writer not in calls
+
+
+def _dependency_calls(dependant: Dependant) -> Iterator[Callable[..., Any] | None]:
+    for sub in dependant.dependencies:
+        yield sub.call
+        yield from _dependency_calls(sub)
+
+
+def declare_guest_reads(routes: Sequence[BaseRoute]) -> None:
+    """Mark guest-readable operations in the OpenAPI schema. FastAPI emits
+    `security: [{UserJWT: []}]` for every route behind the scheme; the extra
+    empty requirement merged in here is how OpenAPI says the token is optional,
+    so guest-readable operations end up as `[{UserJWT: []}, {}]` while
+    writer-only operations keep the single entry."""
+    for route in routes:
+        if isinstance(route, APIRoute) and guest_readable(route):
+            route.openapi_extra = {**(route.openapi_extra or {}), "security": [{}]}
 
 
 async def _verify_drive_owner(session: AsyncSession, drive_id: str | None, hostname_header: str | None) -> None:

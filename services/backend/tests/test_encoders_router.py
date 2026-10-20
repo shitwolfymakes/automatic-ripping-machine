@@ -3,29 +3,25 @@ server-computed availability from the live `gpus` inventory."""
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import secrets
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
-import secrets  # noqa: E402
-from datetime import UTC, datetime  # noqa: E402
-from unittest.mock import MagicMock  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import encoders as encoders_router
+from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
+from arm_backend.ws import WSHub
+from arm_common import Gpu, User
+from arm_common.encoders import ENCODERS
+from arm_common.enums import GpuStatus, GpuVendor
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import encoders as encoders_router  # noqa: E402
-from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import Gpu, User  # noqa: E402
-from arm_common.encoders import ENCODERS  # noqa: E402
-from arm_common.enums import GpuStatus, GpuVendor  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _gpu(gpu_id: str = "gpu_1", vendor: GpuVendor = GpuVendor.QSV, **kw: object) -> Gpu:

@@ -57,7 +57,7 @@ trap cleanup EXIT
 log "checking dev stack is up"
 if ! docker inspect -f '{{.State.Running}}' "${BACKEND_CTR}" 2>/dev/null | grep -q true; then
     err "${BACKEND_CTR} is not running. Bring up the dev stack first:"
-    err "    cd ${ROOT_DIR} && docker compose up -d"
+    err "    bash ${ROOT_DIR}/devtools/setup-dev.sh up"
     exit 1
 fi
 if ! docker inspect -f '{{.State.Running}}' "${DB_CTR}" 2>/dev/null | grep -q true; then
@@ -72,7 +72,7 @@ if [[ ${YES} -eq 0 ]]; then
 This drill will:
   1. insert a synthetic ripping job (id ${JOB_ID}) + track in the dev DB
   2. force-kill ${BACKEND_CTR} (docker kill -s KILL)
-  3. restart it via docker compose up -d
+  3. restart it (docker compose up -d arm-backend)
   4. assert the startup sweep recovered the job
   5. delete the synthetic job + track
 

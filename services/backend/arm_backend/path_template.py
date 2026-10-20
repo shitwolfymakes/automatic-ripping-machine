@@ -97,14 +97,15 @@ class _StrictDict(dict[str, str]):
         raise TemplateValidationError(f"unknown token: {{{key}}}")
 
 
-def expand_template(template: str, ctx: dict[str, str]) -> str:
+def expand_template(template: str, ctx: dict[str, str], *, allow_empty: bool = False) -> str:
     """Expand `{token}` / `{token?}` references against `ctx`. Unknown tokens raise.
 
     An optional token whose value is empty is removed together with a ()/[]
     pair wrapping only it and one preceding space; segments are then trimmed of
     edge whitespace and empty ones (with leading/trailing `/`) collapse. That
     collapse only happens when an optional token was dropped; otherwise the
-    output is left byte-identical. A result that is empty after that raises.
+    output is left byte-identical. A result that is empty after that raises,
+    unless `allow_empty` (a caller expanding one segment at a time).
     """
     dropped = False
 
@@ -125,7 +126,7 @@ def expand_template(template: str, ctx: dict[str, str]) -> str:
         raise TemplateValidationError(f"malformed template: {exc}") from exc
     if dropped:
         out = "/".join(seg for seg in (s.strip() for s in out.split("/")) if seg)
-        if not out:
+        if not out and not allow_empty:
             raise TemplateValidationError("output path is empty once optional tokens with no value are dropped")
     return out
 

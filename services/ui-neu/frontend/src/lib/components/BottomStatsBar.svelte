@@ -1,72 +1,83 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
 	import { barColor, filesHref } from '$lib/utils/resource-bars';
 
-	onMount(() => {
+	// Auth pages (/login, /change-password) have no usable session, so the
+	// resources poll would 401 or 403 every tick there (D-137). Same rule as
+	// the layout's dashboard poll: stay unmounted and idle on auth pages, and
+	// start once the visitor reaches a real page.
+	const onAuthPage = $derived(
+		$page.url.pathname.startsWith('/login') || $page.url.pathname.startsWith('/change-password')
+	);
+
+	$effect(() => {
+		if (onAuthPage) return;
 		startResources();
 		return () => stopResources();
 	});
 </script>
 
-<!-- Fixed bottom bar, hidden below lg (1024px) — matches neu placement. -->
-<div data-testid="bottom-stats-bar" class="stats-bar hidden h-10 items-center gap-3 lg:flex 2xl:hidden">
-	<!-- CPU -->
-	<div class="stats-bar-group flex items-center gap-2">
-		<span class="shrink-0">CPU</span>
-		<div class="progress progress-sm stats-bar-track">
-			<div class="progress-track">
-				<div
-					class="progress-fill"
-					data-bar={barColor($resources.cpu_percent, 'cpu')}
-					style:--progress="{Math.min(100, $resources.cpu_percent)}%"
-				></div>
+{#if !onAuthPage}
+	<!-- Fixed bottom bar, hidden below lg (1024px) — matches neu placement. -->
+	<div data-testid="bottom-stats-bar" class="stats-bar hidden h-10 items-center gap-3 lg:flex 2xl:hidden">
+		<!-- CPU -->
+		<div class="stats-bar-group flex items-center gap-2">
+			<span class="shrink-0">CPU</span>
+			<div class="progress progress-sm stats-bar-track">
+				<div class="progress-track">
+					<div
+						class="progress-fill"
+						data-bar={barColor($resources.cpu_percent, 'cpu')}
+						style:--progress="{Math.min(100, $resources.cpu_percent)}%"
+					></div>
+				</div>
 			</div>
+			<span class="stats-bar-slot stats-bar-slot-pct shrink-0">{$resources.cpu_percent.toFixed(0)}%</span>
 		</div>
-		<span class="stats-bar-slot stats-bar-slot-pct shrink-0">{$resources.cpu_percent.toFixed(0)}%</span>
-	</div>
 
-	<div class="stats-bar-divider shrink-0"></div>
-
-	<!-- Memory -->
-	<div class="stats-bar-group flex items-center gap-2">
-		<span class="shrink-0">Mem</span>
-		<div class="progress progress-sm stats-bar-track">
-			<div class="progress-track">
-				<div
-					class="progress-fill"
-					data-bar={barColor($resources.memory.percent, 'mem')}
-					style:--progress="{Math.min(100, $resources.memory.percent)}%"
-				></div>
-			</div>
-		</div>
-		<span class="stats-bar-slot stats-bar-slot-mem shrink-0 whitespace-nowrap"
-			>{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span
-		>
-	</div>
-
-	<!-- Storage per root -->
-	{#if $resources.storage.length}
 		<div class="stats-bar-divider shrink-0"></div>
-		<div class="stats-bar-group flex items-center gap-3 overflow-hidden">
-			{#each $resources.storage as s (s.path)}
-				<a href={filesHref(s.name)} class="stats-bar-link flex shrink-0 items-center gap-1.5">
-					<span class="stats-bar-name">{s.name}</span>
-					<div class="progress progress-sm stats-bar-track stats-bar-track-sm">
-						<div class="progress-track">
-							<div
-								class="progress-fill"
-								data-bar={barColor(s.percent, 'disk')}
-								style:--progress="{Math.min(100, s.percent)}%"
-							></div>
-						</div>
-					</div>
-					<span class="stats-bar-slot stats-bar-slot-free shrink-0">{s.free_gb} GB</span>
-				</a>
-			{/each}
+
+		<!-- Memory -->
+		<div class="stats-bar-group flex items-center gap-2">
+			<span class="shrink-0">Mem</span>
+			<div class="progress progress-sm stats-bar-track">
+				<div class="progress-track">
+					<div
+						class="progress-fill"
+						data-bar={barColor($resources.memory.percent, 'mem')}
+						style:--progress="{Math.min(100, $resources.memory.percent)}%"
+					></div>
+				</div>
+			</div>
+			<span class="stats-bar-slot stats-bar-slot-mem shrink-0 whitespace-nowrap"
+				>{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span
+			>
 		</div>
-	{/if}
-</div>
+
+		<!-- Storage per root -->
+		{#if $resources.storage.length}
+			<div class="stats-bar-divider shrink-0"></div>
+			<div class="stats-bar-group flex items-center gap-3 overflow-hidden">
+				{#each $resources.storage as s (s.path)}
+					<a href={filesHref(s.name)} class="stats-bar-link flex shrink-0 items-center gap-1.5">
+						<span class="stats-bar-name">{s.name}</span>
+						<div class="progress progress-sm stats-bar-track stats-bar-track-sm">
+							<div class="progress-track">
+								<div
+									class="progress-fill"
+									data-bar={barColor(s.percent, 'disk')}
+									style:--progress="{Math.min(100, s.percent)}%"
+								></div>
+							</div>
+						</div>
+						<span class="stats-bar-slot stats-bar-slot-free shrink-0">{s.free_gb} GB</span>
+					</a>
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.stats-bar {

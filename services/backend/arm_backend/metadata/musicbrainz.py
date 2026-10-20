@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -126,7 +127,7 @@ class MusicBrainzClient:
         lookup. A 404 (unknown MBID) surfaces as the not-found LookupError.
         """
         body = await self._get(
-            f"/release/{release_id}",
+            f"/release/{quote(release_id, safe='')}",
             # release-groups: so extract_poster_url can prefer the (more often
             # populated) release-group cover over the specific release's.
             params={"inc": "artists+recordings+labels+release-groups", "fmt": "json"},

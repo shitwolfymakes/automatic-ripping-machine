@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import httpx
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from arm_backend import image_cache  # noqa: E402
-from arm_backend.routers import images as images_router  # noqa: E402
+from arm_backend import image_cache
+from arm_backend.routers import images as images_router
 
 
 @pytest.fixture
@@ -451,3 +447,27 @@ def test_redirect_without_location_is_unavailable(client, monkeypatch):
         params={"url": "https://coverartarchive.org/release/mbid-x/front"},
     )
     assert r.status_code == 404
+
+
+def test_negative_cache_drops_expired_entries_on_write() -> None:
+    """D-160: expired negative entries are pruned instead of kept forever."""
+    images_router._NEGATIVE_CACHE.clear()
+    images_router._negative_cache_put("https://image.tmdb.org/a.jpg", 0.0)
+    images_router._negative_cache_put("https://image.tmdb.org/b.jpg", 10.0)
+    later = 10.0 + images_router._NEGATIVE_TTL_SECONDS + 1
+    images_router._negative_cache_put("https://image.tmdb.org/c.jpg", later)
+    assert list(images_router._NEGATIVE_CACHE) == ["https://image.tmdb.org/c.jpg"]
+    images_router._NEGATIVE_CACHE.clear()
+
+
+def test_negative_cache_is_capped_and_evicts_oldest(monkeypatch) -> None:
+    """D-160: distinct failing URLs cannot grow the dict past the cap."""
+    images_router._NEGATIVE_CACHE.clear()
+    monkeypatch.setattr(images_router, "_NEGATIVE_CACHE_MAX_ENTRIES", 3)
+    for i in range(5):
+        images_router._negative_cache_put(f"https://image.tmdb.org/{i}.jpg", 100.0 + i)
+    assert list(images_router._NEGATIVE_CACHE) == [f"https://image.tmdb.org/{i}.jpg" for i in (2, 3, 4)]
+    # Re-recording an existing URL moves it to the newest slot without evicting.
+    images_router._negative_cache_put("https://image.tmdb.org/2.jpg", 200.0)
+    assert list(images_router._NEGATIVE_CACHE) == [f"https://image.tmdb.org/{i}.jpg" for i in (3, 4, 2)]
+    images_router._NEGATIVE_CACHE.clear()

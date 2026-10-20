@@ -2,20 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import iso_library, iso_rips  # noqa: E402
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.ripper_manager import RipperManagerError  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend import iso_library, iso_rips
+from arm_backend.config import settings
+from arm_backend.ripper_manager import RipperManagerError
+from arm_common import (
     DiscType,
     Drive,
     DriveKind,
@@ -31,7 +28,7 @@ from arm_common import (  # noqa: E402
     TrackStatus,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _Manager:
