@@ -640,6 +640,24 @@ def test_bonus_title_with_an_empty_optional_year() -> None:
     }
 
 
+def test_bonus_title_drops_a_segment_made_only_of_an_empty_optional_token() -> None:
+    # D-145: the per-segment render must collapse a lone `{year?}` segment
+    # like the whole-template render does, not raise "output path is empty".
+    template = "{show}/{year?}/Season {season}/{show} - S{season}E{episode} - {episode_title?}.{ext}"
+    job = _tv_job(title="Show", year=None)  # type: ignore[arg-type]
+    tracks = [
+        _tv_track(1, role=TrackRole.EPISODE, episode_number=1, episode_name="Pilot"),
+        _tv_track(2, role=TrackRole.EXTRA),
+    ]
+    sess = _tv_session(template)
+    tp = _tv_preset()
+    out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
+    assert out == {
+        "trk_1": "Show/Season 01/Show - S01E01 - Pilot.mkv",
+        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+    }
+
+
 def _backup_session() -> Session:
     return Session(
         id="ses_builtin_bd_backup",
