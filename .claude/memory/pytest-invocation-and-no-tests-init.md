@@ -1,15 +1,15 @@
 ---
 name: pytest-invocation-and-no-tests-init
-description: Run pytest from repo root with NO file path; never add __init__.py to any tests/ dir
+description: Never add __init__.py to any tests/ dir; file-path pytest runs are fine, the full suite is the root invocation
 metadata:
   type: feedback
 ---
 
-The Python test suite must be invoked as bare `uv run pytest` (optionally `-k <name>`) **from the repo root** — it relies on `testpaths` in the root `pyproject.toml`. Passing an explicit file path (`uv run pytest services/backend/tests/foo.py`) breaks collection with `ModuleNotFoundError: No module named 'tests._fakes'`, because each service's `tests/` is a **namespace package** (no `__init__.py`) and pytest's rootdir/sys.path insertion only happens under the testpaths-driven invocation.
+Each service's `tests/` dir (`backend`, `ripper`, `transcode`, and `packages/arm_common`) is a namespace package with no `__init__.py`, importable as `tests.*` (for example `from tests._fakes import FakeSession`). They coexist only as namespace packages.
 
-**Why:** `backend`, `ripper`, and `transcode` each have a `tests/` dir importable as `tests.*` (e.g. `from tests._fakes import FakeSession`). They coexist only as namespace packages.
+**Why:** a stray empty `packages/arm_common/tests/__init__.py` (created by a subagent) turned that dir into a concrete `tests` package that shadowed the backend's namespace `tests` and broke `tests._fakes` collection for every backend module. Removing it restored collection.
 
 **How to apply:**
-- Run subsets with `uv run pytest -q -k "<name>"` from the repo root, never by file path.
-- **Never create an `__init__.py` in any `tests/` directory.** A stray empty `packages/arm_common/tests/__init__.py` (created by a subagent) turned that dir into a concrete `tests` package that **shadowed** the backend's namespace `tests`, breaking `tests._fakes` collection for all 49 backend test modules. Removing it restored the full 1166-test collection.
-- When a subagent reports "N/N tests pass" from a path-based or per-package run, distrust it — verify with the root invocation, which is the only one that exercises the real cross-service collection.
+- Never create an `__init__.py` in any `tests/` directory.
+- The full suite is `uv run pytest` from the repo root (`testpaths` in the root `pyproject.toml`). Running one file by path from the repo root also works, and since D-238 (2026-10-20) `services/backend/tests/conftest.py` sets `DATABASE_URL` and `ARM_SERVICE_TOKEN` once, so any backend file collects alone. An earlier version of this note said file paths break collection; that was the `__init__.py` shadowing, not the path.
+- A subagent's "N/N pass" from a per-file run is not the full suite: run the root invocation once before claiming green.
