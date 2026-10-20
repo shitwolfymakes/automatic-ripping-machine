@@ -492,8 +492,9 @@
 										{#if job.updated_at}
 											<span>Updated <TimeAgo date={job.updated_at} /></span>
 										{/if}
-										{#if job.status === 'done' && job.created_at && job.updated_at}
-											{@const dur = formatDuration(job.created_at, job.updated_at)}
+										<!-- From claim to finish: created_at would add the queue wait (D-202). -->
+										{#if job.status === 'done' && job.started_at && job.updated_at}
+											{@const dur = formatDuration(job.started_at, job.updated_at)}
 											{#if dur}
 												<span class="transcoder-page-took">Took {dur}</span>
 											{/if}

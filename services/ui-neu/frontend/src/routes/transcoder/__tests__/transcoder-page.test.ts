@@ -200,6 +200,40 @@ describe('Transcoder Page', () => {
 		});
 	});
 
+	describe('done task duration (D-202)', () => {
+		const doneTask = {
+			id: 't-3',
+			session_application_id: 'sap_3',
+			job_id: null,
+			source_track_id: 'track-3',
+			status: 'done',
+			output_path: '/media/transcode/movie3.mkv',
+			progress_pct: 100,
+			attempts: 1,
+			claimed_by: null,
+			claim_heartbeat_at: null,
+			last_error: null,
+			created_at: '2025-06-15T09:00:00Z',
+			updated_at: '2025-06-15T11:20:00Z'
+		} as const;
+
+		it('measures Took from the claim, not from when the task was queued', async () => {
+			vi.mocked(fetchTranscoderJobs).mockResolvedValueOnce([{ ...doneTask, started_at: '2025-06-15T11:00:00Z' }]);
+			renderComponent(TranscoderPage);
+			await waitFor(() => expect(screen.getByText('Took 20m 0s')).toBeInTheDocument());
+		});
+
+		it('omits Took when the claim time is unknown', async () => {
+			vi.mocked(fetchTranscoderJobs).mockResolvedValueOnce([{ ...doneTask, started_at: null }]);
+			renderComponent(TranscoderPage);
+			// The per-tab cache may still paint the previous test's list, so
+			// wait for this render's fetch to land before asserting.
+			await vi.mocked(fetchTranscoderJobs).mock.results.at(-1)?.value;
+			await waitFor(() => expect(screen.getAllByText('movie3.mkv').length).toBeGreaterThan(0));
+			await waitFor(() => expect(screen.queryByText(/^Took /)).not.toBeInTheDocument());
+		});
+	});
+
 	describe('action failures (D-195)', () => {
 		afterEach(() => vi.restoreAllMocks());
 
