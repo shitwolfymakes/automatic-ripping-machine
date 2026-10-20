@@ -1275,7 +1275,7 @@ export type DriveSourceKind = 'iso' | 'folder';
 /**
  * DriveStatus
  */
-export type DriveStatus = 'online' | 'offline' | 'ripping' | 'error';
+export type DriveStatus = 'online' | 'offline' | 'error';
 
 /**
  * DriveUpdateRequest

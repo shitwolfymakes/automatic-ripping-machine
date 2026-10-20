@@ -238,7 +238,7 @@ describe('DriveCard', () => {
 		});
 
 		it('Unenroll is disabled while ripping', () => {
-			renderDrive({ status: 'ripping' });
+			renderDrive({ status: 'online', current_job: { id: 'job_1', title: 'X', status: 'ripping' } });
 			expect(screen.getByTestId('drive-unenroll')).toBeDisabled();
 		});
 

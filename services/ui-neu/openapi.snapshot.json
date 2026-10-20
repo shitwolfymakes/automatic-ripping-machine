@@ -11907,7 +11907,6 @@
         "enum": [
           "online",
           "offline",
-          "ripping",
           "error"
         ],
         "title": "DriveStatus"

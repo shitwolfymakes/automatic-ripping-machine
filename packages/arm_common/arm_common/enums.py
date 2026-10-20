@@ -12,7 +12,6 @@ class DiscType(StrEnum):
 class DriveStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"
-    RIPPING = "ripping"
     ERROR = "error"
 
 
