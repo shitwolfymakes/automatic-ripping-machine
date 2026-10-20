@@ -64,7 +64,9 @@ class TmdbEpisodes:
             raise SourceError("tmdb malformed response") from e
 
     async def seasons(self, show_id: str) -> list[int]:
-        body = await self.http.get_json(f"{settings.ARM_TMDB_BASE_URL}/tv/{show_id}", headers=self._headers)
+        body = await self.http.get_json(
+            f"{settings.ARM_TMDB_BASE_URL}/tv/{quote(show_id, safe='')}", headers=self._headers
+        )
         try:
             raw_seasons = body.get("seasons", [])
             if not isinstance(raw_seasons, list):
@@ -80,7 +82,7 @@ class TmdbEpisodes:
 
     async def season(self, show_id: str, number: int) -> list[Episode]:
         body = await self.http.get_json(
-            f"{settings.ARM_TMDB_BASE_URL}/tv/{show_id}/season/{number}", headers=self._headers
+            f"{settings.ARM_TMDB_BASE_URL}/tv/{quote(show_id, safe='')}/season/{number}", headers=self._headers
         )
         try:
             raw_episodes = body.get("episodes") or []
