@@ -17,6 +17,11 @@ class _StrEnumString(TypeDecorator[StrEnum]):
     the row is serialized to JSON. With this, the column round-trips
     StrEnum ↔ str at the SQL boundary and the field always carries the typed
     enum.
+
+    Writes are strict: binding a value that is not a member of `enum_cls` (by
+    instance or exact string value) raises ValueError, so this is the
+    write-time guardrail the VARCHAR-enum convention relies on. Reads stay
+    tolerant (see `process_result_value`).
     """
 
     impl = String
@@ -29,9 +34,10 @@ class _StrEnumString(TypeDecorator[StrEnum]):
     def process_bind_param(self, value: Any, dialect: Dialect) -> str | None:
         if value is None:
             return None
-        if isinstance(value, self._enum_cls):
-            return value.value
-        return str(value)
+        try:
+            return self._enum_cls(value).value
+        except ValueError:
+            raise ValueError(f"{value!r} is not a valid {self._enum_cls.__name__} value") from None
 
     def process_result_value(self, value: Any, dialect: Dialect) -> StrEnum | None:
         # The declared return type matches TypeDecorator's supertype (StrEnum | None)

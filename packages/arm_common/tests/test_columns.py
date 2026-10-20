@@ -1,3 +1,5 @@
+import pytest
+
 from arm_common import JobStatus
 from arm_common.models._columns import _StrEnumString, enum_value_str
 
@@ -30,3 +32,16 @@ def test_str_enum_string_passes_none_through():
     col = _StrEnumString(JobStatus)
     assert col.process_bind_param(None, None) is None
     assert col.process_result_value(None, None) is None
+
+
+def test_str_enum_string_accepts_exact_string_value_on_bind():
+    col = _StrEnumString(JobStatus)
+    assert col.process_bind_param("ripping", None) == "ripping"
+
+
+def test_str_enum_string_rejects_unknown_value_on_bind():
+    # D-187: enums are VARCHAR in the DB, so the bind processor is the write-time
+    # guardrail. A non-member must raise instead of being written verbatim.
+    col = _StrEnumString(JobStatus)
+    with pytest.raises(ValueError, match="not a valid JobStatus value"):
+        col.process_bind_param("bogus", None)
