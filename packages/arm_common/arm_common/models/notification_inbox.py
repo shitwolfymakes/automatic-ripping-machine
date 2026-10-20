@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column
@@ -13,6 +13,7 @@ def _notification_inbox_id() -> str:
 
 class NotificationInbox(SQLModel, table=True):
     __tablename__ = "notification_inbox"
+    __table_args__ = (Index("ix_notification_inbox_created_at", "created_at"),)
 
     id: str = Field(default_factory=_notification_inbox_id, primary_key=True)
     # The source event; SET NULL so the inbox row survives event deletion.

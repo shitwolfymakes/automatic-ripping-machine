@@ -8,6 +8,7 @@ crash-loops — so assert the chain is intact statically. No DB required.
 
 import io
 import os
+import re
 from pathlib import Path
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
@@ -16,6 +17,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from alembic.script import ScriptDirectory  # noqa: E402
+from sqlmodel import SQLModel  # noqa: E402
 
 from arm_common import User  # noqa: E402
 
@@ -115,3 +117,37 @@ def test_every_revision_after_0011_renders_offline() -> None:
     assert "-> 0033_drop_metadata_mirrors" in up
     down = _render_sql("head", "0011_plex_movie_track_token", downgrade=True)
     assert "0033_drop_metadata_mirrors -> 0032_job_metadata_sections" in down
+
+
+def _migrated_indexes() -> dict[str, tuple[str, tuple[str, ...], bool, str]]:
+    """Index inventory at head, read from the rendered DDL. 0011 is skipped (it
+    can't render, see above) and creates no indexes."""
+    sql = _render_sql("base", "0010_fix_passthrough_mkv_preset") + _render_sql("0011_plex_movie_track_token", "head")
+    found: dict[str, tuple[str, tuple[str, ...], bool, str]] = {}
+    for stmt in sql.split(";"):
+        flat = " ".join(stmt.split())
+        created = re.search(r"CREATE (UNIQUE )?INDEX (\w+) ON (\w+) \(([^)]*)\)(?: WHERE (.*))?", flat)
+        if created:
+            cols = tuple(c.strip() for c in created.group(4).split(","))
+            found[created.group(2)] = (created.group(3), cols, bool(created.group(1)), created.group(5) or "")
+        dropped = re.search(r"DROP INDEX (\w+)", flat)
+        if dropped:
+            found.pop(dropped.group(1), None)
+    return found
+
+
+def test_model_indexes_match_migrations() -> None:
+    """Metadata-built schemas (the e2e harness, autogenerate) must carry the
+    same indexes as the migrated one, including the partial unique index that
+    backs the output_path collision check."""
+    modelled: dict[str, tuple[str, tuple[str, ...], bool, str]] = {}
+    for table in SQLModel.metadata.tables.values():
+        for index in table.indexes:
+            where = index.dialect_options["postgresql"]["where"]
+            modelled[str(index.name)] = (
+                table.name,
+                tuple(c.name for c in index.columns),
+                bool(index.unique),
+                str(where) if where is not None else "",
+            )
+    assert modelled == _migrated_indexes()
