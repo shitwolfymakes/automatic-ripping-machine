@@ -62,7 +62,7 @@ One row per disc insertion the ripper detected (via its `ioctl(CDROM_DRIVE_STATU
 - `aacs_disc_id` (text, nullable — 40-hex-char AACS Disc ID from libaacs. Blu-ray only, populated only when `AACS/` is present and libaacs can read it. Identifies the licensing master, not the structural pressing — coexists with `disc_fingerprint`.)
 - `title` (text, nullable — from metadata lookup, editable in UI)
 - `year` (int, nullable)
-- `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis, plus a load-bearing `scan_result` key holding the full `ScanResult` Pydantic dump from identify time. The rip-start handler in Phase 3+ reads `metadata_json["scan_result"]` to drive track selection; consumers must treat unknown keys as opaque.)
+- `metadata_json` (jsonb — full lookup result: artwork URLs, cast, synopsis, plus a load-bearing `scan_result` key holding the full `ScanResult` Pydantic dump from identify time. The rip-start handler in Phase 3+ reads `metadata_json["scan_result"]` to drive track selection; consumers must treat unknown keys as opaque.) Note: `0001_initial` created this column as `JSONB` and it has stayed `JSONB`; the comment in `0031_job_identity_columns` calling it "JSON (not JSONB)" is wrong (its `::jsonb` casts are harmless no-ops).
 - `status` (enum: created | awaiting_user_id | awaiting_review | identified | ripping | ripped | ripped_partial | ripped_awaiting_identify | abandoned | failed)
 - `identity_provenance` (jsonb, nullable — `{attribute: source_id}` for the `season`, `disc_number` and `disc_total` values the identity resolver set)
 - `resumed_from_crash` (bool, default false — set by Backend-startup sweep or by `POST /api/ripper/jobs/{job_id}/resume`; cleared when the job next reaches a terminal state)

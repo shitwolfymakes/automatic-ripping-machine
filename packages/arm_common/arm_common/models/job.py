@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
@@ -67,7 +68,7 @@ class Job(SQLModel, table=True):
     poster_url_manual: str | None = Field(sa_column=Column(String, nullable=True))
     metadata_json: dict[str, Any] = Field(
         default_factory=dict,
-        sa_column=Column(JSON, nullable=False, server_default="{}"),
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
     status: JobStatus = Field(
         sa_column=enum_column(JobStatus, "job_status", server_default=JobStatus.CREATED.value, index=True)

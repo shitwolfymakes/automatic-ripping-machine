@@ -63,3 +63,13 @@ def test_str_enum_string_cache_key_includes_enum_class():
     job_key, drive_key = job_stmt._generate_cache_key(), drive_stmt._generate_cache_key()
     assert job_key is not None and drive_key is not None
     assert job_key.key != drive_key.key
+
+
+def test_json_document_columns_are_jsonb_like_the_migrations():
+    # D-180: 0001_initial created both columns as JSONB; the models must agree.
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    from arm_common.models import Drive, Job
+
+    assert isinstance(Job.__table__.c.metadata_json.type, JSONB)  # type: ignore[attr-defined]
+    assert isinstance(Drive.__table__.c.rip_params_json.type, JSONB)  # type: ignore[attr-defined]
