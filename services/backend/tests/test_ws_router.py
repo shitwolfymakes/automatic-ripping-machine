@@ -395,6 +395,39 @@ def test_ui_jwt_principal_subscribe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ripper.events" in hub.subscribed
 
 
+@pytest.mark.parametrize(
+    ("user", "code", "reason"),
+    [
+        (None, ws_router.CLOSE_UNAUTHORIZED, "unknown user"),
+        (
+            User(id="usr_1", username="guest", password_hash="x", password_must_change=False, disabled=True),
+            ws_router.CLOSE_UNAUTHORIZED,
+            "account disabled",
+        ),
+        (
+            User(id="usr_1", username="admin", password_hash="x", password_must_change=True),
+            ws_router.CLOSE_FORBIDDEN,
+            "password change required",
+        ),
+    ],
+)
+def test_ui_jwt_account_checks_reject(
+    monkeypatch: pytest.MonkeyPatch, user: User | None, code: int, reason: str
+) -> None:
+    # D-163: a validly signed JWT for a missing, disabled, or must-change
+    # account is refused at the handshake, matching REST require_jwt.
+    db = FakeSession()
+    db.rows["users"] = [user] if user is not None else []
+    app = _make_app(db, _Hub(), monkeypatch)
+    token, _ = issue_access_token("usr_1", "admin", _SIGNING_KEY)
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "auth", "token": token})
+            err = ws.receive_json()
+            assert err["code"] == code
+            assert err["reason"] == reason
+
+
 # --- UI principal (anonymous guest, empty auth token) -------------------------
 
 

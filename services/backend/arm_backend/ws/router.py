@@ -6,7 +6,8 @@ Wire shape:
        service-token subprotocol or origin-less connects.
     2. Accept upgrade.
     3. 5s window for the first message; must be {op:auth, token:...}.
-    4. resolve_principal(); reject (4401) on failure.
+    4. resolve_principal(), then the REST-equivalent account checks for a UI
+       user (missing/disabled 4401, password_must_change 4403); reject on failure.
     5. Send {op:ack, topic:""} as the auth ack.
     6. Loop: subscribe / unsubscribe / publish, gated by authz.
     7. On disconnect: hub.disconnect(ws).
@@ -29,6 +30,7 @@ from arm_backend.ws.principal import (
     AuthError,
     Principal,
     ServicePrincipal,
+    UIPrincipal,
     resolve_principal,
 )
 from arm_common import User
@@ -190,6 +192,10 @@ async def _do_auth(
         # here, mirroring require_jwt's REST fallback (guest missing/disabled
         # → unauthorized).
         await _check_guest_enabled(websocket)
+    elif isinstance(principal, UIPrincipal):
+        # A verified JWT signature is not enough: apply the same account
+        # checks REST `require_jwt` runs on every UI request (D-163).
+        await _check_ui_user(principal.user_id)
 
     return principal
 
@@ -199,6 +205,17 @@ async def _check_guest_enabled(websocket: WebSocket) -> None:
         guest = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
     if guest is None or guest.disabled:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "authentication required")
+
+
+async def _check_ui_user(user_id: str) -> None:
+    async with SessionLocal() as session:
+        user = (await session.execute(select(User).where(col(User.id) == user_id))).scalar_one_or_none()
+    if user is None:
+        raise _AuthFailure(CLOSE_UNAUTHORIZED, "unknown user")
+    if user.disabled:
+        raise _AuthFailure(CLOSE_UNAUTHORIZED, "account disabled")
+    if user.password_must_change:
+        raise _AuthFailure(CLOSE_FORBIDDEN, "password change required")
 
 
 async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) -> None:
