@@ -17,6 +17,7 @@ from arm_backend.auth import (  # noqa: E402
     looks_like_jwt,
     require_jwt,
     require_service_token,
+    require_writer,
 )
 from arm_backend.config import settings  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
@@ -145,10 +146,64 @@ def test_openapi_declares_the_auth_schemes() -> None:
     assert schemes["UserJWT"]["bearerFormat"] == "JWT"
     assert schemes["ServiceToken"]["scheme"] == "bearer"
     paths = schema["paths"]
-    assert paths["/api/config"]["get"]["security"] == [{"UserJWT": []}]
+    assert paths["/api/config"]["get"]["security"] == [{"UserJWT": []}, {}]
+    assert paths["/api/config"]["patch"]["security"] == [{"UserJWT": []}]
     ripper_ops = [op for path, ops in paths.items() if path.startswith("/api/ripper/") for op in ops.values()]
     assert ripper_ops and all(op["security"] == [{"ServiceToken": []}] for op in ripper_ops)
     assert "security" not in paths["/api/setup/status"]["get"]
+
+
+def test_openapi_splits_guest_reads_from_writer_only_operations() -> None:
+    """Every UserJWT operation is either guest-readable (token optional, so an
+    extra empty requirement) or writer-only (token required) (D-244)."""
+    from arm_backend.main import app
+
+    user_ops = {
+        (method, path): op["security"]
+        for path, ops in app.openapi()["paths"].items()
+        for method, op in ops.items()
+        if any("UserJWT" in requirement for requirement in op.get("security", []))
+    }
+    guest_readable = {key for key, security in user_ops.items() if security == [{"UserJWT": []}, {}]}
+    writer_only = {key for key, security in user_ops.items() if security == [{"UserJWT": []}]}
+    assert guest_readable | writer_only == set(user_ops)
+    assert ("get", "/api/jobs") in guest_readable
+    assert ("post", "/api/drives/rescan") in guest_readable
+    assert ("get", "/api/users") in writer_only
+    assert ("delete", "/api/jobs/{job_id}") in writer_only
+
+
+def test_declare_guest_reads_marks_only_require_jwt_routes() -> None:
+    """The marker follows the dependency tree: `require_jwt` alone is guest-
+    readable, `require_writer` (which wraps it) is not, and service-token and
+    open routes are left untouched."""
+    from fastapi import Depends, FastAPI, WebSocket
+
+    from arm_backend.auth import declare_guest_reads
+
+    app = FastAPI()
+
+    @app.get("/read")
+    async def read(_: User = Depends(require_jwt)) -> None: ...
+
+    @app.post("/write")
+    async def write(_: User = Depends(require_writer)) -> None: ...
+
+    @app.post("/svc", dependencies=[Depends(require_service_token)])
+    async def svc() -> None: ...
+
+    @app.get("/open")
+    async def open_route() -> None: ...
+
+    @app.websocket("/ws")
+    async def ws(_websocket: WebSocket) -> None: ...
+
+    declare_guest_reads(app.routes)
+    paths = app.openapi()["paths"]
+    assert paths["/read"]["get"]["security"] == [{"UserJWT": []}, {}]
+    assert paths["/write"]["post"]["security"] == [{"UserJWT": []}]
+    assert paths["/svc"]["post"]["security"] == [{"ServiceToken": []}]
+    assert "security" not in paths["/open"]["get"]
 
 
 def test_malformed_header_never_falls_back_to_guest_over_http() -> None:

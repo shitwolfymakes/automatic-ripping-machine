@@ -15,10 +15,16 @@ like a JWT (3 dot-separated segments). This enforces the
 from [05-cross-cutting.md § Authorization rules](../../../docs/developers/architecture/05-cross-cutting.md#authorization-rules).
 """
 
+from collections.abc import Callable, Iterator, Sequence
+from typing import Any
+
 import jwt
 from fastapi import Depends, Header, HTTPException, Request, Security, status
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.routing import BaseRoute
 from sqlmodel import col, select
 
 from arm_backend.config import settings
@@ -163,6 +169,30 @@ async def require_writer(user: User = Depends(require_jwt)) -> User:
             detail="read-only role: write access required",
         )
     return user
+
+
+def guest_readable(route: APIRoute) -> bool:
+    """True when the route authenticates through `require_jwt` without the
+    writer gate, so an absent token is served as the guest account."""
+    calls = set(_dependency_calls(route.dependant))
+    return require_jwt in calls and require_writer not in calls
+
+
+def _dependency_calls(dependant: Dependant) -> Iterator[Callable[..., Any] | None]:
+    for sub in dependant.dependencies:
+        yield sub.call
+        yield from _dependency_calls(sub)
+
+
+def declare_guest_reads(routes: Sequence[BaseRoute]) -> None:
+    """Mark guest-readable operations in the OpenAPI schema. FastAPI emits
+    `security: [{UserJWT: []}]` for every route behind the scheme; the extra
+    empty requirement merged in here is how OpenAPI says the token is optional,
+    so guest-readable operations end up as `[{UserJWT: []}, {}]` while
+    writer-only operations keep the single entry."""
+    for route in routes:
+        if isinstance(route, APIRoute) and guest_readable(route):
+            route.openapi_extra = {**(route.openapi_extra or {}), "security": [{}]}
 
 
 async def _verify_drive_owner(session: AsyncSession, drive_id: str | None, hostname_header: str | None) -> None:
