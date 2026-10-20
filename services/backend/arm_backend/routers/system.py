@@ -33,7 +33,18 @@ from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.transcode_dispatcher import count_queued_encode_tasks
 from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
 from arm_backend.utils import default_roots
-from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
+from arm_common import (
+    Config,
+    Drive,
+    DriveKind,
+    DriveLifecycle,
+    DriveStatus,
+    Event,
+    Job,
+    KeydbState,
+    MakemkvSdfState,
+    User,
+)
 from arm_common.schemas import (
     DiagnosticDetail,
     MemoryInfo,
@@ -139,7 +150,7 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
                 )
             )
 
-    drives = list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
+    drives = await _online_enrolled_drives(db)
     checks.append(
         SystemDiagnosticCheck(
             name="drives",
@@ -260,6 +271,21 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
     return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
 
 
+async def _online_enrolled_drives(db: AsyncSession) -> list[Drive]:
+    """Online drives a ripper actually serves.
+
+    Scanner-created DETECTED rows and virtual ISO rows are ``online`` by default,
+    so ``status`` alone would count a drive that is merely plugged in (D-149).
+    """
+    stmt = (
+        select(Drive)
+        .where(col(Drive.status) == DriveStatus.ONLINE)
+        .where(col(Drive.kind) == DriveKind.OPTICAL)
+        .where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def stats(
     request: Request,
@@ -275,9 +301,7 @@ async def stats(
         key = j.status.value if hasattr(j.status, "value") else str(j.status)
         by_status[key] = by_status.get(key, 0) + 1
 
-    drives_online = len(
-        list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
-    )
+    drives_online = len(await _online_enrolled_drives(db))
 
     # Fetch all events and filter in Python — mirrors the notification_dispatcher
     # pattern to stay compatible with the in-memory FakeSession (which cannot

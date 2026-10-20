@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import system as system_router  # noqa: E402
-from arm_common import Config, DiscType, Drive, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
+from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
 from arm_common.models.user import GUEST_ROLE  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402
@@ -175,6 +175,45 @@ def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
     assert r.status_code == 200, r.text
     drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
     assert drives["status"] == "warning"
+
+
+def _unserved_online_drives() -> list[Drive]:
+    # Every row here is status=online but has no ripper serving it (D-149).
+    return [
+        Drive(
+            id="drv_det000000000000000000003",
+            hostname="h1",
+            device_path="/dev/sr2",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.DETECTED,
+        ),
+        Drive(
+            id="drv_ign000000000000000000004",
+            hostname="h1",
+            device_path="/dev/sr3",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.IGNORED,
+        ),
+        Drive(
+            id="drv_iso000000000000000000005",
+            hostname="h1",
+            device_path="iso:x",
+            status=DriveStatus.ONLINE,
+            kind=DriveKind.VIRTUAL,
+        ),
+    ]
+
+
+def test_diagnostics_detected_ignored_and_virtual_drives_do_not_count(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"] = _unserved_online_drives()
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    r = _get(app, token)
+    assert r.status_code == 200, r.text
+    drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
+    assert drives["status"] == "warning"
+    assert drives["detail"] == "no online drives registered"
 
 
 def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
@@ -707,6 +746,17 @@ def test_stats_counts(signing_key: bytes, tmp_path) -> None:
     assert body["drives_online"] == 1
     assert body["events_unsent"] == 1
     assert body["jobs_by_status"].get("ripping") == 1
+
+
+def test_stats_drives_online_ignores_unserved_drives(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"] += _unserved_online_drives()
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["drives_online"] == 1
 
 
 def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
