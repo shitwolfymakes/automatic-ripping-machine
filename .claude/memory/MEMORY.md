@@ -32,3 +32,7 @@
 - [Docs describe the current state](feedback_docs_describe_current_state.md) — docs, memory, comments and CLAUDE.md say what is true now; replace an old description instead of annotating it ("DONE", "no longer", "used to"); history lives in git, spec/plan and CHANGELOG
 - [No em dashes or unicode symbols in UI copy](feedback_no_em_dashes_in_ui_copy.md) — correct the characters (em-dash, ✓ ✗ ⚠ → · … ≥ ▾ ○); do not reword or change what is shown.
 - [Glyph icons, not emoji](feedback_glyph_icons_not_emoji.md) — status/indicator icons are the inline SVG glyphs ui-neu already uses, never emoji or unicode symbols.
+- [Humanizer for outward-facing text](feedback_humanizer_outward_text.md) — run the humanizer skill over docs, PR bodies, commit messages and issue comments before they ship.
+- [Never rename a PR head branch](feedback_no_head_branch_rename.md) — GitHub closes the PR; only base renames retarget. Name the branch for its final scope up front.
+- [Run affected CI suites on the new toolchain](feedback_run_affected_ci_suites.md) — a CI toolchain change (Node/Python version) needs that job run locally on it; `npx -p node@26` runs vitest without installing.
+- [S4 sweep state](project_s4_sweep.md) — wolfy PR #383 `fix/s4-defects`: A, B, E done; C1 in progress; C2 and D held for UI PRs #375-#379; F, G pending.
