@@ -11,9 +11,19 @@
 
 import { writable, type Readable } from 'svelte/store';
 
-import { getToken } from './client';
+import { goto } from '$app/navigation';
+
+import { getToken, notifyUnauthorized } from './client';
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000];
+
+// The backend's deliberate handshake refusals (arm_backend/ws/router.py).
+// Retrying cannot succeed, so the client stops and hands over to the same
+// flows a REST refusal triggers: 4401 (missing or disabled user) runs the
+// API client's unauthorized handler, 4403 (password must change) routes to
+// /change-password.
+const CLOSE_UNAUTHORIZED = 4401;
+const CLOSE_FORBIDDEN = 4403;
 
 // Connection status for the UI's "live updates unavailable" state (G-28).
 // 'offline' only after OFFLINE_AFTER_FAILURES consecutive failed attempts, so
@@ -108,9 +118,15 @@ class WSConnection {
 		ws.addEventListener('message', (ev) => {
 			this.onMessage(ev.data);
 		});
-		ws.addEventListener('close', () => {
+		ws.addEventListener('close', (ev: CloseEvent) => {
 			this.connected = false;
 			this.ws = null;
+			if (!this.stopping && (ev.code === CLOSE_UNAUTHORIZED || ev.code === CLOSE_FORBIDDEN)) {
+				this.stop();
+				if (ev.code === CLOSE_UNAUTHORIZED) notifyUnauthorized();
+				else goto('/change-password');
+				return;
+			}
 			if (!this.stopping) {
 				const delay = RECONNECT_DELAYS[Math.min(this.retryIdx, RECONNECT_DELAYS.length - 1)];
 				this.retryIdx += 1;

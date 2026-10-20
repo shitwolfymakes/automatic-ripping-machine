@@ -4,8 +4,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // tokenless (guest) path — a missing token must still open the socket and
 // send an empty-string token, not skip connecting.
 const getTokenMock = vi.fn<() => string | null>(() => 'aaa.bbb.ccc');
+const notifyUnauthorizedMock = vi.fn();
 vi.mock('$lib/api/client', () => ({
-	getToken: () => getTokenMock()
+	getToken: () => getTokenMock(),
+	notifyUnauthorized: () => notifyUnauthorizedMock()
+}));
+const gotoMock = vi.fn();
+vi.mock('$app/navigation', () => ({
+	goto: (path: string) => gotoMock(path)
 }));
 
 import { get } from 'svelte/store';
@@ -18,12 +24,12 @@ class FakeWS {
 	static instances: FakeWS[] = [];
 	url: string;
 	sent: string[] = [];
-	private listeners: Record<string, ((ev: { data?: unknown }) => void)[]> = {};
+	private listeners: Record<string, ((ev: { data?: unknown; code?: number }) => void)[]> = {};
 	constructor(url: string) {
 		this.url = url;
 		FakeWS.instances.push(this);
 	}
-	addEventListener(type: string, fn: (ev: { data?: unknown }) => void) {
+	addEventListener(type: string, fn: (ev: { data?: unknown; code?: number }) => void) {
 		(this.listeners[type] ??= []).push(fn);
 	}
 	send(data: string) {
@@ -32,7 +38,7 @@ class FakeWS {
 	close() {
 		this.emit('close', {});
 	}
-	emit(type: string, ev: { data?: unknown }) {
+	emit(type: string, ev: { data?: unknown; code?: number }) {
 		for (const fn of this.listeners[type] ?? []) fn(ev);
 	}
 }
@@ -224,5 +230,42 @@ describe('wsStatus (G-28 live-updates state)', () => {
 		authAck(FakeWS.instances[0]);
 		wsClient.stop();
 		expect(get(wsStatus)).toBe('idle');
+	});
+
+	it('a 4401 refusal stops reconnecting and runs the unauthorized handler (D-237)', () => {
+		notifyUnauthorizedMock.mockClear();
+		gotoMock.mockClear();
+		wsClient.start();
+		FakeWS.instances[0].emit('open', {});
+		FakeWS.instances[0].emit('close', { code: 4401 });
+		expect(notifyUnauthorizedMock).toHaveBeenCalledTimes(1);
+		expect(gotoMock).not.toHaveBeenCalled();
+		expect(get(wsStatus)).toBe('idle');
+		vi.advanceTimersByTime(60_000);
+		expect(FakeWS.instances).toHaveLength(1);
+
+		// A later page mount (after signing in again) connects afresh.
+		wsClient.start();
+		expect(FakeWS.instances).toHaveLength(2);
+	});
+
+	it('a 4403 refusal stops reconnecting and routes to /change-password (D-237)', () => {
+		notifyUnauthorizedMock.mockClear();
+		gotoMock.mockClear();
+		wsClient.start();
+		FakeWS.instances[0].emit('open', {});
+		FakeWS.instances[0].emit('close', { code: 4403 });
+		expect(gotoMock).toHaveBeenCalledWith('/change-password');
+		expect(notifyUnauthorizedMock).not.toHaveBeenCalled();
+		expect(get(wsStatus)).toBe('idle');
+		vi.advanceTimersByTime(60_000);
+		expect(FakeWS.instances).toHaveLength(1);
+	});
+
+	it('any other close code still reconnects with back-off', () => {
+		wsClient.start();
+		FakeWS.instances[0].emit('close', { code: 1006 });
+		vi.advanceTimersByTime(1000);
+		expect(FakeWS.instances).toHaveLength(2);
 	});
 });
