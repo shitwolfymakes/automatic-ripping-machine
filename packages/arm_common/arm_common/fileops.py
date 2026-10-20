@@ -1,7 +1,9 @@
 """Atomic-rename helper and TranscodeTool.NONE passthrough move.
 
-`atomic_output`: the transcoder writes `<final>.arm-inprogress`, `fsync`s,
-then renames to `<final>` on success. Same filesystem, so rename is atomic.
+`atomic_output`: the transcoder writes `<final>.arm-inprogress`; on success
+the helper `fsync`s that file, renames it to `<final>`, then `fsync`s the
+directory so the rename survives a power cut. Same filesystem, so rename is
+atomic.
 Plex/Jellyfin scanners ignore `.arm-inprogress`, so half-written files are
 invisible. On failure (exception, SIGTERM, container kill), the partial file
 stays on disk for the Backend startup sweep.
@@ -11,8 +13,8 @@ transcoding to do. Tries `os.rename` first (atomic, instant on the same
 filesystem); falls back to a chunked copy + remove when source and dest are
 on different mount points (common when /raw is local and /media is a NAS
 share, and always with the stock compose layout's separate /raw and /media
-bind mounts). The copy goes to `<final>.arm-inprogress` and is renamed into
-place only once complete, and it checks an optional `cancel` event between
+bind mounts). The copy goes to `<final>.arm-inprogress` and is fsynced and
+renamed into place only once complete, and it checks an optional `cancel` event between
 chunks: a cancelled copy removes its partial file and keeps the source.
 
 Progress: the rename is instant; the copy reports each chunk through an
@@ -51,6 +53,23 @@ INPROGRESS_SUFFIX = ".arm-inprogress"
 COPY_CHUNK_BYTES = 8 * 1024 * 1024
 
 
+def _fsync_file(path: Path) -> None:
+    fd = os.open(str(path), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(path: Path) -> None:
+    """Make a rename into `path` durable. Best effort: the rename already
+    happened, and some network filesystems reject fsync on a directory."""
+    try:
+        _fsync_file(path)
+    except OSError as exc:
+        logger.debug("directory fsync failed for %s: %s", path, exc)
+
+
 class CopyCancelled(Exception):
     """A passthrough copy stopped because its `cancel` event was set.
 
@@ -77,13 +96,11 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
         raise
     if not tmp_path.exists():
         raise FileNotFoundError(f"transcoder did not write expected output: {tmp_path}")
-    # Best-effort fsync of the directory so the rename is durable on crash.
-    fd = os.open(str(final_path.parent), os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    # Data first, then the rename, then the directory entry. A directory
+    # fsync before the rename would make nothing about the rename durable.
+    _fsync_file(tmp_path)
     os.replace(tmp_path, final_path)
+    _fsync_dir(final_path.parent)
     logger.info("atomic rename → %s", final_path)
 
 
@@ -162,6 +179,7 @@ def transcode_none(
         tmp_path = output_path.with_name(output_path.name + INPROGRESS_SUFFIX)
         try:
             _copy_file(input_path, tmp_path, cancel, on_bytes)
+            _fsync_file(tmp_path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -170,6 +188,7 @@ def transcode_none(
             input_path.unlink()
         except OSError as cleanup_exc:
             logger.warning("post-copy unlink failed: %s (will leave source in /raw)", cleanup_exc)
+    _fsync_dir(output_path.parent)
     size = output_path.stat().st_size
     logger.info("passthrough wrote %s (%d bytes)", output_path, size)
     return size

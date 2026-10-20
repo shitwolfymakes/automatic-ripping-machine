@@ -292,3 +292,69 @@ def test_is_within(tmp_path: Path) -> None:
     assert is_within(tmp_path, tmp_path, allow_root=True)
     assert not is_within(tmp_path / ".." / "x", tmp_path)
     assert not is_within(tmp_path.parent, tmp_path, allow_root=True)
+
+
+def _record_durability_ops(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Log fsync and replace calls by the path they touched, in order."""
+    ops: list[tuple[str, str]] = []
+    real_open, real_replace = os.open, os.replace
+    fd_paths: dict[int, str] = {}
+
+    def spy_open(path: str, flags: int, *a: object) -> int:
+        fd = real_open(path, flags, *a)
+        fd_paths[fd] = Path(path).name
+        return fd
+
+    def spy_fsync(fd: int) -> None:
+        ops.append(("fsync", fd_paths[fd]))
+
+    def spy_replace(src: object, dst: object) -> None:
+        ops.append(("replace", Path(str(src)).name))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(fileops.os, "open", spy_open)
+    monkeypatch.setattr(fileops.os, "fsync", spy_fsync)
+    monkeypatch.setattr(fileops.os, "replace", spy_replace)
+    return ops
+
+
+def test_atomic_output_fsyncs_file_then_renames_then_fsyncs_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-179: a directory fsync before the rename made nothing durable and
+    the data file was never fsynced at all."""
+    ops = _record_durability_ops(monkeypatch)
+    final = tmp_path / "movies" / "Iron Man.mkv"
+    with atomic_output(final) as tmp:
+        tmp.write_bytes(b"video")
+    inprogress = "Iron Man.mkv" + INPROGRESS_SUFFIX
+    assert ops == [("fsync", inprogress), ("replace", inprogress), ("fsync", "movies")]
+
+
+def test_copy_fallback_fsyncs_before_the_rename(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = tmp_path / "raw" / "title.iso"
+    src.parent.mkdir()
+    src.write_bytes(b"iso")
+    dst = tmp_path / "media" / "title.iso"
+    monkeypatch.setattr(fileops.os, "rename", lambda *_a: (_ for _ in ()).throw(OSError(18, "EXDEV")))
+    ops = _record_durability_ops(monkeypatch)
+    transcode_none(src, dst)
+    inprogress = "title.iso" + INPROGRESS_SUFFIX
+    assert ops == [("fsync", inprogress), ("replace", inprogress), ("fsync", "media")]
+
+
+def test_directory_fsync_failure_does_not_fail_a_finished_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_fsync = os.fsync
+    final = tmp_path / "out" / "a.mkv"
+
+    def picky_fsync(fd: int) -> None:
+        if os.path.isdir(f"/proc/self/fd/{fd}"):
+            raise OSError(22, "EINVAL")
+        real_fsync(fd)
+
+    monkeypatch.setattr(fileops.os, "fsync", picky_fsync)
+    with atomic_output(final) as tmp:
+        tmp.write_bytes(b"x")
+    assert final.read_bytes() == b"x"
