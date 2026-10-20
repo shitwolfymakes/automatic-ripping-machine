@@ -138,11 +138,11 @@ _MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
 _MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
 _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
     DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
-    DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
-    DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
-    DriveMediaStatus.DETACHED: "drive is detached — reconnect it before starting a rip",
+    DriveMediaStatus.TRAY_OPEN: "the drive tray is open; close it before starting a rip",
+    DriveMediaStatus.NOT_READY: "the drive is busy or spinning up; try again in a moment",
+    DriveMediaStatus.DETACHED: "the drive is detached; reconnect it before starting a rip",
     DriveMediaStatus.UNAVAILABLE: (
-        "drive node exists but could not be opened — check the device cgroup rule and CDROM_GID"
+        "the drive node exists but could not be opened; check the device cgroup rule and CDROM_GID"
     ),
 }
 
