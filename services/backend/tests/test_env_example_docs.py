@@ -6,14 +6,11 @@ NEW operator-tunable Settings key fails this test until it's documented."""
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.config import Settings  # noqa: E402
+from arm_backend.config import Settings
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _ENV_EXAMPLE = _REPO_ROOT / ".env.example"

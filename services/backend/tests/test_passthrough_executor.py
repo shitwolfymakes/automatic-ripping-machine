@@ -11,25 +11,22 @@ rollups cannot tell the difference.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.passthrough_executor import IN_PROCESS_CLAIMANT, execute_passthrough_task  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.passthrough_executor import IN_PROCESS_CLAIMANT, execute_passthrough_task
+from arm_backend.ws import WSHub
+from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
     Track,
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_common.enums import TrackKind  # noqa: E402
-from tests._fakes import FakeSession  # noqa: E402
+from arm_common.enums import TrackKind
+from tests._fakes import FakeSession
 
 
 def _settings(**overrides: Any) -> Settings:

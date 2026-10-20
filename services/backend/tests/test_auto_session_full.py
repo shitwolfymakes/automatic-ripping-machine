@@ -5,21 +5,18 @@ path + its exception swallows.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend import auto_session as asx  # noqa: E402
-from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session  # noqa: E402
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend import auto_session as asx
+from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session
+from arm_backend.path_template import TemplateValidationError
+from arm_common import (
     Config,
     Drive,
     DriveStatus,
@@ -32,8 +29,8 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
-from tests.test_auto_session import CapturingHub, _seed  # noqa: E402
+from tests._fakes import FakeSession
+from tests.test_auto_session import CapturingHub, _seed
 
 
 def _media_root(tmp: Path) -> None:

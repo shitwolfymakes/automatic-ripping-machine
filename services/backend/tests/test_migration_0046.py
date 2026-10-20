@@ -4,13 +4,9 @@ like test_migration_chain."""
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_common import DiscFingerprint  # noqa: E402
-from tests.test_migration_chain import _render_sql  # noqa: E402
+from arm_common import DiscFingerprint
+from tests.test_migration_chain import _render_sql
 
 _PARENT = "0045_transcode_task_started_at"
 _REV = "0046_disc_fingerprint_created_at"

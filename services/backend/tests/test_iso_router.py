@@ -3,27 +3,24 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import secrets
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import httpx
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend import file_browser as fb  # noqa: E402
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.ripper_manager import RipperManagerError  # noqa: E402
-from arm_backend.routers import iso as iso_router  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend import file_browser as fb
+from arm_backend.config import settings
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.ripper_manager import RipperManagerError
+from arm_backend.routers import iso as iso_router
+from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_common import (
     Config,
     Drive,
     DriveKind,
@@ -36,9 +33,9 @@ from arm_common import (  # noqa: E402
     Session,
     User,
 )
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 # Captured at import, before any fixture swaps the registry out (same idiom
 # as test_files_router.py's `_REAL_ISO_ROOT`).

@@ -11,16 +11,13 @@ too.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import docker.errors  # noqa: E402
+import docker.errors
 
-from arm_common import (  # noqa: E402
+from arm_common import (
     ContainerFormat,
     GpuVendor,
     MediaType,
@@ -33,8 +30,8 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
-from tests.test_transcode_dispatcher_full import _disp  # noqa: E402
+from tests._fakes import FakeSession
+from tests.test_transcode_dispatcher_full import _disp
 
 
 def _make_dispatcher():

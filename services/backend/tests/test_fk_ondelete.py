@@ -14,15 +14,11 @@ authoritative state we don't want auto-orphaned).
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-import arm_common.models  # noqa: E402,F401  ensure all models are imported
-from sqlmodel import SQLModel  # noqa: E402
+import arm_common.models  # noqa: F401  ensure all models are imported
+from sqlmodel import SQLModel
 
 
 _EXPECTED: dict[tuple[str, str], str] = {

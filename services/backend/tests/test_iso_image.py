@@ -4,13 +4,10 @@ an ISO rip is created, instead of after a long unpack and scan."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend import iso_image  # noqa: E402
+from arm_backend import iso_image
 
 SECTOR = 2048
 GB = 1024**3

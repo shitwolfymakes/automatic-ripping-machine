@@ -1,11 +1,6 @@
 """Tier-3: ARM_EXTRA_IMAGE_HOSTS adds (never replaces) image-proxy allowed hosts."""
 
-import os
-
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "x")
-
-from arm_backend.config import Settings  # noqa: E402
+from arm_backend.config import Settings
 
 
 def test_extra_hosts_parses_comma_list(monkeypatch):

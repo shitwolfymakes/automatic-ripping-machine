@@ -5,24 +5,21 @@ the run-loop exception + tick-timeout paths, and _load_job(None).
 from __future__ import annotations
 
 import asyncio
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from typing import Any  # noqa: E402
+from typing import Any
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import notification_dispatcher as nd  # noqa: E402
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.notification_dispatcher import (  # noqa: E402
+from arm_backend import notification_dispatcher as nd
+from arm_backend.config import settings
+from arm_backend.notification_dispatcher import (
     MessageDispatcher,
     _RealAppriseNotifier,
 )
-from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
+from arm_backend.notifications.apprise_listener import AppriseListener
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _FakeApprise:

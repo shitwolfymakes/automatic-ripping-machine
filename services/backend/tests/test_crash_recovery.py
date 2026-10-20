@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend.crash_recovery import _sweep, reset_job_for_recovery  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.crash_recovery import _sweep, reset_job_for_recovery
+from arm_common import (
     DiscType,
     Job,
     JobStatus,
@@ -19,7 +15,7 @@ from arm_common import (  # noqa: E402
     TrackStatus,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _make_job(*, job_id: str = "job_01JZXR7K3M5Q8N4VWA00000001", status: JobStatus = JobStatus.RIPPING) -> Job:

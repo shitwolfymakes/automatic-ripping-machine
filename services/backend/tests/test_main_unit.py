@@ -5,15 +5,12 @@ _build_docker_client (both branches), and main() — without booting the app
 
 from __future__ import annotations
 
-import os
 import subprocess
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import main as main_mod  # noqa: E402
+from arm_backend import main as main_mod
 
 
 def test_run_migrations_invokes_alembic(monkeypatch: pytest.MonkeyPatch) -> None:

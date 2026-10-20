@@ -5,22 +5,19 @@ sessions that the existing per-router suites don't reach.
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import jwt as pyjwt  # noqa: E402
-from argon2 import PasswordHasher  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import jwt as pyjwt
+from argon2 import PasswordHasher
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import (
     auth as auth_router,
     config as config_router,
     diagnostics as diagnostics_router,
@@ -28,7 +25,7 @@ from arm_backend.routers import (  # noqa: E402
     ripper as ripper_router,
     sessions as sessions_router,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     DiscType,
     Drive,
     DriveStatus,
@@ -40,9 +37,9 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
     User,
 )
-from arm_common import ContainerFormat  # noqa: E402
+from arm_common import ContainerFormat
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _KEY = secrets.token_bytes(32)
 _SVC = {"Authorization": "Bearer tok-service"}

@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.auto_session import (  # noqa: E402
+from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
     fan_out_waiting_identify_applications,
     media_mismatch_detail,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     Config,
     ContainerFormat,
     DiscType,
@@ -44,7 +41,7 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class CapturingHub:

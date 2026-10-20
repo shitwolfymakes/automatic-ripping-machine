@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-import pytest  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import notifications as notif_router  # noqa: E402
-from arm_backend.notifications import catalog as cat  # noqa: E402
-from arm_common import NotificationChannel, NotificationDispatchLog, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import notifications as notif_router
+from arm_backend.notifications import catalog as cat
+from arm_common import NotificationChannel, NotificationDispatchLog, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _FakeNotifier:

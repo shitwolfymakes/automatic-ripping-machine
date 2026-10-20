@@ -7,19 +7,16 @@ crash-loops — so assert the chain is intact statically. No DB required.
 """
 
 import io
-import os
 import re
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
-from alembic.script import ScriptDirectory  # noqa: E402
-from sqlmodel import SQLModel  # noqa: E402
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlmodel import SQLModel
 
-from arm_common import User  # noqa: E402
+from arm_common import User
 
 _BACKEND_DIR = Path(__file__).parent.parent
 

@@ -6,20 +6,18 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import system as system_router  # noqa: E402
-from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import system as system_router
+from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Job, JobStatus, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="chmod-based unwritable dirs don't bind as root")
 

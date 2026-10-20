@@ -1,13 +1,9 @@
-import os
-
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.transcode_apply import _build_track_ctx, compute_outputs  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.transcode_apply import _build_track_ctx, compute_outputs
+from arm_common import (
     ContainerFormat,
     DiscType,
     Job,

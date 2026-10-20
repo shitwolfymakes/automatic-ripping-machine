@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import docker.errors  # noqa: E402
-import pytest  # noqa: E402
+import docker.errors
+import pytest
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.ripper_manager import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.ripper_manager import (
     DOCKER_LABEL_KEY,
     SPEC_HASH_LABEL_KEY,
     ReconcileSummary,
     RipperManager,
     RipperManagerError,
 )
-from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus  # noqa: E402
+from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus
 
 
 def _settings(**overrides: Any) -> Settings:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 from unittest.mock import MagicMock
@@ -12,14 +11,12 @@ from argon2 import PasswordHasher
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.auth import require_writer  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.routers import auth as auth_router  # noqa: E402
-from arm_common import User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.auth import require_writer
+from arm_backend.db import get_session
+from arm_backend.routers import auth as auth_router
+from arm_common import User
+from arm_common.models.user import GUEST_ROLE
 
 _hasher = PasswordHasher()
 

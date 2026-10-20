@@ -8,28 +8,25 @@ endpoints (detail previous_rip, rip-again, review-pause) and the config PATCH.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.metadata.base import MetadataResult  # noqa: E402
-from arm_backend.routers import config as config_router  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_backend.routers import ripper as ripper_router  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.metadata.base import MetadataResult
+from arm_backend.routers import config as config_router
+from arm_backend.routers import jobs as jobs_router
+from arm_backend.routers import ripper as ripper_router
+from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_common import (
     Config,
     DiscFingerprint,
     DiscType,
@@ -47,10 +44,10 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     User,
 )
-from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection  # noqa: E402
-from arm_common.models import Track  # noqa: E402
+from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection
+from arm_common.models import Track
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
 _PRIOR = "job_01M4Q4V53S8AC69YM5CKHE11DX"

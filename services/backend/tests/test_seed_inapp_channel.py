@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
+from arm_backend.seeders import _seed_inapp_channel
+from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
+from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
 
-from arm_backend.seeders import _seed_inapp_channel  # noqa: E402
-from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID  # noqa: E402
-from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.mark.asyncio

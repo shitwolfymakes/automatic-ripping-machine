@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.notifications.bash_listener import BashListener  # noqa: E402
-from arm_backend.notifications.message import Message  # noqa: E402
-from arm_common import DiscType, Job, JobStatus, NotificationChannel, NotificationDispatchLog  # noqa: E402
+from arm_backend.notifications.bash_listener import BashListener
+from arm_backend.notifications.message import Message
+from arm_common import DiscType, Job, JobStatus, NotificationChannel, NotificationDispatchLog
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _script(tmp_path: Path, name: str, body: str) -> Path:

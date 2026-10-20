@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import httpx
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from arm_backend import image_cache  # noqa: E402
-from arm_backend.routers import images as images_router  # noqa: E402
+from arm_backend import image_cache
+from arm_backend.routers import images as images_router
 
 
 @pytest.fixture

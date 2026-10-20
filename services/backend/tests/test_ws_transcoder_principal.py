@@ -14,23 +14,20 @@ Covers:
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.ws.authz import can_publish, can_subscribe  # noqa: E402
-from arm_backend.ws.principal import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.ws.authz import can_publish, can_subscribe
+from arm_backend.ws.principal import (
     AuthError,
     ServicePrincipal,
     UIPrincipal,
     resolve_principal,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
