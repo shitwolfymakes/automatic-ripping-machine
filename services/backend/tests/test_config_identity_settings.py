@@ -282,6 +282,45 @@ def test_not_null_int_settings_refuse_null_with_400(signing_key: bytes, body: di
     assert r.json()["detail"] == detail  # type: ignore[attr-defined]
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "auto_transcode_on_idle",
+        "auto_rip_on_insert",
+        "block_on_miss",
+        "community_keydb_enabled",
+        "makemkv_sdf_enabled",
+        "thediscdb_enabled",
+        "ripping_paused",
+        "hold_for_review",
+        "notifications_enabled",
+    ],
+)
+def test_not_null_bool_settings_refuse_null_with_400(signing_key: bytes, key: str) -> None:
+    """D-164: a JSON null for a NOT NULL toggle is a 400, not a 500 on commit."""
+    db = FakeSession()
+    _seed(db)
+    before = getattr(_row(db), key)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {key: None})
+    assert r.status_code == 400  # type: ignore[attr-defined]
+    assert r.json()["detail"] == f"{key} must not be null"  # type: ignore[attr-defined]
+    assert getattr(_row(db), key) == before
+
+
+def test_null_still_clears_a_nullable_setting(signing_key: bytes) -> None:
+    """The D-164 guard only covers NOT NULL columns; a secret still clears."""
+    db = FakeSession()
+    _seed(db)
+    _row(db).tmdb_api_key = "old"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {"tmdb_api_key": None})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert _row(db).tmdb_api_key is None
+
+
 def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
