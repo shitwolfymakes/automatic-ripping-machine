@@ -2,7 +2,8 @@
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { elapsedTime, etaTime, statusAccentVar } from '$lib/utils/format';
+	import { elapsedTime, etaTime, formatRemaining, statusAccentVar } from '$lib/utils/format';
+	import { wsClient } from '$lib/api/ws';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { slide } from 'svelte/transition';
@@ -21,7 +22,24 @@
 	let hasError = $derived(!!job?.last_error);
 	let isActive = $derived(job?.status === 'in_progress');
 	let accentVar = $derived(statusAccentVar(job?.status));
-	let etaDisplay = $derived(isActive && job?.created_at ? etaTime(job.created_at, job.progress_pct) : null);
+	// The transcoder publishes HandBrake's own ETA on transcode.progress.{id};
+	// prefer it. Otherwise extrapolate from when the task was claimed, never
+	// from created_at, which would count the time it sat queued as encode time.
+	let liveEta = $state<{ taskId: string; seconds: number } | null>(null);
+	let taskId = $derived(isActive ? job?.id : undefined);
+	$effect(() => {
+		const id = taskId;
+		if (!id) return;
+		return wsClient.subscribe(`transcode.progress.${id}`, (env) => {
+			const eta = env.payload.eta_seconds;
+			liveEta = typeof eta === 'number' ? { taskId: id, seconds: eta } : null;
+		});
+	});
+	let etaDisplay = $derived.by(() => {
+		if (!isActive || !job) return null;
+		if (liveEta && liveEta.taskId === job.id) return formatRemaining(liveEta.seconds);
+		return job.started_at ? etaTime(job.started_at, job.progress_pct) : null;
+	});
 
 	function toggle(e: MouseEvent) {
 		if ((e.target as HTMLElement).closest('a, button:not(.row-toggle)')) return;
@@ -60,7 +78,7 @@
 				<!-- ETA (active) or Elapsed (otherwise) -->
 				{#if isActive}
 					<span class="shrink-0 transcode-card-meta" title="Estimated time remaining">
-						{etaDisplay ? `~${etaDisplay}` : job.created_at ? elapsedTime(job.created_at) : '-'}
+						{etaDisplay ? `~${etaDisplay}` : job.started_at ? elapsedTime(job.started_at) : '-'}
 					</span>
 				{:else if job.created_at}
 					<span class="shrink-0 transcode-card-meta">{elapsedTime(job.created_at)}</span>
@@ -128,7 +146,7 @@
 							<tr>
 								<td class="transcode-card-detail-label whitespace-nowrap">Started</td>
 								<td class="transcode-card-detail-value transcode-card-detail-value-strong"
-									>{#if job.created_at}<TimeAgo date={job.created_at} />{:else}-{/if}</td
+									>{#if job.started_at}<TimeAgo date={job.started_at} />{:else}-{/if}</td
 								>
 								<td class="transcode-card-detail-label whitespace-nowrap transcode-card-detail-col2">Updated</td>
 								<td class="transcode-card-detail-value transcode-card-detail-value-strong"
