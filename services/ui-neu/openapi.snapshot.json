@@ -19278,6 +19278,18 @@
             ],
             "title": "Claim Heartbeat At"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
           "last_error": {
             "anyOf": [
               {

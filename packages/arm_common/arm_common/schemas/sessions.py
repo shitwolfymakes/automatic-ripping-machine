@@ -187,6 +187,9 @@ class TranscodeTaskView(BaseModel):
     attempts: int
     claimed_by: str | None
     claim_heartbeat_at: datetime | None
+    # When the current attempt was claimed (null while queued, and on rows
+    # claimed before it existed). Encode time runs from here, not created_at.
+    started_at: datetime | None = None
     last_error: str | None
     created_at: datetime | None
     updated_at: datetime | None

@@ -35,6 +35,9 @@ class TranscodeTask(SQLModel, table=True):
     )
     claimed_by: str | None = Field(default=None)
     claim_heartbeat_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # When the current attempt was claimed; unlike claim_heartbeat_at it is not
+    # touched by heartbeats, so the UI measures encode time from it.
+    started_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     attempts: int = Field(sa_column=Column(Integer, nullable=False, server_default="0"))
     output_path: str | None = Field(default=None)
     progress_pct: int = Field(sa_column=Column(Integer, nullable=False, server_default="0"))

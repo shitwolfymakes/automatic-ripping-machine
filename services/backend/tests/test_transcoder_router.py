@@ -202,6 +202,9 @@ def test_claim_transitions_task_and_application() -> None:
     assert body["task"]["status"] == "in_progress"
     assert body["task"]["claimed_by"] == _HOSTNAME
     assert body["task"]["attempts"] == 1
+    # started_at marks the claim so the UI measures encode time, not queue wait (D-130/D-202).
+    assert db.rows["transcode_tasks"][0].started_at is not None
+    assert body["task"]["started_at"] is not None
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
 
 

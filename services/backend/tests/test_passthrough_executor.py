@@ -111,6 +111,7 @@ async def test_success_moves_file_and_completes(tmp_path: Path) -> None:
     assert task.last_error is None
     assert task.claimed_by == IN_PROCESS_CLAIMANT
     assert task.attempts == 1
+    assert task.started_at is not None
     assert (media_root / "Title (2020)" / "t0.mkv").read_bytes() == b"data"
     assert not raw.exists()
 

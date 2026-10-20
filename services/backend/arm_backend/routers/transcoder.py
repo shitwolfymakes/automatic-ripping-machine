@@ -160,6 +160,7 @@ async def claim(
     task.status = TranscodeTaskStatus.IN_PROGRESS
     task.claimed_by = x_arm_hostname
     task.claim_heartbeat_at = now
+    task.started_at = now
     task.attempts = (task.attempts or 0) + 1
     task.progress_pct = 0
     await db.flush()

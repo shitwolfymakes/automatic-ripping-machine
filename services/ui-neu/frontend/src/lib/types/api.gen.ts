@@ -5221,6 +5221,10 @@ export type TranscodeTaskView = {
      */
     claim_heartbeat_at: string | null;
     /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
      * Last Error
      */
     last_error: string | null;
