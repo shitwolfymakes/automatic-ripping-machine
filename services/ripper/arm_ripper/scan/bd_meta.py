@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 _DI = "{urn:BDA:bdmv;discinfo}"
 _BDMT_RE = re.compile(r"^bdmt_([a-z]{3})\.xml(?:;\d+)?$", re.IGNORECASE)
 _META_DIR = "/BDMV/META/DL"
+# Some pressed discs ship `href=foo` without quotes (upstream ARM #1650,
+# fixed there in #1804). Quote the bare value and parse again. Unlike
+# upstream's pattern, the value stops before a self-closing `/>`.
+_BARE_HREF_RE = re.compile(rb"""(?<!")href=([^"'\s>/][^\s>]*?)(?=\s|/?>)""")
 
 
 def pick_bdmt_file(names: list[str]) -> tuple[str, str] | None:
@@ -39,10 +43,35 @@ def _int(text: str | None) -> int | None:
     return value if 1 <= value <= 999 else None
 
 
-def parse_bdmt(xml_bytes: bytes, language: str | None) -> BdDiscMeta | None:
+def _offending_line(xml_bytes: bytes, err: ET.ParseError) -> str:
+    line_no = err.position[0]
+    lines = xml_bytes.splitlines()
+    if 1 <= line_no <= len(lines):
+        return lines[line_no - 1].decode("utf-8", "replace").strip()
+    return ""
+
+
+def _parse_xml(xml_bytes: bytes) -> ET.Element | None:
     try:
-        root = ET.fromstring(xml_bytes)
-    except ET.ParseError:
+        return ET.fromstring(xml_bytes)
+    except ET.ParseError as err:
+        first_err = err
+    repaired = _BARE_HREF_RE.sub(rb'href="\1"', xml_bytes)
+    if repaired != xml_bytes:
+        try:
+            root = ET.fromstring(repaired)
+        except ET.ParseError:
+            pass
+        else:
+            logger.info("bdmt: repaired unquoted href attribute(s) before parsing")
+            return root
+    logger.debug("bdmt: unparseable XML (%s): %r", first_err, _offending_line(xml_bytes, first_err))
+    return None
+
+
+def parse_bdmt(xml_bytes: bytes, language: str | None) -> BdDiscMeta | None:
+    root = _parse_xml(xml_bytes)
+    if root is None:
         return None
     title = root.find(f".//{_DI}title")
     if title is None:
