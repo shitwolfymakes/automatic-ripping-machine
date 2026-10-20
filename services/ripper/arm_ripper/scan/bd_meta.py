@@ -17,7 +17,7 @@ _META_DIR = "/BDMV/META/DL"
 # Some pressed discs ship `href=foo` without quotes (upstream ARM #1650,
 # fixed there in #1804). Quote the bare value and parse again. Unlike
 # upstream's pattern, the value stops before a self-closing `/>`.
-_BARE_HREF_RE = re.compile(rb"""(?<!")href=([^"'\s>/][^\s>]*?)(?=\s|/?>)""")
+_BARE_HREF_RE = re.compile(rb"""(?<!")href=([^"'\s>][^\s>]*?)(?=\s|/?>)""")
 
 
 def pick_bdmt_file(names: list[str]) -> tuple[str, str] | None:

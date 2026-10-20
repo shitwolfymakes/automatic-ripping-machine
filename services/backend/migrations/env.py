@@ -44,6 +44,9 @@ def _offline_safe_bind() -> None:
     the row-by-row rewrite, which has no SQL form anyway.
     """
     conn = context.get_context().connection
+    # `_execute_impl` is private to sqlalchemy.engine.mock.MockConnection
+    # (2.0.x). If an upgrade renames it, test_every_revision_after_0011_renders_offline
+    # fails first; update the name here.
     render = conn._execute_impl  # type: ignore[union-attr]
 
     def execute(obj: object, parameters: object = None) -> _NoRows:

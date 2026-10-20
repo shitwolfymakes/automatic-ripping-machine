@@ -592,3 +592,23 @@ def test_container_statuses_missing_when_no_container_carries_the_label() -> Non
     m, client = _manager()
     client.containers.list.return_value = []
     assert m.container_statuses(["drv_none"]) == {"drv_none": ("missing", None)}
+
+
+def test_reconcile_records_a_drift_check_failure_per_drive(monkeypatch) -> None:
+    """A container_spec that raises for one drive lands in summary.failed;
+    the other drives are still reconciled."""
+    m, client = _manager()
+    bad, good = _drive("drv_bad", serial="B"), _drive("drv_good", serial="G")
+    client.containers.list.return_value = [_container("drv_bad"), _container("drv_good")]
+    client.containers.run.return_value = _container("drv_good", name="arm-ripper-g")
+    real_spec = m.container_spec
+
+    def spec(drive):
+        if drive.id == "drv_bad":
+            raise RuntimeError("no host path for drive")
+        return real_spec(drive)
+
+    monkeypatch.setattr(m, "container_spec", spec)
+    summary = m.reconcile([bad, good])
+    assert "no host path" in summary.failed["drv_bad"]
+    assert summary.recreated == ["drv_good"]

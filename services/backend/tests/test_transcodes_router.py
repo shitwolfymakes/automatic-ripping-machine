@@ -396,6 +396,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     failed.last_error = "boom"
     failed.claimed_by = "transcoder-xyz"
     failed.claim_heartbeat_at = datetime.now(UTC)
+    failed.started_at = datetime.now(UTC)
     failed.attempts = 2
     db.rows["transcode_tasks"] = [failed]
     app, token = _make_app(signing_key, db)
@@ -408,6 +409,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     assert body["last_error"] is None
     assert body["claimed_by"] is None
     assert body["claim_heartbeat_at"] is None
+    assert body["started_at"] is None  # the retry's own claim sets it again
     assert body["attempts"] == 2  # preserved for audit
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 

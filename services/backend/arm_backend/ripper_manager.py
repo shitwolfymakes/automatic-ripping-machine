@@ -360,7 +360,13 @@ class RipperManager:
                 summary.failed[drive_id] = _err(exc)
         for drive in enrolled:
             existing = by_drive.get(drive.id)
-            drift = self._drift(drive, existing) if existing is not None else None
+            try:
+                drift = self._drift(drive, existing) if existing is not None else None
+            except Exception as exc:  # noqa: BLE001
+                # container_spec can raise for one bad drive; that must not
+                # abort the reconcile for every other drive.
+                summary.failed[drive.id] = _err(exc)
+                continue
             if drift is not None:
                 if drive.id in busy:
                     logger.info(

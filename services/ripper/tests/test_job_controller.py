@@ -1063,7 +1063,8 @@ async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, 
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
-    await controller._wipe_raw("never_existed")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await controller._wipe_raw("never_existed")
     assert "already absent" in caplog.text
 
     def denied(_p):

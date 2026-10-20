@@ -74,6 +74,7 @@ _MALFORMED = b"""<?xml version="1.0" encoding="utf-8"?>
     <di:description>
       <di:thumbnail href=sunrise_416.jpg size="416x240"/>
       <di:thumbnail href=sunrise_640.jpg/>
+      <di:thumbnail href=/BDMV/META/DL/sunrise_1920.jpg/>
     </di:description>
   </di:discinfo>
 </disclib>"""
