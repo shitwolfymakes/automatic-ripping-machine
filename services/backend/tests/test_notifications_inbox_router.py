@@ -84,6 +84,20 @@ def test_inbox_list_excludes_cleared_by_default(signing_key: bytes) -> None:
         assert len(r2.json()) == 3
 
 
+def test_inbox_list_limit_counts_only_uncleared_rows(signing_key: bytes) -> None:
+    """D-168: the cleared filter and the limit both run in SQL, filter first."""
+    db = FakeSession()
+    db.rows["notification_inbox"] = [
+        NotificationInbox(id="nin_c", event_type="rip.completed", title="c", message="c", seen=True, cleared=True),
+        NotificationInbox(id="nin_a", event_type="rip.completed", title="a", message="a", seen=False, cleared=False),
+        NotificationInbox(id="nin_b", event_type="rip.completed", title="b", message="b", seen=False, cleared=False),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/inbox?limit=1", headers=_auth(token))
+    assert [row["id"] for row in r.json()] == ["nin_a"]
+
+
 def test_inbox_count(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_rows(db)

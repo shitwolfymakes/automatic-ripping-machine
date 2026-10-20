@@ -182,18 +182,20 @@ class MessageDispatcher:
 
     async def _tick(self) -> None:
         async with self._db_factory() as db:
-            candidates = (
+            # Filter on notified_at in SQL: the events table is never pruned,
+            # so loading every notable event each tick grows with history (D-168).
+            unsent = (
                 (
                     await db.execute(
                         select(Event)
                         .where(col(Event.event_type).in_(NOTABLE_EVENT_TYPES))
+                        .where(col(Event.notified_at).is_(None))
                         .order_by(col(Event.emitted_at).asc())
                     )
                 )
                 .scalars()
                 .all()
             )
-            unsent = [e for e in candidates if e.notified_at is None]
             if not unsent:
                 return
 

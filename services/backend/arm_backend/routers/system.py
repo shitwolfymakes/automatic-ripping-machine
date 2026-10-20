@@ -23,7 +23,7 @@ from arm_backend.disk_usage_cache import get_disk_usage
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import effective_transcode_capable, settings
@@ -296,19 +296,16 @@ async def stats(
     started_at = getattr(request.app.state, "started_at", None)
     uptime = int((datetime.now(timezone.utc) - started_at).total_seconds()) if started_at is not None else 0
 
-    jobs = list((await db.execute(select(Job))).scalars().all())
     by_status: dict[str, int] = {}
-    for j in jobs:
-        key = j.status.value if hasattr(j.status, "value") else str(j.status)
-        by_status[key] = by_status.get(key, 0) + 1
+    for job_status, n in (await db.execute(select(Job.status, func.count()).group_by(col(Job.status)))).all():
+        key = job_status.value if hasattr(job_status, "value") else str(job_status)
+        by_status[key] = n
 
     drives_online = len(await _online_enrolled_drives(db))
 
-    # Fetch all events and filter in Python — mirrors the notification_dispatcher
-    # pattern to stay compatible with the in-memory FakeSession (which cannot
-    # evaluate .is_(None) clauses).
-    all_events = list((await db.execute(select(Event))).scalars().all())
-    events_unsent = len([e for e in all_events if e.notified_at is None])
+    events_unsent = (
+        await db.execute(select(func.count()).select_from(Event).where(col(Event.notified_at).is_(None)))
+    ).scalar_one()
 
     return StatsResponse(
         uptime_seconds=uptime,
