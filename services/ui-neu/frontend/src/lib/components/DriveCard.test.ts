@@ -290,6 +290,36 @@ describe('DriveCard', () => {
 			expect(triggerManualMock).toHaveBeenCalledWith({ drive_id: 'drv_1', session_id: 'ses_1' });
 		});
 
+		it.each([
+			[
+				'a rip in progress',
+				{ status: 'ripping', current_job: { status: 'ripping' } },
+				'The drive already has a job in progress'
+			],
+			['any live job', { current_job: { status: 'identifying' } }, 'The drive already has a job in progress'],
+			['a detached drive', { status: 'offline', present: false, media_status: 'detached' }, 'not connected'],
+			['an offline ripper', { status: 'offline', present: true }, "The drive's ripper is offline"],
+			['no disc', { media_status: 'no_disc' }, 'No disc in the drive'],
+			['an open tray', { media_status: 'tray_open' }, 'The tray is open'],
+			['a drive spinning up', { media_status: 'not_ready' }, 'not ready yet'],
+			['an unopenable drive', { media_status: 'unavailable' }, 'check its permissions']
+		] as [string, Partial<Drive>, string][])(
+			'disables Start rip with a reason for %s (D-208)',
+			(_l, overrides, reason) => {
+				renderDrive(overrides);
+				const btn = screen.getByTestId('drive-start-rip');
+				expect(btn).toBeDisabled();
+				expect(btn.getAttribute('title')).toContain(reason);
+			}
+		);
+
+		it.each([null, 'loaded', 'unknown'] as const)('keeps Start rip enabled when media status is %s', (media) => {
+			renderDrive({ media_status: media });
+			const btn = screen.getByTestId('drive-start-rip');
+			expect(btn).not.toBeDisabled();
+			expect(btn).toHaveAttribute('title', 'Start a manual rip on this drive');
+		});
+
 		it('surfaces a trigger error inline', async () => {
 			triggerManualMock.mockRejectedValueOnce(new Error('ripping is paused; no new jobs accepted'));
 			renderDrive({ id: 'drv_1' });
