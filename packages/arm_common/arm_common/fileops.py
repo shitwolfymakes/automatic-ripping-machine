@@ -28,7 +28,10 @@ an instant rename.
 decrypted backup. `shutil.move` renames on the same filesystem and copies
 the tree then removes the source across filesystems; `move_tree` adds the
 refusal to overwrite an existing destination, the same `cancel` check
-(a cancelled copy removes the partial tree), and the size of the tree.
+(a cancelled copy removes the partial tree), the size of the tree, and the
+durability of the copy: each file is fsynced as it lands, before
+`shutil.move` removes the source, and the destination directories are
+fsynced once the move returns.
 
 `safe_join` / `is_within`: the one containment guard for a path built from
 untrusted input (a request, a theme id, a name read off a disc). Both
@@ -194,6 +197,14 @@ def transcode_none(
     return size
 
 
+def _fsync_tree_dirs(root: Path) -> None:
+    """fsync every directory of a copied tree, deepest first, then its parent."""
+    for d in sorted((p for p in root.rglob("*") if p.is_dir() and not p.is_symlink()), reverse=True):
+        _fsync_dir(d)
+    _fsync_dir(root)
+    _fsync_dir(root.parent)
+
+
 def tree_size(root: Path) -> int:
     """Total size of the regular files under `root`; symlinks are not followed."""
     return sum(p.lstat().st_size for p in root.rglob("*") if p.is_file() and not p.is_symlink())
@@ -226,6 +237,8 @@ def move_tree(
             copying = True
             _same_device_hint(src, dst.parent)
         _copy_file(Path(s), Path(d), cancel, on_bytes)
+        # Each file is durable before shutil.move removes the source tree.
+        _fsync_file(Path(d))
 
     try:
         shutil.move(src, dst, copy_function=copy)
@@ -234,6 +247,8 @@ def move_tree(
         # source in place; drop the partial tree.
         shutil.rmtree(dst, ignore_errors=True)
         raise
+    if copying:
+        _fsync_tree_dirs(dst)
     size = tree_size(dst)
     logger.info("passthrough moved folder to %s (%d bytes)", dst, size)
     return size

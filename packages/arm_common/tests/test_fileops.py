@@ -300,8 +300,8 @@ def _record_durability_ops(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, s
     real_open, real_replace = os.open, os.replace
     fd_paths: dict[int, str] = {}
 
-    def spy_open(path: str, flags: int, *a: object) -> int:
-        fd = real_open(path, flags, *a)
+    def spy_open(path: str, flags: int, *a: object, **kw: object) -> int:
+        fd = real_open(path, flags, *a, **kw)
         fd_paths[fd] = Path(path).name
         return fd
 
@@ -341,6 +341,40 @@ def test_copy_fallback_fsyncs_before_the_rename(tmp_path: Path, monkeypatch: pyt
     transcode_none(src, dst)
     inprogress = "title.iso" + INPROGRESS_SUFFIX
     assert ops == [("fsync", inprogress), ("replace", inprogress), ("fsync", "media")]
+
+
+def test_move_tree_fsyncs_each_file_before_the_source_goes_then_the_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-247: the cross-filesystem copy of a backup tree was never fsynced."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    _no_rename(monkeypatch)
+    ops = _record_durability_ops(monkeypatch)
+    real_rmtree = fileops.shutil.rmtree
+
+    def spy_rmtree(path: object, *a: object, **kw: object) -> None:
+        ops.append(("rmtree", Path(str(path)).name))
+        real_rmtree(path, *a, **kw)
+
+    monkeypatch.setattr(fileops.shutil, "rmtree", spy_rmtree)
+    move_tree(src, dst)
+    removed = ops.index(("rmtree", "backup"))
+    assert sorted(n for _op, n in ops[:removed]) == ["00000.m2ts", "id.bdmv", "index.bdmv"]
+    assert ops[removed + 1 :] == [
+        ("fsync", "CERTIFICATE"),
+        ("fsync", "STREAM"),
+        ("fsync", "BDMV"),
+        ("fsync", "T"),
+        ("fsync", "media"),
+    ]
+
+
+def test_move_tree_rename_does_not_fsync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    ops = _record_durability_ops(monkeypatch)
+    move_tree(src, tmp_path / "media" / "T")
+    assert ops == []
 
 
 def test_directory_fsync_failure_does_not_fail_a_finished_rename(
