@@ -765,3 +765,84 @@ async def test_a_failing_progress_publish_does_not_strand_the_task(tmp_path: Pat
 
     assert progress_tried.is_set()
     assert ok is True and task.status == TranscodeTaskStatus.DONE
+
+
+async def test_a_crashing_progress_publisher_does_not_change_the_result(
+    tmp_path: Path, monkeypatch: Any, caplog: Any
+) -> None:
+    """The publisher is awaited after the move; whatever it raises is logged
+    and the move's own result still decides the task's terminal state."""
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"x" * 100)
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    hub, _sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+
+    import arm_backend.passthrough_executor as mod
+
+    async def _crashing_publisher(*_args: Any) -> None:
+        raise RuntimeError("publisher bug")
+
+    monkeypatch.setattr(mod, "_publish_progress", _crashing_publisher)
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(tmp_path / "media")))
+
+    assert ok is True and task.status == TranscodeTaskStatus.DONE
+    assert "passthrough progress publisher failed task_id=txt_1" in caplog.text
+
+
+async def test_progress_publisher_skips_unknown_totals_and_repeat_percentages(monkeypatch: Any) -> None:
+    """No total yet (the sizer has not run) publishes nothing, and an unchanged
+    percentage is not re-published."""
+    import asyncio
+
+    import arm_backend.passthrough_executor as mod
+
+    monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.001)
+    stop = asyncio.Event()
+    hub, sent = _hub_with_recorder()
+
+    class _Progress:
+        done = 50
+        reads = 0
+
+        @property
+        def total(self) -> int:
+            self.reads += 1
+            if self.reads == 1:
+                return 0  # first tick: total unknown
+            if sent:
+                stop.set()  # a tick after the publish: same 50 %, then stop
+            return 100
+
+    db = FakeSession()
+    await mod._publish_progress(db, hub, "txt_1", None, None, _Progress(), stop)  # type: ignore[arg-type]
+
+    assert [e["payload"]["progress_pct"] for e in sent] == [50]
+    assert db.committed == 1
+
+
+async def test_progress_publisher_stops_after_a_failed_write(monkeypatch: Any, caplog: Any) -> None:
+    """A failed heartbeat write rolls back and ends progress reporting; the
+    copy itself is unaffected."""
+    import asyncio
+
+    import arm_backend.passthrough_executor as mod
+    from arm_backend.passthrough_executor import _CopyProgress
+
+    monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.001)
+    hub, sent = _hub_with_recorder()
+    db = FakeSession()
+
+    async def _raising_execute(_stmt: Any) -> None:
+        raise RuntimeError("db gone")
+
+    monkeypatch.setattr(db, "execute", _raising_execute)
+    progress = _CopyProgress()
+    progress.add(50)
+    progress.total = 100
+
+    await mod._publish_progress(db, hub, "txt_1", None, None, progress, asyncio.Event())
+
+    assert db.call_log[-1] == "rollback" and sent == []
+    assert "progress write failed task_id=txt_1" in caplog.text

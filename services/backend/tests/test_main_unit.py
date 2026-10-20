@@ -297,3 +297,34 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
     assert calls == [(app.state.http, Path(str(tmp_path)))]
     assert cfg.thediscdb_refreshed_at is not None
     assert cfg in db.added
+
+
+async def test_thediscdb_refresh_loop_survives_an_error(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    """A failing pass is logged and the loop sleeps until the next one. Pinned
+    here because the e2e boot only reaches this line when its refresh happens
+    to fail (no network), which made coverage environment-dependent."""
+    import asyncio
+
+    def _broken_session() -> object:
+        raise RuntimeError("db down")
+
+    async def _stop(_seconds: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(main_mod, "SessionLocal", _broken_session)
+    monkeypatch.setattr(main_mod.asyncio, "sleep", _stop)
+    with pytest.raises(asyncio.CancelledError):
+        await main_mod._thediscdb_refresh_loop(object())  # type: ignore[arg-type]
+    assert "thediscdb: refresh loop error: db down" in caplog.text
+
+
+def test_ensure_roots_never_raises(tmp_path, caplog) -> None:
+    """A root that cannot be created (here: under a regular file) is logged,
+    not raised, so a broken mount never crash-loops the API."""
+    from arm_backend.utils import ensure_roots
+
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    ensure_roots({"media": str(blocker / "media"), "raw": str(tmp_path / "raw")})
+    assert (tmp_path / "raw").is_dir()
+    assert "cannot create media" in caplog.text

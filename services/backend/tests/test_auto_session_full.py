@@ -485,3 +485,24 @@ async def test_same_job_overwrite_still_works(tmp_path: Path) -> None:
     assert out.application is not None
     assert not any(t.id == "txt_mine" for t in db.rows["transcode_tasks"])
     assert len(out.tasks) == 1
+
+
+async def test_drain_survives_a_failed_job_reload_after_rollback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A drain failure rolls back and reloads the job; when that reload fails
+    too, the hook still logs and returns [] instead of raising into rip-complete."""
+    db = FakeSession()
+    job = _seed(db)
+
+    async def _raising_fan_out(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("boom: drain failed")
+
+    async def _raising_refresh(_obj: object) -> None:
+        raise RuntimeError("boom: reload failed")
+
+    monkeypatch.setattr(asx, "fan_out_waiting_identify_applications", _raising_fan_out)
+    monkeypatch.setattr(db, "refresh", _raising_refresh)
+
+    assert await asx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
+    assert "after a failed drain failed" in caplog.text

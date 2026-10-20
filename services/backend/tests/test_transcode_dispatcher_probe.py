@@ -766,3 +766,40 @@ def test_local_spawn_never_checks_the_backend_url() -> None:
 
     d._backend_url_probe = _boom
     assert d.probe() == (True, None)
+
+
+def test_probe_hold_logs_once_when_the_host_recovers(caplog) -> None:
+    d = _make_dispatcher()
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        d._log_probe_hold((False, "image arm-transcode:test not present"))
+        d._log_probe_hold((True, None))
+        d._log_probe_hold((True, None))
+    assert d._probe_hold_logged is None
+    resumed = [r for r in caplog.records if "encode spawns resume" in r.getMessage()]
+    assert len(resumed) == 1
+
+
+async def test_failed_spawn_is_not_counted_once_the_task_left_queued() -> None:
+    """Another session claimed or cancelled the task meanwhile: nothing to count."""
+    db = _one_encode_task_db()
+    task = db.rows["transcode_tasks"][0]
+    task.status = TranscodeTaskStatus.IN_PROGRESS
+    d = _disp(db, ARM_TRANSCODE_MAX_ATTEMPTS=1)
+    await d._count_failed_spawn(db, "txt_1")
+    await d._count_failed_spawn(db, "txt_missing")
+    assert task.attempts == 0 and task.status == TranscodeTaskStatus.IN_PROGRESS
+    assert db.committed == 0
+
+
+async def test_an_error_counting_a_failed_spawn_does_not_abort_the_tick(caplog) -> None:
+    db = _one_encode_task_db()
+    d = _disp(db, MAX_PARALLEL_TRANSCODES=1)
+    d._docker.containers.run.side_effect = RuntimeError("invalid mount config")
+
+    async def _raising_count(_db, _task_id) -> None:
+        raise RuntimeError("db blip")
+
+    d._count_failed_spawn = _raising_count  # type: ignore[method-assign]
+    assert await d.spawn_pending(db) == 0
+    assert "could not count the failed spawn task_id=txt_1" in caplog.text
+    assert db.call_log.count("rollback") == 2  # the spawn failure, then the count failure

@@ -322,3 +322,35 @@ def test_reenable_redrain_failure_never_fails_the_patch(
     assert r.status_code == 200
     assert r.json()["transcode_enabled"] is True
     assert calls["n"] == 1
+
+
+async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A drain that raises rolls back and the loop moves on to the next job."""
+    from types import SimpleNamespace
+
+    from arm_common import DiscType, Job
+
+    db = FakeSession()
+    db.rows["jobs"] = [
+        Job(id="job_a", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+        Job(id="job_b", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED),
+    ]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id=f"sap_{j}", session_id="ses_x", job_id=j, status=SessionApplicationStatus.WAITING_IDENTIFY
+        )
+        for j in ("job_a", "job_b")
+    ]
+    drained: list[str] = []
+
+    async def _drain(_session: Any, job: Any, _hub: Any, *, trigger: str) -> None:
+        drained.append(job.id)
+        if job.id == "job_a":
+            raise RuntimeError("drain blew up")
+
+    monkeypatch.setattr(config_router, "drain_parked_applications_after_rip", _drain)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+
+    assert drained == ["job_a", "job_b"]
+    assert db.call_log.count("rollback") == 1

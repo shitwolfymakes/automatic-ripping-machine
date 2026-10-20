@@ -329,3 +329,72 @@ def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
         r = _patch(client, token, {"manual_wait_seconds": 0})
     assert r.status_code == 200, r.text  # type: ignore[attr-defined]
     assert _row(db).manual_wait_seconds == 0
+
+
+def _request(**state: object) -> object:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(**state)))
+
+
+async def test_re_resolve_listing_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The PATCH has committed before the re-resolve runs; a failed job listing
+    is logged and nothing is resolved."""
+    db = FakeSession()
+    resolved: list[str] = []
+
+    async def _raising_execute(_stmt: object) -> None:
+        raise RuntimeError("db went away")
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        resolved.append(job.id)
+
+    monkeypatch.setattr(db, "execute", _raising_execute)
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    await config_router._reresolve_identity(db, _request())  # type: ignore[arg-type]
+    assert resolved == []
+
+
+async def test_re_resolve_skips_a_job_deleted_after_the_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _identity_jobs(db)
+    real_execute = db.execute
+    resolved: list[str] = []
+
+    async def _execute(stmt: object) -> object:
+        result = await real_execute(stmt)
+        if "session_applications" in str(stmt):
+            db.rows["jobs"] = []  # every candidate deleted before its lock
+        return result
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        resolved.append(job.id)
+
+    monkeypatch.setattr(db, "execute", _execute)
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    stage = _Stage()
+    await config_router._reresolve_identity(db, _request(episode_stage=stage))  # type: ignore[arg-type]
+    assert resolved == [] and stage.scheduled == []
+
+
+async def test_re_resolve_emits_when_the_identity_changed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A changed identity is committed then announced on the hub, per job."""
+    from arm_backend.identity.pipeline import ResolveOutcome
+
+    db = FakeSession()
+    _identity_jobs(db)
+    emitted: list[str] = []
+    hub = object()
+
+    async def fake_resolve(_session, _job):  # type: ignore[no-untyped-def]
+        return ResolveOutcome(changed=1, track_ids=frozenset())
+
+    async def fake_emit(_session, got_hub, job, _resolved, *, sources):  # type: ignore[no-untyped-def]
+        assert got_hub is hub and sources == {}
+        emitted.append(job.id)
+
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_router, "emit_identity_resolved", fake_emit)
+    await config_router._reresolve_identity(db, _request(ws_hub=hub))  # type: ignore[arg-type]
+    assert sorted(emitted) == ["job_live", "job_ripped_unapplied"]
+    assert db.committed == 4  # resolve + emit, per job
