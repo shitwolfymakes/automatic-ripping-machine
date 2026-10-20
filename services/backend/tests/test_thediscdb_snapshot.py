@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import tarfile
@@ -10,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from arm_backend.identity.sources import thediscdb_snapshot
 from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, build_index, refresh
 
 DISC = {
@@ -78,7 +80,38 @@ def test_build_replaces_atomically(tmp_path: Path) -> None:
     build_index(_mini_tarball(tmp_path), dest)  # rebuild over live index
     assert dest.exists() and SnapshotStore(tmp_path).count() == 1
     assert dest.stat().st_mtime_ns != before
-    assert not dest.with_suffix(".sqlite.new").exists()
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
+
+
+def test_build_failure_removes_temp_file_and_keeps_live_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    dest = tmp_path / "index.sqlite"
+    build_index(_mini_tarball(tmp_path), dest)
+
+    def _boom(src: object, dst: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(thediscdb_snapshot.os, "replace", _boom)
+    with pytest.raises(OSError, match="disk full"):
+        build_index(_mini_tarball(tmp_path), dest)
+    assert SnapshotStore(tmp_path).count() == 1
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
+
+
+def test_overlapping_builds_use_distinct_temp_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # D-159: two builds into the same dest must not share a temp path.
+    seen: list[Path] = []
+    real_write = thediscdb_snapshot._write_index
+
+    def _spy(new_path: Path, *args: object) -> int:
+        seen.append(new_path)
+        return real_write(new_path, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(thediscdb_snapshot, "_write_index", _spy)
+    dest = tmp_path / "index.sqlite"
+    build_index(_mini_tarball(tmp_path), dest)
+    build_index(_mini_tarball(tmp_path), dest)
+    assert len(seen) == 2 and seen[0] != seen[1]
+    assert all(p.parent == tmp_path for p in seen)
 
 
 def test_missing_store(tmp_path: Path) -> None:
@@ -111,7 +144,7 @@ def test_empty_tarball_refuses_to_replace(tmp_path: Path) -> None:
 
     # Verify live index unchanged and no .new leftover
     assert SnapshotStore(tmp_path).count() == 1
-    assert not dest.with_suffix(".sqlite.new").exists()
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
 
 
 # --- build_index: member filtering and malformed entries ----------------------
@@ -189,3 +222,27 @@ async def test_refresh_http_failure_propagates_and_keeps_index_absent(tmp_path: 
             await refresh(http, store_dir)
 
     assert not SnapshotStore(store_dir).exists()
+
+
+async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-159: a second refresh waits for the first instead of building alongside it."""
+    active = 0
+    peak = 0
+    running_during: list[bool] = []
+
+    async def _fake_locked(http: object, dir_path: Path) -> int:
+        nonlocal active, peak
+        running_during.append(thediscdb_snapshot.refresh_running())
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return 1
+
+    monkeypatch.setattr(thediscdb_snapshot, "_refresh_locked", _fake_locked)
+    assert not thediscdb_snapshot.refresh_running()
+    results = await asyncio.gather(refresh(object(), tmp_path), refresh(object(), tmp_path))  # type: ignore[arg-type]
+    assert results == [1, 1]
+    assert peak == 1
+    assert running_during == [True, True]
+    assert not thediscdb_snapshot.refresh_running()

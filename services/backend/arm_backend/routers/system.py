@@ -32,6 +32,7 @@ from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.transcode_dispatcher import count_queued_encode_tasks
 from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
+from arm_backend.identity.sources.thediscdb_snapshot import refresh_running as thediscdb_refresh_running
 from arm_backend.utils import default_roots
 from arm_common import (
     Config,
@@ -405,6 +406,8 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
 async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
+    if thediscdb_refresh_running():
+        raise HTTPException(status_code=409, detail="thediscdb refresh already in progress")
     try:
         count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
     except Exception as e:  # noqa: BLE001 — network/tar/sqlite: report, keep old index

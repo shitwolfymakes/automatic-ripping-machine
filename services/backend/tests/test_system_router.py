@@ -806,6 +806,28 @@ def test_thediscdb_refresh_now_maps_failure_to_502(signing_key: bytes, tmp_path,
     assert db.rows["config"][0].thediscdb_refreshed_at is None
 
 
+def test_thediscdb_refresh_now_409_while_refresh_running(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """D-159: a manual refresh during the loop's (or another click's) build is refused."""
+    called: list[bool] = []
+
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        called.append(True)
+        return 1
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    monkeypatch.setattr(system_router, "thediscdb_refresh_running", lambda: True)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert "already in progress" in r.json()["detail"]
+    assert called == []
+    assert db.rows["config"][0].thediscdb_refreshed_at is None
+
+
 def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) -> None:
     """Refresh is a mutating route (network fetch + config write) — guests get 403."""
     db = FakeSession()

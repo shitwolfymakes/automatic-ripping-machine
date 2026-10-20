@@ -10,8 +10,9 @@ Refresh keeps the previous index on any failure (mirror philosophy: a
 third-party outage must never break local operation). Build raises an
 exception if the tarball contains zero indexable discs (e.g., upstream
 layout change), so refresh propagates the error and the previous index
-remains untouched. Build is atomic: write `<dest>.new`, then os.replace
-over the live file.
+remains untouched. Build is atomic: write a uniquely named temp file next
+to the live index, then os.replace over it. `refresh` holds a process-wide
+lock so the daily loop and a manual refresh never build concurrently.
 """
 
 from __future__ import annotations
@@ -103,9 +104,28 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
     if not discs:
         raise ValueError("thediscdb: tarball contained no indexable discs — refusing to replace index")
 
-    new_path = dest_sqlite.with_suffix(".sqlite.new")
-    new_path.unlink(missing_ok=True)
     dest_sqlite.parent.mkdir(parents=True, exist_ok=True)
+    # Unique name per build: a fixed `<dest>.new` let two overlapping builds
+    # unlink each other's open database (D-159).
+    fd, tmp_name = tempfile.mkstemp(dir=dest_sqlite.parent, prefix=f"{dest_sqlite.name}.", suffix=".new")
+    os.close(fd)
+    new_path = Path(tmp_name)
+    try:
+        rows = _write_index(new_path, discs, metadata_by_title, release_by_dir)
+        os.replace(new_path, dest_sqlite)
+    except BaseException:
+        new_path.unlink(missing_ok=True)
+        raise
+    logger.info("thediscdb: index built with %d discs", rows)
+    return rows
+
+
+def _write_index(
+    new_path: Path,
+    discs: list[tuple[str, str, str, dict[str, Any]]],
+    metadata_by_title: dict[str, dict[str, Any]],
+    release_by_dir: dict[str, dict[str, Any]],
+) -> int:
     conn = sqlite3.connect(new_path)
     try:
         conn.executescript(_SCHEMA)
@@ -130,8 +150,6 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
         conn.commit()
     finally:
         conn.close()
-    os.replace(new_path, dest_sqlite)
-    logger.info("thediscdb: index built with %d discs", rows)
     return rows
 
 
@@ -176,9 +194,24 @@ class SnapshotStore:
         )
 
 
+# Serialises refreshes within the process (daily loop vs the manual route).
+_refresh_lock = asyncio.Lock()
+
+
+def refresh_running() -> bool:
+    """True while a refresh holds the lock; the manual route answers 409."""
+    return _refresh_lock.locked()
+
+
 async def refresh(http: httpx.AsyncClient, dir_path: Path) -> int:
     """Download the tarball and rebuild the index. Raises on failure — the
-    caller logs and keeps the previous index."""
+    caller logs and keeps the previous index. A second caller waits for the
+    first to finish."""
+    async with _refresh_lock:
+        return await _refresh_locked(http, dir_path)
+
+
+async def _refresh_locked(http: httpx.AsyncClient, dir_path: Path) -> int:
     dir_path.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = Path(tmp.name)
