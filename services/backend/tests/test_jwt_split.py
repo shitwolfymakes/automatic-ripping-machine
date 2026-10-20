@@ -133,3 +133,49 @@ async def test_require_jwt_allows_must_change_user_on_password_route() -> None:
     sess = _FakeSession(user=user)
     got = await require_jwt(request=req, authorization=f"Bearer {token}", session=sess)  # type: ignore[arg-type]
     assert got.id == "usr_abc"
+
+
+def test_openapi_declares_the_auth_schemes() -> None:
+    """The wire contract names the scheme each route needs (D-183)."""
+    from arm_backend.main import app
+
+    schema = app.openapi()
+    schemes = schema["components"]["securitySchemes"]
+    assert schemes["UserJWT"]["scheme"] == "bearer"
+    assert schemes["UserJWT"]["bearerFormat"] == "JWT"
+    assert schemes["ServiceToken"]["scheme"] == "bearer"
+    paths = schema["paths"]
+    assert paths["/api/config"]["get"]["security"] == [{"UserJWT": []}]
+    ripper_ops = [op for path, ops in paths.items() if path.startswith("/api/ripper/") for op in ops.values()]
+    assert ripper_ops and all(op["security"] == [{"ServiceToken": []}] for op in ripper_ops)
+    assert "security" not in paths["/api/setup/status"]["get"]
+
+
+def test_malformed_header_never_falls_back_to_guest_over_http() -> None:
+    """The scheme dep hands over the raw header, so a non-Bearer value is still
+    a 401 rather than an anonymous (guest) request."""
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+
+    from arm_backend.db import get_session
+
+    app = FastAPI()
+
+    @app.get("/ui")
+    async def ui(_: User = Depends(require_jwt)) -> dict[str, bool]:
+        return {"ok": True}
+
+    @app.get("/svc", dependencies=[Depends(require_service_token)])
+    async def svc() -> dict[str, bool]:
+        return {"ok": True}
+
+    async def _no_session() -> Any:
+        yield None
+
+    app.dependency_overrides[get_session] = _no_session
+    client = TestClient(app)
+    resp = client.get("/ui", headers={"Authorization": "Basic abc"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "missing bearer token"
+    assert client.get("/svc", headers={"Authorization": f"Bearer {settings.ARM_SERVICE_TOKEN}"}).status_code == 200
+    assert client.get("/svc").status_code == 401

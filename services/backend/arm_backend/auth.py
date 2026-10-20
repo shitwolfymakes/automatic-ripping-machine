@@ -16,7 +16,8 @@ from [05-cross-cutting.md § Authorization rules](../../../docs/developers/archi
 """
 
 import jwt
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, Security, status
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -39,13 +40,35 @@ def looks_like_jwt(token: str) -> bool:
     return bool(token) and token.count(".") == 2
 
 
+class _BearerHeader(HTTPBearer):
+    """Declares a bearer scheme in the OpenAPI schema but hands the dep the raw
+    `Authorization` header, so the checks below keep their exact semantics
+    (absent vs malformed header matters for the guest fallback)."""
+
+    async def __call__(self, request: Request) -> str | None:  # type: ignore[override]
+        return request.headers.get("authorization")
+
+
+_user_jwt = _BearerHeader(
+    scheme_name="UserJWT",
+    bearerFormat="JWT",
+    description="UI session JWT from POST /api/auth/login. Omit it to act as the guest account when enabled.",
+    auto_error=False,
+)
+_service_token = _BearerHeader(
+    scheme_name="ServiceToken",
+    description="Shared ARM_SERVICE_TOKEN used by ripper and transcoder containers.",
+    auto_error=False,
+)
+
+
 def _extract_bearer(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
     return authorization.removeprefix("Bearer ").strip()
 
 
-async def require_service_token(authorization: str | None = Header(default=None)) -> None:
+async def require_service_token(authorization: str | None = Security(_service_token)) -> None:
     token = _extract_bearer(authorization)
     if looks_like_jwt(token):
         # A JWT-shaped token reaching a ripper/transcoder endpoint is the
@@ -73,7 +96,7 @@ _MUST_CHANGE_GET_EXACT: frozenset[str] = frozenset({"/api/setup", "/api/system/r
 
 async def require_jwt(
     request: Request,
-    authorization: str | None = Header(default=None),
+    authorization: str | None = Security(_user_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     if authorization is None:
