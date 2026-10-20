@@ -95,12 +95,17 @@ class _StubManager:
         ensure_fail: str | None = None,
         remove_fail: str | None = None,
         states: dict[str, str] | None = None,
+        host_paths: bool = True,
     ) -> None:
+        self.host_paths = host_paths
         self.ensure_fail = ensure_fail
         self.remove_fail = remove_fail
         self.states = states or {}
         self.ensured: list[str] = []
         self.removed: list[str] = []
+
+    def host_paths_set(self) -> bool:
+        return self.host_paths
 
     def container_statuses(self, drive_ids: Any) -> dict[str, tuple[str, None]]:
         return {i: (self.states.get(i, "running"), None) for i in drive_ids}
@@ -321,6 +326,22 @@ def test_manager_unavailable_503(lib: Path, signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/iso/rips", json={"path": "x.iso"}, headers=_auth(token))
     assert r.status_code == 503, r.text
+
+
+def test_manager_disabled_503_without_creating_a_drive(lib: Path, signing_key: bytes) -> None:
+    """A manager kept on app.state with ARM_HOST_*_PATH unset answers 503 like
+    /api/drives does, before a virtual drive row is committed (D-150)."""
+    (lib / "x.iso").write_bytes(b"x")
+    db = FakeSession()
+    token = _admin_token(db, signing_key)
+    manager = _StubManager(host_paths=False)
+    app = _build_app(db, signing_key, manager)
+    with TestClient(app) as client:
+        r = client.post("/api/iso/rips", json={"path": "x.iso"}, headers=_auth(token))
+    assert r.status_code == 503, r.text
+    assert "disabled" in r.json()["detail"]
+    assert manager.ensured == []
+    assert db.rows.get("drives", []) == []
 
 
 @pytest.mark.parametrize("path", ["../x.iso", "/etc/x.iso", "Movies/../../x.iso", "link_out.iso"])
