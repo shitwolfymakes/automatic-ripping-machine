@@ -684,6 +684,23 @@ def test_apply_rejects_job_in_bad_status(signing_key: bytes, tmp_path: Path) -> 
     assert r.status_code == 409
 
 
+def test_apply_bad_status_409_survives_raw_string_status(signing_key: bytes, tmp_path: Path) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPING)
+    object.__setattr__(db.rows["jobs"][0], "status", "some_future_status")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
+
+
 def test_apply_unknown_session_400(signing_key: bytes, tmp_path: Path) -> None:
     db = FakeSession()
     _seed(db)

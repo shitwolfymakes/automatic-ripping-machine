@@ -510,7 +510,7 @@ async def abandon_job(
     if job.status not in NON_TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job already in terminal status {job.status.value}",
+            detail=f"job already in terminal status {enum_value_str(job.status)}",
         )
 
     delete_raw = bool(req and req.delete_raw)
@@ -863,7 +863,7 @@ async def delete_job(
     if job.status not in TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job in non-terminal status {job.status.value}; abandon it first",
+            detail=f"job in non-terminal status {enum_value_str(job.status)}; abandon it first",
         )
 
     counters: dict[str, int] | None = None
@@ -1137,7 +1137,7 @@ async def resolve(
     if job.status not in RESOLVABLE_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
+            detail=f"job {job_id} is in status {enum_value_str(job.status)}, not in an identify-resolvable status",
         )
     before_identity = _identity_snapshot(job)
 

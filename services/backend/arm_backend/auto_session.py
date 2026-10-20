@@ -371,7 +371,7 @@ async def _apply_session_internal(
         # `maybe_auto_apply_session` gates on RIPPED/RIPPED_PARTIAL.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job is in status {job.status.value}; cannot apply a session",
+            detail=f"job is in status {enum_value_str(job.status)}; cannot apply a session",
         )
 
     rip_preset = (

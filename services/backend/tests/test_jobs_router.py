@@ -214,6 +214,31 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
     assert "terminal status" in r.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/abandon", None),
+        ("DELETE", "", None),
+        ("POST", "/resolve", {"title": "T"}),
+    ],
+)
+def test_status_409_survives_raw_string_status(
+    signing_key: bytes, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409 on abandon / delete / resolve, not an
+    AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.request(method, f"/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001{path}", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
+
+
 def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
     db = FakeSession()
     hub = _Hub()
