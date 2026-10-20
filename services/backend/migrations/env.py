@@ -25,6 +25,34 @@ def _sync_url() -> str:
 target_metadata = SQLModel.metadata
 
 
+class _NoRows(list[tuple[object, ...]]):
+    """Empty result for a statement executed on the offline mock connection."""
+
+    def scalar(self) -> None:
+        return None
+
+    def first(self) -> None:
+        return None
+
+
+def _offline_safe_bind() -> None:
+    """Make ``op.get_bind().execute()`` return an empty result offline.
+
+    Offline, the bind is a mock connection that renders each statement and
+    returns ``None``. Data-lift revisions (0032, 0033) iterate a SELECT's rows,
+    so ``--sql`` crashed there. Returning no rows renders the SELECT and skips
+    the row-by-row rewrite, which has no SQL form anyway.
+    """
+    conn = context.get_context().connection
+    render = conn._execute_impl  # type: ignore[union-attr]
+
+    def execute(obj: object, parameters: object = None) -> _NoRows:
+        render(obj, parameters)
+        return _NoRows()
+
+    conn._execute_impl = execute  # type: ignore[union-attr]
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=_sync_url(),
@@ -32,6 +60,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
+    _offline_safe_bind()
     with context.begin_transaction():
         context.run_migrations()
 

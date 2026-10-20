@@ -73,7 +73,8 @@ def _render_sql(from_rev: str, to_rev: str, *, downgrade: bool = False) -> str:
 
 # The full base:head range can't be rendered offline: 0011_plex_movie_track_token
 # seeds rows through a parameterised statement that raises CompileError under
-# `literal_binds`. Scoped to the range this branch introduced; widening it means
+# `literal_binds`. Everything after it renders (see
+# test_every_revision_after_0011_renders_offline); widening to base means
 # rewriting that seed first.
 _PARENT_REV = "0026_add_makemkv_sdf_columns"
 _REV = "0028_user_role_disabled"
@@ -102,3 +103,15 @@ def test_0028_matches_the_user_model() -> None:
         assert f"ADD COLUMN {name} " in sql, f"0028 does not add users.{name}"
         assert not column.nullable, f"User.{name} is nullable but 0028 declares NOT NULL"
         assert column.server_default is not None, f"User.{name} has no server_default to match 0028's"
+
+
+def test_every_revision_after_0011_renders_offline() -> None:
+    """The data-lift revisions (0032, 0033) iterate SELECT rows from
+    ``op.get_bind()``; offline the bind renders statements and returns nothing,
+    so ``env.py`` hands back an empty result. Without that, ``--sql`` over any
+    range spanning 0032 crashed with ``'NoneType' object is not iterable``."""
+    up = _render_sql("0011_plex_movie_track_token", "head")
+    assert "-> 0032_job_metadata_sections" in up
+    assert "-> 0033_drop_metadata_mirrors" in up
+    down = _render_sql("head", "0011_plex_movie_track_token", downgrade=True)
+    assert "0033_drop_metadata_mirrors -> 0032_job_metadata_sections" in down
