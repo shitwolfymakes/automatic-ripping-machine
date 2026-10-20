@@ -202,16 +202,13 @@ def _parked_session_ids(sas: list[SessionApplication]) -> list[str]:
 
 
 def _parked_apps_are_settled(job: Job) -> bool:
-    """Has the drain that would fill a parked application already run (or
-    can it never run)? True once the rip is over and identity is not still
-    pending: rip-complete drained what it could on a ripped job, and a
-    failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
-    parked application is still legitimately waiting for resolve, and so is
-    an unidentified RIPPED_PARTIAL one's (resolve drains both)."""
-    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
-        return False
-    if job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified"):
-        return False
+    """Is a parked application with no tasks no longer in flight? True once
+    the rip is over: rip-complete drained what it could on a ripped job, and
+    a failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
+    (or an unidentified RIPPED_PARTIAL one's) parked application is still
+    waiting for resolve to drain it, but it is waiting on identity, not
+    transcoding, so it is settled for the rollup too (D-142);
+    `parked_session_ids` shows it as waiting."""
     return job.status in TERMINAL_JOB_STATUSES
 
 

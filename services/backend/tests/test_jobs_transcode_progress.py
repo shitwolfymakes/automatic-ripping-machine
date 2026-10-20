@@ -156,20 +156,23 @@ def test_settled_parked_app_is_left_out_of_the_rollup() -> None:
     assert s is not None and s.state == "done" and s.tasks_total == 1
 
 
-def test_parked_apps_settle_only_once_identity_is_not_pending() -> None:
-    """D-081 follow-up: resolve drains the parked app of an unidentified
-    partial rip, as it does for ripped_awaiting_identify, so neither counts
-    as settled. An identified partial rip has had its drain."""
+def test_parked_apps_settle_once_the_rip_is_over() -> None:
+    """D-142: a parked app waiting on resolve (ripped_awaiting_identify, or an
+    unidentified partial rip) is waiting on identity, not transcoding, so it
+    is settled for the rollup like any other post-rip job's. A job that has
+    not ripped yet still drains at rip-complete."""
     from arm_backend.routers.jobs import _parked_apps_are_settled
     from arm_common import Job
 
     def job(status: JobStatus, metadata: dict[str, Any]) -> Job:
         return Job(id="job_1", drive_id=None, disc_type=DiscType.DVD, status=status, metadata_json=metadata)
 
-    assert not _parked_apps_are_settled(job(JobStatus.RIPPED_AWAITING_IDENTIFY, {}))
-    assert not _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {"flags": {"unidentified": True}}))
+    assert _parked_apps_are_settled(job(JobStatus.RIPPED_AWAITING_IDENTIFY, {}))
+    assert _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {"flags": {"unidentified": True}}))
     assert _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {}))
     assert _parked_apps_are_settled(job(JobStatus.RIPPED, {}))
+    assert not _parked_apps_are_settled(job(JobStatus.IDENTIFIED, {}))
+    assert not _parked_apps_are_settled(job(JobStatus.AWAITING_USER_ID, {}))
 
 
 import secrets  # noqa: E402
