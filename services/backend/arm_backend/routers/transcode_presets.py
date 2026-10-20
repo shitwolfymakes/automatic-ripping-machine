@@ -1,6 +1,7 @@
 """Transcode preset CRUD. Built-in protection mirrors sessions.py and rip_presets.py."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -15,6 +16,10 @@ from arm_common.schemas import (
 )
 
 router = APIRouter(prefix="/api/transcode-presets", tags=["transcode-presets"])
+
+# NOT NULL columns (name, tool, container, encoder): the update schema lets a
+# client send null for them, which means "leave it as is".
+_NOT_NULL_FIELDS = frozenset(c.key for c in inspect(TranscodePreset).columns if not c.nullable)
 
 
 def _validate_encoder(encoder: str, tool: TranscodeTool, container: ContainerFormat) -> None:
@@ -97,8 +102,7 @@ async def update_transcode_preset(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_preset_id: {preset_id}")
 
-    # `encoder` is NOT NULL: an explicit null means "leave it as is".
-    fields = {k: v for k, v in req.model_dump(exclude_unset=True).items() if not (k == "encoder" and v is None)}
+    fields = {k: v for k, v in req.model_dump(exclude_unset=True).items() if not (k in _NOT_NULL_FIELDS and v is None)}
     if row.is_builtin and fields:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -234,6 +234,26 @@ def test_patch_null_encoder_leaves_it_unchanged(signing_key: bytes) -> None:
     assert r.json()["name"] == "renamed"
 
 
+def test_patch_null_not_null_fields_leaves_them_unchanged(signing_key: bytes) -> None:
+    # D-154: tool/container/name are nullable in the update schema but NOT
+    # NULL in the table; an explicit null must not reach the row (500).
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    row = _preset("tpr_nulls", name="keep")
+    db.rows["transcode_presets"] = [row]
+    before = (row.tool, row.container)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/transcode-presets/tpr_nulls",
+            json={"name": None, "tool": None, "container": None, "extra_args": None},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "keep"
+    assert (row.tool, row.container) == before
+    assert row.extra_args is None
+
+
 def test_create_empty_encoder_422(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
