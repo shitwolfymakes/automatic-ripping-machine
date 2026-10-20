@@ -211,7 +211,8 @@ else
     ensure_ca
     make_leaf arm-backend
     make_leaf arm-db
-    make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
+    mapfile -t ui_sans < <(ui_leaf_sans)
+    make_leaf arm-ui "${ui_sans[@]}"
 fi
 
 # docker-compose.yml is generated per host (gitignored, like .env): bootstrap

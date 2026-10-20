@@ -129,6 +129,16 @@ import `~/arm/certs/arm-ca.crt` into your browser/OS trust store as a trusted
 root once to clear it on every device. See
 [Getting Started § Trust the certificate](Getting-Started#trust-the-certificate).
 
+If the warning stays after you trusted the CA and you open the UI by IP, check
+that the address is on the certificate:
+
+```bash
+openssl x509 -in ~/arm/certs/arm-ui.crt -noout -ext subjectAltName
+```
+
+If the address is missing (the host's IP changed after install), run
+`armctl down`, then `armctl install` to issue a new certificate.
+
 ## "Password change required" / everything returns 403
 
 That's expected on a brand-new install: log in as `admin` / `admin`, set a new

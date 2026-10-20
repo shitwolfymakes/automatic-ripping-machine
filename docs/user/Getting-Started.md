@@ -208,6 +208,11 @@ This is a one-time action per device. The per-service leaf certs are
 regenerated whenever you rerun the installer, but they're all signed by this CA,
 so trusting the CA is enough: you never re-import after a leaf changes.
 
+The UI certificate names `localhost`, the host's name and the IPv4 addresses
+the host had when you installed. If the host later gets a new address (a DHCP
+change, a new network card), browsers warn on the new address until you issue
+a fresh certificate: run `armctl down`, then `armctl install`.
+
 ## Your first rip
 
 1. **Insert a disc.** The ripper polls the drive every couple of seconds (no

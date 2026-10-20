@@ -136,7 +136,7 @@ print_install_summary() {  # print_install_summary <started 0|1>
 }
 
 cmd_install() {
-    local start=1 rotate_ca=0 release_repo="" backend_san args=() a fresh=0
+    local start=1 rotate_ca=0 release_repo="" backend_san ui_sans=() args=() a fresh=0
     OFFLOAD_HOST_ARG=""; OFFLOAD_URL_ARG=""; OFFLOAD_UIDGID_ARG=""
     REMOTE_OFFLOAD=0; REMOTE_DOCKER_HOST=""; REMOTE_BACKEND_URL=""; REMOTE_BACKEND_SAN=""
     REMOTE_TRANSCODE_PUID=""; REMOTE_TRANSCODE_PGID=""; REMOTE_GPUS=""; REMOTE_RENDER_GID=""
@@ -231,7 +231,8 @@ cmd_install() {
         make_leaf arm-backend
     fi
     make_leaf arm-db
-    make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
+    mapfile -t ui_sans < <(ui_leaf_sans)
+    make_leaf arm-ui "${ui_sans[@]}"
 
     step "Configuration"
     write_env

@@ -617,6 +617,17 @@ flow() {
 check "install: full box runs every stage in order" \
     "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
     "$(flow flow-full)"
+ui_sans_out="$(
+    hostname() {
+        case "${1:-}" in
+            -f) echo nas.lan ;;
+            -I) echo "192.168.1.20 127.0.1.1 172.17.0.1 fe80::1 10.0.0.5" ;;
+        esac
+    }
+    ui_leaf_sans | tr '\n' ' '
+)"
+check "install: the UI leaf carries the host's LAN IPv4 addresses, not loopback or IPv6" \
+    "localhost nas.lan 192.168.1.20 172.17.0.1 10.0.0.5 " "${ui_sans_out}"
 out="$(flow flow-offload --profile offload)"
 has "install: offload runs the walkthrough after storage" "choose_storage;setup_remote_offload;ensure_ca;" "$out"
 has "install: offload puts the callback address on the backend certificate" "make_leaf arm-backend 192.168.0.68;" "$out"

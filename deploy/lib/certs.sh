@@ -64,3 +64,19 @@ EOF
     chmod 444 "$crt"
     rm -f "$csr" "$ext"
 }
+
+# ui_leaf_sans: the extra SANs for the UI leaf, one per line: localhost, the
+# host name, and every non-loopback IPv4 address. Without the addresses a
+# browser that trusts the CA still rejects https://<host-ip>:8081, the way
+# other devices on the LAN reach the UI. Addresses are read at issue time; a
+# host whose address changes needs its leaves re-issued.
+ui_leaf_sans() {
+    echo localhost
+    hostname -f 2>/dev/null || hostname 2>/dev/null || echo localhost
+    local ip
+    for ip in $(hostname -I 2>/dev/null); do
+        if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ && "$ip" != 127.* ]]; then
+            echo "$ip"
+        fi
+    done
+}
