@@ -58,8 +58,9 @@ Your user must be able to reach the Docker daemon — either a member of the
 sudo usermod -aG docker "$USER" && newgrp docker
 ```
 
-You do **not** need to be in the host's optical group; the ripper container is
-granted access to the drive via `group_add` automatically.
+You do **not** need to be in the host's optical group. The installer records
+that group's ID as `CDROM_GID`, and each ripper container joins it and creates
+its own drive nodes when it starts.
 
 ## Install
 
@@ -94,8 +95,11 @@ The installer asks a few questions:
 
 - **How the host is used.** Full box (rip and transcode here), ripper-only, or
   rip here and transcode on another machine.
-- **Where raw rips and finished media go.** The default is inside `~/arm`;
-  point them at a NAS mount or a second disk if you have one.
+- **Where raw rips and finished media go.** The default is inside `~/arm`.
+  Keep raw rips on the fastest local disk you have, sized for a few discs:
+  every rip is written there and then read back in full to hash it, so raw on
+  a network share costs twice. Finished media can go on a NAS mount or a
+  second disk.
 - **Host changes, one at a time.** Installing Docker (Debian and Ubuntu only),
   the NVIDIA container toolkit if you have an NVIDIA GPU, and a udev rule that
   stops a desktop session auto-mounting discs. You can decline any of them.
@@ -147,7 +151,7 @@ If `armctl` is not found, use `~/arm/armctl`.
 > **Alpha note:** during early v3 development the published registry images may
 > not yet exist for every tag, and the image pull can 404. To run today,
 > build the images locally from a checkout — see
-> [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
+> [Local development in CONTRIBUTING.md](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md#local-development).
 
 ## First login
 

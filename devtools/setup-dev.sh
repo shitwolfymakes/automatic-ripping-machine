@@ -368,7 +368,6 @@ cat <<EOF
 
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
-                                     # (or: docker compose up -d --build; no backup or health wait)
   then open https://localhost:8081 and follow the setup walkthrough (drives, keys, defaults)
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 

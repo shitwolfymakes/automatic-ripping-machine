@@ -14,7 +14,8 @@ can also run unattended.
                           full: rip and transcode on this host (default)
                           ripper-only: rip here, never transcode here
                           offload: rip here, transcode on another host over ssh
-  --raw-path <dir>        folder for raw rips (default: <arm>/raw)
+  --raw-path <dir>        folder for raw rips, ideally on a fast local disk
+                          (default: <arm>/raw)
   --media-path <dir>      folder for finished media (default: <arm>/media)
   --iso-library-path <dir>
                           folder of .iso files to rip from (default: <arm>/iso-library)

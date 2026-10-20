@@ -54,8 +54,8 @@ completion/failure. See [Configuration § Notifications](Configuring-ARM#notific
 ## Do I have to pay for MakeMKV?
 
 Not while it's in beta — ARM uses the free monthly beta key automatically. You
-can supply a purchased permanent key via `MAKEMKV_KEY` to skip the monthly
-rotation. DVDs don't need a key at all; Blu-ray/UHD do. See [MakeMKV](MakeMKV).
+can paste a purchased permanent key into **Config → MakeMKV key** to skip the
+monthly rotation. DVDs don't need a key at all; Blu-ray/UHD do. See [MakeMKV](MakeMKV).
 
 ## How do I turn on GPU transcoding?
 

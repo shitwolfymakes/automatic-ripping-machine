@@ -223,7 +223,7 @@ POSTGRES_DB=arm
 ARM_SERVICE_TOKEN=<generated: openssl rand -hex 32>
 PUID=<host user's UID, `id -u`>
 PGID=<host user's GID, `id -g`>
-CDROM_GID=<detected via `stat -c %g /dev/sr0`, else 44>
+CDROM_GID=<the host's `cdrom` group id (`getent group cdrom`), else 44>
 ARM_LOG_LEVEL=info
 ```
 
@@ -253,7 +253,7 @@ v3 uses the linuxserver.io-style `PUID`/`PGID` pattern to keep files on `/raw` a
 
 **Optical-drive device access:**
 
-The ripper containers also need `group_add: ["${CDROM_GID}"]` so the PUID-dropped process can read `/dev/sr*`. `CDROM_GID` is the host's optical group GID (typically `44` for Debian/Ubuntu `cdrom`, sometimes `19` for Arch `optical`). The installer detects it via `stat -c %g /dev/sr0`. **No optical groups are hardcoded at image-build time** — a common v2 failure mode where the image's `cdrom` group had a different GID from the host's and the container couldn't read the drive.
+The backend passes `CDROM_GID` into each ripper's environment. The shared entrypoint adopts the container group with that GID (or creates `cdrom-host` with it), adds the `arm` user to it, and creates `/dev/sr0..7` and `/dev/sg0..15` owned by that group, so the PUID-dropped process can open the drive. `CDROM_GID` is the host's optical group GID (typically `44` for Debian/Ubuntu `cdrom`, sometimes `19` for Arch `optical`). The installer reads it with `getent group cdrom` and falls back to `44` (`detect_cdrom_gid` in `deploy/lib/detect.sh`), so an Arch host sets it by hand. **No optical groups are hardcoded at image-build time** — a common v2 failure mode where the image's `cdrom` group had a different GID from the host's and the container couldn't read the drive.
 
 ## Privilege matrix
 
@@ -262,7 +262,7 @@ The ripper containers also need `group_add: ["${CDROM_GID}"]` so the PUID-droppe
 | `arm-db` | no | — | Standard Postgres image. |
 | `arm-backend` | no | `/var/run/docker.sock` | Root-equivalent on the host. Acceptable; documented. |
 | `arm-ui` | no | — | Stateless. |
-| `arm-ripper-*` | no | `/dev/sr*` | Drive exposed via compose `devices:` (no `--privileged`, no manual cgroup rules). Host's optical GID passed via `group_add: ["${CDROM_GID}"]` so the PUID-dropped process can read the device node. Nothing is hardcoded at image-build time. |
+| `arm-ripper-*` | no | `/dev/sr*`, `/dev/sg*` | No `devices:` bind. The backend grants `device_cgroup_rules: ["b 11:* rmw", "c 21:* rmw"]` and the entrypoint creates the sr/sg nodes itself, group-owned by the host's optical GID (`CDROM_GID` in the env) so the PUID-dropped process can open them. Nothing is hardcoded at image-build time. |
 | `arm-transcode-*` | no | optionally `/dev/dri`, NVIDIA runtime | Transient. |
 
 No `privileged: true` anywhere. If a ripper ever needs it for a weird host, we document that as an escape hatch but do not ship it on.
@@ -394,10 +394,10 @@ The install drill, `devtools/install-drill.sh`, runs this path end to end agains
 
 **First-boot sequence** (after `armctl up`):
 
-1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with a random password written to `/logs/first-boot.log` and printed to stdout.
-2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` with the printed password, is forced to change it.
+1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with the default password `admin` (flagged must-change) and writes the credentials banner to `/logs/first-boot.log` and the backend log.
+2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` / `admin`, is forced to change it.
 3. User enters third-party API keys in the UI → stored in `config`.
-4. Rippers register themselves with Backend, appear in UI.
+4. The backend lists the host's optical drives on the **Drives** page as detected; enrolling one starts its ripper container.
 5. User inserts a disc; flow proceeds as documented in [02-job-lifecycle.md](02-job-lifecycle.md).
 
 ## Update / upgrade

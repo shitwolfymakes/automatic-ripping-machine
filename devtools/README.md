@@ -14,7 +14,7 @@ What it does (idempotent — safe to re-run):
 
 1. Checks that `uv`, `docker`, `docker compose`, and `openssl` are available.
 2. Runs `uv sync` to create `.venv/` with all workspace members.
-3. Generates the CA and leaf certificates under `certs/` if `certs/arm-ca.crt` isn't already present.
+3. Generates the CA and leaf certificates under `arm/certs/` if `arm/certs/arm-ca.crt` isn't already present.
 4. Creates `.env` from `.env.example` if missing, filling in a random `POSTGRES_PASSWORD` and `ARM_SERVICE_TOKEN`, and detecting `PUID`/`PGID`/`CDROM_GID` from the host. An existing `.env` is left untouched.
 5. Creates `docker-compose.yml` from the template — no drive enumeration; enroll drives from the UI.
 6. Writes a host-wide udev rule (`KERNEL=="sr[0-9]*"`, `UDISKS_AUTO=0`).
@@ -53,7 +53,7 @@ Fixture-driven Phase 15 smoke — runs the ripper end-to-end against the matrix2
 bash devtools/iso-smoke.sh
 ```
 
-Prereqs: dev stack up (`docker compose up -d arm-db arm-backend arm-ui`) and at least one **enrolled** drive. The script borrows an enrolled drive (`ARM_SMOKE_DRIVE_ID`, or the first enrolled drive from `GET /api/drives`) and stops its manager-created container for the duration of the run (two rippers can't register the same `drive_id`), starting it back up when it's done.
+Prereqs: dev stack up (`bash devtools/setup-dev.sh up`) with `ARM_HOST_ISO_LIBRARY_PATH` set in `.env`. No drive is needed: the script stages the ISO into the ISO library and starts the rip through `POST /api/iso/rips`, so the backend spawns and retires its own one-shot ripper. Enrolled drives are not touched.
 
 Defaults to caching the ISO under `~/arm-corpus/` (override with `ISO_CACHE_DIR`). MakeMKV key resolution: `MAKEMKV_KEY` env first (any value MakeMKV accepts — purchased perma-key or a beta you grabbed manually), then a single forum-scrape attempt. See [../docs/developers/contributing/real-disc-smoke.md § Run the test (ISO fixture)](../docs/developers/contributing/real-disc-smoke.md#run-the-test-iso-fixture--no-physical-disc-needed) for the full runbook and known gotchas.
 

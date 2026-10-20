@@ -38,8 +38,9 @@ All ripper routes are under `/api/ripper/`. The Ripper is the client.
 | `PATCH` | `/api/ripper/tracks/{track_id}/complete` | Mark track done. Body: `{output_path, sha256, size_bytes, duration_seconds}`. |
 | `PATCH` | `/api/ripper/tracks/{track_id}/fail` | Mark track failed. Body: `{error_code, error_message, retriable}`. |
 | `POST` | `/api/ripper/jobs/{job_id}/complete` | All tracks terminal; mark job done. |
+| `POST` | `/api/ripper/heartbeat` | Every 30 s. Body: `{drive_id, media_status}` (the drive's `CDROM_DRIVE_STATUS` reading, or `detached` when the node has no hardware behind it). Backend stamps `media_status_at` and `last_seen_at`; `detached` sets the drive `present=false` / `offline`, any other reading brings an `offline` drive back `online`. |
 
-There is no ripper heartbeat endpoint. Live progress streams over WS (see "WebSocket channels" below); crash detection happens at container-restart time, not via timeout. State-transition calls (`complete`, `fail`, `complete-job`) retry until acknowledged.
+The ripper heartbeat reports drive presence and tray state; live progress streams over WS (see "WebSocket channels" below). Crash detection for an in-flight rip still happens at container-restart time, not via timeout. State-transition calls (`complete`, `fail`, `complete-job`) retry until acknowledged.
 
 ### UI ↔ Backend
 
@@ -93,7 +94,7 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 | `system.events` | Backend → subscribers | Backend | UI | Drive online/offline, backend restart, config change. |
 | `logs.{job_id}` | Backend → subscribers | Log collector in Backend | UI log viewer | Tails the per-job log stream. |
 | `ripper.commands.{drive_id}` | Backend → one ripper | Backend | The ripper registered on that `drive_id` | Typed commands to the owning ripper: `identify.resolved` (user-resolved identity delivered to a ripper parked in `awaiting_user_id`), `job.cancel`. Only the ripper whose hostname matches the drive's `hostname` may subscribe. |
-| `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only the transcoder holding the claim may subscribe. |
+| `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only a transcoder whose `X-ARM-Task-Id` matches `task_id` may subscribe (no claim lookup). |
 
 ### Implementation notes
 
@@ -114,9 +115,9 @@ Two different cost models, two different transports.
 
 **Progress is WS push from the ripper.** Live progress (`{track_id, progress_pct, eta_seconds}`) is fire-and-forget telemetry — losing a tick during a Backend restart is invisible to the user; the next tick replaces it. WS amortizes per-message overhead across the rip, no HTTP handshake per heartbeat tick. The same connection delivers identify-resolution events back to the ripper, so we get one durable connection instead of one + polling.
 
-**No heartbeat at all.** Crash detection is handled at container-restart time (Backend-startup sweep + ripper-startup probe — see [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch)), not via timeout-based liveness pings. WS protocol-layer ping/pong keeps the connection alive; nothing more is needed.
+**The ripper heartbeat tracks the drive.** `heartbeat_loop` posts `/api/ripper/heartbeat` every 30 s. The beat lets the manual-trigger endpoint refuse a click against an empty or open tray, lets the backend mark an unplugged drive `offline` while its row stays visible, and feeds the drive diagnostic, which flags a beat older than 5 minutes as stale. A missed beat never fails a job: crash detection for a rip is handled at container-restart time (Backend-startup sweep + ripper-startup probe, see [02-job-lifecycle.md § Crash recovery](02-job-lifecycle.md#crash-recovery-restart-the-rip-from-scratch)). WS protocol-layer ping/pong keeps the WS connection alive.
 
-The transcoder still uses REST + claim/heartbeat (see `/api/transcoder/tasks/{task_id}/heartbeat` below) because multiple ephemeral transcoders compete for queued tasks, which actually requires per-task liveness tracking — a different problem from the one-ripper-per-drive case.
+The transcoder heartbeat does a different job. Several ephemeral transcoders compete for queued tasks, so each claim needs its own liveness: REST claim + `/api/transcoder/tasks/{task_id}/heartbeat` (below) lets the backend requeue a task whose transcoder stopped beating. With one ripper per drive there is no claim to expire.
 
 ## Event payload shape
 

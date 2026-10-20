@@ -19,32 +19,39 @@ JSONL under `~/arm/logs/`, with a `job_id` on each line for correlation.
 The ripper polls its drive every ~2 seconds (no udev events needed), so a disc
 should show up within a few seconds of the drive spinning up.
 
-1. **Is the ripper running?** `docker ps` should list
-   `armv3-ripper-srN` as up. If it's missing, the drive wasn't enrolled — enroll
-   it in the UI; the backend then starts its ripper.
-2. **Does the ripper have the drive?** Each drive needs **both** its block
-   device and its SCSI-generic node passed in. The backend's drive scanner
-   pairs them when it starts the ripper.
+1. **Is the ripper running?** The backend starts one container per enrolled
+   drive, named `arm-ripper-<serial>-<id>`. List them with
+   `docker ps --filter label=arm.drive_id`. If your drive has none, it isn't
+   enrolled: enroll it on the **Drives** page and the backend starts its ripper.
+2. **Does the ripper see the drive?** Rippers get no `devices:` bind. Each one
+   creates `/dev/sr0` to `/dev/sr7` and `/dev/sg0` to `/dev/sg15` itself at
+   start and is allowed to open them, so a drive that is unplugged and comes
+   back under a new number keeps working. A drive numbered above that range is invisible to
+   the ripper; see the next section.
 3. **Check the ripper log** while inserting a disc:
-   `docker logs -f armv3-ripper-sr0`. A brief `DRIVE_NOT_READY` while the
-   drive reads the table of contents is **normal** — ARM keeps polling.
+   `docker logs -f <ripper-name>`. A brief `DRIVE_NOT_READY` while the
+   drive reads the table of contents is **normal**, and ARM keeps polling.
 
 ## Every disc "looks unidentifiable"
 
 If video discs all fall through to the data-disc path and MakeMKV reports zero
-titles, the ripper is almost certainly missing the **SCSI-generic** node.
+titles, MakeMKV probably can't reach the drive's **SCSI-generic** node.
 MakeMKV enumerates drives over SG ioctls, not the block device, so it needs
-`/dev/sgM` *as well as* `/dev/srN`. The pairing is **not** lexicographic — `sr0`
-does not necessarily pair with `sg0`. Find the right node:
+`/dev/sgM` *as well as* `/dev/srN`. The numbers don't line up: `sr0` is not
+necessarily `sg0`. Find the drive's SG node on the host:
 
 ```bash
 ls /sys/class/block/sr0/device/scsi_generic/    # e.g. -> sg5
 ```
 
-The backend's drive scanner pairs the two nodes when it starts a drive's
-ripper. If MakeMKV still reports zero titles, compare the pairing from the
-command above with the devices the ripper container was given
-(`docker inspect armv3-ripper-sr0`).
+The ripper creates `sg0` to `sg15` and `sr0` to `sr7`. On a host with many SCSI
+devices the drive can land above that (for example `sg18`). Raise the range in
+`~/arm/.armctl/.env` with `ARM_RIPPER_OPTICAL_SG_MAX` (and
+`ARM_RIPPER_OPTICAL_SR_MAX` for the block node). While the drive is idle,
+remove its ripper with `docker rm -f <ripper-name>`, then run `armctl up`; the
+backend recreates the ripper for every enrolled drive when it starts, now with
+the new range. The ripper logs the range it created at start
+(`optical nodes: created ... (sr0..sr7, sg0..sg15)`).
 
 ## Disc won't eject after a rip
 
@@ -55,16 +62,14 @@ This happens on **desktop** hosts (GNOME/KDE/XFCE), where `udisks2`/`gvfs`
 auto-mounts the disc and holds the device, so the container can't eject it.
 Server/headless hosts don't run those and aren't affected.
 
-The fix is a one-time host udev rule that disables *auto-mount* for the ARM
-drive(s) only (the drive stays browsable; the desktop just won't grab it on
-insert). The installer writes this for you. To do it by hand:
+The fix is a host udev rule that disables *auto-mount* for every optical drive
+on the host. The drive stays browsable; the desktop just won't grab it on
+insert. It covers all `sr*` drives because drives are hot-plugged and enrolled
+after install. `armctl install` writes it for you. To do it by hand:
 
 ```bash
-# Find the drive's stable identifier:
-udevadm info /dev/sr0 | grep -E 'ID_PATH=|ID_SERIAL='
-
-# /etc/udev/rules.d/99-arm-no-automount.rules  (use your ID_PATH)
-SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{ID_PATH}=="pci-0000:00:14.0-ata-3", ENV{UDISKS_AUTO}="0"
+# /etc/udev/rules.d/99-arm-no-automount.rules
+SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{UDISKS_AUTO}="0"
 ```
 
 ```bash
@@ -154,9 +159,13 @@ Then `armctl up`.
    [Hardware Transcoding § NVIDIA](Hardware-Transcoding#nvidia-the-container-toolkit).
    Without it the transcoder can't get the GPU and the job falls back to CPU.
    Confirm the runtime is registered: `docker info | grep -i nvidia`.
-3. **Intel/AMD:** `/dev/dri/renderD*` must exist on the host. If it's missing,
+3. **NVIDIA driver older than 530:** the installer and `armctl up` leave NVENC
+   out of `ARM_GPUS` and warn `NVIDIA driver <version> is too old for this
+   build's NVENC (needs >= 530.x)`. Upgrade the host driver, then run
+   `armctl up`.
+4. **Intel/AMD:** `/dev/dri/renderD*` must exist on the host. If it's missing,
    the kernel driver for your GPU isn't loaded.
-4. Check what the backend loaded: `armctl compose logs arm-backend | grep -i gpu`.
+5. Check what the backend loaded: `armctl compose logs arm-backend | grep -i gpu`.
 
 A host with no detectable GPU still transcodes on CPU — this is a speed issue,
 not a broken stack.
@@ -170,7 +179,7 @@ while DVDs work — all covered on the [MakeMKV](MakeMKV) page.
 
 During the alpha, registry images may not exist for every tag yet. Build the
 images locally from a checkout — see
-[Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
+[Local development in CONTRIBUTING.md](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md#local-development).
 
 ## Still stuck?
 

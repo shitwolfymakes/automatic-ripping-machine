@@ -64,7 +64,7 @@ Two tiers:
 | `ARM_LOG_LEVEL` | `debug`/`info`/`warn`/`error`. Optional, default `info`. |
 | `PUID` | Numeric UID the ripper and transcoder drop to before writing `/raw` and `/media`. Should match the UID that owns the host-side mount (or the UID the user's media server runs as). Default `1000`. |
 | `PGID` | Numeric GID shared by ripper and transcoder so group-writable handoff on `/raw` works. Should match the group that owns the host-side mount. Default `1000`. |
-| `CDROM_GID` | Numeric GID of the host's optical group (`stat -c %g /dev/sr0`). Passed to ripper containers via `group_add` so the PUID-dropped process can read `/dev/sr*`. Default `44` (Debian/Ubuntu `cdrom`). Installer detects and writes this on first boot. |
+| `CDROM_GID` | Numeric GID of the host's optical group. The installer reads it with `getent group cdrom` and falls back to `44` (Debian/Ubuntu `cdrom`). The backend passes it into each ripper's environment; the entrypoint joins that group and creates the `/dev/sr*` and `/dev/sg*` nodes owned by it, so the PUID-dropped process can open the drive. |
 | `ARM_TRANSCODE_CAPABLE` | Deployment fact: can this backend get a transcode container run anywhere (local socket or `ARM_TRANSCODE_DOCKER_HOST`)? Default `true`. `devtools/setup-dev.sh --ripper-only` writes `false` — no `arm-transcode` image is built and encode work is impossible by construction. A configured `ARM_TRANSCODE_DOCKER_HOST` implies capable regardless of this flag; the contradictory combo logs a startup warning, not a boot failure. Gates whether `config.transcode_enabled` may be switched on at all — see [02-job-lifecycle.md § Transcode capability and the disabled state](02-job-lifecycle.md#transcode-capability-and-the-disabled-state). |
 
 **What compose derives and injects per-service:**
@@ -96,9 +96,9 @@ No YAML files. No mounted `/etc/arm/*.conf`. The v2 `arm.yaml` pattern is retire
 
 **Why JWT and not session cookies.** Homelab operators deploy ARM in ways we can't predict, including behind reverse proxies with public hostnames. Session cookies touch GDPR/CCPA consent law; Bearer-in-header / localStorage sidesteps it. The single-user scope also means cookie-specific wins (easy server-side revocation, HttpOnly XSS protection) don't buy much here.
 
-**Why argon2id and not bcrypt.** Argon2id is the 2015 Password Hashing Competition winner and the current OWASP recommendation. It is memory-hard — cost is tunable on three axes (time, memory, parallelism) instead of bcrypt's single rounds parameter — which forces an attacker to spend RAM per guess and neutralises the GPU/ASIC speedup bcrypt is vulnerable to. The `id` variant combines Argon2i's side-channel resistance with Argon2d's GPU resistance. Secondary wins: no 72-byte silent truncation (bcrypt's long-standing footgun), and the encoded hash embeds its parameters so cost can be raised later via transparent rehash-on-verify without a schema change. Implementation: `argon2-cffi`'s `PasswordHasher` with OWASP-default parameters (memory=19 MiB, iterations=2, parallelism=1); tune upward if login latency budget allows. bcrypt would not be *broken*, just a weaker default for something designed in 2026.
+**Why argon2id and not bcrypt.** Argon2id is the 2015 Password Hashing Competition winner and the current OWASP recommendation. It is memory-hard — cost is tunable on three axes (time, memory, parallelism) instead of bcrypt's single rounds parameter — which forces an attacker to spend RAM per guess and neutralises the GPU/ASIC speedup bcrypt is vulnerable to. The `id` variant combines Argon2i's side-channel resistance with Argon2d's GPU resistance. Secondary wins: no 72-byte silent truncation (bcrypt's long-standing footgun), and the encoded hash embeds its parameters so cost can be raised later via transparent rehash-on-verify without a schema change. Implementation: `argon2-cffi`'s `PasswordHasher()` with the library defaults (time_cost=3, memory=64 MiB, parallelism=4 on argon2-cffi 25.1), above the OWASP minimum of 19 MiB / 2 iterations / 1 lane. bcrypt would not be *broken*, just a weaker default for something designed in 2026.
 
-The default-creds footgun that v2 has (ships with `admin`/`password` and does not force change) is closed by the random generated password.
+The default-creds footgun that v2 has (ships with `admin`/`password` and does not force change) is closed by the forced change: the seeded `admin`/`admin` account can do nothing but change its password until it does.
 
 ### Service-to-service
 
@@ -188,7 +188,7 @@ The WS endpoint (`/ws` on Backend) is exposed through the same nginx that fronts
 - **Per-topic authorization.** After auth, topic subscription is gated by principal type:
     - UI-JWT principals may subscribe to: `ripper.progress.{job_id}`, `ripper.events`, `transcode.progress.{task_id}`, `transcode.events`, `system.events`, `logs.{job_id}`.
     - Service-token ripper principals may subscribe *only* to their own inbound command topic (e.g. `ripper.commands.{drive_id}`, used by Backend to push identify-resolution events back to the owning ripper). A ripper cannot subscribe to another drive's command topic, nor to any UI-facing topic.
-    - Service-token transcoder principals may subscribe *only* to `transcoder.commands.{task_id}` for the task they hold a claim on.
+    - Service-token transcoder principals may subscribe *only* to `transcoder.commands.{task_id}` where `task_id` matches the `X-ARM-Task-Id` the transcoder presented at handshake. Subscribe does not look up `TranscodeTask.claimed_by`; publish does (see `ws/authz.py`).
     - Unknown topics are rejected, not silently ignored.
 - **Backend → ripper command scoping.** Outbound commands (identify-resolution events, cancellation) are routed to the specific ripper whose registered `hostname` matches the `drives` row for the target `job_id`. The topic name (`ripper.commands.{drive_id}`) is the mechanism; the authorization check above is the guarantee.
 - **JWT expiry vs long-lived WS.** Tokens are validated at handshake only. A WS opened with a still-valid token remains authorized until the client closes it or the network drops — even if the token expires mid-connection. With 7-day token TTL and the longest realistic rip session measured in hours, this is the simpler behavior. When an expired token causes a REST call to 401, the UI forces re-login and reconnects the WS with the new token; server-side eviction at token expiry is unnecessary complexity for the single-user homelab scope.
@@ -198,7 +198,7 @@ The WS endpoint (`/ws` on Backend) is exposed through the same nginx that fronts
 
 - Third-party API keys (TMDB, OMDB, MusicBrainz) and Apprise URLs are stored **plaintext** in the `config` table.
 - Consequence: DB dumps contain secrets. Treat Postgres backups as sensitive files.
-- No secrets are logged. Log lines that touch `config` rows MUST redact the API-key/URL fields — enforced by a structured-logging helper that knows which fields to drop.
+- Secrets must not be logged. There is no central logging filter: each site that could log a secret redacts it itself. Apprise URLs go through `redact_apprise_url` (scheme only), and bash-hook output goes through `redact_secrets` before it is stored. New code that logs a `config` row or a provider URL must do the same.
 
 ## Logging
 
