@@ -15,7 +15,10 @@ are being fixed on one branch, `fix/s4-defects` (wolfy PR #383, one section per 
 - C2 HELD until UI PRs #375-#379 merge (same files): #265, #334, #343, #321, #333,
   #393. Each issue has a hold comment. Re-check each against main after they merge.
 - D (ui-neu hygiene) also held for the same PRs. D-184 (#313) held for #374/#375 (config_metadata.py). F (common/migrations, minus D-184) done 2026-10-20. G
-  (ripper/transcode/installer, 7) done 2026-10-20; D-174/175/179/217 unverified on hardware. D-158 (#287) left to the
+  (ripper/transcode/installer, 7) done 2026-10-20; D-174/175/179/217 unverified on hardware.
+  H (sweep follow-ups with no open-PR collision: #390 #394 #395 #397 #399 #400 #401) done
+  2026-10-20. Still held besides C2/D/D-184: #386 #391 #387 (files in open PRs), #388 #392 #396
+  (design or policy calls), #398 (not reproduced; clock-skew hypothesis on the issue). D-158 (#287) left to the
   identification rework (#374-#376). D-118 (#240) is the owner's keep-or-delete call.
 
 **Why:** fixing files the large UI reworks also change would force a rebase on one side.
