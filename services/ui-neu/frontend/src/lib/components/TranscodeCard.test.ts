@@ -184,6 +184,20 @@ describe('TranscodeCard', () => {
 			await waitFor(() => expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~1m 0s'));
 		});
 
+		it('prefers the persisted eta_seconds from the task row before any live tick arrives', async () => {
+			// D-242: a card that mounts mid-encode shows the heartbeat's ETA, not
+			// the local extrapolation (which would read ~1m here).
+			renderComponent(TranscodeCard, {
+				props: {
+					job: createTranscodeTask({ progress_pct: 50, started_at: '2025-06-15T11:59:00Z', eta_seconds: 900 })
+				}
+			});
+			expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~15m 0s');
+			// A live tick replaces it.
+			wsHandlers.get('transcode.progress.t-1')?.(progressEvent('t-1', { progress_pct: 51, eta_seconds: 1800 }));
+			await waitFor(() => expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~30m 0s'));
+		});
+
 		it('shows no ETA or elapsed time from created_at when the claim time is unknown', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ started_at: null }) } });
 			expect(screen.getByTitle('Estimated time remaining').textContent?.trim()).toBe('-');
@@ -201,6 +215,31 @@ describe('TranscodeCard', () => {
 			expect(wsHandlers.has('transcode.progress.t-1')).toBe(true);
 			cleanup();
 			expect(wsHandlers.size).toBe(0);
+		});
+	});
+
+	// D-248: the encoder frame rate beside the ETA.
+	describe('frame rate', () => {
+		it('shows the persisted fps and average from the task row', () => {
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: 45.67, avg_fps: 23.46 }) } });
+			expect(screen.getByTitle('Encoder frame rate')).toHaveTextContent('45.7 fps (avg 23.5)');
+		});
+
+		it('prefers the live progress event and omits a missing average', async () => {
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: 45.67, avg_fps: 23.46 }) } });
+			wsHandlers.get('transcode.progress.t-1')?.(progressEvent('t-1', { progress_pct: 51, fps: 60, avg_fps: null }));
+			await waitFor(() => expect(screen.getByTitle('Encoder frame rate')).toHaveTextContent('60.0 fps'));
+			expect(screen.getByTitle('Encoder frame rate').textContent).not.toContain('avg');
+		});
+
+		it('renders nothing when no rate has been reported', () => {
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: null, avg_fps: null }) } });
+			expect(screen.queryByTitle('Encoder frame rate')).not.toBeInTheDocument();
+		});
+
+		it('hides the rate once the task is no longer running', () => {
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ status: 'done', fps: 45.67 }) } });
+			expect(screen.queryByTitle('Encoder frame rate')).not.toBeInTheDocument();
 		});
 	});
 });

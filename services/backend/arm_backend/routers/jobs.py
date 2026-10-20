@@ -417,20 +417,22 @@ async def get_job_detail(
     )
     job_view.parked_session_ids = _parked_session_ids(list(sas))
 
-    # Most-recent transcode task status per source track (ULID ids are
-    # monotonic, so the greatest id is the newest task). Built from the
-    # already-loaded job_tasks — no extra query.
-    latest_task_status: dict[str, TranscodeTaskStatus] = {}
-    latest_task_id: dict[str, str] = {}
+    # Most-recent transcode task per source track (ULID ids are monotonic,
+    # so the greatest id is the newest task). Built from the already-loaded
+    # job_tasks — no extra query.
+    latest_task: dict[str, TranscodeTask] = {}
     for task in job_tasks:
-        prev = latest_task_id.get(task.source_track_id)
-        if prev is None or task.id > prev:
-            latest_task_id[task.source_track_id] = task.id
-            latest_task_status[task.source_track_id] = task.status
+        prev = latest_task.get(task.source_track_id)
+        if prev is None or task.id > prev.id:
+            latest_task[task.source_track_id] = task
 
     def _track_view(t: Track) -> TrackView:
         tv = TrackView.model_validate(t)
-        tv.transcode_status = latest_task_status.get(t.id)
+        task = latest_task.get(t.id)
+        if task is not None:
+            tv.transcode_status = task.status
+            tv.transcode_fps = task.fps
+            tv.transcode_avg_fps = task.avg_fps
         return tv
 
     return JobDetailView(

@@ -77,7 +77,7 @@ The transcode container is short-lived and single-purpose. Its API surface is mi
 |---|---|---|
 | `POST` | `/api/transcoder/register` | Container startup. Body: `{task_id, hostname, hw_caps}`. Server verifies the task exists and is still expected. |
 | `POST` | `/api/transcoder/tasks/{task_id}/claim` | Claim the task. |
-| `PATCH` | `/api/transcoder/tasks/{task_id}/heartbeat` | Heartbeat every 30s with progress. |
+| `PATCH` | `/api/transcoder/tasks/{task_id}/heartbeat` | Heartbeat every 30s with progress. Body: `{progress_pct, current_pass, eta_seconds, fps, avg_fps}`; the Backend persists all five on the task so polling clients see the same numbers as the WS event. |
 | `PATCH` | `/api/transcoder/tasks/{task_id}/complete` | Mark done. |
 | `PATCH` | `/api/transcoder/tasks/{task_id}/fail` | Mark failed. |
 
@@ -89,7 +89,7 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 |---|---|---|---|---|
 | `ripper.progress.{job_id}` | Backend → subscribers | Rippers (push directly over WS, fanned out) | UI, other tooling | `{track_id, progress_pct, eta_seconds, updated_at}` |
 | `ripper.events` | Backend → subscribers | Backend | UI | Typed events: `rip.started`, `rip.completed`, `rip.failed`, `rip.needs_user_input`, `rip.resumed_from_crash` |
-| `transcode.progress.{task_id}` | Backend → subscribers | Transcoders | UI | `{progress_pct, current_pass, eta_seconds}` |
+| `transcode.progress.{task_id}` | Backend → subscribers | Transcoders | UI | `{progress_pct, current_pass, eta_seconds, fps, avg_fps}` |
 | `transcode.events` | Backend → subscribers | Backend | UI | Typed events: `session.queued`, `session.started`, `session.completed`, `session.failed`, `task.started`, `task.completed`, `task.failed` |
 | `system.events` | Backend → subscribers | Backend | UI | Drive online/offline, backend restart, config change. |
 | `logs.{job_id}` | Backend → subscribers | Log collector in Backend | UI log viewer | Tails the per-job log stream. |

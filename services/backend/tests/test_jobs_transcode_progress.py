@@ -358,6 +358,8 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
         track_a.id,
         TranscodeTaskStatus.FAILED,
     )
+    task_old.fps, task_old.avg_fps = 99.0, 98.0
+    task_new.fps, task_new.avg_fps = 45.7, 23.5
     db.rows["transcode_tasks"] = [task_old, task_new]
 
     app, token = _make_app(db)
@@ -368,8 +370,11 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
     tracks = {t["source_ref"]: t for t in r.json()["tracks"]}
     # Most-recent task (greater ULID id) wins → failed
     assert tracks["t:1"]["transcode_status"] == "failed"
+    # The frame rate comes from the same task (D-248).
+    assert (tracks["t:1"]["transcode_fps"], tracks["t:1"]["transcode_avg_fps"]) == (45.7, 23.5)
     # track_b has no task → None
     assert tracks["t:2"]["transcode_status"] is None
+    assert (tracks["t:2"]["transcode_fps"], tracks["t:2"]["transcode_avg_fps"]) == (None, None)
 
 
 def test_summarize_includes_tasks_failed() -> None:

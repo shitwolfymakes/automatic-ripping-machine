@@ -3,6 +3,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { elapsedTime, etaTime, formatRemaining, statusAccentVar } from '$lib/utils/format';
+	import { formatFps } from '$lib/utils/fps';
 	import { wsClient } from '$lib/api/ws';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
@@ -22,23 +23,37 @@
 	let hasError = $derived(!!job?.last_error);
 	let isActive = $derived(job?.status === 'in_progress');
 	let accentVar = $derived(statusAccentVar(job?.status));
-	// The transcoder publishes HandBrake's own ETA on transcode.progress.{id};
-	// prefer it. Otherwise extrapolate from when the task was claimed, never
-	// from created_at, which would count the time it sat queued as encode time.
-	let liveEta = $state<{ taskId: string; seconds: number } | null>(null);
+	// The transcoder publishes the encoder's own ETA and frame rate on
+	// transcode.progress.{id}; prefer them. Before the first tick (a card that
+	// mounts mid-encode, a socket that is down) the task row carries the
+	// values from the last REST heartbeat. For the ETA alone, extrapolate as a
+	// last resort from when the task was claimed, never from created_at, which
+	// would count the time it sat queued as encode time.
+	let live = $state<{ taskId: string; eta: number | null; fps: number | null; avgFps: number | null } | null>(null);
 	let taskId = $derived(isActive ? job?.id : undefined);
 	$effect(() => {
 		const id = taskId;
 		if (!id) return;
 		return wsClient.subscribe(`transcode.progress.${id}`, (env) => {
-			const eta = env.payload.eta_seconds;
-			liveEta = typeof eta === 'number' ? { taskId: id, seconds: eta } : null;
+			const { eta_seconds, fps, avg_fps } = env.payload;
+			live = {
+				taskId: id,
+				eta: typeof eta_seconds === 'number' ? eta_seconds : null,
+				fps: typeof fps === 'number' ? fps : null,
+				avgFps: typeof avg_fps === 'number' ? avg_fps : null
+			};
 		});
 	});
+	let liveForJob = $derived(live && job && live.taskId === job.id ? live : null);
 	let etaDisplay = $derived.by(() => {
 		if (!isActive || !job) return null;
-		if (liveEta && liveEta.taskId === job.id) return formatRemaining(liveEta.seconds);
+		const eta = liveForJob?.eta ?? job.eta_seconds;
+		if (typeof eta === 'number') return formatRemaining(eta);
 		return job.started_at ? etaTime(job.started_at, job.progress_pct) : null;
+	});
+	let fpsDisplay = $derived.by(() => {
+		if (!isActive || !job) return null;
+		return liveForJob?.fps != null ? formatFps(liveForJob.fps, liveForJob.avgFps) : formatFps(job.fps, job.avg_fps);
 	});
 
 	function toggle(e: MouseEvent) {
@@ -75,8 +90,11 @@
 				<!-- Spacer -->
 				<span class="flex-1"></span>
 
-				<!-- ETA (active) or Elapsed (otherwise) -->
+				<!-- Frame rate + ETA (active) or Elapsed (otherwise) -->
 				{#if isActive}
+					{#if fpsDisplay}
+						<span class="shrink-0 transcode-card-meta" title="Encoder frame rate">{fpsDisplay}</span>
+					{/if}
 					<span class="shrink-0 transcode-card-meta" title="Estimated time remaining">
 						{etaDisplay ? `~${etaDisplay}` : job.started_at ? elapsedTime(job.started_at) : '-'}
 					</span>

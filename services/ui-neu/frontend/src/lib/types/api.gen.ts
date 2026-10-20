@@ -1848,6 +1848,14 @@ export type HeartbeatRequest = {
      * Eta Seconds
      */
     eta_seconds?: number | null;
+    /**
+     * Fps
+     */
+    fps?: number | null;
+    /**
+     * Avg Fps
+     */
+    avg_fps?: number | null;
 };
 
 /**
@@ -4911,6 +4919,14 @@ export type TrackView = {
     status: TrackStatus;
     transcode_status?: TranscodeTaskStatus | null;
     /**
+     * Transcode Fps
+     */
+    transcode_fps?: number | null;
+    /**
+     * Transcode Avg Fps
+     */
+    transcode_avg_fps?: number | null;
+    /**
      * Output Path
      */
     output_path: string | null;
@@ -5224,6 +5240,22 @@ export type TranscodeTaskView = {
      * Started At
      */
     started_at?: string | null;
+    /**
+     * Current Pass
+     */
+    current_pass?: string | null;
+    /**
+     * Eta Seconds
+     */
+    eta_seconds?: number | null;
+    /**
+     * Fps
+     */
+    fps?: number | null;
+    /**
+     * Avg Fps
+     */
+    avg_fps?: number | null;
     /**
      * Last Error
      */

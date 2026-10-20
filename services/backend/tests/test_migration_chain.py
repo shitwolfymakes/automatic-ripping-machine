@@ -16,7 +16,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlmodel import SQLModel
 
-from arm_common import User
+from arm_common import TranscodeTask, User
 
 _BACKEND_DIR = Path(__file__).parent.parent
 
@@ -102,6 +102,18 @@ def test_0028_matches_the_user_model() -> None:
         assert f"ADD COLUMN {name} " in sql, f"0028 does not add users.{name}"
         assert not column.nullable, f"User.{name} is nullable but 0028 declares NOT NULL"
         assert column.server_default is not None, f"User.{name} has no server_default to match 0028's"
+
+
+def test_0048_matches_the_transcode_task_model() -> None:
+    """The heartbeat telemetry columns (D-242, D-248) exist on both sides,
+    nullable, so a row from before the revision reads back as null."""
+    sql = _render_sql("0047_drive_status_ripping", "0048_transcode_task_telemetry")
+    for name in ("current_pass", "eta_seconds", "fps", "avg_fps"):
+        column = TranscodeTask.__table__.columns[name]
+        assert f"ADD COLUMN {name} " in sql, f"0048 does not add transcode_tasks.{name}"
+        assert column.nullable, f"TranscodeTask.{name} is not nullable but 0048 adds it without a default"
+    down = _render_sql("0048_transcode_task_telemetry", "0047_drive_status_ripping", downgrade=True)
+    assert "ALTER TABLE transcode_tasks DROP COLUMN fps" in down
 
 
 def test_every_revision_after_0011_renders_offline() -> None:
