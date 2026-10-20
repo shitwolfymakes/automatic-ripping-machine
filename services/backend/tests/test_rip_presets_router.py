@@ -255,21 +255,22 @@ def test_update_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_update_builtin_name_only(signing_key: bytes) -> None:
+def test_update_builtin_is_read_only(signing_key: bytes) -> None:
+    # `name` included: the seeder re-syncs it on every boot (D-146).
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["rip_presets"] = [_preset("rpr_b", name="builtin", is_builtin=True)]
     with TestClient(app) as client:
-        ok = client.patch("/api/rip-presets/rpr_b", json={"name": "renamed"}, headers=_auth(token))
+        renamed = client.patch("/api/rip-presets/rpr_b", json={"name": "renamed"}, headers=_auth(token))
         bad = client.patch(
             "/api/rip-presets/rpr_b",
             json={"output_mode": "iso"},
             headers=_auth(token),
         )
-    assert ok.status_code == 200
-    assert ok.json()["name"] == "renamed"
+    assert renamed.status_code == 409
+    assert db.rows["rip_presets"][0].name == "builtin"
     assert bad.status_code == 409
-    assert "only `name` can be edited" in bad.json()["detail"]
+    assert "read-only" in bad.json()["detail"]
 
 
 def test_update_revalidates_filters_on_selection_change(signing_key: bytes) -> None:

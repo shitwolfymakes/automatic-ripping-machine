@@ -99,10 +99,10 @@ async def update_transcode_preset(
 
     # `encoder` is NOT NULL: an explicit null means "leave it as is".
     fields = {k: v for k, v in req.model_dump(exclude_unset=True).items() if not (k == "encoder" and v is None)}
-    if row.is_builtin and set(fields.keys()) - {"name"}:
+    if row.is_builtin and fields:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="built-in transcode preset: only `name` can be edited",
+            detail="built-in transcode preset is read-only; create a new preset to customise",
         )
     if req.encoder is not None or req.tool is not None or req.container is not None:
         # Validate what the row will hold after the patch, so switching the

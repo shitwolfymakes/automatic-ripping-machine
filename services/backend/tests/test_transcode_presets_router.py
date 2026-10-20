@@ -262,7 +262,7 @@ def test_patch_builtin_encoder_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.patch("/api/transcode-presets/tpr_bi", json={"encoder": "cpu_h265"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "only `name` can be edited" in r.json()["detail"]
+    assert "read-only" in r.json()["detail"]
 
 
 def test_patch_updates_fields(signing_key: bytes) -> None:
@@ -288,21 +288,22 @@ def test_patch_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_patch_builtin_name_only_allowed(signing_key: bytes) -> None:
+def test_patch_builtin_is_read_only(signing_key: bytes) -> None:
+    # `name` included: the seeder re-syncs it on every boot (D-146).
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["transcode_presets"] = [_preset("tpr_b", name="builtin", is_builtin=True)]
     with TestClient(app) as client:
-        ok = client.patch("/api/transcode-presets/tpr_b", json={"name": "renamed"}, headers=_auth(token))
+        renamed = client.patch("/api/transcode-presets/tpr_b", json={"name": "renamed"}, headers=_auth(token))
         rejected = client.patch(
             "/api/transcode-presets/tpr_b",
             json={"extra_args": "--nope"},
             headers=_auth(token),
         )
-    assert ok.status_code == 200
-    assert ok.json()["name"] == "renamed"
+    assert renamed.status_code == 409
+    assert db.rows["transcode_presets"][0].name == "builtin"
     assert rejected.status_code == 409
-    assert "only `name` can be edited" in rejected.json()["detail"]
+    assert "read-only" in rejected.json()["detail"]
 
 
 def test_delete_404(signing_key: bytes) -> None:

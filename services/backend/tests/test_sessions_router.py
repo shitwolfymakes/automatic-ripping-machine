@@ -216,7 +216,9 @@ def test_create_session_rejects_media_type_mismatch(signing_key: bytes) -> None:
     assert r.status_code == 400
 
 
-def test_patch_builtin_only_name_allowed(signing_key: bytes) -> None:
+def test_patch_builtin_name_409(signing_key: bytes) -> None:
+    # The seeder re-syncs a built-in's name on every boot, so a rename would
+    # silently revert; the router refuses it instead (D-146).
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -226,8 +228,9 @@ def test_patch_builtin_only_name_allowed(signing_key: bytes) -> None:
             json={"name": "Renamed"},
             headers=_auth(token),
         )
-    assert r.status_code == 200
-    assert r.json()["name"] == "Renamed"
+    assert r.status_code == 409
+    assert "read-only" in r.json()["detail"]
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_builtin").name != "Renamed"
 
 
 def test_patch_builtin_other_field_409(signing_key: bytes) -> None:

@@ -1,9 +1,9 @@
 """Session CRUD, clone, and template preview.
 
-Built-in protection: `is_builtin=true` rows can be renamed (so users can
-disambiguate "Plex 1080p" → "Plex 1080p (legacy)") but every other field is
-locked, and `DELETE` is refused. Cloning a built-in is the supported escape
-hatch and produces a fresh non-builtin row owned by the caller.
+Built-in protection: `is_builtin=true` rows are read-only (the seeder owns
+every shipped field, `name` included, and re-syncs it on each boot), and
+`DELETE` is refused. Cloning a built-in is the supported escape hatch and
+produces a fresh non-builtin row owned by the caller.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -132,10 +132,10 @@ async def update_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown session_id: {session_id}")
 
     fields = req.model_dump(exclude_unset=True)
-    if row.is_builtin and set(fields.keys()) - {"name"}:
+    if row.is_builtin and fields:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="built-in session: only `name` can be edited; clone it to customise",
+            detail="built-in session is read-only; clone it to customise",
         )
 
     new_rip_preset_id = fields.get("rip_preset_id", row.rip_preset_id)
