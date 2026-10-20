@@ -146,7 +146,9 @@
 							<tr>
 								<td class="transcode-card-detail-label whitespace-nowrap">Started</td>
 								<td class="transcode-card-detail-value transcode-card-detail-value-strong"
-									>{#if job.started_at}<TimeAgo date={job.started_at} />{:else}-{/if}</td
+									>{#if job.started_at ?? job.created_at}<TimeAgo
+											date={job.started_at ?? job.created_at}
+										/>{:else}-{/if}</td
 								>
 								<td class="transcode-card-detail-label whitespace-nowrap transcode-card-detail-col2">Updated</td>
 								<td class="transcode-card-detail-value transcode-card-detail-value-strong"

@@ -172,7 +172,7 @@ def test_auth_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         with client.websocket_connect("/ws") as ws:
             err = ws.receive_json()
             assert err["op"] == "error"
-            assert err["code"] == ws_router.CLOSE_UNAUTHORIZED
+            assert err["code"] == ws_router.CLOSE_AUTH_TIMEOUT
             assert "timeout" in err["reason"]
 
 

@@ -283,7 +283,7 @@ fi
 # either way, but the backend reports "Rip from ISO" as not configured while
 # the value is empty. Fill it when absent or empty; a path the developer set
 # (a NAS mount, or a ${PWD}-relative value) is kept.
-if ! grep -qE '^ARM_HOST_ISO_LIBRARY_PATH=.+' "${ENV_FILE}"; then
+if ! grep -qE "^ARM_HOST_ISO_LIBRARY_PATH=[\"']?[^\"'[:space:]]" "${ENV_FILE}"; then
     env_set ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library" "${ENV_FILE}"
     echo "==> writing ARM_HOST_ISO_LIBRARY_PATH=${ARM_DIR}/iso-library"
 fi

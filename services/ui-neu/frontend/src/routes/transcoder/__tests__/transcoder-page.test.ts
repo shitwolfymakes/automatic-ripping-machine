@@ -223,14 +223,10 @@ describe('Transcoder Page', () => {
 			await waitFor(() => expect(screen.getByText('Took 20m 0s')).toBeInTheDocument());
 		});
 
-		it('omits Took when the claim time is unknown', async () => {
+		it('falls back to created_at for Took on tasks from before started_at existed', async () => {
 			vi.mocked(fetchTranscoderJobs).mockResolvedValueOnce([{ ...doneTask, started_at: null }]);
 			renderComponent(TranscoderPage);
-			// The per-tab cache may still paint the previous test's list, so
-			// wait for this render's fetch to land before asserting.
-			await vi.mocked(fetchTranscoderJobs).mock.results.at(-1)?.value;
-			await waitFor(() => expect(screen.getAllByText('movie3.mkv').length).toBeGreaterThan(0));
-			await waitFor(() => expect(screen.queryByText(/^Took /)).not.toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('Took 2h 20m 0s')).toBeInTheDocument());
 		});
 	});
 

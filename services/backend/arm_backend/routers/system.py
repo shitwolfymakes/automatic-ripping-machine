@@ -31,7 +31,7 @@ from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.transcode_dispatcher import count_queued_encode_tasks
-from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
+from arm_backend.identity.sources.thediscdb_snapshot import RefreshBusy, refresh as thediscdb_refresh
 from arm_backend.identity.sources.thediscdb_snapshot import refresh_running as thediscdb_refresh_running
 from arm_backend.utils import default_roots
 from arm_common import (
@@ -407,6 +407,9 @@ async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depend
         raise HTTPException(status_code=409, detail="thediscdb refresh already in progress")
     try:
         count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
+    except RefreshBusy as e:
+        # The daily loop took the lock between the check above and the call.
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001 — network/tar/sqlite: report, keep old index
         raise HTTPException(status_code=502, detail=f"thediscdb refresh failed: {e}") from e
     now = datetime.now(timezone.utc)

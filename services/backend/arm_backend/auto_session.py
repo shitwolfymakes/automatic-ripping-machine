@@ -251,7 +251,7 @@ async def _apply_session_internal(
     # (pre-rip or pre-identify): it does no work yet, so a repeat click
     # returns the already-parked row (see `_existing_parked_application`).
     if source == "auto":
-        existing = (
+        existing_rows = (
             (
                 await db.execute(
                     select(SessionApplication)
@@ -260,8 +260,19 @@ async def _apply_session_internal(
                 )
             )
             .scalars()
-            .first()
+            .all()
         )
+        if len(existing_rows) > 1:
+            # Parked twice before D-141; the extra rows still drain, each into
+            # its own collisions park, until someone deletes them.
+            logger.warning(
+                "job %s has %d applications of session %s; using the first (%s)",
+                job.id,
+                len(existing_rows),
+                session_id,
+                existing_rows[0].id,
+            )
+        existing = existing_rows[0] if existing_rows else None
         if existing is not None:
             tasks = await _load_tasks(db, existing.id)
             retried = await _retry_failed_tasks(db, tasks)

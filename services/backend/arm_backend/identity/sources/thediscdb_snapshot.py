@@ -203,10 +203,18 @@ def refresh_running() -> bool:
     return _refresh_lock.locked()
 
 
+class RefreshBusy(RuntimeError):
+    """A refresh is already running in this process."""
+
+
 async def refresh(http: httpx.AsyncClient, dir_path: Path) -> int:
     """Download the tarball and rebuild the index. Raises on failure — the
-    caller logs and keeps the previous index. A second caller waits for the
-    first to finish."""
+    caller logs and keeps the previous index. Raises RefreshBusy, without
+    waiting, while another refresh holds the lock: a manual refresh must not
+    hang behind the daily download, and the daily loop has nothing to add
+    after a manual one."""
+    if _refresh_lock.locked():
+        raise RefreshBusy("thediscdb refresh already in progress")
     async with _refresh_lock:
         return await _refresh_locked(http, dir_path)
 

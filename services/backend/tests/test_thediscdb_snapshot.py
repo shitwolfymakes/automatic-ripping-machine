@@ -225,7 +225,8 @@ async def test_refresh_http_failure_propagates_and_keeps_index_absent(tmp_path: 
 
 
 async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-159: a second refresh waits for the first instead of building alongside it."""
+    """D-159: a second refresh is refused at once instead of building alongside
+    the first, or queueing behind it."""
     active = 0
     peak = 0
     running_during: list[bool] = []
@@ -241,8 +242,13 @@ async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: 
 
     monkeypatch.setattr(thediscdb_snapshot, "_refresh_locked", _fake_locked)
     assert not thediscdb_snapshot.refresh_running()
-    results = await asyncio.gather(refresh(object(), tmp_path), refresh(object(), tmp_path))  # type: ignore[arg-type]
-    assert results == [1, 1]
+    results = await asyncio.gather(
+        refresh(object(), tmp_path),  # type: ignore[arg-type]
+        refresh(object(), tmp_path),  # type: ignore[arg-type]
+        return_exceptions=True,
+    )
+    assert results[0] == 1
+    assert isinstance(results[1], thediscdb_snapshot.RefreshBusy)
     assert peak == 1
-    assert running_during == [True, True]
+    assert running_during == [True]
     assert not thediscdb_snapshot.refresh_running()

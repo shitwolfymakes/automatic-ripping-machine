@@ -492,9 +492,10 @@
 										{#if job.updated_at}
 											<span>Updated <TimeAgo date={job.updated_at} /></span>
 										{/if}
-										<!-- From claim to finish: created_at would add the queue wait (D-202). -->
-										{#if job.status === 'done' && job.started_at && job.updated_at}
-											{@const dur = formatDuration(job.started_at, job.updated_at)}
+										<!-- From claim to finish: created_at would add the queue wait (D-202).
+										     Tasks from before started_at existed fall back to created_at. -->
+										{#if job.status === 'done' && (job.started_at ?? job.created_at) && job.updated_at}
+											{@const dur = formatDuration(job.started_at ?? job.created_at, job.updated_at)}
 											{#if dur}
 												<span class="transcoder-page-took">Took {dur}</span>
 											{/if}

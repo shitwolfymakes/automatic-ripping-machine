@@ -22,6 +22,7 @@ const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000];
 // flows a REST refusal triggers: 4401 (missing or disabled user) runs the
 // API client's unauthorized handler, 4403 (password must change) routes to
 // /change-password.
+// 4408 (auth window elapsed) is deliberately not listed: it reconnects like any other close.
 const CLOSE_UNAUTHORIZED = 4401;
 const CLOSE_FORBIDDEN = 4403;
 

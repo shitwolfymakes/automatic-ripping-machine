@@ -57,6 +57,9 @@ SERVICE_TOKEN_SUBPROTOCOL = "arm-service-token"
 CLOSE_BAD_MESSAGE = 4400
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_FORBIDDEN = 4403
+# The auth window elapsed. Distinct from 4401 so a client that treats 4401 as
+# "log out" keeps reconnecting after a stall on either side.
+CLOSE_AUTH_TIMEOUT = 4408
 
 
 def _origin_allowed(
@@ -161,7 +164,7 @@ async def _do_auth(
     try:
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError as e:
-        raise _AuthFailure(CLOSE_UNAUTHORIZED, "auth timeout") from e
+        raise _AuthFailure(CLOSE_AUTH_TIMEOUT, "auth timeout") from e
     except WebSocketDisconnect as e:
         raise _ClientGone from e
     except Exception as e:
