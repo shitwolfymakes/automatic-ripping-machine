@@ -18,7 +18,7 @@ from arm_backend.path_template import (
     validate_template,
     validate_template_or_http,
 )
-from arm_common import Drive, RipPreset, Session, TranscodePreset, User
+from arm_common import Drive, RipPreset, Session, SessionApplication, TranscodePreset, User
 from arm_common.schemas import (
     SessionCloneRequest,
     SessionCreateRequest,
@@ -203,6 +203,18 @@ async def delete_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"session is the default for drive(s): {names}",
+        )
+
+    # session_applications.session_id is ON DELETE RESTRICT: a session that
+    # was ever applied stays as long as the jobs that used it do.
+    applied = (
+        await db.execute(select(SessionApplication.job_id).where(col(SessionApplication.session_id) == session_id))
+    ).all()
+    if applied:
+        job_count = len({r.job_id for r in applied})
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"session has been applied to {job_count} job(s); delete those jobs first, or keep the session",
         )
 
     await db.delete(row)

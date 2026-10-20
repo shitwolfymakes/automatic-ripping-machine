@@ -40,6 +40,9 @@ _EXPECTED: dict[tuple[str, str], str] = {
     # so a future model rewrite can't quietly downgrade these.
     ("tracks", "job_id"): "CASCADE",
     ("session_applications", "job_id"): "CASCADE",
+    # session_applications → sessions: RESTRICT so an applied session keeps
+    # its history; DELETE /api/sessions/{id} pre-checks and answers 409.
+    ("session_applications", "session_id"): "RESTRICT",
     ("events", "job_id"): "CASCADE",
     ("disc_fingerprints", "job_id"): "CASCADE",
     # gpus.claimed_by_task_id → transcode_tasks: SET NULL because a
