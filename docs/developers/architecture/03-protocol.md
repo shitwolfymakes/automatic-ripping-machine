@@ -94,7 +94,7 @@ There is one WS endpoint on Backend: `/ws`. After connecting, the client subscri
 | `system.events` | Backend → subscribers | Backend | UI | Drive online/offline, backend restart, config change. |
 | `logs.{job_id}` | Backend → subscribers | Log collector in Backend | UI log viewer | Tails the per-job log stream. |
 | `ripper.commands.{drive_id}` | Backend → one ripper | Backend | The ripper registered on that `drive_id` | Typed commands to the owning ripper: `identify.resolved` (user-resolved identity delivered to a ripper parked in `awaiting_user_id`), `job.cancel`. Only the ripper whose hostname matches the drive's `hostname` may subscribe. |
-| `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only a transcoder whose `X-ARM-Task-Id` matches `task_id` may subscribe (no claim lookup). |
+| `transcoder.commands.{task_id}` | Backend → one transcoder | Backend | The transcoder that claimed that task | Typed commands: `task.cancel`. Only the transcoder holding the claim may subscribe: `task_id` must match its `X-ARM-Task-Id`, and once the task is `in_progress` its `claimed_by` must match the connection's hostname. A `queued` task may be subscribed before the claim, because the transcoder subscribes before it calls `/claim`. |
 
 ### Implementation notes
 
