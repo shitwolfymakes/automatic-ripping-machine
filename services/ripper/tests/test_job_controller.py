@@ -1030,3 +1030,45 @@ async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
     rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
     assert rc is None
     assert msg == "timeout"
+
+
+async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
+    """D-175: the raw-dir wipe runs in a thread via a spawned task, so the
+    WS handler returns before a multi-GB rmtree finishes."""
+    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)
+    raw = tmp_path / "job_test"
+    (raw / "sub").mkdir(parents=True)
+    (raw / "sub" / "title_t00.mkv").write_bytes(b"x")
+    threads: list[object] = []
+    real_to_thread = jc_module.asyncio.to_thread
+
+    async def spy_to_thread(fn, *a, **kw):
+        threads.append(fn)
+        return await real_to_thread(fn, *a, **kw)
+
+    monkeypatch.setattr(jc_module.asyncio, "to_thread", spy_to_thread)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._handle_abandon("job_test", delete_raw=True)
+    assert raw.exists()  # not deleted inline
+    await asyncio.gather(*controller._wipe_tasks)
+
+    assert not raw.exists()
+    assert threads == [jc_module.shutil.rmtree]
+    assert controller._wipe_tasks == set()
+
+
+async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    await controller._wipe_raw("never_existed")
+    assert "already absent" in caplog.text
+
+    def denied(_p):
+        raise PermissionError("read-only mount")
+
+    monkeypatch.setattr(jc_module.shutil, "rmtree", denied)
+    await controller._wipe_raw("job_x")
+    assert "raw-dir cleanup failed" in caplog.text
