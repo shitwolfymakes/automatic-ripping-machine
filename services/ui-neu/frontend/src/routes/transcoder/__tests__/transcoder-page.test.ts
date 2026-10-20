@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import TranscoderPage from '../+page.svelte';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
-import { fetchTranscoderJobs, fetchTranscoderStats } from '$lib/api/transcoder';
+import {
+	fetchTranscoderJobs,
+	fetchTranscoderStats,
+	retryTranscoderJob,
+	deleteTranscoderJob
+} from '$lib/api/transcoder';
 import { fetchGpus } from '$lib/api/gpus';
 
 vi.mock('$lib/stores/auth', async () => {
@@ -192,6 +197,40 @@ describe('Transcoder Page', () => {
 			expect(links[0]).toHaveAttribute('href', '/jobs/job_abc');
 			expect(document.querySelector('a[href="/jobs/sap_1"]')).toBeNull();
 			expect(screen.getByText('No job')).toBeInTheDocument();
+		});
+	});
+
+	describe('action failures (D-195)', () => {
+		afterEach(() => vi.restoreAllMocks());
+
+		it('shows a failed retry in the feedback banner and refreshes the list', async () => {
+			vi.mocked(retryTranscoderJob).mockRejectedValueOnce(new Error('task is in status=queued, not failed'));
+			renderComponent(TranscoderPage);
+			await waitFor(() => expect(screen.getByText('Retry')).toBeInTheDocument());
+			const before = vi.mocked(fetchTranscoderJobs).mock.calls.length;
+			await fireEvent.click(screen.getByText('Retry'));
+			await waitFor(() => expect(screen.getByText('task is in status=queued, not failed')).toBeInTheDocument());
+			await waitFor(() => expect(vi.mocked(fetchTranscoderJobs).mock.calls.length).toBeGreaterThan(before));
+			await fireEvent.click(screen.getByText('Dismiss'));
+			expect(screen.queryByText('task is in status=queued, not failed')).not.toBeInTheDocument();
+		});
+
+		it('shows a failed delete in the feedback banner', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(true);
+			vi.mocked(deleteTranscoderJob).mockRejectedValueOnce(new Error('transcode dispatcher unavailable'));
+			renderComponent(TranscoderPage);
+			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
+			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			await waitFor(() => expect(screen.getByText('transcode dispatcher unavailable')).toBeInTheDocument());
+		});
+
+		it('does not call delete when the confirm is declined', async () => {
+			vi.spyOn(window, 'confirm').mockReturnValue(false);
+			vi.mocked(deleteTranscoderJob).mockClear();
+			renderComponent(TranscoderPage);
+			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
+			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			expect(deleteTranscoderJob).not.toHaveBeenCalled();
 		});
 	});
 

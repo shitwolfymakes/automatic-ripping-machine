@@ -97,18 +97,28 @@
 		loadJobs(getJobsCache(tab) == null);
 	}
 
-	async function handleRetry(id: string) {
-		await retryTranscoderJob(id);
+	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+
+	// A failed action (409 retry of a task no longer failed, 503 delete with
+	// the dispatcher down, a network error) shows in the feedback banner, and
+	// the list refreshes either way since the failure usually means it is stale.
+	async function runAction(action: () => Promise<unknown>, verb: string) {
+		actionFeedback = null;
+		try {
+			await action();
+		} catch (e) {
+			actionFeedback = { type: 'error', message: e instanceof Error ? e.message : `${verb} failed` };
+		}
 		loadJobs();
 	}
 
-	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	function handleRetry(id: string) {
+		return runAction(() => retryTranscoderJob(id), 'Retry');
+	}
 
-	async function handleDelete(id: string) {
-		if (confirm('Delete this transcode task?')) {
-			await deleteTranscoderJob(id);
-			loadJobs();
-		}
+	function handleDelete(id: string) {
+		if (!confirm('Delete this transcode task?')) return;
+		return runAction(() => deleteTranscoderJob(id), 'Delete');
 	}
 
 	let jobsTimer: ReturnType<typeof setInterval> | null = null;
