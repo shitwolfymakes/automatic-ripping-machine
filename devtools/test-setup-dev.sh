@@ -241,6 +241,7 @@ present "backend waits for arm-data-init"      'condition: service_completed_suc
 present "backend mounts the ISO library read-only" 'ARM_HOST_ISO_LIBRARY_PATH:-\./arm/iso-library\}:/ingress:ro' "${TEMPLATE}"
 present "backend receives ARM_HOST_ISO_LIBRARY_PATH" 'ARM_HOST_ISO_LIBRARY_PATH: \$\{ARM_HOST_ISO_LIBRARY_PATH:-\}' "${TEMPLATE}"
 present "setup-dev creates the iso-library dir" 'iso-library' "${SETUP}"
+present "setup-dev fills an empty ARM_HOST_ISO_LIBRARY_PATH" 'env_set ARM_HOST_ISO_LIBRARY_PATH "\$\{ARM_DIR\}/iso-library"' "${SETUP}"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     envfile="$(mktemp)"

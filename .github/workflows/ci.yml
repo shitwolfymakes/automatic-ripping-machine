@@ -20,7 +20,6 @@ concurrency:
 env:
   UV_VERSION: '0.11.x'
   PYTHON_VERSION: '3.14'   # must match pyproject.toml requires-python
-  NODE_VERSION: '24'
   RUFF_VERSION: '0.15.11'  # must match .pre-commit-config.yaml rev
 
 jobs:
@@ -127,7 +126,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: services/ui-neu/frontend/.nvmrc
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
@@ -148,7 +147,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: services/ui-neu/frontend/.nvmrc
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
@@ -165,7 +164,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: services/ui-neu/frontend/.nvmrc
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
@@ -181,7 +180,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: services/ui-neu/frontend/.nvmrc
           cache: 'npm'
           cache-dependency-path: site/package-lock.json
       - run: npm ci
@@ -196,7 +195,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: services/ui-neu/frontend/.nvmrc
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - name: Install frontend deps

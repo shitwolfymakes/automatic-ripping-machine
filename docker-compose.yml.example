@@ -1,10 +1,21 @@
 name: armv3
 
+# Docker's default json-file driver never rotates, so a looping error fills the
+# disk. Every long-running service caps its log at 3 x 10 MB; the backend gives
+# the ripper and transcoder containers it spawns the same limit
+# (arm_backend/container_logging.py).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   arm-db:
     image: postgres:18
     container_name: armv3-db
     restart: unless-stopped
+    logging: *default-logging
     entrypoint:
       - bash
       - -c
@@ -32,6 +43,7 @@ services:
       dockerfile: services/backend/Dockerfile
     container_name: armv3-backend
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       arm-db:
         condition: service_started
@@ -257,6 +269,7 @@ services:
       dockerfile: services/ui-neu/Dockerfile
     container_name: armv3-ui
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - arm-backend
     ports:

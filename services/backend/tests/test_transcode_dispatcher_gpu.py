@@ -187,6 +187,7 @@ async def test_no_gpus_on_host_spawns_cpu(encoder: str) -> None:
     assert "ARM_GPU_VENDOR" not in kwargs["environment"]
     assert "devices" not in kwargs
     assert "runtime" not in kwargs
+    assert kwargs["log_config"] == {"type": "json-file", "config": {"max-size": "10m", "max-file": "3"}}
 
 
 # --- CPU encoder ----------------------------------------------------------------

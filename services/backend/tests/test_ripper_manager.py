@@ -126,6 +126,7 @@ def test_container_spec_matches_spec_section_3() -> None:
     assert spec["labels"] == {DOCKER_LABEL_KEY: "drv_01JABCDEFGHJKMNPQ"}
     assert spec["device_cgroup_rules"] == ["b 11:* rmw", "c 21:* rmw"]
     assert spec["restart_policy"] == {"Name": "unless-stopped"}
+    assert spec["log_config"] == {"type": "json-file", "config": {"max-size": "10m", "max-file": "3"}}
     assert spec["network"] == "armv3_default"
     assert spec["detach"] is True
     assert "auto_remove" not in spec and "devices" not in spec and "privileged" not in spec
@@ -232,6 +233,7 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
     assert spec["volumes"]["/host/certs/arm-ca.crt"] == {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"}
     assert "device_cgroup_rules" not in spec
     assert spec["restart_policy"] == {"Name": "no"}
+    assert spec["log_config"]["type"] == "json-file"  # inherited from the optical spec
     env = spec["environment"]
     assert env["ARM_SOURCE_PATH"] == "/source/Blade Runner.iso" and "ARM_SOURCE_KIND" not in env
     assert "ARM_DRIVE_DEV" not in env and "ARM_DRIVE_BY_ID" not in env and "CDROM_GID" not in env

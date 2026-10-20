@@ -82,13 +82,14 @@ jobs:
       matrix:
         # Same legs as release.yml: `target` picks a Dockerfile stage (empty:
         # the file's last stage), `suffix` is appended to the tag, so the
-        # transcode variants :<tag>-intel / :<tag>-amd are refreshed too.
+        # transcode variants :<tag>-intel / :<tag>-amd are refreshed too, and
+        # `alias` re-pushes the base build as :<tag>-nvidia like release.yml.
         # `dir` (default: the service name) is the services/ subdirectory
         # holding the Dockerfile; the arm-ui image is built from ui-neu.
         include:
           - {service: backend, target: "", suffix: ""}
           - {service: ripper, target: "", suffix: ""}
-          - {service: transcode, target: base, suffix: ""}
+          - {service: transcode, target: base, suffix: "", alias: "-nvidia"}
           - {service: transcode, target: intel, suffix: "-intel"}
           - {service: transcode, target: amd, suffix: "-amd"}
           - {service: ui, dir: ui-neu, target: "", suffix: ""}
@@ -169,6 +170,7 @@ jobs:
             suffix=${{ matrix.suffix }}
           tags: |
             type=raw,value=${{ needs.resolve-tag.outputs.tag }}
+            type=raw,value=${{ needs.resolve-tag.outputs.tag }},suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
 
       # Crucially: NO cache-from. Weekly rebuild's whole job is to ignore
       # the cache and pull fresh base layers + apt indices.

@@ -25,6 +25,7 @@ import docker.errors  # type: ignore[import-untyped]
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.container_logging import log_config
 from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_backend.iso_library import iso_host_path
 from arm_common import Drive, DriveKind, DriveLifecycle, DriveStatus, Job, JobStatus
@@ -154,6 +155,7 @@ class RipperManager:
             "network": s.ARM_DOCKER_NETWORK,
             "device_cgroup_rules": list(_DEVICE_CGROUP_RULES),
             "restart_policy": {"Name": "unless-stopped"},
+            "log_config": log_config(),
             "detach": True,
         }
         if drive.kind == DriveKind.VIRTUAL:

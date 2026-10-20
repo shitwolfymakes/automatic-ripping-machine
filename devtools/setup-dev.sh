@@ -278,6 +278,15 @@ else
     echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
 
+# ARM_HOST_ISO_LIBRARY_PATH: the template mounts ./arm/iso-library at /ingress
+# either way, but the backend reports "Rip from ISO" as not configured while
+# the value is empty. Fill it when absent or empty; a path the developer set
+# (a NAS mount, or a ${PWD}-relative value) is kept.
+if ! grep -qE '^ARM_HOST_ISO_LIBRARY_PATH=.+' "${ENV_FILE}"; then
+    env_set ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library" "${ENV_FILE}"
+    echo "==> writing ARM_HOST_ISO_LIBRARY_PATH=${ARM_DIR}/iso-library"
+fi
+
 # ARM_TRANSCODE_CAPABLE is derived from the flag on every run (like ARM_GPUS),
 # not preserved like a secret: --ripper-only writes `false`, a run without it
 # writes `true`. Re-running without the flag is the supported way to turn a
