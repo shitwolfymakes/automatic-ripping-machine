@@ -341,6 +341,27 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
     assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped (133)
 
 
+def test_stream_limit_zero_returns_no_lines(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
+    _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
+        (tmp_path / "jobs").mkdir()
+        (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").write_text(
+            json.dumps(_line(msg="l0")) + "\n", encoding="utf-8"
+        )
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
+
+
 def test_stream_fallback_skips_unreadable_log(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
