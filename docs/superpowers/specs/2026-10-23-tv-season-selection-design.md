@@ -231,9 +231,14 @@ change.
 **C2. Placing episodes by hand.** The per-track episode picker is built for
 the common case where the match is wrong:
 
-- The disc's season is chosen once (Info or the re-run select) and every
-  track row's picker uses it; a track may still be moved to another season
-  from its own row, which is how a two-season disc is placed.
+- Every track row shows its own season and episode as two controls, season
+  first, each reading "-" when unset. The disc's season (Info or the re-run
+  select) seeds the row's season control for tracks that have none, and the
+  row's episode picker lists that season. Changing a row's season reloads its
+  episode list for the new season and leaves the other rows alone; this is how
+  a two-season disc, or a special among regular episodes, is placed. The
+  row's season and episode are saved together as the operator's values and
+  show the same provenance marking the rows use today.
 - Each track row shows its length. The picker lists the season's episodes
   with their runtime, sorted by closeness to the track's length, closest
   first, so the right episode is usually at the top. Episodes already placed
@@ -297,8 +302,9 @@ new strings assume a season.
 - UI vitest for the Info form season field (seed, touched, null forgets,
   provenance line) on the card and the job page, the re-run defaults and the
   "Scan all seasons" entry, the season select and fallback, the alternatives
-  buttons, the reasons mapping, the picker's runtime-sorted list with used
-  episodes marked, "Fill the rest" previewing only unplaced tracks, and the
+  buttons, the reasons mapping, the per-row season control seeding from the
+  job and reloading the row's episodes, the picker's runtime-sorted list with
+  used episodes marked, "Fill the rest" previewing only unplaced tracks, and the
   card's "Season not set".
 - Docs: `docs/developers/architecture/02-job-lifecycle.md` section "Episode
   matching" describes the new scan order, the stop rule, the reasons, and the
