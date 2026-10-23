@@ -44,6 +44,9 @@ held results, and make the operator's path solid:
 
 Goals
 
+0. Matching will often miss. Choosing a season and placing episodes by hand
+   must be the primary path, fast enough to use on every disc, and the matcher
+   must work around what the operator has placed instead of over it.
 1. An operator can see the job's season, where it came from, and change it
    (or the disc number) in the same place they review the disc, before or
    after the rip. Saving re-runs episode matching and the view updates when
@@ -72,6 +75,10 @@ Anti-goals (this would be a failure even if it works)
 - A full-season scan that hammers a provider: a 38-season show must not cost
   38 requests on every re-run of every disc.
 - Overriding an operator's season or disc number with an automatic value.
+- Extrapolating from one hand-placed track: an operator sets title 3 to
+  episode 5 and ARM silently numbers the following titles 6, 7, 8 in title
+  order. On the corpus, episode order differs from title order on 42% of
+  discs, so a sequence guessed from one fix is wrong more often than right.
 
 ## 3. Decisions already made
 
@@ -161,6 +168,18 @@ forever, which would leave the card saying "Season not set" while the tracks
 read season 7. `record_manual_job` drops the field from the manual claim when
 the value is None; no new endpoint.
 
+**I. Operator-placed tracks are constraints.** A track whose episode was set
+by the operator (`identity_provenance["episode_number"] == "manual"`) is
+removed from the titles the stage aligns, and its episode numbers are removed
+from the season's `remaining` list exactly as sibling-held episodes are
+(`claimed` in `align_runs`). A re-run therefore fills the other titles into
+the episodes left over, split into runs around the operator's picks, and can
+never propose an episode the operator already placed on this disc. Today the
+stage re-aligns every episode-shaped title and the manual value only wins at
+resolve time, so a re-run after one fix can hand the neighbouring titles a
+sequence that collides with it. Specials (season 0) and tracks the operator
+marked as extras are excluded the same way.
+
 **H. Season list endpoint.** `GET /api/jobs/{id}/identity/seasons?source=`
 returns `{source_id, show_id, seasons: [int]}` from `provider.seasons()` for
 the job's resolved show id, with the same source resolution and error shapes
@@ -209,6 +228,24 @@ change.
   when neither is known, the row shows a season select first and no episode
   list until one is chosen.
 
+**C2. Placing episodes by hand.** The per-track episode picker is built for
+the common case where the match is wrong:
+
+- The disc's season is chosen once (Info or the re-run select) and every
+  track row's picker uses it; a track may still be moved to another season
+  from its own row, which is how a two-season disc is placed.
+- Each track row shows its length. The picker lists the season's episodes
+  with their runtime, sorted by closeness to the track's length, closest
+  first, so the right episode is usually at the top. Episodes already placed
+  on this disc, or held by a sibling disc, are marked and sorted last.
+- Picking an episode saves that track only. Nothing else on the disc changes.
+- After one or more picks, a "Fill the rest" button runs a preview (4.1 F
+  path, with the job's season) that places only the unplaced tracks into the
+  episodes left over (4.1 I), and shows the result as the existing preview
+  does, with Apply. The operator sees what would change before anything is
+  saved.
+- Revert per track stays as it is.
+
 **D. Candidate seasons from the scan.** When the active source's stored
 summary has `alternatives`, the panel lists them under the status line as
 "Also fits: Season 3 (6 of 6 titles), Season 7 (5 of 6)". Each is a button
@@ -252,13 +289,17 @@ new strings assume a season.
   "nothing known", Supernatural seasons 11 to 15 and The Simpsons discs get
   the right season picked (`wrongS` for those discs drops to the level of the
   under-10 seasons).
-- Backend unit tests for A to H in the existing suites (`test_episode_stage`,
+- Backend unit tests for A to I in the existing suites, including: a re-run
+  with one manually placed track never proposes its episode for another
+  title, and fills around it in runs (`test_episode_stage`,
   `test_identity_thediscdb`, `test_thediscdb_snapshot`, `test_identity_router`),
   100% statement coverage kept.
 - UI vitest for the Info form season field (seed, touched, null forgets,
   provenance line) on the card and the job page, the re-run defaults and the
   "Scan all seasons" entry, the season select and fallback, the alternatives
-  buttons, the reasons mapping, and the card's "Season not set".
+  buttons, the reasons mapping, the picker's runtime-sorted list with used
+  episodes marked, "Fill the rest" previewing only unplaced tracks, and the
+  card's "Season not set".
 - Docs: `docs/developers/architecture/02-job-lifecycle.md` section "Episode
   matching" describes the new scan order, the stop rule, the reasons, and the
   seasons endpoint, replacing the ten-season text.
@@ -298,5 +339,9 @@ new strings assume a season.
    7 leaves the job showing season 7 from the match, not "Season not set".
 7. The job page edits season, disc number and disc total with the same form
    as the card.
+8. On a disc placed wrongly, the operator sets the season, picks the right
+   episode for one track from a list sorted by runtime, presses "Fill the
+   rest", and the preview places the remaining tracks around that pick. No
+   track is renumbered in title order from the fixed one.
 4. A TheDiscDB-mapped season disc shows its season in the card and Info.
 5. Corpus baseline: no regression; deep-season discs pick the right season.
