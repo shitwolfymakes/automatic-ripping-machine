@@ -242,7 +242,9 @@ the common case where the match is wrong:
 - Each track row shows its length. The picker lists the season's episodes
   with their runtime, sorted by closeness to the track's length, closest
   first, so the right episode is usually at the top. Episodes already placed
-  on this disc, or held by a sibling disc, are marked and sorted last.
+  on another track of this disc are marked "(used)" and sorted last. Marking
+  episodes held by a sibling disc needs sibling data the UI does not have and
+  is a follow-up.
 - Picking an episode saves that track only. Nothing else on the disc changes.
 - After one or more picks, a "Fill the rest" button runs a preview (4.1 F
   path, with the job's season) that places only the unplaced tracks into the
