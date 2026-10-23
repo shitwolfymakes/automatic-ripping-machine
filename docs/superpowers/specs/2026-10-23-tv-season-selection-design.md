@@ -209,7 +209,7 @@ existing source labels. The form saves through `resolveJob` as now.
 **B. Re-run after a change.** When the Info save changed season or disc
 number on a TV job, the host (card or job page) starts the shared
 `EpisodeMatching` state for the job, exactly as picking a show in the match
-picker does, so the card shows "Matching episodes…" and the panel refreshes on
+picker does, so the card shows "Matching episodes..." and the panel refreshes on
 `job.identity_updated`. The backend already re-schedules the stage on that
 change.
 
@@ -274,14 +274,22 @@ sentence per `hold_reasons` code:
 
 Followed by "Set the season or disc number in Info, or accept the suggestion."
 
-**F. The review card.** The SHOW row's detail keeps "TV Series · years ·
-Season n". When the job is TV, pre-rip, and has no season, the detail ends
+**F. The review card.** The SHOW row's detail keeps the show kind, years and
+season ("TV Series, 2008-2013, Season 5" once the separators below are
+corrected). When the job is TV, pre-rip, and has no season, the detail ends
 with "Season not set" in the muted style, since an unset season is ordinary
 (my call). The Episodes row's "Episodes need attention" text is unchanged.
 
-**G. Standard components.** Chips, close buttons, glyphs and sort indicators
-come from the shared components. No em dashes or unicode symbols in copy. No
-new strings assume a season.
+**G. Standard components and plain punctuation.** Chips, close buttons,
+glyphs and sort indicators come from the shared components. Copy is ASCII:
+no em or en dashes, middle dots, ellipsis characters or symbol glyphs. The
+files this work touches (`DiscReviewWidget`, `EpisodeMatchPanel`,
+`EpisodeRows`, `RerunPanel`, `JobInfoForm`) still carry them, and the same
+change corrects the characters without rewording: an em dash standing for an
+empty value becomes "-", "..." replaces the ellipsis character, and ", "
+replaces the " · " separator in joined facts. The UI vitest suite gains a
+check that these components' rendered copy contains none of those characters,
+so they do not return. No new strings assume a season.
 
 ### 4.3 Tests and acceptance
 
@@ -333,7 +341,7 @@ new strings assume a season.
 ## 7. Definition of done
 
 1. A TV disc with no label season: card shows "Season not set"; Info shows an
-   empty Season; operator types 7, saves; card shows "Matching episodes…";
+   empty Season; operator types 7, saves; card shows "Matching episodes...";
    panel refreshes with season 7's placement or a held result with reasons.
 2. A disc from season 23 of a 38-season show with nothing known is scanned
    past season 10 and either applied or held with "Another season fits about
