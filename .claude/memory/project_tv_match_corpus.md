@@ -24,4 +24,8 @@ the corpus is the only check against real layouts.
 **How to apply:** any change to `identity/episodes/` or `episode_stage.py`
 runs the baseline before and after and quotes both; a new disc shape goes
 into the corpus by adding the series to `SERIES` in the generator, not as a
-hand-written fixture. See [[project-s4-sweep]] for the branch hold rules.
+hand-written fixture. TheDiscDB's new ODM sidecars (`discNN.odm.json`, 126 on
+2026-10-23) are deliberately not consumed: the owner chose to stabilise the
+existing MakeMKV-based process first; keep identifier kinds, the corpus reader
+and the source registry open for them (review doc section 9). See
+[[project-s4-sweep]] for the branch hold rules.
