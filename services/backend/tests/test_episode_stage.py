@@ -186,6 +186,7 @@ async def test_applies_a_confident_match() -> None:
         "sibling_conflict": False,
         "play_all": [],
         "skipped": [],
+        "hold_reasons": [],
     }
     tracks = _tracks(db, job)
     assert [tracks[r].episode_number for r in "0123"] == [3, 4, 5, 6]
@@ -816,14 +817,14 @@ async def test_unknown_season_scans_and_proposes_the_best() -> None:
     assert _tracks(db, job)["0"].episode_number == 3
 
 
-async def test_season_scan_is_capped() -> None:
+async def test_no_fetchable_season_is_a_miss() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     provider = FakeProvider(season_list=list(range(1, 13)))
 
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
-    assert [n for name, n in provider.calls if name == "season"] == list(range(1, 11))
+    assert [n for name, n in provider.calls if name == "season"] == list(range(1, 13))
     assert outcome.claims.status == "miss"
     assert outcome.result is None
 
@@ -1192,9 +1193,9 @@ async def test_known_season_is_never_a_thin_win_i5() -> None:
     assert outcome.claims.suggestion is False
 
 
-async def test_truncated_season_scan_is_a_suggestion_i5() -> None:
-    """More seasons than MAX_SEASON_SCAN: the best of the scanned ones may
-    not be the true best, so the win is a suggestion (I5)."""
+async def test_season_scan_has_no_cap() -> None:
+    """More than ten seasons: every listed season is fetched, and nothing
+    marks the scan truncated."""
     job = _job(season=None)
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, season_list=list(range(1, 12)))
@@ -1202,8 +1203,118 @@ async def test_truncated_season_scan_is_a_suggestion_i5() -> None:
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
     assert outcome.claims.job.season == 1
-    assert outcome.claims.extra["scan_truncated"] is True
-    assert outcome.claims.suggestion is True
+    assert [n for name, n in provider.calls if name == "season"] == list(range(1, 12))
+    assert "scan_truncated" not in outcome.claims.extra
+
+
+def test_season_scan_order_puts_hint_then_siblings_then_the_rest() -> None:
+    order = episode_stage.season_scan_order([1, 2, 3, 4, 5, 6], hint=4, sibling_seasons=[6, 2])
+    assert order == [(4, True), (2, True), (6, True), (1, False), (3, False), (5, False)]
+    assert episode_stage.season_scan_order([1, 2, 3], hint=None, sibling_seasons=[]) == [
+        (1, False),
+        (2, False),
+        (3, False),
+    ]
+    assert episode_stage.season_scan_order([1, 2], hint=9, sibling_seasons=[7]) == [(1, False), (2, False)]
+
+
+async def test_nothing_known_scans_every_season_and_never_stops_early() -> None:
+    job = _job(season=None)
+    db = _db(job, DISC)
+    seasons = {n: _season(n, [600 * n + i for i in range(10)]) for n in range(1, 16)}
+    seasons[13] = _season(13, DISTINCT)
+    provider = FakeProvider(seasons=seasons)
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    claims = outcomes[0].claims
+    assert claims.job.season == 13
+    assert sorted(n for name, n in provider.calls if name == "season") == list(range(1, 16))
+    assert claims.extra["scan_stopped_early"] is False
+    assert "scan_truncated" not in claims.extra
+
+
+async def test_sibling_season_is_tried_first_and_stops_the_scan() -> None:
+    # Disc 1 of season 7 (E1, E2) is already ripped; this is disc 2 holding E3-E6.
+    job = _job(season=None, disc_number=2)
+    sibling = _job("job_2", season=7, disc_number=1)
+    sib_tracks = [
+        _track("job_2", i, s, role=TrackRole.EPISODE, season=7, episode_number=i + 1)
+        for i, s in enumerate(DISTINCT[:2])
+    ]
+    db = _db(job, DISC, sibling, extra_tracks=sib_tracks)
+    provider = FakeProvider(seasons={n: _season(n, DISTINCT) for n in range(1, 10)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert [n for name, n in provider.calls if name == "season"] == [7]
+    assert outcomes[0].claims.extra["scan_stopped_early"] is True
+    assert outcomes[0].claims.job.season == 7
+
+
+async def test_disc_hint_season_is_tried_first_and_stops_the_scan() -> None:
+    """A label hint proposed season 4 but the resolver never made it the
+    job's season: the scan still tries 4 first, and its confident fit stops
+    the scan."""
+    from datetime import UTC, datetime
+
+    from arm_common.schemas.identity import JobClaim, SourceClaims
+
+    from arm_backend.identity.proposals import put_source
+
+    job = _job(season=None)
+    put_source(job, "label", SourceClaims(run_at=datetime.now(UTC), status="ok", job=JobClaim(season=4)))
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={n: _season(n, DISTINCT) for n in range(1, 7)})
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert [n for name, n in provider.calls if name == "season"] == [4]
+    assert outcome.claims.job.season == 4
+    assert outcome.claims.extra["scan_stopped_early"] is True
+    assert outcome.claims.suggestion is False
+
+
+async def test_held_hint_season_does_not_stop_the_scan() -> None:
+    """A sibling-proposed season whose fit is held (here ambiguous) never
+    stops the scan; the rest are tried and the best wins."""
+    job = _job(season=None, disc_number=2)
+    sibling = _job("job_2", season=2, disc_number=1)
+    db = _db(job, DISC, sibling)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT), 2: _season(2, [2000] * 10)})
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert [n for name, n in provider.calls if name == "season"] == [2, 1]
+    assert outcome.claims.job.season == 1
+    assert outcome.claims.extra["scan_stopped_early"] is False
+
+
+def test_sibling_seasons_counts_shared_id_rows_most_frequent_first() -> None:
+    same = _job("job_2", season=3)
+    tracks = [_track("job_2", 0, 1500, season=5), _track("job_2", 1, 1500, season=5), _track("job_2", 2, 1500)]
+    also = _job("job_3", season=1)
+    other_show = _job("job_4", season=9, ids={"imdb": "tt2"})
+    rows = [(same, tracks), (also, []), (other_show, [_track("job_4", 0, 1500, season=8)])]
+
+    assert episode_stage.sibling_seasons(rows, ExternalIds(imdb="tt1")) == [5, 1, 3]
+
+
+async def test_hold_reasons_name_why_a_result_is_a_suggestion() -> None:
+    job = _job()
+    db = _db(job, [2700] * 4)
+    provider = FakeProvider(seasons={1: _season(1, [2700] * 10)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcomes[0].claims.suggestion is True
+    assert "ambiguous" in outcomes[0].claims.extra["hold_reasons"]
+    off = Config(episode_auto_apply=False)
+    outcomes = await compute_episode_claims(db, job, [provider], off, StageOptions())  # type: ignore[arg-type]
+    assert outcomes[0].claims.extra["hold_reasons"][0] == "auto_apply_off"
+
+
+async def test_empty_season_list_is_a_miss() -> None:
+    job = _job(season=None)
+    db = _db(job, DISC)
+    provider = FakeProvider(season_list=[])
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcomes[0].claims.status == "miss"
+    assert outcomes[0].claims.detail == "no seasons listed"
 
 
 async def test_sibling_holding_no_episodes_is_no_conflict_f2() -> None:

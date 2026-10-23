@@ -86,11 +86,9 @@ def hint_title(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> str | None
     return None
 
 
-def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
-    """True when any ok disc-hint source proposed a `season` — the hint title
-    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
-    first, not movie-first (a movie label ending in a season-shaped number,
-    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+def hint_season(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> int | None:
+    """The season of the first ok disc-hint source, in source order, that
+    proposed one; None when none did."""
     claim_sources = claims_of(job).sources
     for source in sources:
         entry = claim_sources.get(source.id)
@@ -100,5 +98,13 @@ def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
             and "season" in entry.job.model_fields_set
             and entry.job.season is not None
         ):
-            return True
-    return False
+            return entry.job.season
+    return None
+
+
+def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
+    """True when any ok disc-hint source proposed a `season` — the hint title
+    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
+    first, not movie-first (a movie label ending in a season-shaped number,
+    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+    return hint_season(job, sources) is not None

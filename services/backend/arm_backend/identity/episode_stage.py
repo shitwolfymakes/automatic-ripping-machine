@@ -9,12 +9,19 @@ when `opts.apply` is set. `run_episode_stage` stores every outcome with
 
 A result the stage is not sure of (ambiguous positions, low coverage, low
 confidence, two seasons that fit about equally, nominal broadcast-slot
-runtimes) is stored with `suggestion=True`, which the resolver never applies.
+runtimes) is stored with `suggestion=True`, which the resolver never applies,
+and `extra["hold_reasons"]` names every reason (`hold_reasons`).
+
+With no known season, every season the provider lists is fetched, in
+`season_scan_order`: the disc hint's season, then seasons sibling discs hold,
+then the rest. Only a hint- or sibling-proposed season can stop the scan
+early, and only when its fit would apply on its own.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -34,12 +41,11 @@ from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
-from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
+from arm_backend.identity.pipeline import ResolveOutcome, hint_season, resolve_job
 from arm_backend.identity.proposals import claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
     EPISODE_SOURCE_BY_SETTING,
-    MAX_SEASON_SCAN,
     enabled_episode_source_ids,
     episode_auto_apply,
     episode_tolerance,
@@ -194,6 +200,34 @@ def _siblings(
     return out, conflict
 
 
+def sibling_seasons(rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds) -> list[int]:
+    """Seasons the sibling rows sharing an external id with `ids` hold (each
+    job's season and every track's season), most frequent first, ties
+    ascending."""
+    counts: Counter[int] = Counter()
+    for sibling, tracks in rows:
+        if not _shares_id(ids, current_ids(sibling)):
+            continue
+        held = [sibling.season, *(t.season for t in tracks)]
+        counts.update(season for season in held if season is not None)
+    return sorted(counts, key=lambda season: (-counts[season], season))
+
+
+def season_scan_order(
+    seasons: Sequence[int], *, hint: int | None, sibling_seasons: Sequence[int]
+) -> list[tuple[int, bool]]:
+    """The listed `seasons` as `(season, from_hint)` pairs in scan order: the
+    hint's season, then the listed sibling seasons nearest the hint first
+    (ties and a missing hint ascending), then the rest ascending. `from_hint`
+    marks the first two groups, the only seasons that may stop a scan."""
+    listed = set(seasons)
+    proposed = [hint] if hint is not None and hint in listed else []
+    siblings = {s for s in sibling_seasons if s in listed and s not in proposed}
+    proposed += sorted(siblings, key=lambda s: (abs(s - hint) if hint is not None else 0, s))
+    rest = sorted(listed.difference(proposed))
+    return [(s, True) for s in proposed] + [(s, False) for s in rest]
+
+
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
     """C4: every known runtime is a whole number of broadcast slots, and fewer
     than half the titles fit any of them."""
@@ -249,26 +283,57 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
     return _SeasonFit(result, nominal, conflict)
 
 
-async def _pick_season(
-    provider: EpisodeListProvider, req: _Request, seasons: Sequence[int]
-) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]]] | None:
-    """The best-ranked season's fit, with the full ranking; None when no
-    season could be fetched."""
-    fits: dict[int, _SeasonFit] = {}
-    for season in seasons:
-        fit = await _fit_season(provider, req, season)
-        if fit is not None:
-            fits[season] = fit
-    ranked = rank_seasons({s: f.result for s, f in fits.items()})
-    if not ranked:
-        return None
-    season = ranked[0][0]
-    return season, fits[season], ranked
-
-
 def _thin_win(best: MatchResult, runner_up: MatchResult) -> bool:
     gap = _mean_cost(runner_up) - _mean_cost(best)
     return gap < max(THIN_WIN_RATIO * _mean_cost(runner_up), THIN_WIN_MIN_S)
+
+
+def hold_reasons(
+    fit: _SeasonFit, ranked: Sequence[tuple[int, MatchResult]], *, scanned: bool, auto_apply: bool
+) -> list[str]:
+    """Why `fit` (the best-ranked season's) is held as a suggestion, in a
+    fixed order; empty when it applies on its own. `near_tie` and `thin_win`
+    compare against the runner-up in `ranked`; `thin_win` only for a scanned
+    season (I5)."""
+    result = fit.result
+    runner_up = ranked[1][1] if len(ranked) > 1 else None
+    mean_conf = sum(m.confidence for m in result.matches) / max(1, len(result.matches))
+    checks = (
+        ("auto_apply_off", not auto_apply),
+        ("ambiguous", result.ambiguous),
+        ("low_coverage", result.coverage < MIN_COVERAGE),
+        ("low_confidence", mean_conf < MIN_MEAN_CONFIDENCE),
+        ("near_tie", runner_up is not None and _near_tie(result, runner_up)),
+        ("thin_win", scanned and runner_up is not None and _thin_win(result, runner_up)),
+        ("nominal_runtimes", fit.nominal),
+        ("sibling_conflict", fit.sibling_conflict),
+    )
+    return [code for code, held in checks if held]
+
+
+async def _pick_season(
+    provider: EpisodeListProvider, req: _Request, order: Sequence[tuple[int, bool]]
+) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]], bool] | None:
+    """The best-ranked season's fit, the ranking of the seasons tried, and
+    whether the scan stopped early; None when no season could be fetched.
+
+    Seasons are tried in `order`. A season with `from_hint` set stops the
+    scan when it ranks first and nothing holds its fit (judged as if
+    auto-apply were on: the stop is about confidence)."""
+    fits: dict[int, _SeasonFit] = {}
+    ranked: list[tuple[int, MatchResult]] = []
+    for season, from_hint in order:
+        fit = await _fit_season(provider, req, season)
+        if fit is None:
+            continue
+        fits[season] = fit
+        ranked = rank_seasons({s: f.result for s, f in fits.items()})
+        if from_hint and ranked[0][0] == season and not hold_reasons(fit, ranked, scanned=True, auto_apply=True):
+            return season, fit, ranked, True
+    if not ranked:
+        return None
+    season = ranked[0][0]
+    return season, fits[season], ranked, False
 
 
 def _ok_claims(
@@ -277,29 +342,15 @@ def _ok_claims(
     ranked: Sequence[tuple[int, MatchResult]],
     *,
     scanned: bool,
-    truncated: bool,
+    stopped_early: bool,
     inputs: dict[str, Any],
     now: datetime,
     auto_apply: bool,
 ) -> SourceClaims:
     result = fit.result
-    near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
-    # I5: a scanned season is only as sure as its margin over the runner-up,
-    # and over the seasons the capped scan never looked at.
-    thin_win = scanned and len(ranked) > 1 and _thin_win(result, ranked[1][1])
-    scan_truncated = scanned and truncated
-    mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
-    suggestion = (
-        (not auto_apply)
-        or result.ambiguous
-        or result.coverage < MIN_COVERAGE
-        or mean_conf < MIN_MEAN_CONFIDENCE
-        or near_tie
-        or thin_win
-        or scan_truncated
-        or fit.nominal
-        or fit.sibling_conflict
-    )
+    reasons = hold_reasons(fit, ranked, scanned=scanned, auto_apply=auto_apply)
+    near_tie = "near_tie" in reasons
+    thin_win = "thin_win" in reasons
     tracks: dict[str, TrackClaim] = {
         m.ref: TrackClaim(
             role=TrackRole.EPISODE,
@@ -316,7 +367,7 @@ def _ok_claims(
     return SourceClaims(
         run_at=now,
         status="ok",
-        suggestion=suggestion,
+        suggestion=bool(reasons),
         inputs={**inputs, "nominal_runtimes": fit.nominal},
         job=JobClaim(season=season) if scanned else JobClaim(),
         tracks=tracks,
@@ -331,7 +382,8 @@ def _ok_claims(
             "play_all": list(result.play_all),
             "skipped": list(result.skipped),
             **({"thin_win": True} if thin_win else {}),
-            **({"scan_truncated": True} if scan_truncated else {}),
+            "hold_reasons": reasons,
+            **({"scan_stopped_early": stopped_early} if scanned else {}),
         },
     )
 
@@ -413,31 +465,32 @@ async def _match(
 
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
-    truncated = False
     if known_season is not None:
-        seasons = [known_season]
+        order = [(known_season, False)]
     else:
         try:
-            seasons = await provider.seasons(show_id)
+            listed = await provider.seasons(show_id)
         except SourceMiss:
             # A stale cached show id: the provider no longer knows the show.
             claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
-        truncated = len(seasons) > MAX_SEASON_SCAN
-        seasons = seasons[:MAX_SEASON_SCAN]
+        if not listed:
+            claims = SourceClaims(run_at=now, status="miss", detail="no seasons listed", inputs=dict(inputs))
+            return SourceOutcome(source_id, claims, None)
+        order = season_scan_order(listed, hint=hint_season(job), sibling_seasons=sibling_seasons(rows, ids))
 
     req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance)
-    picked = await _pick_season(provider, req, seasons)
+    picked = await _pick_season(provider, req, order)
     if picked is None or not picked[1].result.matches:
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
         return SourceOutcome(source_id, claims, picked[1].result if picked else None)
-    season, fit, ranked = picked
+    season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
         season,
         fit,
         ranked,
         scanned=known_season is None,
-        truncated=truncated,
+        stopped_early=stopped_early,
         inputs=inputs,
         now=now,
         auto_apply=episode_auto_apply(cfg),

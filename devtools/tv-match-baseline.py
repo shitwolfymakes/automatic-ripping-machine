@@ -24,7 +24,6 @@ sys.path.insert(0, str(ROOT / "services" / "backend"))
 from arm_backend.identity.episode_stage import _near_tie  # noqa: E402
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor  # noqa: E402
 from arm_backend.identity.episodes.model import MatchResult  # noqa: E402
-from arm_backend.identity.sources.registry import MAX_SEASON_SCAN  # noqa: E402
 from tests.thediscdb_corpus import Disc, Series, load_corpus  # noqa: E402
 
 TOLERANCE = 300
@@ -137,7 +136,7 @@ def run(series: Series, min_seconds: int) -> dict[str, Tally]:
                     result = _fit(series, disc, season, titles, siblings, disc_number, disc_total)
                     near_tie = False
                 else:
-                    seasons = series.season_numbers()[:MAX_SEASON_SCAN]
+                    seasons = series.season_numbers()
                     fits = {s: _fit(series, disc, s, titles, siblings, disc_number, disc_total) for s in seasons}
                     ranked = rank_seasons(fits)
                     picked, result = ranked[0]
