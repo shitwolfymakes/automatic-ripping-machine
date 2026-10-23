@@ -1,0 +1,57 @@
+{
+ "source": "https://github.com/TheDiscDb/data (MIT)",
+ "commit": "17b8891c7acfbb9f4774d4db90c3c06309c31cbb",
+ "built": "2026-10-23",
+ "generator": "devtools/thediscdb-fixture.py",
+ "series": {
+  "all-creatures-great-and-small": {
+   "upstream": "All Creatures Great & Small (2020)",
+   "why": "Two late seasons only (5, 6); playlists in reverse episode order; varied runtimes.",
+   "releases": 2,
+   "discs": 4,
+   "episodes": 14
+  },
+  "breaking-bad": {
+   "upstream": "Breaking Bad (2008)",
+   "why": "Clean reference: five seasons, in order, distinct runtimes.",
+   "releases": 1,
+   "discs": 16,
+   "episodes": 62
+  },
+  "star-trek-deep-space-nine": {
+   "upstream": "Star Trek Deep Space Nine (1993)",
+   "why": "DVD, seven seasons, runtimes identical within a season: runtime alone cannot place a title.",
+   "releases": 1,
+   "discs": 48,
+   "episodes": 170
+  },
+  "supernatural": {
+   "upstream": "Supernatural (2005)",
+   "why": "Fourteen seasons on disc (2 to 15): beyond the ten-season scan cap.",
+   "releases": 1,
+   "discs": 58,
+   "episodes": 292
+  },
+  "doctor-who-2005": {
+   "upstream": "Doctor Who (2005)",
+   "why": "Specials (season 0), three releases of the same episodes (Blu-ray and UHD), shuffled playlists.",
+   "releases": 3,
+   "discs": 65,
+   "episodes": 414
+  },
+  "futurama": {
+   "upstream": "Futurama (1999)",
+   "why": "One volume whose playlists are shuffled against episode order with uniform runtimes.",
+   "releases": 1,
+   "discs": 2,
+   "episodes": 13
+  },
+  "sherlock": {
+   "upstream": "Sherlock (2010)",
+   "why": "Ninety-minute episodes: a TV disc that looks like a movie.",
+   "releases": 4,
+   "discs": 7,
+   "episodes": 10
+  }
+ }
+}

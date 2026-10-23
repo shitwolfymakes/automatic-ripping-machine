@@ -1,0 +1,4100 @@
+{
+ "title": "Star Trek: Deep Space Nine",
+ "year": 1993,
+ "external_ids": {
+  "tmdb": "580",
+  "imdb": "tt0106145",
+  "tvdb": "72073"
+ },
+ "tmdb": {
+  "number_of_seasons": 7,
+  "number_of_episodes": 173,
+  "episode_run_time": [
+   45
+  ],
+  "seasons": [
+   {
+    "season_number": 0,
+    "episode_count": 116,
+    "name": "Specials"
+   },
+   {
+    "season_number": 1,
+    "episode_count": 19,
+    "name": "Season 1"
+   },
+   {
+    "season_number": 2,
+    "episode_count": 26,
+    "name": "Season 2"
+   },
+   {
+    "season_number": 3,
+    "episode_count": 26,
+    "name": "Season 3"
+   },
+   {
+    "season_number": 4,
+    "episode_count": 25,
+    "name": "Season 4"
+   },
+   {
+    "season_number": 5,
+    "episode_count": 26,
+    "name": "Season 5"
+   },
+   {
+    "season_number": 6,
+    "episode_count": 26,
+    "name": "Season 6"
+   },
+   {
+    "season_number": 7,
+    "episode_count": 25,
+    "name": "Season 7"
+   }
+  ]
+ },
+ "releases": [
+  {
+   "slug": "2021-the-complete-series-dvd",
+   "title": "The Complete Series (DVD)",
+   "year": 2021,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "season-1-disc-1",
+     "name": "Season 1 Disc 1",
+     "format": "DVD",
+     "content_hash": "6420989D11AA3195365B2AE906966AD4",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 5429,
+       "size": 4120061952,
+       "item": {
+        "type": "Episode",
+        "title": "Emissary",
+        "season": 1,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2718,
+       "size": 2022201344,
+       "item": {
+        "type": "Episode",
+        "title": "Past Prologue",
+        "season": 1,
+        "episode": 3
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2715,
+       "size": 1996349440,
+       "item": {
+        "type": "Episode",
+        "title": "A Man Alone",
+        "season": 1,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "season-1-disc-2",
+     "name": "Season 1 Disc 2",
+     "format": "DVD",
+     "content_hash": "83618A79D1EF895B016A12DD637F610B",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2714,
+       "size": 2058489856,
+       "item": {
+        "type": "Episode",
+        "title": "Babel",
+        "season": 1,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2716,
+       "size": 1998508032,
+       "item": {
+        "type": "Episode",
+        "title": "Captive Pursuit",
+        "season": 1,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2721,
+       "size": 1997922304,
+       "item": {
+        "type": "Episode",
+        "title": "Q-Less",
+        "season": 1,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2709,
+       "size": 1986226176,
+       "item": {
+        "type": "Episode",
+        "title": "Dax",
+        "season": 1,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 3,
+     "slug": "season-1-disc-3",
+     "name": "Season 1 Disc 3",
+     "format": "DVD",
+     "content_hash": "3FB3B994F544B62E552FA985BCF1A077",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2720,
+       "size": 1991026688,
+       "item": {
+        "type": "Episode",
+        "title": "The Passenger",
+        "season": 1,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2709,
+       "size": 1926080512,
+       "item": {
+        "type": "Episode",
+        "title": "Move Along Home",
+        "season": 1,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2711,
+       "size": 2007889920,
+       "item": {
+        "type": "Episode",
+        "title": "The Nagus",
+        "season": 1,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2717,
+       "size": 2004973568,
+       "item": {
+        "type": "Episode",
+        "title": "Vortex",
+        "season": 1,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 4,
+     "slug": "season-1-disc-4",
+     "name": "Season 1 Disc 4",
+     "format": "DVD",
+     "content_hash": "A567B745ED16731FE6281340A481FCE9",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2721,
+       "size": 2051407872,
+       "item": {
+        "type": "Episode",
+        "title": "Battle Lines",
+        "season": 1,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2722,
+       "size": 2109714432,
+       "item": {
+        "type": "Episode",
+        "title": "The Storyteller",
+        "season": 1,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 2002456576,
+       "item": {
+        "type": "Episode",
+        "title": "Progress",
+        "season": 1,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2722,
+       "size": 1999822848,
+       "item": {
+        "type": "Episode",
+        "title": "If Wishes Were Horses",
+        "season": 1,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 5,
+     "slug": "season-1-disc-5",
+     "name": "Season 1 Disc 5",
+     "format": "DVD",
+     "content_hash": "23124A3443B32F97853E447C705158AF",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2722,
+       "size": 2010507264,
+       "item": {
+        "type": "Episode",
+        "title": "The Forsaken",
+        "season": 1,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2717,
+       "size": 2004310016,
+       "item": {
+        "type": "Episode",
+        "title": "Dramatis Personae",
+        "season": 1,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2723,
+       "size": 2028042240,
+       "item": {
+        "type": "Episode",
+        "title": "Duet",
+        "season": 1,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2720,
+       "size": 1942489088,
+       "item": {
+        "type": "Episode",
+        "title": "In the Hands of the Prophets",
+        "season": 1,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 6,
+     "slug": "season-1-disc-6",
+     "name": "Season 1 Disc 6",
+     "format": "DVD",
+     "content_hash": "17E1866D8A6D41CAF228188A9F564109",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "02",
+       "duration_s": 1086,
+       "size": 1065512960,
+       "item": {
+        "type": "Extra",
+        "title": "DS9 A Bold New Beginning",
+        "season": 1,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "03",
+       "duration_s": 860,
+       "size": 822886400,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "04",
+       "duration_s": 609,
+       "size": 578383872,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "05",
+       "duration_s": 287,
+       "size": 271349760,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "06",
+       "duration_s": 177,
+       "size": 165070848,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "07",
+       "duration_s": 323,
+       "size": 303265792,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "09",
+       "duration_s": 194,
+       "size": 182489088,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "10",
+       "duration_s": 161,
+       "size": 149506048,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "11",
+       "duration_s": 144,
+       "size": 133744640,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "12",
+       "duration_s": 135,
+       "size": 124459008,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "13",
+       "duration_s": 102,
+       "size": 93949952,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "14",
+       "duration_s": 143,
+       "size": 131987456,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "15",
+       "duration_s": 176,
+       "size": 164501504,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "16",
+       "duration_s": 91,
+       "size": 82976768,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "17",
+       "duration_s": 136,
+       "size": 127246336,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "18",
+       "duration_s": 162,
+       "size": 151719936,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 7,
+     "slug": "season-2-disc-1",
+     "name": "Season 2 Disc 1",
+     "format": "DVD",
+     "content_hash": "11B2E7A46ED9DFB08337D28F65CE8864",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2719,
+       "size": 2102845440,
+       "item": {
+        "type": "Episode",
+        "title": "The Homecoming (1)",
+        "season": 2,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2721,
+       "size": 2067759104,
+       "item": {
+        "type": "Episode",
+        "title": "The Circle (2)",
+        "season": 2,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2722,
+       "size": 2074963968,
+       "item": {
+        "type": "Episode",
+        "title": "The Siege (3)",
+        "season": 2,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2727,
+       "size": 2067652608,
+       "item": {
+        "type": "Episode",
+        "title": "Invasive Procedures",
+        "season": 2,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 8,
+     "slug": "season-2-disc-2",
+     "name": "Season 2 Disc 2",
+     "format": "DVD",
+     "content_hash": "040D2985A709E2FA5B4B49F257E97086",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 2047184896,
+       "item": {
+        "type": "Episode",
+        "title": "Cardassians",
+        "season": 2,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2717,
+       "size": 2055772160,
+       "item": {
+        "type": "Episode",
+        "title": "Melora",
+        "season": 2,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2718,
+       "size": 1981919232,
+       "item": {
+        "type": "Episode",
+        "title": "Rules of Acquisition",
+        "season": 2,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2717,
+       "size": 1993142272,
+       "item": {
+        "type": "Episode",
+        "title": "Necessary Evil",
+        "season": 2,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 9,
+     "slug": "season-2-disc-3",
+     "name": "Season 2 Disc 3",
+     "format": "DVD",
+     "content_hash": "19A119AAB269E99EDA2EA5B31BF150FD",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2723,
+       "size": 2069516288,
+       "item": {
+        "type": "Episode",
+        "title": "Second Sight",
+        "season": 2,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2721,
+       "size": 2060400640,
+       "item": {
+        "type": "Episode",
+        "title": "Sanctuary",
+        "season": 2,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2725,
+       "size": 2078185472,
+       "item": {
+        "type": "Episode",
+        "title": "Rivals",
+        "season": 2,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2721,
+       "size": 2037276672,
+       "item": {
+        "type": "Episode",
+        "title": "The Alternate",
+        "season": 2,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 10,
+     "slug": "season-2-disc-4",
+     "name": "Season 2 Disc 4",
+     "format": "DVD",
+     "content_hash": "C54B181CF46A491C7226D41E68EE068A",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2720,
+       "size": 2038132736,
+       "item": {
+        "type": "Episode",
+        "title": "Armageddon Game",
+        "season": 2,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2718,
+       "size": 2064125952,
+       "item": {
+        "type": "Episode",
+        "title": "Whispers",
+        "season": 2,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2720,
+       "size": 1993588736,
+       "item": {
+        "type": "Episode",
+        "title": "Paradise",
+        "season": 2,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2720,
+       "size": 2003480576,
+       "item": {
+        "type": "Episode",
+        "title": "Shadowplay",
+        "season": 2,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 11,
+     "slug": "season-2-disc-5",
+     "name": "Season 2 Disc 5",
+     "format": "DVD",
+     "content_hash": "24237868E5F607C7B68F820C32CB89B3",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2719,
+       "size": 2019495936,
+       "item": {
+        "type": "Episode",
+        "title": "Playing God",
+        "season": 2,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2718,
+       "size": 1998665728,
+       "item": {
+        "type": "Episode",
+        "title": "Profit and Loss",
+        "season": 2,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2721,
+       "size": 2044164096,
+       "item": {
+        "type": "Episode",
+        "title": "Blood Oath",
+        "season": 2,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2717,
+       "size": 2016208896,
+       "item": {
+        "type": "Episode",
+        "title": "The Maquis (1)",
+        "season": 2,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 12,
+     "slug": "season-2-disc-6",
+     "name": "Season 2 Disc 6",
+     "format": "DVD",
+     "content_hash": "BDD457FB628880D96664F484E85E7FDB",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2722,
+       "size": 2056921088,
+       "item": {
+        "type": "Episode",
+        "title": "The Maquis (2)",
+        "season": 2,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2723,
+       "size": 2018430976,
+       "item": {
+        "type": "Episode",
+        "title": "The Wire",
+        "season": 2,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2721,
+       "size": 2003785728,
+       "item": {
+        "type": "Episode",
+        "title": "Crossover",
+        "season": 2,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2722,
+       "size": 2011570176,
+       "item": {
+        "type": "Episode",
+        "title": "The Collaborator",
+        "season": 2,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 13,
+     "slug": "season-2-disc-7",
+     "name": "Season 2 Disc 7",
+     "format": "DVD",
+     "content_hash": "2F898B240B21AE16B045D34FBD031ED4",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2721,
+       "size": 2033827840,
+       "item": {
+        "type": "Episode",
+        "title": "Tribunal",
+        "season": 2,
+        "episode": 25
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2720,
+       "size": 2147395584,
+       "item": {
+        "type": "Episode",
+        "title": "The Jem'Hadar",
+        "season": 2,
+        "episode": 26
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 922,
+       "size": 598616064,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 733,
+       "size": 477483008,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 663,
+       "size": 433070080,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "06",
+       "duration_s": 1065,
+       "size": 694157312,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "07",
+       "duration_s": 330,
+       "size": 212582400,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "08",
+       "duration_s": 157,
+       "size": 98764800,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "09",
+       "duration_s": 161,
+       "size": 102002688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "10",
+       "duration_s": 172,
+       "size": 109426688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "11",
+       "duration_s": 121,
+       "size": 76023808,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "12",
+       "duration_s": 148,
+       "size": 93999104,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "13",
+       "duration_s": 213,
+       "size": 135854080,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "14",
+       "duration_s": 125,
+       "size": 78397440,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "15",
+       "duration_s": 146,
+       "size": 91877376,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "16",
+       "duration_s": 151,
+       "size": 95164416,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "17",
+       "duration_s": 167,
+       "size": 104984576,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 14,
+     "slug": "season-3-disc-1",
+     "name": "Season 3 Disc 1",
+     "format": "DVD",
+     "content_hash": "7F72CF499598777FD803981F164DCD9B",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 2083700736,
+       "item": {
+        "type": "Episode",
+        "title": "The Search (1)",
+        "season": 3,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2716,
+       "size": 2026061824,
+       "item": {
+        "type": "Episode",
+        "title": "The Search (2)",
+        "season": 3,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 1992818688,
+       "item": {
+        "type": "Episode",
+        "title": "The House of Quark",
+        "season": 3,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2718,
+       "size": 1997467648,
+       "item": {
+        "type": "Episode",
+        "title": "Equilibrium",
+        "season": 3,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 15,
+     "slug": "season-3-disc-2",
+     "name": "Season 3 Disc 2",
+     "format": "DVD",
+     "content_hash": "9D9AF6587C2BCD3E9D68AD944524F043",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2721,
+       "size": 2037065728,
+       "item": {
+        "type": "Episode",
+        "title": "Second Skin",
+        "season": 3,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2721,
+       "size": 2001201152,
+       "item": {
+        "type": "Episode",
+        "title": "The Abandoned",
+        "season": 3,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2722,
+       "size": 2072717312,
+       "item": {
+        "type": "Episode",
+        "title": "Civil Defense",
+        "season": 3,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2720,
+       "size": 2040250368,
+       "item": {
+        "type": "Episode",
+        "title": "Meridian",
+        "season": 3,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 16,
+     "slug": "season-3-disc-3",
+     "name": "Season 3 Disc 3",
+     "format": "DVD",
+     "content_hash": "D6E37140FDB4B09EADF32FC5D0B267D4",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2719,
+       "size": 2032869376,
+       "item": {
+        "type": "Episode",
+        "title": "Defiant",
+        "season": 3,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2720,
+       "size": 2054334464,
+       "item": {
+        "type": "Episode",
+        "title": "Fascination",
+        "season": 3,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 2006523904,
+       "item": {
+        "type": "Episode",
+        "title": "Past Tense (1)",
+        "season": 3,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 2072932352,
+       "item": {
+        "type": "Episode",
+        "title": "Past Tense (2)",
+        "season": 3,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 17,
+     "slug": "season-3-disc-4",
+     "name": "Season 3 Disc 4",
+     "format": "DVD",
+     "content_hash": "186B2745D28C72F2F522A7EB39B8E119",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2722,
+       "size": 2026094592,
+       "item": {
+        "type": "Episode",
+        "title": "Life Support",
+        "season": 3,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2720,
+       "size": 2024501248,
+       "item": {
+        "type": "Episode",
+        "title": "Heart of Stone",
+        "season": 3,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2720,
+       "size": 2014595072,
+       "item": {
+        "type": "Episode",
+        "title": "Destiny",
+        "season": 3,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 2080385024,
+       "item": {
+        "type": "Episode",
+        "title": "Prophet Motive",
+        "season": 3,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 18,
+     "slug": "season-3-disc-5",
+     "name": "Season 3 Disc 5",
+     "format": "DVD",
+     "content_hash": "866139561A49BA31ADE3F39728888959",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2717,
+       "size": 2023469056,
+       "item": {
+        "type": "Episode",
+        "title": "Visionary",
+        "season": 3,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2721,
+       "size": 2036848640,
+       "item": {
+        "type": "Episode",
+        "title": "Distant Voices",
+        "season": 3,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2713,
+       "size": 2042636288,
+       "item": {
+        "type": "Episode",
+        "title": "Through the Looking Glass",
+        "season": 3,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2714,
+       "size": 2025576448,
+       "item": {
+        "type": "Episode",
+        "title": "Improbable Cause (1)",
+        "season": 3,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 19,
+     "slug": "season-3-disc-6",
+     "name": "Season 3 Disc 6",
+     "format": "DVD",
+     "content_hash": "1D487DDF4A9261FB40FC10CF9BB1E436",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2722,
+       "size": 2035228672,
+       "item": {
+        "type": "Episode",
+        "title": "The Die Is Cast (2)",
+        "season": 3,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2723,
+       "size": 2072008704,
+       "item": {
+        "type": "Episode",
+        "title": "Explorers",
+        "season": 3,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2720,
+       "size": 2039678976,
+       "item": {
+        "type": "Episode",
+        "title": "Family Business",
+        "season": 3,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 2063613952,
+       "item": {
+        "type": "Episode",
+        "title": "Shakaar",
+        "season": 3,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 20,
+     "slug": "season-3-disc-7",
+     "name": "Season 3 Disc 7",
+     "format": "DVD",
+     "content_hash": "2404239C259D70168BE1FB32DDCAB465",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 2035171328,
+       "item": {
+        "type": "Episode",
+        "title": "Facets",
+        "season": 3,
+        "episode": 25
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2719,
+       "size": 2063556608,
+       "item": {
+        "type": "Episode",
+        "title": "The Adversary",
+        "season": 3,
+        "episode": 26
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 679,
+       "size": 723814400,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 763,
+       "size": 821192704,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 420,
+       "size": 449822720,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "06",
+       "duration_s": 705,
+       "size": 757321728,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "07",
+       "duration_s": 342,
+       "size": 364709888,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "08",
+       "duration_s": 136,
+       "size": 137355264,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "09",
+       "duration_s": 179,
+       "size": 188157952,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "10",
+       "duration_s": 159,
+       "size": 166402048,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "11",
+       "duration_s": 109,
+       "size": 107003904,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "12",
+       "duration_s": 135,
+       "size": 137328640,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "13",
+       "duration_s": 106,
+       "size": 103575552,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "14",
+       "duration_s": 109,
+       "size": 106444800,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 21,
+     "slug": "season-4-disc-1",
+     "name": "Season 4 Disc 1",
+     "format": "DVD",
+     "content_hash": "E54BC39525E41793FA167F1284C925F5",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 5569,
+       "size": 4192624640,
+       "item": {
+        "type": "Episode",
+        "title": "The Way of the Warrior",
+        "season": 4,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2722,
+       "size": 2050672640,
+       "item": {
+        "type": "Episode",
+        "title": "The Visitor",
+        "season": 4,
+        "episode": 3
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2722,
+       "size": 2028634112,
+       "item": {
+        "type": "Episode",
+        "title": "Hippocratic Oath",
+        "season": 4,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 22,
+     "slug": "season-4-disc-2",
+     "name": "Season 4 Disc 2",
+     "format": "DVD",
+     "content_hash": "1ECD99C9E15240005894F242689A19F2",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 2028636160,
+       "item": {
+        "type": "Episode",
+        "title": "Indiscretion",
+        "season": 4,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2717,
+       "size": 2029230080,
+       "item": {
+        "type": "Episode",
+        "title": "Rejoined",
+        "season": 4,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 2024357888,
+       "item": {
+        "type": "Episode",
+        "title": "Starship Down",
+        "season": 4,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 1996912640,
+       "item": {
+        "type": "Episode",
+        "title": "Little Green Men",
+        "season": 4,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 23,
+     "slug": "season-4-disc-3",
+     "name": "Season 4 Disc 3",
+     "format": "DVD",
+     "content_hash": "79C8D11B6CE07A24EF94CE6BDAAB593E",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2721,
+       "size": 2052800512,
+       "item": {
+        "type": "Episode",
+        "title": "The Sword of Kahless",
+        "season": 4,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2719,
+       "size": 2023014400,
+       "item": {
+        "type": "Episode",
+        "title": "Our Man Bashir",
+        "season": 4,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2720,
+       "size": 2005153792,
+       "item": {
+        "type": "Episode",
+        "title": "Homefront (1)",
+        "season": 4,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2721,
+       "size": 2036121600,
+       "item": {
+        "type": "Episode",
+        "title": "Paradise Lost (2)",
+        "season": 4,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 24,
+     "slug": "season-4-disc-4",
+     "name": "Season 4 Disc 4",
+     "format": "DVD",
+     "content_hash": "5B035AA77C179016A19BFF69074BDAB0",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 2027593728,
+       "item": {
+        "type": "Episode",
+        "title": "Crossfire",
+        "season": 4,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2720,
+       "size": 2018967552,
+       "item": {
+        "type": "Episode",
+        "title": "Return to Grace",
+        "season": 4,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 2026354688,
+       "item": {
+        "type": "Episode",
+        "title": "Sons of Mogh",
+        "season": 4,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2718,
+       "size": 2054000640,
+       "item": {
+        "type": "Episode",
+        "title": "Bar Association",
+        "season": 4,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 25,
+     "slug": "season-4-disc-5",
+     "name": "Season 4 Disc 5",
+     "format": "DVD",
+     "content_hash": "1A9A956118D70463385C757D1B6C79BC",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2715,
+       "size": 1994696704,
+       "item": {
+        "type": "Episode",
+        "title": "Accession",
+        "season": 4,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2715,
+       "size": 2003959808,
+       "item": {
+        "type": "Episode",
+        "title": "Rules of Engagement",
+        "season": 4,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2721,
+       "size": 2053163008,
+       "item": {
+        "type": "Episode",
+        "title": "Hard Time",
+        "season": 4,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2716,
+       "size": 2039816192,
+       "item": {
+        "type": "Episode",
+        "title": "Shattered Mirror",
+        "season": 4,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 26,
+     "slug": "season-4-disc-6",
+     "name": "Season 4 Disc 6",
+     "format": "DVD",
+     "content_hash": "936BBA8D8E1ED52E0E82A586E6E42882",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2719,
+       "size": 1938014208,
+       "item": {
+        "type": "Episode",
+        "title": "The Muse",
+        "season": 4,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2719,
+       "size": 2071928832,
+       "item": {
+        "type": "Episode",
+        "title": "For the Cause",
+        "season": 4,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2690,
+       "size": 2103750656,
+       "item": {
+        "type": "Episode",
+        "title": "To the Death",
+        "season": 4,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 2115227648,
+       "item": {
+        "type": "Episode",
+        "title": "The Quickening",
+        "season": 4,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 27,
+     "slug": "season-4-disc-7",
+     "name": "Season 4 Disc 7",
+     "format": "DVD",
+     "content_hash": "3F93FA86731F1C09052A49DBB0D45109",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2723,
+       "size": 2046820352,
+       "item": {
+        "type": "Episode",
+        "title": "Body Parts",
+        "season": 4,
+        "episode": 25
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2716,
+       "size": 2050654208,
+       "item": {
+        "type": "Episode",
+        "title": "Broken Link",
+        "season": 4,
+        "episode": 26
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 1102,
+       "size": 844959744,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 859,
+       "size": 658046976,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 670,
+       "size": 514934784,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "06",
+       "duration_s": 611,
+       "size": 467902464,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "07",
+       "duration_s": 107,
+       "size": 121636864,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "09",
+       "duration_s": 206,
+       "size": 155385856,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "10",
+       "duration_s": 224,
+       "size": 168927232,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "11",
+       "duration_s": 105,
+       "size": 79183872,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "12",
+       "duration_s": 309,
+       "size": 229820416,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "13",
+       "duration_s": 304,
+       "size": 228632576,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "14",
+       "duration_s": 200,
+       "size": 155162624,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "15",
+       "duration_s": 173,
+       "size": 129531904,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "16",
+       "duration_s": 244,
+       "size": 187684864,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "17",
+       "duration_s": 148,
+       "size": 112633856,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "18",
+       "duration_s": 174,
+       "size": 131549184,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 28,
+     "slug": "season-5-disc-1",
+     "name": "Season 5 Disc 1",
+     "format": "DVD",
+     "content_hash": "3BA7925DF93A94EB3104C890832C6C61",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2721,
+       "size": 2091290624,
+       "item": {
+        "type": "Episode",
+        "title": "Apocalypse Rising",
+        "season": 5,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2716,
+       "size": 2073913344,
+       "item": {
+        "type": "Episode",
+        "title": "The Ship",
+        "season": 5,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2718,
+       "size": 2093467648,
+       "item": {
+        "type": "Episode",
+        "title": "Looking for par'Mach in All the Wrong Places",
+        "season": 5,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2721,
+       "size": 2114486272,
+       "item": {
+        "type": "Episode",
+        "title": "Nor the Battle to the Strong",
+        "season": 5,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 29,
+     "slug": "season-5-disc-2",
+     "name": "Season 5 Disc 2",
+     "format": "DVD",
+     "content_hash": "29E7D2A87928090B11F81A68D360A128",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2725,
+       "size": 2087372800,
+       "item": {
+        "type": "Episode",
+        "title": "The Assignment",
+        "season": 5,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2725,
+       "size": 2069995520,
+       "item": {
+        "type": "Episode",
+        "title": "Trials and Tribble-ations",
+        "season": 5,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2722,
+       "size": 2137812992,
+       "item": {
+        "type": "Episode",
+        "title": "Let He Who Is Without Sin...",
+        "season": 5,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2724,
+       "size": 1983211520,
+       "item": {
+        "type": "Episode",
+        "title": "Things Past",
+        "season": 5,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 30,
+     "slug": "season-5-disc-3",
+     "name": "Season 5 Disc 3",
+     "format": "DVD",
+     "content_hash": "AD792267E2BAD967E5DF696580335C03",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2717,
+       "size": 2032564224,
+       "item": {
+        "type": "Episode",
+        "title": "The Ascent",
+        "season": 5,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2716,
+       "size": 2042466304,
+       "item": {
+        "type": "Episode",
+        "title": "Rapture",
+        "season": 5,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2718,
+       "size": 2098591744,
+       "item": {
+        "type": "Episode",
+        "title": "The Darkness and the Light",
+        "season": 5,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2718,
+       "size": 2100344832,
+       "item": {
+        "type": "Episode",
+        "title": "The Begotten",
+        "season": 5,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 31,
+     "slug": "season-5-disc-4",
+     "name": "Season 5 Disc 4",
+     "format": "DVD",
+     "content_hash": "E4A58A5DE9516471AE19792936E1EA15",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2723,
+       "size": 1902254080,
+       "item": {
+        "type": "Episode",
+        "title": "For the Uniform",
+        "season": 5,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2720,
+       "size": 1953855488,
+       "item": {
+        "type": "Episode",
+        "title": "In Purgatory's Shadow (1)",
+        "season": 5,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2718,
+       "size": 2111127552,
+       "item": {
+        "type": "Episode",
+        "title": "By Inferno's Light (2)",
+        "season": 5,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2719,
+       "size": 2106382336,
+       "item": {
+        "type": "Episode",
+        "title": "Doctor Bashir, I Presume?",
+        "season": 5,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 32,
+     "slug": "season-5-disc-5",
+     "name": "Season 5 Disc 5",
+     "format": "DVD",
+     "content_hash": "D1713DC4AFA8383305647675EDB9C0DB",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2719,
+       "size": 2032121856,
+       "item": {
+        "type": "Episode",
+        "title": "A Simple Investigation",
+        "season": 5,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2718,
+       "size": 2090436608,
+       "item": {
+        "type": "Episode",
+        "title": "Business As Usual",
+        "season": 5,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2721,
+       "size": 1984702464,
+       "item": {
+        "type": "Episode",
+        "title": "Ties of Blood and Water",
+        "season": 5,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2721,
+       "size": 1995315200,
+       "item": {
+        "type": "Episode",
+        "title": "Ferengi Love Songs",
+        "season": 5,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 33,
+     "slug": "season-5-disc-6",
+     "name": "Season 5 Disc 6",
+     "format": "DVD",
+     "content_hash": "42224FF31747E65F93B92F061B017FB0",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2717,
+       "size": 2071967744,
+       "item": {
+        "type": "Episode",
+        "title": "Soldiers of the Empire",
+        "season": 5,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2719,
+       "size": 2068746240,
+       "item": {
+        "type": "Episode",
+        "title": "Children of Time",
+        "season": 5,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2719,
+       "size": 2074019840,
+       "item": {
+        "type": "Episode",
+        "title": "Blaze of Glory",
+        "season": 5,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2717,
+       "size": 2054727680,
+       "item": {
+        "type": "Episode",
+        "title": "Empok Nor",
+        "season": 5,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 34,
+     "slug": "season-5-disc-7",
+     "name": "Season 5 Disc 7",
+     "format": "DVD",
+     "content_hash": "CF22CBAD6944BA2B4831226DC5E38277",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2718,
+       "size": 1992212480,
+       "item": {
+        "type": "Episode",
+        "title": "In the Cards",
+        "season": 5,
+        "episode": 25
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2718,
+       "size": 1967257600,
+       "item": {
+        "type": "Episode",
+        "title": "Call to Arms",
+        "season": 5,
+        "episode": 26
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 1018,
+       "size": 760557568,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 997,
+       "size": 737255424,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 689,
+       "size": 487743488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "06",
+       "duration_s": 439,
+       "size": 318971904,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "07",
+       "duration_s": 441,
+       "size": 317108224,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "09",
+       "duration_s": 107,
+       "size": 121636864,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "10",
+       "duration_s": 181,
+       "size": 126728192,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "11",
+       "duration_s": 185,
+       "size": 130140160,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "12",
+       "duration_s": 125,
+       "size": 85200896,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "13",
+       "duration_s": 134,
+       "size": 92534784,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "14",
+       "duration_s": 176,
+       "size": 121485312,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "15",
+       "duration_s": 151,
+       "size": 104927232,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "16",
+       "duration_s": 183,
+       "size": 116336640,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "17",
+       "duration_s": 205,
+       "size": 144033792,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "18",
+       "duration_s": 213,
+       "size": 151920640,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 17,
+       "makemkv_title": 17,
+       "source_file": "19",
+       "duration_s": 251,
+       "size": 180396032,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 35,
+     "slug": "season-6-disc-1",
+     "name": "Season 6 Disc 1",
+     "format": "DVD",
+     "content_hash": "0F2EFC777B50A923173CB4D987E7063D",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2709,
+       "size": 2014027776,
+       "item": {
+        "type": "Episode",
+        "title": "A Time to Stand",
+        "season": 6,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2708,
+       "size": 1950523392,
+       "item": {
+        "type": "Episode",
+        "title": "Rocks and Shoals",
+        "season": 6,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2712,
+       "size": 2130098176,
+       "item": {
+        "type": "Episode",
+        "title": "Sons and Daughters",
+        "season": 6,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2710,
+       "size": 2070722560,
+       "item": {
+        "type": "Episode",
+        "title": "Behind the Lines",
+        "season": 6,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 36,
+     "slug": "season-6-disc-2",
+     "name": "Season 6 Disc 2",
+     "format": "DVD",
+     "content_hash": "BF58B48F241B2BEBDACF6ADA21A025B3",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2709,
+       "size": 2020532224,
+       "item": {
+        "type": "Episode",
+        "title": "Favor the Bold (1)",
+        "season": 6,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2707,
+       "size": 2081126400,
+       "item": {
+        "type": "Episode",
+        "title": "Sacrifice of Angels (2)",
+        "season": 6,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2707,
+       "size": 2097690624,
+       "item": {
+        "type": "Episode",
+        "title": "You Are Cordially Invited",
+        "season": 6,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2707,
+       "size": 2109112320,
+       "item": {
+        "type": "Episode",
+        "title": "Resurrection",
+        "season": 6,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 37,
+     "slug": "season-6-disc-3",
+     "name": "Season 6 Disc 3",
+     "format": "DVD",
+     "content_hash": "3EA65010998CB49612F9A5D069092B70",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2710,
+       "size": 2044561408,
+       "item": {
+        "type": "Episode",
+        "title": "Statistical Probabilities",
+        "season": 6,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2711,
+       "size": 2032859136,
+       "item": {
+        "type": "Episode",
+        "title": "The Magnificent Ferengi",
+        "season": 6,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2707,
+       "size": 2220220416,
+       "item": {
+        "type": "Episode",
+        "title": "Waltz",
+        "season": 6,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2706,
+       "size": 1830621184,
+       "item": {
+        "type": "Episode",
+        "title": "Who Mourns for Morn?",
+        "season": 6,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 38,
+     "slug": "season-6-disc-4",
+     "name": "Season 6 Disc 4",
+     "format": "DVD",
+     "content_hash": "204D25A9370AEE21628B3B111C868339",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2705,
+       "size": 2010527744,
+       "item": {
+        "type": "Episode",
+        "title": "Far Beyond the Stars",
+        "season": 6,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2708,
+       "size": 2070847488,
+       "item": {
+        "type": "Episode",
+        "title": "One Little Ship",
+        "season": 6,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2706,
+       "size": 2067503104,
+       "item": {
+        "type": "Episode",
+        "title": "Honor Among Thieves",
+        "season": 6,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2709,
+       "size": 2062370816,
+       "item": {
+        "type": "Episode",
+        "title": "Change of Heart",
+        "season": 6,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 39,
+     "slug": "season-6-disc-5",
+     "name": "Season 6 Disc 5",
+     "format": "DVD",
+     "content_hash": "C61519A6C33F39FACB0A0BB4A236656F",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2710,
+       "size": 2045755392,
+       "item": {
+        "type": "Episode",
+        "title": "Wrongs Darker Than Death or Night",
+        "season": 6,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2711,
+       "size": 2097418240,
+       "item": {
+        "type": "Episode",
+        "title": "Inquisition",
+        "season": 6,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2707,
+       "size": 1975320576,
+       "item": {
+        "type": "Episode",
+        "title": "In the Pale Moonlight",
+        "season": 6,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2705,
+       "size": 2031460352,
+       "item": {
+        "type": "Episode",
+        "title": "His Way",
+        "season": 6,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 40,
+     "slug": "season-6-disc-6",
+     "name": "Season 6 Disc 6",
+     "format": "DVD",
+     "content_hash": "50972D5CFFCB769F3B355C4F3A3A4567",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2709,
+       "size": 1937164288,
+       "item": {
+        "type": "Episode",
+        "title": "The Reckoning",
+        "season": 6,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2708,
+       "size": 2065479680,
+       "item": {
+        "type": "Episode",
+        "title": "Valiant",
+        "season": 6,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2705,
+       "size": 2081732608,
+       "item": {
+        "type": "Episode",
+        "title": "Profit and Lace",
+        "season": 6,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2707,
+       "size": 2131546112,
+       "item": {
+        "type": "Episode",
+        "title": "Time's Orphan",
+        "season": 6,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 41,
+     "slug": "season-6-disc-7",
+     "name": "Season 6 Disc 7",
+     "format": "DVD",
+     "content_hash": "E0CDDC6B972A34C3A109756265404CDA",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2708,
+       "size": 2079526912,
+       "item": {
+        "type": "Episode",
+        "title": "The Sound of Her Voice",
+        "season": 6,
+        "episode": 25
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2709,
+       "size": 2062813184,
+       "item": {
+        "type": "Episode",
+        "title": "Tears of the Prophets",
+        "season": 6,
+        "episode": 26
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 528,
+       "size": 397623296,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 654,
+       "size": 483291136,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 860,
+       "size": 644571136,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "06",
+       "duration_s": 959,
+       "size": 724768768,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "07",
+       "duration_s": 555,
+       "size": 418031616,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "09",
+       "duration_s": 107,
+       "size": 121636864,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "10",
+       "duration_s": 147,
+       "size": 106887168,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "11",
+       "duration_s": 242,
+       "size": 177483776,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "12",
+       "duration_s": 102,
+       "size": 72691712,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "13",
+       "duration_s": 212,
+       "size": 156315648,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "14",
+       "duration_s": 169,
+       "size": 122714112,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "15",
+       "duration_s": 78,
+       "size": 54415360,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "16",
+       "duration_s": 150,
+       "size": 108341248,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "17",
+       "duration_s": 197,
+       "size": 146948096,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "18",
+       "duration_s": 136,
+       "size": 99887104,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 17,
+       "makemkv_title": 17,
+       "source_file": "19",
+       "duration_s": 168,
+       "size": 122447872,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 42,
+     "slug": "season-7-disc-1",
+     "name": "Season 7 Disc 1",
+     "format": "DVD",
+     "content_hash": "2D310968A583B20D36630DDA26E5A206",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2697,
+       "size": 2039891968,
+       "item": {
+        "type": "Episode",
+        "title": "Image in the Sand",
+        "season": 7,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2700,
+       "size": 2039924736,
+       "item": {
+        "type": "Episode",
+        "title": "Shadows and Symbols",
+        "season": 7,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2697,
+       "size": 2044188672,
+       "item": {
+        "type": "Episode",
+        "title": "Afterimage",
+        "season": 7,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2694,
+       "size": 2149808128,
+       "item": {
+        "type": "Episode",
+        "title": "Take Me Out to the Holosuite",
+        "season": 7,
+        "episode": 4
+       }
+      }
+     ]
+    },
+    {
+     "index": 43,
+     "slug": "season-7-disc-2",
+     "name": "Season 7 Disc 2",
+     "format": "DVD",
+     "content_hash": "6CF5C32C6FD1C4C0C1597BA4A564D61F",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2697,
+       "size": 2075162624,
+       "item": {
+        "type": "Episode",
+        "title": "Chrysalis",
+        "season": 7,
+        "episode": 5
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2704,
+       "size": 2000058368,
+       "item": {
+        "type": "Episode",
+        "title": "Treachery, Faith, and the Great River",
+        "season": 7,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2700,
+       "size": 2032533504,
+       "item": {
+        "type": "Episode",
+        "title": "Once More Unto the Breach",
+        "season": 7,
+        "episode": 7
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2700,
+       "size": 2108680192,
+       "item": {
+        "type": "Episode",
+        "title": "The Siege of AR-558",
+        "season": 7,
+        "episode": 8
+       }
+      }
+     ]
+    },
+    {
+     "index": 44,
+     "slug": "season-7-disc-3",
+     "name": "Season 7 Disc 3",
+     "format": "DVD",
+     "content_hash": "938EB79561427A5FFEC9DE6586AABD8B",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2698,
+       "size": 2046707712,
+       "item": {
+        "type": "Episode",
+        "title": "Covenant",
+        "season": 7,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2699,
+       "size": 2039642112,
+       "item": {
+        "type": "Episode",
+        "title": "It's Only a Paper Moon",
+        "season": 7,
+        "episode": 10
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2697,
+       "size": 2038433792,
+       "item": {
+        "type": "Episode",
+        "title": "Prodigal Daughter",
+        "season": 7,
+        "episode": 11
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2700,
+       "size": 2043318272,
+       "item": {
+        "type": "Episode",
+        "title": "The Emperor's New Cloak",
+        "season": 7,
+        "episode": 12
+       }
+      }
+     ]
+    },
+    {
+     "index": 45,
+     "slug": "season-7-disc-4",
+     "name": "Season 7 Disc 4",
+     "format": "DVD",
+     "content_hash": "6C96DEFA4FA697407EC668179C2455A5",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2700,
+       "size": 2047823872,
+       "item": {
+        "type": "Episode",
+        "title": "Field of Fire",
+        "season": 7,
+        "episode": 13
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2696,
+       "size": 2045882368,
+       "item": {
+        "type": "Episode",
+        "title": "Chimera",
+        "season": 7,
+        "episode": 14
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2698,
+       "size": 2107029504,
+       "item": {
+        "type": "Episode",
+        "title": "Badda-Bing, Badda-Bang",
+        "season": 7,
+        "episode": 15
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2698,
+       "size": 2083893248,
+       "item": {
+        "type": "Episode",
+        "title": "Inter Arma Enim Silent Leges",
+        "season": 7,
+        "episode": 16
+       }
+      }
+     ]
+    },
+    {
+     "index": 46,
+     "slug": "season-7-disc-5",
+     "name": "Season 7 Disc 5",
+     "format": "DVD",
+     "content_hash": "F24A8AC8E8E8E0609DD18861ADF7648D",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2696,
+       "size": 1967847424,
+       "item": {
+        "type": "Episode",
+        "title": "Penumbra",
+        "season": 7,
+        "episode": 17
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2698,
+       "size": 2042767360,
+       "item": {
+        "type": "Episode",
+        "title": "'Til Death Do Us Part",
+        "season": 7,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2693,
+       "size": 2090608640,
+       "item": {
+        "type": "Episode",
+        "title": "Strange Bedfellows",
+        "season": 7,
+        "episode": 19
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2702,
+       "size": 2080905216,
+       "item": {
+        "type": "Episode",
+        "title": "The Changing Face of Evil",
+        "season": 7,
+        "episode": 20
+       }
+      }
+     ]
+    },
+    {
+     "index": 47,
+     "slug": "season-7-disc-6",
+     "name": "Season 7 Disc 6",
+     "format": "DVD",
+     "content_hash": "117D8B8BB4A301010B296243A3826313",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 2694,
+       "size": 2049497088,
+       "item": {
+        "type": "Episode",
+        "title": "When It Rains...",
+        "season": 7,
+        "episode": 21
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 2699,
+       "size": 2055825408,
+       "item": {
+        "type": "Episode",
+        "title": "Tacking Into the Wind",
+        "season": 7,
+        "episode": 22
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 2698,
+       "size": 2063216640,
+       "item": {
+        "type": "Episode",
+        "title": "Extreme Measures",
+        "season": 7,
+        "episode": 23
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 2700,
+       "size": 2170150912,
+       "item": {
+        "type": "Episode",
+        "title": "The Dogs of War",
+        "season": 7,
+        "episode": 24
+       }
+      }
+     ]
+    },
+    {
+     "index": 48,
+     "slug": "season-7-disk-7",
+     "name": "Season 7 Disk 7",
+     "format": "DVD",
+     "content_hash": "FE6C923DE5B44D682A61BAE2C07FDC5E",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "01",
+       "duration_s": 5499,
+       "size": 4021798912,
+       "item": {
+        "type": "Episode",
+        "title": "What You Leave Behind",
+        "season": 7,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "02",
+       "duration_s": 921,
+       "size": 763467776,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "03",
+       "duration_s": 782,
+       "size": 621721600,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "04",
+       "duration_s": 608,
+       "size": 501135360,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "05",
+       "duration_s": 852,
+       "size": 713394176,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "07",
+       "duration_s": 143,
+       "size": 128565248,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "08",
+       "duration_s": 157,
+       "size": 126093312,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "09",
+       "duration_s": 267,
+       "size": 214034432,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "10",
+       "duration_s": 172,
+       "size": 139458560,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "11",
+       "duration_s": 184,
+       "size": 152786944,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "12",
+       "duration_s": 254,
+       "size": 204486656,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "13",
+       "duration_s": 185,
+       "size": 147093504,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "14",
+       "duration_s": 208,
+       "size": 169287680,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "15",
+       "duration_s": 155,
+       "size": 124227584,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "16",
+       "duration_s": 259,
+       "size": 213901312,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
