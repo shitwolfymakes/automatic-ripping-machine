@@ -1,19 +1,24 @@
 ---
 name: project-tv-match-corpus
-description: Real-disc TV corpus from TheDiscDB under services/backend/tests/fixtures/thediscdb/ and the matcher baseline it measured (2026-10-23); use it for any episode-matching change
+description: Real-disc TV corpus from TheDiscDB under services/backend/tests/fixtures/thediscdb/ (260 discs, 9 series) and the matcher baseline it measures; use it for any episode-matching change
 metadata:
   type: project
 ---
 
-Since 2026-10-23 a corpus of 200 real TV discs (7 series) built from the
+A corpus of 260 real TV discs (9 series, two of them deep-season) built from the
 TheDiscDB data repo lives at `services/backend/tests/fixtures/thediscdb/`
 (generator `devtools/thediscdb-fixture.py`, upstream commit in
 `manifest.json`; loader `tests/thediscdb_corpus.py`; baseline harness
-`devtools/tv-match-baseline.py`). Branch `feat/tv-season-selection`. Review
+`devtools/tv-match-baseline.py`; regression floor
+`services/backend/tests/test_tv_match_baseline.py`). Review
 and numbers: `../arm-ai/arm-v3/docs/superpowers/specs/2026-10-23-tv-season-selection-review.md`.
 
-Baseline of the current matcher on it: 24% of titles placed correctly with the
-season known, 51% with lower discs already ripped. Causes: extras inflate the
+Baseline of the matcher on it (`--min-seconds 60`, all 9 series): 24% of
+titles placed correctly with the season known, 16% with nothing known, 47%
+with lower discs already ripped. On the original 7 series the correct
+placements are: nothing known 164, season known 242, season + disc known 308,
+lower discs held 467, higher discs held 253, all others held 381 (the
+regression test's floor). Causes of the misses: extras inflate the
 anchor's title count, 42% of discs list episodes out of MakeMKV title order
 (16% out of playlist order too), uniform runtimes are always ambiguous, bonus
 discs repeat a season.
