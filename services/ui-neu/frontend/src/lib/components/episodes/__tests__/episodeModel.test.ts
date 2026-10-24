@@ -201,10 +201,22 @@ describe('season candidates and hold reasons', () => {
 	});
 	it('lists candidate seasons from alternatives', () => {
 		const id = {
-			sources: { episodes_tmdb: { status: 'ok', alternatives: [{ season: 3, coverage: 1, matches: 6 }] } }
+			sources: {
+				episodes_tmdb: {
+					status: 'ok',
+					alternatives: [
+						{ season: 3, coverage: 0.75, matches: 3 },
+						{ season: 4, matches: 2 }
+					]
+				}
+			}
 		} as unknown as IdentityView;
-		expect(seasonAlternatives(id, 'episodes_tmdb')).toEqual([{ season: 3, matches: 6, total: 0 }]);
-		expect(seasonAlternatives(id, 'episodes_tmdb', 6)).toEqual([{ season: 3, matches: 6, total: 6 }]);
+		// The total is the season's own title count (3 / 0.75 = 4), not the rows shown.
+		expect(seasonAlternatives(id, 'episodes_tmdb', 6)).toEqual([
+			{ season: 3, matches: 3, total: 4 },
+			{ season: 4, matches: 2, total: 6 }
+		]);
+		expect(seasonAlternatives(id, 'episodes_tmdb')[1].total).toBe(0);
 		expect(seasonAlternatives(id, null)).toEqual([]);
 	});
 	it('names the held season from the source proposals', () => {

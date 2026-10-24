@@ -12,9 +12,10 @@ const FILES = [
 	'JobInfoForm.svelte',
 	'episodes/EpisodeMatchPanel.svelte',
 	'episodes/EpisodeRows.svelte',
-	'episodes/RerunPanel.svelte'
+	'episodes/RerunPanel.svelte',
+	'episodes/SeasonSelect.svelte'
 ];
-const NON_ASCII = /[—–·…→✓✗⚠]/;
+const NON_ASCII = /[—–·…→✓✗⚠≥○▾]/;
 
 function copyOf(file: string): string {
 	return readFileSync(resolve(__dirname, '..', file), 'utf8')

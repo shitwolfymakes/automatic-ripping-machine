@@ -220,13 +220,19 @@ export function holdReasons(identity: IdentityView, source: string | null): stri
 	return codes.map((c) => HOLD_REASON_TEXT[String(c)]).filter((t): t is string => !!t);
 }
 
-/** The other seasons the source's scan found a fit in, best first; `total` is
- * the disc's title count the caller passes in. */
-export function seasonAlternatives(identity: IdentityView, source: string | null, total = 0): SeasonCandidate[] {
+/** The other seasons the source's scan found a fit in, best first. Each
+ * total is the number of titles that season was matched over (its matches
+ * over its coverage); `fallback` stands in when the coverage is unknown. */
+export function seasonAlternatives(identity: IdentityView, source: string | null, fallback = 0): SeasonCandidate[] {
 	const alts = source ? (identity.sources?.[source]?.alternatives ?? []) : [];
 	return alts
 		.filter((a) => typeof a.season === 'number')
-		.map((a) => ({ season: a.season as number, matches: Number(a.matches ?? 0), total }));
+		.map((a) => {
+			const matches = Number(a.matches ?? 0);
+			const coverage = Number(a.coverage ?? 0);
+			const total = coverage > 0 ? Math.round(matches / coverage) : fallback;
+			return { season: a.season as number, matches, total };
+		});
 }
 
 /** The season the source's own (held) result placed the tracks in, by its

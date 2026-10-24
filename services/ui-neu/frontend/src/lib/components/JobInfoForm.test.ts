@@ -150,7 +150,7 @@ describe('JobInfoForm', () => {
 	});
 
 	it('shows the season empty when unknown and saves a typed season', async () => {
-		mockResolve.mockResolvedValue({} as any);
+		mockResolve.mockResolvedValue({ job: job({ season: 7 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
 		renderComponent(JobInfoForm, { props: { job: job({ season: null }), onsaved } });
 		const season = screen.getByLabelText('Season') as HTMLInputElement;
@@ -177,11 +177,34 @@ describe('JobInfoForm', () => {
 	});
 
 	it('reports a disc change', async () => {
+		mockResolve.mockResolvedValue({ job: job({ disc_number: 2 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
 		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
 		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
 		await fireEvent.click(screen.getByText('Save'));
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: true }));
+	});
+
+	it('reports nothing changed when a cleared season comes back the same', async () => {
+		// The label owns the season: clearing it re-resolves to the same value.
+		mockResolve.mockResolvedValue({ job: job({ season: 2 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, {
+			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }), onsaved }
+		});
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: null })));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: false }));
+	});
+
+	it('a disc-total-only edit changes neither season nor disc', async () => {
+		mockResolve.mockResolvedValue({ job: job({ disc_total: 3 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: false }));
 	});
 
 	it('shows the provenance line for a set season', () => {

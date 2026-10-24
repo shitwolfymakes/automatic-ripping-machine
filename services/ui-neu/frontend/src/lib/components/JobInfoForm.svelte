@@ -53,17 +53,22 @@
 		feedback = null;
 		try {
 			// Season is sent only when touched: omitted keeps the stored value, null forgets it.
-			const changed = {
-				season: !!touched.season && num(season) !== (job.season ?? null),
-				disc: num(discNumber) !== (job.disc_number ?? null) || num(discTotal) !== (job.disc_total ?? null)
-			};
-			await resolveJob(job.id, {
+			const before = { season: job.season ?? null, disc: job.disc_number ?? null };
+			const resp = await resolveJob(job.id, {
 				title: title.trim(),
 				year: num(year),
 				...(touched.season ? { season: num(season) } : {}),
 				disc_number: num(discNumber),
 				disc_total: num(discTotal)
 			});
+			// What the save changed, read from the saved job: a cleared value the
+			// backend re-resolves to the same one changed nothing, and the disc
+			// total never re-runs the episode match.
+			const after = resp?.job;
+			const changed = {
+				season: !!after && before.season !== (after.season ?? null),
+				disc: !!after && before.disc !== (after.disc_number ?? null)
+			};
 			touched = {};
 			feedback = { type: 'success', message: 'Saved' };
 			onrefresh?.();

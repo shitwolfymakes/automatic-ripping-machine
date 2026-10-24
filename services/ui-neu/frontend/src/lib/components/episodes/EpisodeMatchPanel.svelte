@@ -37,6 +37,7 @@
 		type RerunForm,
 		type SeasonCandidate
 	} from './episodeModel';
+	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
 
@@ -307,10 +308,13 @@
 	// A row's own season: one picked for it here (not saved until an episode
 	// is picked), else its saved one; null when neither is set.
 	const savedOrPicked = (row: EpisodeRow): number | null => rowSeason[row.trackId] ?? row.season;
-	// The season a row's list comes from: its own, else the job's; null when
+	// The disc's season the rows fall back to: the re-run form's season while
+	// the form is open and names one, else the job's; null when none is known.
+	const discSeason = $derived(rerunOpen && typeof rerun.season === 'number' ? rerun.season : (job.season ?? null));
+	// The season a row's list comes from: its own, else the disc's; null when
 	// none is known (the disc's season is never assumed).
-	const seasonOf = (row: EpisodeRow): number | null => savedOrPicked(row) ?? job.season ?? null;
-	// The rows as shown: each carries its own season (EpisodeRows falls back to the job's).
+	const seasonOf = (row: EpisodeRow): number | null => savedOrPicked(row) ?? discSeason;
+	// The rows as shown: each carries its own season (EpisodeRows falls back to the disc's).
 	const shownRows = $derived(rows.map((r) => ({ ...r, season: savedOrPicked(r) })));
 
 	// Every season a row shows gets its episode list, once per job and source.
@@ -358,7 +362,7 @@
 	// The by-hand choices of a shown row (its season already resolved). The
 	// roles need no season; the episodes do.
 	function optionsFor(row: EpisodeRow) {
-		const season = row.season ?? job.season ?? null;
+		const season = row.season ?? discSeason;
 		if (season == null) return ROLE_OPTIONS;
 		return pickerOptions(episodesBySeason.get(season) ?? [], season, row.seconds, usedIn(season, row.trackId));
 	}
@@ -403,20 +407,28 @@
 
 	// Fill the rest: preview the source over the tracks not set by hand (the
 	// backend keeps each hand-set track and reserves its episode), shown in the
-	// re-run form so its Apply is at hand.
-	const canFill = $derived(!!pickerSource && rows.some((r) => r.handSet) && rows.some((r) => r.code === 'Not placed'));
+	// re-run form so its Apply is at hand. Offered once a track is set by hand
+	// and another is not, however the others were placed.
+	const canFill = $derived(!!pickerSource && rows.some((r) => r.handSet) && rows.some((r) => !r.handSet));
+	// The season to fill in: the job's, else the one season every hand-set row
+	// was saved in; null (no season sent) when they disagree or none is known.
+	function fillSeason(): number | null {
+		if (job.season != null) return job.season;
+		const held = new Set(rows.filter((r) => r.handSet).map((r) => r.season));
+		const [only] = held;
+		return held.size === 1 && only != null ? only : null;
+	}
 	function fillTheRest() {
 		const src = pickerSource;
 		if (!src) return;
-		rerun = { source: src, season: job.season ?? null, disc: job.disc_number ?? null, tolerance: null };
+		const season = fillSeason();
+		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
 		rerunOpen = true;
 		dropPreview();
-		return run({
-			source: src,
-			season: job.season ?? undefined,
-			disc_number: job.disc_number ?? undefined,
-			apply: false
-		});
+		const req: MatchRequest = { source: src, apply: false };
+		if (season != null) req.season = season;
+		if (job.disc_number != null) req.disc_number = job.disc_number;
+		return run(req);
 	}
 
 	async function revert(trackId: string) {
@@ -514,7 +526,7 @@
 						aria-expanded={othersOpen}
 						onclick={() => (othersOpen = !othersOpen)}
 					>
-						Other sources ▾
+						Other sources <Glyph name="chevron-down" />
 					</button>
 				{/if}
 			</span>
@@ -638,7 +650,7 @@
 				proposedLabel={preview && previewSource ? labelOf(previewSource) : null}
 				optionsFor={canAct && !preview ? optionsFor : null}
 				{seasons}
-				panelSeason={job.season ?? null}
+				panelSeason={discSeason}
 				onseason={setRowSeason}
 				onpick={setByHand}
 				onrevert={revert}

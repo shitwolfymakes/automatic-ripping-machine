@@ -43,7 +43,7 @@
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
-	// "Matching episodes…" while the Backend re-matches after a type flip or a
+	// "Matching episodes..." while the Backend re-matches after a type flip or a
 	// series apply; job.identity_updated for this job (or a timeout) ends it.
 	const matching = new EpisodeMatching();
 	let editingTrackId = $state<string | null>(null);

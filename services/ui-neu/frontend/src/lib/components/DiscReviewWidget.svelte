@@ -76,7 +76,7 @@
 	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
-	// "Matching episodes…" while the Backend re-matches after a series pick or a
+	// "Matching episodes..." while the Backend re-matches after a series pick or a
 	// flip to TV; job.identity_updated for this job (or a timeout) ends it.
 	const matching = new EpisodeMatching();
 	let showApplySession = $state(false);
@@ -135,14 +135,14 @@
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
 	let episodeRow = $derived(episodeStatus(displayJob, data ? tracks : null, matching.active));
-	// "TMDb · 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
+	// "TMDb, 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
 	let matchingDetail = $derived.by(() => {
 		if (!episodeRow) return null;
 		const { source, total, unmatched } = episodeRow;
 		const counts = total && unmatched != null ? `${total - unmatched} of ${total} titles` : null;
 		return [source, counts].filter(Boolean).join(', ') || null;
 	});
-	// The SHOW / MATCH row's trailing detail: "TV Series · 1974–1975 · Season 2" or "Movie · 1999".
+	// The SHOW / MATCH row's trailing detail: "TV Series, 1974-1975, Season 2" or "Movie, 1999".
 	let matchDetail = $derived.by(() => {
 		const facts = (displayJob.metadata_json?.identity as { facts?: { end_year?: number | null } } | undefined)?.facts;
 		const end = facts?.end_year;
@@ -163,7 +163,7 @@
 			return p && p !== 'manual' ? providerLabel(p) : null;
 		})()
 	);
-	// "Blu-ray · Disc 1/4 · 6 titles", leaving out the parts that are empty.
+	// "Blu-ray, Disc 1/4, 6 titles", leaving out the parts that are empty.
 	let discLine = $derived(
 		[
 			discTypeLabel(displayJob.disc_type),

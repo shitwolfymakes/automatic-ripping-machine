@@ -109,7 +109,14 @@ vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } }))
 }));
 
-import { fetchJob, updateTrack, fetchNamingPreview, setJobMediaType, acceptIdentitySuggestion } from '$lib/api/jobs';
+import {
+	fetchJob,
+	updateTrack,
+	fetchNamingPreview,
+	setJobMediaType,
+	acceptIdentitySuggestion,
+	resolveJob
+} from '$lib/api/jobs';
 import * as authStore from '$lib/stores/auth';
 import { fetchIdentity } from '$lib/api/identity';
 import { ApiError } from '$lib/api/client';
@@ -694,6 +701,38 @@ describe('Job detail page (v3)', () => {
 			renderComponent(Page);
 			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
 			expect(await screen.findByLabelText('Season')).toBeInTheDocument();
+		});
+
+		it('starts matching when an Info save changed a TV job season', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: null }));
+			vi.mocked(resolveJob).mockResolvedValueOnce({
+				job: createJob({ id: 'job_42', media_type: 'tv', season: 3 }),
+				fan_out: []
+			});
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
+			await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '3' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(resolveJob).toHaveBeenCalled());
+			await fireEvent.click(screen.getByRole('button', { name: 'Match Episodes' }));
+			expect(await screen.findByText('Matching episodes...')).toBeInTheDocument();
+		});
+
+		it('does not start matching when an Info save changed a movie job season', async () => {
+			// The save's refresh turns the job into TV, so the panel can be opened
+			// to see that the movie-time save started nothing.
+			mockFetchJob.mockResolvedValueOnce(tvJob({ status: 'identified', media_type: 'movie', has_series: false }));
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: 3 }));
+			vi.mocked(resolveJob).mockResolvedValueOnce({
+				job: createJob({ id: 'job_42', media_type: 'movie', season: 3 }),
+				fan_out: []
+			});
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
+			await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '3' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Match Episodes' }));
+			expect(screen.queryByText('Matching episodes...')).not.toBeInTheDocument();
 		});
 
 		it('hides Match Episodes for a movie job', async () => {
