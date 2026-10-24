@@ -10,6 +10,9 @@
 	interface Props {
 		form: RerunForm;
 		sources: { id: EpisodeSource; label: string; disabled: boolean }[];
+		/** The source's regular seasons; null when the list could not load (the
+		 * season is then a number input). */
+		seasons: number[] | null;
 		busy: boolean;
 		/** Changed-track count and source label of the preview on screen, if any. */
 		preview: { changed: number; label: string } | null;
@@ -22,6 +25,7 @@
 	let {
 		form = $bindable(),
 		sources,
+		seasons,
 		busy,
 		preview,
 		onfieldchange,
@@ -31,6 +35,19 @@
 		children
 	}: Props = $props();
 	const uid = $props.id();
+
+	// The job's season stays selectable while the list loads or lacks it.
+	const listed = $derived(
+		[...new Set([...(seasons ?? []), ...(typeof form.season === 'number' ? [form.season] : [])])]
+			.filter((n) => n > 0)
+			.sort((a, b) => a - b)
+	);
+	const seasonValue = $derived(form.season == null ? '' : String(form.season));
+
+	function setSeason(value: string) {
+		form.season = value === '' ? null : value === 'scan' ? 'scan' : Number(value);
+		onfieldchange();
+	}
 </script>
 
 <div class="panel panel-compact rerun-panel">
@@ -45,14 +62,31 @@
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-season">Season</label>
-			<input
-				id="{uid}-season"
-				class="field-control"
-				type="number"
-				min="0"
-				bind:value={form.season}
-				oninput={onfieldchange}
-			/>
+			{#if seasons}
+				<select
+					id="{uid}-season"
+					class="field-control"
+					value={seasonValue}
+					onchange={(e) => setSeason(e.currentTarget.value)}
+				>
+					<option value="" disabled>-</option>
+					<option value="scan">Scan all seasons</option>
+					<option value="0">Specials</option>
+					{#each listed as n (n)}
+						<option value={String(n)}>Season {n}</option>
+					{/each}
+				</select>
+			{:else}
+				<input
+					id="{uid}-season"
+					class="field-control"
+					type="number"
+					min="0"
+					placeholder="-"
+					value={typeof form.season === 'number' ? form.season : ''}
+					oninput={(e) => setSeason(e.currentTarget.value)}
+				/>
+			{/if}
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-disc">Disc</label>
@@ -61,6 +95,7 @@
 				class="field-control"
 				type="number"
 				min="1"
+				placeholder="-"
 				bind:value={form.disc}
 				oninput={onfieldchange}
 			/>

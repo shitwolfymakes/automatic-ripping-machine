@@ -11,7 +11,14 @@
 		MatchRequest,
 		TrackView
 	} from '$lib/types/api.gen';
-	import { fetchEpisodes, fetchIdentity, matchIdentity, unpinIdentity, type EpisodeSource } from '$lib/api/identity';
+	import {
+		fetchEpisodes,
+		fetchIdentity,
+		fetchSeasons,
+		matchIdentity,
+		unpinIdentity,
+		type EpisodeSource
+	} from '$lib/api/identity';
 	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
 	import {
@@ -20,8 +27,12 @@
 		placedCount,
 		activeSource,
 		failedSources,
+		heldSeason,
+		holdReasons,
+		seasonAlternatives,
 		SOURCE_LABEL,
-		type RerunForm
+		type RerunForm,
+		type SeasonCandidate
 	} from './episodeModel';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
@@ -46,7 +57,11 @@
 
 	const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
 	let rerunOpen = $state(false);
-	let rerun = $state<RerunForm>({ source: 'tmdb', season: 1, disc: 1, tolerance: null });
+	// No season or disc is assumed: unknown stays empty until the operator picks.
+	const NO_RERUN: RerunForm = { source: 'tmdb', season: null, disc: null, tolerance: null };
+	let rerun = $state<RerunForm>({ ...NO_RERUN });
+	// The re-run source's seasons; null when the list could not load.
+	let seasons = $state<number[] | null>([]);
 	let preview = $state<MatchPreview | null>(null);
 	let previewSource = $state<EpisodeSource | null>(null);
 	// The request that produced the preview on screen: Apply & pin sends exactly
@@ -97,7 +112,7 @@
 		fileNames = new Map();
 		othersOpen = false;
 		rerunOpen = false;
-		rerun = { source: 'tmdb', season: 1, disc: 1, tolerance: null };
+		rerun = { ...NO_RERUN };
 		dropPreview();
 		lastRequest = null;
 		unpinAsk = false;
@@ -149,12 +164,31 @@
 		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
 		rerun = {
 			source: current && EPISODE_SOURCES.includes(current) ? current : first,
-			season: job.season ?? 1,
-			disc: job.disc_number ?? 1,
+			season: job.season ?? null,
+			disc: job.disc_number ?? null,
 			tolerance: null
 		};
 		dropPreview();
 	}
+
+	// The season list follows the re-run form's source while the form is open.
+	$effect(() => {
+		if (!rerunOpen) return;
+		const src = rerun.source;
+		const jobId = job.id;
+		untrack(() => {
+			seasons = [];
+			const current = () => rerunOpen && rerun.source === src && job.id === jobId;
+			fetchSeasons(jobId, src).then(
+				(r) => {
+					if (current()) seasons = r.seasons ?? [];
+				},
+				() => {
+					if (current()) seasons = null;
+				}
+			);
+		});
+	});
 
 	function dropPreview() {
 		previewSeq++;
@@ -165,9 +199,34 @@
 	}
 
 	function request(apply: boolean): MatchRequest {
-		const req: MatchRequest = { source: rerun.source, season: rerun.season, disc_number: rerun.disc, apply };
+		const req: MatchRequest = { source: rerun.source, apply };
+		if (rerun.season === 'scan') req.scan_seasons = true;
+		else if (rerun.season != null) req.season = rerun.season;
+		if (rerun.disc != null) req.disc_number = rerun.disc;
 		if (rerun.tolerance != null) req.tolerance = rerun.tolerance;
 		return req;
+	}
+
+	// Candidate seasons under the status line: the held result's own season
+	// first (one click confirms it), then the other seasons the scan fit.
+	const ownSeason = $derived(
+		identity && canAct && view === 'suggestion' ? heldSeason(identity, source, rows.length) : null
+	);
+	const altSeasons = $derived(
+		identity && canAct
+			? seasonAlternatives(identity, source, rows.length).filter((a) => a.season !== ownSeason?.season)
+			: []
+	);
+	const candidates = $derived<SeasonCandidate[]>(ownSeason ? [ownSeason, ...altSeasons] : altSeasons);
+	const seasonName = (n: number) => (n === 0 ? 'Specials' : `Season ${n}`);
+
+	// Preview one candidate season in the re-run form, so its Apply is at hand.
+	function tryCandidate(season: number) {
+		const src = pickerSource ?? rerun.source;
+		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
+		rerunOpen = true;
+		dropPreview();
+		return run({ source: src, season, disc_number: job.disc_number ?? undefined, apply: false });
 	}
 
 	async function run(req: MatchRequest) {
@@ -223,11 +282,19 @@
 
 	$effect(() => {
 		const src = pickerSource;
-		const season = job.season ?? 1;
+		// No season, no list: the disc's season is never assumed.
+		const season = job.season;
 		const key = `${job.id}:${src}:${season}`;
 		// Tracked so each identity reload re-runs this: a list that failed to
 		// load is fetched again then (a loaded one is skipped by its key).
 		void identity;
+		if (season == null) {
+			untrack(() => {
+				episodes = [];
+				episodesKey = '';
+			});
+			return;
+		}
 		if (!src || !canAct || key === episodesKey) return;
 		episodesKey = key;
 		fetchEpisodes(job.id, src, season).then(
@@ -244,7 +311,7 @@
 
 	const pad = (n: number) => String(n).padStart(2, '0');
 	const pickOptions = $derived.by(() => {
-		const season = job.season ?? 1;
+		const season = job.season;
 		const eps = episodes.map((e) => {
 			const mins = e.runtime_s != null ? `, ${Math.round(e.runtime_s / 60)}m` : '';
 			return e.special
@@ -373,6 +440,17 @@
 			</span>
 		</div>
 
+		{#if candidates.length > 0 && !loading && !loadError}
+			<div class="episode-panel-seasons">
+				{#each candidates as c, i (c.season)}
+					{#if i === (ownSeason ? 1 : 0)}<span class="episode-panel-text">Also fits:</span>{/if}
+					<button type="button" class="btn btn-sm" disabled={busy} onclick={() => tryCandidate(c.season)}>
+						{seasonName(c.season)} ({c.matches} of {c.total} titles)
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		{#if view === 'matching'}
 			<div class="progress progress-sm">
 				<div data-progress-track data-indeterminate="true" class="progress-track">
@@ -410,6 +488,10 @@
 			<div class="alert alert-warning">
 				<p class="alert-title">{sourceLabel}'s best match is too uncertain to apply on its own</p>
 				<p class="alert-body">The placement below is a suggestion. Nothing is applied until you accept it.</p>
+				{#each holdReasons(identity ?? {}, source) as reason (reason)}
+					<p class="alert-body">{reason}</p>
+				{/each}
+				<p class="alert-body">Set the season or disc number in Info, or accept the suggestion.</p>
 				{#if canAct}
 					<div class="episode-panel-banner-actions">
 						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
@@ -451,6 +533,7 @@
 			<RerunPanel
 				bind:form={rerun}
 				sources={sourceOptions}
+				{seasons}
 				{busy}
 				preview={preview && previewSource
 					? { changed: rows.filter((r) => r.changed).length, label: labelOf(previewSource) }
@@ -503,6 +586,12 @@
 		display: flex;
 		gap: 0.5rem;
 		margin-left: auto;
+	}
+	.episode-panel-seasons {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.episode-panel-count,
 	.episode-panel-text {

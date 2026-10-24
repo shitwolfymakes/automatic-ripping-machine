@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows, placedCount, formatLength, activeSource } from '../episodeModel';
+import {
+	failedSources,
+	panelState,
+	buildRows,
+	placedCount,
+	formatLength,
+	activeSource,
+	holdReasons,
+	seasonAlternatives,
+	heldSeason
+} from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
@@ -164,5 +174,34 @@ describe('activeSource agrees with the resolver', () => {
 	it('falls back to an ok suggestion when nothing else is ok', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
 		expect(activeSource(id)).toBe('episodes_tmdb');
+	});
+});
+
+describe('season candidates and hold reasons', () => {
+	it('maps hold reason codes to sentences and drops unknown ones', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true, extra: { hold_reasons: ['near_tie', 'bogus'] } } }
+		} as unknown as IdentityView;
+		expect(holdReasons(id, 'episodes_tmdb')).toEqual(['Another season fits about as well.']);
+	});
+	it('lists candidate seasons from alternatives', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', alternatives: [{ season: 3, coverage: 1, matches: 6 }] } }
+		} as unknown as IdentityView;
+		expect(seasonAlternatives(id, 'episodes_tmdb')).toEqual([{ season: 3, matches: 6, total: 0 }]);
+		expect(seasonAlternatives(id, 'episodes_tmdb', 6)).toEqual([{ season: 3, matches: 6, total: 6 }]);
+		expect(seasonAlternatives(id, null)).toEqual([]);
+	});
+	it('names the held season from the source proposals', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true } },
+			tracks: [
+				{ track_id: 'a', proposals: { episodes_tmdb: { season: 5, episode: 1 } } },
+				{ track_id: 'b', proposals: { episodes_tmdb: { season: 5, episode: 2 } } },
+				{ track_id: 'c', proposals: { episodes_tmdb: { role: 'extra' } } }
+			]
+		} as unknown as IdentityView;
+		expect(heldSeason(id, 'episodes_tmdb', 3)).toEqual({ season: 5, matches: 2, total: 3 });
+		expect(heldSeason(id, 'episodes_tvmaze', 3)).toBeNull();
 	});
 });
