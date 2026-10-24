@@ -142,12 +142,13 @@ async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
 
 
 async def _sibling_rows(session: AsyncSession, job: Job) -> list[tuple[Job, list[Track]]]:
-    """Other live TV jobs with the same title, with their tracks. Season and
-    shared show ids are checked per season / provider by `_siblings`. Failed
-    and abandoned jobs never hold episodes."""
-    if not job.title:
+    """Other live TV jobs, with their tracks; a job with no external ids has
+    none. Which of them share this show is decided per season / provider by
+    `_siblings` on show ids, not on the title string. Failed and abandoned
+    jobs never hold episodes."""
+    if not current_ids(job).model_dump(exclude_none=True):
         return []
-    stmt = select(Job).where(col(Job.title) == job.title, col(Job.media_type) == MediaType.TV)
+    stmt = select(Job).where(col(Job.media_type) == MediaType.TV)
     jobs = [
         j for j in (await session.execute(stmt)).scalars().all() if j.id != job.id and j.status not in _DEAD_STATUSES
     ]

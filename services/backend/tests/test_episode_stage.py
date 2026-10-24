@@ -519,14 +519,26 @@ async def test_sibling_in_season_by_track_season_only() -> None:
     assert outcome.claims.suggestion is True
 
 
-async def test_job_without_title_has_no_siblings() -> None:
-    job = _job(title=None)
-    db = _db(job, DISC)
+async def test_siblings_match_by_show_id_not_title_string() -> None:
+    job = _job(disc_number=2, title="The Office")
+    sibling = _job("job_2", disc_number=1, title="The Office (US)")
+    sib_tracks = [
+        _track("job_2", i, s, role=TrackRole.EPISODE, season=1, episode_number=i + 1)
+        for i, s in enumerate(DISTINCT[:2])
+    ]
+    db = _db(job, DISC, sibling, extra_tracks=sib_tracks)
+    rows = await episode_stage._sibling_rows(db, job)
+    assert [j.id for j, _ in rows] == ["job_2"]
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    placed = {c.episode for c in outcomes[0].claims.tracks.values() if c.episode is not None}
+    assert placed.isdisjoint({1, 2})
 
-    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
-    assert outcome.claims.status == "ok"
+async def test_job_without_ids_has_no_siblings() -> None:
+    job = _job(ids={}, disc_number=2)
+    db = _db(job, DISC, _job("job_2", disc_number=1))
+    assert await episode_stage._sibling_rows(db, job) == []
 
 
 # ---------------------------------------------------------------------------
