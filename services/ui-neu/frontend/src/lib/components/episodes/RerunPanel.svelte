@@ -79,7 +79,7 @@
 			/>
 		</div>
 		<button type="button" class="btn btn-primary rerun-panel-preview" disabled={busy} onclick={onpreview}>
-			{busy && !preview ? 'Previewing…' : 'Preview'}
+			{busy && !preview ? 'Previewing...' : 'Preview'}
 		</button>
 	</div>
 

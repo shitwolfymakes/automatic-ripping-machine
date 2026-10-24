@@ -65,7 +65,7 @@ describe('EpisodeMatchPanel', () => {
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
 		expect(screen.getByText('6 of 6 tracks placed')).toBeInTheDocument();
 		expect(screen.getAllByText('S01E04')[0]).toBeInTheDocument();
-		expect(screen.getAllByText('Auto · TMDb').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('Auto, TMDb').length).toBeGreaterThan(0);
 		expect(screen.getAllByText('0.90').length).toBeGreaterThan(0);
 	});
 
@@ -229,7 +229,7 @@ describe('EpisodeMatchPanel actions', () => {
 		expect(vi.mocked(matchIdentity).mock.calls[0][1]).not.toHaveProperty('tolerance');
 		expect(await screen.findByText(/1 track changes if you apply TVmaze/)).toBeInTheDocument();
 		expect(screen.getByText('Nothing is saved yet.', { exact: false })).toBeInTheDocument();
-		expect(screen.getByRole('columnheader', { name: 'Proposed · TVmaze' })).toBeInTheDocument();
+		expect(screen.getByRole('columnheader', { name: 'Proposed, TVmaze' })).toBeInTheDocument();
 		expect(screen.getAllByText('CHANGED')).toHaveLength(1);
 		const before = fetchIdentity.mock.calls.length;
 		await fireEvent.click(screen.getByRole('button', { name: 'Apply & pin TVmaze' }));
@@ -305,7 +305,7 @@ describe('EpisodeMatchPanel actions', () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		await fireEvent.click(await screen.findByRole('button', { name: 'Accept suggestion' }));
 		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', apply: true });
-		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+		expect(screen.getByRole('button', { name: 'Accepting...' })).toBeDisabled();
 		const before = fetchIdentity.mock.calls.length;
 		resolve({ outcomes: [] });
 		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
@@ -315,12 +315,12 @@ describe('EpisodeMatchPanel actions', () => {
 		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tmdb' } });
 		vi.mocked(unpinIdentity).mockResolvedValue({ ...applied, pin: {} });
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin...' }));
 		expect(unpinIdentity).not.toHaveBeenCalled();
 		expect(screen.getByText('Unpin and let ARM pick the source again?')).toBeInTheDocument();
 		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 		expect(screen.queryByText('Unpin and let ARM pick the source again?')).toBeNull();
-		await fireEvent.click(screen.getByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Unpin...' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Unpin' }));
 		expect(unpinIdentity).toHaveBeenCalledWith('job_1');
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
@@ -373,7 +373,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 	it('sets a track to Extra by hand', async () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		const select = await screen.findByLabelText('Set placement for t04');
-		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire · 51m/).length).toBeGreaterThan(0));
+		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire, 51m/).length).toBeGreaterThan(0));
 		const before = fetchIdentity.mock.calls.length;
 		await fireEvent.change(select, { target: { value: 'extra' } });
 		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_4', { role: 'extra' });
@@ -398,9 +398,9 @@ describe('EpisodeMatchPanel set by hand', () => {
 		const select = (await screen.findByLabelText('Set placement for t00')) as HTMLSelectElement;
 		await waitFor(() => expect(select.options.length).toBe(6));
 		expect([...select.options].map((o) => [o.value, o.text])).toEqual([
-			['', 'Change…'],
-			['s1e4', 'E04 The Vampire · 51m'],
-			['s0e1', 'S00E01 The Night Stalker · 74m · special'],
+			['', 'Change...'],
+			['s1e4', 'E04 The Vampire, 51m'],
+			['s0e1', 'S00E01 The Night Stalker, 74m, special'],
 			['extra', 'Extra'],
 			['trailer', 'Trailer'],
 			['other', 'Other']
@@ -481,11 +481,11 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		const first = deferred<IdentityView>();
 		fetchIdentity.mockReturnValue(first.promise);
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		expect(screen.getByText('Loading episodes…')).toBeInTheDocument();
+		expect(screen.getByText('Loading episodes...')).toBeInTheDocument();
 		expect(screen.queryByText('No episode source is set up')).toBeNull();
 		first.resolve(applied);
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
-		expect(screen.queryByText('Loading episodes…')).toBeNull();
+		expect(screen.queryByText('Loading episodes...')).toBeNull();
 	});
 
 	it('ignores a late identity for the previous job', async () => {
@@ -552,7 +552,7 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		const slow = deferred<IdentityView>();
 		vi.mocked(unpinIdentity).mockReturnValue(slow.promise);
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin...' }));
 		const button = screen.getByRole('button', { name: 'Unpin' });
 		await fireEvent.click(button);
 		expect(button).toBeDisabled();
@@ -568,7 +568,7 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		await openRerun();
 		await fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
-		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+		expect(screen.getByRole('button', { name: 'Accepting...' })).toBeDisabled();
 	});
 });
 

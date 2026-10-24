@@ -102,21 +102,21 @@ describe('DiscReviewWidget episode matching', () => {
 		const panel = await screen.findByTestId('episode-panel');
 		expect(screen.getByRole('button', { name: 'Episodes' })).toHaveAttribute('aria-pressed', 'true');
 		expect(screen.queryByRole('button', { name: 'Pick a series' })).not.toBeInTheDocument();
-		await waitFor(() => expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument());
+		await waitFor(() => expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument());
 
 		vi.mocked(fetchIdentity).mockResolvedValue({ sources: {}, pin: null } as unknown as IdentityView);
 		fireRipperEvent('job_other', 'job.identity_updated');
-		expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument();
+		expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument();
 
 		const fetches = mockFetchJob.mock.calls.length;
 		fireRipperEvent('job_42', 'rip.identify_resolved');
 		await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThan(fetches));
 		await new Promise((r) => setTimeout(r, 50));
-		expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument();
+		expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument();
 
 		const identityCalls = vi.mocked(fetchIdentity).mock.calls.length;
 		fireRipperEvent('job_42', 'job.identity_updated');
-		await waitFor(() => expect(within(panel).queryByText('Matching episodes…')).not.toBeInTheDocument());
+		await waitFor(() => expect(within(panel).queryByText('Matching episodes...')).not.toBeInTheDocument());
 		expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls);
 	});
 
@@ -136,7 +136,7 @@ describe('DiscReviewWidget episode matching', () => {
 		await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
 		expect(setJobMediaType).toHaveBeenCalledWith('job_42', 'tv');
 		const panel = await screen.findByTestId('episode-panel');
-		await waitFor(() => expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument());
+		await waitFor(() => expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument());
 	});
 
 	it("the panel's series search opens Search looking for TV", async () => {

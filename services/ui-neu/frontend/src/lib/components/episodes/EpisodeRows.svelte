@@ -41,12 +41,12 @@
 
 	function originLabel(row: EpisodeRow): string {
 		const label = SOURCE_LABEL[row.origin.source ?? ''] ?? row.origin.source ?? '';
-		if (row.origin.kind === 'auto') return `Auto · ${label}`;
-		if (row.origin.kind === 'suggestion') return `Suggestion · ${label}`;
+		if (row.origin.kind === 'auto') return `Auto, ${label}`;
+		if (row.origin.kind === 'suggestion') return `Suggestion, ${label}`;
 		if (row.origin.kind === 'you') return 'Set by you';
-		return '—';
+		return '-';
 	}
-	const conf = (c: number | null) => (c == null ? '—' : c.toFixed(2));
+	const conf = (c: number | null) => (c == null ? '-' : c.toFixed(2));
 </script>
 
 {#snippet placement(row: EpisodeRow)}
@@ -82,7 +82,7 @@
 				aria-label="Set placement for {row.ref}"
 				onchange={(e) => pick(row.trackId, e)}
 			>
-				<option value="">Change…</option>
+				<option value="">Change...</option>
 				{#each options as o (o.value)}
 					<option value={o.value}>{o.label}</option>
 				{/each}
@@ -98,7 +98,7 @@
 
 {#snippet origin(row: EpisodeRow)}
 	{#if matching || row.origin.kind === 'none'}
-		<span class="episode-rows-muted">—</span>
+		<span class="episode-rows-muted">-</span>
 	{:else}
 		<span
 			class="chip chip-sm {ORIGIN_CHIP[row.origin.kind]}"
@@ -132,7 +132,7 @@
 					<th class="table-header">Track</th>
 					<th class="table-header">Length</th>
 					<th class="table-header">Placement</th>
-					{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
+					{#if proposedLabel}<th class="table-header">Proposed, {proposedLabel}</th>{/if}
 					<th class="table-header">Origin</th>
 					<th class="table-header table-right">Conf.</th>
 					{#if options}<th class="table-header">Set by hand</th>{/if}
@@ -151,12 +151,12 @@
 								{:else if row.proposed}
 									<span class="episode-rows-muted">Same</span>
 								{:else}
-									<span class="episode-rows-muted">—</span>
+									<span class="episode-rows-muted">-</span>
 								{/if}
 							</td>
 						{/if}
 						<td class="table-cell">{@render origin(row)}</td>
-						<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
+						<td class="table-cell table-right tabular-nums">{matching ? '-' : conf(row.confidence)}</td>
 						{#if options}<td class="table-cell">{@render byHand(row)}</td>{/if}
 					</tr>
 				{/each}

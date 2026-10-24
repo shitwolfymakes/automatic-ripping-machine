@@ -246,9 +246,9 @@
 	const pickOptions = $derived.by(() => {
 		const season = job.season ?? 1;
 		const eps = episodes.map((e) => {
-			const mins = e.runtime_s != null ? ` · ${Math.round(e.runtime_s / 60)}m` : '';
+			const mins = e.runtime_s != null ? `, ${Math.round(e.runtime_s / 60)}m` : '';
 			return e.special
-				? { value: `s0e${e.number}`, label: `S00E${pad(e.number)} ${e.name ?? ''}${mins} · special` }
+				? { value: `s0e${e.number}`, label: `S00E${pad(e.number)} ${e.name ?? ''}${mins}, special` }
 				: { value: `s${season}e${e.number}`, label: `E${pad(e.number)} ${e.name ?? ''}${mins}` };
 		});
 		return [...eps, ...ROLES.map((r) => ({ value: r, label: r[0].toUpperCase() + r.slice(1) }))];
@@ -338,9 +338,9 @@
 		<div class="episode-panel-status" role="status">
 			<span class="eyebrow">Episodes</span>
 			{#if view === 'matching'}
-				<span class="episode-panel-text">Matching episodes…</span>
+				<span class="episode-panel-text">Matching episodes...</span>
 			{:else if loading}
-				<span class="episode-panel-text">Loading episodes…</span>
+				<span class="episode-panel-text">Loading episodes...</span>
 			{:else}
 				{#if sourceLabel}<span class="chip chip-sm chip-info">{sourceLabel}</span>{/if}
 				{#if view === 'applied'}
@@ -358,7 +358,7 @@
 			{/if}
 			<span class="episode-panel-status-actions">
 				{#if canAct}
-					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run…</button>
+					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run...</button>
 				{/if}
 				{#if others.length > 0 && view !== 'matching'}
 					<button
@@ -385,7 +385,7 @@
 			<ul class="episode-panel-others">
 				{#each others as [id, s] (id)}
 					<li>
-						{SOURCE_LABEL[id] ?? id}: {STATUS_WORD[s?.status ?? 'ok'] ?? s?.status}{s?.detail ? ` · ${s.detail}` : ''}
+						{SOURCE_LABEL[id] ?? id}: {STATUS_WORD[s?.status ?? 'ok'] ?? s?.status}{s?.detail ? `, ${s.detail}` : ''}
 					</li>
 				{/each}
 			</ul>
@@ -413,7 +413,7 @@
 				{#if canAct}
 					<div class="episode-panel-banner-actions">
 						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
-							{accepting ? 'Accepting…' : 'Accept suggestion'}
+							{accepting ? 'Accepting...' : 'Accept suggestion'}
 						</button>
 					</div>
 				{/if}
@@ -431,7 +431,7 @@
 								>Cancel</button
 							>
 						{:else}
-							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin…</button>
+							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin...</button>
 						{/if}
 					</div>
 					{#if unpinError}<p class="field-error">Could not unpin: {unpinError}</p>{/if}
