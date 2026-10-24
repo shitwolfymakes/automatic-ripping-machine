@@ -689,6 +689,13 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'false');
 		});
 
+		it('has an Info tab that mounts the info form', async () => {
+			mockFetchJob.mockResolvedValue(tvJob());
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
+			expect(await screen.findByLabelText('Season')).toBeInTheDocument();
+		});
+
 		it('hides Match Episodes for a movie job', async () => {
 			mockFetchJob.mockResolvedValue(tvJob({ media_type: 'movie', has_series: false }));
 			renderComponent(Page);

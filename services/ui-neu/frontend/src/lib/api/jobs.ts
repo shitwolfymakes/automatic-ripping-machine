@@ -148,6 +148,7 @@ export function resolveJob(
 	body: {
 		title: string;
 		year?: number | null;
+		season?: number | null;
 		disc_number?: number | null;
 		disc_total?: number | null;
 		media_type?: MediaType | null;

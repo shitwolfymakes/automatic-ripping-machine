@@ -2640,6 +2640,12 @@ export type JobView = {
      */
     disc_total?: number | null;
     /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
+    /**
      * Poster Url
      */
     poster_url?: string | null;
@@ -5670,6 +5676,12 @@ export type JobViewWritable = {
      * Disc Total
      */
     disc_total?: number | null;
+    /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
     /**
      * Poster Url
      */

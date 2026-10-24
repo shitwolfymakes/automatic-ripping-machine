@@ -3,20 +3,29 @@
 	import { resolveJob } from '$lib/api/jobs';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
+	import { provenanceLine } from '$lib/utils/provenance';
 
 	interface Props {
 		job: JobView;
 		onrefresh?: () => void;
+		onsaved?: (changed: { season: boolean; disc: boolean }) => void;
 	}
-	let { job, onrefresh }: Props = $props();
+	let { job, onrefresh, onsaved }: Props = $props();
 
 	let resolvable = $derived(job.actions.can_resolve);
 
 	let title = $state('');
 	let year = $state('');
+	let season = $state('');
 	let discNumber = $state('');
 	let discTotal = $state('');
-	let touched = $state<{ title?: boolean; year?: boolean; discNumber?: boolean; discTotal?: boolean }>({});
+	let touched = $state<{
+		title?: boolean;
+		year?: boolean;
+		season?: boolean;
+		discNumber?: boolean;
+		discTotal?: boolean;
+	}>({});
 	let saving = $state(false);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -27,12 +36,14 @@
 	$effect.pre(() => {
 		if (!touched.title) title = job.title ?? '';
 		if (!touched.year) year = job.year != null ? String(job.year) : '';
+		if (!touched.season) season = job.season != null ? String(job.season) : '';
 		if (!touched.discNumber) discNumber = job.disc_number != null ? String(job.disc_number) : '';
 		if (!touched.discTotal) discTotal = job.disc_total != null ? String(job.disc_total) : '';
 	});
 
-	function num(v: string): number | null {
-		const t = String(v).trim();
+	// A cleared number input binds as null, not ''.
+	function num(v: string | null | undefined): number | null {
+		const t = String(v ?? '').trim();
 		return t === '' ? null : Number(t);
 	}
 
@@ -41,15 +52,22 @@
 		saving = true;
 		feedback = null;
 		try {
+			// Season is sent only when touched: omitted keeps the stored value, null forgets it.
+			const changed = {
+				season: !!touched.season && num(season) !== (job.season ?? null),
+				disc: num(discNumber) !== (job.disc_number ?? null) || num(discTotal) !== (job.disc_total ?? null)
+			};
 			await resolveJob(job.id, {
 				title: title.trim(),
 				year: num(year),
+				...(touched.season ? { season: num(season) } : {}),
 				disc_number: num(discNumber),
 				disc_total: num(discTotal)
 			});
 			touched = {};
 			feedback = { type: 'success', message: 'Saved' };
 			onrefresh?.();
+			onsaved?.(changed);
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Save failed' };
 		} finally {
@@ -97,6 +115,17 @@
 	<p class="eyebrow mb-2 mt-4">Disc</p>
 	<div class="flex gap-3">
 		<label class="field w-28">
+			<span class="field-label job-info-form-small-label">Season</span>
+			<input
+				aria-label="Season"
+				type="number"
+				bind:value={season}
+				oninput={() => (touched = { ...touched, season: true })}
+				disabled={!resolvable}
+				placeholder="-"
+			/>
+		</label>
+		<label class="field w-28">
 			<span class="field-label job-info-form-small-label">Disc number</span>
 			<input
 				aria-label="Disc number"
@@ -120,8 +149,14 @@
 		</label>
 	</div>
 	<p class="field-help mt-1.5">
-		For multi-disc sets (box sets, TV seasons) set this disc's position. Leave blank for a single disc.
+		For TV box sets, the season on this disc and the disc's position in it. Leave blank when unknown.
 	</p>
+	{#each ['season', 'disc_number', 'disc_total'] as const as field (field)}
+		{@const line = provenanceLine(field, job.identity_provenance)}
+		{#if line && job[field] != null}
+			<p class="field-help">{line}</p>
+		{/if}
+	{/each}
 
 	<!-- Save bar (metadata): appears when there are unsaved edits -->
 	{#if dirty && resolvable}

@@ -7,6 +7,7 @@
 	import { posterSrc, posterFallback, jobPoster } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
 	import type { JobDetailView, ResolveResponse, ApplySessionResponse, NamingPreviewItem } from '$lib/types/api.gen';
+	import JobInfoForm from '$lib/components/JobInfoForm.svelte';
 	import JobActions from '$lib/components/JobActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
@@ -37,7 +38,7 @@
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
 	let jobError = $state<Error | null>(null);
-	let activePanel = $state<'title' | 'music' | 'episodes' | null>(null);
+	let activePanel = $state<'title' | 'music' | 'episodes' | 'info' | null>(null);
 	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
@@ -183,6 +184,10 @@
 		loadJob();
 	}
 
+	function handleInfoSaved(changed: { season: boolean; disc: boolean }) {
+		if (detail?.job.media_type === 'tv' && (changed.season || changed.disc)) matching.start();
+	}
+
 	function handleSeriesApplied() {
 		activePanel = 'episodes';
 		matching.start();
@@ -196,7 +201,7 @@
 		loadJob();
 	}
 
-	function togglePanel(panel: 'title' | 'music' | 'episodes') {
+	function togglePanel(panel: 'title' | 'music' | 'episodes' | 'info') {
 		if (panel === 'title') titleInitialType = undefined;
 		activePanel = activePanel === panel ? null : panel;
 	}
@@ -431,6 +436,12 @@
 								aria-pressed={activePanel === 'episodes'}>Match Episodes</button
 							>
 						{/if}
+						<button
+							type="button"
+							onclick={() => togglePanel('info')}
+							class="job-detail-panel-tab"
+							aria-pressed={activePanel === 'info'}>Info</button
+						>
 					</div>
 				{:else if isCdDisc}
 					<div class="flex job-detail-panel-toggle-bar">
@@ -466,6 +477,11 @@
 								activePanel = 'title';
 							}}
 						/>
+					</div>
+				{/if}
+				{#if activePanel === 'info' && isVideoDisc}
+					<div class="job-detail-panel-content">
+						<JobInfoForm {job} onrefresh={() => loadJob()} onsaved={handleInfoSaved} />
 					</div>
 				{/if}
 				{#if activePanel === 'music'}

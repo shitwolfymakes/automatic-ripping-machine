@@ -14781,6 +14781,20 @@
             ],
             "title": "Disc Total"
           },
+          "identity_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Provenance"
+          },
           "poster_url": {
             "anyOf": [
               {

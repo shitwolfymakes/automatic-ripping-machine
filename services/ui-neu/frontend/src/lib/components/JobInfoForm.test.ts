@@ -148,4 +148,46 @@ describe('JobInfoForm', () => {
 			expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 		});
 	});
+
+	it('shows the season empty when unknown and saves a typed season', async () => {
+		mockResolve.mockResolvedValue({} as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job({ season: null }), onsaved } });
+		const season = screen.getByLabelText('Season') as HTMLInputElement;
+		expect(season.value).toBe('');
+		await fireEvent.input(season, { target: { value: '7' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: 7 })));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: true, disc: false }));
+	});
+
+	it('clears a season by sending null', async () => {
+		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: null })));
+	});
+
+	it('does not send season when untouched', async () => {
+		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Other' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+		expect(mockResolve.mock.calls[0][1]).not.toHaveProperty('season');
+	});
+
+	it('reports a disc change', async () => {
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: true }));
+	});
+
+	it('shows the provenance line for a set season', () => {
+		renderComponent(JobInfoForm, {
+			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }) }
+		});
+		expect(screen.getByText('Season from the disc label')).toBeInTheDocument();
+	});
 });
