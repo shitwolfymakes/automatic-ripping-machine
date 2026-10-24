@@ -31,6 +31,7 @@
 		holdReasons,
 		seasonAlternatives,
 		pickerOptions,
+		ROLE_OPTIONS,
 		SOURCE_LABEL,
 		type EpisodeRow,
 		type RerunForm,
@@ -303,10 +304,9 @@
 	const placed = $derived(
 		new Map((identity?.tracks ?? []).filter((t) => t.episode_number != null).map((t) => [t.track_id, t] as const))
 	);
-	// A row's own season: one picked for it here (until it holds an episode),
-	// else its saved one; null when neither is set.
-	const savedOrPicked = (row: EpisodeRow): number | null =>
-		(placed.has(row.trackId) ? undefined : rowSeason[row.trackId]) ?? row.season;
+	// A row's own season: one picked for it here (not saved until an episode
+	// is picked), else its saved one; null when neither is set.
+	const savedOrPicked = (row: EpisodeRow): number | null => rowSeason[row.trackId] ?? row.season;
 	// The season a row's list comes from: its own, else the job's; null when
 	// none is known (the disc's season is never assumed).
 	const seasonOf = (row: EpisodeRow): number | null => savedOrPicked(row) ?? job.season ?? null;
@@ -355,32 +355,39 @@
 		return used;
 	}
 
-	// The by-hand choices of a shown row (its season already resolved).
+	// The by-hand choices of a shown row (its season already resolved). The
+	// roles need no season; the episodes do.
 	function optionsFor(row: EpisodeRow) {
 		const season = row.season ?? job.season ?? null;
-		if (season == null) return [];
+		if (season == null) return ROLE_OPTIONS;
 		return pickerOptions(episodesBySeason.get(season) ?? [], season, row.seconds, usedIn(season, row.trackId));
 	}
 
+	// Picking a season saves nothing: it switches the row's episode list, and
+	// the season is saved with the episode picked from it.
 	function setRowSeason(trackId: string, season: number) {
-		// A placed track's season is saved; it keeps its episode number until
-		// the operator picks one from the new season's list.
-		if (placed.has(trackId)) return saveTrack(trackId, { season });
 		rowSeason = { ...rowSeason, [trackId]: season };
 	}
 
-	async function saveTrack(trackId: string, data: Parameters<typeof updateTrack>[2]) {
+	function clearRowSeason(trackId: string) {
+		if (!(trackId in rowSeason)) return;
+		const { [trackId]: _dropped, ...rest } = rowSeason;
+		rowSeason = rest;
+	}
+
+	async function saveTrack(trackId: string, data: Parameters<typeof updateTrack>[2]): Promise<boolean> {
 		handError = null;
 		try {
 			await updateTrack(job.id, trackId, data);
 		} catch (e) {
 			handError = e instanceof Error ? e.message : 'Could not save';
-			return;
+			return false;
 		}
 		await reload();
+		return true;
 	}
 
-	function setByHand(trackId: string, value: string) {
+	async function setByHand(trackId: string, value: string) {
 		const role = ROLES.find((r) => r === value);
 		if (role) return saveTrack(trackId, { role });
 		const m = /^s(\d+)e(\d+)$/.exec(value);
@@ -390,7 +397,8 @@
 		const listSeason = row ? seasonOf(row) : null;
 		const list = listSeason == null ? [] : (episodesBySeason.get(listSeason) ?? []);
 		const ep = list.find((e) => e.number === n && (!!e.special || listSeason === 0) === (season === 0));
-		return saveTrack(trackId, { role: 'episode', season, episode_number: n, episode_name: ep?.name ?? null });
+		const data = { role: 'episode' as const, season, episode_number: n, episode_name: ep?.name ?? null };
+		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
 	}
 
 	// Fill the rest: preview the source over the tracks not set by hand (the
@@ -411,8 +419,8 @@
 		});
 	}
 
-	function revert(trackId: string) {
-		return saveTrack(trackId, { revert_fields: [...REVERT] });
+	async function revert(trackId: string) {
+		if (await saveTrack(trackId, { revert_fields: [...REVERT] })) clearRowSeason(trackId);
 	}
 
 	async function accept() {

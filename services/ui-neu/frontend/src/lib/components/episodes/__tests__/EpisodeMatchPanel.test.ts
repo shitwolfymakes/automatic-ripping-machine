@@ -764,6 +764,7 @@ describe('EpisodeMatchPanel per-row season', () => {
 		await seasonListed('t00', 1);
 		for (const t of tracks) expect(seasonOf(t.source_ref).value).toBe('4');
 		expect([...seasonOf('t00').options].map((o) => o.text)).toEqual([
+			'-',
 			'Specials',
 			'Season 1',
 			'Season 2',
@@ -779,12 +780,17 @@ describe('EpisodeMatchPanel per-row season', () => {
 		expect(seasonOf('t00').value).toBe('1');
 	});
 
-	it('leaves the season empty and the episode select disabled with no season anywhere', async () => {
+	it('with no season anywhere, reads "-", fetches no list and still offers the roles', async () => {
 		fetchIdentity.mockResolvedValue(unplaced);
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		await screen.findByLabelText('Season for t00');
 		expect(seasonOf('t00').value).toBe('');
-		expect(screen.getByLabelText('Set placement for t00')).toBeDisabled();
+		expect(seasonOf('t00').selectedOptions[0].text).toBe('-');
+		const select = screen.getByLabelText('Set placement for t00') as HTMLSelectElement;
+		expect(select).toBeEnabled();
+		expect([...select.options].map((o) => o.value)).toEqual(['', 'extra', 'trailer', 'other']);
+		await fireEvent.change(select, { target: { value: 'extra' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_0', { role: 'extra' });
 		expect(fetchEpisodes).not.toHaveBeenCalled();
 	});
 
@@ -828,14 +834,33 @@ describe('EpisodeMatchPanel per-row season', () => {
 			episode_number: 2,
 			episode_name: 'S5 Two'
 		});
+		// Saved: the picked season is dropped, so the row shows what the reload
+		// says (this mock still has none, so the job's).
+		await waitFor(() => expect(seasonOf('t02').value).toBe('4'));
 	});
 
-	it('saves only the season for a row that already has an episode', async () => {
+	it('changing the season of a placed row saves nothing and loads that season', async () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		await screen.findByLabelText('Season for t01');
 		await seasonListed('t01', 2);
 		await fireEvent.change(seasonOf('t01'), { target: { value: '2' } });
-		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_1', { season: 2 });
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 2));
+		expect(seasonOf('t01').value).toBe('2');
+		expect(seasonOf('t00').value).toBe('1');
+		expect(updateTrack).not.toHaveBeenCalled();
+	});
+
+	it('drops a picked season after a revert', async () => {
+		const id = structuredClone(applied);
+		id.tracks![1].identity_provenance = { episode_number: 'manual' };
+		fetchIdentity.mockResolvedValue(id);
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t01');
+		await seasonListed('t01', 2);
+		await fireEvent.change(seasonOf('t01'), { target: { value: '2' } });
+		expect(seasonOf('t01').value).toBe('2');
+		await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+		await waitFor(() => expect(seasonOf('t01').value).toBe('1'));
 	});
 
 	it('marks the episodes other rows of that season already hold as used', async () => {

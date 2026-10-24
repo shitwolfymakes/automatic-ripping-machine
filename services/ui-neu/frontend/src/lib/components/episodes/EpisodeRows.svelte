@@ -3,6 +3,7 @@
 	// desktop, stacked cards below 640px. Presentational only - the panel owns
 	// the data and the actions.
 	import { SOURCE_LABEL, type EpisodeRow } from './episodeModel';
+	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface FileName {
 		name: string;
@@ -46,14 +47,6 @@
 	}
 
 	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
-	// The row's own season stays selectable while the list loads or lacks it.
-	function seasonChoices(row: EpisodeRow): number[] {
-		const own = seasonOf(row);
-		return [...new Set([...(seasons ?? []), ...(own != null ? [own] : [])])].filter((n) => n > 0).sort((a, b) => a - b);
-	}
-	function setSeason(trackId: string, value: string) {
-		if (value !== '' && Number.isInteger(Number(value)) && Number(value) >= 0) onseason?.(trackId, Number(value));
-	}
 
 	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
 
@@ -94,36 +87,17 @@
 
 {#snippet byHand(row: EpisodeRow)}
 	{#if optionsFor}
-		{@const season = seasonOf(row)}
 		<div class="episode-rows-hand">
-			{#if seasons}
-				<select
-					class="field-control episode-rows-season"
-					aria-label="Season for {row.ref}"
-					value={season == null ? '' : String(season)}
-					onchange={(e) => setSeason(row.trackId, e.currentTarget.value)}
-				>
-					{#if season == null}<option value="" disabled>Season...</option>{/if}
-					<option value="0">Specials</option>
-					{#each seasonChoices(row) as n (n)}
-						<option value={String(n)}>Season {n}</option>
-					{/each}
-				</select>
-			{:else}
-				<input
-					type="number"
-					min="0"
-					class="field-control episode-rows-season"
-					aria-label="Season for {row.ref}"
-					placeholder="Season"
-					value={season ?? ''}
-					onchange={(e) => setSeason(row.trackId, e.currentTarget.value)}
-				/>
-			{/if}
+			<SeasonSelect
+				class="episode-rows-season"
+				ariaLabel="Season for {row.ref}"
+				value={seasonOf(row)}
+				{seasons}
+				onchange={(v) => typeof v === 'number' && onseason?.(row.trackId, v)}
+			/>
 			<select
 				class="field-control episode-rows-select"
 				aria-label="Set placement for {row.ref}"
-				disabled={season == null}
 				onchange={(e) => pick(row.trackId, e)}
 			>
 				<option value="">Change...</option>
@@ -265,7 +239,7 @@
 		min-width: 0;
 		max-width: 16rem;
 	}
-	.episode-rows-season {
+	.episode-rows-hand :global(.episode-rows-season) {
 		min-width: 0;
 		max-width: 8rem;
 	}
@@ -277,7 +251,7 @@
 		max-width: none;
 		min-height: 2.75rem;
 	}
-	.episode-rows-card .episode-rows-season {
+	.episode-rows-card :global(.episode-rows-season) {
 		flex: 1 1 100%;
 		max-width: none;
 		min-height: 2.75rem;
