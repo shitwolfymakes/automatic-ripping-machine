@@ -714,13 +714,13 @@ describe('Job detail page (v3)', () => {
 			mockFetchJob.mockResolvedValue(tvJob());
 			renderComponent(Page);
 			await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
-			expect(await screen.findByText('Matching episodes…')).toBeInTheDocument();
+			expect(await screen.findByText('Matching episodes...')).toBeInTheDocument();
 			// The page awaits the panel's reload before clearing, so the identity must load.
 			vi.mocked(fetchIdentity).mockResolvedValue({ sources: {}, pin: null } as unknown as IdentityView);
 			const identityCalls = vi.mocked(fetchIdentity).mock.calls.length;
 			// Another job's identity update leaves it matching.
 			fireRipperEvent('job_other', 'job.identity_updated');
-			expect(screen.getByText('Matching episodes…')).toBeInTheDocument();
+			expect(screen.getByText('Matching episodes...')).toBeInTheDocument();
 			// The resolve's own event refreshes the job but the stage is still running.
 			const fetches = mockFetchJob.mock.calls.length;
 			fireRipperEvent('job_42', 'rip.identify_resolved');
@@ -728,9 +728,9 @@ describe('Job detail page (v3)', () => {
 			await waitFor(() => expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls));
 			// Let the refresh fully settle before checking the state stuck.
 			await new Promise((r) => setTimeout(r, 50));
-			expect(screen.getByText('Matching episodes…')).toBeInTheDocument();
+			expect(screen.getByText('Matching episodes...')).toBeInTheDocument();
 			fireRipperEvent('job_42', 'job.identity_updated');
-			await waitFor(() => expect(screen.queryByText('Matching episodes…')).not.toBeInTheDocument());
+			await waitFor(() => expect(screen.queryByText('Matching episodes...')).not.toBeInTheDocument());
 			expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls);
 		});
 
@@ -741,9 +741,9 @@ describe('Job detail page (v3)', () => {
 				mockFetchJob.mockResolvedValue(tvJob());
 				renderComponent(Page);
 				await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
-				expect(await screen.findByText('Matching episodes…')).toBeInTheDocument();
+				expect(await screen.findByText('Matching episodes...')).toBeInTheDocument();
 				await vi.advanceTimersByTimeAsync(60_000);
-				await waitFor(() => expect(screen.queryByText('Matching episodes…')).not.toBeInTheDocument());
+				await waitFor(() => expect(screen.queryByText('Matching episodes...')).not.toBeInTheDocument());
 			} finally {
 				vi.useRealTimers();
 			}
