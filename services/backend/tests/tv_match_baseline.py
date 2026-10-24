@@ -55,6 +55,7 @@ class Tally:
     deep_discs: int = 0
     deep_wrong_season: int = 0
     duplicates: int = 0
+    hand_placed: int = 0
 
     def row(self) -> str:
         return (
@@ -166,6 +167,7 @@ def run(series: Series, min_seconds: int) -> dict[str, Tally]:
                 disc_total = count if disc_known else None
                 siblings, conflict = _siblings(disc, discs, mode, season, disc_known) if mode != "none" else ([], False)
                 scan_titles = titles
+                hand = None
                 hand_episode: int | None = None
                 if variant == "hand":
                     hand = next(
@@ -193,6 +195,10 @@ def run(series: Series, min_seconds: int) -> dict[str, Tally]:
                     picked, result = ranked[0]
                     near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
                 placed = {m.ref: (picked, m.episode) for m in result.matches if m.ref not in unnumbered}
+                if hand is not None and hand_episode is not None:
+                    # The operator's placement is the oracle's own, so it counts as placed and correct.
+                    placed[hand.ref] = (season, hand_episode)
+                    tally.hand_placed += 1
                 tally.placed += len(placed)
                 ok = sum(1 for ref, se in placed.items() if oracle.get(ref) == se)
                 tally.correct += ok

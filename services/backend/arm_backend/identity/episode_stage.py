@@ -166,15 +166,17 @@ async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
 
 
 async def _sibling_rows(session: AsyncSession, job: Job) -> list[tuple[Job, list[Track]]]:
-    """Other live TV jobs, with their tracks; a job with no external ids has
-    none. Which of them share this show is decided per season / provider by
-    `_siblings` on show ids, not on the title string. Failed and abandoned
-    jobs never hold episodes."""
-    if not current_ids(job).model_dump(exclude_none=True):
+    """Other live TV jobs of the same show (a shared show id, not the title
+    string), with their tracks; a job with no external ids has none. Failed
+    and abandoned jobs never hold episodes. Tracks load only for these."""
+    ids = current_ids(job)
+    if not ids.model_dump(exclude_none=True):
         return []
     stmt = select(Job).where(col(Job.media_type) == MediaType.TV)
     jobs = [
-        j for j in (await session.execute(stmt)).scalars().all() if j.id != job.id and j.status not in _DEAD_STATUSES
+        j
+        for j in (await session.execute(stmt)).scalars().all()
+        if j.id != job.id and j.status not in _DEAD_STATUSES and _shares_id(ids, current_ids(j))
     ]
     if not jobs:
         return []
@@ -363,21 +365,22 @@ async def _pick_season(
     provider: EpisodeListProvider, req: _Request, order: Sequence[tuple[int, bool]]
 ) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]], bool] | None:
     """The best-ranked season's fit, the ranking of the seasons tried, and
-    whether the scan stopped early; None when no season could be fetched.
+    whether the scan stopped early (seasons were left untried); None when no
+    season could be fetched.
 
     Seasons are tried in `order`. A season with `from_hint` set stops the
     scan when it ranks first and nothing holds its fit (judged as if
     auto-apply were on: the stop is about confidence)."""
     fits: dict[int, _SeasonFit] = {}
     ranked: list[tuple[int, MatchResult]] = []
-    for season, from_hint in order:
+    for i, (season, from_hint) in enumerate(order):
         fit = await _fit_season(provider, req, season)
         if fit is None:
             continue
         fits[season] = fit
         ranked = rank_seasons({s: f.result for s, f in fits.items()})
         if from_hint and ranked[0][0] == season and not hold_reasons(fit, ranked, scanned=True, auto_apply=True):
-            return season, fit, ranked, True
+            return season, fit, ranked, i < len(order) - 1
     if not ranked:
         return None
     season = ranked[0][0]

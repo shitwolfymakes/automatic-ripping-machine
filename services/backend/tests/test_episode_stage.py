@@ -535,6 +535,41 @@ async def test_siblings_match_by_show_id_not_title_string() -> None:
     assert placed.isdisjoint({1, 2})
 
 
+async def test_other_show_contributes_no_tracks_to_the_rows() -> None:
+    job = _job(disc_number=2)
+    sibling = _job("job_2", disc_number=1)
+    other = _job("job_3", disc_number=1, ids={"imdb": "tt9"})
+    extra = [
+        _track("job_2", 0, DISTINCT[0], role=TrackRole.EPISODE, season=1, episode_number=1),
+        _track("job_3", 0, DISTINCT[0], role=TrackRole.EPISODE, season=1, episode_number=1),
+    ]
+    db = _db(job, DISC, sibling, other, extra_tracks=extra)
+    statements: list[Any] = []
+    real_execute = db.execute
+
+    async def spy(stmt: Any, *args: Any, **kwargs: Any) -> Any:
+        statements.append(stmt)
+        return await real_execute(stmt, *args, **kwargs)
+
+    db.execute = spy  # type: ignore[method-assign]
+    rows = await episode_stage._sibling_rows(db, job)
+
+    assert [j.id for j, _ in rows] == ["job_2"]
+    assert all(t.job_id == "job_2" for _, tracks in rows for t in tracks)
+    # The track query names only the real sibling, so job_3's tracks never load.
+    track_query = str(statements[-1].compile(compile_kwargs={"literal_binds": True}))
+    assert "job_2" in track_query
+    assert "job_3" not in track_query
+
+
+def test_siblings_skip_a_row_of_another_show() -> None:
+    """`_siblings` matches rows on the provider's resolved ids, which can
+    differ from the job's own: a row sharing none of them holds nothing."""
+    other = _job("job_3", disc_number=1, ids={"imdb": "tt9"})
+    tracks = [_track("job_3", 0, 1500, role=TrackRole.EPISODE, season=1, episode_number=1)]
+    assert episode_stage._siblings([(other, tracks)], ExternalIds(imdb="tt1"), 1, 2) == ([], False)
+
+
 async def test_job_without_ids_has_no_siblings() -> None:
     job = _job(ids={}, disc_number=2)
     db = _db(job, DISC, _job("job_2", disc_number=1))
@@ -1283,6 +1318,27 @@ async def test_disc_hint_season_is_tried_first_and_stops_the_scan() -> None:
     assert outcome.claims.suggestion is False
 
 
+async def test_hint_season_that_is_the_only_season_did_not_stop_early() -> None:
+    """The hinted season stops the scan, but it was the only season listed:
+    nothing was left untried, so the scan did not stop early."""
+    from datetime import UTC, datetime
+
+    from arm_common.schemas.identity import JobClaim, SourceClaims
+
+    from arm_backend.identity.proposals import put_source
+
+    job = _job(season=None)
+    put_source(job, "label", SourceClaims(run_at=datetime.now(UTC), status="ok", job=JobClaim(season=4)))
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={4: _season(4, DISTINCT)})
+
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert [n for name, n in provider.calls if name == "season"] == [4]
+    assert outcome.claims.job.season == 4
+    assert outcome.claims.extra["scan_stopped_early"] is False
+
+
 async def test_held_hint_season_does_not_stop_the_scan() -> None:
     """A sibling-proposed season whose fit is held (here ambiguous) never
     stops the scan; the rest are tried and the best wins."""
@@ -1318,6 +1374,41 @@ async def test_hold_reasons_name_why_a_result_is_a_suggestion() -> None:
     off = Config(episode_auto_apply=False)
     outcomes = await compute_episode_claims(db, job, [provider], off, StageOptions())  # type: ignore[arg-type]
     assert outcomes[0].claims.extra["hold_reasons"][0] == "auto_apply_off"
+
+
+def _result(n: int = 4, *, cost: float = 40, coverage: float = 1.0, conf: float = 0.9, ambiguous: bool = False) -> Any:
+    from arm_backend.identity.episodes.model import MatchResult, TitleMatch
+
+    matches = tuple(TitleMatch(str(i), 1, i + 1, None, None, 0, conf) for i in range(n))
+    return MatchResult(matches, (), (), cost, coverage, ambiguous)
+
+
+# A runner-up far behind (half the coverage, a much worse mean cost): no tie, no thin win.
+_FAR = _result(2, cost=4000, coverage=0.5)
+
+
+@pytest.mark.parametrize(
+    ("code", "fit", "runner_up", "scanned", "auto_apply"),
+    [
+        (None, {}, _FAR, True, True),
+        ("auto_apply_off", {}, _FAR, True, False),
+        ("ambiguous", {"result": _result(ambiguous=True)}, _FAR, True, True),
+        ("low_coverage", {"result": _result(coverage=0.4)}, _FAR, True, True),
+        ("low_confidence", {"result": _result(conf=0.2)}, _FAR, True, True),
+        ("near_tie", {}, _result(cost=42), False, True),
+        ("thin_win", {}, _result(2, cost=40, coverage=0.5), True, True),
+        ("nominal_runtimes", {"nominal": True}, _FAR, True, True),
+        ("sibling_conflict", {"sibling_conflict": True}, _FAR, True, True),
+    ],
+)
+def test_hold_reasons_table(
+    code: str | None, fit: dict[str, Any], runner_up: Any, scanned: bool, auto_apply: bool
+) -> None:
+    """Each of the eight hold-reason codes, by name, fires on its own."""
+    season_fit = episode_stage._SeasonFit(**{"result": _result(), "nominal": False, "sibling_conflict": False, **fit})
+    ranked = [(1, season_fit.result), (2, runner_up)]
+    reasons = episode_stage.hold_reasons(season_fit, ranked, scanned=scanned, auto_apply=auto_apply)
+    assert reasons == ([code] if code else [])
 
 
 async def test_empty_season_list_is_a_miss() -> None:
@@ -1390,6 +1481,36 @@ async def test_operator_placed_track_is_excluded_and_its_episode_reserved() -> N
     assert "1" not in claims.tracks
     assert 4 not in {c.episode for c in claims.tracks.values()}
     assert episode_stage.operator_placed([hand]) == {1: frozenset({4})}
+
+
+async def test_operator_placed_track_mid_disc_splits_the_alignment_into_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pick in the middle of the disc (E4 of E3-E6) splits the season into
+    the runs E1-E3 and E5-E10; the other titles align inside one run, so no
+    placement crosses the operator's episode."""
+    from arm_backend.identity.episodes.continuity import _runs
+
+    job = _job()
+    db = _db(job, DISC)
+    hand = _tracks(db, job)["1"]
+    hand.role, hand.season, hand.episode_number = TrackRole.EPISODE, 1, 4
+    hand.identity_provenance = {"episode_number": "manual", "season": "manual", "role": "manual"}
+    runs: list[list[list[int]]] = []
+    real = episode_stage.align_runs
+
+    def spy(titles: Any, remaining: Any, **kwargs: Any) -> Any:
+        runs.append([[e.number for e in eps] for _, eps in _runs(remaining, kwargs["claimed"])])
+        return real(titles, remaining, **kwargs)
+
+    monkeypatch.setattr(episode_stage, "align_runs", spy)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert runs == [[[1, 2, 3], [5, 6, 7, 8, 9, 10]]]
+    placed = {ref: c.episode for ref, c in outcome.claims.tracks.items() if c.episode is not None}
+    assert "1" not in outcome.claims.tracks
+    assert placed == {"2": 5, "3": 6}
 
 
 async def test_operator_placed_track_in_another_season_reserves_nothing_here() -> None:

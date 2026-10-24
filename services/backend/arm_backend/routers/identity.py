@@ -432,6 +432,9 @@ async def browse_seasons(
         seasons = await provider.seasons(show_id)
     except HTTPException:
         raise
+    except SourceMiss as e:
+        # A stale cached show id: the provider no longer knows the show.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{source}: show not found") from e
     except SourceError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: {e}") from e
     except Exception as e:
