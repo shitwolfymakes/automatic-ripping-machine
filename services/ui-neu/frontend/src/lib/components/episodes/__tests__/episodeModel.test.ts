@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows, placedCount, formatLength, activeSource } from '../episodeModel';
+import {
+	failedSources,
+	panelState,
+	buildRows,
+	placedCount,
+	formatLength,
+	activeSource,
+	holdReasons,
+	seasonAlternatives,
+	heldSeason,
+	pickerOptions
+} from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
@@ -92,12 +103,26 @@ describe('buildRows', () => {
 		id.tracks![2].episode_number_end = 4;
 		expect(buildRows(tracks, id, null)[2].code).toBe('S01E03-E04');
 	});
+	it('a seasonless episode renders no season, never an assumed one', () => {
+		const id = identity();
+		id.tracks![2].season = null;
+		expect(buildRows(tracks, id, null)[2].code).toBe('S-E03');
+	});
+	it('carries the saved season and the length in seconds', () => {
+		const id = identity();
+		id.tracks![1].season = null;
+		const withSeason = tracks.map((t, i) => (i === 1 ? { ...t, season: 3 } : t));
+		const rows = buildRows(withSeason, id, null);
+		expect(rows[0]).toMatchObject({ season: 1, seconds: 3093 });
+		expect(rows[1].season).toBe(3);
+		expect(rows[5]).toMatchObject({ season: null, seconds: 542 });
+	});
 });
 
 it('formatLength', () => {
 	expect(formatLength(3093)).toBe('51:33');
 	expect(formatLength(542)).toBe('9:02');
-	expect(formatLength(null)).toBe('—');
+	expect(formatLength(null)).toBe('-');
 });
 it('activeSource maps a pin to its source id', () => {
 	expect(activeSource(identity({ pin: { episode: 'episodes_tvmaze' } }))).toBe('episodes_tvmaze');
@@ -164,5 +189,87 @@ describe('activeSource agrees with the resolver', () => {
 	it('falls back to an ok suggestion when nothing else is ok', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
 		expect(activeSource(id)).toBe('episodes_tmdb');
+	});
+});
+
+describe('season candidates and hold reasons', () => {
+	it('maps hold reason codes to sentences and drops unknown ones', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true, extra: { hold_reasons: ['near_tie', 'bogus'] } } }
+		} as unknown as IdentityView;
+		expect(holdReasons(id, 'episodes_tmdb')).toEqual(['Another season fits about as well.']);
+	});
+	it('lists candidate seasons from alternatives', () => {
+		const id = {
+			sources: {
+				episodes_tmdb: {
+					status: 'ok',
+					alternatives: [
+						{ season: 3, coverage: 0.75, matches: 3 },
+						{ season: 4, matches: 2 }
+					]
+				}
+			}
+		} as unknown as IdentityView;
+		// The total is the season's own title count (3 / 0.75 = 4), not the rows shown.
+		expect(seasonAlternatives(id, 'episodes_tmdb', 6)).toEqual([
+			{ season: 3, matches: 3, total: 4 },
+			{ season: 4, matches: 2, total: 6 }
+		]);
+		expect(seasonAlternatives(id, 'episodes_tmdb')[1].total).toBe(0);
+		expect(seasonAlternatives(id, null)).toEqual([]);
+	});
+	it('names the held season from the source proposals', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true } },
+			tracks: [
+				{ track_id: 'a', proposals: { episodes_tmdb: { season: 5, episode: 1 } } },
+				{ track_id: 'b', proposals: { episodes_tmdb: { season: 5, episode: 2 } } },
+				{ track_id: 'c', proposals: { episodes_tmdb: { role: 'extra' } } }
+			]
+		} as unknown as IdentityView;
+		expect(heldSeason(id, 'episodes_tmdb', 3)).toEqual({ season: 5, matches: 2, total: 3 });
+		expect(heldSeason(id, 'episodes_tvmaze', 3)).toBeNull();
+	});
+});
+
+describe('pickerOptions', () => {
+	it('sorts picker options by runtime fit and pushes used episodes last', () => {
+		const eps = [
+			{ number: 1, name: 'A', runtime_s: 2700 },
+			{ number: 2, name: 'B', runtime_s: 1500 },
+			{ number: 3, name: 'C', runtime_s: 1520 }
+		] as any;
+		const labels = pickerOptions(eps, 2, 1510, new Set([3])).map((o) => o.label);
+		expect(labels.slice(0, 3)).toEqual(['E02 B, 25m', 'E01 A, 45m', 'E03 C, 25m (used)']);
+		expect(pickerOptions(eps, 2, 1510, new Set())[0].value).toBe('s2e2');
+	});
+	it('labels specials as season 0, puts unknown runtimes last, then the roles', () => {
+		const eps = [
+			{ number: 2, name: 'No runtime' },
+			{ number: 1, name: 'Pilot', runtime_s: 4440, special: true },
+			{ number: 1, name: 'First', runtime_s: 3000 }
+		];
+		expect(pickerOptions(eps, 1, 3000, new Set()).map((o) => [o.value, o.label])).toEqual([
+			['s1e1', 'E01 First, 50m'],
+			['s0e1', 'S00E01 Pilot, 74m, special'],
+			['s1e2', 'E02 No runtime'],
+			['extra', 'Extra'],
+			['trailer', 'Trailer'],
+			['other', 'Other']
+		]);
+	});
+	it('orders by number when the track length is unknown', () => {
+		const eps = [
+			{ number: 3, name: 'C', runtime_s: 100 },
+			{ number: 1, name: 'A', runtime_s: 900 }
+		];
+		expect(pickerOptions(eps, 1, null, new Set()).map((o) => o.value)).toEqual([
+			's1e1',
+			's1e3',
+			'extra',
+			'trailer',
+			'other'
+		]);
 	});
 });

@@ -63,8 +63,6 @@ EPISODE_TOLERANCE_S = 300
 EPISODE_AUTO_APPLY = True
 # Stop trying further episode sources once one applies at this coverage (spec 5: 80%).
 COVERAGE_STOP = 0.8
-# Most seasons scanned when the job's season is unknown.
-MAX_SEASON_SCAN = 10
 
 # Disc-hint sources by setting value (spec 4.5 `disc_hint_sources`).
 HINT_SOURCE_BY_SETTING: dict[str, Source] = {BD_TITLE.id: BD_TITLE, LABEL.id: LABEL}

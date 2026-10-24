@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS discs (
     release_slug TEXT NOT NULL,
     disc_json TEXT NOT NULL,
     metadata_json TEXT NOT NULL,
-    release_json TEXT NOT NULL
+    release_json TEXT NOT NULL,
+    release_seasons TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_discs_global ON discs(global_disc_id);
 """
@@ -61,6 +62,21 @@ class DiscMatch:
     disc: dict[str, Any]
     metadata: dict[str, Any]
     release: dict[str, Any]
+    # Seasons covered by the whole release (sorted); None when it has no Episode titles.
+    release_seasons: list[int] | None = None
+
+
+def _episode_seasons(disc: dict[str, Any]) -> set[int]:
+    seasons: set[int] = set()
+    for entry in disc.get("Titles") or []:
+        item = entry.get("Item") if isinstance(entry, dict) else None
+        if not isinstance(item, dict) or item.get("Type") != "Episode":
+            continue
+        try:
+            seasons.add(int(item["Season"]))
+        except KeyError, TypeError, ValueError:
+            continue
+    return seasons
 
 
 def build_index(tarball: Path, dest_sqlite: Path) -> int:
@@ -110,11 +126,14 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
     try:
         conn.executescript(_SCHEMA)
         rows = 0
+        seasons_by_release: dict[tuple[str, str, str], set[int]] = {}
+        for kind, title_dir, release_dir, disc in discs:
+            seasons_by_release.setdefault((kind, title_dir, release_dir), set()).update(_episode_seasons(disc))
         for kind, title_dir, release_dir, disc in discs:
             meta = metadata_by_title.get(f"{kind}/{title_dir}", {})
             release = release_by_dir.get(f"{kind}/{title_dir}/{release_dir}", {})
             conn.execute(
-                "INSERT OR REPLACE INTO discs VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO discs VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     str(disc["ContentHash"]).upper(),
                     (str(disc["GlobalDiscId"]).upper() if disc.get("GlobalDiscId") else None),
@@ -124,6 +143,9 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
                     json.dumps(disc),
                     json.dumps(meta),
                     json.dumps(release),
+                    json.dumps(sorted(seasons))
+                    if (seasons := seasons_by_release[(kind, title_dir, release_dir)])
+                    else None,
                 ),
             )
             rows += 1
@@ -159,11 +181,11 @@ class SnapshotStore:
         if not content_hash or not self.exists():
             return None
         with sqlite3.connect(f"file:{self._path}?mode=ro", uri=True) as conn:
-            row = conn.execute(
-                "SELECT kind, title_slug, release_slug, disc_json, metadata_json, release_json"
-                " FROM discs WHERE content_hash = ?",
-                (content_hash.upper(),),
-            ).fetchone()
+            select = "SELECT kind, title_slug, release_slug, disc_json, metadata_json, release_json{} FROM discs WHERE content_hash = ?"
+            try:
+                row = conn.execute(select.format(", release_seasons"), (content_hash.upper(),)).fetchone()
+            except sqlite3.OperationalError:  # index built before release_seasons existed
+                row = conn.execute(select.format(""), (content_hash.upper(),)).fetchone()
         if row is None:
             return None
         return DiscMatch(
@@ -173,6 +195,7 @@ class SnapshotStore:
             disc=json.loads(row[3]),
             metadata=json.loads(row[4]),
             release=json.loads(row[5]),
+            release_seasons=json.loads(row[6]) if len(row) > 6 and row[6] else None,
         )
 
 

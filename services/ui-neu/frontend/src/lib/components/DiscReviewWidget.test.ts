@@ -388,11 +388,11 @@ describe('DiscReviewWidget', () => {
 				})
 			);
 			renderWidget({ status: 'awaiting_review' });
-			await waitFor(() => expect(screen.getByText('Blu-ray · Disc 1/3 · 2 titles')).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('Blu-ray, Disc 1/3, 2 titles')).toBeInTheDocument());
 			const show = screen.getByTestId('match-row');
 			expect(show).toHaveTextContent('Show');
 			expect(within(show).getByText('tt0071003')).toHaveAttribute('href', 'https://www.imdb.com/title/tt0071003');
-			expect(show).toHaveTextContent('· TV Series · 1974–1975 · Season 2');
+			expect(show).toHaveTextContent(', TV Series, 1974-1975, Season 2');
 			// The TYPE toggle replaces the old "Series" chip.
 			expect(screen.queryByText('Series')).not.toBeInTheDocument();
 		});
@@ -478,7 +478,7 @@ describe('DiscReviewWidget', () => {
 			const line = await screen.findByTestId('episode-status');
 			expect(line).toHaveTextContent('Waiting for show');
 			expect(line.querySelector('button')).toBeNull();
-			expect(screen.getByTestId('match-row')).toHaveTextContent('Needs show · pick a show with Search');
+			expect(screen.getByTestId('match-row')).toHaveTextContent('Needs show, pick a show with Search');
 		});
 
 		it('names the matching source as a link that opens the episodes panel', async () => {
@@ -510,7 +510,7 @@ describe('DiscReviewWidget', () => {
 			);
 			renderWidget({ status: 'awaiting_review', media_type: 'tv', has_series: true } as never);
 			const line = await screen.findByTestId('episode-status');
-			await waitFor(() => expect(line).toHaveTextContent('Episodes need attention · 2 of 3 titles unmatched · Review'));
+			await waitFor(() => expect(line).toHaveTextContent('Episodes need attention, 2 of 3 titles unmatched, Review'));
 			await fireEvent.click(within(line).getByRole('button', { name: 'Review' }));
 			expect(await screen.findByTestId('episode-panel')).toBeInTheDocument();
 		});

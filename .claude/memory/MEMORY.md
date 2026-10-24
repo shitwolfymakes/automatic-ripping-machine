@@ -32,3 +32,5 @@
 - [Docs describe the current state](feedback_docs_describe_current_state.md) — docs, memory, comments and CLAUDE.md say what is true now; replace an old description instead of annotating it ("DONE", "no longer", "used to"); history lives in git, spec/plan and CHANGELOG
 - [No em dashes or unicode symbols in UI copy](feedback_no_em_dashes_in_ui_copy.md) — correct the characters (em-dash, ✓ ✗ ⚠ → · … ≥ ▾ ○); do not reword or change what is shown.
 - [Glyph icons, not emoji](feedback_glyph_icons_not_emoji.md) — status/indicator icons are the inline SVG glyphs ui-neu already uses, never emoji or unicode symbols.
+- [TV match corpus and baseline](project_tv_match_corpus.md) — 260 real TheDiscDB discs (9 series) under tests/fixtures/thediscdb/; run devtools/tv-match-baseline.py before and after any episode-matcher change (season known 24%; nothing known 164 correct on the 7-series floor)
+- [TV season selection PR #402](project_tv_season_selection.md) — draft on wolfy, stacked on #379; DoD walk pending; follow-ups: fill both sides of a mid-disc hand pick, interleaved-seasons scenario, alignment model

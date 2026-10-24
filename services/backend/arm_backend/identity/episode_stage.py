@@ -9,13 +9,20 @@ when `opts.apply` is set. `run_episode_stage` stores every outcome with
 
 A result the stage is not sure of (ambiguous positions, low coverage, low
 confidence, two seasons that fit about equally, nominal broadcast-slot
-runtimes) is stored with `suggestion=True`, which the resolver never applies.
+runtimes) is stored with `suggestion=True`, which the resolver never applies,
+and `extra["hold_reasons"]` names every reason (`hold_reasons`).
+
+With no known season, every season the provider lists is fetched, in
+`season_scan_order`: the disc hint's season, then seasons sibling discs hold,
+then the rest. Only a hint- or sibling-proposed season can stop the scan
+early, and only when its fit would apply on its own.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -34,12 +41,11 @@ from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
-from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
-from arm_backend.identity.proposals import claims_of, put_source
+from arm_backend.identity.pipeline import ResolveOutcome, hint_season, resolve_job
+from arm_backend.identity.proposals import MANUAL, claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
     EPISODE_SOURCE_BY_SETTING,
-    MAX_SEASON_SCAN,
     enabled_episode_source_ids,
     episode_auto_apply,
     episode_tolerance,
@@ -72,6 +78,8 @@ class StageOptions:
     tolerance: int | None = None
     only_source: str | None = None
     apply: bool = True
+    # Scan every season even when the job has one.
+    scan_seasons: bool = False
 
 
 @dataclass(frozen=True)
@@ -97,14 +105,36 @@ def _length(track: Track) -> int | None:
     return track.duration_seconds or track.expected_duration_seconds or None
 
 
+def _placed(track: Track) -> bool:
+    """The operator set this episode number by hand, in a season."""
+    return (
+        track.role == TrackRole.EPISODE
+        and track.season is not None
+        and track.episode_number is not None
+        and (track.identity_provenance or {}).get("episode_number") == MANUAL
+    )
+
+
+def operator_placed(tracks: Sequence[Track]) -> dict[int, frozenset[int]]:
+    """Season -> the episode numbers (a range expanded) the operator placed by
+    hand. Matching leaves those tracks alone and keeps their numbers free of
+    every other title."""
+    held: dict[int, set[int]] = {}
+    for track in tracks:
+        if _placed(track) and track.season is not None and track.episode_number is not None:
+            end = max(track.episode_number_end or track.episode_number, track.episode_number)
+            held.setdefault(track.season, set()).update(range(track.episode_number, end + 1))
+    return {season: frozenset(numbers) for season, numbers in held.items()}
+
+
 def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
     """Selected video titles with a length whose role is unknown or episode
-    (C6). A role this stage itself set on an earlier run (provenance is an
+    (C6), other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
     episode source, e.g. `extra` for a skipped title) does not count as known,
     so a re-run can still place that title."""
     out: list[TitleIn] = []
     for track in sorted(tracks, key=lambda t: t.index):
-        if track.kind != TrackKind.VIDEO_TITLE or track.excluded:
+        if track.kind != TrackKind.VIDEO_TITLE or track.excluded or _placed(track):
             continue
         role_source = (track.identity_provenance or {}).get("role")
         if track.role not in (None, TrackRole.EPISODE) and role_source not in _EPISODE_SOURCE_IDS:
@@ -136,14 +166,17 @@ async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
 
 
 async def _sibling_rows(session: AsyncSession, job: Job) -> list[tuple[Job, list[Track]]]:
-    """Other live TV jobs with the same title, with their tracks. Season and
-    shared show ids are checked per season / provider by `_siblings`. Failed
-    and abandoned jobs never hold episodes."""
-    if not job.title:
+    """Other live TV jobs of the same show (a shared show id, not the title
+    string), with their tracks; a job with no external ids has none. Failed
+    and abandoned jobs never hold episodes. Tracks load only for these."""
+    ids = current_ids(job)
+    if not ids.model_dump(exclude_none=True):
         return []
-    stmt = select(Job).where(col(Job.title) == job.title, col(Job.media_type) == MediaType.TV)
+    stmt = select(Job).where(col(Job.media_type) == MediaType.TV)
     jobs = [
-        j for j in (await session.execute(stmt)).scalars().all() if j.id != job.id and j.status not in _DEAD_STATUSES
+        j
+        for j in (await session.execute(stmt)).scalars().all()
+        if j.id != job.id and j.status not in _DEAD_STATUSES and _shares_id(ids, current_ids(j))
     ]
     if not jobs:
         return []
@@ -194,14 +227,46 @@ def _siblings(
     return out, conflict
 
 
+def sibling_seasons(rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds) -> list[int]:
+    """Seasons the sibling rows sharing an external id with `ids` hold (each
+    job's season and every track's season), most frequent first, ties
+    ascending."""
+    counts: Counter[int] = Counter()
+    for sibling, tracks in rows:
+        if not _shares_id(ids, current_ids(sibling)):
+            continue
+        held = [sibling.season, *(t.season for t in tracks)]
+        counts.update(season for season in held if season is not None)
+    return sorted(counts, key=lambda season: (-counts[season], season))
+
+
+def season_scan_order(
+    seasons: Sequence[int], *, hint: int | None, sibling_seasons: Sequence[int]
+) -> list[tuple[int, bool]]:
+    """The listed `seasons` as `(season, from_hint)` pairs in scan order: the
+    hint's season, then the listed sibling seasons nearest the hint first
+    (ties and a missing hint ascending), then the rest ascending. `from_hint`
+    marks the first two groups, the only seasons that may stop a scan."""
+    listed = set(seasons)
+    proposed = [hint] if hint is not None and hint in listed else []
+    siblings = {s for s in sibling_seasons if s in listed and s not in proposed}
+    proposed += sorted(siblings, key=lambda s: (abs(s - hint) if hint is not None else 0, s))
+    rest = sorted(listed.difference(proposed))
+    return [(s, True) for s in proposed] + [(s, False) for s in rest]
+
+
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
     """C4: every known runtime is a whole number of broadcast slots, and fewer
-    than half the titles fit any of them."""
+    than half the episode-shaped titles fit any of them (extras never count; a
+    disc with no episode-shaped title is judged on all of them)."""
     known = {e.runtime_s for e in remaining if e.runtime_s}
     if not known or any(rt % NOMINAL_SLOT_S for rt in known):
         return False
-    fitting = sum(1 for t in titles if any(abs(t.seconds - rt) <= _eff_tol(rt, tolerance) for rt in known))
-    return fitting < len(titles) / 2
+    # A disc with nothing episode-shaped is judged on all its titles: that is the
+    # TVmaze case, a list of round runtimes no title comes near.
+    shaped = _episode_shaped(titles, remaining, tolerance) or list(titles)
+    fitting = sum(1 for t in shaped if any(abs(t.seconds - rt) <= _eff_tol(rt, tolerance) for rt in known))
+    return fitting < len(shaped) / 2
 
 
 def _mean_cost(result: MatchResult) -> float:
@@ -215,6 +280,21 @@ def _near_tie(first: MatchResult, second: MatchResult) -> bool:
     return abs(a - b) <= NEAR_TIE_COST_RATIO * max(a, b)
 
 
+def _episode_shaped(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> list[TitleIn]:
+    """Titles whose length could be an episode of this season, so menus, trailers
+    and extras are left out. With no known runtime every title counts."""
+    runtimes = [e.runtime_s for e in episodes if e.runtime_s]
+    if not runtimes:
+        return list(titles)
+    low, high = min(runtimes) - tolerance, max(runtimes) + tolerance
+    return [t for t in titles if low <= t.seconds <= high]
+
+
+def episode_shaped_count(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> int:
+    """How many titles are episode-shaped; this, not every title, anchors the disc."""
+    return len(_episode_shaped(titles, episodes, tolerance))
+
+
 @dataclass(frozen=True)
 class _Request:
     """One provider's matching inputs."""
@@ -226,6 +306,7 @@ class _Request:
     disc_number: int | None
     disc_total: int | None
     tolerance: int
+    placed: Mapping[int, frozenset[int]]
 
 
 async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> _SeasonFit | None:
@@ -234,11 +315,14 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
     except SourceMiss:
         return None
     siblings, conflict = _siblings(req.rows, req.ids, season, req.disc_number)
+    if held := req.placed.get(season):
+        # Claims the operator's numbers without anchoring on a disc.
+        siblings.append(SiblingDisc(None, held))
     remaining, anchor = start_anchor(
         episodes,
         disc_number=req.disc_number,
         disc_total=req.disc_total,
-        n_titles=len(req.titles),
+        n_titles=episode_shaped_count(req.titles, episodes, req.tolerance),
         siblings=siblings,
     )
     nominal = _nominal(remaining, req.titles, req.tolerance)
@@ -249,26 +333,58 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
     return _SeasonFit(result, nominal, conflict)
 
 
-async def _pick_season(
-    provider: EpisodeListProvider, req: _Request, seasons: Sequence[int]
-) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]]] | None:
-    """The best-ranked season's fit, with the full ranking; None when no
-    season could be fetched."""
-    fits: dict[int, _SeasonFit] = {}
-    for season in seasons:
-        fit = await _fit_season(provider, req, season)
-        if fit is not None:
-            fits[season] = fit
-    ranked = rank_seasons({s: f.result for s, f in fits.items()})
-    if not ranked:
-        return None
-    season = ranked[0][0]
-    return season, fits[season], ranked
-
-
 def _thin_win(best: MatchResult, runner_up: MatchResult) -> bool:
     gap = _mean_cost(runner_up) - _mean_cost(best)
     return gap < max(THIN_WIN_RATIO * _mean_cost(runner_up), THIN_WIN_MIN_S)
+
+
+def hold_reasons(
+    fit: _SeasonFit, ranked: Sequence[tuple[int, MatchResult]], *, scanned: bool, auto_apply: bool
+) -> list[str]:
+    """Why `fit` (the best-ranked season's) is held as a suggestion, in a
+    fixed order; empty when it applies on its own. `near_tie` and `thin_win`
+    compare against the runner-up in `ranked`; `thin_win` only for a scanned
+    season (I5)."""
+    result = fit.result
+    runner_up = ranked[1][1] if len(ranked) > 1 else None
+    mean_conf = sum(m.confidence for m in result.matches) / max(1, len(result.matches))
+    checks = (
+        ("auto_apply_off", not auto_apply),
+        ("ambiguous", result.ambiguous),
+        ("low_coverage", result.coverage < MIN_COVERAGE),
+        ("low_confidence", mean_conf < MIN_MEAN_CONFIDENCE),
+        ("near_tie", runner_up is not None and _near_tie(result, runner_up)),
+        ("thin_win", scanned and runner_up is not None and _thin_win(result, runner_up)),
+        ("nominal_runtimes", fit.nominal),
+        ("sibling_conflict", fit.sibling_conflict),
+    )
+    return [code for code, held in checks if held]
+
+
+async def _pick_season(
+    provider: EpisodeListProvider, req: _Request, order: Sequence[tuple[int, bool]]
+) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]], bool] | None:
+    """The best-ranked season's fit, the ranking of the seasons tried, and
+    whether the scan stopped early (seasons were left untried); None when no
+    season could be fetched.
+
+    Seasons are tried in `order`. A season with `from_hint` set stops the
+    scan when it ranks first and nothing holds its fit (judged as if
+    auto-apply were on: the stop is about confidence)."""
+    fits: dict[int, _SeasonFit] = {}
+    ranked: list[tuple[int, MatchResult]] = []
+    for i, (season, from_hint) in enumerate(order):
+        fit = await _fit_season(provider, req, season)
+        if fit is None:
+            continue
+        fits[season] = fit
+        ranked = rank_seasons({s: f.result for s, f in fits.items()})
+        if from_hint and ranked[0][0] == season and not hold_reasons(fit, ranked, scanned=True, auto_apply=True):
+            return season, fit, ranked, i < len(order) - 1
+    if not ranked:
+        return None
+    season = ranked[0][0]
+    return season, fits[season], ranked, False
 
 
 def _ok_claims(
@@ -277,29 +393,15 @@ def _ok_claims(
     ranked: Sequence[tuple[int, MatchResult]],
     *,
     scanned: bool,
-    truncated: bool,
+    stopped_early: bool,
     inputs: dict[str, Any],
     now: datetime,
     auto_apply: bool,
 ) -> SourceClaims:
     result = fit.result
-    near_tie = len(ranked) > 1 and _near_tie(result, ranked[1][1])
-    # I5: a scanned season is only as sure as its margin over the runner-up,
-    # and over the seasons the capped scan never looked at.
-    thin_win = scanned and len(ranked) > 1 and _thin_win(result, ranked[1][1])
-    scan_truncated = scanned and truncated
-    mean_conf = sum(m.confidence for m in result.matches) / len(result.matches)
-    suggestion = (
-        (not auto_apply)
-        or result.ambiguous
-        or result.coverage < MIN_COVERAGE
-        or mean_conf < MIN_MEAN_CONFIDENCE
-        or near_tie
-        or thin_win
-        or scan_truncated
-        or fit.nominal
-        or fit.sibling_conflict
-    )
+    reasons = hold_reasons(fit, ranked, scanned=scanned, auto_apply=auto_apply)
+    near_tie = "near_tie" in reasons
+    thin_win = "thin_win" in reasons
     tracks: dict[str, TrackClaim] = {
         m.ref: TrackClaim(
             role=TrackRole.EPISODE,
@@ -316,7 +418,7 @@ def _ok_claims(
     return SourceClaims(
         run_at=now,
         status="ok",
-        suggestion=suggestion,
+        suggestion=bool(reasons),
         inputs={**inputs, "nominal_runtimes": fit.nominal},
         job=JobClaim(season=season) if scanned else JobClaim(),
         tracks=tracks,
@@ -331,7 +433,8 @@ def _ok_claims(
             "play_all": list(result.play_all),
             "skipped": list(result.skipped),
             **({"thin_win": True} if thin_win else {}),
-            **({"scan_truncated": True} if scan_truncated else {}),
+            "hold_reasons": reasons,
+            **({"scan_stopped_early": stopped_early} if scanned else {}),
         },
     )
 
@@ -341,6 +444,8 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
     job's season unless this stage itself set it (F1). A season an episode
     source picked by scanning stays a scan, so re-runs keep proposing it
     and their inputs stay the same."""
+    if opts.scan_seasons:
+        return None
     if opts.season is not None:
         return opts.season
     if (job.identity_provenance or {}).get("season") in _EPISODE_SOURCE_IDS:
@@ -371,6 +476,7 @@ async def _match(
     *,
     titles: Sequence[TitleIn],
     rows: Sequence[tuple[Job, list[Track]]],
+    placed: Mapping[int, frozenset[int]],
     now: datetime,
     inputs: dict[str, Any],
 ) -> SourceOutcome:
@@ -413,31 +519,32 @@ async def _match(
 
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
-    truncated = False
     if known_season is not None:
-        seasons = [known_season]
+        order = [(known_season, False)]
     else:
         try:
-            seasons = await provider.seasons(show_id)
+            listed = await provider.seasons(show_id)
         except SourceMiss:
             # A stale cached show id: the provider no longer knows the show.
             claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
-        truncated = len(seasons) > MAX_SEASON_SCAN
-        seasons = seasons[:MAX_SEASON_SCAN]
+        if not listed:
+            claims = SourceClaims(run_at=now, status="miss", detail="no seasons listed", inputs=dict(inputs))
+            return SourceOutcome(source_id, claims, None)
+        order = season_scan_order(listed, hint=hint_season(job), sibling_seasons=sibling_seasons(rows, ids))
 
-    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance)
-    picked = await _pick_season(provider, req, seasons)
+    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance, placed)
+    picked = await _pick_season(provider, req, order)
     if picked is None or not picked[1].result.matches:
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
         return SourceOutcome(source_id, claims, picked[1].result if picked else None)
-    season, fit, ranked = picked
+    season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
         season,
         fit,
         ranked,
         scanned=known_season is None,
-        truncated=truncated,
+        stopped_early=stopped_early,
         inputs=inputs,
         now=now,
         auto_apply=episode_auto_apply(cfg),
@@ -476,19 +583,23 @@ async def compute_episode_claims(
     """Every tried provider's outcome, in the order tried. Stops after the
     first confident, well-covered result (spec 5); later providers are not
     called. One provider failing never fails the stage (spec 9)."""
-    titles = _eligible(await _job_tracks(session, job))
+    job_tracks = await _job_tracks(session, job)
+    titles = _eligible(job_tracks)
     if not titles:
         # Nothing to match yet (e.g. identify without the review hold creates
         # no tracks; rip-start schedules the stage again). No outcome means
         # nothing is stored, so `sweep_startup` can still pick the job up.
         return []
     rows = await _sibling_rows(session, job)
+    placed = operator_placed(job_tracks)
     now = datetime.now(UTC)
     outcomes: list[SourceOutcome] = []
     for provider in _ordered_providers(job, providers, opts.only_source, cfg):
         inputs: dict[str, Any] = {}
         try:
-            outcome = await _match(provider, job, cfg, opts, titles=titles, rows=rows, now=now, inputs=inputs)
+            outcome = await _match(
+                provider, job, cfg, opts, titles=titles, rows=rows, placed=placed, now=now, inputs=inputs
+            )
         except SourceError as e:
             logger.warning("episode stage: source %s failed job_id=%s: %s", provider.source_id, job.id, e)
             outcome = _error(job, provider.source_id, e, inputs, now)

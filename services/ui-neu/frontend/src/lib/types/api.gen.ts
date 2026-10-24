@@ -2640,6 +2640,12 @@ export type JobView = {
      */
     disc_total?: number | null;
     /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
+    /**
      * Poster Url
      */
     poster_url?: string | null;
@@ -2978,6 +2984,10 @@ export type MatchRequest = {
      * Apply
      */
     apply?: boolean;
+    /**
+     * Scan Seasons
+     */
+    scan_seasons?: boolean;
 };
 
 /**
@@ -4302,6 +4312,26 @@ export type SdfStatusReport = {
      * Age Days
      */
     age_days?: number | null;
+};
+
+/**
+ * SeasonListView
+ *
+ * `GET /api/jobs/{id}/identity/seasons` response.
+ */
+export type SeasonListView = {
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Show Id
+     */
+    show_id: string;
+    /**
+     * Seasons
+     */
+    seasons: Array<number>;
 };
 
 /**
@@ -5646,6 +5676,12 @@ export type JobViewWritable = {
      * Disc Total
      */
     disc_total?: number | null;
+    /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
     /**
      * Poster Url
      */
@@ -7124,6 +7160,47 @@ export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses = {
 };
 
 export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponse = BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses[keyof BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses];
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query: {
+        /**
+         * Source
+         */
+        source: 'tmdb' | 'tvmaze' | 'tvdb';
+    };
+    url: '/api/jobs/{job_id}/identity/seasons';
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetError = BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors[keyof BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors];
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeasonListView;
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponse = BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses[keyof BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses];
 
 export type ListDrivesApiDrivesGetData = {
     body?: never;

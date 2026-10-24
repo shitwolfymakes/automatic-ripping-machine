@@ -130,16 +130,29 @@ def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = 
     """Record the operator's job edits as `manual` claims, skipping restated
     values unless `keep_restated` (an explicit operator choice, e.g. the
     `/identity/match` season, that must pin even a value an automatic source
-    already set). Returns whether any claim was recorded."""
+    already set). A None value clears the field from the manual claim (never
+    recorded as "unknown"), so the resolver falls back to the next proposer.
+    A cleared field with no provenance owner (a pre-provenance row) is emptied
+    on the job directly, since the resolver leaves ownerless fields alone.
+    Returns whether the stored claim or a job attribute changed."""
+    clears = [attr for attr, value in edits.items() if value is None]
+    sets = {attr: value for attr, value in edits.items() if value is not None}
     if not keep_restated:
-        edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
-    if not edits:
-        return False
+        sets = {attr: value for attr, value in sets.items() if not _restated(job, attr, value)}
     claims = claims_of(job)
     manual = _manual(claims)
-    merged = manual.job.model_dump(exclude_unset=True)
-    for attr, value in edits.items():
+    before = manual.job.model_dump(exclude_unset=True)
+    merged = dict(before)
+    for attr, value in sets.items():
         merged[_JOB_ATTR_TO_CLAIM[attr]] = value
+    for attr in clears:
+        merged.pop(_JOB_ATTR_TO_CLAIM[attr], None)
+    owners = job.identity_provenance or {}
+    emptied = [attr for attr in clears if attr not in owners and getattr(job, attr) is not None]
+    for attr in emptied:
+        setattr(job, attr, None)
+    if merged == before:
+        return bool(emptied)
     manual.job = JobClaim(**merged)
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)

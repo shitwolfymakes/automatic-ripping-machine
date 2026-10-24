@@ -238,6 +238,8 @@ class JobView(BaseModel):
     parked_session_ids: list[str] = []
     disc_number: int | None = None
     disc_total: int | None = None
+    # {attribute: source_id} for resolver-managed fields (display-only).
+    identity_provenance: dict[str, str] | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None

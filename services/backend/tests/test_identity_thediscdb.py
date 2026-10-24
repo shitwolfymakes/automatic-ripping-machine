@@ -389,3 +389,64 @@ def test_release_result_builds_the_thediscdb_identity() -> None:
     assert (result.title, result.year, result.kind, result.provider) == ("Round Midnight", 1986, "tv", "thediscdb")
     assert result.payload == {"imdb_id": "tt1", "thediscdb_release": "r"}
     assert release_result(_release_match(title_slug=""), "tt1") is None
+
+
+def _episodes(season: str, count: int = 3) -> list[dict[str, Any]]:
+    return [
+        {
+            "SourceFile": f"0000{i}.mpls",
+            "Duration": "0:45:00",
+            "Item": {"Type": "Episode", "Season": season, "Episode": str(i)},
+        }
+        for i in range(1, count + 1)
+    ]
+
+
+_EPISODES_S3 = _episodes("3")
+
+
+def _scan(titles: list[dict[str, Any]]) -> ScanResult:
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[ScanTitle(index=i, duration_seconds=2700, source_file=t["SourceFile"]) for i, t in enumerate(titles)],
+    )
+
+
+def test_build_claims_claims_the_season_and_disc_for_a_single_season_release() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = 2
+    match.release_seasons = [3]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number == 2
+
+
+def test_build_claims_skips_disc_number_for_a_multi_season_release() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = 14
+    match.release_seasons = [1, 2, 3, 4]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number is None
+
+
+def test_build_claims_skips_disc_number_when_index_is_not_an_int() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = "two"
+    match.release_seasons = [3]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number is None
+
+
+def test_build_claims_claims_no_season_when_titles_span_seasons() -> None:
+    titles = _episodes("3", 2) + [
+        {"SourceFile": "00009.mpls", "Duration": "0:45:00", "Item": {"Type": "Episode", "Season": "4", "Episode": "1"}}
+    ]
+    claims = build_claims(_match(titles, kind="series"), _scan(titles), now=NOW)
+    assert claims.job.season is None
+
+
+def test_build_claims_ignores_the_season_of_non_episode_titles() -> None:
+    titles = _episodes("3", 2) + [
+        {"SourceFile": "00009.mpls", "Duration": "0:05:00", "Item": {"Type": "Extra", "Season": "9"}}
+    ]
+    claims = build_claims(_match(titles, kind="series"), _scan(titles), now=NOW)
+    assert claims.job.season == 3

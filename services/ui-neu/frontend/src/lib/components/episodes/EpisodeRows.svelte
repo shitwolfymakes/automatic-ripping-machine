@@ -3,6 +3,7 @@
 	// desktop, stacked cards below 640px. Presentational only - the panel owns
 	// the data and the actions.
 	import { SOURCE_LABEL, type EpisodeRow } from './episodeModel';
+	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface FileName {
 		name: string;
@@ -15,8 +16,13 @@
 		phone?: boolean;
 		/** Label of the source being previewed; null when no preview is shown. */
 		proposedLabel?: string | null;
-		/** Set-by-hand choices; null hides the pickers and Revert (guest, matching, preview). */
-		options?: { value: string; label: string }[] | null;
+		/** A row's set-by-hand choices; absent hides the pickers and Revert (guest, matching, preview). */
+		optionsFor?: ((row: EpisodeRow) => { value: string; label: string }[] | null) | null;
+		/** The source's regular seasons for the per-row season select; null when they could not load. */
+		seasons?: number[] | null;
+		/** The job's season, shown for a row with none of its own; null when unknown. */
+		panelSeason?: number | null;
+		onseason?: (trackId: string, season: number) => void;
 		onpick?: (trackId: string, value: string) => void;
 		onrevert?: (trackId: string) => void;
 	}
@@ -26,7 +32,10 @@
 		matching = false,
 		phone = false,
 		proposedLabel = null,
-		options = null,
+		optionsFor = null,
+		seasons = null,
+		panelSeason = null,
+		onseason,
 		onpick,
 		onrevert
 	}: Props = $props();
@@ -37,16 +46,18 @@
 		if (value) onpick?.(trackId, value);
 	}
 
+	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
+
 	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
 
 	function originLabel(row: EpisodeRow): string {
 		const label = SOURCE_LABEL[row.origin.source ?? ''] ?? row.origin.source ?? '';
-		if (row.origin.kind === 'auto') return `Auto · ${label}`;
-		if (row.origin.kind === 'suggestion') return `Suggestion · ${label}`;
+		if (row.origin.kind === 'auto') return `Auto, ${label}`;
+		if (row.origin.kind === 'suggestion') return `Suggestion, ${label}`;
 		if (row.origin.kind === 'you') return 'Set by you';
-		return '—';
+		return '-';
 	}
-	const conf = (c: number | null) => (c == null ? '—' : c.toFixed(2));
+	const conf = (c: number | null) => (c == null ? '-' : c.toFixed(2));
 </script>
 
 {#snippet placement(row: EpisodeRow)}
@@ -75,15 +86,22 @@
 {/snippet}
 
 {#snippet byHand(row: EpisodeRow)}
-	{#if options}
+	{#if optionsFor}
 		<div class="episode-rows-hand">
+			<SeasonSelect
+				class="episode-rows-season"
+				ariaLabel="Season for {row.ref}"
+				value={seasonOf(row)}
+				{seasons}
+				onchange={(v) => typeof v === 'number' && onseason?.(row.trackId, v)}
+			/>
 			<select
 				class="field-control episode-rows-select"
 				aria-label="Set placement for {row.ref}"
 				onchange={(e) => pick(row.trackId, e)}
 			>
-				<option value="">Change…</option>
-				{#each options as o (o.value)}
+				<option value="">Change...</option>
+				{#each optionsFor(row) ?? [] as o (o.value)}
 					<option value={o.value}>{o.label}</option>
 				{/each}
 			</select>
@@ -98,7 +116,7 @@
 
 {#snippet origin(row: EpisodeRow)}
 	{#if matching || row.origin.kind === 'none'}
-		<span class="episode-rows-muted">—</span>
+		<span class="episode-rows-muted">-</span>
 	{:else}
 		<span
 			class="chip chip-sm {ORIGIN_CHIP[row.origin.kind]}"
@@ -132,10 +150,10 @@
 					<th class="table-header">Track</th>
 					<th class="table-header">Length</th>
 					<th class="table-header">Placement</th>
-					{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
+					{#if proposedLabel}<th class="table-header">Proposed, {proposedLabel}</th>{/if}
 					<th class="table-header">Origin</th>
 					<th class="table-header table-right">Conf.</th>
-					{#if options}<th class="table-header">Set by hand</th>{/if}
+					{#if optionsFor}<th class="table-header">Set by hand</th>{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -151,13 +169,13 @@
 								{:else if row.proposed}
 									<span class="episode-rows-muted">Same</span>
 								{:else}
-									<span class="episode-rows-muted">—</span>
+									<span class="episode-rows-muted">-</span>
 								{/if}
 							</td>
 						{/if}
 						<td class="table-cell">{@render origin(row)}</td>
-						<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
-						{#if options}<td class="table-cell">{@render byHand(row)}</td>{/if}
+						<td class="table-cell table-right tabular-nums">{matching ? '-' : conf(row.confidence)}</td>
+						{#if optionsFor}<td class="table-cell">{@render byHand(row)}</td>{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -221,10 +239,21 @@
 		min-width: 0;
 		max-width: 16rem;
 	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
+	.episode-rows-hand :global(.episode-rows-season) {
+		min-width: 0;
+		max-width: 8rem;
+	}
 	.episode-rows-card .episode-rows-hand {
 		flex-wrap: wrap;
 	}
 	.episode-rows-card .episode-rows-select {
+		flex: 1 1 100%;
+		max-width: none;
+		min-height: 2.75rem;
+	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
+	.episode-rows-card :global(.episode-rows-season) {
 		flex: 1 1 100%;
 		max-width: none;
 		min-height: 2.75rem;

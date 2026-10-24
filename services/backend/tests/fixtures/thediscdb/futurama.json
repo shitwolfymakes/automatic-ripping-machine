@@ -1,0 +1,909 @@
+{
+ "title": "Futurama",
+ "year": 1999,
+ "external_ids": {
+  "tmdb": "615",
+  "imdb": "tt0149460",
+  "tvdb": "73871"
+ },
+ "tmdb": {
+  "number_of_seasons": 11,
+  "number_of_episodes": 164,
+  "episode_run_time": [],
+  "seasons": [
+   {
+    "season_number": 0,
+    "episode_count": 6,
+    "name": "Specials"
+   },
+   {
+    "season_number": 1,
+    "episode_count": 9,
+    "name": "Season 1"
+   },
+   {
+    "season_number": 2,
+    "episode_count": 20,
+    "name": "Season 2"
+   },
+   {
+    "season_number": 3,
+    "episode_count": 15,
+    "name": "Season 3"
+   },
+   {
+    "season_number": 4,
+    "episode_count": 12,
+    "name": "Season 4"
+   },
+   {
+    "season_number": 5,
+    "episode_count": 16,
+    "name": "Season 5"
+   },
+   {
+    "season_number": 6,
+    "episode_count": 26,
+    "name": "Season 6"
+   },
+   {
+    "season_number": 7,
+    "episode_count": 26,
+    "name": "Season 7"
+   },
+   {
+    "season_number": 8,
+    "episode_count": 10,
+    "name": "Season 8"
+   },
+   {
+    "season_number": 9,
+    "episode_count": 10,
+    "name": "Season 9"
+   },
+   {
+    "season_number": 10,
+    "episode_count": 10,
+    "name": "Season 10"
+   },
+   {
+    "season_number": 11,
+    "episode_count": 10,
+    "name": "Season 11"
+   }
+  ]
+ },
+ "releases": [
+  {
+   "slug": "volume-6-bluray",
+   "title": "Volume 6 (Broadcast Season 8)",
+   "year": 2014,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "v06d01",
+     "name": "Volume 6, Disc 1",
+     "format": "Blu-ray",
+     "content_hash": "7F84AD20149558C37707D139EF86E9AD",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00650.mpls",
+       "duration_s": 0,
+       "size": 823296,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00800.mpls",
+       "duration_s": 1300,
+       "size": 5314953216,
+       "item": {
+        "type": "Episode",
+        "title": "The Silence of the Clamps",
+        "season": 6,
+        "episode": 18
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00801.mpls",
+       "duration_s": 1298,
+       "size": 5962260480,
+       "item": {
+        "type": "Episode",
+        "title": "Mobius Dick",
+        "season": 6,
+        "episode": 21
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00802.mpls",
+       "duration_s": 1299,
+       "size": 5679034368,
+       "item": {
+        "type": "Episode",
+        "title": "Law and Oracle",
+        "season": 6,
+        "episode": 17
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00803.mpls",
+       "duration_s": 1299,
+       "size": 5499887616,
+       "item": {
+        "type": "Episode",
+        "title": "Benderama",
+        "season": 6,
+        "episode": 15
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00804.mpls",
+       "duration_s": 1299,
+       "size": 5425563648,
+       "item": {
+        "type": "Episode",
+        "title": "The Tip of the Zoidberg",
+        "season": 6,
+        "episode": 23
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00805.mpls",
+       "duration_s": 1299,
+       "size": 5504022528,
+       "item": {
+        "type": "Episode",
+        "title": "Ghost in the Machines",
+        "season": 6,
+        "episode": 16
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00806.mpls",
+       "duration_s": 1299,
+       "size": 5378906112,
+       "item": {
+        "type": "Episode",
+        "title": "Neutopia",
+        "season": 6,
+        "episode": 14
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00300.mpls",
+       "duration_s": 20,
+       "size": 40052736,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00020.mpls",
+       "duration_s": 46,
+       "size": 112588800,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00807.mpls",
+       "duration_s": 9095,
+       "size": 38764627968,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "00274.mpls",
+       "duration_s": 390,
+       "size": 806578176,
+       "item": {
+        "type": "Extra",
+        "title": "Season 6 Deleted Scenes #1",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "00021.mpls",
+       "duration_s": 46,
+       "size": 112570368,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "00011.m2ts",
+       "duration_s": 23,
+       "size": 68628480,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "00122.m2ts",
+       "duration_s": 11,
+       "size": 20594688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "00123.m2ts",
+       "duration_s": 15,
+       "size": 40421376,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "00720.m2ts",
+       "duration_s": 17,
+       "size": 51640320,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 17,
+       "makemkv_title": 17,
+       "source_file": "00863.m2ts",
+       "duration_s": 21,
+       "size": 52512768,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 18,
+       "makemkv_title": 18,
+       "source_file": "00864.m2ts",
+       "duration_s": 26,
+       "size": 54448128,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 19,
+       "makemkv_title": 19,
+       "source_file": "00865.m2ts",
+       "duration_s": 25,
+       "size": 61409280,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 20,
+       "makemkv_title": 20,
+       "source_file": "00866.m2ts",
+       "duration_s": 46,
+       "size": 98881536,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 21,
+       "makemkv_title": 21,
+       "source_file": "00867.m2ts",
+       "duration_s": 25,
+       "size": 46583808,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 22,
+       "makemkv_title": 22,
+       "source_file": "00868.m2ts",
+       "duration_s": 52,
+       "size": 97714176,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 23,
+       "makemkv_title": 23,
+       "source_file": "00869.m2ts",
+       "duration_s": 74,
+       "size": 172572672,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 24,
+       "makemkv_title": 24,
+       "source_file": "00870.m2ts",
+       "duration_s": 34,
+       "size": 82839552,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 25,
+       "makemkv_title": 25,
+       "source_file": "00871.m2ts",
+       "duration_s": 18,
+       "size": 34658304,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 26,
+       "makemkv_title": 26,
+       "source_file": "00872.m2ts",
+       "duration_s": 35,
+       "size": 57200640,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 27,
+       "makemkv_title": 27,
+       "source_file": "00873.m2ts",
+       "duration_s": 21,
+       "size": 38553600,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 28,
+       "makemkv_title": 28,
+       "source_file": "00874.m2ts",
+       "duration_s": 6,
+       "size": 9203712,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "v06d02",
+     "name": "Volume 6, Disc 2",
+     "format": "Blu-ray",
+     "content_hash": "9ECBF240EF2C7132E1104706C253DA44",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00650.mpls",
+       "duration_s": 0,
+       "size": 823296,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00800.mpls",
+       "duration_s": 1299,
+       "size": 5788932096,
+       "item": {
+        "type": "Episode",
+        "title": "Yo Leela Leela",
+        "season": 6,
+        "episode": 19
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00801.mpls",
+       "duration_s": 1299,
+       "size": 5851170816,
+       "item": {
+        "type": "Episode",
+        "title": "Fry Am the Egg Man",
+        "season": 6,
+        "episode": 22
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00802.mpls",
+       "duration_s": 1299,
+       "size": 5824585728,
+       "item": {
+        "type": "Episode",
+        "title": "All the Presidents' Heads",
+        "season": 6,
+        "episode": 20
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00803.mpls",
+       "duration_s": 1299,
+       "size": 5923829760,
+       "item": {
+        "type": "Episode",
+        "title": "Cold Warriors",
+        "season": 6,
+        "episode": 24
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00804.mpls",
+       "duration_s": 1299,
+       "size": 6156791808,
+       "item": {
+        "type": "Episode",
+        "title": "Overclockwise",
+        "season": 6,
+        "episode": 25
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00805.mpls",
+       "duration_s": 1299,
+       "size": 5860761600,
+       "item": {
+        "type": "Episode",
+        "title": "Reincarnation",
+        "season": 6,
+        "episode": 26
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00276.mpls",
+       "duration_s": 20,
+       "size": 26327040,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00020.mpls",
+       "duration_s": 46,
+       "size": 112558080,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00806.mpls",
+       "duration_s": 7796,
+       "size": 35406071808,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00251.mpls",
+       "duration_s": 506,
+       "size": 1017864192,
+       "item": {
+        "type": "DeletedScene",
+        "title": "Deleted Scenes #2",
+        "season": 6,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "00021.mpls",
+       "duration_s": 46,
+       "size": 112613376,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "00011.m2ts",
+       "duration_s": 23,
+       "size": 68628480,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "00122.m2ts",
+       "duration_s": 11,
+       "size": 20594688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "00123.m2ts",
+       "duration_s": 15,
+       "size": 40421376,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "00720.m2ts",
+       "duration_s": 17,
+       "size": 51640320,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "00261.m2ts",
+       "duration_s": 59,
+       "size": 93523968,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 17,
+       "makemkv_title": 17,
+       "source_file": "00252.m2ts",
+       "duration_s": 1031,
+       "size": 2494586880,
+       "item": {
+        "type": "Extra",
+        "title": "Professor Farnsworth Science of a Scene",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 18,
+       "makemkv_title": 18,
+       "source_file": "00253.m2ts",
+       "duration_s": 407,
+       "size": 966924288,
+       "item": {
+        "type": "Extra",
+        "title": "Reincarnation Explained! With Director Peter Avanzino",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 19,
+       "makemkv_title": 19,
+       "source_file": "00254.m2ts",
+       "duration_s": 687,
+       "size": 1639729152,
+       "item": {
+        "type": "Extra",
+        "title": "Futurama FAQ",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 20,
+       "makemkv_title": 20,
+       "source_file": "00262.m2ts",
+       "duration_s": 32,
+       "size": 56469504,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 21,
+       "makemkv_title": 21,
+       "source_file": "00263.m2ts",
+       "duration_s": 135,
+       "size": 232925184,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 22,
+       "makemkv_title": 22,
+       "source_file": "00264.m2ts",
+       "duration_s": 33,
+       "size": 81334272,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 23,
+       "makemkv_title": 23,
+       "source_file": "00265.m2ts",
+       "duration_s": 31,
+       "size": 74065920,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 24,
+       "makemkv_title": 24,
+       "source_file": "00266.m2ts",
+       "duration_s": 30,
+       "size": 72806400,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 25,
+       "makemkv_title": 25,
+       "source_file": "00267.m2ts",
+       "duration_s": 19,
+       "size": 46811136,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 26,
+       "makemkv_title": 26,
+       "source_file": "00268.m2ts",
+       "duration_s": 27,
+       "size": 66760704,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 27,
+       "makemkv_title": 27,
+       "source_file": "00269.m2ts",
+       "duration_s": 20,
+       "size": 49010688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 28,
+       "makemkv_title": 28,
+       "source_file": "00270.m2ts",
+       "duration_s": 19,
+       "size": 35014656,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 29,
+       "makemkv_title": 29,
+       "source_file": "00271.m2ts",
+       "duration_s": 19,
+       "size": 35586048,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 30,
+       "makemkv_title": 30,
+       "source_file": "00272.m2ts",
+       "duration_s": 42,
+       "size": 100970496,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 31,
+       "makemkv_title": 31,
+       "source_file": "00273.m2ts",
+       "duration_s": 26,
+       "size": 63381504,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 32,
+       "makemkv_title": 32,
+       "source_file": "00863.m2ts",
+       "duration_s": 6,
+       "size": 9203712,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

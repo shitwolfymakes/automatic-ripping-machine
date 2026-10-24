@@ -11,7 +11,14 @@
 		MatchRequest,
 		TrackView
 	} from '$lib/types/api.gen';
-	import { fetchEpisodes, fetchIdentity, matchIdentity, unpinIdentity, type EpisodeSource } from '$lib/api/identity';
+	import {
+		fetchEpisodes,
+		fetchIdentity,
+		fetchSeasons,
+		matchIdentity,
+		unpinIdentity,
+		type EpisodeSource
+	} from '$lib/api/identity';
 	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
 	import {
@@ -20,9 +27,17 @@
 		placedCount,
 		activeSource,
 		failedSources,
+		heldSeason,
+		holdReasons,
+		seasonAlternatives,
+		pickerOptions,
+		ROLE_OPTIONS,
 		SOURCE_LABEL,
-		type RerunForm
+		type EpisodeRow,
+		type RerunForm,
+		type SeasonCandidate
 	} from './episodeModel';
+	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
 
@@ -46,7 +61,13 @@
 
 	const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
 	let rerunOpen = $state(false);
-	let rerun = $state<RerunForm>({ source: 'tmdb', season: 1, disc: 1, tolerance: null });
+	// No season or disc is assumed: unknown stays empty until the operator picks.
+	const NO_RERUN: RerunForm = { source: 'tmdb', season: null, disc: null, tolerance: null };
+	let rerun = $state<RerunForm>({ ...NO_RERUN });
+	// The seasons of the re-run form's source while it is open, else of the
+	// picker's source (the per-row season select); null when the list could not load.
+	let seasons = $state<number[] | null>([]);
+	let seasonsKey = '';
 	let preview = $state<MatchPreview | null>(null);
 	let previewSource = $state<EpisodeSource | null>(null);
 	// The request that produced the preview on screen: Apply & pin sends exactly
@@ -60,8 +81,13 @@
 	let lastRequest = $state.raw<MatchRequest | null>(null);
 	let unpinAsk = $state(false);
 	let unpinError = $state<string | null>(null);
-	let episodes = $state<EpisodeSummary[]>([]);
-	let episodesKey = '';
+	// The picker's episode lists by season, for the job and source in episodesFor.
+	let episodesBySeason = $state.raw(new Map<number, EpisodeSummary[]>());
+	let episodesFor = '';
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- fetch bookkeeping, never read reactively
+	const episodesRequested = new Set<number>();
+	// A season the operator picked for a row with no episode yet (nothing saved).
+	let rowSeason = $state<Record<string, number>>({});
 	let handError = $state<string | null>(null);
 	const ROLES = ['extra', 'trailer', 'other'] as const;
 	const REVERT = ['role', 'season', 'episode_number', 'episode_number_end', 'episode_name'] as const;
@@ -97,13 +123,17 @@
 		fileNames = new Map();
 		othersOpen = false;
 		rerunOpen = false;
-		rerun = { source: 'tmdb', season: 1, disc: 1, tolerance: null };
+		rerun = { ...NO_RERUN };
 		dropPreview();
 		lastRequest = null;
 		unpinAsk = false;
 		unpinError = null;
-		episodes = [];
-		episodesKey = '';
+		seasons = [];
+		seasonsKey = '';
+		episodesBySeason = new Map();
+		episodesFor = '';
+		episodesRequested.clear();
+		rowSeason = {};
 		handError = null;
 	}
 
@@ -149,8 +179,8 @@
 		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
 		rerun = {
 			source: current && EPISODE_SOURCES.includes(current) ? current : first,
-			season: job.season ?? 1,
-			disc: job.disc_number ?? 1,
+			season: job.season ?? null,
+			disc: job.disc_number ?? null,
 			tolerance: null
 		};
 		dropPreview();
@@ -165,9 +195,34 @@
 	}
 
 	function request(apply: boolean): MatchRequest {
-		const req: MatchRequest = { source: rerun.source, season: rerun.season, disc_number: rerun.disc, apply };
+		const req: MatchRequest = { source: rerun.source, apply };
+		if (rerun.season === 'scan') req.scan_seasons = true;
+		else if (rerun.season != null) req.season = rerun.season;
+		if (rerun.disc != null) req.disc_number = rerun.disc;
 		if (rerun.tolerance != null) req.tolerance = rerun.tolerance;
 		return req;
+	}
+
+	// Candidate seasons under the status line: the held result's own season
+	// first (one click confirms it), then the other seasons the scan fit.
+	const ownSeason = $derived(
+		identity && canAct && view === 'suggestion' ? heldSeason(identity, source, rows.length) : null
+	);
+	const altSeasons = $derived(
+		identity && canAct
+			? seasonAlternatives(identity, source, rows.length).filter((a) => a.season !== ownSeason?.season)
+			: []
+	);
+	const candidates = $derived<SeasonCandidate[]>(ownSeason ? [ownSeason, ...altSeasons] : altSeasons);
+	const seasonName = (n: number) => (n === 0 ? 'Specials' : `Season ${n}`);
+
+	// Preview one candidate season in the re-run form, so its Apply is at hand.
+	function tryCandidate(season: number) {
+		const src = pickerSource ?? rerun.source;
+		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
+		rerunOpen = true;
+		dropPreview();
+		return run({ source: src, season, disc_number: job.disc_number ?? undefined, apply: false });
 	}
 
 	async function run(req: MatchRequest) {
@@ -221,62 +276,163 @@
 		return ran?.id ?? null;
 	});
 
+	// The season list follows the re-run form's source while the form is open,
+	// else the picker's source. Tracked on identity so a reload retries a list
+	// that failed (a loaded one is skipped by its key).
+	const seasonsSource = $derived<EpisodeSource | null>(rerunOpen ? rerun.source : pickerSource);
 	$effect(() => {
-		const src = pickerSource;
-		const season = job.season ?? 1;
-		const key = `${job.id}:${src}:${season}`;
-		// Tracked so each identity reload re-runs this: a list that failed to
-		// load is fetched again then (a loaded one is skipped by its key).
+		const src = seasonsSource;
+		const jobId = job.id;
 		void identity;
-		if (!src || !canAct || key === episodesKey) return;
-		episodesKey = key;
-		fetchEpisodes(job.id, src, season).then(
+		if (!src || !canAct) return;
+		const key = `${jobId}:${src}`;
+		if (key === seasonsKey) return;
+		seasonsKey = key;
+		untrack(() => (seasons = []));
+		fetchSeasons(jobId, src).then(
 			(r) => {
-				if (episodesKey === key) episodes = r.episodes ?? [];
+				if (seasonsKey === key) seasons = r.seasons ?? [];
 			},
 			() => {
-				if (episodesKey !== key) return;
-				episodes = [];
-				episodesKey = '';
+				if (seasonsKey !== key) return;
+				seasons = null;
+				seasonsKey = '';
 			}
 		);
 	});
 
-	const pad = (n: number) => String(n).padStart(2, '0');
-	const pickOptions = $derived.by(() => {
-		const season = job.season ?? 1;
-		const eps = episodes.map((e) => {
-			const mins = e.runtime_s != null ? ` · ${Math.round(e.runtime_s / 60)}m` : '';
-			return e.special
-				? { value: `s0e${e.number}`, label: `S00E${pad(e.number)} ${e.name ?? ''}${mins} · special` }
-				: { value: `s${season}e${e.number}`, label: `E${pad(e.number)} ${e.name ?? ''}${mins}` };
+	// The identity tracks that hold an episode: their saved season is the row's.
+	const placed = $derived(
+		new Map((identity?.tracks ?? []).filter((t) => t.episode_number != null).map((t) => [t.track_id, t] as const))
+	);
+	// A row's own season: one picked for it here (not saved until an episode
+	// is picked), else its saved one; null when neither is set.
+	const savedOrPicked = (row: EpisodeRow): number | null => rowSeason[row.trackId] ?? row.season;
+	// The disc's season the rows fall back to: the re-run form's season while
+	// the form is open and names one, else the job's; null when none is known.
+	const discSeason = $derived(rerunOpen && typeof rerun.season === 'number' ? rerun.season : (job.season ?? null));
+	// The season a row's list comes from: its own, else the disc's; null when
+	// none is known (the disc's season is never assumed).
+	const seasonOf = (row: EpisodeRow): number | null => savedOrPicked(row) ?? discSeason;
+	// The rows as shown: each carries its own season (EpisodeRows falls back to the disc's).
+	const shownRows = $derived(rows.map((r) => ({ ...r, season: savedOrPicked(r) })));
+
+	// Every season a row shows gets its episode list, once per job and source.
+	// Tracked on identity (through rows) so a reload retries a list that failed.
+	$effect(() => {
+		const src = pickerSource;
+		const jobId = job.id;
+		const needed = new Set(rows.map(seasonOf).filter((n): n is number => n != null));
+		if (!src || !canAct) return;
+		untrack(() => {
+			const key = `${jobId}:${src}`;
+			if (key !== episodesFor) {
+				episodesFor = key;
+				episodesRequested.clear();
+				episodesBySeason = new Map();
+			}
+			for (const season of needed) {
+				if (episodesRequested.has(season)) continue;
+				episodesRequested.add(season);
+				fetchEpisodes(jobId, src, season).then(
+					(r) => {
+						if (episodesFor !== key) return;
+						// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state.raw variable triggers updates
+						episodesBySeason = new Map(episodesBySeason).set(season, r.episodes ?? []);
+					},
+					() => {
+						if (episodesFor === key) episodesRequested.delete(season);
+					}
+				);
+			}
 		});
-		return [...eps, ...ROLES.map((r) => ({ value: r, label: r[0].toUpperCase() + r.slice(1) }))];
 	});
 
-	async function saveTrack(trackId: string, data: Parameters<typeof updateTrack>[2]) {
+	// The episode numbers the other tracks of a season already hold.
+	function usedIn(season: number, trackId: string): Set<number> {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a fresh value per call, never mutated after
+		const used = new Set<number>();
+		for (const t of placed.values()) {
+			if (t.track_id === trackId || t.season !== season || t.episode_number == null) continue;
+			for (let n = t.episode_number; n <= (t.episode_number_end ?? t.episode_number); n++) used.add(n);
+		}
+		return used;
+	}
+
+	// The by-hand choices of a shown row (its season already resolved). The
+	// roles need no season; the episodes do.
+	function optionsFor(row: EpisodeRow) {
+		const season = row.season ?? discSeason;
+		if (season == null) return ROLE_OPTIONS;
+		return pickerOptions(episodesBySeason.get(season) ?? [], season, row.seconds, usedIn(season, row.trackId));
+	}
+
+	// Picking a season saves nothing: it switches the row's episode list, and
+	// the season is saved with the episode picked from it.
+	function setRowSeason(trackId: string, season: number) {
+		rowSeason = { ...rowSeason, [trackId]: season };
+	}
+
+	function clearRowSeason(trackId: string) {
+		if (!(trackId in rowSeason)) return;
+		const { [trackId]: _dropped, ...rest } = rowSeason;
+		rowSeason = rest;
+	}
+
+	async function saveTrack(trackId: string, data: Parameters<typeof updateTrack>[2]): Promise<boolean> {
 		handError = null;
 		try {
 			await updateTrack(job.id, trackId, data);
 		} catch (e) {
 			handError = e instanceof Error ? e.message : 'Could not save';
-			return;
+			return false;
 		}
 		await reload();
+		return true;
 	}
 
-	function setByHand(trackId: string, value: string) {
+	async function setByHand(trackId: string, value: string) {
 		const role = ROLES.find((r) => r === value);
 		if (role) return saveTrack(trackId, { role });
 		const m = /^s(\d+)e(\d+)$/.exec(value);
 		if (!m) return;
 		const [season, n] = [Number(m[1]), Number(m[2])];
-		const ep = episodes.find((e) => e.number === n && !!e.special === (season === 0));
-		return saveTrack(trackId, { role: 'episode', season, episode_number: n, episode_name: ep?.name ?? null });
+		const row = rows.find((r) => r.trackId === trackId);
+		const listSeason = row ? seasonOf(row) : null;
+		const list = listSeason == null ? [] : (episodesBySeason.get(listSeason) ?? []);
+		const ep = list.find((e) => e.number === n && (!!e.special || listSeason === 0) === (season === 0));
+		const data = { role: 'episode' as const, season, episode_number: n, episode_name: ep?.name ?? null };
+		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
 	}
 
-	function revert(trackId: string) {
-		return saveTrack(trackId, { revert_fields: [...REVERT] });
+	// Fill the rest: preview the source over the tracks not set by hand (the
+	// backend keeps each hand-set track and reserves its episode), shown in the
+	// re-run form so its Apply is at hand. Offered once a track is set by hand
+	// and another is not, however the others were placed.
+	const canFill = $derived(!!pickerSource && rows.some((r) => r.handSet) && rows.some((r) => !r.handSet));
+	// The season to fill in: the job's, else the one season every hand-set row
+	// was saved in; null (no season sent) when they disagree or none is known.
+	function fillSeason(): number | null {
+		if (job.season != null) return job.season;
+		const held = new Set(rows.filter((r) => r.handSet).map((r) => r.season));
+		const [only] = held;
+		return held.size === 1 && only != null ? only : null;
+	}
+	function fillTheRest() {
+		const src = pickerSource;
+		if (!src) return;
+		const season = fillSeason();
+		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
+		rerunOpen = true;
+		dropPreview();
+		const req: MatchRequest = { source: src, apply: false };
+		if (season != null) req.season = season;
+		if (job.disc_number != null) req.disc_number = job.disc_number;
+		return run(req);
+	}
+
+	async function revert(trackId: string) {
+		if (await saveTrack(trackId, { revert_fields: [...REVERT] })) clearRowSeason(trackId);
 	}
 
 	async function accept() {
@@ -338,9 +494,9 @@
 		<div class="episode-panel-status" role="status">
 			<span class="eyebrow">Episodes</span>
 			{#if view === 'matching'}
-				<span class="episode-panel-text">Matching episodes…</span>
+				<span class="episode-panel-text">Matching episodes...</span>
 			{:else if loading}
-				<span class="episode-panel-text">Loading episodes…</span>
+				<span class="episode-panel-text">Loading episodes...</span>
 			{:else}
 				{#if sourceLabel}<span class="chip chip-sm chip-info">{sourceLabel}</span>{/if}
 				{#if view === 'applied'}
@@ -357,8 +513,11 @@
 				{/if}
 			{/if}
 			<span class="episode-panel-status-actions">
+				{#if canAct && canFill && !preview}
+					<button type="button" class="btn btn-sm" disabled={busy} onclick={fillTheRest}>Fill the rest</button>
+				{/if}
 				{#if canAct}
-					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run…</button>
+					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run...</button>
 				{/if}
 				{#if others.length > 0 && view !== 'matching'}
 					<button
@@ -367,11 +526,22 @@
 						aria-expanded={othersOpen}
 						onclick={() => (othersOpen = !othersOpen)}
 					>
-						Other sources ▾
+						Other sources <Glyph name="chevron-down" />
 					</button>
 				{/if}
 			</span>
 		</div>
+
+		{#if candidates.length > 0 && !loading && !loadError}
+			<div class="episode-panel-seasons">
+				{#each candidates as c, i (c.season)}
+					{#if i === (ownSeason ? 1 : 0)}<span class="episode-panel-text">Also fits:</span>{/if}
+					<button type="button" class="btn btn-sm" disabled={busy} onclick={() => tryCandidate(c.season)}>
+						{seasonName(c.season)} ({c.matches} of {c.total} titles)
+					</button>
+				{/each}
+			</div>
+		{/if}
 
 		{#if view === 'matching'}
 			<div class="progress progress-sm">
@@ -385,7 +555,7 @@
 			<ul class="episode-panel-others">
 				{#each others as [id, s] (id)}
 					<li>
-						{SOURCE_LABEL[id] ?? id}: {STATUS_WORD[s?.status ?? 'ok'] ?? s?.status}{s?.detail ? ` · ${s.detail}` : ''}
+						{SOURCE_LABEL[id] ?? id}: {STATUS_WORD[s?.status ?? 'ok'] ?? s?.status}{s?.detail ? `, ${s.detail}` : ''}
 					</li>
 				{/each}
 			</ul>
@@ -410,10 +580,14 @@
 			<div class="alert alert-warning">
 				<p class="alert-title">{sourceLabel}'s best match is too uncertain to apply on its own</p>
 				<p class="alert-body">The placement below is a suggestion. Nothing is applied until you accept it.</p>
+				{#each holdReasons(identity ?? {}, source) as reason (reason)}
+					<p class="alert-body">{reason}</p>
+				{/each}
+				<p class="alert-body">Set the season or disc number in Info, or accept the suggestion.</p>
 				{#if canAct}
 					<div class="episode-panel-banner-actions">
 						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
-							{accepting ? 'Accepting…' : 'Accept suggestion'}
+							{accepting ? 'Accepting...' : 'Accept suggestion'}
 						</button>
 					</div>
 				{/if}
@@ -431,7 +605,7 @@
 								>Cancel</button
 							>
 						{:else}
-							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin…</button>
+							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin...</button>
 						{/if}
 					</div>
 					{#if unpinError}<p class="field-error">Could not unpin: {unpinError}</p>{/if}
@@ -451,6 +625,7 @@
 			<RerunPanel
 				bind:form={rerun}
 				sources={sourceOptions}
+				{seasons}
 				{busy}
 				preview={preview && previewSource
 					? { changed: rows.filter((r) => r.changed).length, label: labelOf(previewSource) }
@@ -468,12 +643,15 @@
 
 		{#if showRows}
 			<EpisodeRows
-				{rows}
+				rows={shownRows}
 				{fileNames}
 				matching={view === 'matching'}
 				phone={phoneQuery.current}
 				proposedLabel={preview && previewSource ? labelOf(previewSource) : null}
-				options={canAct && !preview ? pickOptions : null}
+				optionsFor={canAct && !preview ? optionsFor : null}
+				{seasons}
+				panelSeason={discSeason}
+				onseason={setRowSeason}
 				onpick={setByHand}
 				onrevert={revert}
 			/>
@@ -503,6 +681,12 @@
 		display: flex;
 		gap: 0.5rem;
 		margin-left: auto;
+	}
+	.episode-panel-seasons {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.episode-panel-count,
 	.episode-panel-text {

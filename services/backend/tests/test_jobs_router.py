@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
+from arm_backend.identity.proposals import record_manual_job  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.path_template import TemplateValidationError  # noqa: E402
 from arm_backend.routers import jobs as jobs_router  # noqa: E402
@@ -1757,10 +1758,10 @@ def test_resolve_without_disc_fields_keeps_hinted_disc(signing_key: bytes) -> No
     assert job.identity_provenance == {"disc_number": "label", "disc_total": "label"}
 
 
-def test_resolve_explicit_null_disc_clears_hint(signing_key: bytes) -> None:
-    """An EXPLICIT null for disc_number is the operator saying "clear it" --
-    distinct from omitting the field (test_resolve_without_disc_fields_keeps_hinted_disc
-    above), and still wins over the hint as a manual claim."""
+def test_resolve_explicit_null_disc_forgets_the_operator_value_only(signing_key: bytes) -> None:
+    """An EXPLICIT null for disc_number removes the operator's own value (it
+    is no longer recorded as a manual "unknown" claim), so the label hint, an
+    automatic proposer, still stands -- nothing manual is left to pin."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job_with_label_disc_hint()]
@@ -1772,8 +1773,9 @@ def test_resolve_explicit_null_disc_clears_hint(signing_key: bytes) -> None:
         )
     assert r.status_code == 200, r.text
     job = db.rows["jobs"][0]
-    assert job.disc_number is None
-    assert job.identity_provenance == {"disc_number": "manual", "disc_total": "label"}
+    assert job.disc_number == 3
+    assert job.identity_provenance == {"disc_number": "label", "disc_total": "label"}
+    assert "manual" not in job.metadata_json.get("identity_claims", {}).get("sources", {})
 
 
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
@@ -1824,6 +1826,8 @@ def test_resolve_explicit_null_media_type_and_season_clears_them(signing_key: by
     job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
     job.media_type = MediaType.TV
     job.season = 3
+    job.identity_provenance = {"season": "manual"}
+    record_manual_job(job, {"season": 3}, keep_restated=True)
     db.rows["jobs"] = [job]
     with TestClient(app) as client:
         r = client.post(

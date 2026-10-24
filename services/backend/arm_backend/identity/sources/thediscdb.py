@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from arm_common.enums import TrackRole
 from arm_common.schemas import ScanResult
-from arm_common.schemas.identity import SourceClaims, TrackClaim
+from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_backend.metadata.base import MetadataResult
@@ -63,6 +63,7 @@ def _int_or_none(value: Any) -> int | None:
 def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> SourceClaims:
     by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
     tracks: dict[str, TrackClaim] = {}
+    episode_seasons: set[int] = set()
     for entry in match.disc.get("Titles") or []:
         if not isinstance(entry, dict):
             continue
@@ -93,6 +94,8 @@ def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> Source
         season = _int_or_none(item.get("Season"))
         if season is not None:
             fields["season"] = season
+            if type_name == "Episode":
+                episode_seasons.add(season)
         episode = _int_or_none(item.get("Episode"))
         if episode is not None:
             fields["episode"] = episode
@@ -101,9 +104,16 @@ def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> Source
         if type_name in _SELECT_TYPES:
             fields["selected"] = True
         tracks[ref] = TrackClaim(**fields)
+    job = JobClaim()
+    if len(episode_seasons) == 1:
+        job.season = next(iter(episode_seasons))
+    disc_index = match.disc.get("Index")
+    if match.release_seasons and len(match.release_seasons) == 1 and isinstance(disc_index, int):
+        job.disc_number = disc_index
     return SourceClaims(
         run_at=now,
         status="ok",
+        job=job,
         tracks=tracks,
         extra={
             "release_slug": match.release_slug,

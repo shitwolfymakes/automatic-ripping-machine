@@ -950,3 +950,105 @@ def test_episodes_browse_never_offers_a_movie_tmdb_id_as_a_show_id(signing_key: 
 
     assert r.status_code == 200
     assert r.json()["show_id"] == "5084"  # resolved afresh, not the movie id
+
+
+# --- GET /identity/seasons -------------------------------------------------------
+
+
+def test_seasons_browse_happy_path(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT), 2: _season(2, DISTINCT)})
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert r.json() == {"source_id": "episodes_tmdb", "show_id": "100", "seasons": [1, 2]}
+
+
+def test_seasons_browse_without_show_id_404(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    runner = _FakeStageRunner([FakeProvider(show_id=None)])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 404
+
+
+def test_seasons_browse_without_stage_runner_503(signing_key: bytes) -> None:
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=None)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 503
+
+
+def test_seasons_browse_source_error_502(signing_key: bytes) -> None:
+    class _Failing(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise SourceError("timeout")
+
+    runner = _FakeStageRunner([_Failing()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 502
+    assert "tmdb" in r.json()["detail"]
+
+
+def test_seasons_browse_show_miss_404(signing_key: bytes) -> None:
+    class _Gone(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise SourceMiss("no such show")
+
+    runner = _FakeStageRunner([_Gone()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 404
+    assert r.json()["detail"] == "tmdb: show not found"
+
+
+def test_seasons_browse_unexpected_exception_502(signing_key: bytes, caplog: pytest.LogCaptureFixture) -> None:
+    class _Boom(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise RuntimeError("boom")
+
+    runner = _FakeStageRunner([_Boom()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 502
+    assert r.json()["detail"] == "tmdb: unexpected error"
+    assert "Traceback" in caplog.text
+
+
+def test_match_scan_seasons_scans_despite_a_job_season(signing_key: bytes) -> None:
+    """`scan_seasons: true` reaches the stage: the provider's season list is
+    asked for even though the job already has a season."""
+    job = _job(season=1)
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT), 2: _season(2, DISTINCT)})
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([provider]))
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"source": "tmdb", "scan_seasons": True},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
+    assert "seasons" in provider.calls
+
+
+def test_match_season_and_scan_seasons_together_422(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([FakeProvider()]))
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"season": 2, "scan_seasons": True},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 422

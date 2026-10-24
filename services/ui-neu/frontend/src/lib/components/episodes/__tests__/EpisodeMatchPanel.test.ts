@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -16,7 +16,8 @@ vi.mock('$lib/api/identity', () => ({
 	fetchIdentity: (...a: unknown[]) => fetchIdentity(...a),
 	matchIdentity: vi.fn(),
 	unpinIdentity: vi.fn(),
-	fetchEpisodes: vi.fn(() => Promise.resolve({ source_id: 'episodes_tmdb', show_id: '5084', season: 1, episodes: [] }))
+	fetchEpisodes: vi.fn(() => Promise.resolve({ source_id: 'episodes_tmdb', show_id: '5084', season: 1, episodes: [] })),
+	fetchSeasons: vi.fn(() => Promise.resolve({ source_id: 'episodes_tmdb', show_id: '5084', seasons: [1, 2, 3] }))
 }));
 vi.mock('$lib/api/jobs', () => ({
 	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
@@ -25,7 +26,7 @@ vi.mock('$lib/api/jobs', () => ({
 
 import EpisodeMatchPanel from '../EpisodeMatchPanel.svelte';
 import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
-import { fetchEpisodes, matchIdentity, unpinIdentity } from '$lib/api/identity';
+import { fetchEpisodes, fetchSeasons, matchIdentity, unpinIdentity } from '$lib/api/identity';
 import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
 const LENGTHS = [3093, 3033, 3092, 3070, 3078, 542];
@@ -43,6 +44,19 @@ const applied: IdentityView = {
 		episode_name: i === 5 ? null : `Ep ${i + 1}`,
 		identity_provenance: (i === 5 ? {} : { episode_number: 'episodes_tmdb' }) as Record<string, string>,
 		proposals: { episodes_tmdb: { episode: i + 1, confidence: 0.9 } }
+	}))
+};
+
+// Nothing placed and no saved season: the row seasons fall back to the job's.
+const unplaced: IdentityView = {
+	...applied,
+	tracks: applied.tracks!.map((t) => ({
+		...t,
+		role: null,
+		season: null,
+		episode_number: null,
+		episode_name: null,
+		identity_provenance: {}
 	}))
 };
 
@@ -65,7 +79,7 @@ describe('EpisodeMatchPanel', () => {
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
 		expect(screen.getByText('6 of 6 tracks placed')).toBeInTheDocument();
 		expect(screen.getAllByText('S01E04')[0]).toBeInTheDocument();
-		expect(screen.getAllByText('Auto · TMDb').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('Auto, TMDb').length).toBeGreaterThan(0);
 		expect(screen.getAllByText('0.90').length).toBeGreaterThan(0);
 	});
 
@@ -215,10 +229,20 @@ async function openRerun() {
 	await fireEvent.click(await screen.findByRole('button', { name: /Re-run/ }));
 }
 
+// The re-run form's own season option (each row has a season select too).
+async function rerunSeasonOption(name: string) {
+	return within(await screen.findByLabelText('Season')).findByRole('option', { name });
+}
+
+async function pickSeason(value: string) {
+	if (value !== 'scan') await rerunSeasonOption(`Season ${value}`);
+	await fireEvent.change(screen.getByLabelText('Season'), { target: { value } });
+}
+
 describe('EpisodeMatchPanel actions', () => {
 	it('previews then applies & pins', async () => {
 		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview).mockResolvedValueOnce({ outcomes: [] });
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1, disc_number: 1 }), tracks, matching: false } });
 		await openRerun();
 		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
@@ -229,7 +253,7 @@ describe('EpisodeMatchPanel actions', () => {
 		expect(vi.mocked(matchIdentity).mock.calls[0][1]).not.toHaveProperty('tolerance');
 		expect(await screen.findByText(/1 track changes if you apply TVmaze/)).toBeInTheDocument();
 		expect(screen.getByText('Nothing is saved yet.', { exact: false })).toBeInTheDocument();
-		expect(screen.getByRole('columnheader', { name: 'Proposed · TVmaze' })).toBeInTheDocument();
+		expect(screen.getByRole('columnheader', { name: 'Proposed, TVmaze' })).toBeInTheDocument();
 		expect(screen.getAllByText('CHANGED')).toHaveLength(1);
 		const before = fetchIdentity.mock.calls.length;
 		await fireEvent.click(screen.getByRole('button', { name: 'Apply & pin TVmaze' }));
@@ -265,7 +289,7 @@ describe('EpisodeMatchPanel actions', () => {
 		expect(screen.queryByText(/1 track changes/)).toBeNull();
 		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 		await screen.findByText(/1 track changes/);
-		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '2' } });
+		await pickSeason('2');
 		await waitFor(() => expect(screen.queryByText(/1 track changes/)).toBeNull());
 	});
 
@@ -305,7 +329,7 @@ describe('EpisodeMatchPanel actions', () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		await fireEvent.click(await screen.findByRole('button', { name: 'Accept suggestion' }));
 		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', apply: true });
-		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+		expect(screen.getByRole('button', { name: 'Accepting...' })).toBeDisabled();
 		const before = fetchIdentity.mock.calls.length;
 		resolve({ outcomes: [] });
 		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
@@ -315,12 +339,12 @@ describe('EpisodeMatchPanel actions', () => {
 		fetchIdentity.mockResolvedValue({ ...applied, pin: { episode: 'episodes_tmdb' } });
 		vi.mocked(unpinIdentity).mockResolvedValue({ ...applied, pin: {} });
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin...' }));
 		expect(unpinIdentity).not.toHaveBeenCalled();
 		expect(screen.getByText('Unpin and let ARM pick the source again?')).toBeInTheDocument();
 		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 		expect(screen.queryByText('Unpin and let ARM pick the source again?')).toBeNull();
-		await fireEvent.click(screen.getByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Unpin...' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Unpin' }));
 		expect(unpinIdentity).toHaveBeenCalledWith('job_1');
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
@@ -371,9 +395,9 @@ describe('EpisodeMatchPanel set by hand', () => {
 	beforeEach(() => vi.mocked(fetchEpisodes).mockResolvedValue(kolchakS1));
 
 	it('sets a track to Extra by hand', async () => {
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		const select = await screen.findByLabelText('Set placement for t04');
-		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire · 51m/).length).toBeGreaterThan(0));
+		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire, 51m/).length).toBeGreaterThan(0));
 		const before = fetchIdentity.mock.calls.length;
 		await fireEvent.change(select, { target: { value: 'extra' } });
 		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_4', { role: 'extra' });
@@ -381,7 +405,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 	});
 
 	it('picks an episode by hand', async () => {
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		const select = await screen.findByLabelText('Set placement for t03');
 		await waitFor(() => expect(screen.getAllByText(/E04 The Vampire/).length).toBeGreaterThan(0));
 		await fireEvent.change(select, { target: { value: 's1e4' } });
@@ -394,13 +418,14 @@ describe('EpisodeMatchPanel set by hand', () => {
 	});
 
 	it('lists specials as season 0 and offers Extra / Trailer / Other', async () => {
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		const select = (await screen.findByLabelText('Set placement for t00')) as HTMLSelectElement;
 		await waitFor(() => expect(select.options.length).toBe(6));
+		// t03 holds S01E04, so it is marked used and sorts after the special.
 		expect([...select.options].map((o) => [o.value, o.text])).toEqual([
-			['', 'Change…'],
-			['s1e4', 'E04 The Vampire · 51m'],
-			['s0e1', 'S00E01 The Night Stalker · 74m · special'],
+			['', 'Change...'],
+			['s0e1', 'S00E01 The Night Stalker, 74m, special'],
+			['s1e4', 'E04 The Vampire, 51m (used)'],
 			['extra', 'Extra'],
 			['trailer', 'Trailer'],
 			['other', 'Other']
@@ -415,6 +440,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 	});
 
 	it('loads the episode list once per source and season', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
 		const { component } = renderComponent(EpisodeMatchPanel, {
 			props: { job: job({ season: 2 }), tracks, matching: false }
 		});
@@ -424,11 +450,19 @@ describe('EpisodeMatchPanel set by hand', () => {
 		expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 2);
 	});
 
+	it('fetches no episode list while the job has no season', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await screen.findByLabelText('Set placement for t00');
+		await new Promise((r) => setTimeout(r, 0));
+		expect(fetchEpisodes).not.toHaveBeenCalled();
+	});
+
 	it('reverts a hand-set row', async () => {
 		const handSet = structuredClone(applied);
 		handSet.tracks![5].identity_provenance = { role: 'manual' };
 		fetchIdentity.mockResolvedValue(handSet);
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		await fireEvent.click(await screen.findByRole('button', { name: 'Revert' }));
 		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_5', {
 			revert_fields: ['role', 'season', 'episode_number', 'episode_number_end', 'episode_name']
@@ -437,7 +471,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 
 	it('hides the pickers while a preview is shown', async () => {
 		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		await screen.findByLabelText('Set placement for t00');
 		await openRerun();
 		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
@@ -450,7 +484,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 		const handSet = structuredClone(applied);
 		handSet.tracks![5].identity_provenance = { role: 'manual' };
 		fetchIdentity.mockResolvedValue(handSet);
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		expect(await screen.findByText('Set by you')).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull();
 		expect(screen.queryByLabelText(/Set placement for/)).toBeNull();
@@ -461,7 +495,7 @@ describe('EpisodeMatchPanel set by hand', () => {
 		const real = globalThis.matchMedia;
 		globalThis.matchMedia = ((q: string) => ({ ...real(q), matches: q.includes('max-width: 639px') })) as typeof real;
 		try {
-			renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+			renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 			const select = await screen.findByLabelText('Set placement for t04');
 			expect(select.closest('li')).not.toBeNull();
 		} finally {
@@ -481,11 +515,11 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		const first = deferred<IdentityView>();
 		fetchIdentity.mockReturnValue(first.promise);
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		expect(screen.getByText('Loading episodes…')).toBeInTheDocument();
+		expect(screen.getByText('Loading episodes...')).toBeInTheDocument();
 		expect(screen.queryByText('No episode source is set up')).toBeNull();
 		first.resolve(applied);
 		expect(await screen.findByText('Applied automatically')).toBeInTheDocument();
-		expect(screen.queryByText('Loading episodes…')).toBeNull();
+		expect(screen.queryByText('Loading episodes...')).toBeNull();
 	});
 
 	it('ignores a late identity for the previous job', async () => {
@@ -517,11 +551,12 @@ describe('EpisodeMatchPanel fix round 1', () => {
 	it('drops a preview whose form changed while it was in flight; apply sends the previewed request', async () => {
 		const slow = deferred<MatchPreview>();
 		vi.mocked(matchIdentity).mockReturnValueOnce(slow.promise);
-		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ disc_number: 1 }), tracks, matching: false } });
 		await openRerun();
 		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await rerunSeasonOption('Season 2');
 		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '2' } });
+		await pickSeason('2');
 		slow.resolve(tvmazePreview);
 		await new Promise((r) => setTimeout(r, 0));
 		expect(screen.queryByText(/track changes? if you apply/)).toBeNull();
@@ -552,7 +587,7 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		const slow = deferred<IdentityView>();
 		vi.mocked(unpinIdentity).mockReturnValue(slow.promise);
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
-		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin…' }));
+		await fireEvent.click(await screen.findByRole('button', { name: 'Unpin...' }));
 		const button = screen.getByRole('button', { name: 'Unpin' });
 		await fireEvent.click(button);
 		expect(button).toBeDisabled();
@@ -568,7 +603,7 @@ describe('EpisodeMatchPanel fix round 1', () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		await openRerun();
 		await fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
-		expect(screen.getByRole('button', { name: 'Accepting…' })).toBeDisabled();
+		expect(screen.getByRole('button', { name: 'Accepting...' })).toBeDisabled();
 	});
 });
 
@@ -583,7 +618,9 @@ describe('EpisodeMatchPanel final review fixes', () => {
 
 	it('retries the episode list on a later reload after it failed', async () => {
 		vi.mocked(fetchEpisodes).mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValue(kolchakS1);
-		const { component } = renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		const { component } = renderComponent(EpisodeMatchPanel, {
+			props: { job: job({ season: 1 }), tracks, matching: false }
+		});
 		await screen.findByLabelText('Set placement for t00');
 		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(1));
 		await (component as unknown as { reload: () => Promise<void> }).reload();
@@ -607,5 +644,318 @@ describe('EpisodeMatchPanel final review fixes', () => {
 		await waitFor(() => expect(fetchIdentity.mock.calls.length).toBe(before + 1));
 		expect(await screen.findByText('Pinned by you')).toBeInTheDocument();
 		expect(screen.getByRole('alert')).toHaveTextContent("TVmaze didn't answer (HTTP 502)");
+	});
+});
+
+const held = (summary: Record<string, unknown>): IdentityView => ({
+	...applied,
+	sources: { episodes_tmdb: { status: 'ok', suggestion: true, ...summary } }
+});
+
+describe('EpisodeMatchPanel season selection', () => {
+	it('opens the re-run form with no season when the job has none', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await rerunSeasonOption('Season 1');
+		expect((screen.getByLabelText('Season') as HTMLSelectElement).value).toBe('');
+		expect((screen.getByLabelText('Disc') as HTMLInputElement).value).toBe('');
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', apply: false });
+	});
+
+	it('preselects the job season', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 2 }), tracks, matching: false } });
+		await openRerun();
+		await rerunSeasonOption('Season 3');
+		expect((screen.getByLabelText('Season') as HTMLSelectElement).value).toBe('2');
+	});
+
+	it('offers Scan all seasons and sends scan_seasons', async () => {
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 2 }), tracks, matching: false } });
+		await openRerun();
+		await pickSeason('scan');
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', expect.objectContaining({ scan_seasons: true }));
+		expect(vi.mocked(matchIdentity).mock.calls[0][1]).not.toHaveProperty('season');
+	});
+
+	it('lists the seasons from the seasons endpoint', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await rerunSeasonOption('Season 3');
+		expect(fetchSeasons).toHaveBeenCalledWith('job_1', 'tmdb');
+		const select = screen.getByLabelText('Season') as HTMLSelectElement;
+		expect([...select.options].filter((o) => !o.disabled).map((o) => [o.value, o.text])).toEqual([
+			['scan', 'Scan all seasons'],
+			['0', 'Specials'],
+			['1', 'Season 1'],
+			['2', 'Season 2'],
+			['3', 'Season 3']
+		]);
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await waitFor(() => expect(fetchSeasons).toHaveBeenLastCalledWith('job_1', 'tvmaze'));
+	});
+
+	it('falls back to a number input when the season list fails', async () => {
+		vi.mocked(fetchSeasons).mockRejectedValueOnce(new Error('HTTP 502'));
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await openRerun();
+		await waitFor(() => expect(screen.getByLabelText('Season')).toHaveAttribute('type', 'number'));
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '4' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', season: 4, apply: false });
+	});
+
+	it('shows a candidate season button that previews that season', async () => {
+		fetchIdentity.mockResolvedValue(held({ alternatives: [{ season: 3, coverage: 1, matches: 6 }] }));
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Season 3 (6 of 6 titles)' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', season: 3, apply: false });
+		expect(await screen.findByRole('button', { name: 'Apply & pin TMDb' })).toBeInTheDocument();
+	});
+
+	it('lists the held season first', async () => {
+		// The alternative's total comes from its own coverage (2 / 0.5), not the 6 rows.
+		const id = held({ alternatives: [{ season: 3, coverage: 0.5, matches: 2 }] });
+		id.tracks = id.tracks!.map((t) => ({ ...t, proposals: { episodes_tmdb: { season: 7, episode: 1 } } }));
+		fetchIdentity.mockResolvedValue(id);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		const first = await screen.findByRole('button', { name: 'Season 7 (6 of 6 titles)' });
+		const second = screen.getByRole('button', { name: 'Season 3 (2 of 4 titles)' });
+		expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('explains why a result is held', async () => {
+		fetchIdentity.mockResolvedValue(held({ extra: { hold_reasons: ['ambiguous'] } }));
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		expect(await screen.findByText('The titles fit equally well one episode earlier or later.')).toBeInTheDocument();
+		expect(screen.getByText('Set the season or disc number in Info, or accept the suggestion.')).toBeInTheDocument();
+	});
+});
+
+describe('EpisodeMatchPanel per-row season', () => {
+	// Earlier blocks leave their list mocks in place; start each test from an empty list.
+	beforeEach(() => {
+		vi.mocked(fetchEpisodes).mockResolvedValue({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			season: 1,
+			episodes: []
+		});
+		vi.mocked(fetchSeasons).mockResolvedValue({ source_id: 'episodes_tmdb', show_id: '5084', seasons: [1, 2, 3] });
+	});
+	const seasonOf = (ref: string) => screen.getByLabelText(`Season for ${ref}`) as HTMLSelectElement;
+	// Wait for the per-row season list to load, so a season is selectable.
+	const seasonListed = (ref: string, n: number) => within(seasonOf(ref)).findByRole('option', { name: `Season ${n}` });
+	const fiveSeasons = () =>
+		vi.mocked(fetchSeasons).mockResolvedValue({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			seasons: [1, 2, 3, 4, 5]
+		});
+
+	it('gives each row a season control seeded from the job', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 4 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t00');
+		await seasonListed('t00', 1);
+		for (const t of tracks) expect(seasonOf(t.source_ref).value).toBe('4');
+		expect([...seasonOf('t00').options].map((o) => o.text)).toEqual([
+			'-',
+			'Specials',
+			'Season 1',
+			'Season 2',
+			'Season 3',
+			'Season 4'
+		]);
+		expect(fetchSeasons).toHaveBeenCalledWith('job_1', 'tmdb');
+	});
+
+	it('shows a saved season over the job season', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 4 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t00');
+		expect(seasonOf('t00').value).toBe('1');
+	});
+
+	it('with no season anywhere, reads "-", fetches no list and still offers the roles', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await screen.findByLabelText('Season for t00');
+		expect(seasonOf('t00').value).toBe('');
+		expect(seasonOf('t00').selectedOptions[0].text).toBe('-');
+		const select = screen.getByLabelText('Set placement for t00') as HTMLSelectElement;
+		expect(select).toBeEnabled();
+		expect([...select.options].map((o) => o.value)).toEqual(['', 'extra', 'trailer', 'other']);
+		await fireEvent.change(select, { target: { value: 'extra' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_0', { role: 'extra' });
+		expect(fetchEpisodes).not.toHaveBeenCalled();
+	});
+
+	it('changing a row season reloads only that row episodes', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		fiveSeasons();
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 4 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t02');
+		await seasonListed('t02', 5);
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 4));
+		await fireEvent.change(seasonOf('t02'), { target: { value: '5' } });
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 5));
+		expect(vi.mocked(fetchEpisodes).mock.calls.filter((c) => c[2] === 5)).toHaveLength(1);
+		expect(fetchEpisodes).toHaveBeenCalledTimes(2);
+		expect(seasonOf('t02').value).toBe('5');
+		for (const ref of ['t00', 't01', 't03', 't04', 't05']) expect(seasonOf(ref).value).toBe('4');
+		expect(updateTrack).not.toHaveBeenCalled();
+	});
+
+	it('saves season and episode together from the picker', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		vi.mocked(fetchEpisodes).mockImplementation((_job, _src, season) =>
+			Promise.resolve({
+				source_id: 'episodes_tmdb',
+				show_id: '5084',
+				season,
+				episodes: [{ number: 2, name: `S${season} Two`, runtime_s: 3000 }]
+			})
+		);
+		fiveSeasons();
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 4 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t02');
+		await seasonListed('t02', 5);
+		await fireEvent.change(seasonOf('t02'), { target: { value: '5' } });
+		const select = screen.getByLabelText('Set placement for t02') as HTMLSelectElement;
+		await waitFor(() => expect([...select.options].map((o) => o.text)).toContain('E02 S5 Two, 50m'));
+		await fireEvent.change(select, { target: { value: 's5e2' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_2', {
+			role: 'episode',
+			season: 5,
+			episode_number: 2,
+			episode_name: 'S5 Two'
+		});
+		// Saved: the picked season is dropped, so the row shows what the reload
+		// says (this mock still has none, so the job's).
+		await waitFor(() => expect(seasonOf('t02').value).toBe('4'));
+	});
+
+	it('changing the season of a placed row saves nothing and loads that season', async () => {
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t01');
+		await seasonListed('t01', 2);
+		await fireEvent.change(seasonOf('t01'), { target: { value: '2' } });
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 2));
+		expect(seasonOf('t01').value).toBe('2');
+		expect(seasonOf('t00').value).toBe('1');
+		expect(updateTrack).not.toHaveBeenCalled();
+	});
+
+	it('drops a picked season after a revert', async () => {
+		const id = structuredClone(applied);
+		id.tracks![1].identity_provenance = { episode_number: 'manual' };
+		fetchIdentity.mockResolvedValue(id);
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t01');
+		await seasonListed('t01', 2);
+		await fireEvent.change(seasonOf('t01'), { target: { value: '2' } });
+		expect(seasonOf('t01').value).toBe('2');
+		await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+		await waitFor(() => expect(seasonOf('t01').value).toBe('1'));
+	});
+
+	it('marks the episodes other rows of that season already hold as used', async () => {
+		vi.mocked(fetchEpisodes).mockResolvedValue({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			season: 1,
+			episodes: [
+				{ number: 1, name: 'Ep 1', runtime_s: 3093 },
+				{ number: 2, name: 'Ep 2', runtime_s: 3093 }
+			]
+		});
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
+		const select = (await screen.findByLabelText('Set placement for t00')) as HTMLSelectElement;
+		await waitFor(() => expect(select.options.length).toBeGreaterThan(1));
+		expect([...select.options].slice(1, 3).map((o) => o.text)).toEqual(['E01 Ep 1, 52m', 'E02 Ep 2, 52m (used)']);
+	});
+
+	it('offers Fill the rest after a hand pick and previews only', async () => {
+		const id = structuredClone(unplaced);
+		Object.assign(id.tracks![0], {
+			role: 'episode',
+			season: 1,
+			episode_number: 3,
+			episode_name: 'Ep 3',
+			identity_provenance: { episode_number: 'manual' }
+		});
+		fetchIdentity.mockResolvedValue(id);
+		vi.mocked(matchIdentity).mockResolvedValueOnce({
+			outcomes: [
+				{
+					source_id: 'episodes_tmdb',
+					matches: [{ source_ref: 't01', season: 1, episode: 4, episode_name: 'Ep 4', confidence: 0.8 }]
+				}
+			]
+		});
+		renderComponent(EpisodeMatchPanel, {
+			props: { job: job({ season: 1, disc_number: 2 }), tracks, matching: false }
+		});
+		await fireEvent.click(await screen.findByRole('button', { name: 'Fill the rest' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', {
+			source: 'tmdb',
+			season: 1,
+			disc_number: 2,
+			apply: false
+		});
+		expect(await screen.findByRole('button', { name: 'Apply & pin TMDb' })).toBeInTheDocument();
+		expect(screen.getByText('Proposed, TMDb')).toBeInTheDocument();
+	});
+
+	it('offers Fill the rest on a fully auto-placed disc once a row is set by hand', async () => {
+		const id = structuredClone(applied);
+		id.tracks![1].identity_provenance = { episode_number: 'manual' };
+		fetchIdentity.mockResolvedValue(id);
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Fill the rest' }));
+		// No job season: the hand-set row's saved season is the one sent.
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', season: 1, apply: false });
+		expect(vi.mocked(matchIdentity).mock.calls[0][1]).not.toHaveProperty('scan_seasons');
+	});
+
+	it('Fill the rest sends no season when the hand-set rows disagree and the job has none', async () => {
+		const id = structuredClone(applied);
+		id.tracks![1].identity_provenance = { episode_number: 'manual' };
+		Object.assign(id.tracks![2], { season: 2, identity_provenance: { episode_number: 'manual' } });
+		fetchIdentity.mockResolvedValue(id);
+		vi.mocked(matchIdentity).mockResolvedValueOnce(tvmazePreview);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await fireEvent.click(await screen.findByRole('button', { name: 'Fill the rest' }));
+		expect(matchIdentity).toHaveBeenCalledWith('job_1', { source: 'tmdb', apply: false });
+		const sent = vi.mocked(matchIdentity).mock.calls[0][1];
+		expect(sent).not.toHaveProperty('season');
+		expect(sent).not.toHaveProperty('scan_seasons');
+	});
+
+	it('the re-run form season seeds the rows that have none', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
+		await screen.findByLabelText('Season for t00');
+		expect(seasonOf('t00').value).toBe('');
+		await openRerun();
+		await pickSeason('2');
+		await waitFor(() => expect(seasonOf('t00').value).toBe('2'));
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_1', 'tmdb', 2));
+		// Scan names no season: the rows fall back to the job's (none).
+		await pickSeason('scan');
+		await waitFor(() => expect(seasonOf('t00').value).toBe(''));
+	});
+
+	it('offers no Fill the rest without a hand pick', async () => {
+		fetchIdentity.mockResolvedValue(unplaced);
+		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
+		await screen.findByLabelText('Season for t00');
+		expect(screen.queryByRole('button', { name: 'Fill the rest' })).toBeNull();
 	});
 });
