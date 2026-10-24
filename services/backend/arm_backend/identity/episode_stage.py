@@ -230,12 +230,16 @@ def season_scan_order(
 
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
     """C4: every known runtime is a whole number of broadcast slots, and fewer
-    than half the titles fit any of them."""
+    than half the episode-shaped titles fit any of them (extras never count; a
+    disc with no episode-shaped title is judged on all of them)."""
     known = {e.runtime_s for e in remaining if e.runtime_s}
     if not known or any(rt % NOMINAL_SLOT_S for rt in known):
         return False
-    fitting = sum(1 for t in titles if any(abs(t.seconds - rt) <= _eff_tol(rt, tolerance) for rt in known))
-    return fitting < len(titles) / 2
+    # A disc with nothing episode-shaped is judged on all its titles: that is the
+    # TVmaze case, a list of round runtimes no title comes near.
+    shaped = _episode_shaped(titles, remaining, tolerance) or list(titles)
+    fitting = sum(1 for t in shaped if any(abs(t.seconds - rt) <= _eff_tol(rt, tolerance) for rt in known))
+    return fitting < len(shaped) / 2
 
 
 def _mean_cost(result: MatchResult) -> float:
@@ -249,15 +253,19 @@ def _near_tie(first: MatchResult, second: MatchResult) -> bool:
     return abs(a - b) <= NEAR_TIE_COST_RATIO * max(a, b)
 
 
-def episode_shaped_count(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> int:
+def _episode_shaped(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> list[TitleIn]:
     """Titles whose length could be an episode of this season, so menus, trailers
-    and extras do not inflate the count that anchors the disc. With no known
-    runtime every title counts."""
+    and extras are left out. With no known runtime every title counts."""
     runtimes = [e.runtime_s for e in episodes if e.runtime_s]
     if not runtimes:
-        return len(titles)
+        return list(titles)
     low, high = min(runtimes) - tolerance, max(runtimes) + tolerance
-    return sum(1 for t in titles if low <= t.seconds <= high)
+    return [t for t in titles if low <= t.seconds <= high]
+
+
+def episode_shaped_count(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> int:
+    """How many titles are episode-shaped; this, not every title, anchors the disc."""
+    return len(_episode_shaped(titles, episodes, tolerance))
 
 
 @dataclass(frozen=True)

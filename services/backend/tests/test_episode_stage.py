@@ -1331,11 +1331,31 @@ async def test_sibling_holding_no_episodes_is_no_conflict_f2() -> None:
 
 async def test_anchor_ignores_extras_when_counting_titles() -> None:
     # Four 45-minute episodes and ten 2-minute extras on disc 2 of 3 of a ten-episode season.
+    # Extras must not count toward the nominal rule either: 2700 s is a slot multiple, and
+    # counting the ten extras as non-fitting would strip the runtimes and misplace them.
     job = _job(disc_number=2, disc_total=3)
-    db = _db(job, [2640] * 4 + [120] * 10)
-    provider = FakeProvider(seasons={1: _season(1, [2640] * 10)})
+    db = _db(job, [2700] * 4 + [120] * 10)
+    provider = FakeProvider(seasons={1: _season(1, [2700] * 10)})
     outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())
     placed = sorted(c.episode for c in outcomes[0].claims.tracks.values() if c.episode is not None)
     assert placed == [4, 5, 6, 7]
-    assert episode_stage.episode_shaped_count([TitleIn("a", 2640), TitleIn("b", 120)], _season(1, [2640] * 3), 300) == 1
-    assert episode_stage.episode_shaped_count([TitleIn("a", 2640), TitleIn("b", 120)], _season(1, [None] * 3), 300) == 2
+    assert episode_stage.episode_shaped_count([TitleIn("a", 2700), TitleIn("b", 120)], _season(1, [2700] * 3), 300) == 1
+    assert episode_stage.episode_shaped_count([TitleIn("a", 2700), TitleIn("b", 120)], _season(1, [None] * 3), 300) == 2
+
+
+async def test_nominal_rule_still_fires_when_episodes_do_not_fit() -> None:
+    job = _job()
+    db = _db(job, [1800] * 4)
+    provider = FakeProvider(seasons={1: _season(1, [3000] * 10)})
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcome.claims.suggestion is True
+    assert "nominal_runtimes" in outcome.claims.extra["hold_reasons"]
+    assert outcome.claims.inputs["nominal_runtimes"] is True
+
+
+async def test_extras_alone_do_not_trigger_the_nominal_rule() -> None:
+    job = _job()
+    db = _db(job, [2700] * 4 + [120] * 10)
+    provider = FakeProvider(seasons={1: _season(1, [2700] * 10)})
+    [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    assert outcome.claims.inputs["nominal_runtimes"] is False
