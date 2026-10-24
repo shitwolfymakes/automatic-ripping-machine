@@ -22,7 +22,7 @@ from arm_backend.identity.episode_stage import (  # noqa: E402
     run_episode_stage,
 )
 from arm_backend.identity.episodes.continuity import SiblingDisc  # noqa: E402
-from arm_backend.identity.episodes.model import Episode  # noqa: E402
+from arm_backend.identity.episodes.model import Episode, TitleIn  # noqa: E402
 from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
 from arm_backend.identity.proposals import claims_of, forget_episode_show_ids, set_pin  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
@@ -1327,3 +1327,15 @@ async def test_sibling_holding_no_episodes_is_no_conflict_f2() -> None:
 
     assert outcome.claims.extra["sibling_conflict"] is False
     assert outcome.claims.suggestion is False
+
+
+async def test_anchor_ignores_extras_when_counting_titles() -> None:
+    # Four 45-minute episodes and ten 2-minute extras on disc 2 of 3 of a ten-episode season.
+    job = _job(disc_number=2, disc_total=3)
+    db = _db(job, [2640] * 4 + [120] * 10)
+    provider = FakeProvider(seasons={1: _season(1, [2640] * 10)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())
+    placed = sorted(c.episode for c in outcomes[0].claims.tracks.values() if c.episode is not None)
+    assert placed == [4, 5, 6, 7]
+    assert episode_stage.episode_shaped_count([TitleIn("a", 2640), TitleIn("b", 120)], _season(1, [2640] * 3), 300) == 1
+    assert episode_stage.episode_shaped_count([TitleIn("a", 2640), TitleIn("b", 120)], _season(1, [None] * 3), 300) == 2

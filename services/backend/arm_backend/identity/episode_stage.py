@@ -249,6 +249,17 @@ def _near_tie(first: MatchResult, second: MatchResult) -> bool:
     return abs(a - b) <= NEAR_TIE_COST_RATIO * max(a, b)
 
 
+def episode_shaped_count(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> int:
+    """Titles whose length could be an episode of this season, so menus, trailers
+    and extras do not inflate the count that anchors the disc. With no known
+    runtime every title counts."""
+    runtimes = [e.runtime_s for e in episodes if e.runtime_s]
+    if not runtimes:
+        return len(titles)
+    low, high = min(runtimes) - tolerance, max(runtimes) + tolerance
+    return sum(1 for t in titles if low <= t.seconds <= high)
+
+
 @dataclass(frozen=True)
 class _Request:
     """One provider's matching inputs."""
@@ -272,7 +283,7 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
         episodes,
         disc_number=req.disc_number,
         disc_total=req.disc_total,
-        n_titles=len(req.titles),
+        n_titles=episode_shaped_count(req.titles, episodes, req.tolerance),
         siblings=siblings,
     )
     nominal = _nominal(remaining, req.titles, req.tolerance)
