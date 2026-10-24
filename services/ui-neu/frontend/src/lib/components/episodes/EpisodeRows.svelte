@@ -239,6 +239,7 @@
 		min-width: 0;
 		max-width: 16rem;
 	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
 	.episode-rows-hand :global(.episode-rows-season) {
 		min-width: 0;
 		max-width: 8rem;
@@ -251,6 +252,7 @@
 		max-width: none;
 		min-height: 2.75rem;
 	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
 	.episode-rows-card :global(.episode-rows-season) {
 		flex: 1 1 100%;
 		max-width: none;
