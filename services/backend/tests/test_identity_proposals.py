@@ -3,8 +3,9 @@
 from datetime import datetime, timezone
 
 from arm_common import DiscType, Job, JobStatus, Track, TrackKind
-from arm_common.schemas.identity import SourceClaims, TrackClaim
+from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
+from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.proposals import (
     claims_of,
     clear_pin,
@@ -178,7 +179,7 @@ def test_record_manual_job() -> None:
     job.disc_number = 1
     assert record_manual_job(job, {"season": 2, "disc_number": None}) is True
     claim = claims_of(job).sources["manual"].job
-    assert claim.model_fields_set == {"season", "disc_number"}
+    assert claim.model_fields_set == {"season"}
 
 
 def test_record_manual_job_skips_restated_values_unless_manual() -> None:
@@ -211,3 +212,36 @@ def test_clear_pin_noop_when_nothing_pinned() -> None:
     job = _job()
     clear_pin(job, "episode")
     assert claims_of(job).pin == {}
+
+
+TIERS = {"manual": 1, "label": 4}
+
+
+def test_clearing_a_manual_field_removes_the_claim() -> None:
+    job = _job()
+    put_source(job, "label", SourceClaims(run_at=NOW, status="ok", job=JobClaim(season=3)))
+    record_manual_job(job, {"season": 7})
+    assert claims_of(job).sources["manual"].job.season == 7
+    assert record_manual_job(job, {"season": None}) is True
+    assert "season" not in claims_of(job).sources["manual"].job.model_fields_set
+    res = resolve(claims_of(job), tiers=TIERS)
+    assert res.job["season"].value == 3 and res.job["season"].source == "label"
+
+
+def test_clearing_with_no_other_proposer_empties_the_field_and_keeps_track_seasons() -> None:
+    job = _job()
+    track = _track("1")
+    track.season = 7
+    record_manual_job(job, {"season": 7})
+    apply_resolution(job, [track], resolve(claims_of(job), tiers=TIERS))
+    assert job.season == 7
+    record_manual_job(job, {"season": None})
+    apply_resolution(job, [track], resolve(claims_of(job), tiers=TIERS))
+    assert job.season is None and "season" not in (job.identity_provenance or {})
+    assert track.season == 7
+
+
+def test_clearing_a_field_the_claim_never_held_changes_nothing() -> None:
+    job = _job()
+    record_manual_job(job, {"season": 7})
+    assert record_manual_job(job, {"disc_number": None}) is False

@@ -130,16 +130,23 @@ def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = 
     """Record the operator's job edits as `manual` claims, skipping restated
     values unless `keep_restated` (an explicit operator choice, e.g. the
     `/identity/match` season, that must pin even a value an automatic source
-    already set). Returns whether any claim was recorded."""
+    already set). A None value clears the field from the manual claim (never
+    recorded as "unknown"), so the resolver falls back to the next proposer.
+    Returns whether the stored claim changed."""
+    clears = [attr for attr, value in edits.items() if value is None]
+    sets = {attr: value for attr, value in edits.items() if value is not None}
     if not keep_restated:
-        edits = {attr: value for attr, value in edits.items() if not _restated(job, attr, value)}
-    if not edits:
-        return False
+        sets = {attr: value for attr, value in sets.items() if not _restated(job, attr, value)}
     claims = claims_of(job)
     manual = _manual(claims)
-    merged = manual.job.model_dump(exclude_unset=True)
-    for attr, value in edits.items():
+    before = manual.job.model_dump(exclude_unset=True)
+    merged = dict(before)
+    for attr, value in sets.items():
         merged[_JOB_ATTR_TO_CLAIM[attr]] = value
+    for attr in clears:
+        merged.pop(_JOB_ATTR_TO_CLAIM[attr], None)
+    if merged == before:
+        return False
     manual.job = JobClaim(**merged)
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)
