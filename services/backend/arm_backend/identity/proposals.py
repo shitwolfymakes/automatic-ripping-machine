@@ -132,7 +132,9 @@ def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = 
     `/identity/match` season, that must pin even a value an automatic source
     already set). A None value clears the field from the manual claim (never
     recorded as "unknown"), so the resolver falls back to the next proposer.
-    Returns whether the stored claim changed."""
+    A cleared field with no provenance owner (a pre-provenance row) is emptied
+    on the job directly, since the resolver leaves ownerless fields alone.
+    Returns whether the stored claim or a job attribute changed."""
     clears = [attr for attr, value in edits.items() if value is None]
     sets = {attr: value for attr, value in edits.items() if value is not None}
     if not keep_restated:
@@ -145,8 +147,12 @@ def record_manual_job(job: Job, edits: dict[str, Any], *, keep_restated: bool = 
         merged[_JOB_ATTR_TO_CLAIM[attr]] = value
     for attr in clears:
         merged.pop(_JOB_ATTR_TO_CLAIM[attr], None)
+    owners = job.identity_provenance or {}
+    emptied = [attr for attr in clears if attr not in owners and getattr(job, attr) is not None]
+    for attr in emptied:
+        setattr(job, attr, None)
     if merged == before:
-        return False
+        return bool(emptied)
     manual.job = JobClaim(**merged)
     claims.sources = {**claims.sources, MANUAL: manual}
     _store(job, claims)

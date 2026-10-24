@@ -245,3 +245,24 @@ def test_clearing_a_field_the_claim_never_held_changes_nothing() -> None:
     job = _job()
     record_manual_job(job, {"season": 7})
     assert record_manual_job(job, {"disc_number": None}) is False
+
+
+def test_clearing_a_legacy_value_without_an_owner_empties_it() -> None:
+    job = _job()
+    job.season = 5
+    assert record_manual_job(job, {"season": None}) is True
+    assert job.season is None
+    apply_resolution(job, [], resolve(claims_of(job), tiers=TIERS))
+    assert job.season is None
+
+
+def test_clearing_an_owned_value_leaves_the_write_to_the_resolver() -> None:
+    job = _job()
+    put_source(job, "label", SourceClaims(run_at=NOW, status="ok", job=JobClaim(season=3)))
+    record_manual_job(job, {"season": 7})
+    apply_resolution(job, [], resolve(claims_of(job), tiers=TIERS))
+    assert job.season == 7 and job.identity_provenance == {"season": "manual"}
+    assert record_manual_job(job, {"season": None}) is True
+    assert job.season == 7  # the resolver, not the recorder, rewrites an owned field
+    apply_resolution(job, [], resolve(claims_of(job), tiers=TIERS))
+    assert job.season == 3 and job.identity_provenance == {"season": "label"}
