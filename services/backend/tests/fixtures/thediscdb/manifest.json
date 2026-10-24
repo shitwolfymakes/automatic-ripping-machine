@@ -1,7 +1,7 @@
 {
  "source": "https://github.com/TheDiscDb/data (MIT)",
  "commit": "17b8891c7acfbb9f4774d4db90c3c06309c31cbb",
- "built": "2026-10-23",
+ "built": "2026-10-24",
  "generator": "devtools/thediscdb-fixture.py",
  "series": {
   "all-creatures-great-and-small": {
@@ -52,6 +52,20 @@
    "releases": 4,
    "discs": 7,
    "episodes": 10
+  },
+  "the-simpsons": {
+   "upstream": "The Simpsons (1989)",
+   "why": "Deep seasons: 38 TMDb seasons, so a wrong season guess has many candidates.",
+   "releases": 3,
+   "discs": 8,
+   "episodes": 70
+  },
+  "doctor-who-1963": {
+   "upstream": "Doctor Who (1963)",
+   "why": "Deep seasons: 26 TMDb seasons of classic serials with uneven episode counts.",
+   "releases": 8,
+   "discs": 52,
+   "episodes": 248
   }
  }
 }

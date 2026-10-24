@@ -54,6 +54,14 @@ SERIES: dict[str, tuple[str, str]] = {
         "One volume whose playlists are shuffled against episode order with uniform runtimes.",
     ),
     "Sherlock (2010)": ("sherlock", "Ninety-minute episodes: a TV disc that looks like a movie."),
+    "The Simpsons (1989)": (
+        "the-simpsons",
+        "Deep seasons: 38 TMDb seasons, so a wrong season guess has many candidates.",
+    ),
+    "Doctor Who (1963)": (
+        "doctor-who-1963",
+        "Deep seasons: 26 TMDb seasons of classic serials with uneven episode counts.",
+    ),
 }
 
 _DISC_RE = re.compile(r"^data-main/data/series/([^/]+)/([^/]+)/(disc\d+)\.json$")
