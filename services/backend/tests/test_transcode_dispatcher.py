@@ -19,6 +19,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import pytest  # noqa: E402
+import docker.errors as docker_errors  # type: ignore[import-untyped]  # noqa: E402
 from paramiko.ssh_exception import SSHException  # noqa: E402
 
 from arm_backend.config import Settings  # noqa: E402
@@ -662,6 +663,101 @@ async def test_spawn_successful_rebuild_closes_old_client() -> None:
     assert spawned == 1
     assert disp._docker is fresh
     dead.close.assert_called_once()
+
+
+# ---- probe-path transport recovery ------------------------------------------
+
+
+async def test_probe_rebuilds_docker_client_on_dead_ssh_transport(caplog: pytest.LogCaptureFixture) -> None:
+    """A docker-over-SSH transport that died while idle fails `ping`, so the
+    probe (diagnostics, the Settings test, the spawn gate) must rebuild the
+    client exactly like the spawn path does, instead of reporting the dead
+    session until the backend restarts."""
+    dead = MagicMock()
+    dead.ping.side_effect = SSHException("SSH session not active")
+    fresh = MagicMock()
+    factory_calls: list[int] = []
+
+    def factory() -> MagicMock:
+        factory_calls.append(1)
+        return fresh
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), dead, WSHub(), docker_client_factory=factory)
+
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+        assert disp.probe() == (True, None)
+
+    assert factory_calls == [1]
+    assert disp._docker is fresh
+    dead.close.assert_called_once()
+    fresh.ping.assert_called_once()
+    assert any("transport dead" in r.message and "re-probing" in r.message for r in caplog.records)
+
+
+async def test_probe_keeps_client_on_non_transport_error() -> None:
+    # A plain refusal is not a dead session: no rebuild, the detail stands.
+    docker = MagicMock()
+    docker.ping.side_effect = docker_errors.DockerException("connect refused")
+    factory_calls: list[int] = []
+
+    def factory() -> MagicMock:
+        factory_calls.append(1)
+        return MagicMock()
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), docker, WSHub(), docker_client_factory=factory)
+
+    assert disp.probe() == (False, "docker host unreachable: connect refused")
+    assert factory_calls == []
+    assert disp._docker is docker
+
+
+async def test_probe_without_factory_reports_dead_transport() -> None:
+    docker = MagicMock()
+    docker.ping.side_effect = SSHException("SSH session not active")
+    disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), docker, WSHub())
+
+    assert disp.probe() == (False, "docker host unreachable: SSH session not active")
+    assert disp._docker is docker
+
+
+async def test_spawn_pending_recovers_when_the_probe_gate_hits_a_dead_transport() -> None:
+    """The wedge seen on a live host: the spawn gate probes first, the dead
+    client fails `ping`, every encode task is held, and `containers.run` (the
+    only place that used to rebuild) is never reached. The probe's own
+    recovery must let the same tick spawn on the fresh client."""
+    db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
+    db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
+    dead = MagicMock()
+    dead.ping.side_effect = SSHException("SSH session not active")
+    fresh = MagicMock()
+    factory_calls: list[int] = []
+
+    def factory() -> MagicMock:
+        factory_calls.append(1)
+        return fresh
+
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), dead, WSHub(), docker_client_factory=factory)
+
+    spawned = await disp.spawn_pending(db)
+
+    assert spawned == 1
+    assert factory_calls == [1]
+    dead.containers.run.assert_not_called()
+    fresh.containers.run.assert_called_once()
+    assert disp._docker is fresh
+
+
+def test_image_exists_rebuilds_docker_client_on_dead_ssh_transport() -> None:
+    dead = MagicMock()
+    dead.ping.side_effect = SSHException("SSH session not active")
+    fresh = MagicMock()
+    disp = TranscodeDispatcher(
+        _settings(), _db_factory(FakeSession()), dead, WSHub(), docker_client_factory=lambda: fresh
+    )
+
+    assert disp.image_exists("arm-transcode:variant") is True
+    assert disp._docker is fresh
+    fresh.images.get.assert_called_once_with("arm-transcode:variant")
 
 
 # ---- no-transcode-mode routing -----------------------------------------------

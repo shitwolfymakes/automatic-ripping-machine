@@ -29,12 +29,30 @@ ARM_CA_FILE = "/etc/ssl/arm/arm-ca.crt"
 BACKEND_URL_TIMEOUT_SECONDS = 5.0
 
 
-def probe_docker(client: Any, image: str) -> tuple[bool, str | None]:
-    """Ping the daemon, then check `image` exists there. (ok, detail)."""
+def probe_docker(
+    client: Any,
+    image: str,
+    *,
+    recover: Callable[[BaseException], Any | None] | None = None,
+) -> tuple[bool, str | None]:
+    """Ping the daemon, then check `image` exists there. (ok, detail).
+
+    `recover` is handed the ping failure and may return a replacement client
+    (a docker-over-SSH transport that died while idle fails the ping and
+    nothing else would ever reopen it); the replacement is pinged once and
+    answers the rest of the probe. Returning None keeps the failure as is.
+    """
     try:
         client.ping()
     except Exception as exc:  # noqa: BLE001 — any transport failure is the same answer
-        return False, f"docker host unreachable: {exc}"
+        fresh = recover(exc) if recover is not None else None
+        if fresh is None:
+            return False, f"docker host unreachable: {exc}"
+        client = fresh
+        try:
+            client.ping()
+        except Exception as again:  # noqa: BLE001
+            return False, f"docker host unreachable: {again}"
     try:
         client.images.get(image)
     except docker.errors.ImageNotFound:

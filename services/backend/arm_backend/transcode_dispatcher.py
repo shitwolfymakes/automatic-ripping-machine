@@ -258,7 +258,9 @@ class TranscodeDispatcher:
         self.last_spawn_error: str | None = None
         # (detail, monotonic time) of the last "spawns held" log line.
         self._probe_hold_logged: tuple[str | None, float] | None = None
-        self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
+        self._probe = TtlProbe(
+            lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE, recover=self._recover_for_probe)
+        )
         # The URL a remote-spawned transcoder calls home on; only checked
         # when spawning remotely (see `probe`).
         self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
@@ -994,6 +996,42 @@ class TranscodeDispatcher:
             and self._settings.ARM_HOST_CERTS_PATH
         )
 
+    def _recover_docker_client(self, exc: BaseException, *, context: str) -> Any | None:
+        """Rebuild the docker client when `exc` is a dead docker-over-SSH
+        transport. Returns the fresh client (now `self._docker`, the dead one
+        best-effort closed) or None when nothing was rebuilt: no factory
+        (local-socket deployments), an error that is not a dead transport,
+        or a factory that raised or returned None.
+
+        Shared by the probe (diagnostics, the Settings test, the spawn gate)
+        and the spawn retry, so a transport that died while idle is reopened
+        by whichever path touches it first. The old client is kept on a
+        failed rebuild: `_build_docker_client` (main.py) returns None on any
+        failure, and a `self._docker = None` here would turn every later
+        call into an AttributeError instead of another recovery attempt.
+        """
+        if self._docker_factory is None or not _is_transport_death(exc):
+            return None
+        logger.warning("docker ssh transport dead; rebuilding client and %s: %s", context, exc)
+        try:
+            rebuilt = self._docker_factory()
+        except Exception as factory_exc:  # noqa: BLE001 - factory failure must not wedge the dispatcher
+            logger.warning("docker client rebuild failed; keeping old client (%s): %s", context, factory_exc)
+            return None
+        if rebuilt is None:
+            logger.warning("docker client rebuild returned None; keeping old client (%s)", context)
+            return None
+        old_docker = self._docker
+        self._docker = rebuilt
+        try:
+            old_docker.close()
+        except Exception:  # noqa: BLE001 - best-effort cleanup of the dead client
+            pass
+        return rebuilt
+
+    def _recover_for_probe(self, exc: BaseException) -> Any | None:
+        return self._recover_docker_client(exc, context="re-probing")
+
     def probe(self) -> tuple[bool, str | None]:
         """Can this dispatcher actually run a transcode right now? Pings the
         docker host and checks the BASE image exists there; when spawning on
@@ -1043,7 +1081,7 @@ class TranscodeDispatcher:
             # `image` is this call's own local (not a loop variable), so a
             # plain closure captures the right value with no late-binding
             # hazard; each distinct image gets its own TtlProbe + closure.
-            cached = TtlProbe(lambda: probe_docker(self._docker, image))
+            cached = TtlProbe(lambda: probe_docker(self._docker, image, recover=self._recover_for_probe))
             self._image_probes[image] = cached
         ok, _ = cached()
         return ok
@@ -1233,48 +1271,12 @@ class TranscodeDispatcher:
         try:
             container = self._docker.containers.run(**run_kwargs)
         except Exception as exc:
-            if self._docker_factory is not None and _is_transport_death(exc):
-                logger.warning(
-                    "docker ssh transport dead; rebuilding client and retrying spawn task_id=%s: %s",
-                    task.id,
-                    exc,
-                )
-                old_docker = self._docker
-                try:
-                    rebuilt = self._docker_factory()
-                except Exception as factory_exc:  # noqa: BLE001 - factory failure must not wedge the dispatcher
-                    logger.warning(
-                        "docker client rebuild failed; keeping old client task_id=%s: %s",
-                        task.id,
-                        factory_exc,
-                    )
-                    raise
-                if rebuilt is None:
-                    # _build_docker_client (main.py) returns None on any
-                    # failure (dev without the socket, unreachable/
-                    # misconfigured remote host). Assigning self._docker =
-                    # None here would make every LATER spawn raise
-                    # AttributeError instead of the transport-death path
-                    # that can actually recover — permanently wedging the
-                    # dispatcher. Keep the old (dead) client instead: this
-                    # tick's spawn still fails via the original exception
-                    # below, and the next tick's spawn attempt will detect
-                    # transport death again and retry the rebuild.
-                    logger.warning(
-                        "docker client rebuild returned None; keeping old client task_id=%s",
-                        task.id,
-                    )
-                    raise
-                self._docker = rebuilt
-                try:
-                    old_docker.close()
-                except Exception:  # noqa: BLE001 - best-effort cleanup of the dead client
-                    pass
-                # A second failure here propagates into the existing
-                # error handling in spawn_pending — no infinite retry.
-                container = self._docker.containers.run(**run_kwargs)
-            else:
+            rebuilt = self._recover_docker_client(exc, context=f"retrying spawn task_id={task.id}")
+            if rebuilt is None:
                 raise
+            # A second failure here propagates into the existing error
+            # handling in spawn_pending; no infinite retry.
+            container = rebuilt.containers.run(**run_kwargs)
         logger.info(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
