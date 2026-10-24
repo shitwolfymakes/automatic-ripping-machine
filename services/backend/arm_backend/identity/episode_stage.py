@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -42,7 +42,7 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
 from arm_backend.identity.pipeline import ResolveOutcome, hint_season, resolve_job
-from arm_backend.identity.proposals import claims_of, put_source
+from arm_backend.identity.proposals import MANUAL, claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
     EPISODE_SOURCE_BY_SETTING,
@@ -103,14 +103,36 @@ def _length(track: Track) -> int | None:
     return track.duration_seconds or track.expected_duration_seconds or None
 
 
+def _placed(track: Track) -> bool:
+    """The operator set this episode number by hand, in a season."""
+    return (
+        track.role == TrackRole.EPISODE
+        and track.season is not None
+        and track.episode_number is not None
+        and (track.identity_provenance or {}).get("episode_number") == MANUAL
+    )
+
+
+def operator_placed(tracks: Sequence[Track]) -> dict[int, frozenset[int]]:
+    """Season -> the episode numbers (a range expanded) the operator placed by
+    hand. Matching leaves those tracks alone and keeps their numbers free of
+    every other title."""
+    held: dict[int, set[int]] = {}
+    for track in tracks:
+        if _placed(track) and track.season is not None and track.episode_number is not None:
+            end = max(track.episode_number_end or track.episode_number, track.episode_number)
+            held.setdefault(track.season, set()).update(range(track.episode_number, end + 1))
+    return {season: frozenset(numbers) for season, numbers in held.items()}
+
+
 def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
     """Selected video titles with a length whose role is unknown or episode
-    (C6). A role this stage itself set on an earlier run (provenance is an
+    (C6), other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
     episode source, e.g. `extra` for a skipped title) does not count as known,
     so a re-run can still place that title."""
     out: list[TitleIn] = []
     for track in sorted(tracks, key=lambda t: t.index):
-        if track.kind != TrackKind.VIDEO_TITLE or track.excluded:
+        if track.kind != TrackKind.VIDEO_TITLE or track.excluded or _placed(track):
             continue
         role_source = (track.identity_provenance or {}).get("role")
         if track.role not in (None, TrackRole.EPISODE) and role_source not in _EPISODE_SOURCE_IDS:
@@ -280,6 +302,7 @@ class _Request:
     disc_number: int | None
     disc_total: int | None
     tolerance: int
+    placed: Mapping[int, frozenset[int]]
 
 
 async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> _SeasonFit | None:
@@ -288,6 +311,9 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
     except SourceMiss:
         return None
     siblings, conflict = _siblings(req.rows, req.ids, season, req.disc_number)
+    if held := req.placed.get(season):
+        # Claims the operator's numbers without anchoring on a disc.
+        siblings.append(SiblingDisc(None, held))
     remaining, anchor = start_anchor(
         episodes,
         disc_number=req.disc_number,
@@ -443,6 +469,7 @@ async def _match(
     *,
     titles: Sequence[TitleIn],
     rows: Sequence[tuple[Job, list[Track]]],
+    placed: Mapping[int, frozenset[int]],
     now: datetime,
     inputs: dict[str, Any],
 ) -> SourceOutcome:
@@ -499,7 +526,7 @@ async def _match(
             return SourceOutcome(source_id, claims, None)
         order = season_scan_order(listed, hint=hint_season(job), sibling_seasons=sibling_seasons(rows, ids))
 
-    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance)
+    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance, placed)
     picked = await _pick_season(provider, req, order)
     if picked is None or not picked[1].result.matches:
         claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
@@ -549,19 +576,23 @@ async def compute_episode_claims(
     """Every tried provider's outcome, in the order tried. Stops after the
     first confident, well-covered result (spec 5); later providers are not
     called. One provider failing never fails the stage (spec 9)."""
-    titles = _eligible(await _job_tracks(session, job))
+    job_tracks = await _job_tracks(session, job)
+    titles = _eligible(job_tracks)
     if not titles:
         # Nothing to match yet (e.g. identify without the review hold creates
         # no tracks; rip-start schedules the stage again). No outcome means
         # nothing is stored, so `sweep_startup` can still pick the job up.
         return []
     rows = await _sibling_rows(session, job)
+    placed = operator_placed(job_tracks)
     now = datetime.now(UTC)
     outcomes: list[SourceOutcome] = []
     for provider in _ordered_providers(job, providers, opts.only_source, cfg):
         inputs: dict[str, Any] = {}
         try:
-            outcome = await _match(provider, job, cfg, opts, titles=titles, rows=rows, now=now, inputs=inputs)
+            outcome = await _match(
+                provider, job, cfg, opts, titles=titles, rows=rows, placed=placed, now=now, inputs=inputs
+            )
         except SourceError as e:
             logger.warning("episode stage: source %s failed job_id=%s: %s", provider.source_id, job.id, e)
             outcome = _error(job, provider.source_id, e, inputs, now)

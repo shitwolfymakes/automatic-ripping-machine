@@ -1371,3 +1371,54 @@ async def test_extras_alone_do_not_trigger_the_nominal_rule() -> None:
     provider = FakeProvider(seasons={1: _season(1, [2700] * 10)})
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
     assert outcome.claims.inputs["nominal_runtimes"] is False
+
+
+# ---------------------------------------------------------------------------
+# Operator-placed tracks constrain the matcher
+# ---------------------------------------------------------------------------
+
+
+async def test_operator_placed_track_is_excluded_and_its_episode_reserved() -> None:
+    job = _job()
+    db = _db(job, DISC)
+    hand = _tracks(db, job)["1"]
+    hand.role, hand.season, hand.episode_number = TrackRole.EPISODE, 1, 4
+    hand.identity_provenance = {"episode_number": "manual", "season": "manual", "role": "manual"}
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    claims = outcomes[0].claims
+    assert "1" not in claims.tracks
+    assert 4 not in {c.episode for c in claims.tracks.values()}
+    assert episode_stage.operator_placed([hand]) == {1: frozenset({4})}
+
+
+async def test_operator_placed_track_in_another_season_reserves_nothing_here() -> None:
+    job = _job()
+    hand = _track(
+        "job_1",
+        9,
+        999,
+        role=TrackRole.EPISODE,
+        season=2,
+        episode_number=4,
+        identity_provenance={"episode_number": "manual", "season": "manual"},
+    )
+    db = _db(job, DISC, extra_tracks=[hand])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+    claims = outcomes[0].claims
+    assert "9" not in claims.tracks
+    assert 4 in {c.episode for c in claims.tracks.values()}
+
+
+def test_operator_placed_expands_ranges_and_ignores_unplaced_tracks() -> None:
+    manual = {"episode_number": "manual"}
+    double = _track("j", 0, 100, role=TrackRole.EPISODE, season=1, episode_number=2, episode_number_end=3)
+    double.identity_provenance = manual
+    auto = _track("j", 1, 100, role=TrackRole.EPISODE, season=1, episode_number=7)
+    auto.identity_provenance = {"episode_number": "episodes_tmdb"}
+    seasonless = _track("j", 2, 100, role=TrackRole.EPISODE, episode_number=8)
+    seasonless.identity_provenance = manual
+    extra = _track("j", 3, 100, role=TrackRole.EXTRA, season=1, episode_number=9)
+    extra.identity_provenance = manual
+    assert episode_stage.operator_placed([double, auto, seasonless, extra]) == {1: frozenset({2, 3})}
