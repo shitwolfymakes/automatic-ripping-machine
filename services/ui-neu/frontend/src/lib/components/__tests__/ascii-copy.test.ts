@@ -47,7 +47,9 @@ describe('ASCII copy', () => {
 			confidence: null,
 			proposed: null,
 			changed: false,
-			handSet: false
+			handSet: false,
+			season: null,
+			seconds: null
 		};
 		renderComponent(EpisodeRows, { rows: [row], fileNames: new Map() });
 		expect(screen.getAllByText('-').length).toBeGreaterThan(0);

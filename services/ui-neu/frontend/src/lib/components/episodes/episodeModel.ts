@@ -1,4 +1,11 @@
-import type { IdentityView, JobView, MatchPreview, TrackIdentityView, TrackView } from '$lib/types/api.gen';
+import type {
+	EpisodeSummary,
+	IdentityView,
+	JobView,
+	MatchPreview,
+	TrackIdentityView,
+	TrackView
+} from '$lib/types/api.gen';
 
 export type PanelState = 'noseries' | 'matching' | 'unavailable' | 'nomatch' | 'suggestion' | 'pinned' | 'applied';
 export type Origin = { kind: 'auto' | 'suggestion' | 'you' | 'none'; source: string | null };
@@ -13,6 +20,9 @@ export interface EpisodeRow {
 	proposed: { code: string; name: string; confidence: number | null } | null;
 	changed: boolean;
 	handSet: boolean;
+	/** The track's saved season; null when none is set (never assumed). */
+	season: number | null;
+	seconds: number | null;
 }
 
 /** The Re-run form. An empty season or disc is null (unknown); a season of
@@ -43,11 +53,12 @@ function episodeCode(
 ): string | null {
 	if (ep == null) return null;
 	const span = end != null && end !== ep ? `-E${pad(end)}` : '';
-	return `S${pad(season ?? 1)}E${pad(ep)}${span}`;
+	// A seasonless episode shows no season rather than an assumed one.
+	return `S${season == null ? '-' : pad(season)}E${pad(ep)}${span}`;
 }
 
 export function formatLength(seconds: number | null | undefined): string {
-	if (seconds == null) return '—';
+	if (seconds == null) return '-';
 	const m = Math.floor(seconds / 60);
 	return `${m}:${pad(seconds % 60)}`;
 }
@@ -143,9 +154,41 @@ export function buildRows(tracks: TrackView[], identity: IdentityView, preview: 
 			confidence: proposal?.confidence ?? null,
 			proposed,
 			changed: proposed !== null && proposed.code !== current,
-			handSet: o.kind === 'you'
+			handSet: o.kind === 'you',
+			season: t?.season ?? track.season ?? null,
+			seconds: track.duration_seconds ?? null
 		};
 	});
+}
+
+export const ROLE_OPTIONS = Object.entries(NON_EPISODE).map(([value, label]) => ({ value, label }));
+
+/** The by-hand choices for one track in one season: its episodes, closest
+ * runtime to the track's length first (unknown runtimes last, ties by number),
+ * the episodes other tracks already hold after the rest and marked used, then
+ * the roles. A special (or any episode of season 0) is valued as season 0. */
+export function pickerOptions(
+	episodes: EpisodeSummary[],
+	season: number,
+	seconds: number | null,
+	used: Set<number>
+): { value: string; label: string }[] {
+	const fit = (e: EpisodeSummary) =>
+		seconds == null || e.runtime_s == null ? Infinity : Math.abs(e.runtime_s - seconds);
+	const items = episodes.map((e) => {
+		const special = !!e.special || season === 0;
+		// A special in a regular season's list is numbered in season 0, so the
+		// season's used numbers do not apply to it.
+		const isUsed = (season === 0 || !e.special) && used.has(e.number);
+		const code = special ? `S00E${pad(e.number)}` : `E${pad(e.number)}`;
+		const parts = [[code, e.name].filter(Boolean).join(' ')];
+		if (e.runtime_s != null) parts.push(`${Math.round(e.runtime_s / 60)}m`);
+		if (special) parts.push('special');
+		const label = parts.join(', ') + (isUsed ? ' (used)' : '');
+		return { e, isUsed, value: `s${special ? 0 : season}e${e.number}`, label };
+	});
+	items.sort((a, b) => +a.isUsed - +b.isUsed || fit(a.e) - fit(b.e) || a.e.number - b.e.number);
+	return [...items.map(({ value, label }) => ({ value, label })), ...ROLE_OPTIONS];
 }
 
 export function placedCount(rows: EpisodeRow[]): number {

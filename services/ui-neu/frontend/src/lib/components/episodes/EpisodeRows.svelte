@@ -15,8 +15,13 @@
 		phone?: boolean;
 		/** Label of the source being previewed; null when no preview is shown. */
 		proposedLabel?: string | null;
-		/** Set-by-hand choices; null hides the pickers and Revert (guest, matching, preview). */
-		options?: { value: string; label: string }[] | null;
+		/** A row's set-by-hand choices; absent hides the pickers and Revert (guest, matching, preview). */
+		optionsFor?: ((row: EpisodeRow) => { value: string; label: string }[] | null) | null;
+		/** The source's regular seasons for the per-row season select; null when they could not load. */
+		seasons?: number[] | null;
+		/** The job's season, shown for a row with none of its own; null when unknown. */
+		panelSeason?: number | null;
+		onseason?: (trackId: string, season: number) => void;
 		onpick?: (trackId: string, value: string) => void;
 		onrevert?: (trackId: string) => void;
 	}
@@ -26,7 +31,10 @@
 		matching = false,
 		phone = false,
 		proposedLabel = null,
-		options = null,
+		optionsFor = null,
+		seasons = null,
+		panelSeason = null,
+		onseason,
 		onpick,
 		onrevert
 	}: Props = $props();
@@ -35,6 +43,16 @@
 		const value = e.currentTarget.value;
 		e.currentTarget.value = '';
 		if (value) onpick?.(trackId, value);
+	}
+
+	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
+	// The row's own season stays selectable while the list loads or lacks it.
+	function seasonChoices(row: EpisodeRow): number[] {
+		const own = seasonOf(row);
+		return [...new Set([...(seasons ?? []), ...(own != null ? [own] : [])])].filter((n) => n > 0).sort((a, b) => a - b);
+	}
+	function setSeason(trackId: string, value: string) {
+		if (value !== '' && Number.isInteger(Number(value)) && Number(value) >= 0) onseason?.(trackId, Number(value));
 	}
 
 	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
@@ -75,15 +93,41 @@
 {/snippet}
 
 {#snippet byHand(row: EpisodeRow)}
-	{#if options}
+	{#if optionsFor}
+		{@const season = seasonOf(row)}
 		<div class="episode-rows-hand">
+			{#if seasons}
+				<select
+					class="field-control episode-rows-season"
+					aria-label="Season for {row.ref}"
+					value={season == null ? '' : String(season)}
+					onchange={(e) => setSeason(row.trackId, e.currentTarget.value)}
+				>
+					{#if season == null}<option value="" disabled>Season...</option>{/if}
+					<option value="0">Specials</option>
+					{#each seasonChoices(row) as n (n)}
+						<option value={String(n)}>Season {n}</option>
+					{/each}
+				</select>
+			{:else}
+				<input
+					type="number"
+					min="0"
+					class="field-control episode-rows-season"
+					aria-label="Season for {row.ref}"
+					placeholder="Season"
+					value={season ?? ''}
+					onchange={(e) => setSeason(row.trackId, e.currentTarget.value)}
+				/>
+			{/if}
 			<select
 				class="field-control episode-rows-select"
 				aria-label="Set placement for {row.ref}"
+				disabled={season == null}
 				onchange={(e) => pick(row.trackId, e)}
 			>
 				<option value="">Change...</option>
-				{#each options as o (o.value)}
+				{#each optionsFor(row) ?? [] as o (o.value)}
 					<option value={o.value}>{o.label}</option>
 				{/each}
 			</select>
@@ -135,7 +179,7 @@
 					{#if proposedLabel}<th class="table-header">Proposed, {proposedLabel}</th>{/if}
 					<th class="table-header">Origin</th>
 					<th class="table-header table-right">Conf.</th>
-					{#if options}<th class="table-header">Set by hand</th>{/if}
+					{#if optionsFor}<th class="table-header">Set by hand</th>{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -157,7 +201,7 @@
 						{/if}
 						<td class="table-cell">{@render origin(row)}</td>
 						<td class="table-cell table-right tabular-nums">{matching ? '-' : conf(row.confidence)}</td>
-						{#if options}<td class="table-cell">{@render byHand(row)}</td>{/if}
+						{#if optionsFor}<td class="table-cell">{@render byHand(row)}</td>{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -221,10 +265,19 @@
 		min-width: 0;
 		max-width: 16rem;
 	}
+	.episode-rows-season {
+		min-width: 0;
+		max-width: 8rem;
+	}
 	.episode-rows-card .episode-rows-hand {
 		flex-wrap: wrap;
 	}
 	.episode-rows-card .episode-rows-select {
+		flex: 1 1 100%;
+		max-width: none;
+		min-height: 2.75rem;
+	}
+	.episode-rows-card .episode-rows-season {
 		flex: 1 1 100%;
 		max-width: none;
 		min-height: 2.75rem;
