@@ -10,7 +10,7 @@ schemas.identity`).
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from arm_common.enums import TrackRole
 from arm_common.schemas.identity import ClaimStatus, TrackClaim
@@ -68,6 +68,14 @@ class MatchRequest(BaseModel):
     disc_number: int | None = Field(default=None, ge=1)
     tolerance: int | None = Field(default=None, ge=1, le=1800)
     apply: bool = False
+    # Scan every season even when the job has one (the season picker's "all").
+    scan_seasons: bool = False
+
+    @model_validator(mode="after")
+    def _season_xor_scan(self) -> "MatchRequest":
+        if self.season is not None and self.scan_seasons:
+            raise ValueError("season and scan_seasons are exclusive")
+        return self
 
 
 class MatchEntryView(BaseModel):
@@ -120,3 +128,11 @@ class EpisodeListView(BaseModel):
     show_id: str
     season: int
     episodes: list[EpisodeSummary] = Field(default_factory=list)
+
+
+class SeasonListView(BaseModel):
+    """`GET /api/jobs/{id}/identity/seasons` response."""
+
+    source_id: str
+    show_id: str
+    seasons: list[int]

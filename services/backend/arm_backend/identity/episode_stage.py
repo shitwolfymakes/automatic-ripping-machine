@@ -78,6 +78,8 @@ class StageOptions:
     tolerance: int | None = None
     only_source: str | None = None
     apply: bool = True
+    # Scan every season even when the job has one.
+    scan_seasons: bool = False
 
 
 @dataclass(frozen=True)
@@ -439,6 +441,8 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
     job's season unless this stage itself set it (F1). A season an episode
     source picked by scanning stays a scan, so re-runs keep proposing it
     and their inputs stay the same."""
+    if opts.scan_seasons:
+        return None
     if opts.season is not None:
         return opts.season
     if (job.identity_provenance or {}).get("season") in _EPISODE_SOURCE_IDS:

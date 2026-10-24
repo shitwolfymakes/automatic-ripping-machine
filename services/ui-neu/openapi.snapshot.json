@@ -2553,6 +2553,79 @@
         }
       }
     },
+    "/api/jobs/{job_id}/identity/seasons": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Browse Seasons",
+        "operationId": "browse_seasons_api_jobs__job_id__identity_seasons_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "tvmaze",
+                "tvdb"
+              ],
+              "type": "string",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeasonListView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/drives": {
       "get": {
         "tags": [
@@ -15296,6 +15369,11 @@
             "type": "boolean",
             "title": "Apply",
             "default": false
+          },
+          "scan_seasons": {
+            "type": "boolean",
+            "title": "Scan Seasons",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -17712,6 +17790,33 @@
         ],
         "title": "SdfStatusReport",
         "description": "Body of POST /api/ripper/sdf-status \u2014 the ripper's MakeMKV SDF fetch\noutcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `age_days` is present on fresh_kept; None on all other states."
+      },
+      "SeasonListView": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "show_id": {
+            "type": "string",
+            "title": "Show Id"
+          },
+          "seasons": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Seasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "show_id",
+          "seasons"
+        ],
+        "title": "SeasonListView",
+        "description": "`GET /api/jobs/{id}/identity/seasons` response."
       },
       "ServiceCatalog": {
         "properties": {

@@ -1422,3 +1422,12 @@ def test_operator_placed_expands_ranges_and_ignores_unplaced_tracks() -> None:
     extra = _track("j", 3, 100, role=TrackRole.EXTRA, season=1, episode_number=9)
     extra.identity_provenance = manual
     assert episode_stage.operator_placed([double, auto, seasonless, extra]) == {1: frozenset({2, 3})}
+
+
+async def test_scan_seasons_option_ignores_the_job_season() -> None:
+    job = _job(season=1)
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, [600 + i for i in range(10)]), 2: _season(2, DISTINCT)})
+    outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions(scan_seasons=True))
+    assert outcomes[0].claims.job.season == 2
+    assert outcomes[0].claims.inputs["season"] is None
