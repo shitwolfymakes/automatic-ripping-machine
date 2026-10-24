@@ -14,6 +14,7 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(),
 	setJobMediaType: vi.fn(() => Promise.resolve({})),
+	resolveJob: vi.fn(() => Promise.resolve({})),
 	fetchNamingPreview: vi.fn(() => Promise.resolve({ items: [] })),
 	updateTrack: vi.fn(() => Promise.resolve({}))
 }));
@@ -149,5 +150,29 @@ describe('DiscReviewWidget episode matching', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 		expect(screen.getByTestId('title-initial-type')).toHaveTextContent('none');
+	});
+
+	it('says the season is not set for a pre-rip TV job without one', async () => {
+		renderCard();
+		expect(await screen.findByText(/Season not set/)).toBeTruthy();
+	});
+
+	it('does not say it for a ripped job or when a season is known', async () => {
+		renderCard({ ...TV, status: 'ripped' });
+		await episodesButton();
+		expect(screen.queryByText(/Season not set/)).toBeNull();
+		cleanup();
+		renderCard({ ...TV, season: 5 });
+		await episodesButton();
+		expect(screen.queryByText(/Season not set/)).toBeNull();
+		expect(screen.getByText(/Season 5/)).toBeTruthy();
+	});
+
+	it('starts matching when Info saves a season on a TV job', async () => {
+		renderCard();
+		await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
+		await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '7' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(await screen.findByText('Matching episodes...')).toBeTruthy();
 	});
 });

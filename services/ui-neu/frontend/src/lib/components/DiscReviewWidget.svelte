@@ -152,7 +152,7 @@
 				: `${displayJob.year}`
 			: null;
 		const parts = isTv
-			? ['TV Series', years, jobMeta.season ? `Season ${Number(jobMeta.season)}` : null]
+			? ['TV Series', years, jobMeta.season ? `Season ${Number(jobMeta.season)}` : isPostRip ? null : 'Season not set']
 			: ['Movie', years];
 		return parts.filter(Boolean).join(', ');
 	});
@@ -693,6 +693,9 @@
 		{#if showInfo}
 			<JobInfoForm
 				{job}
+				onsaved={(c) => {
+					if (isTv && (c.season || c.disc)) matching.start();
+				}}
 				onrefresh={() => {
 					onrefresh?.();
 					loadDetail();
