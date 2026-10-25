@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
-	import { abandonJob, deleteJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import {
+		abandonJob,
+		deleteJob,
+		fetchJob,
+		fetchNamingPreview,
+		startWaitingJob,
+		pauseWaitingJob,
+		resolveJob
+	} from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata } from '$lib/utils/job-fields';
@@ -68,6 +76,9 @@
 	let countdownPaused = $derived(paused || !!job?.manual_pause);
 
 	let data = $state<JobDetailView | null>(null);
+	// The generated file name per track (the applied session's naming), for the
+	// Info table's Episode column; empty until a session names the tracks.
+	let fileNames = $state(new Map<string, string>());
 	let initialLoading = $state(true);
 	let showInfo = $state(false);
 	let showTitleSearch = $state(false);
@@ -217,6 +228,13 @@
 			data = null;
 		} finally {
 			initialLoading = false;
+		}
+		try {
+			const preview = await fetchNamingPreview(job.id);
+			fileNames = new Map((preview.items ?? []).map((i) => [i.track_id, i.output_name]));
+		} catch {
+			// No session routed yet (409) or a nicety that failed: the table shows the episode instead.
+			fileNames = new Map();
 		}
 	}
 
@@ -742,6 +760,7 @@
 						{scanTitles}
 						{isVideo}
 						{isMusic}
+						{fileNames}
 						onrefresh={() => {
 							onrefresh?.();
 							loadDetail();

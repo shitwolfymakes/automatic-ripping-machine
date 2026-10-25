@@ -22,6 +22,7 @@ vi.mock('$lib/stores/auth', async () => {
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(() => Promise.resolve(createJobDetail())),
+	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
 	abandonJob: vi.fn(() => Promise.resolve()),
 	startWaitingJob: vi.fn(() => Promise.resolve(createJob())),
 	pauseWaitingJob: vi.fn(() => Promise.resolve(createJob())),

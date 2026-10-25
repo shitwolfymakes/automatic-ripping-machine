@@ -453,6 +453,10 @@
 	async function revert(trackId: string) {
 		if (await saveTrack(trackId, { revert_fields: [...REVERT] })) clearRowSeason(trackId);
 	}
+	// Include or leave a track out of the transcode output, from the same rows.
+	function setExcluded(trackId: string, excluded: boolean) {
+		return saveTrack(trackId, { excluded });
+	}
 
 	function applyPreview() {
 		if (previewRequest) return run({ ...previewRequest, apply: true });
@@ -637,6 +641,7 @@
 				onseason={setRowSeason}
 				onpick={setByHand}
 				onrevert={revert}
+				onexclude={canAct ? setExcluded : undefined}
 			/>
 			{#if handError}<p class="field-error" role="alert">Could not save the track: {handError}</p>{/if}
 		{/if}

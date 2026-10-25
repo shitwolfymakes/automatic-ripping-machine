@@ -429,10 +429,34 @@ describe('Job detail page (v3)', () => {
 			],
 			fingerprints: []
 		});
+		mockFetchNamingPreview.mockResolvedValue({ job_output_dir: '', job_output_name: '', items: [] });
 		renderComponent(Page);
 		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
 		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
 		expect(screen.getByText('The One With The Test')).toBeInTheDocument();
+	});
+
+	it('the Episode column reads the generated name once a session names the track', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped' }),
+			tracks: [createTrack({ id: 'trk_1', status: 'done', role: 'episode', episode_number: 3, episode_name: 'Ep 3' })],
+			fingerprints: []
+		});
+		mockFetchNamingPreview.mockResolvedValue({
+			job_output_dir: '/media/tv/Show/Season 01',
+			job_output_name: 'Show',
+			items: [
+				{
+					track_id: 'trk_1',
+					output_name: 'Show - S01E03 - Ep 3.mkv',
+					output_path: '/media/tv/Show/Season 01/Show - S01E03 - Ep 3.mkv'
+				}
+			]
+		} as never);
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (1)')).toBeInTheDocument());
+		await waitFor(() => expect(screen.getAllByText('Show - S01E03 - Ep 3.mkv').length).toBeGreaterThan(0));
+		expect(screen.queryByText('Ep 3')).toBeNull();
 	});
 
 	it('omits the Episode column for non-series tracks', async () => {

@@ -25,6 +25,8 @@
 		onseason?: (trackId: string, season: number) => void;
 		onpick?: (trackId: string, value: string) => void;
 		onrevert?: (trackId: string) => void;
+		/** Include or leave out a track; absent shows the state as text. */
+		onexclude?: (trackId: string, excluded: boolean) => void;
 	}
 	let {
 		rows,
@@ -37,7 +39,8 @@
 		panelSeason = null,
 		onseason,
 		onpick,
-		onrevert
+		onrevert,
+		onexclude
 	}: Props = $props();
 
 	function pick(trackId: string, e: Event & { currentTarget: HTMLSelectElement }) {
@@ -114,6 +117,20 @@
 	{/if}
 {/snippet}
 
+{#snippet include(row: EpisodeRow)}
+	{#if onexclude}
+		<input
+			type="checkbox"
+			aria-label="Include {row.ref}"
+			checked={!row.excluded}
+			onchange={(e) => onexclude?.(row.trackId, !e.currentTarget.checked)}
+			title="Include this track in transcode output (the disc still rips in full)"
+		/>
+	{:else}
+		<span class="episode-rows-muted">{row.excluded ? 'Excluded' : 'Included'}</span>
+	{/if}
+{/snippet}
+
 {#snippet origin(row: EpisodeRow)}
 	{#if matching || row.origin.kind === 'none'}
 		<span class="episode-rows-muted">-</span>
@@ -132,6 +149,7 @@
 				<div class="episode-rows-card-head">
 					<span class="episode-rows-ref">{row.ref}</span>
 					<span class="episode-rows-muted tabular-nums">{row.length}</span>
+					<span class="episode-rows-card-include">{@render include(row)}</span>
 					<span class="episode-rows-card-origin">{@render origin(row)}</span>
 				</div>
 				<div class="episode-rows-placement">{@render placement(row)}</div>
@@ -149,6 +167,7 @@
 				<tr>
 					<th class="table-header">Track</th>
 					<th class="table-header">Length</th>
+					<th class="table-header">Include</th>
 					<th class="table-header">Placement</th>
 					{#if proposedLabel}<th class="table-header">Proposed, {proposedLabel}</th>{/if}
 					<th class="table-header">Origin</th>
@@ -161,6 +180,7 @@
 					<tr class="table-row">
 						<td class="table-cell episode-rows-ref">{row.ref}</td>
 						<td class="table-cell tabular-nums">{row.length}</td>
+						<td class="table-cell">{@render include(row)}</td>
 						<td class="table-cell"><div class="episode-rows-placement">{@render placement(row)}</div></td>
 						{#if proposedLabel}
 							<td class="table-cell" data-changed={row.changed}>
@@ -287,5 +307,9 @@
 	}
 	.episode-rows-card-origin {
 		margin-left: auto;
+	}
+	.episode-rows-card-include {
+		display: inline-flex;
+		align-items: center;
 	}
 </style>

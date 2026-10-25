@@ -24,6 +24,8 @@ export interface EpisodeRow {
 	/** The track's saved season; null when none is set (never assumed). */
 	season: number | null;
 	seconds: number | null;
+	/** Left out of the transcode output (the disc still rips in full). */
+	excluded: boolean;
 }
 
 /** The Re-run form. An empty season or disc is null (unknown); a season of
@@ -160,7 +162,8 @@ export function buildRows(
 			changed: proposed !== null && proposed.code !== current,
 			handSet: o.kind === 'you',
 			season: t?.season ?? track.season ?? null,
-			seconds: track.duration_seconds ?? track.expected_duration_seconds ?? null
+			seconds: track.duration_seconds ?? track.expected_duration_seconds ?? null,
+			excluded: track.excluded ?? false
 		};
 	});
 }

@@ -639,7 +639,10 @@
 										</td>
 										{#if tracksAreSeries}
 											<td class="table-cell" data-label="Episode">
-												{#if track.episode_number != null}
+												{#if preview?.output_name}
+													<!-- A session names the track: the generated name is the episode. -->
+													<span class="mono job-detail-track-generated">{preview.output_name}</span>
+												{:else if track.episode_number != null}
 													<span class="job-detail-track-title job-detail-track-title-strong"
 														>{track.episode_number}</span
 													>
@@ -1102,6 +1105,9 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-muted);
+	}
+	.job-detail-track-generated {
+		font-size: 0.8125rem;
 	}
 	.job-detail-track-faint {
 		color: var(--color-text-faint);
