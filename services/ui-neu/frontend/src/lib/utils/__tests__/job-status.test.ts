@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveJobStatus, isPartialComplete, reviewPhaseBadge, hasTitleMatch } from '$lib/utils/job-status';
+import {
+	effectiveJobStatus,
+	isPartialComplete,
+	reviewPhaseBadge,
+	hasTitleMatch,
+	identitySuggestionOf,
+	providerLabel,
+	PROVIDER_LABELS
+} from '$lib/utils/job-status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
@@ -92,6 +100,77 @@ describe('reviewPhaseBadge', () => {
 	});
 	it('ripped violet accent', () => {
 		expect(reviewPhaseBadge(badgeJob('ripped', null)).accent).toContain('--color-accent-3');
+	});
+});
+
+const SUGGESTION = {
+	provider: 'tmdb',
+	title: 'Iron Man',
+	year: 2008,
+	kind: 'movie',
+	poster_url: null,
+	external_ids: {},
+	overview: null,
+	payload: {},
+	suggested_at: '2026-10-15T10:00:00Z'
+};
+const heldJob = (status: string, extra: Record<string, unknown> = {}) =>
+	({
+		status,
+		title: 'MY_DISC',
+		transcode_progress: null,
+		metadata_json: { identity_suggestion: SUGGESTION, flags: { unidentified: true }, ...extra }
+	}) as any;
+
+describe('reviewPhaseBadge with an identity suggestion', () => {
+	it('awaiting_review + suggestion -> CONFIRM TITLE', () => {
+		const b = reviewPhaseBadge(heldJob('awaiting_review'));
+		expect(b.label).toBe('CONFIRM TITLE');
+		expect(b.accent).toBe('var(--color-accent-4)');
+	});
+	it('awaiting_user_id + suggestion -> CONFIRM TITLE', () => {
+		expect(reviewPhaseBadge(heldJob('awaiting_user_id')).label).toBe('CONFIRM TITLE');
+	});
+	it('ripped_awaiting_identify + suggestion -> CONFIRM TITLE', () => {
+		expect(reviewPhaseBadge(heldJob('ripped_awaiting_identify')).label).toBe('CONFIRM TITLE');
+	});
+	it('previously ripped still wins over a suggestion', () => {
+		const b = reviewPhaseBadge(heldJob('awaiting_review', { previously_ripped: { job_id: 'job_old' } }));
+		expect(b.label).toBe('ALREADY RIPPED');
+	});
+	it('a suggestion on another status does not change its badge', () => {
+		expect(reviewPhaseBadge(heldJob('identified')).label).toBe('READY');
+	});
+});
+
+describe('identitySuggestionOf', () => {
+	it('returns the held suggestion', () => {
+		expect(identitySuggestionOf(heldJob('awaiting_review'))?.title).toBe('Iron Man');
+	});
+	it('null when absent, null metadata, or no job', () => {
+		expect(identitySuggestionOf({ metadata_json: {} } as any)).toBeNull();
+		expect(identitySuggestionOf({ metadata_json: { identity_suggestion: null } } as any)).toBeNull();
+		expect(identitySuggestionOf({ metadata_json: null } as any)).toBeNull();
+		expect(identitySuggestionOf(null)).toBeNull();
+		expect(identitySuggestionOf(undefined)).toBeNull();
+	});
+});
+
+describe('PROVIDER_LABELS / providerLabel', () => {
+	it('maps every known provider', () => {
+		expect(PROVIDER_LABELS).toEqual({
+			tmdb: 'TMDb',
+			omdb: 'OMDb',
+			tvmaze: 'TVmaze',
+			tvdb: 'TVDB',
+			musicbrainz: 'MusicBrainz',
+			arm_server: 'ARM community database',
+			thediscdb: 'TheDiscDB'
+		});
+		expect(providerLabel('arm_server')).toBe('ARM community database');
+	});
+	it('falls back to the id itself', () => {
+		expect(providerLabel('somewhere_else')).toBe('somewhere_else');
 	});
 });
 

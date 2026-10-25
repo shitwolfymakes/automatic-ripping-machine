@@ -36,7 +36,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # --- Metadata ---
     ConfigFieldMeta(
         key="tmdb_api_key",
-        group="Metadata",
+        group="Keys",
         tier="secret",
         label="TMDb API key",
         help="The Movie Database API key (free; recommended).",
@@ -48,7 +48,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="omdb_api_key",
-        group="Metadata",
+        group="Keys",
         tier="secret",
         label="OMDb API key",
         help="Open Movie Database API key (1000 req/day free tier).",
@@ -60,7 +60,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="tvdb_api_key",
-        group="Metadata",
+        group="Keys",
         tier="secret",
         label="TVDb API key",
         help="Needed for the TVDB episode source.",
@@ -72,7 +72,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="makemkv_key",
-        group="Metadata",
+        group="Keys",
         tier="secret",
         label="MakeMKV key",
         help="MakeMKV registration key (purchased perma-key or beta key).",
@@ -84,18 +84,16 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="thediscdb_enabled",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Match discs against TheDiscDB",
         help="Match discs against the local TheDiscDB snapshot to label titles, pick the main feature, and name extras/episodes.",
         type="bool",
         editable=True,
-        setup_step="metadata",
-        setup_order=5,
     ),
     ConfigFieldMeta(
         key="thediscdb_refresh_days",
-        group="Metadata",
+        group="Keys",
         tier="operator",
         label="TheDiscDB refresh interval (days)",
         help="How often the backend refreshes its TheDiscDB snapshot from GitHub.",
@@ -104,7 +102,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="episode_sources",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Episode sources",
         help="Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.",
@@ -116,7 +114,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="disc_hint_sources",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Read season and disc number from",
         help="Read from the disc in this order, before ARM identifies it.",
@@ -127,7 +125,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="episode_match_tolerance_seconds",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Match tolerance (seconds)",
         help=(
@@ -140,7 +138,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="episode_auto_apply",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Apply confident matches",
         help=(
@@ -152,7 +150,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="movie_sources",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Movie sources",
         help="Tried top to bottom when a disc looks like a movie. ARM stops at the first confident match.",
@@ -164,7 +162,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="movie_auto_apply",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Apply confident movie matches",
         help=(
@@ -176,7 +174,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="music_sources",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Music sources",
         help="Tried top to bottom for audio CDs, matched by the disc's track layout. MusicBrainz needs no key.",
@@ -187,7 +185,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="music_auto_apply",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Apply confident music matches",
         help=(
@@ -199,7 +197,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="search_provider_movie",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Search movies with",
         help="The service behind the job page's search box for movies.",
@@ -217,7 +215,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="search_provider_tv",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Search TV with",
         help="The service behind the job page's search box for TV. TVmaze needs no key.",
@@ -229,7 +227,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="search_provider_music",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="Search music with",
         help="The service behind the job page's search box for audio CDs.",
@@ -240,7 +238,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="crc64service_enabled",
-        group="Metadata",
+        group="Identification",
         tier="operator",
         label="ARM community database (CRC64)",
         help="Send a DVD's CRC64 fingerprint to the ARM project's community database and take its title when it has one. DVDs only; no key needed.",

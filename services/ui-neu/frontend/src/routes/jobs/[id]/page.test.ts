@@ -47,6 +47,7 @@ vi.mock('$lib/api/jobs', () => ({
 	updateTrack: vi.fn(() => Promise.resolve()),
 	fetchNamingPreview: vi.fn(() => Promise.resolve({ job_output_dir: '', job_output_name: '', items: [] })),
 	resolveJob: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
+	acceptIdentitySuggestion: vi.fn(() => Promise.resolve({ job: createJob({ id: 'job_42' }), fan_out: [] })),
 	applySession: vi.fn(() => Promise.resolve({ session_application: {}, tasks: [], collisions: [], idempotent: false })),
 	searchMusicMetadata: vi.fn(() => Promise.resolve({ candidates: [] })),
 	fetchMusicDetail: vi.fn(() => Promise.resolve({})),
@@ -108,7 +109,7 @@ vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(() => Promise.resolve({ transcoder_config: { config: {} } }))
 }));
 
-import { fetchJob, updateTrack, fetchNamingPreview, setJobMediaType } from '$lib/api/jobs';
+import { fetchJob, updateTrack, fetchNamingPreview, setJobMediaType, acceptIdentitySuggestion } from '$lib/api/jobs';
 import * as authStore from '$lib/stores/auth';
 import { fetchIdentity } from '$lib/api/identity';
 import { ApiError } from '$lib/api/client';
@@ -545,6 +546,94 @@ describe('Job detail page (v3)', () => {
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
 		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});
+	describe('held identity suggestion', () => {
+		const held = () => ({
+			job: createJob({
+				id: 'job_42',
+				status: 'awaiting_review',
+				title: 'MY_DISC',
+				disc_type: 'bluray',
+				wait_start_time: null,
+				metadata_json: {
+					identity_suggestion: {
+						provider: 'tmdb',
+						title: 'Iron Man',
+						year: 2008,
+						kind: 'movie',
+						poster_url: 'https://image.tmdb.org/t/p/w500/abc.jpg',
+						external_ids: {},
+						overview: null,
+						payload: {},
+						suggested_at: '2026-10-15T10:00:00Z'
+					},
+					flags: { unidentified: true }
+				} as never
+			}),
+			tracks: [],
+			fingerprints: []
+		});
+
+		it('shows the banner in the header and Use this title reloads the job', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
+			try {
+				renderComponent(Page);
+				const banner = await screen.findByTestId('identity-suggestion');
+				expect(banner.closest('.job-detail-header-card')).not.toBeNull();
+				expect(screen.getByText('Iron Man (2008)')).toBeInTheDocument();
+				const calls = mockFetchJob.mock.calls.length;
+				await fireEvent.click(screen.getByRole('button', { name: 'Use this title' }));
+				await waitFor(() => expect(acceptIdentitySuggestion).toHaveBeenCalledWith('job_42'));
+				await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThan(calls));
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+
+		it('accepting hands the resolve response on, so resumed sessions are announced', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
+			vi.mocked(acceptIdentitySuggestion).mockResolvedValueOnce({
+				job: createJob({ id: 'job_42' }),
+				fan_out: [{}, {}]
+			} as never);
+			try {
+				renderComponent(Page);
+				await fireEvent.click(await screen.findByRole('button', { name: 'Use this title' }));
+				expect(await screen.findByTestId('action-note')).toHaveTextContent('2 sessions resumed');
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+
+		it('Search instead opens the identify dialog', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
+			try {
+				renderComponent(Page);
+				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
+				await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+
+		it('a guest sees the banner without its buttons', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
+			const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+			auth.__setRole('guest');
+			try {
+				renderComponent(Page);
+				expect(await screen.findByTestId('identity-suggestion')).toBeInTheDocument();
+				expect(screen.queryByRole('button', { name: 'Use this title' })).toBeNull();
+			} finally {
+				auth.__setRole('admin');
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+	});
+
 	describe('TV episode matching', () => {
 		afterEach(() => {
 			(authStore as unknown as { __setRole: (r: string | null) => void }).__setRole('admin');
