@@ -618,7 +618,10 @@ async def identify(
 
     scan = req.scan_result
     fps = [(fp.algo.lower(), fp.value) for fp in scan.fingerprints if fp.algo and fp.value]
-    decision = await find_reusable_job_for_disc(session, drive_id=req.drive_id, fingerprints=fps)
+    # A virtual drive holds one source for its whole life: its parked job is this disc's.
+    decision = await find_reusable_job_for_disc(
+        session, drive_id=req.drive_id, fingerprints=fps, same_source=drive.kind == DriveKind.VIRTUAL
+    )
     if decision is not None and decision.action == "in_flight":
         # Disc re-scanned while its rip is in flight (restart race) — return the
         # live job; in-flight recovery owns it. No new job, no re-identify.

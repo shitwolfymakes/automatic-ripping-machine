@@ -1997,6 +1997,33 @@ def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
     assert new_fps == []  # no duplicate fingerprint rows
 
 
+def test_identify_on_a_virtual_drive_reuses_its_parked_job_without_fingerprints() -> None:
+    """A ripper started again for a rip parked at a review gate re-identifies
+    the ISO; ISO scans carry no fingerprints, so the parked job is matched by
+    the virtual drive itself instead of a second job appearing on it."""
+    db = FakeSession()
+    drive = _drive()
+    drive.kind = DriveKind.VIRTUAL
+    db.rows["drives"] = [drive]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_parked", status=JobStatus.AWAITING_REVIEW, disc_type="dvd")
+    existing.title = "Kolchak: The Night Stalker"
+    db.rows["jobs"] = [existing]
+    dispatcher = _Dispatcher(result=None)
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = []
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_parked"
+    assert [r for r in db.added if type(r).__name__ == "Job"] == []
+
+
 def test_identify_terminal_match_mints_fresh() -> None:
     """A fingerprint matching only a terminal (RIPPED) job must mint a brand-new
     Job — terminal jobs are excluded from the reuse candidates."""
