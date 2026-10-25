@@ -207,14 +207,31 @@ describe('Job detail page (v3)', () => {
 		});
 	});
 
-	it('shows the Identify (Edit identity) button for a resolvable status', async () => {
+	// A disc still waiting for an identity: the dialog is the way to give it one.
+	const awaitingIdentity = () => ({
+		...createJobDetail({ tracks: [] }),
+		job: createJob({ id: 'job_42', status: 'awaiting_user_id', title: null })
+	});
+
+	it('shows the Identify button only while the disc is waiting for an identity', async () => {
 		renderComponent(Page);
-		await waitFor(() => {
-			expect(screen.getByTestId('identify-open')).toBeInTheDocument();
-		});
+		await screen.findByRole('heading', { name: 'Test Movie' });
+		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
+		cleanup();
+		const jobImpl = mockFetchJob.getMockImplementation();
+		try {
+			mockFetchJob.mockResolvedValue(awaitingIdentity());
+			renderComponent(Page);
+			await waitFor(() => {
+				expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc');
+			});
+		} finally {
+			mockFetchJob.mockImplementation(jobImpl!);
+		}
 	});
 
 	it('opens the IdentifyDialog when the Identify button is clicked', async () => {
+		mockFetchJob.mockResolvedValueOnce(awaitingIdentity());
 		renderComponent(Page);
 		const btn = await screen.findByTestId('identify-open');
 		await fireEvent.click(btn);
@@ -665,8 +682,8 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
 		});
 
-		it('puts the Movie | TV switch, as one control, right before Edit identity', async () => {
-			mockFetchJob.mockResolvedValue(tvJob());
+		it('puts the Movie | TV switch, as one control, right before Identify disc', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'awaiting_user_id' }));
 			renderComponent(Page);
 			const editIdentity = await screen.findByTestId('identify-open');
 			const group = screen.getByRole('radiogroup', { name: 'Media type' });

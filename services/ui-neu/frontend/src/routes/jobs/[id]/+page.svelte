@@ -369,7 +369,10 @@
 						{#if isVideoDisc && $isAdmin}
 							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
 						{/if}
-						{#if canResolve && $isAdmin}
+						<!-- A video job with an identity edits it in place on the facts grid and
+						     searches from the tab below; the dialog stays for a disc still waiting
+						     for an identity, and for CDs (album, artist, track titles). -->
+						{#if canResolve && $isAdmin && (isCdDisc || isAwaitingIdentity(job.status))}
 							<button
 								type="button"
 								data-testid="identify-open"
