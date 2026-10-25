@@ -7055,6 +7055,42 @@ export type GetIdentityApiJobsJobIdIdentityGetResponses = {
 
 export type GetIdentityApiJobsJobIdIdentityGetResponse = GetIdentityApiJobsJobIdIdentityGetResponses[keyof GetIdentityApiJobsJobIdIdentityGetResponses];
 
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/match';
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteError = ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors[keyof ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors];
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityView;
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponse = ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses[keyof ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses];
+
 export type MatchIdentityApiJobsJobIdIdentityMatchPostData = {
     body: MatchRequest;
     headers?: {

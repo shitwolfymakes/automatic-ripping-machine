@@ -178,6 +178,23 @@ def forget_episode_show_ids(job: Job) -> None:
         _store(job, claims)
 
 
+def forget_episode_sources(job: Job) -> bool:
+    """Forget the episode match: every `episodes_*` source, the episode pin and
+    the unsure flag go; manual claims (hand-placed tracks, the operator's
+    season) and the show ids stay. Returns whether anything was removed. The
+    caller re-resolves, which takes the forgotten placements off the tracks."""
+    claims = claims_of(job)
+    gone = [sid for sid in claims.sources if sid.startswith("episodes_")]
+    changed = bool(gone) or "episode" in claims.pin or claims.unsure
+    for sid in gone:
+        del claims.sources[sid]
+    claims.pin.pop("episode", None)
+    claims.unsure = False
+    if changed:
+        _store(job, claims)
+    return changed
+
+
 def set_unsure(job: Job, unsure: bool) -> bool:
     """Record whether the winning episode placement is a guess. Returns
     whether the stored value changed."""

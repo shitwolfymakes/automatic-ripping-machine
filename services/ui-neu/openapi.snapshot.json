@@ -2409,6 +2409,64 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Clear Episode Match",
+        "description": "Clear episodes: forget every episode source's result and the operator's\nsource choice, then re-resolve so the placements come off the tracks.\nHand-placed tracks keep their manual claims; show ids stay for the next\nFix match. Emits `job.identity_updated` and a `track.updated` per track\nthe resolver changed.",
+        "operationId": "clear_episode_match_api_jobs__job_id__identity_match_delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/jobs/{job_id}/identity/pin": {

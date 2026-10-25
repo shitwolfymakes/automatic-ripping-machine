@@ -708,6 +708,76 @@ def test_clear_pin_when_nothing_pinned_is_a_noop(signing_key: bytes) -> None:
     assert claims_of(job).pin == {}
 
 
+def test_clear_match_takes_the_placements_off_and_keeps_a_hand_set_track(signing_key: bytes) -> None:
+    """Clear episodes: the stored episode results and the pin go, the
+    resolver unplaces every track they placed, a hand-set track keeps its
+    manual claim, the job is no longer unsure, and the events fire."""
+    job = _job(
+        meta={
+            "identity": {"external_ids": {"imdb": "tt1"}},
+            "identity_claims": {
+                "sources": {
+                    "episodes_tmdb": {
+                        "status": "ok",
+                        "suggestion": True,
+                        "inputs": {"show_id": "5084"},
+                        "tracks": {
+                            "0": {"role": "episode", "season": 1, "episode": 3, "episode_name": "Ep3"},
+                            "1": {"role": "episode", "season": 1, "episode": 4, "episode_name": "Ep4"},
+                        },
+                    },
+                    "manual": {"status": "ok", "tracks": {"1": {"role": "episode", "season": 1, "episode": 9}}},
+                },
+                "pin": {"episode": "episodes_tmdb"},
+                "unsure": True,
+            },
+        }
+    )
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    # Track 0 carries the guess an earlier resolve put on it.
+    tracks[0].role, tracks[0].season, tracks[0].episode_number, tracks[0].episode_name = "episode", 1, 3, "Ep3"
+    tracks[0].identity_provenance = {k: "episodes_tmdb" for k in ("role", "season", "episode_number", "episode_name")}
+    db = _db(job, tracks=tracks)
+    hub = _Hub()
+    app, admin_token, _ = _make_app(signing_key, db, hub=hub, stage_runner=None)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert db.locked == ["jobs"]
+    claims = claims_of(job)
+    assert set(claims.sources) == {"manual"} and claims.pin == {} and claims.unsure is False
+    assert r.json()["pin"] == {}
+    track_0 = next(t for t in db.rows["tracks"] if t.source_ref == "0")
+    track_1 = next(t for t in db.rows["tracks"] if t.source_ref == "1")
+    assert track_0.episode_number is None
+    assert track_1.episode_number == 9  # the operator's placement survives
+    identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
+    assert len(identity_events) == 1
+    assert any(e["payload"]["track_id"] == track_0.id for e in hub.events if e["event_type"] == "track.updated")
+
+
+def test_clear_match_when_nothing_matched_is_a_noop(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert claims_of(job).sources == {}
+
+
+def test_clear_match_unknown_job_404_and_reader_403(signing_key: bytes) -> None:
+    db = _db()
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        assert client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token)).status_code == 404
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    app, _, guest_token = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        assert client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(guest_token)).status_code == 403
+
+
 def test_clear_pin_unknown_job_404(signing_key: bytes) -> None:
     db = _db()
     app, admin_token, _ = _make_app(signing_key, db, stage_runner=None)

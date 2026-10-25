@@ -17,6 +17,10 @@ export function unpinIdentity(jobId: string): Promise<IdentityView> {
 	return del<IdentityView>(`/api/jobs/${jobId}/identity/pin`);
 }
 
+/** Clear episodes: forget the episode match so the placements come off the tracks. */
+export function clearEpisodeMatch(jobId: string): Promise<IdentityView> {
+	return del<IdentityView>(`/api/jobs/${jobId}/identity/match`);
+}
 export function fetchEpisodes(jobId: string, source: EpisodeSource, season: number): Promise<EpisodeListView> {
 	return get<EpisodeListView>(`/api/jobs/${jobId}/identity/episodes?source=${source}&season=${season}`);
 }

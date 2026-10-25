@@ -36,7 +36,7 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import claims_of, clear_pin, record_manual_job, set_pin
+from arm_backend.identity.proposals import claims_of, clear_pin, forget_episode_sources, record_manual_job, set_pin
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.routers._params import JobIdParam
@@ -285,6 +285,31 @@ async def _match_identity(
 
     stored = claims_of(fresh_job).sources
     return MatchPreview(outcomes=[_outcome_view(o.source_id, stored.get(o.source_id, o.claims)) for o in outcomes])
+
+
+@router.delete("/{job_id}/identity/match", response_model=IdentityView)
+async def clear_episode_match(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+) -> IdentityView:
+    """Clear episodes: forget every episode source's result and the operator's
+    source choice, then re-resolve so the placements come off the tracks.
+    Hand-placed tracks keep their manual claims; show ids stay for the next
+    Fix match. Emits `job.identity_updated` and a `track.updated` per track
+    the resolver changed."""
+    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    job = await _get_job(db, job_id, for_update=True)
+    forget_episode_sources(job)
+    db.add(job)
+    resolved = await resolve_job(db, job)
+    await db.commit()
+    await emit_identity_resolved(db, hub, job, resolved, sources={})
+    await db.commit()
+    await db.refresh(job)
+    tracks = await _get_tracks(db, job_id)
+    return _identity_view(job, tracks)
 
 
 @router.delete("/{job_id}/identity/pin", response_model=IdentityView)

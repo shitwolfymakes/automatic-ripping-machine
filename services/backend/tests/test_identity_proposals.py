@@ -7,6 +7,8 @@ from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.proposals import (
+    forget_episode_sources,
+    set_unsure,
     claims_of,
     clear_pin,
     put_source,
@@ -266,3 +268,20 @@ def test_clearing_an_owned_value_leaves_the_write_to_the_resolver() -> None:
     assert job.season == 7  # the resolver, not the recorder, rewrites an owned field
     apply_resolution(job, [], resolve(claims_of(job), tiers=TIERS))
     assert job.season == 3 and job.identity_provenance == {"season": "label"}
+
+
+def test_forget_episode_sources_drops_sources_pin_and_unsure_but_keeps_manual_and_show_ids() -> None:
+    job = _job({"identity": {"external_ids": {"tvdb": "77170"}}})
+    put_source(job, "episodes_tmdb", SourceClaims(run_at=NOW, status="ok", suggestion=True, inputs={"show_id": "1"}))
+    put_source(job, "episodes_tvmaze", SourceClaims(run_at=NOW, status="miss"))
+    put_source(job, "label", SourceClaims(run_at=NOW, status="ok", job=JobClaim(season=2)))
+    record_manual_job(job, {"season": 7})
+    set_pin(job, "episode", "episodes_tmdb")
+    set_unsure(job, True)
+    assert forget_episode_sources(job) is True
+    claims = claims_of(job)
+    assert set(claims.sources) == {"label", "manual"}
+    assert claims.pin == {} and claims.unsure is False
+    assert claims.sources["manual"].job.season == 7
+    assert job.metadata_json["identity"]["external_ids"]["tvdb"] == "77170"
+    assert forget_episode_sources(job) is False  # nothing left to forget
