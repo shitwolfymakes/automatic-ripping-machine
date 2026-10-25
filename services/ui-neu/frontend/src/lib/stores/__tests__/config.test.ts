@@ -81,4 +81,28 @@ describe('config store', () => {
 		expect(get(transcoderEnabled)).toBe(true);
 		expect(get(transcodeRuntimeEnabled)).toBe(true);
 	});
+	it('hydrateConfig: keyedSources is true where the key comes back <hidden>', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({
+				transcode_capable: true,
+				transcode_enabled: true,
+				tmdb_api_key: '<hidden>',
+				omdb_api_key: null,
+				tvdb_api_key: ''
+			})
+		}) as unknown as typeof fetch;
+
+		const { keyedSources, hydrateConfig } = await import('../config');
+		await hydrateConfig();
+		expect(get(keyedSources)).toEqual({ tmdb: true, omdb: false, tvdb: false });
+	});
+
+	it('hydrateConfig: keyedSources fails open on fetch failure', async () => {
+		globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('network')) as unknown as typeof fetch;
+
+		const { keyedSources, hydrateConfig } = await import('../config');
+		await hydrateConfig();
+		expect(get(keyedSources)).toEqual({ tmdb: true, omdb: true, tvdb: true });
+	});
 });

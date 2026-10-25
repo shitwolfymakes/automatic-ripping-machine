@@ -346,3 +346,72 @@ def test_external_imdb_id_malformed_external_ids_returns_none() -> None:
         release={},
     )
     assert external_imdb_id(match) is None
+
+
+def _release_match(**overrides: Any) -> DiscMatch:
+    base: dict[str, Any] = dict(
+        kind="movie", title_slug="round-midnight-1986", release_slug="r", disc={}, metadata={}, release={}
+    )
+    base.update(overrides)
+    return DiscMatch(**base)
+
+
+def test_release_kind_maps_thediscdb_directories() -> None:
+    from arm_backend.identity.sources.thediscdb import release_kind
+
+    assert release_kind(_release_match(kind="movies")) == "movie"
+    assert release_kind(_release_match(kind="movie")) == "movie"
+    assert release_kind(_release_match(kind="series")) == "tv"
+    assert release_kind(_release_match(kind="tv")) == "tv"
+
+
+def test_release_identity_prefers_metadata_then_slug() -> None:
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": 1986})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": "1986"})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={}, title_slug="round-midnight-1986")) == ("Round Midnight", 1986)
+    assert release_identity(_release_match(metadata={}, title_slug="lost")) == ("Lost", None)
+    assert release_identity(_release_match(metadata={}, title_slug="")) == (None, None)
+
+
+def test_release_identity_keeps_a_title_that_ends_in_a_year() -> None:
+    """The slug's trailing number is a year suffix, not the tail of the title
+    -- unless it is. This names the completed folder (ripper `miss_title`), so
+    "Blade Runner 2049" must not become "Blade Runner"."""
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    # Past the 2029 cap the dispatcher's own year-suffix regex uses.
+    assert release_identity(_release_match(metadata={}, title_slug="blade-runner-2049")) == ("Blade Runner 2049", None)
+    # TheDiscDB's own Year settles the ambiguous ones either way.
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049-2017")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 1975}, title_slug="death-race-2000")) == (
+        "Death Race 2000",
+        1975,
+    )
+    # A year-only title keeps its suffix read as the year, the one reading the
+    # slug alone supports.
+    assert release_identity(_release_match(metadata={}, title_slug="1917-2019")) == ("1917", 2019)
+
+
+def test_release_result_builds_the_thediscdb_identity() -> None:
+    from arm_backend.identity.sources.thediscdb import release_result
+
+    result = release_result(_release_match(kind="series", metadata={"Title": "Round Midnight", "Year": 1986}), "tt1")
+    assert result is not None
+    assert (result.title, result.year, result.kind, result.provider) == ("Round Midnight", 1986, "tv", "thediscdb")
+    assert result.payload == {"imdb_id": "tt1", "thediscdb_release": "r"}
+    assert release_result(_release_match(title_slug=""), "tt1") is None

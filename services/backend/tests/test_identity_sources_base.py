@@ -64,6 +64,18 @@ def test_accessors_follow_operator_order_and_drop_unknown_values() -> None:
     assert source_ranks(cfg) == {"episodes_tvdb": 0, "episodes_tmdb": 1, "label": 0}
 
 
+def test_hint_order_is_fixed_whatever_the_stored_order() -> None:
+    """The disc's own metadata beats its label (design v4): `disc_hint_sources`
+    is a set; a saved order never reranks the hints."""
+    cfg = Config(disc_hint_sources=["label", "bd_title"])
+    assert hint_sources_setting(cfg) == ("bd_title", "label")
+    assert [s.id for s in enabled_hint_sources(cfg)] == ["bd_title", "label"]
+    ranks = source_ranks(cfg)
+    assert (ranks["bd_title"], ranks["label"]) == (0, 1)
+    assert hint_sources_setting(Config(disc_hint_sources=["label"])) == ("label",)
+    assert hint_sources_setting(Config(disc_hint_sources=["bogus", "label", "label"])) == ("label",)
+
+
 def test_empty_lists_disable_everything() -> None:
     cfg = Config(episode_sources=[], disc_hint_sources=[])
     assert enabled_episode_source_ids(cfg) == ()

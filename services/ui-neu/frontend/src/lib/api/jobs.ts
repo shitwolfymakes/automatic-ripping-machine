@@ -214,7 +214,7 @@ export function applySession(
 export function searchMetadata(
 	query: string,
 	type?: 'movie' | 'tv',
-	provider?: 'tmdb' | 'omdb'
+	provider?: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb'
 ): Promise<MetadataSearchResponse> {
 	const params = new URLSearchParams({ title: query });
 	if (type) params.set('type', type);
@@ -308,6 +308,12 @@ export function fetchNamingVariables(): Promise<NamingVariablesResponse> {
 // the disc if one is waiting, otherwise lets the next insert through once.
 export function ripAgain(id: string): Promise<RipAgainResponse> {
 	return apiFetch<RipAgainResponse>(`/api/jobs/${id}/rip-again`, { method: 'POST' });
+}
+
+// Apply the identity suggestion identify held for review (the media type's
+// auto-apply switch is off). Answers like resolve; 409 when none is held.
+export function acceptIdentitySuggestion(jobId: string): Promise<ResolveResponse> {
+	return post<ResolveResponse>(`/api/jobs/${jobId}/identity/accept`);
 }
 
 export function startWaitingJob(id: string): Promise<JobView> {

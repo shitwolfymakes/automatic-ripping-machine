@@ -5,6 +5,7 @@ import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import { ApiError } from '$lib/api/client';
 import { sectionFields } from '$lib/utils/settings-sections';
 import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
@@ -28,7 +29,7 @@ const GROUP: SettingsGroup = {
 	name: 'Metadata',
 	fields: [
 		{
-			key: 'metadata_provider',
+			key: 'search_provider_movie',
 			group: 'Metadata',
 			tier: 'operator',
 			label: 'Provider',
@@ -59,7 +60,7 @@ const GROUP: SettingsGroup = {
 		}
 	]
 };
-const CONFIG = { metadata_provider: 'tmdb', tmdb_api_key: '<hidden>', makemkv_key: '<hidden>' };
+const CONFIG = { search_provider_movie: 'tmdb', tmdb_api_key: '<hidden>', makemkv_key: '<hidden>' };
 
 afterEach(() => {
 	cleanup();
@@ -97,7 +98,7 @@ describe('SchemaConfigForm', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		const payload = saveArmConfig.mock.calls[0][0];
-		expect(payload.metadata_provider).toBe('omdb');
+		expect(payload.search_provider_movie).toBe('omdb');
 		expect('tmdb_api_key' in payload).toBe(false);
 	});
 
@@ -118,12 +119,12 @@ describe('SchemaConfigForm', () => {
 		await fireEvent.change(select, { target: { value: 'omdb' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
-		expect(saveArmConfig.mock.calls[0][0]).toEqual({ metadata_provider: 'omdb' });
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ search_provider_movie: 'omdb' });
 
 		await fireEvent.change(select, { target: { value: 'tmdb' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(2));
-		expect(saveArmConfig.mock.calls[1][0]).toEqual({ metadata_provider: 'tmdb' });
+		expect(saveArmConfig.mock.calls[1][0]).toEqual({ search_provider_movie: 'tmdb' });
 	});
 
 	it('holds a saved secret as <hidden> in the baseline and clears the field back to its masked state', async () => {
@@ -357,95 +358,62 @@ describe('SchemaConfigForm section layout hints', () => {
 		const fieldCCheckbox = screen.getByLabelText('Field C');
 		expect(fieldCCheckbox.compareDocumentPosition(advancedLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
+});
 
-	it('renders the registered summary component for a section named "tv-episodes"', () => {
+describe('SchemaConfigForm section note', () => {
+	const mk = (key: string, label: string): ConfigFieldMeta => ({
+		key,
+		group: 'Identification',
+		tier: 'operator',
+		label,
+		help: 'Own help for ' + label,
+		type: 'enum',
+		editable: true,
+		enum_values: ['a', 'b']
+	});
+	const a = mk('a', 'Field A');
+	const b = mk('b', 'Field B');
+	const c = mk('c', 'Field C');
+	const G: SettingsGroup = { name: 'Identification', fields: [a, b, c] };
+
+	it('renders the note once, hides field help in that section only, and points the controls at the note', () => {
 		vi.mocked(sectionFields).mockReturnValueOnce([
-			{
-				title: 'Test section',
-				summary: 'tv-episodes',
-				columns: [],
-				fields: [fieldA],
-				advanced: []
-			}
+			{ title: 'Search', note: 'One shared line.', hideFieldHelp: true, columns: [[a], [b]], fields: [], advanced: [] },
+			{ title: 'Other', columns: [], fields: [c], advanced: [] }
 		]);
-		renderComponent(SchemaConfigForm, { props: { group: LAYOUT_GROUP, config: LAYOUT_CONFIG } });
-		expect(screen.getByRole('group', { name: 'TV episodes summary' })).toBeInTheDocument();
-		expect(screen.getByLabelText('Field A')).toBeInTheDocument();
+		renderComponent(SchemaConfigForm, { props: { group: G, config: { a: 'a', b: 'a', c: 'a' } } });
+		const note = screen.getAllByText('One shared line.');
+		expect(note).toHaveLength(1);
+		expect(note[0].id).toBeTruthy();
+		expect(screen.queryByText('Own help for Field A')).not.toBeInTheDocument();
+		expect(screen.queryByText('Own help for Field B')).not.toBeInTheDocument();
+		expect(screen.getByText('Own help for Field C')).toBeInTheDocument();
+		expect(screen.getByLabelText('Field A')).toHaveAttribute('aria-describedby', note[0].id);
+		expect(screen.getByLabelText('Field B')).toHaveAttribute('aria-describedby', note[0].id);
 	});
 });
 
-describe('SchemaConfigForm TV episodes section', () => {
-	const TV_FIELDS: ConfigFieldMeta[] = [
-		{
-			key: 'disc_hint_sources',
-			group: 'Metadata',
-			tier: 'operator',
-			label: 'Read season and disc number from',
-			help: 'Read from the disc in this order, before ARM identifies it.',
-			type: 'ranked',
-			editable: true,
-			enum_values: ['bd_title', 'label'],
-			enum_labels: { bd_title: 'Blu-ray disc title', label: 'Disc volume label' }
-		},
-		{
-			key: 'episode_sources',
-			group: 'Metadata',
-			tier: 'operator',
-			label: 'Episode sources',
-			help: 'Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.',
-			type: 'ranked',
-			editable: true,
-			enum_values: ['tmdb', 'tvmaze', 'tvdb'],
-			enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' },
-			enum_requires: { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key' }
-		},
-		{
-			key: 'episode_auto_apply',
-			group: 'Metadata',
-			tier: 'operator',
-			label: 'Apply confident matches',
-			help: 'When off, every match is kept as a suggestion to review on the job page.',
-			type: 'bool',
-			editable: true
-		},
-		{
-			key: 'episode_match_tolerance_seconds',
-			group: 'Metadata',
-			tier: 'operator',
-			label: 'Match tolerance (seconds)',
-			help: "How far a track's runtime may differ from an episode's and still match.",
-			type: 'int',
-			editable: true
-		}
-	];
-	const TV_GROUP: SettingsGroup = { name: 'Metadata', fields: TV_FIELDS };
-	const TV_CONFIG = {
-		disc_hint_sources: ['bd_title', 'label'],
-		episode_sources: ['tmdb', 'tvmaze', 'tvdb'],
-		episode_auto_apply: true,
-		episode_match_tolerance_seconds: 300
+describe('SchemaConfigForm missing-key chip links', () => {
+	const EPISODE_SOURCES: ConfigFieldMeta = {
+		key: 'episode_sources',
+		group: 'Metadata',
+		tier: 'operator',
+		label: 'Episode sources',
+		help: 'Tried top to bottom. ARM stops at the first confident match. TVmaze needs no key.',
+		type: 'ranked',
+		editable: true,
+		enum_values: ['tmdb', 'tvmaze', 'tvdb'],
+		enum_labels: { tmdb: 'TMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' },
+		enum_requires: { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key' }
 	};
+	const TV_GROUP: SettingsGroup = { name: 'Metadata', fields: [EPISODE_SOURCES] };
+	const TV_CONFIG = { episode_sources: ['tmdb', 'tvmaze', 'tvdb'] };
 
-	it('renders the panel with the summary, both ranked lists, the auto-apply toggle and the advanced tolerance field', () => {
-		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-
-		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
-		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
-
-		const columnsGrid = screen.getByTestId('settings-section-columns');
-		expect(within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' })).toBeInTheDocument();
-		expect(within(columnsGrid).getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
-
-		expect(screen.getByLabelText('Apply confident matches')).toBeInTheDocument();
-		expect(screen.getByText('Advanced')).toBeInTheDocument();
-		expect(screen.getByLabelText('Match tolerance (seconds)')).toBeInTheDocument();
-	});
-
-	it('deep-links a missing key to Metadata when the form does not hold the key', () => {
+	it("links a missing key to the field's anchor when the form does not hold the key and no schema context is set", () => {
 		renderComponent(SchemaConfigForm, {
 			props: { group: TV_GROUP, config: { ...TV_CONFIG, tmdb_api_key: '<hidden>', tvdb_api_key: '' } }
 		});
-		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#Metadata/tvdb_api_key');
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#setting-tvdb_api_key');
 	});
 
 	it("deep-links a missing key to this form's own tab when the form holds the key", () => {
@@ -460,7 +428,7 @@ describe('SchemaConfigForm TV episodes section', () => {
 		};
 		const group: SettingsGroup = {
 			name: 'Transcoding',
-			fields: [{ ...TV_FIELDS[1], group: 'Transcoding' }, keyField]
+			fields: [{ ...EPISODE_SOURCES, group: 'Transcoding' }, keyField]
 		};
 		renderComponent(SchemaConfigForm, {
 			props: { group, config: { episode_sources: ['tvdb'], tvdb_api_key: '' } }
@@ -468,52 +436,66 @@ describe('SchemaConfigForm TV episodes section', () => {
 		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#transcoding/tvdb_api_key');
 	});
 
-	it('places the two ranked lists in different column cells (side by side, not stacked)', () => {
-		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-
-		const columnsGrid = screen.getByTestId('settings-section-columns');
-		const discHints = within(columnsGrid).getByRole('list', { name: 'Read season and disc number from' });
-		const episodeSources = within(columnsGrid).getByRole('list', { name: 'Episode sources' });
-
-		const cells = Array.from(columnsGrid.children);
-		expect(cells).toHaveLength(2);
-		const discHintsCell = cells.find((c) => c.contains(discHints));
-		const episodeSourcesCell = cells.find((c) => c.contains(episodeSources));
-		expect(discHintsCell).toBeDefined();
-		expect(episodeSourcesCell).toBeDefined();
-		expect(discHintsCell).not.toBe(episodeSourcesCell);
-	});
-
-	it('shows the empty-sources note when episode_sources is empty, and hides it otherwise', () => {
-		const { unmount } = renderComponent(SchemaConfigForm, {
-			props: { group: TV_GROUP, config: { ...TV_CONFIG, episode_sources: [] } }
+	it("links a setup step's missing key to the field's anchor on the same step", () => {
+		const keyField: ConfigFieldMeta = {
+			key: 'tvdb_api_key',
+			group: 'Keys',
+			tier: 'secret',
+			label: 'TVDB API key',
+			help: '',
+			type: 'str',
+			editable: true
+		};
+		const group: SettingsGroup = { name: 'setup:metadata', fields: [EPISODE_SOURCES, keyField] };
+		renderComponent(SchemaConfigForm, {
+			props: { group, config: { episode_sources: ['tvdb'], tvdb_api_key: '' }, deferred: true, bare: true }
 		});
-		expect(screen.getByTestId('tv-episodes-empty-note')).toHaveTextContent(
-			'With every source off, ARM does not match episodes automatically.'
-		);
-		unmount();
+		expect(screen.getByRole('link', { name: /Needs TVDB key/ })).toHaveAttribute('href', '#setting-tvdb_api_key');
+	});
+});
 
-		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-		expect(screen.queryByTestId('tv-episodes-empty-note')).not.toBeInTheDocument();
+describe('SchemaConfigForm Identity section', () => {
+	const IDENTIFICATION: SettingsGroup = { name: 'Identification', fields: IDENTITY_METAS };
+
+	it('renders the Identity card inside the Identity panel', () => {
+		renderComponent(SchemaConfigForm, { props: { group: IDENTIFICATION, config: { ...IDENTITY_DEFAULTS } } });
+		const panel = screen
+			.getAllByTestId('settings-section')
+			.find((p) => within(p).queryByRole('heading', { name: 'Identity', level: 3 }));
+		expect(panel).toBeDefined();
+		expect(within(panel!).getByTestId('identity-card')).toBeInTheDocument();
+		expect(screen.getAllByTestId('identity-card')).toHaveLength(1);
 	});
 
-	it('moving TVmaze up updates the summary text before Save', async () => {
-		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-		const summary = screen.getByRole('group', { name: 'TV episodes summary' });
-		expect(summary).toHaveTextContent('TMDb, TVmaze, TVDB');
-
-		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
-
-		expect(summary).toHaveTextContent('TVmaze, TMDb, TVDB');
-		expect(saveArmConfig).not.toHaveBeenCalled();
-	});
-
-	it('saves the reordered episode_sources', async () => {
-		renderComponent(SchemaConfigForm, { props: { group: TV_GROUP, config: TV_CONFIG } });
-		await fireEvent.click(screen.getByRole('button', { name: 'Move TVmaze up' }));
+	it('Save still submits a changed movie_auto_apply', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: IDENTIFICATION, config: { ...IDENTITY_DEFAULTS } } });
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
-		expect(saveArmConfig.mock.calls[0][0]).toEqual({ episode_sources: ['tvmaze', 'tmdb', 'tvdb'] });
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ movie_auto_apply: false });
+	});
+
+	it('Save submits disc_hint_sources from the Advanced boxes', async () => {
+		renderComponent(SchemaConfigForm, { props: { group: IDENTIFICATION, config: { ...IDENTITY_DEFAULTS } } });
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the disc title metadata' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ disc_hint_sources: ['label'] });
+	});
+
+	it('a guest sees the card with every control disabled and no Save', () => {
+		const readOnly: SettingsGroup = {
+			name: 'Identification',
+			fields: IDENTITY_METAS.map((f) => ({ ...f, editable: false }))
+		};
+		renderComponent(SchemaConfigForm, { props: { group: readOnly, config: { ...IDENTITY_DEFAULTS } } });
+		const card = screen.getByTestId('identity-card');
+		const controls = Array.from(card.querySelectorAll('input, select, button')).filter(
+			(el) => el.getAttribute('role') !== 'radio'
+		);
+		expect(controls.length).toBeGreaterThan(10);
+		for (const el of controls) expect(el).toBeDisabled();
+		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 	});
 });
 

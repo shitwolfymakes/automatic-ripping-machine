@@ -17,7 +17,8 @@
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
+	import { effectiveJobStatus, identitySuggestionOf, isPartialComplete } from '$lib/utils/job-status';
+	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
@@ -251,6 +252,8 @@
 
 	onMount(() => {
 		let stopped = false;
+		// The review card's episode line links here as #episodes.
+		if (window.location.hash === '#episodes') activePanel = 'episodes';
 		startWS();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
@@ -376,6 +379,18 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- A confident match identify held for confirmation (auto-apply off). -->
+				{#if identitySuggestionOf(job)}
+					<div class="job-detail-suggestion">
+						<IdentitySuggestionBanner
+							{job}
+							canAct={$isAdmin && canResolve}
+							onaccepted={handleIdentified}
+							onsearch={() => (showIdentify = true)}
+						/>
+					</div>
+				{/if}
 
 				<!-- Poster + Metadata grid -->
 				<div class="flex flex-col sm:flex-row items-start">
@@ -826,6 +841,10 @@
 		box-shadow: var(--shadow-1);
 	}
 	.job-detail-title-bar {
+		border-bottom: 1px solid var(--color-border);
+		padding: 0.75rem 1.25rem;
+	}
+	.job-detail-suggestion {
 		border-bottom: 1px solid var(--color-border);
 		padding: 0.75rem 1.25rem;
 	}

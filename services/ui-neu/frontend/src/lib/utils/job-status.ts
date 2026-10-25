@@ -1,4 +1,6 @@
-import type { JobView } from '$lib/types/api.gen';
+import type { IdentityClaims, IdentitySuggestion, IdentityView, JobView } from '$lib/types/api.gen';
+import { activeSource, SOURCE_LABEL } from '$lib/components/episodes/episodeModel';
+import { isPostRipStatus } from './job-status-groups';
 
 type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;
 
@@ -86,6 +88,91 @@ export function previouslyRippedJobId(
 }
 
 /**
+ * The confident match identify held for confirmation (the media type's
+ * auto-apply switch is off), or null. Accepting it applies the title.
+ */
+export function identitySuggestionOf(
+	job: { metadata_json?: JobView['metadata_json'] } | null | undefined
+): IdentitySuggestion | null {
+	return job?.metadata_json?.identity_suggestion ?? null;
+}
+
+type MissAttempt = { source?: unknown; step?: unknown; outcome?: unknown; detail?: unknown };
+
+/**
+ * One line saying why identify's automatic match missed, from the attempts
+ * it stored (`metadata_json.identify_attempts`), or null: the job is not a
+ * miss (neither `flags.unidentified` nor awaiting_user_id), or it has no
+ * attempts (jobs identified before the list existed).
+ */
+export function missReason(
+	job: Pick<JobView, 'status' | 'title'> & {
+		disc_type?: JobView['disc_type'];
+		metadata_json?: JobView['metadata_json'];
+	}
+): string | null {
+	const meta = job.metadata_json;
+	if (job.status !== 'awaiting_user_id' && meta?.flags?.unidentified !== true) return null;
+	const attempts = (meta?.identify_attempts ?? []) as MissAttempt[];
+	if (attempts.length === 0) return null;
+	const outcomes = attempts.map((a) => a.outcome);
+	if (outcomes.includes('no_sources')) return 'No online source is switched on for this kind of disc.';
+	if (outcomes.every((o) => o === 'not_configured')) return 'No API keys are saved for the sources in your lists.';
+	if (outcomes.includes('timeout') && !outcomes.includes('miss')) return 'The lookup timed out. Try the search below.';
+	// The searched title: the last title search that names one. The
+	// whole-dispatch timeout entry (no source) carries a message, not a title.
+	const searched = attempts.findLast(
+		(a) => a.step === 'title' && a.source != null && typeof a.detail === 'string' && a.detail
+	)?.detail as string | undefined;
+	const title = searched || job.title?.trim() || 'this disc';
+	// The CD card's search is MusicSearch: there is no source to switch.
+	if (job.disc_type === 'cd') return `No source found a close match for "${title}".`;
+	return `No source found a close match for "${title}". Try another source in the search below.`;
+}
+
+/**
+ * The episode-matching line on a TV job's review card, or null for a movie or
+ * a post-rip job. `href` is the Match Episodes panel once a series is known.
+ */
+export function episodeStatus(
+	job: Pick<JobView, 'id' | 'status' | 'media_type' | 'has_series'> & { metadata_json?: JobView['metadata_json'] }
+): { text: string; href: string | null } | null {
+	if (job.media_type !== 'tv' || isPostRipStatus(job.status)) return null;
+	if (!job.has_series) return { text: 'Pick the show to match episodes.', href: null };
+	const href = `/jobs/${job.id}#episodes`;
+	const claims = (job.metadata_json?.identity_claims ?? {}) as IdentityClaims;
+	const sources = claims.sources ?? {};
+	const episodes = Object.keys(sources).filter((id) => id.startsWith('episodes_'));
+	// The card has no per-track provenance, so activeSource falls back to its
+	// pin, then first ok non-suggestion, then first ok suggestion: the panel's
+	// answer unless provenance says another ok source won.
+	const active = activeSource({ pin: claims.pin, sources } as unknown as IdentityView);
+	if (active && sources[active]?.status === 'ok') {
+		return { text: `Episodes matched from ${SOURCE_LABEL[active] ?? active}.`, href };
+	}
+	if (episodes.length > 0) return { text: 'No source could place the episodes.', href };
+	return { text: 'Matching episodes…', href };
+}
+
+/** Display names for identification provider ids. */
+export const PROVIDER_LABELS: Record<string, string> = {
+	tmdb: 'TMDb',
+	omdb: 'OMDb',
+	tvmaze: 'TVmaze',
+	tvdb: 'TVDB',
+	musicbrainz: 'MusicBrainz',
+	arm_server: 'ARM community database',
+	thediscdb: 'TheDiscDB'
+};
+
+/** A provider id's display name; an unknown id shows as itself. */
+export function providerLabel(provider: string): string {
+	return PROVIDER_LABELS[provider] ?? provider;
+}
+
+const CONFIRM_TITLE_STATUSES = new Set(['awaiting_review', 'awaiting_user_id', 'ripped_awaiting_identify']);
+
+/**
  * The header phase pill for any job rendered as a review card. Pre-rip statuses
  * map to REVIEW / IDENTIFY / READY; a post-rip job awaiting a session reads
  * RIPPED · NEEDS SESSION (or · NEEDS TITLE when a session is somehow present but
@@ -98,6 +185,8 @@ export function reviewPhaseBadge(job: BadgeJob): { label: string; accent: string
 	const s = job.status?.toLowerCase() ?? '';
 	if (s === 'awaiting_review' && previouslyRippedJobId(job))
 		return { label: 'ALREADY RIPPED', accent: 'var(--color-accent-4)' };
+	if (CONFIRM_TITLE_STATUSES.has(s) && identitySuggestionOf(job))
+		return { label: 'CONFIRM TITLE', accent: 'var(--color-accent-4)' };
 	if (s === 'awaiting_review') return { label: 'REVIEW', accent: 'var(--color-accent-1)' };
 	if (s === 'awaiting_user_id' || s === 'ripped_awaiting_identify')
 		return { label: 'IDENTIFY', accent: 'var(--color-accent-4)' };

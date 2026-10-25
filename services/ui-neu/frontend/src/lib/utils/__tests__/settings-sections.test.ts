@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { sectionFields, settingsTabFor } from '../settings-sections';
-import type { ConfigFieldMeta } from '$lib/types/api.gen';
+import { groupBlurb, legacyTab, sectionFields, settingsFieldHref, settingsTabFor } from '../settings-sections';
+import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 
 const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
 	key,
-	group: 'Metadata',
+	group: 'Identification',
 	tier: 'operator',
 	label: key,
 	help: '',
@@ -13,55 +13,87 @@ const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
 });
 
 describe('sectionFields layout hints', () => {
-	it('splits columns, fields and advanced, each key once', () => {
-		// The real "TV episodes" section: disc_hint_sources + episode_sources
-		// side by side (one column each), episode_auto_apply in the plain
-		// stack, episode_match_tolerance_seconds after the Advanced divider.
-		const fields = [
-			meta('disc_hint_sources', 'ranked'),
-			meta('episode_sources', 'ranked'),
-			meta('episode_auto_apply'),
-			meta('episode_match_tolerance_seconds', 'int')
-		];
+	const IDENTITY_KEYS = [
+		'thediscdb_enabled',
+		'crc64service_enabled',
+		'movie_sources',
+		'episode_sources',
+		'music_sources',
+		'episode_match_tolerance_seconds',
+		'movie_auto_apply',
+		'episode_auto_apply',
+		'music_auto_apply',
+		'disc_hint_sources'
+	];
+	const SEARCH_KEYS = ['search_provider_movie', 'search_provider_tv', 'search_provider_music'];
 
-		const sections = sectionFields('Metadata', fields);
-		const tvEpisodes = sections.find((s) => s.title === 'TV episodes');
-		expect(tvEpisodes).toBeDefined();
+	it('lays out Identification as a two-column Search card (music hidden) and the custom Identity card', () => {
+		const fields = [...SEARCH_KEYS, ...IDENTITY_KEYS].map((k) => meta(k));
+		const sections = sectionFields('Identification', fields);
 
-		expect(tvEpisodes?.columns.map((col) => col.map((f) => f.key))).toEqual([
-			['disc_hint_sources'],
-			['episode_sources']
+		expect(sections.map((s) => s.title)).toEqual(['Search', 'Identity']);
+		const [search, identity] = sections;
+		expect(search.columns.map((col) => col.map((f) => f.key))).toEqual([
+			['search_provider_movie'],
+			['search_provider_tv']
 		]);
-		expect(tvEpisodes?.fields.map((f) => f.key)).toEqual(['episode_auto_apply']);
-		expect(tvEpisodes?.advanced.map((f) => f.key)).toEqual(['episode_match_tolerance_seconds']);
-		expect(tvEpisodes?.summary).toBe('tv-episodes');
+		// Music has a single search service, so the select is owned but not rendered.
+		expect(search.fields).toEqual([]);
+		expect(sections.flatMap((s) => [...s.columns.flat(), ...s.fields]).map((f) => f.key)).not.toContain(
+			'search_provider_music'
+		);
+		expect(search.custom).toBeUndefined();
 
-		// Each key appears in exactly one bucket.
-		const allKeys = [
-			...tvEpisodes!.columns.flat().map((f) => f.key),
-			...tvEpisodes!.fields.map((f) => f.key),
-			...tvEpisodes!.advanced.map((f) => f.key)
-		];
-		expect(allKeys.sort()).toEqual(fields.map((f) => f.key).sort());
+		expect(identity.custom).toBe('identity');
+		expect(identity.blurb).toBe('How ARM works out what a disc is before it rips, and when it trusts the answer.');
+		expect(identity.columns).toEqual([]);
+		expect(identity.fields).toEqual([]);
+		expect(identity.advanced).toEqual([]);
+	});
+
+	it('gives the Search card one help line and hides the per-select help', () => {
+		const sections = sectionFields(
+			'Identification',
+			SEARCH_KEYS.map((k) => meta(k))
+		);
+		expect(sections[0].note).toBe("The service the job page's search box uses for each media type.");
+		expect(sections[0].hideFieldHelp).toBe(true);
+	});
+
+	it('words the Identification tab blurb', () => {
+		expect(groupBlurb('Identification')).toBe('How ARM works out what a disc is, and where it looks titles up.');
+	});
+
+	it('lays out Keys as MakeMKV, API keys, TheDiscDB', () => {
+		const sections = sectionFields(
+			'Keys',
+			['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key', 'thediscdb_refresh_days', 'makemkv_key'].map((k) =>
+				meta(k, 'string')
+			)
+		);
+		expect(sections.map((s) => s.title)).toEqual(['MakeMKV', 'API keys', 'TheDiscDB']);
+		expect(sections[0].fields.map((f) => f.key)).toEqual(['makemkv_key']);
+		expect(sections[1].fields.map((f) => f.key)).toEqual(['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key']);
+		expect(sections[2].fields.map((f) => f.key)).toEqual(['thediscdb_refresh_days']);
 	});
 
 	it('drops the section entirely when none of its keys are present', () => {
-		const sections = sectionFields('Metadata', [meta('metadata_provider', 'enum')]);
-		expect(sections.find((s) => s.title === 'TV episodes')).toBeUndefined();
+		const sections = sectionFields('Identification', [meta('search_provider_movie', 'enum')]);
+		expect(sections.map((s) => s.title)).toEqual(['Search']);
 	});
 
 	it('returns empty columns and advanced for a section that declares neither', () => {
-		const sections = sectionFields('Metadata', [meta('metadata_provider', 'enum')]);
-		const lookup = sections.find((s) => s.title === 'Lookup');
-		expect(lookup?.columns).toEqual([]);
-		expect(lookup?.advanced).toEqual([]);
-		expect(lookup?.fields.map((f) => f.key)).toEqual(['metadata_provider']);
+		const sections = sectionFields('Keys', [meta('tmdb_api_key', 'string')]);
+		const keys = sections.find((s) => s.title === 'API keys');
+		expect(keys?.columns).toEqual([]);
+		expect(keys?.advanced).toEqual([]);
+		expect(keys?.fields.map((f) => f.key)).toEqual(['tmdb_api_key']);
 	});
 
 	it('puts unmapped fields in a trailing card titled after the group', () => {
-		const sections = sectionFields('Metadata', [meta('some_future_field')]);
+		const sections = sectionFields('Keys', [meta('some_future_field')]);
 		expect(sections).toHaveLength(1);
-		expect(sections[0]).toMatchObject({ title: 'Metadata', columns: [], advanced: [] });
+		expect(sections[0]).toMatchObject({ title: 'Keys', columns: [], advanced: [] });
 		expect(sections[0].fields.map((f) => f.key)).toEqual(['some_future_field']);
 	});
 });
@@ -89,7 +121,7 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 					f('block_on_miss')
 				]
 			},
-			{ name: 'Metadata', fields: [f('tmdb_api_key', { setup_step: 'metadata', setup_order: 1 })] }
+			{ name: 'Keys', fields: [f('tmdb_api_key', { setup_step: 'metadata', setup_order: 1 })] }
 		];
 		expect(stepFields(groups, 'discs').map((x) => x.key)).toEqual(['auto_rip_on_insert', 'hold_for_review']);
 		expect(stepFields(groups, 'metadata').map((x) => x.key)).toEqual(['tmdb_api_key']);
@@ -133,9 +165,33 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 
 describe('settingsTabFor', () => {
 	it('keeps the config group names and lower-cases the screen tabs', () => {
-		expect(settingsTabFor('Metadata')).toBe('Metadata');
+		expect(settingsTabFor('Identification')).toBe('Identification');
+		expect(settingsTabFor('Keys')).toBe('Keys');
 		expect(settingsTabFor('Ripping')).toBe('Ripping');
 		expect(settingsTabFor('Transcoding')).toBe('transcoding');
 		expect(settingsTabFor('System')).toBe('system');
+	});
+});
+
+describe('settingsFieldHref', () => {
+	it("links to the tab of the field's own group, else to the field's anchor on this page", () => {
+		const groups = [{ name: 'Keys', fields: [{ key: 'tvdb_api_key', label: 'TVDb API key' }] }] as SettingsGroup[];
+		expect(settingsFieldHref('tvdb_api_key', groups)).toBe('#Keys/tvdb_api_key');
+		expect(settingsFieldHref('tvdb_api_key', undefined)).toBe('#setting-tvdb_api_key');
+		expect(settingsFieldHref('not_a_field', groups)).toBe('#setting-not_a_field');
+	});
+
+	it('uses the screen tab id for a group that folds into one', () => {
+		const groups = [{ name: 'Transcoding', fields: [{ key: 'transcode_enabled' }] }] as SettingsGroup[];
+		expect(settingsFieldHref('transcode_enabled', groups)).toBe('#transcoding/transcode_enabled');
+	});
+});
+
+describe('legacyTab', () => {
+	it('maps retired tab names to their successors and leaves the rest alone', () => {
+		expect(legacyTab('Metadata')).toBe('Identification');
+		expect(legacyTab('appearance')).toBe('themes');
+		expect(legacyTab('Ripping')).toBe('Ripping');
+		expect(legacyTab('drives')).toBe('drives');
 	});
 });

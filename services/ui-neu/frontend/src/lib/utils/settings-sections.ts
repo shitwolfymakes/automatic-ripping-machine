@@ -16,9 +16,17 @@ export interface SettingsSection {
 	/** Keys rendered last, under a muted "Advanced" divider. Not repeated
 	 *  in `fields`. */
 	advanced?: string[];
-	/** A named summary component rendered under the section blurb. An
-	 *  unrecognised name (or none) renders nothing. */
-	summary?: 'tv-episodes';
+	/** A named component that renders the whole section from the group's
+	 *  fields (its keys are claimed here, so none fall through to the
+	 *  trailing card). The section keeps no columns, fields or advanced. */
+	custom?: 'identity';
+	/** One help line rendered under the section's fields. */
+	note?: string;
+	/** Hide each field's own help text in this section (the `note` covers it). */
+	hideFieldHelp?: boolean;
+	/** Keys this section owns but does not render (a setting with a single
+	 *  option, kept at its default until a second option exists). */
+	hidden?: string[];
 }
 
 /** The section shape `sectionFields()` hands the form: keys already split
@@ -26,37 +34,62 @@ export interface SettingsSection {
 export interface SectionFieldGroups {
 	title: string;
 	blurb?: string;
-	summary?: 'tv-episodes';
+	custom?: 'identity';
+	note?: string;
+	hideFieldHelp?: boolean;
 	columns: ConfigFieldMeta[][];
 	fields: ConfigFieldMeta[];
 	advanced: ConfigFieldMeta[];
 }
 
 const GROUP_BLURBS: Record<string, string> = {
-	Metadata: 'Where ARM looks up titles and disc data, and the keys those services need.',
+	Identification: 'How ARM works out what a disc is, and where it looks titles up.',
+	Keys: 'Keys and the service snapshots ARM uses to identify discs.',
 	Ripping: 'What happens when a disc goes in.',
 	Transcoding: 'When finished rips are handed to the transcoder.'
 };
 
 const SECTIONS: Record<string, SettingsSection[]> = {
-	Metadata: [
+	Identification: [
 		{
-			title: 'Lookup',
-			blurb: 'Which service identifies a disc, and whether TheDiscDB matching is used.',
-			keys: ['metadata_provider', 'thediscdb_enabled', 'thediscdb_refresh_days']
+			title: 'Search',
+			note: "The service the job page's search box uses for each media type.",
+			hideFieldHelp: true,
+			keys: ['search_provider_movie', 'search_provider_tv', 'search_provider_music'],
+			columns: [['search_provider_movie'], ['search_provider_tv']],
+			// Music has one search service (MusicBrainz); nothing to choose yet.
+			hidden: ['search_provider_music']
 		},
 		{
-			title: 'TV episodes',
-			blurb: 'How ARM works out season and episode numbers for TV discs.',
-			summary: 'tv-episodes',
-			keys: ['disc_hint_sources', 'episode_sources', 'episode_auto_apply', 'episode_match_tolerance_seconds'],
-			columns: [['disc_hint_sources'], ['episode_sources']],
-			advanced: ['episode_match_tolerance_seconds']
-		},
+			title: 'Identity',
+			blurb: 'How ARM works out what a disc is before it rips, and when it trusts the answer.',
+			keys: [
+				'thediscdb_enabled',
+				'crc64service_enabled',
+				'movie_sources',
+				'episode_sources',
+				'music_sources',
+				'episode_match_tolerance_seconds',
+				'movie_auto_apply',
+				'episode_auto_apply',
+				'music_auto_apply',
+				'disc_hint_sources'
+			],
+			custom: 'identity'
+		}
+	],
+	Keys: [
+		{ title: 'MakeMKV', keys: ['makemkv_key'] },
 		{
 			title: 'API keys',
-			blurb: 'Stored on the server. A key that is already set shows as hidden; leave it blank to keep it.',
-			keys: ['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key', 'makemkv_key']
+			blurb:
+				'Stored on the server. A key that is already set shows as hidden; leave it blank to keep it. Environment variables seed a key once at first boot; after that only what is saved here is used.',
+			keys: ['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key']
+		},
+		{
+			title: 'TheDiscDB',
+			blurb: 'The local snapshot ARM matches discs against.',
+			keys: ['thediscdb_refresh_days']
 		}
 	],
 	Ripping: [
@@ -79,7 +112,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 	Transcoding: [{ title: 'Scheduling', keys: ['transcode_enabled', 'auto_transcode_on_idle'] }]
 };
 
-/** Maps the four API-key field keys (from the "API keys" section above) to
+/** Maps the four key field keys (the Keys tab's "API keys" and "MakeMKV" sections) to
  *  the endpoint name POST /api/config/keys/{name}/check expects. */
 export const KEY_CHECK_NAMES: Record<string, 'tmdb' | 'omdb' | 'tvdb' | 'makemkv'> = {
 	tmdb_api_key: 'tmdb',
@@ -115,7 +148,35 @@ export function stepGroup(groups: SettingsGroup[], step: string): SettingsGroup 
 /** The Settings tab (a `#<tab>` hash) that renders a schema group: the config
  *  groups keep their own name, the others fold into their lower-case screen tab. */
 export function settingsTabFor(groupName: string): string {
-	return groupName === 'Metadata' || groupName === 'Ripping' ? groupName : groupName.toLowerCase();
+	return ['Identification', 'Keys', 'Ripping'].includes(groupName) ? groupName : groupName.toLowerCase();
+}
+
+/** Svelte context key: Settings publishes a getter for the loaded schema groups
+ *  so field widgets can deep-link to another tab's field (`#<tab>/<key>`). */
+export const SETTINGS_SCHEMA_CONTEXT = Symbol('settings-schema');
+
+/** The Settings deep link for a field: `#<tab>/<key>` on the tab that renders
+ *  the field's own schema group, else the field's anchor on the current page
+ *  (`#setting-<key>`, e.g. the setup walkthrough, which has no tabs). */
+export function settingsFieldHref(key: string, groups: SettingsGroup[] | undefined): string {
+	const group = groups?.find((g) => g.fields.some((f) => f.key === key))?.name;
+	return group ? `#${settingsTabFor(group)}/${key}` : `#setting-${key}`;
+}
+
+/** Retired Settings tab names in old bookmarks and links, mapped to the tab
+ *  that replaced them; any other name is returned unchanged. */
+export function legacyTab(tab: string): string {
+	if (tab === 'Metadata') return 'Identification';
+	if (tab === 'appearance') return 'themes';
+	return tab;
+}
+
+/** Display names for config groups whose tab reads differently from the
+ *  schema group id (the id stays in `#<group>/<key>` links). */
+const GROUP_LABELS: Record<string, string> = { Keys: 'API Keys' };
+
+export function groupLabel(group: string): string {
+	return GROUP_LABELS[group] ?? group;
 }
 
 export function groupBlurb(group: string): string | undefined {
@@ -138,6 +199,18 @@ export function sectionFields(group: string, allFields: ConfigFieldMeta[]): Sect
 		if (own.length === 0) continue;
 		own.forEach((f) => placed.add(f.key));
 
+		if (section.custom) {
+			out.push({
+				title: section.title,
+				blurb: section.blurb,
+				custom: section.custom,
+				columns: [],
+				fields: [],
+				advanced: []
+			});
+			continue;
+		}
+
 		const columns = (section.columns ?? [])
 			.map((col) => col.map((k) => byKey.get(k)).filter((f): f is ConfigFieldMeta => f !== undefined))
 			.filter((col) => col.length > 0);
@@ -148,12 +221,14 @@ export function sectionFields(group: string, allFields: ConfigFieldMeta[]): Sect
 			.filter((f): f is ConfigFieldMeta => f !== undefined);
 		const advancedKeys = new Set(advanced.map((f) => f.key));
 
-		const plainFields = own.filter((f) => !columnKeys.has(f.key) && !advancedKeys.has(f.key));
+		const hiddenKeys = new Set(section.hidden ?? []);
+		const plainFields = own.filter((f) => !columnKeys.has(f.key) && !advancedKeys.has(f.key) && !hiddenKeys.has(f.key));
 
 		out.push({
 			title: section.title,
 			blurb: section.blurb,
-			summary: section.summary,
+			note: section.note,
+			hideFieldHelp: section.hideFieldHelp,
 			columns,
 			fields: plainFields,
 			advanced

@@ -145,7 +145,11 @@ describe('EpisodeMatchPanel', () => {
 		fetchIdentity.mockResolvedValue({ sources: {}, pin: {}, tracks: [] });
 		renderComponent(EpisodeMatchPanel, { props: { job: job(), tracks, matching: false } });
 		expect(await screen.findByText('No episode source is set up')).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: /Settings/ })).toHaveAttribute('href', '/settings#metadata');
+		expect(screen.getByRole('link', { name: /Settings/ })).toHaveAttribute(
+			'href',
+			'/settings#Identification/episode_sources'
+		);
+		expect(screen.getByRole('link', { name: /Settings/ })).toHaveTextContent('Settings › Identification › Identity');
 	});
 
 	it('suggestion and pinned banners', async () => {

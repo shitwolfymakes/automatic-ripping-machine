@@ -81,7 +81,14 @@ class ConfigView(BaseModel):
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
-    metadata_provider: str
+    movie_sources: list[str]
+    music_sources: list[str]
+    search_provider_movie: str
+    search_provider_tv: str
+    search_provider_music: str
+    movie_auto_apply: bool
+    music_auto_apply: bool
+    crc64service_enabled: bool
     makemkv_key_valid: bool | None = None
     makemkv_key_state: str | None = None
     makemkv_key_checked_at: datetime | None = None
@@ -118,7 +125,14 @@ class ConfigUpdateRequest(BaseModel):
     manual_wait_seconds: int | None = None
     on_previously_ripped: PreviouslyRippedAction | None = None
     notifications_enabled: bool | None = None
-    metadata_provider: str | None = None
+    movie_sources: list[str] | None = None
+    music_sources: list[str] | None = None
+    search_provider_movie: str | None = None
+    search_provider_tv: str | None = None
+    search_provider_music: str | None = None
+    movie_auto_apply: bool | None = None
+    music_auto_apply: bool | None = None
+    crc64service_enabled: bool | None = None
 
 
 class KeyCheckRequest(BaseModel):

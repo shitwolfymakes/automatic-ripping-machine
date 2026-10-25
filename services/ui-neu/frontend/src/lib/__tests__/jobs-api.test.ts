@@ -104,6 +104,13 @@ describe('metadata search (EXISTS in v3)', () => {
 		expect(url).toContain('provider=tmdb');
 	});
 
+	it('searchMetadata accepts the TV providers', async () => {
+		await searchMetadata('Lost', 'tv', 'tvmaze');
+		const url = mockApiFetch.mock.calls[0][0] as string;
+		expect(url).toContain('type=tv');
+		expect(url).toContain('provider=tvmaze');
+	});
+
 	it('fetchMediaDetail looks up by imdb_id', async () => {
 		await fetchMediaDetail('tt0133093');
 		const url = mockApiFetch.mock.calls[0][0] as string;

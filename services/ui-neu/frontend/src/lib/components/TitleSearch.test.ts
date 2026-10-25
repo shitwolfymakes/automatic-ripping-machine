@@ -15,6 +15,17 @@ vi.mock('$lib/stores/auth', async () => {
 	};
 });
 
+vi.mock('$lib/stores/config', async () => {
+	const { writable } = await import('svelte/store');
+	const keyed = writable({ tmdb: true, omdb: true, tvdb: true });
+	return {
+		searchProviders: writable({ movie: 'omdb', tv: 'tmdb' }),
+		keyedSources: { subscribe: keyed.subscribe },
+		// Test-only helper - not part of the real module's public API.
+		__setKeyed: (v: { tmdb: boolean; omdb: boolean; tvdb: boolean }) => keyed.set(v)
+	};
+});
+
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
@@ -23,6 +34,8 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
+import * as configStore from '$lib/stores/config';
+const setKeyed = (configStore as unknown as { __setKeyed: (v: Record<string, boolean>) => void }).__setKeyed;
 const mockSearchMetadata = vi.mocked(searchMetadata);
 const mockFetchDetail = vi.mocked(fetchMediaDetail);
 const mockUpdateTitle = vi.mocked(updateJobTitle);
@@ -43,6 +56,89 @@ describe('TitleSearch', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+	});
+
+	describe('source picker', () => {
+		afterEach(() => setKeyed({ tmdb: true, omdb: true, tvdb: true }));
+
+		const sourceSelect = () => screen.getByRole('combobox', { name: 'Search with' }) as HTMLSelectElement;
+		const option = (id: string) => sourceSelect().querySelector(`option[value="${id}"]`) as HTMLOptionElement;
+		const sourceNames = () => Array.from(sourceSelect().options).map((o) => o.textContent?.trim());
+		const checkedSource = () => sourceSelect().selectedOptions[0]?.textContent?.trim();
+		const pick = (id: string) => fireEvent.change(sourceSelect(), { target: { value: id } });
+
+		it('lists TMDb and OMDb for movies, and all four for TV, in order', () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(sourceNames()).toEqual(['TMDb', 'OMDb']);
+			cleanup();
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'tv' }) } });
+			expect(sourceNames()).toEqual(['TMDb', 'OMDb', 'TVmaze', 'TVDB']);
+		});
+
+		it('has no Movie/TV toggle: the type comes from the job', () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(screen.queryByRole('radiogroup', { name: 'Search type' })).toBeNull();
+			expect(screen.queryByRole('radio', { name: 'TV' })).toBeNull();
+		});
+
+		it('defaults to the Settings choice per type, and a job type change resets it', async () => {
+			const { rerender } = renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(checkedSource()).toBe('OMDb');
+			await pick('tmdb');
+			expect(checkedSource()).toBe('TMDb');
+			await rerender({ job: createJob({ media_type: 'tv' }) });
+			expect(checkedSource()).toBe('TMDb');
+			await pick('tvmaze');
+			await rerender({ job: createJob({ media_type: 'movie' }) });
+			expect(checkedSource()).toBe('OMDb');
+		});
+
+		it('disables a source whose key is not saved, and never TVmaze', () => {
+			setKeyed({ tmdb: false, omdb: true, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'tv' }) } });
+			expect(option('tmdb')).toBeDisabled();
+			expect(option('tmdb').textContent).toBe('TMDb (needs API key)');
+			expect(option('tvdb')).toBeDisabled();
+			expect(option('tvdb').textContent).toBe('TVDB (needs API key)');
+			expect(option('tvmaze')).not.toBeDisabled();
+			expect(option('omdb')).not.toBeDisabled();
+		});
+
+		it('searches the chosen source: TVmaze with no TMDb key never sends tmdb', async () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: false });
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
+			renderComponent(TitleSearch, { props: { job: createJob({ title: 'Kolchak', media_type: 'tv' }) } });
+			await pick('tvmaze');
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await waitFor(() => expect(mockSearchMetadata).toHaveBeenCalledWith('Kolchak', 'tv', 'tvmaze'));
+			expect(mockSearchMetadata.mock.calls.every((c) => c[2] !== 'tmdb')).toBe(true);
+		});
+
+		it('starts on the first usable source when the TV default has no key', async () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: true });
+			mockSearchMetadata.mockResolvedValue({ candidates: [] });
+			renderComponent(TitleSearch, { props: { job: createJob({ title: 'Kolchak', media_type: 'tv' }) } });
+			expect(checkedSource()).toBe('TVmaze');
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await waitFor(() => expect(mockSearchMetadata).toHaveBeenCalledWith('Kolchak', 'tv', 'tvmaze'));
+		});
+
+		it('starts on TMDb when the movie default OMDb has no key', () => {
+			setKeyed({ tmdb: true, omdb: false, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(checkedSource()).toBe('TMDb');
+		});
+
+		it('keeps the unkeyed default when no movie source is usable', () => {
+			setKeyed({ tmdb: false, omdb: false, tvdb: false });
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(sourceSelect().value).toBe('omdb');
+		});
+
+		it('replaces the provider badge', () => {
+			renderComponent(TitleSearch, { props: { job: createJob({ media_type: 'movie' }) } });
+			expect(screen.queryByTitle(/search provider configured/i)).toBeNull();
+		});
 	});
 
 	describe('rendering', () => {
@@ -76,7 +172,7 @@ describe('TitleSearch', () => {
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
-				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', 'movie');
+				expect(mockSearchMetadata).toHaveBeenCalledWith('Test', 'movie', 'omdb');
 				expect(screen.getByText('Result 1')).toBeInTheDocument();
 			});
 		});
@@ -324,25 +420,27 @@ describe('TitleSearch', () => {
 		});
 	});
 
-	describe('Movie / TV toggle', () => {
-		it('defaults to TV for an episodic disc and searches TV', async () => {
+	describe('search type follows the job', () => {
+		it('searches TV for an episodic disc with no type yet', async () => {
 			mockSearchMetadata.mockResolvedValue({ candidates: [] });
 			renderComponent(TitleSearch, {
 				props: { job: createJob({ title: 'kolchak', media_type: null, looks_episodic: true }) }
 			});
-			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'true');
 			await fireEvent.click(screen.getByText('Search'));
-			expect(mockSearchMetadata).toHaveBeenCalledWith('kolchak', 'tv');
+			expect(mockSearchMetadata).toHaveBeenCalledWith('kolchak', 'tv', 'tmdb');
 		});
 
-		it('changing the toggle clears results', async () => {
+		it("changing the job's type clears results and searches the new type", async () => {
 			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Result 1' })] });
-			renderComponent(TitleSearch, { props: { job: createJob({ title: 'x' }) } });
+			const { rerender } = renderComponent(TitleSearch, {
+				props: { job: createJob({ title: 'x', media_type: 'movie' }) }
+			});
 			await fireEvent.click(screen.getByText('Search'));
 			await screen.findByText('Result 1');
-			await fireEvent.click(screen.getByRole('radio', { name: 'TV' }));
+			await rerender({ job: createJob({ title: 'x', media_type: 'tv' }) });
 			expect(screen.queryByText('Result 1')).not.toBeInTheDocument();
-			expect(screen.getByRole('radio', { name: 'TV' })).toHaveAttribute('aria-checked', 'true');
+			await fireEvent.click(screen.getByText('Search'));
+			expect(mockSearchMetadata).toHaveBeenLastCalledWith('x', 'tv', 'tmdb');
 		});
 
 		it('applying a series sends its ids and opens episode matching', async () => {

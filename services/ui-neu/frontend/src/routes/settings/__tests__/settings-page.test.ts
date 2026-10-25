@@ -7,6 +7,7 @@ import { fetchGpus } from '$lib/api/gpus';
 import { get } from 'svelte/store';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
@@ -59,21 +60,26 @@ function withConfig(patch: Record<string, unknown>) {
 const mockSchema = {
 	groups: [
 		{
-			name: 'Metadata',
+			name: 'Identification',
 			fields: [
 				{
-					key: 'metadata_provider',
-					group: 'Metadata',
+					key: 'search_provider_movie',
+					group: 'Identification',
 					tier: 'operator',
-					label: 'Metadata provider',
+					label: 'Search movies with',
 					help: '',
 					type: 'enum',
 					editable: true,
 					enum_values: ['tmdb', 'omdb']
-				},
+				}
+			]
+		},
+		{
+			name: 'Keys',
+			fields: [
 				{
 					key: 'tmdb_api_key',
-					group: 'Metadata',
+					group: 'Keys',
 					tier: 'secret',
 					label: 'TMDb API key',
 					help: '',
@@ -187,7 +193,7 @@ const mockSchema = {
 };
 
 const mockConfig = {
-	metadata_provider: 'omdb',
+	search_provider_movie: 'omdb',
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
 	block_on_miss: true,
@@ -374,7 +380,7 @@ describe('Settings Page', () => {
 		cleanup();
 		// Tab clicks write window.location.hash; jsdom persists it across tests,
 		// which would leave the next render on a non-default tab. Reset so each
-		// test starts on the default Metadata tab.
+		// test starts on the default Identification tab.
 		window.location.hash = '';
 		// transcoderEnabled is a real (unmocked) store shared across tests in
 		// this file; reset to the capable default so it doesn't leak.
@@ -382,14 +388,14 @@ describe('Settings Page', () => {
 		setTranscodeRuntimeEnabled(true);
 	});
 
-	// Render the page and wait for the tab bar to settle. Metadata is the
+	// Render the page and wait for the tab bar to settle. Identification is the
 	// default tab; its config form renders the provider <select> once settings
-	// load, which is the readiness signal. ("Metadata" text appears in both the
-	// tab button and the form heading, so it isn't a unique signal.)
+	// load, which is the readiness signal. ("Identification" text appears in both
+	// the tab button and the form heading, so it isn't a unique signal.)
 	async function renderAndWait() {
 		renderComponent(SettingsPage);
 		await waitFor(() => {
-			expect(screen.getByRole('combobox', { name: /metadata provider/i })).toBeInTheDocument();
+			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 	}
 
@@ -421,22 +427,83 @@ describe('Settings Page', () => {
 			expect(screen.getByText('Settings')).toBeInTheDocument();
 		});
 
-		it('deep-links #<tab>/<field> to the field: scrolls, focuses and highlights it', async () => {
-			window.location.hash = '#Metadata/tmdb_api_key';
-			const scrollIntoView = vi.fn();
-			Element.prototype.scrollIntoView = scrollIntoView;
+		it('lists the tabs in order: API Keys, Identification, Ripping, then the screen tabs', async () => {
 			await renderAndWait();
-			await waitFor(() => {
-				expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
-			});
-			expect(scrollIntoView).toHaveBeenCalled();
-			expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
+			expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
+				'API Keys',
+				'Identification',
+				'Ripping',
+				'Sessions',
+				'Transcoding',
+				'Notifications',
+				'Interface',
+				'Themes',
+				'Drives',
+				'Users',
+				'System'
+			]);
 		});
 
-		it('renders the Metadata config tab with the provider select', async () => {
+		it('maps a legacy #Metadata hash to the Identification tab', async () => {
+			window.location.hash = '#Metadata';
 			await renderAndWait();
-			// Metadata is the default tab — its SchemaConfigForm renders the enum field.
-			expect(screen.getByRole('combobox', { name: /metadata provider/i })).toBeInTheDocument();
+			expect(screen.getByRole('tab', { name: 'Identification' })).toHaveAttribute('aria-selected', 'true');
+		});
+
+		it.each(['#Keys/tmdb_api_key', '#Metadata/tmdb_api_key'])(
+			'deep-links %s to the field on the Keys tab: scrolls, focuses and highlights it',
+			async (hash) => {
+				window.location.hash = hash;
+				const scrollIntoView = vi.fn();
+				Element.prototype.scrollIntoView = scrollIntoView;
+				renderComponent(SettingsPage);
+				await waitFor(() => {
+					expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+				});
+				expect(screen.getByRole('tab', { name: 'API Keys' })).toHaveAttribute('aria-selected', 'true');
+				expect(scrollIntoView).toHaveBeenCalled();
+				expect(screen.getByTestId('setting-tmdb_api_key').className).toContain('settings-field-highlight');
+			}
+		);
+
+		it('deep-links #Keys/makemkv_key to the MakeMKV field, with MakeMKV as the first section', async () => {
+			window.location.hash = '#Keys/makemkv_key';
+			Element.prototype.scrollIntoView = vi.fn();
+			vi.mocked(fetchSettings).mockResolvedValueOnce({
+				config: { ...mockConfig, makemkv_key: '', tmdb_api_key: '' },
+				schema: {
+					groups: [
+						mockSchema.groups[0],
+						{
+							name: 'Keys',
+							fields: ['tmdb_api_key', 'makemkv_key'].map((key) => ({
+								key,
+								group: 'Keys',
+								tier: 'secret',
+								label: key === 'makemkv_key' ? 'MakeMKV key' : 'TMDB API key',
+								help: '',
+								type: 'string',
+								editable: true,
+								enum_values: null
+							}))
+						},
+						...mockSchema.groups.slice(2)
+					]
+				},
+				infra: { RAW_ROOT: '/raw' },
+				arm_config: {},
+				transcoder_config: null
+			} as never);
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByLabelText(/makemkv key/i)).toHaveFocus());
+			const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+			expect(headings.slice(0, 2)).toEqual(['MakeMKV', 'API keys']);
+		});
+
+		it('renders the Identification config tab with the provider select', async () => {
+			await renderAndWait();
+			// Identification is the default tab — its SchemaConfigForm renders the enum field.
+			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 
 		it('renders the Ripping config tab', async () => {
@@ -701,6 +768,87 @@ describe('Settings Page', () => {
 			expect(row).toHaveTextContent('container: running');
 			expect(row).toHaveTextContent('media: tray open');
 			expect(row).toHaveTextContent('OK');
+		});
+	});
+
+	// The Identity card's TVDB source needs `tvdb_api_key`, which lives on the
+	// Keys tab: the chip deep link and the way back must keep unsaved edits, and
+	// a key saved on Keys must clear the chip on Identification.
+	describe('Identification and Keys across tabs', () => {
+		function withIdentitySchema() {
+			vi.mocked(fetchSettings).mockResolvedValueOnce({
+				config: { ...mockConfig, ...IDENTITY_DEFAULTS, episode_sources: ['tmdb', 'tvmaze'], tvdb_api_key: '' },
+				schema: {
+					groups: [
+						{ name: 'Identification', fields: IDENTITY_METAS },
+						{
+							name: 'Keys',
+							fields: [
+								{
+									key: 'tvdb_api_key',
+									group: 'Keys',
+									tier: 'secret',
+									label: 'TVDB API key',
+									help: '',
+									type: 'string',
+									editable: true,
+									enum_values: null
+								}
+							]
+						},
+						...mockSchema.groups.slice(2)
+					]
+				},
+				infra: { RAW_ROOT: '/raw' },
+				arm_config: {},
+				transcoder_config: null
+			} as never);
+		}
+		const tab = (name: string) => screen.getByRole('tab', { name });
+		const useTvdb = () => screen.getByRole('checkbox', { name: 'Use TVDB' }) as HTMLInputElement;
+		const tvdbChip = () => screen.queryByRole('link', { name: /needs tvdb key/i });
+
+		it('an unsaved Identity edit survives a trip to the Keys tab and back', async () => {
+			withIdentitySchema();
+			await renderAndWait();
+			await fireEvent.click(useTvdb());
+			expect(useTvdb().checked).toBe(true);
+			await fireEvent.click(tab('API Keys'));
+			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
+			expect(screen.getByLabelText(/tvdb api key/i)).toBeVisible();
+			await fireEvent.click(tab('Identification'));
+			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
+			expect(useTvdb().checked).toBe(true);
+		});
+
+		it('a key saved on the Keys tab clears the Needs key chip on Identification', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			withIdentitySchema();
+			await renderAndWait();
+			expect(tvdbChip()).toBeInTheDocument();
+			await fireEvent.click(tab('API Keys'));
+			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
+			await fireEvent.click(tab('Identification'));
+			expect(useTvdb()).toBeVisible();
+			await waitFor(() => expect(tvdbChip()).not.toBeInTheDocument());
+		});
+
+		it('saving a key keeps the unsaved edits on the Identification tab', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			withIdentitySchema();
+			await renderAndWait();
+			await fireEvent.click(useTvdb());
+			await fireEvent.click(tab('API Keys'));
+			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
+			await fireEvent.click(tab('Identification'));
+			await waitFor(() => expect(tvdbChip()).not.toBeInTheDocument());
+			expect(useTvdb().checked).toBe(true);
 		});
 	});
 

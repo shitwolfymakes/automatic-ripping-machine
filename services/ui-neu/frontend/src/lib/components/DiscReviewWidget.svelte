@@ -6,7 +6,13 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
-	import { previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-status';
+	import {
+		episodeStatus,
+		identitySuggestionOf,
+		missReason,
+		previouslyRippedJobId,
+		reviewPhaseBadge
+	} from '$lib/utils/job-status';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -20,6 +26,8 @@
 	import JobInfoForm from './JobInfoForm.svelte';
 	import ReviewTracksTable from './ReviewTracksTable.svelte';
 	import IsoSourceChip from './IsoSourceChip.svelte';
+	import IdentitySuggestionBanner from './IdentitySuggestionBanner.svelte';
+	import MediaTypeSwitch from './episodes/MediaTypeSwitch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
@@ -70,6 +78,10 @@
 	let errorMessage = $state<string | null>(null);
 
 	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
+	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
+	let handSetCount = $derived(
+		tracks.filter((t) => ['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')).length
+	);
 	let scanTitles = $derived((data?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles ?? []);
 
 	// v3 classifies disc kind via disc_type. cd → music, data → data, the rest
@@ -109,6 +121,10 @@
 	// countdown runs; the operator chooses Rip again (Start) or Discard (Cancel).
 	let previousId = $derived(isReviewGate ? previouslyRippedJobId(displayJob) : null);
 	let previous = $derived(data?.previous_rip ?? null);
+	// A confident match identify held for confirmation (auto-apply off).
+	let suggestion = $derived(identitySuggestionOf(displayJob));
+	let missLine = $derived(missReason(displayJob));
+	let episodeLine = $derived(episodeStatus(displayJob));
 
 	function shortId(id: string): string {
 		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
@@ -288,11 +304,13 @@
 				<span class="disc-review-widget-status-label">
 					{previousId
 						? 'Already ripped: Rip again or Discard'
-						: isReviewGate
-							? 'Ready: Review & Start'
-							: isPostRip
-								? 'Ripped: Apply Session'
-								: 'Awaiting Review'}
+						: suggestion
+							? 'Confirm the title: use it or search'
+							: isReviewGate
+								? 'Ready: Review & Start'
+								: isPostRip
+									? 'Ripped: Apply Session'
+									: 'Awaiting Review'}
 				</span>
 			</div>
 			<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
@@ -331,6 +349,22 @@
 						{/if}
 					</h3>
 				</div>
+				<!-- The type picks what Search looks for, so the search row has no Movie/TV toggle of its own. -->
+				{#if isVideo && $isAdmin}
+					<div class="disc-review-widget-type">
+						<MediaTypeSwitch job={displayJob} {handSetCount} onchanged={handleTitleApply} />
+					</div>
+				{/if}
+				{#if missLine}
+					<p class="disc-review-widget-miss" data-testid="identify-miss-reason">{missLine}</p>
+				{/if}
+				{#if episodeLine}
+					<p class="disc-review-widget-miss" data-testid="episode-status">
+						{#if episodeLine.href}<a href={episodeLine.href} class="disc-review-widget-episode-link"
+								>{episodeLine.text}</a
+							>{:else}{episodeLine.text}{/if}
+					</p>
+				{/if}
 				<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 disc-review-widget-meta">
 					{#if isoName}
 						<IsoSourceChip
@@ -404,6 +438,24 @@
 			</div>
 		{/if}
 
+		{#if suggestion}
+			<div class="disc-review-widget-suggestion">
+				<IdentitySuggestionBanner
+					job={displayJob}
+					canAct={$isAdmin}
+					onaccepted={() => {
+						loadDetail();
+						onrefresh?.();
+					}}
+					onsearch={() => {
+						showInfo = false;
+						showTitleSearch = !isMusic;
+						showMusicSearch = isMusic;
+					}}
+				/>
+			</div>
+		{/if}
+
 		<!-- Error banner -->
 		{#if errorMessage}
 			<div class="alert alert-danger disc-review-widget-error">
@@ -469,7 +521,7 @@
 		<!-- Expanded sections -->
 		{#if showTitleSearch && isVideo}
 			<div class="disc-review-widget-panel">
-				<TitleSearch {job} onapply={handleTitleApply} />
+				<TitleSearch job={displayJob} onapply={handleTitleApply} />
 			</div>
 		{/if}
 
@@ -542,6 +594,9 @@
 		border-bottom: 1px solid var(--color-border-strong);
 		padding: 0.375rem 1rem;
 	}
+	.disc-review-widget-suggestion {
+		margin: 0 1rem 0.75rem;
+	}
 	/* mixed from text + surface rather than --color-surface-raised, which
 	   most schemes leave unset (the box used to show the default navy) */
 	.disc-review-widget-previous {
@@ -554,6 +609,15 @@
 	}
 	.disc-review-widget-previous-link {
 		font-weight: 600;
+		color: var(--color-primary);
+		text-decoration: underline;
+	}
+	.disc-review-widget-miss {
+		margin-top: 0.25rem;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
+	.disc-review-widget-episode-link {
 		color: var(--color-primary);
 		text-decoration: underline;
 	}
@@ -608,6 +672,9 @@
 		line-height: 1.75rem;
 		font-weight: 600;
 		color: var(--color-text);
+	}
+	.disc-review-widget-type {
+		margin-top: 0.375rem;
 	}
 	.disc-review-widget-title-year {
 		font-weight: 400;
