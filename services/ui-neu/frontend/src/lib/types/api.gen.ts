@@ -1964,6 +1964,10 @@ export type IdentityClaims = {
      * Unsure
      */
     unsure?: boolean;
+    /**
+     * Episodes Cleared
+     */
+    episodes_cleared?: boolean;
 };
 
 /**

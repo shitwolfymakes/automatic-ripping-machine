@@ -210,9 +210,16 @@ def test_jobview_has_series_when_a_source_resolved_a_show() -> None:
     assert JobView.model_validate(make_job(metadata_json=md)).has_series is True
 
 
-def test_jobview_episodes_unsure_reads_the_claims_flag() -> None:
+def test_jobview_episodes_unsure_reads_the_claims_flag_for_tv_only() -> None:
     held = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}}
-    assert JobView.model_validate(make_job(metadata_json=held)).episodes_unsure is True
+    tv = make_job(metadata_json=held)
+    tv.media_type = "tv"
+    assert JobView.model_validate(tv).episodes_unsure is True
+    movie = make_job(metadata_json=held)
+    movie.media_type = "movie"
+    assert JobView.model_validate(movie).episodes_unsure is False  # switched to Movie: nothing to hold
     sure = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok"}}}}
-    assert JobView.model_validate(make_job(metadata_json=sure)).episodes_unsure is False
+    sure_tv = make_job(metadata_json=sure)
+    sure_tv.media_type = "tv"
+    assert JobView.model_validate(sure_tv).episodes_unsure is False
     assert JobView.model_validate(make_job(metadata_json={})).episodes_unsure is False

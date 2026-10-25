@@ -175,8 +175,8 @@ export function episodeStatus(
 	const sources = claims.sources ?? {};
 	const episodes = Object.keys(sources).filter((id) => id.startsWith('episodes_'));
 	// The card has no per-track provenance, so activeSource falls back to its
-	// pin, then first ok non-suggestion, then first ok suggestion: the panel's
-	// answer unless provenance says another ok source won.
+	// pin, then the first ok clean source, then the first ok held source: the
+	// panel's answer unless provenance says another ok source won.
 	const active = activeSource({ pin: claims.pin, sources } as unknown as IdentityView);
 	const label = (id: string | null | undefined) => (id ? (SOURCE_LABEL[id] ?? id) : null);
 	if (matching) return { state: 'matching', source: label(active ?? episodes[0]), total, unmatched };

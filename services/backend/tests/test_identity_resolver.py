@@ -251,6 +251,14 @@ def test_clean_source_beats_held_one_regardless_of_rank() -> None:
     assert res.episode_source == "ep_b" and res.episode_unsure is False
 
 
+def test_a_guess_overridden_by_hand_on_every_track_is_not_unsure() -> None:
+    held = SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4), "2": TrackClaim(episode=5)})
+    by_hand = SourceClaims(tracks={"1": TrackClaim(episode=9), "2": TrackClaim(episode=10)})
+    partial = SourceClaims(tracks={"1": TrackClaim(episode=9)})
+    assert resolve(_claims(ep_a=held, manual=by_hand), tiers=TIERS).episode_unsure is False
+    assert resolve(_claims(ep_a=held, manual=partial), tiers=TIERS).episode_unsure is True
+
+
 def test_no_episode_source_means_not_unsure() -> None:
     res = resolve(_claims(thediscdb=SourceClaims(tracks={"1": TrackClaim(episode=2)})), tiers=TIERS)
     assert res.episode_source is None and res.episode_unsure is False

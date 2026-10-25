@@ -65,6 +65,8 @@ def put_source(job: Job, source_id: str, source_claims: SourceClaims) -> None:
         existing.extra = {**existing.extra, "last_error": {"at": at, "detail": source_claims.detail}}
         source_claims = existing
     claims.sources = {**claims.sources, source_id: source_claims}
+    if source_id.startswith("episodes_"):
+        claims.episodes_cleared = False
     _store(job, claims)
 
 
@@ -190,6 +192,8 @@ def forget_episode_sources(job: Job) -> bool:
         del claims.sources[sid]
     claims.pin.pop("episode", None)
     claims.unsure = False
+    changed = changed or not claims.episodes_cleared
+    claims.episodes_cleared = True
     if changed:
         _store(job, claims)
     return changed

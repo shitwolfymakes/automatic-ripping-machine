@@ -764,6 +764,18 @@ def test_clear_match_when_nothing_matched_is_a_noop(signing_key: bytes) -> None:
         r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
     assert r.status_code == 200
     assert claims_of(job).sources == {}
+    assert claims_of(job).episodes_cleared is True  # the startup sweep leaves it alone
+
+
+def test_clear_match_invalidates_an_in_flight_run_and_releases_it(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert runner.invalidate_calls == [JOB_ID] and runner.release_calls == [JOB_ID]
 
 
 def test_clear_match_unknown_job_404_and_reader_403(signing_key: bytes) -> None:

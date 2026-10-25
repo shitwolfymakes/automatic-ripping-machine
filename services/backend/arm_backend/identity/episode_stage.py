@@ -9,8 +9,9 @@ when `opts.apply` is set. `run_episode_stage` stores every outcome with
 
 A result the stage is not sure of (ambiguous positions, low coverage, low
 confidence, two seasons that fit about equally, nominal broadcast-slot
-runtimes) is stored with `suggestion=True`, which the resolver never applies,
-and `extra["hold_reasons"]` names every reason (`hold_reasons`).
+runtimes) is stored with `suggestion=True`, which the resolver applies as a
+guess (`Resolution.episode_unsure`, held countdown, amber in the UI), and
+`extra["hold_reasons"]` names every reason (`hold_reasons`).
 
 With no known season, every season the provider lists is fetched, in
 `season_scan_order`: the disc hint's season, then seasons sibling discs hold,
@@ -622,13 +623,11 @@ async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequ
     applying stale outcomes to a row a concurrent PATCH/resolve has since
     changed would silently revert that edit.
 
-    Stored claims always keep their computed `suggestion` flag (Task 9 F4
-    round 2): the operator's pinned episode source is applied by the
-    RESOLVER (`resolver.resolve`), which lets a pinned "ok" source's
-    suggestion through, rather than by rewriting the stored claim here --
-    unpinning then reverts on the very next resolve, with no stale forced
-    flag left behind (and a same-inputs error that makes `put_source` keep
-    the prior good "ok" entry stays pinned-applicable too, per F8)."""
+    Stored claims always keep their computed `suggestion` flag: the RESOLVER
+    (`resolver.resolve`) applies a held "ok" result as a guess and reports
+    it through `episode_unsure`, rather than this stage rewriting the stored
+    claim (and a same-inputs error that makes `put_source` keep the prior
+    good "ok" entry stays applicable too, per F8)."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
     return await resolve_job(session, job)

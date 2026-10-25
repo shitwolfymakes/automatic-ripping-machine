@@ -66,8 +66,7 @@ export function formatLength(seconds: number | null | undefined): string {
 
 /** The episode source the resolver applied, in its order: the pin, then the
  * source the tracks' provenance names (what actually won), then the first ok
- * non-suggestion source (the resolver skips unpinned suggestions), then the
- * first ok suggestion (shown as a suggestion). */
+ * clean source, then the first ok held source (applied as a guess). */
 export function activeSource(identity: IdentityView): string | null {
 	const pinned = identity.pin?.episode;
 	if (pinned) return pinned.startsWith(EPISODE_PREFIX) ? pinned : `${EPISODE_PREFIX}${pinned}`;

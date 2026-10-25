@@ -48,7 +48,7 @@ export interface PreviewRow {
 	sentence?: string;
 	sources?: PreviewSource[];
 	empty?: string;
-	trust?: 'Applies confident matches' | 'Waits for review' | 'Places every match as a guess';
+	trust?: 'Applies confident matches' | 'Waits for review';
 }
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -86,11 +86,7 @@ function lookupRow(
 		label,
 		sources,
 		...(sources.length ? {} : { empty: NO_SOURCES }),
-		trust: values[trustKey]
-			? 'Applies confident matches'
-			: trustKey === 'episode_auto_apply'
-				? 'Places every match as a guess'
-				: 'Waits for review'
+		trust: values[trustKey] ? 'Applies confident matches' : 'Waits for review'
 	};
 }
 

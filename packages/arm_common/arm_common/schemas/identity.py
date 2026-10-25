@@ -86,3 +86,6 @@ class IdentityClaims(BaseModel):
     # resolver on every run; the UI shows it amber and the ripper holds the
     # review countdown while it is true.
     unsure: bool = False
+    # The operator cleared the episode match: the startup sweep must not
+    # match the job again on its own. Any new episode result lifts it.
+    episodes_cleared: bool = False

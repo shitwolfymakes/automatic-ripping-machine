@@ -90,9 +90,6 @@ def resolve(
     usable = [s for s in usable if tiers[s] != _EPISODE_TIER or s == episode_sources[0]]
 
     res = Resolution(known_sources=frozenset(tiers))
-    if episode_sources:
-        res.episode_source = episode_sources[0]
-        res.episode_unsure = claims.sources[episode_sources[0]].suggestion
     for source_id in usable:
         source = claims.sources[source_id]
         for name in source.job.model_fields_set & JOB_CLAIM_FIELDS.keys():
@@ -102,6 +99,13 @@ def resolve(
             for name in claim.model_fields_set & TRACK_CLAIM_FIELDS.keys():
                 slot.setdefault(name, Winner(getattr(claim, name), source_id))
     res.tracks = {ref: slot for ref, slot in res.tracks.items() if slot}
+    if episode_sources:
+        winner = episode_sources[0]
+        res.episode_source = winner
+        # A guess the operator has overridden on every track is no guess any
+        # more: the flag follows the placements that are actually on the tracks.
+        owns_a_track = any(w.source == winner for slot in res.tracks.values() for w in slot.values())
+        res.episode_unsure = owns_a_track and claims.sources[winner].suggestion
     return res
 
 

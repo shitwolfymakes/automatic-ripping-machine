@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 import arm_ripper.job_controller as jc_module
-from arm_common import DiscType, Job, JobStatus
+from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
     JobView,
     RipperConfigView,
@@ -56,6 +56,7 @@ def _view(
         status=status,
         title=title,
         year=None,
+        media_type=MediaType.TV if episodes_unsure else None,
         metadata_json={"identity_claims": {"unsure": True}} if episodes_unsure else {},
         resumed_from_crash=False,
         wait_start_time=wait_start_time,

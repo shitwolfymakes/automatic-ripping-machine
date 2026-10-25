@@ -1493,6 +1493,26 @@ def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     assert r.json()["paused"] is True
 
 
+def test_held_job_paused_flag_from_a_guessed_episode_placement() -> None:
+    """A guessed placement holds the countdown; the hold must survive a ripper
+    restart the same way a per-job pause does."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job(
+        "job_01JZXR7K3M5Q8N4VWA0000H09",
+        status=JobStatus.AWAITING_REVIEW,
+        meta={"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}},
+    )
+    held.media_type = MediaType.TV
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+    assert r.json()["job"]["episodes_unsure"] is True
+
+
 def test_held_job_paused_flag_from_a_suggestion_hold() -> None:
     """A held identity suggestion waits for the operator with no pause flag set."""
     db = FakeSession()

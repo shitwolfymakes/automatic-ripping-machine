@@ -73,8 +73,8 @@
 	let seasonsKey = '';
 	let preview = $state<MatchPreview | null>(null);
 	let previewSource = $state<EpisodeSource | null>(null);
-	// The request that produced the preview on screen: Apply & pin sends exactly
-	// it. previewSeq invalidates a preview still in flight when the form changes.
+	// The request that produced the preview on screen: Apply sends exactly it.
+	// previewSeq invalidates a preview still in flight when the form changes.
 	let previewRequest: MatchRequest | null = null;
 	let previewSeq = 0;
 	let busy = $state(false);
@@ -253,8 +253,8 @@
 			if (stale()) return;
 			const failed = out.outcomes?.find((o) => o.status === 'error');
 			if (failed) {
-				// An apply pins its source even when that source failed: reload so
-				// the pinned state shows, then report the failure.
+				// An apply records its source even when that source failed: reload
+				// so the stored state shows, then report the failure.
 				if (req.apply) {
 					await reload();
 					onchanged?.();
@@ -510,7 +510,7 @@
 						>Fix match</button
 					>
 				{/if}
-				{#if canAct && placedCount(rows) > 0 && !preview}
+				{#if canAct && rows.some((r) => r.code !== 'Not placed' && !r.handSet) && !preview}
 					<button type="button" class="btn btn-sm" disabled={busy || clearing} onclick={clearEpisodes}
 						>{clearing ? 'Clearing...' : 'Clear episodes'}</button
 					>

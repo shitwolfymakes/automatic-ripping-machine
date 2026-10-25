@@ -284,4 +284,8 @@ def test_forget_episode_sources_drops_sources_pin_and_unsure_but_keeps_manual_an
     assert claims.pin == {} and claims.unsure is False
     assert claims.sources["manual"].job.season == 7
     assert job.metadata_json["identity"]["external_ids"]["tvdb"] == "77170"
+    assert claims.episodes_cleared is True
     assert forget_episode_sources(job) is False  # nothing left to forget
+    # Any new episode result lifts the cleared mark.
+    put_source(job, "episodes_tmdb", SourceClaims(run_at=NOW, status="ok"))
+    assert claims_of(job).episodes_cleared is False

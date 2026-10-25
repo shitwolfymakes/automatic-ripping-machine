@@ -66,10 +66,6 @@
 	let pauseBusy = $state(false);
 	// The countdown is frozen by the global pause OR this disc's own pause.
 	let countdownPaused = $derived(paused || !!job?.manual_pause);
-	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
-	let countdownHeld = $derived(
-		job?.media_type === 'tv' && !!job?.episodes_unsure ? 'Held: episodes are a guess' : null
-	);
 
 	let data = $state<JobDetailView | null>(null);
 	let initialLoading = $state(true);
@@ -123,6 +119,8 @@
 	let displayJob = $derived((data?.job ?? job) as JobView);
 	// Episode matching is for TV video discs only, as on the job page.
 	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
+	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
+	let countdownHeld = $derived(isTv && !!displayJob.episodes_unsure ? 'Held: episodes are a guess' : null);
 	// An ISO rip's drive_id is a still-enrolled virtual drive; once the rip
 	// completes that drive retires and drops out of isoSources, matching the
 	// card leaving the dashboard.

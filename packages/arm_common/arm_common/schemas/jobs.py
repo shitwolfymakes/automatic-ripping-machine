@@ -290,6 +290,8 @@ class JobView(BaseModel):
     def episodes_unsure(self) -> bool:
         """The episode placement on the tracks came from a held result (a
         guess): the card shows it amber and the review countdown holds."""
+        if self.media_type != MediaType.TV:
+            return False
         claims = self.metadata_json.identity_claims
         return isinstance(claims, IdentityClaims) and claims.unsure
 

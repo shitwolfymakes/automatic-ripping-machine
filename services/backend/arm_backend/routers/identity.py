@@ -274,11 +274,10 @@ async def _match_identity(
             for o in outcomes
         ]
     if source_id is not None:
-        # The operator explicitly chose this source. Pinning it is enough --
-        # the stored claims keep whatever `suggestion` was computed, but the
-        # RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
-        # through regardless, so it still gets applied. Unpinning (DELETE
-        # /identity/pin) reverts on the very next resolve.
+        # The operator explicitly chose this source: the pin records that
+        # choice so the resolver keeps this source's placement over another
+        # source that answers later. A held result is applied as a guess
+        # whether or not it is pinned.
         set_pin(fresh_job, _EPISODE_PIN, source_id)
 
     await apply_outcomes_and_emit(db, fresh_job, outcomes, hub)
@@ -293,20 +292,29 @@ async def clear_episode_match(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
 ) -> IdentityView:
     """Clear episodes: forget every episode source's result and the operator's
     source choice, then re-resolve so the placements come off the tracks.
     Hand-placed tracks keep their manual claims; show ids stay for the next
-    Fix match. Emits `job.identity_updated` and a `track.updated` per track
-    the resolver changed."""
-    # M2: lock the job row before the identity write (lock order: job, then tracks).
-    job = await _get_job(db, job_id, for_update=True)
-    forget_episode_sources(job)
-    db.add(job)
-    resolved = await resolve_job(db, job)
-    await db.commit()
-    await emit_identity_resolved(db, hub, job, resolved, sources={})
-    await db.commit()
+    Fix match. An in-flight background run is invalidated first so its
+    outcome cannot land after the clear, and the startup sweep leaves a
+    cleared job alone. Emits `job.identity_updated` and a `track.updated`
+    per track the resolver changed."""
+    if stage_runner is not None:
+        stage_runner.invalidate(job_id)
+    try:
+        # M2: lock the job row before the identity write (lock order: job, then tracks).
+        job = await _get_job(db, job_id, for_update=True)
+        forget_episode_sources(job)
+        db.add(job)
+        resolved = await resolve_job(db, job)
+        await db.commit()
+        await emit_identity_resolved(db, hub, job, resolved, sources={})
+        await db.commit()
+    finally:
+        if stage_runner is not None:
+            stage_runner.release(job_id)
     await db.refresh(job)
     tracks = await _get_tracks(db, job_id)
     return _identity_view(job, tracks)

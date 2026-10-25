@@ -1,8 +1,7 @@
 <script lang="ts">
-	// Re-run the episode match with other settings (design spec 2026-10-02
-	// section 4.3 #2): pick a source / season / disc / tolerance, preview the
-	// outcome, then apply & pin it or discard it. Presentational - the panel
-	// owns the requests.
+	// Fix match: pick a source / season / disc / tolerance, preview the
+	// outcome, then apply it or discard it. Presentational - the panel owns
+	// the requests.
 	import type { Snippet } from 'svelte';
 	import type { EpisodeSource } from '$lib/api/identity';
 	import type { RerunForm } from './episodeModel';
