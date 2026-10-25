@@ -16,6 +16,23 @@ constraints; `scan_seasons` and the seasons endpoint; clearing forgets;
 TheDiscDB job claims; season in the Info form on card and job page; per-row
 season and runtime-sorted picker; "Fill the rest"; shared `SeasonSelect`.
 
+2026-10-25 tester walk follow-ups (on the PR): Season row on the card with
+"Season not set" opening Info focused; one-line hold text with an (i) for the
+rest ("Season 3 is a guess: ..."); "Accept and pin TMDb"; the held season as
+a fact line plus one "Fix match" button (opens the re-run form); "View
+sources"; the panel's `onchanged` so the card and job page reload tracks
+after a write; Info tracks table uses the scan estimate pre-rip and labels
+extras; placed count ignores a held suggestion. Backend: the ISO watchdog
+restarts the ripper of a rip parked at a review gate once instead of failing
+it, and identify on a virtual drive reuses its newest non-terminal job
+(ISO scans carry no fingerprints). Both were proven live on hifi: the parked
+Kolchak job survived two backend restarts; the first restart (before the
+dedupe fix) left a duplicate parked job the owner retires by hand.
+
+The design canvas "TV Season Flow" (Claude Design, five clickable disc
+cases plus a state inventory) is the base for A/B options; the next design
+question is whether the matcher waits for a season before placing.
+
 Still to do before undraft: walk the design's Definition of done (section 7)
 on a dev stack with a TV disc or ISO, items 6 and 8 first.
 
