@@ -379,7 +379,7 @@ async def test_sweep_fails_a_parked_job_whose_ripper_crash_loops(monkeypatch: py
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     # Missing again within the cooldown: crash-looping, not started a second time.
-    now["t"] += iso_rips.RESPAWN_COOLDOWN_SECONDS - 1
+    now["t"] += iso_rips.CRASH_LOOP_WINDOW_SECONDS - 1
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     assert job.status is JobStatus.FAILED
@@ -388,9 +388,10 @@ async def test_sweep_fails_a_parked_job_whose_ripper_crash_loops(monkeypatch: py
 
 
 @pytest.mark.asyncio
-async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The next backend restart, hours later, is a new incident: a drive whose
-    # ripper was started again once before must not be failed for it.
+async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The next backend restart, minutes later, is a new incident: a drive
+    # whose ripper ran past the crash-loop window before dying must not be
+    # failed for it.
     now = {"t": 1000.0}
     monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
     db = FakeSession()
@@ -400,7 +401,7 @@ async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_cooldown(monkey
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
-    now["t"] += iso_rips.RESPAWN_COOLDOWN_SECONDS
+    now["t"] += iso_rips.CRASH_LOOP_WINDOW_SECONDS
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1", "drv_iso1"]
     assert job.status is JobStatus.AWAITING_REVIEW

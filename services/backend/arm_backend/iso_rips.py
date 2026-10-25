@@ -73,10 +73,12 @@ SPAWN_GRACE_SECONDS = 120
 # live rip.
 _DEAD_STATES = frozenset({"exited", "dead", "missing"})
 # When each virtual drive's parked ripper was last started again (monotonic
-# seconds). A ripper that dies again within the cooldown is crash-looping and
-# is failed like any other dead rip; one that dies hours later (the next
-# backend restart) is a new incident and gets started again.
-RESPAWN_COOLDOWN_SECONDS = 600
+# seconds). A ripper that dies again within this window never got going: it
+# is crash-looping and is failed like any other dead rip. One that ran longer
+# before dying was stopped by something else (a backend restart, even one a
+# few minutes after the last) and is started again. The sweep runs every 30
+# seconds, so a container that crashes on start is seen well inside the window.
+CRASH_LOOP_WINDOW_SECONDS = 90
 _respawned: dict[str, float] = {}
 
 _EPOCH = datetime.min.replace(tzinfo=UTC)
@@ -184,11 +186,11 @@ def _within_spawn_grace(drive: Drive) -> bool:
 
 async def _respawn_parked(manager: RipperManager, drive: Drive, job: Job) -> bool:
     """Start the ripper of a drive whose job is parked before the rip, unless it
-    was started again less than `RESPAWN_COOLDOWN_SECONDS` ago. False when it
+    was started again less than `CRASH_LOOP_WINDOW_SECONDS` ago. False when it
     is crash-looping or the manager could not start it; the caller then fails
     the job as for any dead rip."""
     last = _respawned.get(drive.id)
-    if last is not None and time.monotonic() - last < RESPAWN_COOLDOWN_SECONDS:
+    if last is not None and time.monotonic() - last < CRASH_LOOP_WINDOW_SECONDS:
         return False
     try:
         await asyncio.to_thread(manager.ensure_running, drive)
@@ -206,8 +208,8 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
     - container running (or state unknown): nothing happens;
     - container exited or missing, latest job terminal or no job: retire;
     - container exited or missing, latest job parked before the rip (a review
-      gate), not started again within the cooldown: start the ripper again and
-      leave the drive enrolled; it re-identifies into the same job;
+      gate), not started again within the crash-loop window: start the ripper
+      again and leave the drive enrolled; it re-identifies into the same job;
     - container exited or missing, latest job not terminal otherwise (ripping,
       or parked and crash-looping): fail the job ("ISO ripper stopped
       unexpectedly", `rip.failed`), then retire.
