@@ -696,43 +696,67 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'false');
 		});
 
-		it('has an Info tab that mounts the info form', async () => {
-			mockFetchJob.mockResolvedValue(tvJob());
+		it('has no Info tab: season, disc and total are set in place on the facts grid', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: null, disc_number: 1, disc_total: null }));
 			renderComponent(Page);
-			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
-			expect(await screen.findByLabelText('Season')).toBeInTheDocument();
+			await screen.findByRole('button', { name: 'Match Episodes' });
+			expect(screen.queryByRole('button', { name: 'Info' })).toBeNull();
+			expect(screen.getByTestId('fact-season')).toHaveTextContent('-');
+			expect(screen.getByTestId('fact-disc_number')).toHaveTextContent('1');
+			expect(screen.getByTestId('fact-disc_total')).toHaveTextContent('-');
+			expect(screen.getByRole('button', { name: 'Edit Season' })).toBeInTheDocument();
 		});
 
-		it('starts matching when an Info save changed a TV job season', async () => {
-			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: null }));
+		it('saves a season set in place through resolve and starts matching', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: null, title: 'Kolchak', year: 1974 }));
 			vi.mocked(resolveJob).mockResolvedValueOnce({
 				job: createJob({ id: 'job_42', media_type: 'tv', season: 3 }),
 				fan_out: []
 			});
 			renderComponent(Page);
-			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
-			await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '3' } });
-			await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-			await waitFor(() => expect(resolveJob).toHaveBeenCalled());
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit Season' }));
+			const input = screen.getByLabelText('Season');
+			await fireEvent.input(input, { target: { value: '3' } });
+			await fireEvent.keyDown(input, { key: 'Enter' });
+			await waitFor(() =>
+				expect(resolveJob).toHaveBeenCalledWith('job_42', { title: 'Kolchak', year: 1974, season: 3 })
+			);
 			await fireEvent.click(screen.getByRole('button', { name: 'Match Episodes' }));
 			expect(await screen.findByText('Matching episodes...')).toBeInTheDocument();
 		});
 
-		it('does not start matching when an Info save changed a movie job season', async () => {
-			// The save's refresh turns the job into TV, so the panel can be opened
-			// to see that the movie-time save started nothing.
-			mockFetchJob.mockResolvedValueOnce(tvJob({ status: 'identified', media_type: 'movie', has_series: false }));
-			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', season: 3 }));
+		it('does not start matching when a movie job year is set in place', async () => {
+			mockFetchJob.mockResolvedValue(
+				tvJob({ status: 'identified', media_type: 'movie', has_series: false, year: null })
+			);
 			vi.mocked(resolveJob).mockResolvedValueOnce({
-				job: createJob({ id: 'job_42', media_type: 'movie', season: 3 }),
+				job: createJob({ id: 'job_42', media_type: 'movie', year: 1999 }),
 				fan_out: []
 			});
 			renderComponent(Page);
-			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
-			await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '3' } });
-			await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-			await fireEvent.click(await screen.findByRole('button', { name: 'Match Episodes' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit Year' }));
+			const input = screen.getByLabelText('Year');
+			await fireEvent.input(input, { target: { value: '1999' } });
+			await fireEvent.keyDown(input, { key: 'Enter' });
+			await waitFor(() => expect(resolveJob).toHaveBeenCalled());
+			expect(screen.queryByRole('button', { name: 'Match Episodes' })).toBeNull();
 			expect(screen.queryByText('Matching episodes...')).not.toBeInTheDocument();
+		});
+
+		it('edits the title in place', async () => {
+			mockFetchJob.mockResolvedValue(tvJob({ status: 'identified', title: 'Kolchak', year: 1974 }));
+			vi.mocked(resolveJob).mockResolvedValueOnce({
+				job: createJob({ id: 'job_42', media_type: 'tv', title: 'Kolchak: The Night Stalker' }),
+				fan_out: []
+			});
+			renderComponent(Page);
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit Title' }));
+			const input = screen.getByLabelText('Title');
+			await fireEvent.input(input, { target: { value: 'Kolchak: The Night Stalker' } });
+			await fireEvent.keyDown(input, { key: 'Enter' });
+			await waitFor(() =>
+				expect(resolveJob).toHaveBeenCalledWith('job_42', { title: 'Kolchak: The Night Stalker', year: 1974 })
+			);
 		});
 
 		it('hides Match Episodes for a movie job', async () => {

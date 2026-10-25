@@ -2,12 +2,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+	import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { posterSrc, posterFallback, jobPoster } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
 	import type { JobDetailView, ResolveResponse, ApplySessionResponse, NamingPreviewItem } from '$lib/types/api.gen';
-	import JobInfoForm from '$lib/components/JobInfoForm.svelte';
+	import InlineField from '$lib/components/InlineField.svelte';
+	import type { EditableJobField } from '$lib/utils/job-fields';
 	import JobActions from '$lib/components/JobActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
@@ -38,7 +39,7 @@
 	let detail = $state<JobDetailView | null>(null);
 	let jobLoading = $state(true);
 	let jobError = $state<Error | null>(null);
-	let activePanel = $state<'title' | 'music' | 'episodes' | 'info' | null>(null);
+	let activePanel = $state<'title' | 'music' | 'episodes' | null>(null);
 	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
@@ -184,8 +185,29 @@
 		loadJob();
 	}
 
-	function handleInfoSaved(changed: { season: boolean; disc: boolean }) {
-		if (detail?.job.media_type === 'tv' && (changed.season || changed.disc)) matching.start();
+	// A fact edited in place: title, year, season, disc number or disc total go
+	// through resolve (title and year restate the identity; the rest are
+	// classifications, null clears). A TV job's season or disc change re-runs
+	// the episode match, so the panel shows it matching until the run reports.
+	async function saveFact(field: EditableJobField | 'title', raw: string) {
+		if (!detail) return;
+		const job = detail.job;
+		const num = (v: string) => (v.trim() === '' ? null : Number(v));
+		if (field === 'title' && !raw.trim()) throw new Error('A title is required');
+		const body: Parameters<typeof resolveJob>[1] = {
+			title: field === 'title' ? raw.trim() : (job.title ?? ''),
+			year: field === 'year' ? num(raw) : (job.year ?? null)
+		};
+		if (field !== 'title' && field !== 'year') body[field] = num(raw);
+		const before = { season: job.season ?? null, disc: job.disc_number ?? null };
+		const resp = await resolveJob(job.id, body);
+		const after = resp?.job;
+		const changed =
+			!!after &&
+			job.media_type === 'tv' &&
+			(before.season !== (after.season ?? null) || before.disc !== (after.disc_number ?? null));
+		await loadJob();
+		if (changed) matching.start();
 	}
 
 	function handleSeriesApplied() {
@@ -201,7 +223,7 @@
 		loadJob();
 	}
 
-	function togglePanel(panel: 'title' | 'music' | 'episodes' | 'info') {
+	function togglePanel(panel: 'title' | 'music' | 'episodes') {
 		if (panel === 'title') titleInitialType = undefined;
 		activePanel = activePanel === panel ? null : panel;
 	}
@@ -310,7 +332,12 @@
 				<!-- Title bar -->
 				<div class="flex flex-wrap items-center gap-2 job-detail-title-bar">
 					<h1 class="job-detail-title">
-						{job.title || 'Untitled'}
+						<InlineField
+							label="Title"
+							value={job.title || 'Untitled'}
+							canEdit={$isAdmin && canResolve}
+							onsave={(raw) => saveFact('title', raw)}
+						/>
 					</h1>
 					{#if job.year}
 						<span class="job-detail-year">({job.year})</span>
@@ -402,6 +429,21 @@
 												? 'mono job-detail-metadata-mono'
 												: ''}">{field.value}</a
 										>
+									{:else if field.edit}
+										<div class="mt-1 job-detail-metadata-value" data-testid="fact-{field.edit}">
+											<InlineField
+												label={field.label}
+												value={field.value === '-' ? '' : field.value}
+												type={field.edit === 'season' ||
+												field.edit === 'disc_number' ||
+												field.edit === 'disc_total' ||
+												field.edit === 'year'
+													? 'number'
+													: 'text'}
+												canEdit={$isAdmin && canResolve}
+												onsave={(raw) => saveFact(field.edit!, raw)}
+											/>
+										</div>
 									{:else}
 										<div
 											class="mt-1 job-detail-metadata-value {field.mono
@@ -436,12 +478,6 @@
 								aria-pressed={activePanel === 'episodes'}>Match Episodes</button
 							>
 						{/if}
-						<button
-							type="button"
-							onclick={() => togglePanel('info')}
-							class="job-detail-panel-tab"
-							aria-pressed={activePanel === 'info'}>Info</button
-						>
 					</div>
 				{:else if isCdDisc}
 					<div class="flex job-detail-panel-toggle-bar">
@@ -478,11 +514,6 @@
 								activePanel = 'title';
 							}}
 						/>
-					</div>
-				{/if}
-				{#if activePanel === 'info' && isVideoDisc}
-					<div class="job-detail-panel-content">
-						<JobInfoForm {job} onrefresh={() => loadJob()} onsaved={handleInfoSaved} />
 					</div>
 				{/if}
 				{#if activePanel === 'music'}

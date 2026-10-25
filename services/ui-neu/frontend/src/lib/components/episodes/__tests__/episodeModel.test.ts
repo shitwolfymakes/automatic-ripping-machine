@@ -81,13 +81,15 @@ describe('buildRows', () => {
 		expect(rows[5].origin.kind).toBe('none');
 		expect(placedCount(rows)).toBe(6);
 	});
-	it('rows placed by a held source are a guess', () => {
-		const rows = buildRows(tracks, identity({}, true), null);
+	it('rows placed by a held source are a guess only while the job is unsure', () => {
+		const rows = buildRows(tracks, identity({}, true), null, true);
 		expect(rows[0]).toMatchObject({
 			code: 'S01E01',
 			origin: { kind: 'guess', source: 'episodes_tmdb' },
 			confidence: 0.6
 		});
+		// Resolved sure since (a clean result won): the same rows read as auto.
+		expect(buildRows(tracks, identity({}, true), null)[0].origin.kind).toBe('auto');
 	});
 	it('a hand-set row is "you"', () => {
 		const id = identity();

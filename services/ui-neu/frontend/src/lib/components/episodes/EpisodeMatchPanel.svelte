@@ -152,7 +152,7 @@
 
 	const view = $derived(panelState(job, identity, matching));
 	const loading = $derived(!loaded && view !== 'noseries' && view !== 'matching');
-	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview));
+	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview, !!job.episodes_unsure));
 	const source = $derived(identity ? activeSource(identity) : null);
 	const sourceLabel = $derived(source ? (SOURCE_LABEL[source] ?? source) : null);
 	const others = $derived(

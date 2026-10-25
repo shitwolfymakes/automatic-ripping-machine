@@ -4,6 +4,8 @@ import { discTypeLabel } from '$lib/utils/job-type';
 import { isAwaitingIdentity, isInProgress, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 import { driveLabel } from '$lib/utils/drive-name';
 
+export type EditableJobField = 'year' | 'season' | 'disc_number' | 'disc_total';
+
 export interface MetadataField {
 	label: string;
 	value: string;
@@ -11,6 +13,10 @@ export interface MetadataField {
 	link?: string;
 	isSelect?: boolean;
 	empty?: boolean;
+	/** The job field an admin edits in place in this cell. */
+	edit?: EditableJobField;
+	/** The raw value the editor starts from ('' when unset); `value` stays the display form. */
+	raw?: string;
 }
 
 export interface JobMetadata {
@@ -150,7 +156,12 @@ export function buildMetadataFields(
 	// --- Always-present base fields ---
 	fields.push({ label: 'Disc Type', value: discTypeLabel(job.disc_type) });
 	fields.push({ label: 'Status', value: statusLabel(job.status) });
-	fields.push({ label: 'Year', value: job.year != null ? String(job.year) : '-' });
+	fields.push({
+		label: 'Year',
+		value: job.year != null ? String(job.year) : '-',
+		edit: 'year',
+		raw: job.year != null ? String(job.year) : ''
+	});
 	fields.push({ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true });
 	if (job.resumed_from_crash) {
 		fields.push({ label: 'Recovery', value: 'Resumed from crash' });
@@ -178,9 +189,24 @@ export function buildMetadataFields(
 	if (parked) fields.push({ label: 'Session', value: parked });
 
 	// --- Promoted real JobView columns ---
-	if (job.disc_number != null) {
-		const discValue = job.disc_total != null ? `${job.disc_number} of ${job.disc_total}` : String(job.disc_number);
-		fields.push({ label: 'Disc #', value: discValue });
+	// A TV job always offers its disc position and season, set in place; any
+	// other job shows them once something set them.
+	const tv = job.media_type === 'tv';
+	if (tv || job.disc_number != null) {
+		fields.push({
+			label: 'Disc #',
+			value: job.disc_number != null ? String(job.disc_number) : '-',
+			edit: 'disc_number',
+			raw: job.disc_number != null ? String(job.disc_number) : ''
+		});
+	}
+	if (tv || job.disc_total != null) {
+		fields.push({
+			label: 'Disc total',
+			value: job.disc_total != null ? String(job.disc_total) : '-',
+			edit: 'disc_total',
+			raw: job.disc_total != null ? String(job.disc_total) : ''
+		});
 	}
 	if (job.poster_url_manual) {
 		fields.push({ label: 'Poster', value: 'Manual' });
@@ -202,8 +228,13 @@ export function buildMetadataFields(
 	if (md.tvdb_id) {
 		fields.push({ label: 'TVDB', value: md.tvdb_id, link: `https://www.thetvdb.com/dereferrer/series/${md.tvdb_id}` });
 	}
-	if (md.season) {
-		fields.push({ label: 'Season', value: md.season });
+	if (tv || md.season) {
+		fields.push({
+			label: 'Season',
+			value: md.season || '-',
+			edit: 'season',
+			raw: job.season != null ? String(job.season) : ''
+		});
 	}
 	if (md.artist) {
 		fields.push({ label: 'Artist', value: md.artist });

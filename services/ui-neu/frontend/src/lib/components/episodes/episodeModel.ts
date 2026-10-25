@@ -108,23 +108,29 @@ export function panelState(job: JobView, identity: IdentityView | null, matching
 	return 'applied';
 }
 
-function origin(t: TrackIdentityView, identity: IdentityView): Origin {
+function origin(t: TrackIdentityView, identity: IdentityView, unsure: boolean): Origin {
 	const prov = t.identity_provenance ?? {};
 	if (Object.values(prov).includes('manual')) return { kind: 'you', source: null };
 	const src = prov.episode_number ?? prov.role ?? null;
 	if (src && src.startsWith(EPISODE_PREFIX)) {
-		return { kind: identity.sources?.[src]?.suggestion ? 'guess' : 'auto', source: src };
+		// The job's own flag decides: a source may be held while the job was resolved sure.
+		return { kind: unsure && identity.sources?.[src]?.suggestion ? 'guess' : 'auto', source: src };
 	}
 	return { kind: 'none', source: null };
 }
 
-export function buildRows(tracks: TrackView[], identity: IdentityView, preview: MatchPreview | null): EpisodeRow[] {
+export function buildRows(
+	tracks: TrackView[],
+	identity: IdentityView,
+	preview: MatchPreview | null,
+	unsure = false
+): EpisodeRow[] {
 	const byTrack = new Map((identity.tracks ?? []).map((t) => [t.track_id, t]));
 	const active = activeSource(identity);
 	const matches = new Map((preview?.outcomes?.[0]?.matches ?? []).map((m) => [m.source_ref, m]));
 	return tracks.map((track) => {
 		const t = byTrack.get(track.id);
-		const o: Origin = t ? origin(t, identity) : { kind: 'none', source: null };
+		const o: Origin = t ? origin(t, identity, unsure) : { kind: 'none', source: null };
 		const proposal = t && active ? t.proposals?.[active] : undefined;
 		let code: string | null = null;
 		let name = '';
