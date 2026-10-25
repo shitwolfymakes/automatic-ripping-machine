@@ -367,7 +367,9 @@ async def test_sweep_starts_the_ripper_again_for_a_parked_job(
 
 
 @pytest.mark.asyncio
-async def test_sweep_fails_a_parked_job_whose_ripper_dies_twice() -> None:
+async def test_sweep_fails_a_parked_job_whose_ripper_crash_loops(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = {"t": 1000.0}
+    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
     db = FakeSession()
     drive = _virtual()
     db.rows["drives"] = [drive]
@@ -376,12 +378,33 @@ async def test_sweep_fails_a_parked_job_whose_ripper_dies_twice() -> None:
     manager, hub = _Manager(), _Hub()
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
-    # Still missing on the next pass: the ripper is not started a second time.
+    # Missing again within the cooldown: crash-looping, not started a second time.
+    now["t"] += iso_rips.RESPAWN_COOLDOWN_SECONDS - 1
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     assert job.status is JobStatus.FAILED
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
     assert [e["event_type"] for e in hub.events] == ["rip.failed"]
+
+
+@pytest.mark.asyncio
+async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The next backend restart, hours later, is a new incident: a drive whose
+    # ripper was started again once before must not be failed for it.
+    now = {"t": 1000.0}
+    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    now["t"] += iso_rips.RESPAWN_COOLDOWN_SECONDS
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert manager.started == ["drv_iso1", "drv_iso1"]
+    assert job.status is JobStatus.AWAITING_REVIEW
+    assert drive.lifecycle is DriveLifecycle.ENROLLED and hub.events == []
 
 
 @pytest.mark.asyncio

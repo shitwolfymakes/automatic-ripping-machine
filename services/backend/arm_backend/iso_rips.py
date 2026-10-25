@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -71,9 +72,12 @@ SPAWN_GRACE_SECONDS = 120
 # and so is "unknown" (docker unreachable): retiring on a guess would fail a
 # live rip.
 _DEAD_STATES = frozenset({"exited", "dead", "missing"})
-# Virtual drives whose parked ripper this process already started again. A
-# ripper that dies twice while parked is failed like any other dead rip.
-_respawned: set[str] = set()
+# When each virtual drive's parked ripper was last started again (monotonic
+# seconds). A ripper that dies again within the cooldown is crash-looping and
+# is failed like any other dead rip; one that dies hours later (the next
+# backend restart) is a new incident and gets started again.
+RESPAWN_COOLDOWN_SECONDS = 600
+_respawned: dict[str, float] = {}
 
 _EPOCH = datetime.min.replace(tzinfo=UTC)
 
@@ -179,17 +183,19 @@ def _within_spawn_grace(drive: Drive) -> bool:
 
 
 async def _respawn_parked(manager: RipperManager, drive: Drive, job: Job) -> bool:
-    """Start the ripper of a drive whose job is parked before the rip, once per
-    drive per process. False when it was already started once or the manager
-    could not start it; the caller then fails the job as for any dead rip."""
-    if drive.id in _respawned:
+    """Start the ripper of a drive whose job is parked before the rip, unless it
+    was started again less than `RESPAWN_COOLDOWN_SECONDS` ago. False when it
+    is crash-looping or the manager could not start it; the caller then fails
+    the job as for any dead rip."""
+    last = _respawned.get(drive.id)
+    if last is not None and time.monotonic() - last < RESPAWN_COOLDOWN_SECONDS:
         return False
     try:
         await asyncio.to_thread(manager.ensure_running, drive)
     except RipperManagerError as exc:
         logger.warning("iso drive_id=%s ripper could not be started again for job_id=%s: %s", drive.id, job.id, exc)
         return False
-    _respawned.add(drive.id)
+    _respawned[drive.id] = time.monotonic()
     logger.info("iso drive_id=%s ripper started again for parked job_id=%s (%s)", drive.id, job.id, job.status.value)
     return True
 
@@ -200,10 +206,10 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
     - container running (or state unknown): nothing happens;
     - container exited or missing, latest job terminal or no job: retire;
     - container exited or missing, latest job parked before the rip (a review
-      gate), first time for this drive: start the ripper again and leave the
-      drive enrolled; it re-identifies into the same job;
+      gate), not started again within the cooldown: start the ripper again and
+      leave the drive enrolled; it re-identifies into the same job;
     - container exited or missing, latest job not terminal otherwise (ripping,
-      or parked and already started once): fail the job ("ISO ripper stopped
+      or parked and crash-looping): fail the job ("ISO ripper stopped
       unexpectedly", `rip.failed`), then retire.
 
     Each drive is re-read `FOR UPDATE` before it is acted on and skipped if
