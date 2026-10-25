@@ -178,6 +178,17 @@ def forget_episode_show_ids(job: Job) -> None:
         _store(job, claims)
 
 
+def set_unsure(job: Job, unsure: bool) -> bool:
+    """Record whether the winning episode placement is a guess. Returns
+    whether the stored value changed."""
+    claims = claims_of(job)
+    if claims.unsure == unsure:
+        return False
+    claims.unsure = unsure
+    _store(job, claims)
+    return True
+
+
 def set_pin(job: Job, capability: str, source_id: str) -> None:
     """Pin `source_id` as the operator's chosen source for `capability`
     (e.g. "episode") -- it then outranks its tier-mates in the resolver."""

@@ -285,6 +285,14 @@ class JobView(BaseModel):
             return any(src.inputs.get("show_id") for src in claims.sources.values())
         return False
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def episodes_unsure(self) -> bool:
+        """The episode placement on the tracks came from a held result (a
+        guess): the card shows it amber and the review countdown holds."""
+        claims = self.metadata_json.identity_claims
+        return isinstance(claims, IdentityClaims) and claims.unsure
+
 
 class HeldJobView(BaseModel):
     """Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).

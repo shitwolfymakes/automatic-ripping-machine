@@ -1960,6 +1960,10 @@ export type IdentityClaims = {
     pin?: {
         [key: string]: string;
     };
+    /**
+     * Unsure
+     */
+    unsure?: boolean;
 };
 
 /**
@@ -2684,6 +2688,13 @@ export type JobView = {
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
+    /**
+     * Episodes Unsure
+     *
+     * The episode placement on the tracks came from a held result (a
+     * guess): the card shows it amber and the review countdown holds.
+     */
+    readonly episodes_unsure: boolean;
 };
 
 /**

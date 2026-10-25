@@ -82,3 +82,7 @@ class IdentityClaims(BaseModel):
     # capability name -> source id the operator pinned for this job (PR 3 uses
     # "episode"); a pinned source outranks its tier-mates in the resolver.
     pin: dict[str, str] = Field(default_factory=dict)
+    # The winning episode source's result was held (a guess). Written by the
+    # resolver on every run; the UI shows it amber and the ripper holds the
+    # review countdown while it is true.
+    unsure: bool = False

@@ -40,6 +40,11 @@ class Resolution:
     # silent" (reset to default) from "no winner because the owning source
     # was rolled back / removed" (leave the value alone).
     known_sources: frozenset[str] = frozenset()
+    # The episode source whose placement won, and whether its result was held
+    # (a guess). A held result is applied like a clean one; `episode_unsure`
+    # is what tells the UI and the ripper to treat it as a guess.
+    episode_source: str | None = None
+    episode_unsure: bool = False
 
 
 def resolve(
@@ -51,13 +56,10 @@ def resolve(
 ) -> Resolution:
     ranks = ranks or {}
     pinned = set(claims.pin.values())
-    # The episode pin rule (Task 9 F4 round 2): a source's own computed
-    # `suggestion` is never rewritten (stored claims always keep the value
-    # the stage computed) -- instead, the RESOLVER lets a suggestion through
-    # when the operator pinned that exact source for "episode" and its
-    # status is "ok". Unpinning (or the pinned source erroring/missing) then
-    # reverts on the very next resolve, with no stale forced flag anywhere.
-    pinned_episode = claims.pin.get("episode")
+    # A held result (`suggestion`) is applied like a clean one and reported
+    # through `episode_unsure`; within a tier a clean result outranks a held
+    # one, and a pin outranks both, so a source the operator chose in Fix
+    # match keeps its placement until the match is cleared or re-run.
     usable = []
     for source_id, source in claims.sources.items():
         if source_id not in tiers:
@@ -70,10 +72,17 @@ def resolve(
             continue
         if source.status != "ok":
             continue
-        if source.suggestion and source_id != pinned_episode:
-            continue
         usable.append(source_id)
-    usable.sort(key=lambda s: (tiers[s], 0 if s in pinned else 1, s not in ranks, ranks.get(s, 0), s))
+    usable.sort(
+        key=lambda s: (
+            tiers[s],
+            0 if s in pinned else 1,
+            1 if claims.sources[s].suggestion else 0,
+            s not in ranks,
+            ranks.get(s, 0),
+            s,
+        )
+    )
     # Keep only the first usable episode-match source (the pin sorts first);
     # every other one contributes nothing, so a lower-ranked provider can
     # never fill a track the winner called an extra with a duplicate number.
@@ -81,6 +90,9 @@ def resolve(
     usable = [s for s in usable if tiers[s] != _EPISODE_TIER or s == episode_sources[0]]
 
     res = Resolution(known_sources=frozenset(tiers))
+    if episode_sources:
+        res.episode_source = episode_sources[0]
+        res.episode_unsure = claims.sources[episode_sources[0]].suggestion
     for source_id in usable:
         source = claims.sources[source_id]
         for name in source.job.model_fields_set & JOB_CLAIM_FIELDS.keys():

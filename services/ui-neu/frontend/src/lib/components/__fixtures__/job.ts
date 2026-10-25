@@ -33,7 +33,8 @@ const jobDefaults: JobView = {
 	resumed_from_crash: false,
 	rip_progress: null,
 	looks_episodic: false,
-	has_series: false
+	has_series: false,
+	episodes_unsure: false
 };
 
 export function createJob(overrides: Partial<JobView> = {}): JobView {

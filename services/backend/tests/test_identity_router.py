@@ -453,11 +453,12 @@ def test_match_apply_with_source_pins_and_survives_forced_suggestion(signing_key
     assert outcome["suggestion"] is True
 
 
-def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(signing_key: bytes) -> None:
-    """End to end (Task 9 F4 round 2): pin-apply a forced suggestion via
-    `/identity/match`, then `DELETE /identity/pin`. Nothing else claims these
-    tracks, so they revert immediately (episode_number cleared), and
-    `track.updated` fires for every track the resolver reverted."""
+def test_pin_then_unpin_keeps_the_guess_on_the_tracks(signing_key: bytes) -> None:
+    """End to end: apply a held result via `/identity/match` with a source
+    (which records the choice as the pin), then `DELETE /identity/pin`. A
+    held result is applied as a guess whether or not it is pinned, so the
+    tracks keep their episodes, the job stays unsure, and only
+    `job.identity_updated` fires (no track changed)."""
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks, cfg=Config(id=1, episode_auto_apply=False))
@@ -483,12 +484,12 @@ def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(signing_key: byte
 
     assert r.status_code == 200
     assert claims_of(job).pin == {}
-    assert all(t.episode_number is None for t in db.rows["tracks"])  # reverted: no other source claims them
+    assert {t.id for t in db.rows["tracks"] if t.episode_number is not None} == applied_track_ids
+    assert claims_of(job).unsure is True
 
     identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
     assert len(identity_events) == 1
-    track_events = {e["payload"]["track_id"] for e in hub.events if e["event_type"] == "track.updated"}
-    assert track_events == applied_track_ids
+    assert [e for e in hub.events if e["event_type"] == "track.updated"] == []
 
 
 def test_match_apply_persists_season_disc_and_tolerance_i3(signing_key: bytes) -> None:

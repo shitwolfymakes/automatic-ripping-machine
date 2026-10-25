@@ -13470,6 +13470,11 @@
             },
             "type": "object",
             "title": "Pin"
+          },
+          "unsure": {
+            "type": "boolean",
+            "title": "Unsure",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -14876,6 +14881,12 @@
             "title": "Has Series",
             "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved (spec 3.4). False means the\nMatch Episodes tab asks for the series first.",
             "readOnly": true
+          },
+          "episodes_unsure": {
+            "type": "boolean",
+            "title": "Episodes Unsure",
+            "description": "The episode placement on the tracks came from a held result (a\nguess): the card shows it amber and the review countdown holds.",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -14890,7 +14901,8 @@
           "resumed_from_crash",
           "actions",
           "looks_episodic",
-          "has_series"
+          "has_series",
+          "episodes_unsure"
         ],
         "title": "JobView"
       },

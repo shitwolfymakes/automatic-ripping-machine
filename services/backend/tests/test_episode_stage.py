@@ -283,7 +283,7 @@ async def test_eligibility_rules(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_identical_runtimes_are_a_suggestion_and_not_applied_c2() -> None:
+async def test_identical_runtimes_are_a_suggestion_applied_as_a_guess_c2() -> None:
     job = _job()
     db = _db(job, [2580] * 4)
     provider = FakeProvider(seasons={1: _season(1, [2580] * 10)})
@@ -293,8 +293,10 @@ async def test_identical_runtimes_are_a_suggestion_and_not_applied_c2() -> None:
     assert outcome.claims.status == "ok"
     assert outcome.claims.suggestion is True
     assert outcome.claims.extra["ambiguous"] is True
-    assert resolved.changed == 0
-    assert all(t.episode_number is None and t.role is None for t in _tracks(db, job).values())
+    # A held result goes on the tracks as a guess; the job says so.
+    assert resolved.changed > 0
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())
+    assert claims_of(job).unsure is True
 
 
 async def test_auto_apply_off_makes_every_result_a_suggestion() -> None:
@@ -337,9 +339,9 @@ async def test_pin_rule_applies_despite_computed_suggestion() -> None:
     assert all(t.episode_number is not None for t in _tracks(db, job).values())
 
 
-async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion() -> None:
-    """Without a pin, the pin rule is a no-op: the stored `suggestion` is
-    exactly what was computed, and the resolver never applies it."""
+async def test_unpinned_suggestion_keeps_its_computed_flag_and_applies_as_a_guess() -> None:
+    """Without a pin the stored `suggestion` is exactly what was computed;
+    the resolver applies it as a guess and marks the job unsure."""
     cfg = Config(episode_auto_apply=False)
     job = _job()  # no pin
     db = _db(job, DISC)
@@ -349,8 +351,9 @@ async def test_pin_rule_noop_when_unpinned_keeps_computed_suggestion() -> None:
 
     assert outcomes[0].claims.suggestion is True
     assert claims_of(job).sources["episodes_tmdb"].suggestion is True
-    assert resolved.changed == 0
-    assert all(t.episode_number is None for t in _tracks(db, job).values())
+    assert resolved.changed > 0
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())
+    assert claims_of(job).unsure is True
 
 
 async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -> None:
@@ -444,7 +447,7 @@ async def test_tolerance_comes_from_config() -> None:
     assert outcome.claims.inputs["tolerance"] == 45
 
 
-async def test_nominal_runtimes_are_not_applied_c4() -> None:
+async def test_nominal_runtimes_are_applied_as_a_guess_c4() -> None:
     # TVmaze-style: every episode listed at 60 min, real episodes run ~44 min.
     job = _job()
     db = _db(job, [2640, 2700, 2580, 2660])
@@ -454,8 +457,9 @@ async def test_nominal_runtimes_are_not_applied_c4() -> None:
 
     assert outcome.claims.inputs["nominal_runtimes"] is True
     assert outcome.claims.suggestion is True
-    assert resolved.changed == 0
-    assert all(t.episode_number is None for t in _tracks(db, job).values())
+    assert resolved.changed > 0
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())
+    assert claims_of(job).unsure is True
 
 
 async def test_slot_runtimes_that_fit_are_not_nominal() -> None:
@@ -1106,7 +1110,7 @@ async def test_operator_season_is_not_rescanned_f1() -> None:
     assert ("seasons", "100") not in provider.calls
 
 
-async def test_rerip_of_the_same_disc_is_a_suggestion_f2() -> None:
+async def test_rerip_of_the_same_disc_is_a_suggestion_applied_as_a_guess_f2() -> None:
     earlier = _job("job_0", disc_number=1)
     job = _job(disc_number=1)
     earlier_tracks = [_track("job_0", i, rt, episode_number=i + 1) for i, rt in enumerate(REALISTIC[:4])]
@@ -1117,8 +1121,9 @@ async def test_rerip_of_the_same_disc_is_a_suggestion_f2() -> None:
 
     assert outcome.claims.suggestion is True
     assert outcome.claims.extra["sibling_conflict"] is True
-    assert resolved.changed == 0
-    assert all(t.episode_number is None for t in _tracks(db, job).values())
+    assert resolved.changed > 0
+    assert all(t.episode_number is not None for t in _tracks(db, job).values())
+    assert claims_of(job).unsure is True
 
 
 async def test_sibling_with_unknown_disc_number_forces_a_suggestion_f2(monkeypatch) -> None:

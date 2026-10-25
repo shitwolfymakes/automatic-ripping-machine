@@ -208,3 +208,11 @@ def test_jobview_has_series_by_ids() -> None:
 def test_jobview_has_series_when_a_source_resolved_a_show() -> None:
     md = {"identity_claims": {"sources": {"episodes_tvmaze": {"status": "ok", "inputs": {"show_id": "1234"}}}}}
     assert JobView.model_validate(make_job(metadata_json=md)).has_series is True
+
+
+def test_jobview_episodes_unsure_reads_the_claims_flag() -> None:
+    held = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}}
+    assert JobView.model_validate(make_job(metadata_json=held)).episodes_unsure is True
+    sure = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok"}}}}
+    assert JobView.model_validate(make_job(metadata_json=sure)).episodes_unsure is False
+    assert JobView.model_validate(make_job(metadata_json={})).episodes_unsure is False

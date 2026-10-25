@@ -14,7 +14,7 @@ from arm_common import Config, Job, Track
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims
 
-from arm_backend.identity.proposals import claims_of, put_source
+from arm_backend.identity.proposals import claims_of, put_source, set_unsure
 from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.sources.base import JobContext, Source
 from arm_backend.identity.sources.registry import SOURCE_TIERS, HINT_SOURCES, disabled_source_ids, source_ranks
@@ -37,6 +37,10 @@ async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
     changed_ids: set[str] = set()
     resolution = resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))
     changed = apply_resolution(job, tracks, resolution, changed_track_ids=changed_ids)
+    # A guess flips to sure (or back) only through the resolver, so the flag
+    # counts as a change: callers emit `job.identity_updated` on it.
+    if set_unsure(job, resolution.episode_unsure):
+        changed += 1
     for track in tracks:
         session.add(track)
     session.add(job)

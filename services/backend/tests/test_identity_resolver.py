@@ -227,12 +227,33 @@ def test_apply_reports_changed_track_ids() -> None:
     assert changed == {t2.id}
 
 
-def test_suggestion_sources_are_not_applied() -> None:
+def test_held_source_is_applied_and_reported_unsure() -> None:
+    # A held result is a guess, not a non-result: it goes on the tracks and
+    # the resolution says so, for the amber UI and the countdown hold.
     res = resolve(
         _claims(ep_a=SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})),
         tiers=TIERS,
     )
-    assert res.tracks == {}
+    assert res.tracks["1"]["episode"] == Winner(4, "ep_a")
+    assert res.episode_source == "ep_a" and res.episode_unsure is True
+
+
+def test_clean_source_beats_held_one_regardless_of_rank() -> None:
+    res = resolve(
+        _claims(
+            ep_a=SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)}),
+            ep_b=SourceClaims(tracks={"1": TrackClaim(episode=9)}),
+        ),
+        tiers=TIERS,
+        ranks={"ep_a": 0, "ep_b": 1},
+    )
+    assert res.tracks["1"]["episode"] == Winner(9, "ep_b")
+    assert res.episode_source == "ep_b" and res.episode_unsure is False
+
+
+def test_no_episode_source_means_not_unsure() -> None:
+    res = resolve(_claims(thediscdb=SourceClaims(tracks={"1": TrackClaim(episode=2)})), tiers=TIERS)
+    assert res.episode_source is None and res.episode_unsure is False
 
 
 def test_pinned_ok_suggestion_is_applied() -> None:
@@ -261,17 +282,21 @@ def test_pinned_suggestion_not_ok_is_still_skipped() -> None:
     assert res.tracks == {}
 
 
-def test_unpinned_suggestion_is_skipped_even_with_a_different_pin() -> None:
-    """An unpinned suggestion source stays inapplicable -- pinning a
-    DIFFERENT source for "episode" doesn't make every suggestion usable."""
+def test_pinned_held_source_beats_a_clean_one() -> None:
+    """The source the operator chose in Fix match keeps its placement even
+    when another source later answers cleanly."""
     res = resolve(
         IdentityClaims(
-            sources={"ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)})},
-            pin={"episode": "ep_b"},
+            sources={
+                "ep_a": SourceClaims(suggestion=True, tracks={"1": TrackClaim(episode=4)}),
+                "ep_b": SourceClaims(tracks={"1": TrackClaim(episode=9)}),
+            },
+            pin={"episode": "ep_a"},
         ),
         tiers=TIERS,
     )
-    assert res.tracks == {}
+    assert res.tracks["1"]["episode"] == Winner(4, "ep_a")
+    assert res.episode_unsure is True
 
 
 def test_tier_beats_pin() -> None:
