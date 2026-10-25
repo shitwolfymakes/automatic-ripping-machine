@@ -89,7 +89,7 @@
 						<tr>
 							<th class="table-header">#</th>
 							<th class="table-header">{isMusic ? 'Name' : 'Title'}</th>
-							{#if isVideo}<th class="table-header review-tracks-table-center">Episode</th>{/if}
+							{#if isVideo}<th class="table-header">Episode</th>{/if}
 							<th class="table-header">Length</th>
 							<th class="table-header">Include</th>
 							<th class="table-header">Source</th>
@@ -123,7 +123,7 @@
 									{/if}
 								</td>
 								{#if isVideo}
-									<td class="table-cell review-tracks-table-center">
+									<td class="table-cell">
 										{#if row.trackId && fileNames.get(row.trackId)}
 											<!-- A session names the track: the generated name is the episode. -->
 											<span class="mono review-tracks-table-generated" data-testid="track-generated-name"
@@ -229,11 +229,6 @@
 	.review-tracks-table .table-header,
 	.review-tracks-table .table-cell {
 		padding: 0.375rem 0.75rem;
-	}
-	.review-tracks-table-center {
-		text-align: center;
-		padding-left: 0.5rem;
-		padding-right: 0.5rem;
 	}
 	.table-row[data-disabled='true'] {
 		opacity: 0.4;
