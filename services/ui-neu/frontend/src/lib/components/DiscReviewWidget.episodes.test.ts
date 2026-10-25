@@ -152,6 +152,34 @@ describe('DiscReviewWidget episode matching', () => {
 		expect(screen.getByTestId('title-initial-type')).toHaveTextContent('none');
 	});
 
+	it('a guessed placement: amber Episodes row with Review, and the countdown held', async () => {
+		const guess = {
+			...TV,
+			episodes_unsure: true,
+			wait_start_time: new Date().toISOString(),
+			metadata_json: {
+				identity_claims: { sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, unsure: true }
+			}
+		} as Partial<JobView>;
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({
+				tracks: [
+					{ id: 'trk_0', kind: 'video_title', excluded: false, episode_number: 1, role: 'episode' },
+					{ id: 'trk_1', kind: 'video_title', excluded: false, episode_number: 2, role: 'episode' }
+				] as never
+			}),
+			job: createJob(guess)
+		});
+		renderComponent(DiscReviewWidget, { props: { job: createJob(guess) } });
+		const row = await screen.findByTestId('episode-status');
+		await waitFor(() => expect(row).toHaveAttribute('data-state', 'guess'));
+		expect(row).toHaveTextContent('Episodes placed, a guess');
+		expect(within(row).getByRole('button', { name: 'Review' })).toBeInTheDocument();
+		expect(screen.getByText('Held: episodes are a guess')).toBeInTheDocument();
+		expect(screen.queryByTitle('Pause timer')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Episodes' })).toBeInTheDocument();
+	});
+
 	it('says the season is not set for a pre-rip TV job without one', async () => {
 		renderCard();
 		expect(await screen.findByText(/Season not set/)).toBeTruthy();

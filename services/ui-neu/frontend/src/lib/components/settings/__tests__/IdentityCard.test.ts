@@ -129,7 +129,7 @@ describe('IdentityCard', () => {
 		expect(boxes.map((c) => c.getAttribute('aria-label'))).toEqual(labels);
 		for (const l of labels) expect(within(s4).getByText(l)).toBeInTheDocument();
 		expect(s4).toHaveTextContent(
-			'When off, a match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping › Review first still holds every disc.'
+			'When off, a movie or music match waits on the job page for you to confirm it and the disc is held with no countdown. A TV match is still placed, shown as a guess, and holds the countdown. Ripping › Review first still holds every disc.'
 		);
 		await fireEvent.click(within(s4).getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
 		expect((component as unknown as { getValues: () => Record<string, unknown> }).getValues().movie_auto_apply).toBe(

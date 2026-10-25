@@ -66,6 +66,10 @@
 	let pauseBusy = $state(false);
 	// The countdown is frozen by the global pause OR this disc's own pause.
 	let countdownPaused = $derived(paused || !!job?.manual_pause);
+	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
+	let countdownHeld = $derived(
+		job?.media_type === 'tv' && !!job?.episodes_unsure ? 'Held: episodes are a guess' : null
+	);
 
 	let data = $state<JobDetailView | null>(null);
 	let initialLoading = $state(true);
@@ -415,7 +419,8 @@
 				<CountdownTimer
 					startTime={job.wait_start_time}
 					waitSeconds={manualWaitSeconds}
-					paused={countdownPaused}
+					paused={countdownPaused || !!countdownHeld}
+					held={countdownHeld}
 					inverted
 					onpause={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
 					onresume={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
@@ -500,6 +505,13 @@
 								{#if episodeRow.state === 'matched'}
 									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
 										>Episodes matched{episodeRow.source ? ` from ${episodeRow.source}` : ''}</button
+									>
+								{:else if episodeRow.state === 'guess'}
+									<span class="disc-review-widget-attention">Episodes placed, a guess</span><span
+										class="disc-review-widget-muted">,</span
+									>
+									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
+										>Review</button
 									>
 								{:else if episodeRow.state === 'attention'}
 									<span class="disc-review-widget-attention">Episodes need attention</span

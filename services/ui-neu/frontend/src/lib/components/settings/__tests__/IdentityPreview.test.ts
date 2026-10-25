@@ -50,11 +50,13 @@ describe('IdentityPreview', () => {
 		expect(screen.queryByTestId('identity-preview-tv')).not.toBeInTheDocument();
 	});
 
-	it('an empty list shows No sources on in place of the pills; a switch off reads Waits for review', () => {
-		render('bluray', { movie_sources: [], episode_auto_apply: false });
+	it('an empty list shows No sources on in place of the pills; a switch off reads per kind', () => {
+		render('bluray', { movie_sources: [], movie_auto_apply: false, episode_auto_apply: false });
 		const movie = screen.getByTestId('identity-preview-movie');
 		expect(pills(movie)).toEqual([]);
 		expect(movie).toHaveTextContent('No sources on');
-		expect(screen.getByTestId('identity-preview-tv')).toHaveTextContent('Waits for review');
+		expect(movie).toHaveTextContent('Waits for review');
+		// A TV match is never held back: off means every match is placed as a guess.
+		expect(screen.getByTestId('identity-preview-tv')).toHaveTextContent('Places every match as a guess');
 	});
 });
