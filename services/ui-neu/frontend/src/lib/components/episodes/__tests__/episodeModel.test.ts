@@ -9,6 +9,7 @@ import {
 	holdReasons,
 	seasonAlternatives,
 	heldSeason,
+	holdHeadline,
 	pickerOptions
 } from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
@@ -271,5 +272,45 @@ describe('pickerOptions', () => {
 			'trailer',
 			'other'
 		]);
+	});
+});
+
+describe('placedCount', () => {
+	const row = (code: string, kind: 'auto' | 'suggestion' | 'you' | 'none') =>
+		({ code, origin: { kind, source: kind === 'none' ? null : 'episodes_tmdb' } }) as unknown as ReturnType<
+			typeof buildRows
+		>[number];
+
+	it('counts applied placements and extras, not a held suggestion', () => {
+		const rows = [
+			row('S01E01', 'auto'),
+			row('S01E02', 'you'),
+			row('Extra', 'none'),
+			row('S01E04', 'suggestion'),
+			row('Not placed', 'none')
+		];
+		expect(placedCount(rows)).toBe(3);
+	});
+});
+
+describe('holdHeadline', () => {
+	const held = (codes: string[]): IdentityView => ({
+		sources: { episodes_tmdb: { status: 'ok', suggestion: true, extra: { hold_reasons: codes } } },
+		pin: {},
+		tracks: []
+	});
+
+	it('names the season and the strongest reason, keeping the rest', () => {
+		expect(holdHeadline(held(['near_tie', 'nominal_runtimes']), 'episodes_tmdb', 3)).toEqual({
+			line: 'Season 3 is a guess: another season fits about as well.',
+			more: ['The source lists rounded runtimes, not real ones.']
+		});
+	});
+
+	it('falls back to the match when the season is unknown, and to a bare line with no reason', () => {
+		expect(holdHeadline(held(['ambiguous']), 'episodes_tmdb', null).line).toBe(
+			'This match is a guess: the titles fit equally well one episode earlier or later.'
+		);
+		expect(holdHeadline(held([]), 'episodes_tmdb', 0)).toEqual({ line: 'Specials is a guess.', more: [] });
 	});
 });

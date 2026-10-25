@@ -9,8 +9,14 @@
 		job: JobView;
 		onrefresh?: () => void;
 		onsaved?: (changed: { season: boolean; disc: boolean }) => void;
+		/** A field to put the cursor in when the form opens (the card's "Season not set" link). */
+		focusField?: 'season' | null;
 	}
-	let { job, onrefresh, onsaved }: Props = $props();
+	let { job, onrefresh, onsaved, focusField = null }: Props = $props();
+	let seasonInput = $state<HTMLInputElement | undefined>(undefined);
+	$effect(() => {
+		if (focusField === 'season') seasonInput?.focus();
+	});
 
 	let resolvable = $derived(job.actions.can_resolve);
 
@@ -122,6 +128,7 @@
 		<label class="field w-28">
 			<span class="field-label job-info-form-small-label">Season</span>
 			<input
+				bind:this={seasonInput}
 				aria-label="Season"
 				type="number"
 				bind:value={season}

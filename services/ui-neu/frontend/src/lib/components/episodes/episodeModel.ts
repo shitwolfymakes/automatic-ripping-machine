@@ -147,7 +147,7 @@ export function buildRows(tracks: TrackView[], identity: IdentityView, preview: 
 		return {
 			trackId: track.id,
 			ref: track.source_ref,
-			length: formatLength(track.duration_seconds),
+			length: formatLength(track.duration_seconds ?? track.expected_duration_seconds),
 			code: current,
 			name,
 			origin: o,
@@ -156,7 +156,7 @@ export function buildRows(tracks: TrackView[], identity: IdentityView, preview: 
 			changed: proposed !== null && proposed.code !== current,
 			handSet: o.kind === 'you',
 			season: t?.season ?? track.season ?? null,
-			seconds: track.duration_seconds ?? null
+			seconds: track.duration_seconds ?? track.expected_duration_seconds ?? null
 		};
 	});
 }
@@ -191,8 +191,11 @@ export function pickerOptions(
 	return [...items.map(({ value, label }) => ({ value, label })), ...ROLE_OPTIONS];
 }
 
+/** Rows with an applied placement (an episode or a non-episode role). A held
+ * suggestion's proposed code is not a placement, the same rule the Home card's
+ * Episodes row uses. */
 export function placedCount(rows: EpisodeRow[]): number {
-	return rows.filter((r) => r.code !== 'Not placed').length;
+	return rows.filter((r) => r.code !== 'Not placed' && r.origin.kind !== 'suggestion').length;
 }
 
 /** Why a held (suggestion) result was not applied, by the backend's
@@ -218,6 +221,22 @@ export function holdReasons(identity: IdentityView, source: string | null): stri
 	const codes = source ? identity.sources?.[source]?.extra?.hold_reasons : null;
 	if (!Array.isArray(codes)) return [];
 	return codes.map((c) => HOLD_REASON_TEXT[String(c)]).filter((t): t is string => !!t);
+}
+
+/** The one-line reading of a held result: the season the source guessed and
+ * its strongest reason, with the other reasons kept for a disclosure. */
+export function holdHeadline(
+	identity: IdentityView,
+	source: string | null,
+	season: number | null
+): { line: string; more: string[] } {
+	const reasons = holdReasons(identity, source);
+	const subject = season == null ? 'This match' : season === 0 ? 'Specials' : `Season ${season}`;
+	const [first, ...more] = reasons;
+	const line = first
+		? `${subject} is a guess: ${first.charAt(0).toLowerCase()}${first.slice(1)}`
+		: `${subject} is a guess.`;
+	return { line, more };
 }
 
 /** The other seasons the source's scan found a fit in, best first. Each

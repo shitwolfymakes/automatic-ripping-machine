@@ -28,7 +28,7 @@
 		activeSource,
 		failedSources,
 		heldSeason,
-		holdReasons,
+		holdHeadline,
 		seasonAlternatives,
 		pickerOptions,
 		ROLE_OPTIONS,
@@ -46,14 +46,17 @@
 		tracks: TrackView[];
 		matching?: boolean;
 		onsearchseries?: () => void;
+		/** Tracks or the match changed here: the owner reloads what it shows of them (the card's tracks table). */
+		onchanged?: () => void;
 	}
-	let { job, tracks, matching = false, onsearchseries }: Props = $props();
-
+	let { job, tracks, matching = false, onsearchseries, onchanged }: Props = $props();
 	const STATUS_WORD: Record<string, string> = { ok: 'matched', miss: 'no match', skipped: 'skipped', error: 'failed' };
 
 	let identity = $state<IdentityView | null>(null);
 	let fileNames = $state(new Map<string, { name: string; path: string }>());
 	let othersOpen = $state(false);
+	// The (i) next to a held result's one-line reading: the other reasons.
+	let whyOpen = $state(false);
 	let loadError = $state<string | null>(null);
 	let loaded = $state(false);
 	let loadedFor: string | null = null;
@@ -122,6 +125,7 @@
 		loadError = null;
 		fileNames = new Map();
 		othersOpen = false;
+		whyOpen = false;
 		rerunOpen = false;
 		rerun = { ...NO_RERUN };
 		dropPreview();
@@ -203,28 +207,27 @@
 		return req;
 	}
 
-	// Candidate seasons under the status line: the held result's own season
-	// first (one click confirms it), then the other seasons the scan fit.
-	const ownSeason = $derived(
-		identity && canAct && view === 'suggestion' ? heldSeason(identity, source, rows.length) : null
-	);
-	const altSeasons = $derived(
-		identity && canAct
+	// The held result's season and the other seasons the scan fit, shown as
+	// facts under the status line; Fix match opens the re-run form on the held
+	// season so the operator picks from there.
+	const ownSeason = $derived(identity && view === 'suggestion' ? heldSeason(identity, source, rows.length) : null);
+	const altSeasons = $derived<SeasonCandidate[]>(
+		identity && view === 'suggestion'
 			? seasonAlternatives(identity, source, rows.length).filter((a) => a.season !== ownSeason?.season)
 			: []
 	);
-	const candidates = $derived<SeasonCandidate[]>(ownSeason ? [ownSeason, ...altSeasons] : altSeasons);
 	const seasonName = (n: number) => (n === 0 ? 'Specials' : `Season ${n}`);
-
-	// Preview one candidate season in the re-run form, so its Apply is at hand.
-	function tryCandidate(season: number) {
-		const src = pickerSource ?? rerun.source;
-		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
+	const fitText = (c: SeasonCandidate) => `${seasonName(c.season)} (${c.matches} of ${c.total} titles)`;
+	const alsoFits = $derived(altSeasons.map(fitText).join(', '));
+	const held = $derived(
+		identity && view === 'suggestion' ? holdHeadline(identity, source, ownSeason?.season ?? null) : null
+	);
+	function fixMatch() {
+		const season = ownSeason?.season ?? altSeasons[0]?.season ?? job.season ?? null;
+		rerun = { source: pickerSource ?? rerun.source, season, disc: job.disc_number ?? null, tolerance: null };
 		rerunOpen = true;
 		dropPreview();
-		return run({ source: src, season, disc_number: job.disc_number ?? undefined, apply: false });
 	}
-
 	async function run(req: MatchRequest) {
 		busy = true;
 		actionError = null;
@@ -241,7 +244,10 @@
 			if (failed) {
 				// An apply pins its source even when that source failed: reload so
 				// the pinned state shows, then report the failure.
-				if (req.apply) await reload();
+				if (req.apply) {
+					await reload();
+					onchanged?.();
+				}
 				if (stale()) return;
 				throw new Error(failed.detail ?? 'error');
 			}
@@ -249,6 +255,7 @@
 				dropPreview();
 				rerunOpen = false;
 				await reload();
+				onchanged?.();
 			} else {
 				preview = out;
 				previewSource = req.source ?? null;
@@ -388,6 +395,7 @@
 			return false;
 		}
 		await reload();
+		onchanged?.();
 		return true;
 	}
 
@@ -458,6 +466,7 @@
 			if (job.id !== jobId) return;
 			identity = next;
 			unpinAsk = false;
+			onchanged?.();
 		} catch (e) {
 			if (job.id === jobId) unpinError = e instanceof Error ? e.message : 'Could not unpin';
 		} finally {
@@ -526,20 +535,23 @@
 						aria-expanded={othersOpen}
 						onclick={() => (othersOpen = !othersOpen)}
 					>
-						Other sources <Glyph name="chevron-down" />
+						View sources <Glyph name="chevron-down" />
 					</button>
 				{/if}
 			</span>
 		</div>
 
-		{#if candidates.length > 0 && !loading && !loadError}
-			<div class="episode-panel-seasons">
-				{#each candidates as c, i (c.season)}
-					{#if i === (ownSeason ? 1 : 0)}<span class="episode-panel-text">Also fits:</span>{/if}
-					<button type="button" class="btn btn-sm" disabled={busy} onclick={() => tryCandidate(c.season)}>
-						{seasonName(c.season)} ({c.matches} of {c.total} titles)
-					</button>
-				{/each}
+		{#if (ownSeason || altSeasons.length > 0) && !loading && !loadError}
+			<div class="episode-panel-seasons" data-testid="season-fit">
+				{#if ownSeason}
+					<span class="episode-panel-fit"
+						>{seasonName(ownSeason.season)}, {ownSeason.matches} of {ownSeason.total} titles</span
+					>
+				{/if}
+				{#if alsoFits}<span class="episode-panel-text">Also fits {alsoFits}</span>{/if}
+				{#if canAct}
+					<button type="button" class="btn btn-sm" disabled={busy} onclick={fixMatch}>Fix match</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -576,18 +588,31 @@
 					<a href="/settings#Identification/episode_sources">Settings › Identification › Identity</a>.
 				</p>
 			</div>
-		{:else if view === 'suggestion'}
+		{:else if view === 'suggestion' && held}
 			<div class="alert alert-warning">
-				<p class="alert-title">{sourceLabel}'s best match is too uncertain to apply on its own</p>
-				<p class="alert-body">The placement below is a suggestion. Nothing is applied until you accept it.</p>
-				{#each holdReasons(identity ?? {}, source) as reason (reason)}
-					<p class="alert-body">{reason}</p>
-				{/each}
-				<p class="alert-body">Set the season or disc number in Info, or accept the suggestion.</p>
+				<p class="alert-title episode-panel-hold-line">
+					<span>{held.line}</span>
+					{#if held.more.length > 0}
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm episode-panel-why"
+							aria-label="Why this is a guess"
+							aria-expanded={whyOpen}
+							onclick={() => (whyOpen = !whyOpen)}><Glyph name="info" /></button
+						>
+					{/if}
+				</p>
+				{#if whyOpen}
+					<ul class="episode-panel-why-list">
+						{#each held.more as reason (reason)}
+							<li>{reason}</li>
+						{/each}
+					</ul>
+				{/if}
 				{#if canAct}
 					<div class="episode-panel-banner-actions">
 						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
-							{accepting ? 'Accepting...' : 'Accept suggestion'}
+							{accepting ? 'Accepting...' : `Accept and pin ${sourceLabel}`}
 						</button>
 					</div>
 				{/if}
@@ -715,6 +740,24 @@
 	.episode-panel-noseries-title {
 		font-weight: 600;
 		color: var(--color-text);
+	}
+	.episode-panel-fit {
+		font-size: 0.875rem;
+		font-weight: 600;
+	}
+	.episode-panel-hold-line {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.episode-panel-why {
+		min-height: 1.5rem;
+		padding: 0 0.25rem;
+		color: inherit;
+	}
+	.episode-panel-why-list {
+		margin: 0.25rem 0 0;
+		padding-left: 1.25rem;
 	}
 	.episode-panel-banner-actions {
 		display: flex;

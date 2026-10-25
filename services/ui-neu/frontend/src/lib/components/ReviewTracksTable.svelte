@@ -57,6 +57,11 @@
 		onrefresh?.();
 	}
 
+	// A title a source or the operator placed as something other than an episode.
+	const NON_EPISODE: Record<string, string> = { extra: 'Extra', trailer: 'Trailer', other: 'Other' };
+	function nonEpisode(row: { role: string | null; episodeNumber: number | null }): string | null {
+		return row.episodeNumber == null && row.role ? (NON_EPISODE[row.role] ?? null) : null;
+	}
 	function formatLength(secs: number | null | undefined): string {
 		if (!secs) return '--';
 		const h = Math.floor(secs / 3600);
@@ -116,7 +121,9 @@
 								</td>
 								{#if isVideo}
 									<td class="table-cell review-tracks-table-center">
-										{#if row.trackId}
+										{#if row.trackId && nonEpisode(row)}
+											<span class="chip chip-sm" data-testid="track-role">{nonEpisode(row)}</span>
+										{:else if row.trackId}
 											<input
 												type="text"
 												value={row.episodeNumber ?? ''}

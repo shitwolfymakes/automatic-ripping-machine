@@ -22,10 +22,23 @@ describe('review-rows mappers', () => {
 			title: 'Main',
 			year: 2001,
 			episodeNumber: 4,
+			role: null,
 			excluded: false
 		});
 	});
 
+	it('trackToRow falls back to the scan estimate before the rip and carries the role', () => {
+		const r = trackToRow({
+			id: 'trk_1',
+			index: 5,
+			duration_seconds: null,
+			expected_duration_seconds: 542,
+			role: 'extra',
+			source_ref: '5'
+		} as any);
+		expect(r.durationSeconds).toBe(542);
+		expect(r.role).toBe('extra');
+	});
 	it('trackToRow falls back to source_ref when output_path is empty', () => {
 		const r = trackToRow({
 			id: 't',
@@ -51,10 +64,10 @@ describe('review-rows mappers', () => {
 			title: null,
 			year: null,
 			episodeNumber: null,
+			role: null,
 			excluded: false
 		});
 	});
-
 	it('scanTitleToRow tolerates a missing source_file', () => {
 		const r = scanTitleToRow({ index: 0, duration_seconds: 10 } as any);
 		expect(r.sourceLabel).toBeNull();

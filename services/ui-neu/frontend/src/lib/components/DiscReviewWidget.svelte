@@ -73,6 +73,8 @@
 	let showTitleSearch = $state(false);
 	let showMusicSearch = $state(false);
 	let showEpisodes = $state(false);
+	// The Info field to put the cursor in when the card opens Info itself (the Season row's link).
+	let infoFocus = $state<'season' | null>(null);
 	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
@@ -151,9 +153,7 @@
 				? `${displayJob.year}-${end}`
 				: `${displayJob.year}`
 			: null;
-		const parts = isTv
-			? ['TV Series', years, jobMeta.season ? `Season ${Number(jobMeta.season)}` : isPostRip ? null : 'Season not set']
-			: ['Movie', years];
+		const parts = isTv ? ['TV Series', years] : ['Movie', years];
 		return parts.filter(Boolean).join(', ');
 	});
 	// A match without an IMDb id names the provider that made it; a hand-set title has none.
@@ -336,6 +336,7 @@
 
 	// One section open at a time.
 	function openSection(section: Section | null) {
+		if (section !== 'info') infoFocus = null;
 		showInfo = section === 'info';
 		showTitleSearch = section === 'title';
 		showMusicSearch = section === 'music';
@@ -349,6 +350,11 @@
 	function toggleSection(section: Section) {
 		if (section === 'title') titleInitialType = undefined;
 		openSection(isOpen(section) ? null : section);
+	}
+	// "Season not set" on the Season row: Info with the cursor in Season.
+	function openSeason() {
+		infoFocus = 'season';
+		openSection('info');
 	}
 
 	async function loadSessions() {
@@ -471,6 +477,18 @@
 										data-testid={missLine ? 'identify-miss-reason' : undefined}
 										>, {missLine ?? `pick a ${isTv ? 'show' : 'title'} with Search`}</span
 									>
+								{/if}
+							</dd>
+						</div>
+					{/if}
+					{#if isTv && (jobMeta.season || !isPostRip)}
+						<div class="disc-review-widget-row" data-testid="season-row">
+							<dt>Season</dt>
+							<dd>
+								{#if jobMeta.season}
+									<span>Season {Number(jobMeta.season)}</span>
+								{:else}
+									<button type="button" class="disc-review-widget-link" onclick={openSeason}>Season not set</button>
 								{/if}
 							</dd>
 						</div>
@@ -676,6 +694,7 @@
 					job={displayJob}
 					{tracks}
 					matching={matching.active}
+					onchanged={() => loadDetail()}
 					onsearchseries={() => {
 						openSection('title');
 						titleInitialType = 'tv';
@@ -693,6 +712,7 @@
 		{#if showInfo}
 			<JobInfoForm
 				{job}
+				focusField={infoFocus}
 				onsaved={(c) => {
 					if (isTv && (c.season || c.disc)) matching.start();
 				}}

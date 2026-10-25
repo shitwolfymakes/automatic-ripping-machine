@@ -472,6 +472,7 @@
 							{job}
 							{tracks}
 							matching={matching.active}
+							onchanged={() => loadJob()}
 							onsearchseries={() => {
 								titleInitialType = 'tv';
 								activePanel = 'title';

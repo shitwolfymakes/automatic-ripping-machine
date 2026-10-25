@@ -157,6 +157,15 @@ describe('DiscReviewWidget episode matching', () => {
 		expect(await screen.findByText(/Season not set/)).toBeTruthy();
 	});
 
+	it('"Season not set" opens Info with the cursor in the Season field', async () => {
+		renderCard();
+		await fireEvent.click(await screen.findByRole('button', { name: 'Season not set' }));
+		const season = screen.getByLabelText('Season');
+		expect(season).toBeInTheDocument();
+		await waitFor(() => expect(season).toHaveFocus());
+		expect(screen.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-pressed', 'true');
+	});
+
 	it('does not say it for a ripped job or when a season is known', async () => {
 		renderCard({ ...TV, status: 'ripped' });
 		await episodesButton();

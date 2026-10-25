@@ -392,7 +392,10 @@ describe('DiscReviewWidget', () => {
 			const show = screen.getByTestId('match-row');
 			expect(show).toHaveTextContent('Show');
 			expect(within(show).getByText('tt0071003')).toHaveAttribute('href', 'https://www.imdb.com/title/tt0071003');
-			expect(show).toHaveTextContent(', TV Series, 1974-1975, Season 2');
+			expect(show).toHaveTextContent(', TV Series, 1974-1975');
+			expect(show).not.toHaveTextContent('Season 2');
+			// The season has its own row.
+			expect(screen.getByTestId('season-row')).toHaveTextContent('Season 2');
 			// The TYPE toggle replaces the old "Series" chip.
 			expect(screen.queryByText('Series')).not.toBeInTheDocument();
 		});
