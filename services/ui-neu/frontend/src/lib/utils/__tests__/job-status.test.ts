@@ -327,6 +327,17 @@ describe('episodeStatus', () => {
 		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.source).toBe('TVDB');
 		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.source).toBe('TMDb');
 	});
+	it('every title placed from a held result is a guess, not matched', () => {
+		const c = { episodes_tmdb: { status: 'ok' } };
+		expect(episodeStatus(tv({ episodes_unsure: true }, c), [ep(1), ep(2)])).toEqual({
+			state: 'guess',
+			source: 'TMDb',
+			total: 2,
+			unmatched: 0
+		});
+		// A guess with unplaced titles is attention first.
+		expect(episodeStatus(tv({ episodes_unsure: true }, c), [ep(1), ep(null)])?.state).toBe('attention');
+	});
 	it('an ok claim with unplaced titles needs attention, counting only selected video titles', () => {
 		const tracks = [ep(1), ep(null), ep(null, { excluded: true }), ep(null, { kind: 'audio_track' })];
 		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }), tracks)).toEqual({

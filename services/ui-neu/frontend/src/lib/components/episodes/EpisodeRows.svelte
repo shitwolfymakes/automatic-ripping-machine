@@ -3,6 +3,7 @@
 	// desktop, stacked cards below 640px. Presentational only - the panel owns
 	// the data and the actions.
 	import { SOURCE_LABEL, type EpisodeRow } from './episodeModel';
+	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface FileName {
 		name: string;
@@ -15,10 +16,17 @@
 		phone?: boolean;
 		/** Label of the source being previewed; null when no preview is shown. */
 		proposedLabel?: string | null;
-		/** Set-by-hand choices; null hides the pickers and Revert (guest, matching, preview). */
-		options?: { value: string; label: string }[] | null;
+		/** A row's set-by-hand choices; absent hides the pickers and Revert (guest, matching, preview). */
+		optionsFor?: ((row: EpisodeRow) => { value: string; label: string }[] | null) | null;
+		/** The source's regular seasons for the per-row season select; null when they could not load. */
+		seasons?: number[] | null;
+		/** The job's season, shown for a row with none of its own; null when unknown. */
+		panelSeason?: number | null;
+		onseason?: (trackId: string, season: number) => void;
 		onpick?: (trackId: string, value: string) => void;
 		onrevert?: (trackId: string) => void;
+		/** Include or leave out a track; absent shows the state as text. */
+		onexclude?: (trackId: string, excluded: boolean) => void;
 	}
 	let {
 		rows,
@@ -26,27 +34,40 @@
 		matching = false,
 		phone = false,
 		proposedLabel = null,
-		options = null,
+		optionsFor = null,
+		seasons = null,
+		panelSeason = null,
+		onseason,
 		onpick,
-		onrevert
+		onrevert,
+		onexclude
 	}: Props = $props();
 
+	// The picker is a value select: it shows the row's placement and keeps
+	// what was picked (the save reloads the rows, which confirms it).
 	function pick(trackId: string, e: Event & { currentTarget: HTMLSelectElement }) {
 		const value = e.currentTarget.value;
-		e.currentTarget.value = '';
 		if (value) onpick?.(trackId, value);
 	}
+	// A placement the current list does not offer (another season's episode)
+	// still shows as the selected option instead of falling back to "Not placed".
+	function current(row: EpisodeRow, options: { value: string }[] | null): { value: string; label: string } | null {
+		if (!row.pickValue || options?.some((o) => o.value === row.pickValue)) return null;
+		return { value: row.pickValue, label: [row.code, row.name].filter(Boolean).join(' ') };
+	}
 
-	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
+	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
+
+	const ORIGIN_CHIP = { auto: 'chip-info', guess: 'chip-warning', you: '', none: '' } as const;
 
 	function originLabel(row: EpisodeRow): string {
 		const label = SOURCE_LABEL[row.origin.source ?? ''] ?? row.origin.source ?? '';
-		if (row.origin.kind === 'auto') return `Auto · ${label}`;
-		if (row.origin.kind === 'suggestion') return `Suggestion · ${label}`;
+		if (row.origin.kind === 'auto') return `Auto, ${label}`;
+		if (row.origin.kind === 'guess') return `Guess, ${label}`;
 		if (row.origin.kind === 'you') return 'Set by you';
-		return '—';
+		return '-';
 	}
-	const conf = (c: number | null) => (c == null ? '—' : c.toFixed(2));
+	const conf = (c: number | null) => (c == null ? '-' : c.toFixed(2));
 </script>
 
 {#snippet placement(row: EpisodeRow)}
@@ -75,15 +96,26 @@
 {/snippet}
 
 {#snippet byHand(row: EpisodeRow)}
-	{#if options}
+	{#if optionsFor}
+		{@const options = optionsFor(row)}
+		{@const extra = current(row, options)}
 		<div class="episode-rows-hand">
+			<SeasonSelect
+				class="episode-rows-season"
+				ariaLabel="Season for {row.ref}"
+				value={seasonOf(row)}
+				{seasons}
+				onchange={(v) => typeof v === 'number' && onseason?.(row.trackId, v)}
+			/>
 			<select
 				class="field-control episode-rows-select"
 				aria-label="Set placement for {row.ref}"
+				value={row.pickValue}
 				onchange={(e) => pick(row.trackId, e)}
 			>
-				<option value="">Change…</option>
-				{#each options as o (o.value)}
+				<option value="">Not placed</option>
+				{#if extra}<option value={extra.value}>{extra.label}</option>{/if}
+				{#each options ?? [] as o (o.value)}
 					<option value={o.value}>{o.label}</option>
 				{/each}
 			</select>
@@ -96,9 +128,23 @@
 	{/if}
 {/snippet}
 
+{#snippet include(row: EpisodeRow)}
+	{#if onexclude}
+		<input
+			type="checkbox"
+			aria-label="Include {row.ref}"
+			checked={!row.excluded}
+			onchange={(e) => onexclude?.(row.trackId, !e.currentTarget.checked)}
+			title="Include this track in transcode output (the disc still rips in full)"
+		/>
+	{:else}
+		<span class="episode-rows-muted">{row.excluded ? 'Excluded' : 'Included'}</span>
+	{/if}
+{/snippet}
+
 {#snippet origin(row: EpisodeRow)}
 	{#if matching || row.origin.kind === 'none'}
-		<span class="episode-rows-muted">—</span>
+		<span class="episode-rows-muted">-</span>
 	{:else}
 		<span
 			class="chip chip-sm {ORIGIN_CHIP[row.origin.kind]}"
@@ -114,6 +160,7 @@
 				<div class="episode-rows-card-head">
 					<span class="episode-rows-ref">{row.ref}</span>
 					<span class="episode-rows-muted tabular-nums">{row.length}</span>
+					<span class="episode-rows-card-include">{@render include(row)}</span>
 					<span class="episode-rows-card-origin">{@render origin(row)}</span>
 				</div>
 				<div class="episode-rows-placement">{@render placement(row)}</div>
@@ -131,11 +178,12 @@
 				<tr>
 					<th class="table-header">Track</th>
 					<th class="table-header">Length</th>
+					<th class="table-header">Include</th>
 					<th class="table-header">Placement</th>
-					{#if proposedLabel}<th class="table-header">Proposed · {proposedLabel}</th>{/if}
+					{#if proposedLabel}<th class="table-header">Proposed, {proposedLabel}</th>{/if}
 					<th class="table-header">Origin</th>
 					<th class="table-header table-right">Conf.</th>
-					{#if options}<th class="table-header">Set by hand</th>{/if}
+					{#if optionsFor}<th class="table-header">Set by hand</th>{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -143,6 +191,7 @@
 					<tr class="table-row">
 						<td class="table-cell episode-rows-ref">{row.ref}</td>
 						<td class="table-cell tabular-nums">{row.length}</td>
+						<td class="table-cell">{@render include(row)}</td>
 						<td class="table-cell"><div class="episode-rows-placement">{@render placement(row)}</div></td>
 						{#if proposedLabel}
 							<td class="table-cell" data-changed={row.changed}>
@@ -151,13 +200,13 @@
 								{:else if row.proposed}
 									<span class="episode-rows-muted">Same</span>
 								{:else}
-									<span class="episode-rows-muted">—</span>
+									<span class="episode-rows-muted">-</span>
 								{/if}
 							</td>
 						{/if}
 						<td class="table-cell">{@render origin(row)}</td>
-						<td class="table-cell table-right tabular-nums">{matching ? '—' : conf(row.confidence)}</td>
-						{#if options}<td class="table-cell">{@render byHand(row)}</td>{/if}
+						<td class="table-cell table-right tabular-nums">{matching ? '-' : conf(row.confidence)}</td>
+						{#if optionsFor}<td class="table-cell">{@render byHand(row)}</td>{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -221,10 +270,21 @@
 		min-width: 0;
 		max-width: 16rem;
 	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
+	.episode-rows-hand :global(.episode-rows-season) {
+		min-width: 0;
+		max-width: 8rem;
+	}
 	.episode-rows-card .episode-rows-hand {
 		flex-wrap: wrap;
 	}
 	.episode-rows-card .episode-rows-select {
+		flex: 1 1 100%;
+		max-width: none;
+		min-height: 2.75rem;
+	}
+	/* :global: forwarded through SeasonSelect's class prop onto its own select */
+	.episode-rows-card :global(.episode-rows-season) {
 		flex: 1 1 100%;
 		max-width: none;
 		min-height: 2.75rem;
@@ -258,5 +318,9 @@
 	}
 	.episode-rows-card-origin {
 		margin-left: auto;
+	}
+	.episode-rows-card-include {
+		display: inline-flex;
+		align-items: center;
 	}
 </style>

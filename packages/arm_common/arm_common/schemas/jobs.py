@@ -238,6 +238,8 @@ class JobView(BaseModel):
     parked_session_ids: list[str] = []
     disc_number: int | None = None
     disc_total: int | None = None
+    # {attribute: source_id} for resolver-managed fields (display-only).
+    identity_provenance: dict[str, str] | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
@@ -282,6 +284,16 @@ class JobView(BaseModel):
         if isinstance(claims, IdentityClaims):
             return any(src.inputs.get("show_id") for src in claims.sources.values())
         return False
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def episodes_unsure(self) -> bool:
+        """The episode placement on the tracks came from a held result (a
+        guess): the card shows it amber and the review countdown holds."""
+        if self.media_type != MediaType.TV:
+            return False
+        claims = self.metadata_json.identity_claims
+        return isinstance(claims, IdentityClaims) and claims.unsure
 
 
 class HeldJobView(BaseModel):

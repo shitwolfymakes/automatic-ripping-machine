@@ -2418,6 +2418,64 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Clear Episode Match",
+        "description": "Clear episodes: forget every episode source's result and the operator's\nsource choice, then re-resolve so the placements come off the tracks.\nHand-placed tracks keep their manual claims; show ids stay for the next\nFix match. An in-flight background run is invalidated first so its\noutcome cannot land after the clear, and the startup sweep leaves a\ncleared job alone. Emits `job.identity_updated` and a `track.updated`\nper track the resolver changed.",
+        "operationId": "clear_episode_match_api_jobs__job_id__identity_match_delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/jobs/{job_id}/identity/pin": {
@@ -2545,6 +2603,79 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EpisodeListView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/identity/seasons": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "Browse Seasons",
+        "operationId": "browse_seasons_api_jobs__job_id__identity_seasons_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "tvmaze",
+                "tvdb"
+              ],
+              "type": "string",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeasonListView"
                 }
               }
             }
@@ -13460,6 +13591,16 @@
             },
             "type": "object",
             "title": "Pin"
+          },
+          "unsure": {
+            "type": "boolean",
+            "title": "Unsure",
+            "default": false
+          },
+          "episodes_cleared": {
+            "type": "boolean",
+            "title": "Episodes Cleared",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -14796,6 +14937,20 @@
             ],
             "title": "Disc Total"
           },
+          "identity_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Provenance"
+          },
           "poster_url": {
             "anyOf": [
               {
@@ -14877,6 +15032,12 @@
             "title": "Has Series",
             "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved (spec 3.4). False means the\nMatch Episodes tab asks for the series first.",
             "readOnly": true
+          },
+          "episodes_unsure": {
+            "type": "boolean",
+            "title": "Episodes Unsure",
+            "description": "The episode placement on the tracks came from a held result (a\nguess): the card shows it amber and the review countdown holds.",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -14891,7 +15052,8 @@
           "resumed_from_crash",
           "actions",
           "looks_episodic",
-          "has_series"
+          "has_series",
+          "episodes_unsure"
         ],
         "title": "JobView"
       },
@@ -15383,6 +15545,11 @@
           "apply": {
             "type": "boolean",
             "title": "Apply",
+            "default": false
+          },
+          "scan_seasons": {
+            "type": "boolean",
+            "title": "Scan Seasons",
             "default": false
           }
         },
@@ -17800,6 +17967,33 @@
         ],
         "title": "SdfStatusReport",
         "description": "Body of POST /api/ripper/sdf-status \u2014 the ripper's MakeMKV SDF fetch\noutcome. Global (not per-drive); the backend writes it to the Config\nsingleton. `age_days` is present on fresh_kept; None on all other states."
+      },
+      "SeasonListView": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "show_id": {
+            "type": "string",
+            "title": "Show Id"
+          },
+          "seasons": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Seasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "show_id",
+          "seasons"
+        ],
+        "title": "SeasonListView",
+        "description": "`GET /api/jobs/{id}/identity/seasons` response."
       },
       "ServiceCatalog": {
         "properties": {

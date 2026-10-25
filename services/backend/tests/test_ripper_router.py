@@ -1493,6 +1493,26 @@ def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     assert r.json()["paused"] is True
 
 
+def test_held_job_paused_flag_from_a_guessed_episode_placement() -> None:
+    """A guessed placement holds the countdown; the hold must survive a ripper
+    restart the same way a per-job pause does."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job(
+        "job_01JZXR7K3M5Q8N4VWA0000H09",
+        status=JobStatus.AWAITING_REVIEW,
+        meta={"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}},
+    )
+    held.media_type = MediaType.TV
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+    assert r.json()["job"]["episodes_unsure"] is True
+
+
 def test_held_job_paused_flag_from_a_suggestion_hold() -> None:
     """A held identity suggestion waits for the operator with no pause flag set."""
     db = FakeSession()
@@ -1995,6 +2015,33 @@ def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
     assert new_jobs == []  # no duplicate Job
     new_fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
     assert new_fps == []  # no duplicate fingerprint rows
+
+
+def test_identify_on_a_virtual_drive_reuses_its_parked_job_without_fingerprints() -> None:
+    """A ripper started again for a rip parked at a review gate re-identifies
+    the ISO; ISO scans carry no fingerprints, so the parked job is matched by
+    the virtual drive itself instead of a second job appearing on it."""
+    db = FakeSession()
+    drive = _drive()
+    drive.kind = DriveKind.VIRTUAL
+    db.rows["drives"] = [drive]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_parked", status=JobStatus.AWAITING_REVIEW, disc_type="dvd")
+    existing.title = "Kolchak: The Night Stalker"
+    db.rows["jobs"] = [existing]
+    dispatcher = _Dispatcher(result=None)
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = []
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_parked"
+    assert [r for r in db.added if type(r).__name__ == "Job"] == []
 
 
 def test_identify_terminal_match_mints_fresh() -> None:

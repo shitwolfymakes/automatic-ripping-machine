@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
-	import { abandonJob, deleteJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+	import {
+		abandonJob,
+		deleteJob,
+		fetchJob,
+		fetchNamingPreview,
+		startWaitingJob,
+		pauseWaitingJob,
+		resolveJob
+	} from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine, readJobMetadata } from '$lib/utils/job-fields';
@@ -68,15 +76,20 @@
 	let countdownPaused = $derived(paused || !!job?.manual_pause);
 
 	let data = $state<JobDetailView | null>(null);
+	// The generated file name per track (the applied session's naming), for the
+	// Info table's Episode column; empty until a session names the tracks.
+	let fileNames = $state(new Map<string, string>());
 	let initialLoading = $state(true);
 	let showInfo = $state(false);
 	let showTitleSearch = $state(false);
 	let showMusicSearch = $state(false);
 	let showEpisodes = $state(false);
+	// The Info field to put the cursor in when the card opens Info itself (the Season row's link).
+	let infoFocus = $state<'season' | null>(null);
 	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
-	// "Matching episodes…" while the Backend re-matches after a series pick or a
+	// "Matching episodes..." while the Backend re-matches after a series pick or a
 	// flip to TV; job.identity_updated for this job (or a timeout) ends it.
 	const matching = new EpisodeMatching();
 	let showApplySession = $state(false);
@@ -117,6 +130,8 @@
 	let displayJob = $derived((data?.job ?? job) as JobView);
 	// Episode matching is for TV video discs only, as on the job page.
 	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
+	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
+	let countdownHeld = $derived(isTv && !!displayJob.episodes_unsure ? 'Held: episodes are a guess' : null);
 	// An ISO rip's drive_id is a still-enrolled virtual drive; once the rip
 	// completes that drive retires and drops out of isoSources, matching the
 	// card leaving the dashboard.
@@ -135,26 +150,24 @@
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
 	let episodeRow = $derived(episodeStatus(displayJob, data ? tracks : null, matching.active));
-	// "TMDb · 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
+	// "TMDb, 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
 	let matchingDetail = $derived.by(() => {
 		if (!episodeRow) return null;
 		const { source, total, unmatched } = episodeRow;
 		const counts = total && unmatched != null ? `${total - unmatched} of ${total} titles` : null;
-		return [source, counts].filter(Boolean).join(' · ') || null;
+		return [source, counts].filter(Boolean).join(', ') || null;
 	});
-	// The SHOW / MATCH row's trailing detail: "TV Series · 1974–1975 · Season 2" or "Movie · 1999".
+	// The SHOW / MATCH row's trailing detail: "TV Series, 1974-1975, Season 2" or "Movie, 1999".
 	let matchDetail = $derived.by(() => {
 		const facts = (displayJob.metadata_json?.identity as { facts?: { end_year?: number | null } } | undefined)?.facts;
 		const end = facts?.end_year;
 		const years = displayJob.year
 			? end && end !== displayJob.year
-				? `${displayJob.year}–${end}`
+				? `${displayJob.year}-${end}`
 				: `${displayJob.year}`
 			: null;
-		const parts = isTv
-			? ['TV Series', years, jobMeta.season ? `Season ${Number(jobMeta.season)}` : null]
-			: ['Movie', years];
-		return parts.filter(Boolean).join(' · ');
+		const parts = isTv ? ['TV Series', years] : ['Movie', years];
+		return parts.filter(Boolean).join(', ');
 	});
 	// A match without an IMDb id names the provider that made it; a hand-set title has none.
 	let showProvider = $derived(
@@ -163,7 +176,7 @@
 			return p && p !== 'manual' ? providerLabel(p) : null;
 		})()
 	);
-	// "Blu-ray · Disc 1/4 · 6 titles", leaving out the parts that are empty.
+	// "Blu-ray, Disc 1/4, 6 titles", leaving out the parts that are empty.
 	let discLine = $derived(
 		[
 			discTypeLabel(displayJob.disc_type),
@@ -173,7 +186,7 @@
 			jobMeta.titleCount ? `${jobMeta.titleCount} titles` : null
 		]
 			.filter(Boolean)
-			.join(' · ')
+			.join(', ')
 	);
 	// The source row names what the disc came from: a folder, an ISO, or a drive.
 	let sourceKind = $derived(
@@ -215,6 +228,13 @@
 			data = null;
 		} finally {
 			initialLoading = false;
+		}
+		try {
+			const preview = await fetchNamingPreview(job.id);
+			fileNames = new Map((preview.items ?? []).map((i) => [i.track_id, i.output_name]));
+		} catch {
+			// No session routed yet (409) or a nicety that failed: the table shows the episode instead.
+			fileNames = new Map();
 		}
 	}
 
@@ -336,6 +356,7 @@
 
 	// One section open at a time.
 	function openSection(section: Section | null) {
+		if (section !== 'info') infoFocus = null;
 		showInfo = section === 'info';
 		showTitleSearch = section === 'title';
 		showMusicSearch = section === 'music';
@@ -349,6 +370,11 @@
 	function toggleSection(section: Section) {
 		if (section === 'title') titleInitialType = undefined;
 		openSection(isOpen(section) ? null : section);
+	}
+	// "Season not set" on the Season row: Info with the cursor in Season.
+	function openSeason() {
+		infoFocus = 'season';
+		openSection('info');
 	}
 
 	async function loadSessions() {
@@ -409,7 +435,8 @@
 				<CountdownTimer
 					startTime={job.wait_start_time}
 					waitSeconds={manualWaitSeconds}
-					paused={countdownPaused}
+					paused={countdownPaused || !!countdownHeld}
+					held={countdownHeld}
 					inverted
 					onpause={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(true)}
 					onresume={!$isAdmin || paused || pauseBusy ? undefined : () => handlePauseToggle(false)}
@@ -461,15 +488,28 @@
 										rel="noopener noreferrer"
 										class="disc-review-widget-ext-id">{jobMeta.imdb_id}</a
 									>
-									{#if matchDetail}<span class="disc-review-widget-muted">· {matchDetail}</span>{/if}
+									{#if matchDetail}<span class="disc-review-widget-muted">, {matchDetail}</span>{/if}
 								{:else if isTv ? displayJob.has_series : !!displayJob.title?.trim() && !missLine}
 									<span>{showProvider ? `Matched on ${showProvider}` : 'Set by hand'}</span>
-									{#if matchDetail}<span class="disc-review-widget-muted">· {matchDetail}</span>{/if}
+									{#if matchDetail}<span class="disc-review-widget-muted">, {matchDetail}</span>{/if}
 								{:else}
-									<span class="disc-review-widget-needs">{isTv ? 'Needs show' : 'No match'}</span>
-									<span class="disc-review-widget-muted" data-testid={missLine ? 'identify-miss-reason' : undefined}
-										>· {missLine ?? `pick a ${isTv ? 'show' : 'title'} with Search`}</span
+									<span class="disc-review-widget-needs">{isTv ? 'Needs show' : 'No match'}</span><span
+										class="disc-review-widget-muted"
+										data-testid={missLine ? 'identify-miss-reason' : undefined}
+										>, {missLine ?? `pick a ${isTv ? 'show' : 'title'} with Search`}</span
 									>
+								{/if}
+							</dd>
+						</div>
+					{/if}
+					{#if isTv && (jobMeta.season || !isPostRip)}
+						<div class="disc-review-widget-row" data-testid="season-row">
+							<dt>Season</dt>
+							<dd>
+								{#if jobMeta.season}
+									<span>Season {Number(jobMeta.season)}</span>
+								{:else}
+									<button type="button" class="disc-review-widget-link" onclick={openSeason}>Season not set</button>
 								{/if}
 							</dd>
 						</div>
@@ -482,19 +522,23 @@
 									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
 										>Episodes matched{episodeRow.source ? ` from ${episodeRow.source}` : ''}</button
 									>
+								{:else if episodeRow.state === 'guess'}
+									<span class="disc-review-widget-attention">Episodes placed, a guess</span><span
+										class="disc-review-widget-muted">,</span
+									>
+									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
+										>Review</button
+									>
 								{:else if episodeRow.state === 'attention'}
-									<span class="disc-review-widget-attention">Episodes need attention</span>
-									{#if episodeRow.unmatched && episodeRow.total}
-										<span class="disc-review-widget-muted"
-											>· {episodeRow.unmatched} of {episodeRow.total} titles unmatched</span
-										>
-									{/if}
-									<span class="disc-review-widget-muted">·</span>
+									<span class="disc-review-widget-attention">Episodes need attention</span
+									>{#if episodeRow.unmatched && episodeRow.total}<span class="disc-review-widget-muted"
+											>, {episodeRow.unmatched} of {episodeRow.total} titles unmatched</span
+										>{/if}<span class="disc-review-widget-muted">,</span>
 									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
 										>Review</button
 									>
 								{:else if episodeRow.state === 'matching'}
-									<span class="disc-review-widget-matching">Matching episodes…</span>
+									<span class="disc-review-widget-matching">Matching episodes...</span>
 									{#if matchingDetail}<span class="disc-review-widget-muted">{matchingDetail}</span>{/if}
 								{:else}
 									<span class="disc-review-widget-muted">Waiting for show</span>
@@ -507,7 +551,7 @@
 							<dt>Match</dt>
 							<dd>
 								<span class="disc-review-widget-needs">No match</span>
-								<span class="disc-review-widget-muted" data-testid="identify-miss-reason">· {missLine}</span>
+								<span class="disc-review-widget-muted" data-testid="identify-miss-reason">, {missLine}</span>
 							</dd>
 						</div>
 					{/if}
@@ -678,6 +722,7 @@
 					job={displayJob}
 					{tracks}
 					matching={matching.active}
+					onchanged={() => loadDetail()}
 					onsearchseries={() => {
 						openSection('title');
 						titleInitialType = 'tv';
@@ -695,6 +740,10 @@
 		{#if showInfo}
 			<JobInfoForm
 				{job}
+				focusField={infoFocus}
+				onsaved={(c) => {
+					if (isTv && (c.season || c.disc)) matching.start();
+				}}
 				onrefresh={() => {
 					onrefresh?.();
 					loadDetail();
@@ -711,6 +760,7 @@
 						{scanTitles}
 						{isVideo}
 						{isMusic}
+						{fileNames}
 						onrefresh={() => {
 							onrefresh?.();
 							loadDetail();

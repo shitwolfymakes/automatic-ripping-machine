@@ -1,0 +1,708 @@
+{
+ "title": "All Creatures Great & Small",
+ "year": 2020,
+ "external_ids": {
+  "tmdb": "108255",
+  "imdb": "tt10590066",
+  "tvdb": "378982"
+ },
+ "tmdb": {
+  "number_of_seasons": 7,
+  "number_of_episodes": 48,
+  "episode_run_time": [
+   50
+  ],
+  "seasons": [
+   {
+    "season_number": 0,
+    "episode_count": 5,
+    "name": "Specials"
+   },
+   {
+    "season_number": 1,
+    "episode_count": 7,
+    "name": "Season 1"
+   },
+   {
+    "season_number": 2,
+    "episode_count": 7,
+    "name": "Season 2"
+   },
+   {
+    "season_number": 3,
+    "episode_count": 7,
+    "name": "Season 3"
+   },
+   {
+    "season_number": 4,
+    "episode_count": 7,
+    "name": "Season 4"
+   },
+   {
+    "season_number": 5,
+    "episode_count": 7,
+    "name": "Season 5"
+   },
+   {
+    "season_number": 6,
+    "episode_count": 7,
+    "name": "Season 6"
+   },
+   {
+    "season_number": 7,
+    "episode_count": 6,
+    "name": "Season 7"
+   }
+  ]
+ },
+ "releases": [
+  {
+   "slug": "season-5-blu-ray",
+   "title": "Season 5 [Blu-ray]",
+   "year": 2025,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "season-5-disc-1",
+     "name": "Season 5, Disc 1",
+     "format": "Blu-ray",
+     "content_hash": "1C76DE8A919F7BF7F5CEAE3CA1E17229",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00024.mpls",
+       "duration_s": 3125,
+       "size": 12395667456,
+       "item": {
+        "type": "Episode",
+        "title": "Uninvited Guests",
+        "season": 5,
+        "episode": 4
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00023.mpls",
+       "duration_s": 3124,
+       "size": 12392736768,
+       "item": {
+        "type": "Episode",
+        "title": "Homecoming",
+        "season": 5,
+        "episode": 3
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00022.mpls",
+       "duration_s": 2973,
+       "size": 11791466496,
+       "item": {
+        "type": "Episode",
+        "title": "Holding the Baby",
+        "season": 5,
+        "episode": 2
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00021.mpls",
+       "duration_s": 3125,
+       "size": 11991336960,
+       "item": {
+        "type": "Episode",
+        "title": "Homecoming",
+        "season": 5,
+        "episode": 1
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00000.mpls",
+       "duration_s": 11,
+       "size": 16177152,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00010.m2ts",
+       "duration_s": 60,
+       "size": 120195072,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00005.m2ts",
+       "duration_s": 60,
+       "size": 116213760,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00003.m2ts",
+       "duration_s": 51,
+       "size": 152150016,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00002.m2ts",
+       "duration_s": 10,
+       "size": 29595648,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00001.m2ts",
+       "duration_s": 1,
+       "size": 2623488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00000.m2ts",
+       "duration_s": 1,
+       "size": 270336,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "00011.m2ts",
+       "duration_s": 5,
+       "size": 14825472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "season-5-disc-2",
+     "name": "Season 5, Disc 2",
+     "format": "Blu-ray",
+     "content_hash": "2E544A0FBD572C30E2065D2A035AE1F3",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00023.mpls",
+       "duration_s": 3526,
+       "size": 16747413504,
+       "item": {
+        "type": "Episode",
+        "title": "All God's Creatures",
+        "season": 5,
+        "episode": 7
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00022.mpls",
+       "duration_s": 3124,
+       "size": 14840684544,
+       "item": {
+        "type": "Episode",
+        "title": "Glass Half Full",
+        "season": 5,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00021.mpls",
+       "duration_s": 3124,
+       "size": 14840752128,
+       "item": {
+        "type": "Episode",
+        "title": "Pair Bond",
+        "season": 5,
+        "episode": 5
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00000.mpls",
+       "duration_s": 11,
+       "size": 16177152,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00007.m2ts",
+       "duration_s": 60,
+       "size": 120446976,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00006.m2ts",
+       "duration_s": 1,
+       "size": 270336,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00005.m2ts",
+       "duration_s": 1,
+       "size": 2623488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00004.m2ts",
+       "duration_s": 60,
+       "size": 116213760,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00003.m2ts",
+       "duration_s": 5,
+       "size": 14825472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00001.m2ts",
+       "duration_s": 51,
+       "size": 152150016,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00000.m2ts",
+       "duration_s": 10,
+       "size": 29595648,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "slug": "season-6-blu-ray",
+   "title": "Season 6 [Blu-ray]",
+   "year": 2026,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "season-6-disc-1",
+     "name": "Season 6, Disc 1",
+     "format": "Blu-ray",
+     "content_hash": "8132CC2D2CF7D94F5AE56EBC27E2C73B",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00024.mpls",
+       "duration_s": 3037,
+       "size": 12049422336,
+       "item": {
+        "type": "Episode",
+        "title": "Jenny Wren",
+        "season": 6,
+        "episode": 4
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00023.mpls",
+       "duration_s": 3124,
+       "size": 12393099264,
+       "item": {
+        "type": "Episode",
+        "title": "Captain Farnon?",
+        "season": 6,
+        "episode": 3
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00022.mpls",
+       "duration_s": 3125,
+       "size": 12396349440,
+       "item": {
+        "type": "Episode",
+        "title": "Old Dog, New Tricks",
+        "season": 6,
+        "episode": 2
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00021.mpls",
+       "duration_s": 3124,
+       "size": 11986636800,
+       "item": {
+        "type": "Episode",
+        "title": "Gathering the Flock",
+        "season": 6,
+        "episode": 1
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00000.mpls",
+       "duration_s": 11,
+       "size": 16177152,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00011.m2ts",
+       "duration_s": 60,
+       "size": 118364160,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00006.m2ts",
+       "duration_s": 60,
+       "size": 116213760,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00005.m2ts",
+       "duration_s": 5,
+       "size": 14825472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00003.m2ts",
+       "duration_s": 51,
+       "size": 152150016,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00002.m2ts",
+       "duration_s": 10,
+       "size": 29595648,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00001.m2ts",
+       "duration_s": 1,
+       "size": 2623488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "00000.m2ts",
+       "duration_s": 1,
+       "size": 270336,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "season-6-disc-2",
+     "name": "Season 6, Disc 2",
+     "format": "Blu-ray",
+     "content_hash": "F543127F78BC35B65E3FDA73779D2DB1",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00023.mpls",
+       "duration_s": 3453,
+       "size": 16400529408,
+       "item": {
+        "type": "Episode",
+        "title": "Comfort and Joy",
+        "season": 6,
+        "episode": 7
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00022.mpls",
+       "duration_s": 3124,
+       "size": 14840045568,
+       "item": {
+        "type": "Episode",
+        "title": "Our Hearts Are Full",
+        "season": 6,
+        "episode": 6
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00021.mpls",
+       "duration_s": 3124,
+       "size": 14840580096,
+       "item": {
+        "type": "Episode",
+        "title": "Fixes",
+        "season": 6,
+        "episode": 5
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00000.mpls",
+       "duration_s": 11,
+       "size": 16177152,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00007.m2ts",
+       "duration_s": 60,
+       "size": 118308864,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00006.m2ts",
+       "duration_s": 60,
+       "size": 116213760,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00005.m2ts",
+       "duration_s": 5,
+       "size": 14825472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00003.m2ts",
+       "duration_s": 51,
+       "size": 152150016,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00002.m2ts",
+       "duration_s": 10,
+       "size": 29595648,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00001.m2ts",
+       "duration_s": 1,
+       "size": 2623488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00000.m2ts",
+       "duration_s": 1,
+       "size": 270336,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

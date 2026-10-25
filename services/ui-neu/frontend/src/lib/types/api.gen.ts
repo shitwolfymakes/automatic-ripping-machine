@@ -1960,6 +1960,14 @@ export type IdentityClaims = {
     pin?: {
         [key: string]: string;
     };
+    /**
+     * Unsure
+     */
+    unsure?: boolean;
+    /**
+     * Episodes Cleared
+     */
+    episodes_cleared?: boolean;
 };
 
 /**
@@ -2660,6 +2668,12 @@ export type JobView = {
      */
     disc_total?: number | null;
     /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
+    /**
      * Poster Url
      */
     poster_url?: string | null;
@@ -2698,6 +2712,13 @@ export type JobView = {
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
+    /**
+     * Episodes Unsure
+     *
+     * The episode placement on the tracks came from a held result (a
+     * guess): the card shows it amber and the review countdown holds.
+     */
+    readonly episodes_unsure: boolean;
 };
 
 /**
@@ -2998,6 +3019,10 @@ export type MatchRequest = {
      * Apply
      */
     apply?: boolean;
+    /**
+     * Scan Seasons
+     */
+    scan_seasons?: boolean;
 };
 
 /**
@@ -4322,6 +4347,26 @@ export type SdfStatusReport = {
      * Age Days
      */
     age_days?: number | null;
+};
+
+/**
+ * SeasonListView
+ *
+ * `GET /api/jobs/{id}/identity/seasons` response.
+ */
+export type SeasonListView = {
+    /**
+     * Source Id
+     */
+    source_id: string;
+    /**
+     * Show Id
+     */
+    show_id: string;
+    /**
+     * Seasons
+     */
+    seasons: Array<number>;
 };
 
 /**
@@ -5666,6 +5711,12 @@ export type JobViewWritable = {
      * Disc Total
      */
     disc_total?: number | null;
+    /**
+     * Identity Provenance
+     */
+    identity_provenance?: {
+        [key: string]: string;
+    } | null;
     /**
      * Poster Url
      */
@@ -7028,6 +7079,42 @@ export type GetIdentityApiJobsJobIdIdentityGetResponses = {
 
 export type GetIdentityApiJobsJobIdIdentityGetResponse = GetIdentityApiJobsJobIdIdentityGetResponses[keyof GetIdentityApiJobsJobIdIdentityGetResponses];
 
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/match';
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteError = ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors[keyof ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteErrors];
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityView;
+};
+
+export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponse = ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses[keyof ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponses];
+
 export type MatchIdentityApiJobsJobIdIdentityMatchPostData = {
     body: MatchRequest;
     headers?: {
@@ -7144,6 +7231,47 @@ export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses = {
 };
 
 export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponse = BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses[keyof BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponses];
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query: {
+        /**
+         * Source
+         */
+        source: 'tmdb' | 'tvmaze' | 'tvdb';
+    };
+    url: '/api/jobs/{job_id}/identity/seasons';
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetError = BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors[keyof BrowseSeasonsApiJobsJobIdIdentitySeasonsGetErrors];
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SeasonListView;
+};
+
+export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponse = BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses[keyof BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponses];
 
 export type ListDrivesApiDrivesGetData = {
     body?: never;

@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows, placedCount, formatLength, activeSource } from '../episodeModel';
+import {
+	failedSources,
+	panelState,
+	buildRows,
+	placedCount,
+	formatLength,
+	activeSource,
+	holdReasons,
+	seasonAlternatives,
+	heldSeason,
+	holdHeadline,
+	pickerOptions
+} from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
@@ -15,10 +27,11 @@ function identity(o: Partial<IdentityView> = {}, suggestion = false): IdentityVi
 		tracks: LENGTHS.map((_, i): TrackIdentityView => ({
 			track_id: `trk_${i}`,
 			source_ref: `t0${i}`,
+			// A held result is on the tracks like a clean one; only the source's flag differs.
 			role: i === 5 ? 'extra' : 'episode',
-			season: i === 5 || suggestion ? null : 1,
-			episode_number: i === 5 || suggestion ? null : i + 1,
-			episode_name: i === 5 || suggestion ? null : NAMES[i],
+			season: i === 5 ? null : 1,
+			episode_number: i === 5 ? null : i + 1,
+			episode_name: i === 5 ? null : NAMES[i],
 			identity_provenance: i === 5 ? {} : { episode_number: 'episodes_tmdb' },
 			proposals:
 				i === 5
@@ -34,17 +47,24 @@ describe('panelState', () => {
 		expect(panelState(job({ has_series: false }), identity(), false)).toBe('noseries');
 	});
 	it('matching wins over stored rows', () => expect(panelState(job(), identity(), true)).toBe('matching'));
-	it('applied / suggestion / pinned', () => {
+	it('applied / unsure; a pin is not a state', () => {
 		expect(panelState(job(), identity(), false)).toBe('applied');
-		expect(panelState(job(), identity({}, true), false)).toBe('suggestion');
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), false)).toBe('pinned');
+		// The resolver's flag on the job says a guess is applied, not the source's own suggestion flag.
+		expect(panelState(job(), identity({}, true), false)).toBe('applied');
+		expect(panelState(job({ episodes_unsure: true }), identity({}, true), false)).toBe('unsure');
+		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), false)).toBe('applied');
 	});
 	it('no match when every source missed', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'miss' }, episodes_tvdb: { status: 'skipped' } } });
 		expect(panelState(job(), id, false)).toBe('nomatch');
 	});
-	it('unavailable with no sources at all', () =>
-		expect(panelState(job(), identity({ sources: {} }), false)).toBe('unavailable'));
+	it('no sources at all is a plain no match (cleared, or not yet run); only not-configured sources are unavailable', () => {
+		expect(panelState(job(), identity({ sources: {} }), false)).toBe('nomatch');
+		const off = { status: 'skipped', detail: 'not configured' } as const;
+		expect(panelState(job(), identity({ sources: { episodes_tmdb: off, episodes_tvmaze: off } }), false)).toBe(
+			'unavailable'
+		);
+	});
 });
 
 describe('buildRows', () => {
@@ -60,10 +80,19 @@ describe('buildRows', () => {
 		});
 		expect(rows[5].origin.kind).toBe('none');
 		expect(placedCount(rows)).toBe(6);
+		// The picker's own value: the episode as pickerOptions values it, a role for an extra.
+		expect(rows[0].pickValue).toBe('s1e1');
+		expect(rows[5].pickValue).toBe('extra');
 	});
-	it('suggestion rows come from the proposals and say so', () => {
-		const rows = buildRows(tracks, identity({}, true), null);
-		expect(rows[0]).toMatchObject({ code: 'S01E01', origin: { kind: 'suggestion' }, confidence: 0.6 });
+	it('rows placed by a held source are a guess only while the job is unsure', () => {
+		const rows = buildRows(tracks, identity({}, true), null, true);
+		expect(rows[0]).toMatchObject({
+			code: 'S01E01',
+			origin: { kind: 'guess', source: 'episodes_tmdb' },
+			confidence: 0.6
+		});
+		// Resolved sure since (a clean result won): the same rows read as auto.
+		expect(buildRows(tracks, identity({}, true), null)[0].origin.kind).toBe('auto');
 	});
 	it('a hand-set row is "you"', () => {
 		const id = identity();
@@ -92,12 +121,26 @@ describe('buildRows', () => {
 		id.tracks![2].episode_number_end = 4;
 		expect(buildRows(tracks, id, null)[2].code).toBe('S01E03-E04');
 	});
+	it('a seasonless episode renders no season, never an assumed one', () => {
+		const id = identity();
+		id.tracks![2].season = null;
+		expect(buildRows(tracks, id, null)[2].code).toBe('S-E03');
+	});
+	it('carries the saved season and the length in seconds', () => {
+		const id = identity();
+		id.tracks![1].season = null;
+		const withSeason = tracks.map((t, i) => (i === 1 ? { ...t, season: 3 } : t));
+		const rows = buildRows(withSeason, id, null);
+		expect(rows[0]).toMatchObject({ season: 1, seconds: 3093 });
+		expect(rows[1].season).toBe(3);
+		expect(rows[5]).toMatchObject({ season: null, seconds: 542 });
+	});
 });
 
 it('formatLength', () => {
 	expect(formatLength(3093)).toBe('51:33');
 	expect(formatLength(542)).toBe('9:02');
-	expect(formatLength(null)).toBe('—');
+	expect(formatLength(null)).toBe('-');
 });
 it('activeSource maps a pin to its source id', () => {
 	expect(activeSource(identity({ pin: { episode: 'episodes_tvmaze' } }))).toBe('episodes_tvmaze');
@@ -135,10 +178,12 @@ describe('fix round 1', () => {
 		id.tracks![0].identity_provenance = { role: 'manual', episode_number: 'episodes_tmdb' };
 		expect(buildRows(tracks, id, null)[0]).toMatchObject({ handSet: true, origin: { kind: 'you' } });
 	});
-	it('precedence: matching > pinned > suggestion; manual-only is unavailable', () => {
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), true)).toBe('matching');
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }, true), false)).toBe('pinned');
-		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('unavailable');
+	it('precedence: matching > unsure; manual-only is a plain no match', () => {
+		expect(panelState(job({ episodes_unsure: true }), identity({}, true), true)).toBe('matching');
+		expect(
+			panelState(job({ episodes_unsure: true }), identity({ pin: { episode: 'episodes_tmdb' } }, true), false)
+		).toBe('unsure');
+		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('nomatch');
 	});
 });
 
@@ -164,5 +209,127 @@ describe('activeSource agrees with the resolver', () => {
 	it('falls back to an ok suggestion when nothing else is ok', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
 		expect(activeSource(id)).toBe('episodes_tmdb');
+	});
+});
+
+describe('season candidates and hold reasons', () => {
+	it('maps hold reason codes to sentences and drops unknown ones', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true, extra: { hold_reasons: ['near_tie', 'bogus'] } } }
+		} as unknown as IdentityView;
+		expect(holdReasons(id, 'episodes_tmdb')).toEqual(['Another season fits about as well.']);
+	});
+	it('lists candidate seasons from alternatives', () => {
+		const id = {
+			sources: {
+				episodes_tmdb: {
+					status: 'ok',
+					alternatives: [
+						{ season: 3, coverage: 0.75, matches: 3 },
+						{ season: 4, matches: 2 }
+					]
+				}
+			}
+		} as unknown as IdentityView;
+		// The total is the season's own title count (3 / 0.75 = 4), not the rows shown.
+		expect(seasonAlternatives(id, 'episodes_tmdb', 6)).toEqual([
+			{ season: 3, matches: 3, total: 4 },
+			{ season: 4, matches: 2, total: 6 }
+		]);
+		expect(seasonAlternatives(id, 'episodes_tmdb')[1].total).toBe(0);
+		expect(seasonAlternatives(id, null)).toEqual([]);
+	});
+	it('names the held season from the source proposals', () => {
+		const id = {
+			sources: { episodes_tmdb: { status: 'ok', suggestion: true } },
+			tracks: [
+				{ track_id: 'a', proposals: { episodes_tmdb: { season: 5, episode: 1 } } },
+				{ track_id: 'b', proposals: { episodes_tmdb: { season: 5, episode: 2 } } },
+				{ track_id: 'c', proposals: { episodes_tmdb: { role: 'extra' } } }
+			]
+		} as unknown as IdentityView;
+		expect(heldSeason(id, 'episodes_tmdb', 3)).toEqual({ season: 5, matches: 2, total: 3 });
+		expect(heldSeason(id, 'episodes_tvmaze', 3)).toBeNull();
+	});
+});
+
+describe('pickerOptions', () => {
+	it('sorts picker options by runtime fit and pushes used episodes last', () => {
+		const eps = [
+			{ number: 1, name: 'A', runtime_s: 2700 },
+			{ number: 2, name: 'B', runtime_s: 1500 },
+			{ number: 3, name: 'C', runtime_s: 1520 }
+		] as any;
+		const labels = pickerOptions(eps, 2, 1510, new Set([3])).map((o) => o.label);
+		expect(labels.slice(0, 3)).toEqual(['E02 B, 25m', 'E01 A, 45m', 'E03 C, 25m (used)']);
+		expect(pickerOptions(eps, 2, 1510, new Set())[0].value).toBe('s2e2');
+	});
+	it('labels specials as season 0, puts unknown runtimes last, then the roles', () => {
+		const eps = [
+			{ number: 2, name: 'No runtime' },
+			{ number: 1, name: 'Pilot', runtime_s: 4440, special: true },
+			{ number: 1, name: 'First', runtime_s: 3000 }
+		];
+		expect(pickerOptions(eps, 1, 3000, new Set()).map((o) => [o.value, o.label])).toEqual([
+			['s1e1', 'E01 First, 50m'],
+			['s0e1', 'S00E01 Pilot, 74m, special'],
+			['s1e2', 'E02 No runtime'],
+			['extra', 'Extra'],
+			['trailer', 'Trailer'],
+			['other', 'Other']
+		]);
+	});
+	it('orders by number when the track length is unknown', () => {
+		const eps = [
+			{ number: 3, name: 'C', runtime_s: 100 },
+			{ number: 1, name: 'A', runtime_s: 900 }
+		];
+		expect(pickerOptions(eps, 1, null, new Set()).map((o) => o.value)).toEqual([
+			's1e1',
+			's1e3',
+			'extra',
+			'trailer',
+			'other'
+		]);
+	});
+});
+
+describe('placedCount', () => {
+	const row = (code: string, kind: 'auto' | 'guess' | 'you' | 'none') =>
+		({ code, origin: { kind, source: kind === 'none' ? null : 'episodes_tmdb' } }) as unknown as ReturnType<
+			typeof buildRows
+		>[number];
+
+	it('counts every placement on the tracks, a guess included', () => {
+		const rows = [
+			row('S01E01', 'auto'),
+			row('S01E02', 'you'),
+			row('Extra', 'none'),
+			row('S01E04', 'guess'),
+			row('Not placed', 'none')
+		];
+		expect(placedCount(rows)).toBe(4);
+	});
+});
+
+describe('holdHeadline', () => {
+	const held = (codes: string[]): IdentityView => ({
+		sources: { episodes_tmdb: { status: 'ok', suggestion: true, extra: { hold_reasons: codes } } },
+		pin: {},
+		tracks: []
+	});
+
+	it('names the season and the strongest reason, keeping the rest', () => {
+		expect(holdHeadline(held(['near_tie', 'nominal_runtimes']), 'episodes_tmdb', 3)).toEqual({
+			line: 'Season 3 is a guess: another season fits about as well.',
+			more: ['The source lists rounded runtimes, not real ones.']
+		});
+	});
+
+	it('falls back to the match when the season is unknown, and to a bare line with no reason', () => {
+		expect(holdHeadline(held(['ambiguous']), 'episodes_tmdb', null).line).toBe(
+			'This match is a guess: the titles fit equally well one episode earlier or later.'
+		);
+		expect(holdHeadline(held([]), 'episodes_tmdb', 0)).toEqual({ line: 'Specials is a guess.', more: [] });
 	});
 });

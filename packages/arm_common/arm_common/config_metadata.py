@@ -142,8 +142,9 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         tier="operator",
         label="Apply confident matches",
         help=(
-            "When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; "
-            "the disc is held with no countdown. Ripping › Review first still holds every disc."
+            "When off, a TV show match waits on the job page for you to confirm it and the disc is held with no "
+            "countdown; every episode placement is then a guess too: still placed, shown amber, and it holds the "
+            "countdown. Ripping › Review first still holds every disc."
         ),
         type="bool",
         editable=True,

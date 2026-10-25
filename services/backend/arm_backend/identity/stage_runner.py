@@ -401,8 +401,8 @@ class EpisodeStageRunner:
     async def sweep_startup(self) -> int:
         """Schedule every eligible job once: identified / awaiting review /
         awaiting user id, a TV candidate, with no episode source entry at
-        all yet in its identity claims (Review Focus 5). Returns how many
-        were scheduled."""
+        all yet in its identity claims (Review Focus 5) and not one the
+        operator cleared (Clear episodes). Returns how many were scheduled."""
         count = 0
         async with self._session_factory() as session:
             jobs = list(
@@ -417,7 +417,8 @@ class EpisodeStageRunner:
             for job in jobs:
                 if not is_tv_candidate(job, tracks_by_job.get(job.id, [])):
                     continue
-                if any(source_id in claims_of(job).sources for source_id in _EPISODE_SOURCE_IDS):
+                claims = claims_of(job)
+                if claims.episodes_cleared or any(source_id in claims.sources for source_id in _EPISODE_SOURCE_IDS):
                     continue
                 self.schedule(job.id)
                 count += 1

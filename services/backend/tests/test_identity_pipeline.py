@@ -13,7 +13,7 @@ from arm_common.enums import TrackRole  # noqa: E402
 from arm_common.schemas import BdDiscMeta, ScanResult  # noqa: E402
 from arm_common.schemas.identity import SourceClaims, TrackClaim  # noqa: E402
 
-from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv  # noqa: E402
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv, hint_season  # noqa: E402
 from arm_backend.identity.proposals import put_source, claims_of  # noqa: E402
 from tests._fakes import FakeSession  # noqa: E402
 
@@ -33,6 +33,26 @@ async def test_resolve_job_applies_thediscdb_claims() -> None:
     assert outcome.track_ids == frozenset({"trk_1"})
     assert track.episode_number == 3
     assert track.identity_provenance == {"role": "thediscdb", "episode_number": "thediscdb"}
+
+
+@pytest.mark.asyncio
+async def test_resolve_job_marks_a_held_match_unsure_and_clears_it_when_a_clean_one_wins() -> None:
+    db = FakeSession()
+    job = Job(id="job_u", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.IDENTIFIED, metadata_json={})
+    track = Track(id="trk_u", job_id="job_u", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [track]
+    held = SourceClaims(suggestion=True, tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)})
+    put_source(job, "episodes_tmdb", held)
+    outcome = await resolve_job(db, job)  # type: ignore[arg-type]
+    assert track.episode_number == 3  # the guess is on the track
+    assert claims_of(job).unsure is True
+    assert outcome.changed == 3  # role, episode_number, and the flag
+    assert (await resolve_job(db, job)).changed == 0  # type: ignore[arg-type]
+    put_source(job, "episodes_tmdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
+    outcome = await resolve_job(db, job)  # type: ignore[arg-type]
+    assert claims_of(job).unsure is False
+    assert outcome.changed == 1  # only the flag flipped
 
 
 @pytest.mark.asyncio
@@ -121,6 +141,13 @@ def test_hint_is_tv_true_for_season_shaped_label() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
     run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
     assert hint_is_tv(job) is True
+
+
+def test_hint_season_is_the_hinted_season_or_none() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    assert hint_season(job) is None
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
+    assert hint_season(job) == 2
 
 
 def test_hint_is_tv_false_for_movie_shaped_label() -> None:

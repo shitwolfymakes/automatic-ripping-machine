@@ -910,6 +910,8 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
         meta={"identity_claims": {"sources": {"episodes_tmdb": {}}}},
     )
     not_tv = _job("job_movie", status=JobStatus.IDENTIFIED, media_type=MediaType.MOVIE)
+    # The operator cleared this one: the sweep must not bring the match back.
+    cleared = _job("job_cleared", status=JobStatus.IDENTIFIED, meta={"identity_claims": {"episodes_cleared": True}})
     # RIPPED is terminal: pre-PR-3b jobs must not all be matched on upgrade.
     wrong_status = _job("job_ripped", status=JobStatus.RIPPED)
 
@@ -920,8 +922,9 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
         eligible_ripping,
         already_ran,
         not_tv,
+        cleared,
         wrong_status,
-        tracks=[_track(eligible.id, 0, 1500), _track(eligible_ripping.id, 0, 1500)],
+        tracks=[_track(eligible.id, 0, 1500), _track(eligible_ripping.id, 0, 1500), _track(cleared.id, 0, 1500)],
     )
     hub = _Hub()
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})

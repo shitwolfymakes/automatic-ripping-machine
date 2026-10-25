@@ -179,8 +179,9 @@
 			{/each}
 		</div>
 		<p class="field-help identity-card-footer" id="identity-help-trust">
-			When off, a match waits on the job page for you to confirm it and the disc is held with no countdown. Ripping ›
-			Review first still holds every disc.
+			When off, a match waits on the job page for you to confirm it and the disc is held with no countdown; a TV show's
+			episode placement is then a guess too: still placed, shown amber, and it holds the countdown. Ripping › Review
+			first still holds every disc.
 		</p>
 	</div>
 
