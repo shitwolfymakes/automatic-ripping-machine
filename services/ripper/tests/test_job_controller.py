@@ -47,6 +47,7 @@ def _view(
     title: str | None = None,
     wait_start_time: datetime | None = None,
     manual_pause: bool = False,
+    episodes_unsure: bool = False,
 ) -> JobView:
     return JobView(
         id="job_test",
@@ -55,7 +56,7 @@ def _view(
         status=status,
         title=title,
         year=None,
-        metadata_json={},
+        metadata_json={"identity_claims": {"unsure": True}} if episodes_unsure else {},
         resumed_from_crash=False,
         wait_start_time=wait_start_time,
         manual_pause=manual_pause,
@@ -366,9 +367,49 @@ async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eje
     assert client.rip_complete_calls == []
 
 
+async def test_review_gate_guessed_episodes_do_not_auto_start(stub_scan, stub_eject, monkeypatch, caplog):
+    """A placement that is a guess holds the countdown like a per-job pause:
+    elapsed, not paused, but `episodes_unsure` on every view -> no auto-start,
+    logged once."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    client.ripping_paused = False
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Show"))
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, episodes_unsure=True) for _ in range(6)]
+    )
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level(logging.INFO):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+    assert sum("countdown held, its episode placement is a guess" in r.message for r in caplog.records) == 1
+
+
+async def test_review_gate_auto_starts_once_the_guess_is_fixed(stub_scan, stub_eject):
+    """The hold lifts with the flag: a later view without `episodes_unsure`
+    (a Fix match left a confident placement) auto-starts as usual."""
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Show"))
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, episodes_unsure=True) for _ in range(2)]
+        + [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past) for _ in range(4)]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=4.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
 # --- resolution_timeout: source mode's indefinite wait ----------------------
-
-
 async def test_resolution_timeout_default_still_times_out(stub_scan, stub_eject):
     """No override passed to the constructor: the wait still honours
     RESOLUTION_WAIT_TIMEOUT_SECONDS exactly as before (the `fast_polls` fixture
