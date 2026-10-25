@@ -433,7 +433,7 @@
 										<div class="mt-1 job-detail-metadata-value" data-testid="fact-{field.edit}">
 											<InlineField
 												label={field.label}
-												value={field.value === '-' ? '' : field.value}
+												value={field.raw ?? ''}
 												type={field.edit === 'season' ||
 												field.edit === 'disc_number' ||
 												field.edit === 'disc_total' ||
