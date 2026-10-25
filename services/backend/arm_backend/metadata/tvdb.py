@@ -43,14 +43,16 @@ class TVDBClient:
     episode listing lives in identity/episodes/providers/tvdb.py.
 
     TVDB v4 authenticates via a login handshake: POST /v4/login with the
-    API key returns a bearer token.
+    API key returns a bearer token, cached on the instance for its lifetime.
     """
 
     def __init__(self, api_key: str, http: httpx.AsyncClient) -> None:
         self._api_key = api_key
         self._http = http
-
-    _token: str | None = None
+        # Per instance: the bearer token from the last successful login, so
+        # one client serves many calls on a single handshake. The adapter
+        # (metadata.sources.TvdbSource) holds one client per key for that.
+        self._token: str | None = None
 
     async def _login(self) -> str:
         try:

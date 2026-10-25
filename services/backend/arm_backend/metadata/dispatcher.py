@@ -125,18 +125,9 @@ class MetadataDispatcher:
         # Fingerprint sources first (the community crc64 → title DB). A hit
         # beats fuzzy title matching because the fingerprint is unique to the
         # disc and there's no false-positive risk.
-        crc64 = next(
-            (fp.value for fp in scan.fingerprints if fp.algo == "crc64" and fp.value),
-            None,
-        )
-        if crc64:
-            for source in fingerprint_sources(cfg, self._sources):
-                lookup = capability(source, "lookup_fingerprint")
-                if lookup is None:
-                    continue
-                hit = await self._call(source.id, lookup(cfg, "crc64", crc64))
-                if hit is not None:
-                    return hit
+        hit = await self.identify_from_fingerprint(scan, cfg)
+        if hit is not None:
+            return hit
 
         # Disc hints (bd_title / label, see arm_backend.identity) supply a
         # cleaner search title than the raw volume label — try it first, then
@@ -193,6 +184,24 @@ class MetadataDispatcher:
                 hit = await self._search_kind(title, year, cfg, kind)
                 if hit is not None:
                     return hit
+        return None
+
+    async def identify_from_fingerprint(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
+        """The disc's fingerprint sources only (spec Step 2): today the keyless
+        community CRC64 database. Split out of `identify` so a caller that
+        already holds an exact disc-map title can still consult it — it needs
+        no API key, so it is the one online step a keyless install has — without
+        also running the fuzzy title search that would outrank that title."""
+        crc64 = next((fp.value for fp in scan.fingerprints if fp.algo == "crc64" and fp.value), None)
+        if not crc64:
+            return None
+        for source in fingerprint_sources(cfg, self._sources):
+            lookup = capability(source, "lookup_fingerprint")
+            if lookup is None:
+                continue
+            hit = await self._call(source.id, lookup(cfg, "crc64", crc64))
+            if hit is not None:
+                return hit
         return None
 
     async def _search_kind(self, title: str, year: int | None, cfg: Config, kind: Kind) -> MetadataResult | None:
