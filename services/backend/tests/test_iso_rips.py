@@ -15,6 +15,7 @@ import pytest  # noqa: E402
 from arm_backend import iso_library, iso_rips  # noqa: E402
 from arm_backend.config import settings  # noqa: E402
 from arm_backend.ripper_manager import RipperManagerError  # noqa: E402
+from arm_common.enums import PRE_RIP_JOB_STATUSES  # noqa: E402
 from arm_common import (  # noqa: E402
     DiscType,
     Drive,
@@ -38,11 +39,24 @@ class _Manager:
     """Stands in for RipperManager: `container_statuses` answers from a dict,
     `remove` records the drive ids (or raises)."""
 
-    def __init__(self, states: dict[str, str] | None = None, remove_raises: Exception | None = None) -> None:
+    def __init__(
+        self,
+        states: dict[str, str] | None = None,
+        remove_raises: Exception | None = None,
+        start_raises: Exception | None = None,
+    ) -> None:
         self._states = states or {}
         self._remove_raises = remove_raises
+        self._start_raises = start_raises
         self.removed: list[str] = []
+        self.started: list[str] = []
         self.status_calls: list[list[str]] = []
+
+    def ensure_running(self, drive: Drive) -> str:
+        if self._start_raises is not None:
+            raise self._start_raises
+        self.started.append(drive.id)
+        return f"arm-ripper-iso-{drive.id}"
 
     def container_statuses(self, drive_ids):
         ids = list(drive_ids)
@@ -321,6 +335,69 @@ async def test_sweep_retires_exited_with_no_job() -> None:
     assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
     assert hub.events == []
+
+
+@pytest.fixture(autouse=True)
+def _forget_respawns() -> None:
+    iso_rips._respawned.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", sorted(PRE_RIP_JOB_STATUSES, key=lambda s: s.value))
+async def test_sweep_starts_the_ripper_again_for_a_parked_job(
+    status: JobStatus, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A backend restart takes every spawned ripper with it. A rip parked at a
+    # review gate was only heartbeating, so its job must survive: the ripper
+    # is started again and re-identifies into the same job.
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", status)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
+    with caplog.at_level(logging.INFO, logger="arm_backend.iso_rips"):
+        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert manager.started == ["drv_iso1"]
+    assert job.status is status
+    assert drive.lifecycle is DriveLifecycle.ENROLLED and manager.removed == []
+    assert hub.events == []
+    assert db.committed == 1  # the row lock is released
+    assert any("started again for parked job_id=job_1" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_sweep_fails_a_parked_job_whose_ripper_dies_twice() -> None:
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(), _Hub()
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert manager.started == ["drv_iso1"]
+    # Still missing on the next pass: the ripper is not started a second time.
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert manager.started == ["drv_iso1"]
+    assert job.status is JobStatus.FAILED
+    assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
+    assert [e["event_type"] for e in hub.events] == ["rip.failed"]
+
+
+@pytest.mark.asyncio
+async def test_sweep_fails_a_parked_job_when_the_ripper_cannot_start(caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(start_raises=RipperManagerError("docker unavailable")), _Hub()
+    with caplog.at_level(logging.WARNING, logger="arm_backend.iso_rips"):
+        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert manager.started == []
+    assert job.status is JobStatus.FAILED
+    assert drive.lifecycle is DriveLifecycle.RETIRED
+    assert any("could not be started again" in r.message for r in caplog.records)
 
 
 @pytest.mark.asyncio
