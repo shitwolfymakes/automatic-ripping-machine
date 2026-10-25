@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from arm_backend import image_cache
+from arm_backend.auth import require_jwt
+from arm_backend.db import get_session
+from arm_backend.routers import images as images_router
+from arm_common import User
+from arm_common.models.user import GUEST_ROLE
 
-from arm_backend import image_cache  # noqa: E402
-from arm_backend.auth import require_jwt  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.routers import images as images_router  # noqa: E402
-from arm_common import User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture

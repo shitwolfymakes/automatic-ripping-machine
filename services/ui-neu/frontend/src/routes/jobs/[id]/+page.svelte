@@ -24,6 +24,7 @@
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
+	import { formatFps } from '$lib/utils/fps';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -701,7 +702,14 @@
 										<!-- Transcode outcome (— when no transcode task yet) -->
 										<td class="table-cell" data-label="Transcode">
 											{#if track.transcode_status}
-												<StatusBadge status={track.transcode_status} />
+												<span class="flex items-center gap-1">
+													<StatusBadge status={track.transcode_status} />
+													{#if track.transcode_status === 'in_progress' && track.transcode_fps != null}
+														<span class="job-detail-track-faint" title="Encoder frame rate"
+															>{formatFps(track.transcode_fps, track.transcode_avg_fps)}</span
+														>
+													{/if}
+												</span>
 											{:else}
 												<span class="job-detail-track-faint">-</span>
 											{/if}

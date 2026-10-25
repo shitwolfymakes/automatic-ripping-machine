@@ -1,21 +1,18 @@
 """resolve_job loads claims + tracks through the session and applies them."""
 
-import os
 from datetime import datetime, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import TrackRole  # noqa: E402
-from arm_common.schemas import BdDiscMeta, ScanResult  # noqa: E402
-from arm_common.schemas.identity import SourceClaims, TrackClaim  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import TrackRole
+from arm_common.schemas import BdDiscMeta, ScanResult
+from arm_common.schemas.identity import SourceClaims, TrackClaim
 
-from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv, hint_season  # noqa: E402
-from arm_backend.identity.proposals import put_source, claims_of  # noqa: E402
-from tests._fakes import FakeSession  # noqa: E402
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv, hint_season
+from arm_backend.identity.proposals import put_source, claims_of
+from tests._fakes import FakeSession
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 

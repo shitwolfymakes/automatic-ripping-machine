@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_backend.config import Settings, effective_transcode_capable  # noqa: E402
+from arm_backend.config import Settings, effective_transcode_capable
 
 
 def _settings(**overrides: object) -> Settings:

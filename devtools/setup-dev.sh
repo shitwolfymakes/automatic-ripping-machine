@@ -211,7 +211,8 @@ else
     ensure_ca
     make_leaf arm-backend
     make_leaf arm-db
-    make_leaf arm-ui localhost "$(hostname -f 2>/dev/null || hostname || echo localhost)"
+    mapfile -t ui_sans < <(ui_leaf_sans)
+    make_leaf arm-ui "${ui_sans[@]}"
 fi
 
 # docker-compose.yml is generated per host (gitignored, like .env): bootstrap
@@ -278,6 +279,15 @@ else
     echo "==> detected render group GID for ARM_RENDER_GID: ${RENDER_GID_VALUE:-(none)}"
 fi
 
+# ARM_HOST_ISO_LIBRARY_PATH: the template mounts ./arm/iso-library at /ingress
+# either way, but the backend reports "Rip from ISO" as not configured while
+# the value is empty. Fill it when absent or empty; a path the developer set
+# (a NAS mount, or a ${PWD}-relative value) is kept.
+if ! grep -qE "^ARM_HOST_ISO_LIBRARY_PATH=[\"']?[^\"'[:space:]]" "${ENV_FILE}"; then
+    env_set ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library" "${ENV_FILE}"
+    echo "==> writing ARM_HOST_ISO_LIBRARY_PATH=${ARM_DIR}/iso-library"
+fi
+
 # ARM_TRANSCODE_CAPABLE is derived from the flag on every run (like ARM_GPUS),
 # not preserved like a secret: --ripper-only writes `false`, a run without it
 # writes `true`. Re-running without the flag is the supported way to turn a
@@ -324,8 +334,10 @@ if [[ "${ACTION}" == "up" ]]; then
     #    beyond the built images.
     guard_running_spawned
 
-    # 3. Write the detected GPUs to .env as ARM_GPUS.
+    # 3. Write the detected GPUs to .env as ARM_GPUS, and re-issue the UI
+    #    certificate when the host has an address it does not name.
     refresh_arm_gpus
+    refresh_ui_leaf
 
     # 4. Back up the running database before migrations can touch it.
     backup_db
@@ -345,6 +357,7 @@ if [[ "${ACTION}" == "up" ]]; then
     else
         compose up -d
     fi
+    restart_ui_for_new_leaf
     respawn_rippers_if_needed "${BACKEND_STARTED_BEFORE}"
 
     # 7. Wait for the backend to answer its health check.
@@ -368,7 +381,6 @@ cat <<EOF
 
 done — next:
   bash devtools/setup-dev.sh up      # build, back up the DB, (re)start the stack, wait for health
-                                     # (or: docker compose up -d --build; no backup or health wait)
   then open https://localhost:8081 and follow the setup walkthrough (drives, keys, defaults)
   spin it down (stack + spawned ripper/transcoder containers): bash devtools/setup-dev.sh down
 

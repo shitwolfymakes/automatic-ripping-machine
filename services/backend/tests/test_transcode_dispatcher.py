@@ -9,23 +9,20 @@ matters; otherwise we just test the awaited awaitable directly.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-import docker.errors as docker_errors  # type: ignore[import-untyped]  # noqa: E402
-from paramiko.ssh_exception import SSHException  # noqa: E402
+import pytest
+import docker.errors as docker_errors  # type: ignore[import-untyped]
+from paramiko.ssh_exception import SSHException
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.ws import WSHub
+from arm_common import (
     Config,
     ContainerFormat,
     Gpu,
@@ -41,8 +38,8 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     TranscodeTool,
 )
-from arm_common.enums import TrackKind  # noqa: E402
-from tests._fakes import FakeSession  # noqa: E402
+from arm_common.enums import TrackKind
+from tests._fakes import FakeSession
 
 
 def _settings(**overrides: Any) -> Settings:

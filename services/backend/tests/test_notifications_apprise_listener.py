@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-import os
 
-# The listener imports `notification_dispatcher`, which imports `config`'s
-# module-level `settings = Settings()`; pydantic-settings requires these
-# env vars at import time. Mirrors the sibling dispatcher tests.
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
+from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.message import Message
+from arm_common import DiscType, Job, JobStatus, NotificationChannel
 
-from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
-from arm_backend.notifications.message import Message  # noqa: E402
-from arm_common import DiscType, Job, JobStatus, NotificationChannel  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _FakeNotifier:

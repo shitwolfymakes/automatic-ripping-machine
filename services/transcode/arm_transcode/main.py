@@ -101,10 +101,14 @@ async def _run_encoder(
 ) -> int:
     """Dispatch on `tool`. Returns the size of the file we wrote."""
 
-    async def _on_progress(pct: int, eta: int | None, current: str | None) -> None:
+    async def _on_progress(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> None:
         state.pct = pct
         state.eta_seconds = eta
         state.current_pass = current
+        state.fps = fps
+        state.avg_fps = avg_fps
         if cancel_event.is_set():
             raise CancelRequested("task.cancel received")
 

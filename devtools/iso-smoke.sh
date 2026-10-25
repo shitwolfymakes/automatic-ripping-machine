@@ -280,7 +280,7 @@ require_stack_up() {
     for ctr in armv3-backend armv3-db; do
         if ! docker ps --format '{{.Names}}' | grep -qx "${ctr}"; then
             err "${ctr} is not running"
-            err "bring the stack up first: cd ${ROOT_DIR} && docker compose up -d arm-db arm-backend arm-ui"
+            err "bring the stack up first: bash ${ROOT_DIR}/devtools/setup-dev.sh up"
             exit 1
         fi
     done

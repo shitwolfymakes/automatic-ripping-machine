@@ -68,8 +68,16 @@ class BackendClient:
         progress_pct: int,
         current_pass: str | None = None,
         eta_seconds: int | None = None,
+        fps: float | None = None,
+        avg_fps: float | None = None,
     ) -> TranscodeTaskView:
-        req = HeartbeatRequest(progress_pct=progress_pct, current_pass=current_pass, eta_seconds=eta_seconds)
+        req = HeartbeatRequest(
+            progress_pct=progress_pct,
+            current_pass=current_pass,
+            eta_seconds=eta_seconds,
+            fps=fps,
+            avg_fps=avg_fps,
+        )
         r = await self._client.patch(
             f"/api/transcoder/tasks/{task_id}/heartbeat",
             json=req.model_dump(),

@@ -8,7 +8,7 @@ from typing import Awaitable
 
 import pytest
 
-from arm_transcode.handbrake import _PROGRESS_LINE_RE, _consume_progress, _parse_eta
+from arm_transcode.handbrake import _PROGRESS_LINE_RE, _consume_progress, _parse_eta, _parse_fps
 
 
 def _match(line: str) -> re.Match[str] | None:
@@ -44,6 +44,25 @@ def test_eta_with_hours() -> None:
     assert _parse_eta(m) == 3600 + 45 * 60 + 30
 
 
+def test_fps_pair_is_extracted() -> None:
+    """The live and average frame rates ride on the heartbeat (D-248)."""
+    m = _match("Encoding: task 1 of 1, 47.30 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)")
+    assert m is not None
+    assert _parse_fps(m) == (45.67, 23.45)
+    assert _parse_eta(m) == 12 * 60 + 34
+
+
+def test_fps_is_unknown_without_the_tail_and_eta_still_parses_alone() -> None:
+    early = _match("Encoding: task 1 of 1, 0.00 %")
+    assert early is not None
+    assert _parse_fps(early) == (None, None)
+    # A tail with an ETA but no fps pair keeps the ETA.
+    eta_only = _match("Encoding: task 1 of 2, 50.00 % (... ETA 00h05m00s)")
+    assert eta_only is not None
+    assert _parse_fps(eta_only) == (None, None)
+    assert _parse_eta(eta_only) == 300
+
+
 def test_does_not_match_title_scan_line() -> None:
     """`Scanning title 1 of 1, 70.00 %` is title-scan progress, not encode
     progress. Anchoring on `task N of M` skips it cleanly."""
@@ -72,7 +91,9 @@ async def test_current_pass_is_emitted_as_n_over_m() -> None:
     stream = _FakeStream([raw.encode()])
     seen: list[str | None] = []
 
-    async def cb(pct: int, eta: int | None, current: str | None) -> Awaitable[None]:  # type: ignore[return]
+    async def cb(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> Awaitable[None]:  # type: ignore[return]
         seen.append(current)
 
     await _consume_progress(stream, cb)  # type: ignore[arg-type]
@@ -113,16 +134,20 @@ async def test_consume_progress_splits_on_carriage_return() -> None:
     )
     stream = _FakeStream([raw.encode()])
 
-    seen: list[tuple[int, int | None, str | None]] = []
+    seen: list[tuple[int, int | None, str | None, float | None, float | None]] = []
 
-    async def cb(pct: int, eta: int | None, current: str | None) -> Awaitable[None]:  # type: ignore[return]
-        seen.append((pct, eta, current))
+    async def cb(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> Awaitable[None]:  # type: ignore[return]
+        seen.append((pct, eta, current, fps, avg_fps))
 
     await _consume_progress(stream, cb)  # type: ignore[arg-type]
 
     pcts = [s[0] for s in seen]
     assert pcts == [0, 12, 25, 50, 100]  # one event per unique percent
     assert seen[2][1] == 5  # ETA in seconds at 25 %
+    assert seen[2][3:] == (140.0, 140.0)  # frame rates at 25 %
+    assert seen[1][3:] == (None, None)  # no tail yet at 12 %
 
 
 @pytest.mark.asyncio
@@ -139,7 +164,9 @@ async def test_consume_progress_dedupes_repeated_percent() -> None:
 
     seen: list[int] = []
 
-    async def cb(pct: int, eta: int | None, current: str | None) -> Awaitable[None]:  # type: ignore[return]
+    async def cb(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> Awaitable[None]:  # type: ignore[return]
         seen.append(pct)
 
     await _consume_progress(stream, cb)  # type: ignore[arg-type]
@@ -158,7 +185,9 @@ async def test_consume_progress_handles_chunk_boundary_mid_line() -> None:
     stream = _FakeStream(chunks)
     seen: list[int] = []
 
-    async def cb(pct: int, eta: int | None, current: str | None) -> Awaitable[None]:  # type: ignore[return]
+    async def cb(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> Awaitable[None]:  # type: ignore[return]
         seen.append(pct)
 
     await _consume_progress(stream, cb)  # type: ignore[arg-type]

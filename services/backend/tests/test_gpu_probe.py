@@ -7,17 +7,13 @@ the per-entry validation in `_parse_entry`.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import json
 
-import json  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend.gpu_probe import load_configured_gpus  # noqa: E402
-from arm_common.enums import GpuVendor  # noqa: E402
+from arm_backend.gpu_probe import load_configured_gpus
+from arm_common.enums import GpuVendor
 
 
 @pytest.mark.parametrize("raw", [None, "", "   ", "\n\t"])

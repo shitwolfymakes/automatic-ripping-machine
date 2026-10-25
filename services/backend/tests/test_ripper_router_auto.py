@@ -7,17 +7,14 @@ from Phase 3 and already exercised through the higher-level integration paths.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.auto_session import after_rip, apply_session_internal, maybe_auto_apply_session  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.auto_session import after_rip, apply_session_internal, maybe_auto_apply_session
+from arm_common import (
     Config,
     ContainerFormat,
     DiscType,
@@ -41,7 +38,7 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class CapturingHub:

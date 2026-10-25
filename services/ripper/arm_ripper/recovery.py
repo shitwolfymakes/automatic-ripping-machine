@@ -11,6 +11,7 @@ the orphaned RIPPING row stays visible in the UI with the
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 from pathlib import Path
@@ -26,12 +27,13 @@ logger = logging.getLogger("arm_ripper.recovery")
 RAW_ROOT = Path("/raw")
 
 
-def wipe_raw_dir(job_id: str) -> None:
+async def wipe_raw_dir(job_id: str) -> None:
     """Remove /raw/<job_id>/ and its contents. No-op if the directory
-    does not exist. Safe to call repeatedly.
+    does not exist. Safe to call repeatedly. Runs in a thread so a large
+    raw dir does not block the event loop.
     """
     target = RAW_ROOT / job_id
-    shutil.rmtree(target, ignore_errors=True)
+    await asyncio.to_thread(shutil.rmtree, target, ignore_errors=True)
     logger.info("wiped raw dir job_id=%s path=%s", job_id, target)
 
 
@@ -84,7 +86,7 @@ async def boot_probe(
 
     logger.info("boot probe: resuming in-flight job_id=%s on drive_id=%s", job.id, drive_id)
     try:
-        wipe_raw_dir(job.id)
+        await wipe_raw_dir(job.id)
         await controller.resume_inflight_job(job, device_path)
     except Exception as exc:  # noqa: BLE001 — boot must continue
         logger.exception("boot probe: resume failed for job_id=%s: %s", job.id, exc)

@@ -5,21 +5,18 @@ path + its exception swallows.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend import auto_session as asx  # noqa: E402
-from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session  # noqa: E402
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend import auto_session as asx
+from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session
+from arm_backend.path_template import TemplateValidationError
+from arm_common import (
     Config,
     Drive,
     DriveStatus,
@@ -32,8 +29,8 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
-from tests.test_auto_session import CapturingHub, _seed  # noqa: E402
+from tests._fakes import FakeSession
+from tests.test_auto_session import CapturingHub, _seed
 
 
 def _media_root(tmp: Path) -> None:
@@ -485,3 +482,24 @@ async def test_same_job_overwrite_still_works(tmp_path: Path) -> None:
     assert out.application is not None
     assert not any(t.id == "txt_mine" for t in db.rows["transcode_tasks"])
     assert len(out.tasks) == 1
+
+
+async def test_drain_survives_a_failed_job_reload_after_rollback(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A drain failure rolls back and reloads the job; when that reload fails
+    too, the hook still logs and returns [] instead of raising into rip-complete."""
+    db = FakeSession()
+    job = _seed(db)
+
+    async def _raising_fan_out(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("boom: drain failed")
+
+    async def _raising_refresh(_obj: object) -> None:
+        raise RuntimeError("boom: reload failed")
+
+    monkeypatch.setattr(asx, "fan_out_waiting_identify_applications", _raising_fan_out)
+    monkeypatch.setattr(db, "refresh", _raising_refresh)
+
+    assert await asx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
+    assert "after a failed drain failed" in caplog.text

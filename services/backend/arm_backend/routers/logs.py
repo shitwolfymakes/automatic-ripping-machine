@@ -162,6 +162,10 @@ async def stream_job_logs(
     cap = max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
 
     def gen() -> Iterator[bytes]:
+        # The loops below check the cap only after yielding, so a zero cap
+        # would still emit one line (per file on the fallback path).
+        if cap == 0:
+            return
         per_job = per_job_log_path(job_id)
         if per_job.is_file():
             yielded = 0

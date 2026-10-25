@@ -61,3 +61,39 @@ def test_pick_bdmt_file_prefers_english() -> None:
 def test_probe_bd_meta_soft_fails() -> None:
     with mock.patch("arm_ripper.scan.bd_meta._read_bdmt", side_effect=OSError("boom")):
         assert probe_bd_meta("/dev/sr0") is None
+
+
+_MALFORMED = b"""<?xml version="1.0" encoding="utf-8"?>
+<disclib xmlns="urn:BDA:bdmv;disclib" xmlns:di="urn:BDA:bdmv;discinfo">
+  <di:discinfo>
+    <di:date>2012-05-01</di:date>
+    <di:title>
+      <di:name>Sunrise Box Set Disc 2</di:name>
+      <di:numSets>4</di:numSets><di:setNumber>2</di:setNumber>
+    </di:title>
+    <di:description>
+      <di:thumbnail href=sunrise_416.jpg size="416x240"/>
+      <di:thumbnail href=sunrise_640.jpg/>
+      <di:thumbnail href=/BDMV/META/DL/sunrise_1920.jpg/>
+    </di:description>
+  </di:discinfo>
+</disclib>"""
+
+
+def test_parse_bdmt_repairs_unquoted_href(caplog) -> None:
+    """D-135: an unquoted href= must not cost the disc its title hint."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_meta"):
+        meta = parse_bdmt(_MALFORMED, "eng")
+    assert meta == BdDiscMeta(name="Sunrise Box Set Disc 2", set_number=2, num_sets=4, language="eng")
+    assert "repaired unquoted href" in caplog.text
+
+
+def test_parse_bdmt_unrepairable_logs_the_offending_line(caplog) -> None:
+    import logging
+
+    broken = _MALFORMED.replace(b"<di:name>", b"<di:name <")
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.scan.bd_meta"):
+        assert parse_bdmt(broken, "eng") is None
+    assert "<di:name <" in caplog.text

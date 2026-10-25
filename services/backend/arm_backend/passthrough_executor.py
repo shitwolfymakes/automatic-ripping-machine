@@ -172,7 +172,7 @@ async def execute_passthrough_task(
 
         task.status = TranscodeTaskStatus.IN_PROGRESS
         task.claimed_by = IN_PROCESS_CLAIMANT
-        task.claim_heartbeat_at = datetime.now(UTC)
+        task.claim_heartbeat_at = task.started_at = datetime.now(UTC)
         task.attempts = (task.attempts or 0) + 1
         task.progress_pct = 0
         await db.flush()

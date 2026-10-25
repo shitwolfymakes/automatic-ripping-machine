@@ -62,6 +62,10 @@ class HeartbeatRequest(BaseModel):
     progress_pct: int = Field(ge=0, le=100)
     current_pass: str | None = None
     eta_seconds: int | None = Field(default=None, ge=0)
+    # Encoder frame rate: the instantaneous and the running average, as the
+    # engine reports them. Null when the engine has not surfaced one yet.
+    fps: float | None = Field(default=None, ge=0)
+    avg_fps: float | None = Field(default=None, ge=0)
 
 
 class CompleteTaskRequest(BaseModel):

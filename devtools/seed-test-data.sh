@@ -31,7 +31,7 @@ Usage: bash devtools/seed-test-data.sh [--clean] [-h|--help]
   --clean     Remove the seed rows (jobs+tracks+fingerprints+drive) + logs.
   -h, --help  Show this help.
 
-Requires the dev stack running: docker compose up -d
+Requires the dev stack running: bash devtools/setup-dev.sh up
 EOF
 }
 
@@ -50,7 +50,7 @@ cd "$ROOT_DIR"
 running="$(docker compose ps --status running --services 2>/dev/null || true)"
 for svc in arm-db arm-backend; do
     if ! grep -qx "$svc" <<<"$running"; then
-        echo "stack not running ($svc is down); start it with: docker compose up -d" >&2
+        echo "stack not running ($svc is down); start it with: bash devtools/setup-dev.sh up" >&2
         exit 1
     fi
 done

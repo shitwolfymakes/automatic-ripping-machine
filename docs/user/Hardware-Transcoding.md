@@ -18,7 +18,7 @@ versus a slow CPU encode.
 |---|---|---|
 | **Intel** | Quick Sync (QSV) | Gen12+ (Alder Lake / N-series) or newer. Gen 9 through 11 (Skylake through Ice Lake) have no working QSV runtime on this image; see [Why a device verifies nothing](#why-a-device-verifies-nothing) below. |
 | **AMD** | VAAPI (via Mesa, ffmpeg) | Radeon RX 400 / 500, Vega / Radeon VII, Navi series or newer, with the `amd` transcode image variant built. |
-| **NVIDIA** | NVENC | GeForce GTX Pascal (1050+) or RTX Turing (1650+, 2060+). Older cards need driver >= 418.81. |
+| **NVIDIA** | NVENC | GeForce GTX Pascal (1050+) or RTX Turing (1650+, 2060+), on host driver 530 or newer. The installer skips NVENC on older drivers, so the GPU never appears. |
 
 CPU-only hosts need none of this: the base stack transcodes on CPU with zero
 configuration.
@@ -247,7 +247,7 @@ back on `ARM_TRANSCODE_BACKEND_URL`. Three things must hold:
   `ARM_HOST_CERTS_PATH` exactly as written, on the offload host. Mount the
   shared storage there at those same paths.
 - **Changes to `.env` need the containers recreated.** `docker restart` keeps
-  the old environment; run `armctl up` (or `docker compose up -d`) instead.
+  the old environment; run `armctl up` instead.
 
 The Backend checks the first point itself: while the URL does not answer
 over TLS from the Backend host, the Diagnostics page shows the transcoder

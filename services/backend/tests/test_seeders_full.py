@@ -4,25 +4,21 @@ config signing-key back-fill, and _insert_missing idempotency.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from pathlib import Path
 
-from pathlib import Path  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend import seeders  # noqa: E402
-from arm_backend.seeders import (  # noqa: E402
+from arm_backend import seeders
+from arm_backend.seeders import (
     _seed_admin_user,
     _seed_config_singleton,
     _seed_session_routes,
     run_seeders,
 )
-from arm_common import Config, DiscType, MediaType, RetentionPolicy, SessionRoute, TranscodeTool, User  # noqa: E402
+from arm_common import Config, DiscType, MediaType, RetentionPolicy, SessionRoute, TranscodeTool, User
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 async def test_seed_admin_writes_banner_then_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

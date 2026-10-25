@@ -145,3 +145,18 @@ def test_list_scripts(tmp_path: Path) -> None:
     out = list_scripts(str(tmp_path))
     assert [(s.name, s.executable, s.description) for s in out] == [("a.sh", True, ""), ("b.sh", False, "B")]
     assert list_scripts(str(tmp_path / "missing")) == []
+
+
+def test_read_script_info_vanished_mid_read_is_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A script deleted between the is_file check and the read stays a
+    FileNotFoundError (404), not the unreadable (EACCES) error."""
+    from arm_backend.notifications import script_meta
+
+    _write(tmp_path, "gone.sh", HEADER)
+
+    def _vanished(_path: Path) -> str:
+        raise FileNotFoundError("gone.sh")
+
+    monkeypatch.setattr(script_meta, "_read_head", _vanished)
+    with pytest.raises(FileNotFoundError):
+        read_script_info(str(tmp_path), "gone.sh")

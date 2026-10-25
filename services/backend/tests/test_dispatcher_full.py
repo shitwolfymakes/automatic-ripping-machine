@@ -7,17 +7,13 @@ swallows.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import httpx
+import respx
 
-import httpx  # noqa: E402
-import respx  # noqa: E402
-
-from arm_backend.metadata.dispatcher import MetadataDispatcher, _normalize_volume_label  # noqa: E402
-from arm_common import Config, DiscType  # noqa: E402
-from arm_common.schemas import ScanResult  # noqa: E402
+from arm_backend.metadata.dispatcher import MetadataDispatcher, _normalize_volume_label
+from arm_common import Config, DiscType
+from arm_common.schemas import ScanResult
 
 _ARM = "https://1337server.pythonanywhere.com/api/v1/"
 

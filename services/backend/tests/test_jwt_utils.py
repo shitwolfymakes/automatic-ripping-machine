@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt as pyjwt
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
-from arm_backend.jwt_utils import (  # noqa: E402
+from arm_backend.jwt_utils import (
     ACCESS_TOKEN_TTL,
     ALGORITHM,
     issue_access_token,

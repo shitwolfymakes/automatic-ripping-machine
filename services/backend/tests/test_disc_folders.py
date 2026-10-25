@@ -6,10 +6,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend import disc_folders  # noqa: E402
+from arm_backend import disc_folders
 
 
 def _disc(root: Path, rel: str, video_dir: str = "BDMV") -> Path:

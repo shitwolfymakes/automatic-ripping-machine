@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from typing import Any, Literal
+from urllib.parse import quote
 
 import httpx
 
@@ -215,7 +216,7 @@ class TMDBClient:
         provider-driven detail lookup when TMDb is the movie search provider."""
         try:
             r = await self._http.get(
-                f"{_base_url()}/find/{imdb_id}",
+                f"{_base_url()}/find/{quote(imdb_id, safe='')}",
                 params={"external_source": "imdb_id"},
                 headers=self._headers,
             )

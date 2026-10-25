@@ -8,26 +8,22 @@ and extract_poster_url's provider precedence.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import httpx
+import pytest
+import respx
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-import respx  # noqa: E402
-
-from arm_backend.metadata import musicbrainz as mb_mod  # noqa: E402
-from arm_backend.metadata.arm_server import ArmServerClient  # noqa: E402
-from arm_backend.metadata.base import (  # noqa: E402
+from arm_backend.metadata import musicbrainz as mb_mod
+from arm_backend.metadata.arm_server import ArmServerClient
+from arm_backend.metadata.base import (
     LookupError,
     LookupTimeout,
     MetadataResult,
     extract_poster_url,
 )
-from arm_backend.metadata.musicbrainz import MusicBrainzClient  # noqa: E402
-from arm_backend.metadata.omdb import OMDBClient  # noqa: E402
-from arm_backend.metadata.tmdb import TMDBClient  # noqa: E402
+from arm_backend.metadata.musicbrainz import MusicBrainzClient
+from arm_backend.metadata.omdb import OMDBClient
+from arm_backend.metadata.tmdb import TMDBClient
 
 
 @pytest.fixture

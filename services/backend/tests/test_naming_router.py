@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import naming as naming_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import naming as naming_router
+from arm_common import (
     Config,
     Drive,
     ContainerFormat,
@@ -27,10 +24,10 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
     User,
 )
-from arm_common.enums import DiscType, JobStatus, TrackKind  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.enums import DiscType, JobStatus, TrackKind
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 # Valid ULID-shaped IDs (prefix + 26 Crockford base32 chars)
 _JOB_ID_1 = "job_00000000000000000000000001"

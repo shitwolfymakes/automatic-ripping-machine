@@ -6,7 +6,8 @@ Wire shape:
        service-token subprotocol or origin-less connects.
     2. Accept upgrade.
     3. 5s window for the first message; must be {op:auth, token:...}.
-    4. resolve_principal(); reject (4401) on failure.
+    4. resolve_principal(), then the REST-equivalent account checks for a UI
+       user (missing/disabled 4401, password_must_change 4403); reject on failure.
     5. Send {op:ack, topic:""} as the auth ack.
     6. Loop: subscribe / unsubscribe / publish, gated by authz.
     7. On disconnect: hub.disconnect(ws).
@@ -29,6 +30,7 @@ from arm_backend.ws.principal import (
     AuthError,
     Principal,
     ServicePrincipal,
+    UIPrincipal,
     resolve_principal,
 )
 from arm_common import User
@@ -55,6 +57,9 @@ SERVICE_TOKEN_SUBPROTOCOL = "arm-service-token"
 CLOSE_BAD_MESSAGE = 4400
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_FORBIDDEN = 4403
+# The auth window elapsed. Distinct from 4401 so a client that treats 4401 as
+# "log out" keeps reconnecting after a stall on either side.
+CLOSE_AUTH_TIMEOUT = 4408
 
 
 def _origin_allowed(
@@ -159,7 +164,7 @@ async def _do_auth(
     try:
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError as e:
-        raise _AuthFailure(CLOSE_UNAUTHORIZED, "auth timeout") from e
+        raise _AuthFailure(CLOSE_AUTH_TIMEOUT, "auth timeout") from e
     except WebSocketDisconnect as e:
         raise _ClientGone from e
     except Exception as e:
@@ -190,6 +195,10 @@ async def _do_auth(
         # here, mirroring require_jwt's REST fallback (guest missing/disabled
         # → unauthorized).
         await _check_guest_enabled(websocket)
+    elif isinstance(principal, UIPrincipal):
+        # A verified JWT signature is not enough: apply the same account
+        # checks REST `require_jwt` runs on every UI request (D-163).
+        await _check_ui_user(principal.user_id)
 
     return principal
 
@@ -201,9 +210,28 @@ async def _check_guest_enabled(websocket: WebSocket) -> None:
         raise _AuthFailure(CLOSE_UNAUTHORIZED, "authentication required")
 
 
+async def _check_ui_user(user_id: str) -> None:
+    async with SessionLocal() as session:
+        user = (await session.execute(select(User).where(col(User.id) == user_id))).scalar_one_or_none()
+    if user is None:
+        raise _AuthFailure(CLOSE_UNAUTHORIZED, "unknown user")
+    if user.disabled:
+        raise _AuthFailure(CLOSE_UNAUTHORIZED, "account disabled")
+    if user.password_must_change:
+        raise _AuthFailure(CLOSE_FORBIDDEN, "password change required")
+
+
 async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) -> None:
     while True:
-        raw = await websocket.receive_json()
+        try:
+            raw = await websocket.receive_json()
+        except WebSocketDisconnect:
+            raise
+        except Exception:
+            # Non-JSON text or a binary frame: a client protocol error, answered
+            # like the same frame before auth instead of a 1011 + traceback (D-167).
+            await _send_error(websocket, CLOSE_BAD_MESSAGE, "message must be JSON")
+            continue
         try:
             msg = _inbound_adapter.validate_python(raw)
         except ValidationError:

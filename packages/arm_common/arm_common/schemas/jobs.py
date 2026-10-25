@@ -368,6 +368,11 @@ class TrackView(BaseModel):
     # music, data tracks). NOT the rip status (`status` above) — this is the
     # transcode phase. Display-only; set by get_job_detail, not a Track column.
     transcode_status: TranscodeTaskStatus | None = None
+    # Encoder frame rate from that task's latest heartbeat, so the job page
+    # can show it beside an in-progress transcode. Same provenance as
+    # transcode_status: display-only, set by get_job_detail.
+    transcode_fps: float | None = None
+    transcode_avg_fps: float | None = None
     output_path: str | None
     size_bytes: int | None
     # `expected_size_bytes` is the scan-time MakeMKV estimate (TINFO:t,11);

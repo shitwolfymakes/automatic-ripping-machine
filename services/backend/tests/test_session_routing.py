@@ -10,15 +10,11 @@ flag, bypassed by an explicit per-rip choice.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend.auto_session import auto_apply_allowed, resolve_routed_session_id  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.auto_session import auto_apply_allowed, resolve_routed_session_id
+from arm_common import (
     Config,
     DiscType,
     Drive,
@@ -30,7 +26,7 @@ from arm_common import (  # noqa: E402
     SessionRoute,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _job(

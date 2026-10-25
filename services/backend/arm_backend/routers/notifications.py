@@ -31,7 +31,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
@@ -649,10 +649,9 @@ async def list_inbox(
     db: AsyncSession = Depends(get_session),
 ) -> list[NotificationInbox]:
     stmt = select(NotificationInbox).order_by(col(NotificationInbox.created_at).desc())
-    rows = list((await db.execute(stmt)).scalars().all())
     if not include_cleared:
-        rows = [r for r in rows if not r.cleared]
-    return rows[:limit]
+        stmt = stmt.where(col(NotificationInbox.cleared).is_(False))
+    return list((await db.execute(stmt.limit(limit))).scalars().all())
 
 
 @router.get("/inbox/count", response_model=NotificationInboxCountView)
@@ -660,11 +659,14 @@ async def inbox_count(
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> NotificationInboxCountView:
-    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
-    cleared = sum(1 for r in rows if r.cleared)
-    unseen = sum(1 for r in rows if not r.seen and not r.cleared)
-    seen = sum(1 for r in rows if r.seen and not r.cleared)
-    return NotificationInboxCountView(unseen=unseen, seen=seen, cleared=cleared, total=len(rows))
+    stmt = select(NotificationInbox.seen, NotificationInbox.cleared, func.count()).group_by(
+        col(NotificationInbox.seen), col(NotificationInbox.cleared)
+    )
+    counts = {(bool(s), bool(c)): n for s, c, n in (await db.execute(stmt)).all()}
+    cleared = counts.get((True, True), 0) + counts.get((False, True), 0)
+    unseen = counts.get((False, False), 0)
+    seen = counts.get((True, False), 0)
+    return NotificationInboxCountView(unseen=unseen, seen=seen, cleared=cleared, total=cleared + unseen + seen)
 
 
 @router.post("/inbox/dismiss-all")
@@ -674,12 +676,11 @@ async def inbox_dismiss_all(
 ) -> dict[str, int]:
     # Same effect as dismissing each row (PATCH seen + cleared), so dismissed
     # rows leave the inbox and become purgeable either way.
-    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
+    stmt = select(NotificationInbox).where(col(NotificationInbox.cleared).is_(False))
+    rows = list((await db.execute(stmt)).scalars().all())
     now = datetime.now(UTC)
     updated = 0
     for r in rows:
-        if r.cleared:
-            continue
         if not r.seen:
             r.seen = True
             r.seen_at = now
@@ -695,12 +696,11 @@ async def inbox_purge(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
-    rows = list((await db.execute(select(NotificationInbox))).scalars().all())
-    deleted = 0
+    stmt = select(NotificationInbox).where(col(NotificationInbox.cleared).is_(True))
+    rows = list((await db.execute(stmt)).scalars().all())
     for r in rows:
-        if r.cleared:
-            await db.delete(r)
-            deleted += 1
+        await db.delete(r)
+    deleted = len(rows)
     await db.commit()
     return {"deleted": deleted}
 

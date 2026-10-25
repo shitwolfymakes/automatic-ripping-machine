@@ -113,7 +113,7 @@ Sintel ISO:
 ```bash
 # .env needs ARM_HOST_ISO_LIBRARY_PATH set; devtools/setup-dev.sh up
 # creates arm/iso-library and wires the mount.
-docker compose up -d arm-db arm-backend arm-ui       # if not already up
+bash devtools/setup-dev.sh up                         # if not already up
 ./devtools/iso-smoke.sh
 ```
 
@@ -217,8 +217,8 @@ Attach to the PR comment / issue:
 ## Known gotchas
 
 - **MakeMKV beta key expired** — MakeMKV's free beta key rotates every
-  ~30 days. If `scan` fails with a licence error, refresh the key in
-  `$ARM/.armctl/.env` (`MAKEMKV_KEY=…`) and run `"$ARM/armctl" up`.
+  ~30 days. If `scan` fails with a licence error, set a current key in
+  **Config → MakeMKV key**; the next rip picks it up without a restart.
 - **Audio CD identification can take 30–60s** — MusicBrainz lookups
   with rate-limiting are slow; don't assume the job is stuck.
 - **The transcode image is multi-GB.** In dev it's built locally up front

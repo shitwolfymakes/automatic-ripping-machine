@@ -6,14 +6,11 @@ is executed against in-memory SQLite by value.
 
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from tests.test_migration_chain import _render_sql  # noqa: E402
+from tests.test_migration_chain import _render_sql
 
 _PARENT = "0038_encoder_first"
 _REV = "0039_identity_core"

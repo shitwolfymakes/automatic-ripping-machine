@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from pathlib import Path
 
-from pathlib import Path  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend import file_browser as fb  # noqa: E402
+from arm_backend import file_browser as fb
 
 
 @pytest.fixture

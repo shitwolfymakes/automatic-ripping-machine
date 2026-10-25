@@ -164,6 +164,35 @@ async def test_run_encoder_ffmpeg_vaapi_routes_without_preset_ref(monkeypatch, t
 
 
 @pytest.mark.asyncio
+async def test_run_encoder_progress_callback_records_frame_rates(monkeypatch, tmp_path) -> None:
+    """Every field the engine reports lands on the ProgressState the heartbeat
+    pump reads, the frame rates included (D-248)."""
+    import arm_transcode.main as m
+
+    monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "vaapi_h265")
+    monkeypatch.setenv("ARM_GPU_DEVICE", "/dev/dri/renderD128")
+
+    async def fake_transcode_ffmpeg_vaapi(**kwargs):
+        await kwargs["progress_callback"](42, 600, "1/2", 45.67, 23.45)
+        kwargs["output_path"].write_bytes(b"z")
+        return 1
+
+    monkeypatch.setattr(m, "transcode_ffmpeg_vaapi", fake_transcode_ffmpeg_vaapi)
+    state = ProgressState()
+    await m._run_encoder(
+        tool=TranscodeTool.HANDBRAKE,
+        preset=_handbrake_preset(preset_ref=None),
+        raw_input=tmp_path / "in.mkv",
+        final_output=tmp_path / "out.mkv",
+        duration_seconds=100,
+        state=state,
+        cancel_event=asyncio.Event(),
+    )
+    assert (state.eta_seconds, state.current_pass, state.fps, state.avg_fps) == (600, "1/2", 45.67, 23.45)
+    assert state.pct == 100
+
+
+@pytest.mark.asyncio
 async def test_run_encoder_ffmpeg_vaapi_requires_gpu_device(monkeypatch, tmp_path) -> None:
     import arm_transcode.main as m
 

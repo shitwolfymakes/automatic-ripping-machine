@@ -104,6 +104,8 @@ check "no retired container: nothing removed" \
     "$(retired armv3 '')"
 check "unreadable compose config: no docker calls" "" "$(retired '' c0ffee)"
 present "up removes retired services"   '^    remove_retired_services$' "${SETUP}"
+present "up re-issues the UI certificate for a new address" '^    refresh_ui_leaf$' "${SETUP}"
+present "up restarts arm-ui after a re-issued certificate"  '^    restart_ui_for_new_leaf$' "${SETUP}"
 
 # remove_spawned_containers + respawn_rippers_if_needed, run for real against
 # stubbed compose/docker: prints RIPPERS_REMOVED and whether the backend was
@@ -241,6 +243,8 @@ present "backend waits for arm-data-init"      'condition: service_completed_suc
 present "backend mounts the ISO library read-only" 'ARM_HOST_ISO_LIBRARY_PATH:-\./arm/iso-library\}:/ingress:ro' "${TEMPLATE}"
 present "backend receives ARM_HOST_ISO_LIBRARY_PATH" 'ARM_HOST_ISO_LIBRARY_PATH: \$\{ARM_HOST_ISO_LIBRARY_PATH:-\}' "${TEMPLATE}"
 present "setup-dev creates the iso-library dir" 'iso-library' "${SETUP}"
+present "setup-dev fills an empty ARM_HOST_ISO_LIBRARY_PATH" 'env_set ARM_HOST_ISO_LIBRARY_PATH "\$\{ARM_DIR\}/iso-library"' "${SETUP}"
+present "setup-dev treats a quoted empty ARM_HOST_ISO_LIBRARY_PATH as empty" 'ISO_LIBRARY_PATH=.*\[:space:\]\]' "${SETUP}"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     envfile="$(mktemp)"

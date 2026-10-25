@@ -7,20 +7,16 @@ config signing-key back-fill, `_insert_missing` idempotency) and
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_backend.seeders import (  # noqa: E402
+from arm_backend.seeders import (
     GUEST_USERNAME,
     _seed_admin_user,
     _seed_guest_user,
 )
-from arm_common import User  # noqa: E402
-from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE  # noqa: E402
+from arm_common import User
+from arm_common.models.user import ADMIN_ROLE, GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 async def test_seed_guest_creates_disabled_guest() -> None:
