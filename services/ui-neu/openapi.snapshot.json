@@ -2154,6 +2154,66 @@
         }
       }
     },
+    "/api/jobs/{job_id}/identity/accept": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Accept Identity Suggestion",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
+        "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{job_id}/transcode": {
       "post": {
         "tags": [
@@ -5878,7 +5938,9 @@
                 {
                   "enum": [
                     "tmdb",
-                    "omdb"
+                    "omdb",
+                    "tvmaze",
+                    "tvdb"
                   ],
                   "type": "string"
                 },
@@ -10775,7 +10837,35 @@
             ],
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "anyOf": [
               {
                 "type": "string"
@@ -10784,7 +10874,62 @@
                 "type": "null"
               }
             ],
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crc64Service Enabled"
           }
         },
         "type": "object",
@@ -10950,9 +11095,43 @@
             "type": "boolean",
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "type": "string",
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "type": "string",
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "type": "string",
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "type": "boolean",
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "type": "boolean",
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "type": "boolean",
+            "title": "Crc64Service Enabled"
           },
           "makemkv_key_valid": {
             "anyOf": [
@@ -11054,7 +11233,14 @@
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
-          "metadata_provider",
+          "movie_sources",
+          "music_sources",
+          "search_provider_movie",
+          "search_provider_tv",
+          "search_provider_music",
+          "movie_auto_apply",
+          "music_auto_apply",
+          "crc64service_enabled",
           "updated_by_user_id",
           "updated_at"
         ],
@@ -13112,6 +13298,83 @@
         "type": "object",
         "title": "IdentityClaims"
       },
+      "IdentitySuggestion": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "movie",
+              "tv",
+              "music"
+            ],
+            "title": "Kind"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/ExternalIds"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "suggested_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Suggested At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provider",
+          "title",
+          "kind",
+          "suggested_at"
+        ],
+        "title": "IdentitySuggestion",
+        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off (identification-sources\nspec D-10). The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+      },
       "IdentityView": {
         "properties": {
           "sources": {
@@ -13920,6 +14183,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PreviouslyRipped"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity_suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentitySuggestion"
               },
               {
                 "type": "null"

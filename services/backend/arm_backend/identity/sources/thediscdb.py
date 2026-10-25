@@ -8,14 +8,16 @@ in the window (ambiguity -> no join; a wrong label is worse than no label).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from arm_common.enums import TrackRole
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims, TrackClaim
 
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_backend.metadata.base import MetadataResult
 
 SOURCE_ID = "thediscdb"
 DURATION_WINDOW_SECONDS = 2
@@ -123,3 +125,52 @@ def external_imdb_id(match: DiscMatch) -> str | None:
         return None
     imdb = ids.get("Imdb")
     return str(imdb) if imdb else None
+
+
+def release_kind(match: DiscMatch) -> Literal["movie", "tv"]:
+    """TheDiscDB's top-level directory names the kind (`movies` / `series`)."""
+    return "movie" if str(match.kind or "").lower().startswith("movie") else "tv"
+
+
+# A release-year suffix on a title slug (`round-midnight-1986`). Capped at
+# 2029, the same bound and reasoning as the dispatcher's
+# `_HINT_YEAR_SUFFIX_RE`: a title that genuinely ends in a later number
+# (`blade-runner-2049`) must never be shortened to "Blade Runner".
+_SLUG_YEAR_RE = re.compile(r"-(19\d{2}|20[0-2]\d)$")
+
+
+def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
+    """The release's own title and year: the title metadata when present,
+    else derived from the title slug (`round-midnight-1986`)."""
+    title = match.metadata.get("Title")
+    year = _int_or_none(match.metadata.get("Year"))
+    if isinstance(title, str) and title.strip():
+        return title.strip(), year
+    slug = str(match.title_slug or "").strip()
+    if not slug:
+        return None, None
+    m = _SLUG_YEAR_RE.search(slug)
+    # A trailing number is the release year only when it is not the tail of the
+    # title itself. TheDiscDB's own Year settles it when the snapshot has one
+    # (`blade-runner-2049` under Year=2017 keeps its 2049); without one the
+    # suffix is read as the year, which is all the slug can tell us.
+    if m and (year is None or int(m.group(1)) == year):
+        year = year if year is not None else int(m.group(1))
+        slug = slug[: m.start()]
+    words = [w for w in slug.split("-") if w]
+    return (" ".join(w.capitalize() for w in words) or None), year
+
+
+def release_result(match: DiscMatch, imdb_id: str) -> MetadataResult | None:
+    """The disc named by its TheDiscDB release alone (spec D-1, no online call);
+    None when the release has no usable title."""
+    title, year = release_identity(match)
+    if not title:
+        return None
+    return MetadataResult(
+        title=title,
+        year=year,
+        kind=release_kind(match),
+        payload={"imdb_id": imdb_id, "thediscdb_release": match.release_slug},
+        provider="thediscdb",
+    )

@@ -5,12 +5,8 @@
 	import PosterImage from './PosterImage.svelte';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
-	import { metadataProvider } from '$lib/stores/config';
-
-	// Pretty label for the configured default metadata provider; generic until
-	// the config store hydrates (layout load runs hydrateConfig once per load).
-	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb' };
-	let providerLabel = $derived(PROVIDER_LABELS[$metadataProvider ?? ''] ?? 'OMDb/TMDb');
+	import { searchProviders } from '$lib/stores/config';
+	import { providerLabel } from '$lib/utils/search-providers';
 
 	interface Props {
 		job: JobView;
@@ -26,6 +22,10 @@
 	let searchType = $state<'movie' | 'tv'>(
 		initialType ?? (job.media_type === 'tv' || (job.media_type == null && job.looks_episodic) ? 'tv' : 'movie')
 	);
+
+	// Pretty label for the configured search provider of the current search
+	// type; generic until the config store hydrates.
+	let providerBadge = $derived(providerLabel(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie));
 
 	function setSearchType(t: 'movie' | 'tv') {
 		if (t === searchType) return;
@@ -226,8 +226,8 @@
 		>
 			{searching ? 'Searching...' : 'Search'}
 		</button>
-		<span class="badge badge-sm" title="Default metadata provider configured in Settings">
-			{providerLabel}
+		<span class="badge badge-sm" title="Search provider configured in Settings">
+			{providerBadge}
 		</span>
 	</div>
 

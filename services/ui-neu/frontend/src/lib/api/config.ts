@@ -8,8 +8,9 @@ export interface AppConfig {
 	// Runtime toggle: Settings > Transcoding "Enable transcoding". Only
 	// meaningful when transcoder_capable is true.
 	transcoder_enabled: boolean;
-	// Configured default metadata provider ('tmdb' | 'omdb'); null when unset.
-	metadata_provider: string | null;
+	// The job page's search provider per media type; null when unset.
+	search_provider_movie: string | null;
+	search_provider_tv: string | null;
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -17,7 +18,8 @@ export async function fetchConfig(): Promise<AppConfig> {
 	return {
 		transcoder_capable: cfg.transcode_capable ?? true,
 		transcoder_enabled: cfg.transcode_enabled ?? true,
-		metadata_provider: cfg.metadata_provider ?? null
+		search_provider_movie: cfg.search_provider_movie ?? null,
+		search_provider_tv: cfg.search_provider_tv ?? null
 	};
 }
 

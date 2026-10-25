@@ -63,7 +63,7 @@ async def test_omdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
 @respx.mock
 async def test_tvdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
     monkeypatch.setattr("arm_backend.metadata.tvdb._base_url", lambda: "http://tvdb.lan/v4")
-    route = respx.post("http://tvdb.lan/v4/login").mock(return_value=httpx.Response(200, json={}))
+    route = respx.post("http://tvdb.lan/v4/login").mock(return_value=httpx.Response(200, json={"data": {"token": "t"}}))
     await TVDBClient("k", http_client).validate_key()
     assert route.called
 

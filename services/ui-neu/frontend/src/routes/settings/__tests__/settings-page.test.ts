@@ -62,10 +62,10 @@ const mockSchema = {
 			name: 'Metadata',
 			fields: [
 				{
-					key: 'metadata_provider',
+					key: 'search_provider_movie',
 					group: 'Metadata',
 					tier: 'operator',
-					label: 'Metadata provider',
+					label: 'Search movies with',
 					help: '',
 					type: 'enum',
 					editable: true,
@@ -187,7 +187,7 @@ const mockSchema = {
 };
 
 const mockConfig = {
-	metadata_provider: 'omdb',
+	search_provider_movie: 'omdb',
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
 	block_on_miss: true,
@@ -389,7 +389,7 @@ describe('Settings Page', () => {
 	async function renderAndWait() {
 		renderComponent(SettingsPage);
 		await waitFor(() => {
-			expect(screen.getByRole('combobox', { name: /metadata provider/i })).toBeInTheDocument();
+			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 	}
 
@@ -435,7 +435,7 @@ describe('Settings Page', () => {
 		it('renders the Metadata config tab with the provider select', async () => {
 			await renderAndWait();
 			// Metadata is the default tab — its SchemaConfigForm renders the enum field.
-			expect(screen.getByRole('combobox', { name: /metadata provider/i })).toBeInTheDocument();
+			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 
 		it('renders the Ripping config tab', async () => {
