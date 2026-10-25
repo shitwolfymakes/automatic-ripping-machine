@@ -273,6 +273,29 @@ describe('Dashboard Page', () => {
 			await fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'failed' } });
 			await waitFor(() => expect(mock).toHaveBeenLastCalledWith({ status: 'failed', limit: 48, offset: 0 }));
 		});
+
+		it('drops a slower, older jobs response that lands after a newer page', async () => {
+			const { fetchJobsPage } = await import('$lib/api/jobs');
+			const mock = fetchJobsPage as ReturnType<typeof vi.fn>;
+			mock.mockImplementation(() => Promise.resolve({ jobs: [COMPLETED_JOB], total: 100 }));
+			await renderDashboardTable();
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+
+			// a page-1 reload (the poll) hangs; page 2 is asked for and answers first
+			let resolveStale!: (v: unknown) => void;
+			mock.mockImplementationOnce(() => new Promise((r) => (resolveStale = r)));
+			await fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: '' } });
+			mock.mockImplementationOnce(() =>
+				Promise.resolve({ jobs: [{ ...COMPLETED_JOB, id: 'job_page2', title: 'Page Two' }], total: 100 })
+			);
+			await fireEvent.click(screen.getByText('2'));
+			await waitFor(() => expect(screen.getByText('Page Two')).toBeInTheDocument());
+
+			resolveStale({ jobs: [{ ...COMPLETED_JOB, id: 'job_stale', title: 'Stale Page' }], total: 100 });
+			await new Promise((r) => setTimeout(r, 0));
+			expect(screen.queryByText('Stale Page')).toBeNull();
+			expect(screen.getByText('Page Two')).toBeInTheDocument();
+		});
 	});
 
 	describe('guest write-control gating', () => {

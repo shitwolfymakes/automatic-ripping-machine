@@ -31,7 +31,7 @@ import { fetchDrives } from '$lib/api/drives';
 import { fetchIsoPreparing } from '$lib/api/iso';
 import { fetchJobs } from '$lib/api/jobs';
 import type { DriveView, IsoPrepareView, JobView } from '$lib/types/api.gen';
-import { fetchDashboard } from '../dashboard';
+import { fetchDashboard, fetchDashboardSnapshot } from '../dashboard';
 
 const mockFetchDrives = vi.mocked(fetchDrives);
 
@@ -77,6 +77,20 @@ describe('fetchDashboard', () => {
 
 		expect(dash.drives_online).toBe(0);
 		expect(dash.iso_sources).toEqual({});
+	});
+
+	it('reports the drive fields as null in a snapshot when the drives fetch fails', async () => {
+		// null (not {}) is what lets the store hold the last good maps
+		mockFetchDrives.mockRejectedValueOnce(new Error('boom'));
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.drives_online).toBeNull();
+		expect(snap.drive_names).toBeNull();
+		expect(snap.iso_sources).toBeNull();
+		expect(snap.iso_source_kinds).toBeNull();
+		expect(snap.drive_source_kinds).toBeNull();
+		expect(snap.active_jobs).not.toBeNull();
 	});
 
 	it('lists ISO rips that are preparing: live virtual drives with no job yet', async () => {

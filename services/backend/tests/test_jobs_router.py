@@ -220,18 +220,34 @@ def test_list_jobs_pages_newest_first_with_id_tiebreak(signing_key: bytes) -> No
     assert [j["id"] for j in second.json()] == ["job_01JZXR7K3M5Q8N4VWA00000004", "job_01JZXR7K3M5Q8N4VWA00000001"]
 
 
-def test_list_jobs_limit_defaults_to_48_and_caps_at_200(signing_key: bytes) -> None:
+def test_list_jobs_limit_defaults_to_50_and_caps_at_500(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i % 28) for i in range(60)]
     with TestClient(app) as client:
         default = client.get("/api/jobs", headers=_auth(token))
-        too_big = client.get("/api/jobs?limit=201", headers=_auth(token))
-        max_ok = client.get("/api/jobs?limit=200", headers=_auth(token))
-    assert len(default.json()) == 48
+        too_big = client.get("/api/jobs?limit=501", headers=_auth(token))
+        max_ok = client.get("/api/jobs?limit=500", headers=_auth(token))
+    assert len(default.json()) == 50
     assert default.headers["X-Total-Count"] == "60"
     assert too_big.status_code == 422
     assert max_ok.status_code == 200
+    assert max_ok.headers["X-Total-Count"] == "60"
+
+
+def test_list_jobs_total_count_is_exact_on_short_and_past_end_pages(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i) for i in range(5)]
+    with TestClient(app) as client:
+        short = client.get("/api/jobs?limit=10&offset=2", headers=_auth(token))
+        past_end = client.get("/api/jobs?limit=10&offset=20", headers=_auth(token))
+        full = client.get("/api/jobs?limit=5", headers=_auth(token))
+    assert len(short.json()) == 3
+    assert short.headers["X-Total-Count"] == "5"
+    assert past_end.json() == []
+    assert past_end.headers["X-Total-Count"] == "5"
+    assert full.headers["X-Total-Count"] == "5"
 
 
 # --- get_job_detail ----------------------------------------------------------

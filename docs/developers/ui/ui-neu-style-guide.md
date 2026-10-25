@@ -187,6 +187,7 @@ comment is the block's contract (name, elements, modifiers, state). Summary:
 | `field` | -label, -help, -error, -control | -row | [aria-invalid], :disabled, :focus-visible |
 | `flyout` | -item, -divider | | [data-placement] |
 | `glyph` | | -sm, -md, -lg; -danger, -warning, -success, -info | [data-glyph] |
+| `list-panel` | -header, -title, -count, -body | | |
 | `list-row` | -lead, -main, -meta, -actions | -compact | [data-active], [data-disabled], [aria-expanded] |
 | `modal` | -backdrop, -panel, -title, -body, -actions | -wide | |
 | `nav` | -item, -badge, -logo | | [data-active] |

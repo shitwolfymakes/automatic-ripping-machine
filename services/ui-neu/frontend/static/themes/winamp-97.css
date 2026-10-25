@@ -275,28 +275,25 @@
 	margin-left: 1rem;
 	margin-right: 1rem;
 }
-/* All Jobs header — like the card header rows above: the titlebar spans the
-   panel edge-to-edge on top (negative margins cancel the header's padding),
-   and the count, filter, view toggle and actions wrap onto the row below. */
-[data-scheme='winamp-97'] main .dashboard-jobs-header > .dashboard-jobs-title {
+/* List panels (All Jobs, Logs) — like the card header rows above: the
+   titlebar spans the panel edge-to-edge on top (negative margins cancel the
+   header's padding), and the count, filters and actions wrap below it. */
+[data-scheme='winamp-97'] main .list-panel-header > .list-panel-title {
 	flex: 1 1 100%;
 	margin: -0.75rem -1rem 0;
 }
-/* Logs page — the panel is a winamp window like All Jobs: the "Job logs"
-   title (an h1, so the h2 titlebar rule below misses it) becomes the same
-   titlebar band spanning the top edge, and the count, filter and search
-   wrap onto the row below it. */
+/* Logs page — the panel is a winamp window, and its "Job logs" title (an
+   h1, so the h2 titlebar rule below misses it) becomes the same titlebar
+   band All Jobs' h2 gets. */
 [data-scheme='winamp-97'] main .logs-panel {
 	border: 2px solid;
 	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
 	border-radius: 0;
 	background-color: rgb(34, 36, 56);
 }
-[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title {
+[data-scheme='winamp-97'] main .list-panel-header > h1.list-panel-title {
 	display: flex;
 	align-items: center;
-	flex: 1 1 100%;
-	margin: -0.75rem -1rem 0;
 	padding: 0.35rem 0.75rem;
 	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
 	border: 1px solid rgb(12, 13, 22);
@@ -309,8 +306,8 @@
 	text-transform: uppercase;
 	text-shadow: 1px 1px 0 rgb(0, 0, 0);
 }
-[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title::before,
-[data-scheme='winamp-97'] main .logs-panel-header > .logs-panel-title::after {
+[data-scheme='winamp-97'] main .list-panel-header > h1.list-panel-title::before,
+[data-scheme='winamp-97'] main .list-panel-header > h1.list-panel-title::after {
 	content: '';
 	flex: 1;
 	height: 6px;

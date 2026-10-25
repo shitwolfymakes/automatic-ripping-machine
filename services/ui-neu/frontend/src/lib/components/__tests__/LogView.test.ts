@@ -188,6 +188,36 @@ describe('LogView', () => {
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Following');
 	});
 
+	it('counts paused arrivals from appended once a capped feed stops growing', async () => {
+		const { rerender } = renderComponent(LogView, { props: { entries: ENTRIES, appended: 5 } });
+		await scrollUp(screen.getByTestId('job-log-view'));
+
+		// the cap dropped as many old lines as arrived: same length, new tail
+		const shifted: LogEntry[] = [
+			...ENTRIES.slice(3),
+			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:03Z', event: 'late one' },
+			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:04Z', event: 'late two' },
+			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:05Z', event: 'late three' }
+		].slice(-ENTRIES.length);
+		await rerender({ entries: shifted, appended: 8 });
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 3 new lines');
+	});
+
+	it('follows the latest line again when a collapsed view is expanded', async () => {
+		const header = textSnippet('Log title');
+		const { rerender } = renderComponent(LogView, { props: { entries: ENTRIES, header } });
+		await scrollUp(screen.getByTestId('job-log-view'));
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused');
+
+		await rerender({ entries: ENTRIES, header, collapsed: true });
+		await rerender({ entries: ENTRIES, header, collapsed: false });
+
+		const view = screen.getByTestId('job-log-view');
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Following');
+		expect(screen.queryByTestId('job-log-jump')).not.toBeInTheDocument();
+		expect(view.scrollTop).toBe(view.scrollHeight);
+	});
+
 	it('renders each line with time, service chip and message', () => {
 		renderComponent(LogView, { props: { entries: ENTRIES } });
 		const lines = screen.getAllByTestId('job-log-line');

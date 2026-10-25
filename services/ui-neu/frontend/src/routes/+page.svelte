@@ -137,7 +137,11 @@
 	let allVisibleSelected = $derived(jobs !== null && jobs.length > 0 && jobs.every((j) => selectedJobs.has(j.id)));
 
 	// Reloads the current page only (the poll and ripper events call this too).
+	// Calls overlap (poll, events, paging), so only the latest request's
+	// response is applied; an earlier, slower one is dropped.
+	let jobsRequest = 0;
 	async function loadJobs() {
+		const request = ++jobsRequest;
 		if (!jobs) jobsLoading = true;
 		jobsError = null;
 		try {
@@ -146,6 +150,7 @@
 				limit: perPage,
 				offset: (page - 1) * perPage
 			});
+			if (request !== jobsRequest) return;
 			jobs = result.jobs;
 			total = result.total;
 			// A delete (here or elsewhere) can empty the page we are on: step
@@ -159,9 +164,10 @@
 				if (!jobs.some((j) => j.id === id)) selectedJobs.delete(id);
 			}
 		} catch (e) {
+			if (request !== jobsRequest) return;
 			jobsError = e instanceof Error ? e : new Error('Failed to load jobs');
 		} finally {
-			jobsLoading = false;
+			if (request === jobsRequest) jobsLoading = false;
 		}
 	}
 
@@ -458,10 +464,10 @@
 	<!-- All Jobs: one panel (header, selection bar, list, footer). Plain divs
 	     inside, not header/footer/.panel: the winamp-97 scheme styles those
 	     as the app titlebar and would rebuild the old two-row layout. -->
-	<section id="all-jobs" class="dashboard-jobs">
-		<div class="dashboard-jobs-header">
-			<h2 class="dashboard-jobs-title">All Jobs</h2>
-			<span class="dashboard-jobs-count">{total} {total === 1 ? 'job' : 'jobs'}</span>
+	<section id="all-jobs" class="list-panel">
+		<div class="list-panel-header">
+			<h2 class="list-panel-title">All Jobs</h2>
+			<span class="list-panel-count">{total} {total === 1 ? 'job' : 'jobs'}</span>
 			<JobFilterBar {statusFilter} onstatusfilter={setStatusFilter} />
 			<span class="flex-1"></span>
 			<div class="dashboard-view-group">
@@ -500,7 +506,7 @@
 			</div>
 		{/if}
 
-		<div class="dashboard-jobs-body">
+		<div class="list-panel-body">
 			<LoadState data={jobs} loading={jobsLoading} error={jobsError} transitionKey="dashboard-recent-jobs">
 				{#snippet loadingSlot()}
 					{#if viewMode === 'table'}
@@ -588,30 +594,6 @@
 		border-radius: 9999px;
 		background: var(--color-warning);
 	}
-	.dashboard-jobs {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		background: var(--color-surface);
-		box-shadow: var(--shadow-1);
-		overflow: hidden;
-	}
-	.dashboard-jobs-header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.625rem 0.875rem;
-		padding: 0.75rem 1rem;
-	}
-	.dashboard-jobs-title {
-		font-size: 1.125rem;
-		line-height: 1.75rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.dashboard-jobs-count {
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-	}
 	/* Cards / Table: one tinted track, the active view filled in primary */
 	.dashboard-view-group {
 		display: flex;
@@ -670,9 +652,6 @@
 	}
 	.dashboard-jobs-feedback[data-tone='error'] {
 		color: var(--color-danger);
-	}
-	.dashboard-jobs-body {
-		border-top: 1px solid var(--color-border);
 	}
 	.dashboard-jobs-grid {
 		padding: 0.75rem;

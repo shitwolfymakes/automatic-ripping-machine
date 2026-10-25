@@ -65,6 +65,26 @@ export interface DashboardData {
 	active_transcodes: TranscodeTaskView[];
 }
 
+// Fields whose endpoint can blip independently. A snapshot reports them as
+// `null` when their read failed this poll, so the store can hold the last
+// good value instead of flickering to an empty map or a zero count.
+export const STICKY_FIELDS = [
+	'active_jobs',
+	'drives_online',
+	'drive_names',
+	'iso_sources',
+	'iso_source_kinds',
+	'drive_source_kinds',
+	'notification_count',
+	'ripping_enabled'
+] as const satisfies readonly (keyof DashboardData)[];
+
+type StickyField = (typeof STICKY_FIELDS)[number];
+
+export type DashboardSnapshot = Omit<DashboardData, StickyField> & {
+	[K in StickyField]: DashboardData[K] | null;
+};
+
 // JobView.status values that mean "in-flight" (non-terminal). v3 GET /api/jobs
 // has no "all active" status_filter, so we fetch the full list and filter here.
 const TERMINAL_JOB_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>(['abandoned', 'failed']);
@@ -81,12 +101,29 @@ function fetchConfig(): Promise<ConfigView> {
 	return apiFetch<ConfigView>('/api/config');
 }
 
+/** The dashboard with every failed read's fields filled with empty defaults. */
+export async function fetchDashboard(): Promise<DashboardData> {
+	const s = await fetchDashboardSnapshot();
+	return {
+		...s,
+		active_jobs: s.active_jobs ?? [],
+		drives_online: s.drives_online ?? 0,
+		drive_names: s.drive_names ?? {},
+		iso_sources: s.iso_sources ?? {},
+		iso_source_kinds: s.iso_source_kinds ?? {},
+		drive_source_kinds: s.drive_source_kinds ?? {},
+		notification_count: s.notification_count ?? 0,
+		ripping_enabled: s.ripping_enabled ?? true
+	};
+}
+
 /**
  * Compose the dashboard from independent v3 endpoints. Uses Promise.allSettled
- * so a single failing endpoint degrades only its field(s); `arm_online` /
- * `transcoder_online` are derived from which fetches settled.
+ * so a single failing endpoint degrades only its field(s), which come back
+ * `null` (see STICKY_FIELDS); `arm_online` / `transcoder_online` are derived
+ * from which fetches settled.
  */
-export async function fetchDashboard(): Promise<DashboardData> {
+export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes, preparingRes] =
 		await Promise.allSettled([
 			fetchConfig(),
@@ -142,15 +179,16 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		// sidebar uses it to gate drive counts / the ripping toggle.
 		db_available: config !== null,
 		arm_online: armOnline,
-		active_jobs: activeJobs,
-		drives_online: (drives ?? []).filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
-		drive_names: driveNames,
-		iso_sources: isoSources,
-		iso_source_kinds: isoSourceKinds,
-		drive_source_kinds: driveSourceKinds,
+		active_jobs: jobs === null ? null : activeJobs,
+		drives_online:
+			drives === null ? null : drives.filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
+		drive_names: drives === null ? null : driveNames,
+		iso_sources: drives === null ? null : isoSources,
+		iso_source_kinds: drives === null ? null : isoSourceKinds,
+		drive_source_kinds: drives === null ? null : driveSourceKinds,
 		preparing,
-		notification_count: notifications?.unseen ?? 0,
-		ripping_enabled: config ? !config.ripping_paused : true,
+		notification_count: notifications === null ? null : (notifications.unseen ?? 0),
+		ripping_enabled: config === null ? null : !config.ripping_paused,
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,
 		transcoder_online: transcoderOnline,

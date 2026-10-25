@@ -78,6 +78,7 @@
 		entries={log.entries}
 		error={log.error}
 		loading={log.loading && log.entries.length === 0}
+		appended={log.appended}
 		search
 		header={titlebar}
 		collapsed={!open}

@@ -297,7 +297,7 @@ async def list_jobs(
     session: AsyncSession = Depends(get_session),
     status_filter: JobStatus | None = Query(default=None, alias="status"),
     drive_id: str | None = Query(default=None),
-    limit: int = Query(default=48, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[JobView]:
     """One page of jobs, newest first with a stable `id` tiebreak so a page
@@ -313,7 +313,12 @@ async def list_jobs(
     )
     result = await session.execute(stmt)
     jobs = list(result.scalars().all())
-    total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
+    # A short page already pins the total (the poll's common case), so the
+    # COUNT round trip runs only for a full page or one past the end.
+    if len(jobs) < limit and (jobs or offset == 0):
+        total = offset + len(jobs)
+    else:
+        total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
     response.headers["X-Total-Count"] = str(total)
 
     # One batched track lookup keyed on the ripping-job IDs feeds the

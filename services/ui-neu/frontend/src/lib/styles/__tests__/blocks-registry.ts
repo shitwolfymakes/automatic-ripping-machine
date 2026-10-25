@@ -28,6 +28,7 @@ export const BLOCKS: Record<string, string[]> = {
 		'.stat-muted'
 	],
 	table: ['.table', '.table-header', '.table-row', '.table-cell', '.table-sort', '.table-compact'],
+	'list-panel': ['.list-panel', '.list-panel-header', '.list-panel-title', '.list-panel-count', '.list-panel-body'],
 	'list-row': [
 		'.list-row',
 		'.list-row-lead',

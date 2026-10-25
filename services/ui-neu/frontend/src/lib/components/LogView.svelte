@@ -16,6 +16,10 @@
 		header?: Snippet;
 		/** When true only the title bar renders. */
 		collapsed?: boolean;
+		/** Running count of live lines received; drives the paused "N new
+		 *  lines" count, which entries.length can't once a capped feed drops
+		 *  old lines. Defaults to entries.length. */
+		appended?: number;
 	}
 
 	let {
@@ -25,7 +29,8 @@
 		search = false,
 		maxHeightClass = 'max-h-96',
 		header = undefined,
-		collapsed = false
+		collapsed = false,
+		appended = undefined
 	}: Props = $props();
 
 	type Level = 'all' | 'error' | 'warning' | 'info' | 'debug';
@@ -202,12 +207,26 @@
 
 	// Follow new lines while the user hasn't scrolled up; while paused, count
 	// the lines that arrived so the status bar can say how many are waiting.
+	// The terminal div unmounts while collapsed, so a newly bound one (first
+	// render or expand) starts following again at the latest line.
 	let seen = 0;
+	let boundView: HTMLDivElement | null = null;
 	$effect(() => {
-		const total = entries.length;
+		const total = appended ?? entries.length;
 		void filtered.length;
+		const view = viewEl;
 		const follow = following;
 		untrack(() => {
+			seen = Math.min(seen, total);
+			if (view !== boundView) {
+				boundView = view;
+				if (view !== null && !follow) {
+					// re-runs this effect with follow on, which scrolls
+					following = true;
+					seen = total;
+					return;
+				}
+			}
 			if (follow) {
 				newWhilePaused = 0;
 				scrollToBottom();

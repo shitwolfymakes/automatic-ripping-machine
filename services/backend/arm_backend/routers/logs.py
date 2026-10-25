@@ -70,8 +70,10 @@ def per_job_log_path(job_id: str) -> Path:
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
+# Plain `def`: the directory scan and per-file stat are blocking I/O, so
+# FastAPI runs this in its threadpool instead of on the event loop.
 @router.get("", response_model=list[JobLogFileView])
-async def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
+def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
     """Every per-job log file under `LOG_DIR/jobs`, newest first.
 
     Only `<job_id>.log` regular files whose stem is a valid job id are listed;

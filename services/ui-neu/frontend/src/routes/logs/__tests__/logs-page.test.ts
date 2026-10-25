@@ -46,7 +46,7 @@ const INDEX = [
 ];
 
 vi.mock('$lib/api/jobs', () => ({
-	fetchJobsPage: vi.fn(() => Promise.resolve({ jobs: JOBS, total: JOBS.length }))
+	fetchAllJobs: vi.fn(() => Promise.resolve({ jobs: JOBS, total: JOBS.length }))
 }));
 // drv_iso_with_a_long_name is a retired virtual drive: the ISO chip must
 // still come from it.
@@ -88,10 +88,10 @@ describe('Logs job-list page', () => {
 		expect(search).toHaveAttribute('aria-label', 'Search jobs by title or id');
 	});
 
-	it('loads one page of up to 200 jobs', async () => {
-		const { fetchJobsPage } = await import('$lib/api/jobs');
+	it('loads every job, not one page', async () => {
+		const { fetchAllJobs } = await import('$lib/api/jobs');
 		await ready();
-		expect(fetchJobsPage).toHaveBeenCalledWith({ limit: 200 });
+		expect(fetchAllJobs).toHaveBeenCalledWith();
 	});
 
 	it('shows the columns in order', async () => {
@@ -155,8 +155,8 @@ describe('Logs job-list page', () => {
 	});
 
 	it('shows the error state when the jobs fail to load', async () => {
-		const { fetchJobsPage } = await import('$lib/api/jobs');
-		vi.mocked(fetchJobsPage).mockRejectedValueOnce(new Error('jobs down'));
+		const { fetchAllJobs } = await import('$lib/api/jobs');
+		vi.mocked(fetchAllJobs).mockRejectedValueOnce(new Error('jobs down'));
 		renderComponent(LogsPage);
 		await waitFor(() => expect(screen.getByText(/Failed to load: jobs down/)).toBeInTheDocument());
 	});
@@ -195,15 +195,15 @@ describe('Logs job-list page', () => {
 	});
 
 	it('uses the singular for one job', async () => {
-		const { fetchJobsPage } = await import('$lib/api/jobs');
-		vi.mocked(fetchJobsPage).mockResolvedValueOnce({ jobs: [JOBS[0]], total: 1 } as never);
+		const { fetchAllJobs } = await import('$lib/api/jobs');
+		vi.mocked(fetchAllJobs).mockResolvedValueOnce({ jobs: [JOBS[0]], total: 1 } as never);
 		await ready();
 		expect(screen.getByText('1 job')).toBeInTheDocument();
 	});
 
 	it('shows the empty state when there are no jobs', async () => {
-		const { fetchJobsPage } = await import('$lib/api/jobs');
-		vi.mocked(fetchJobsPage).mockResolvedValueOnce({ jobs: [], total: 0 });
+		const { fetchAllJobs } = await import('$lib/api/jobs');
+		vi.mocked(fetchAllJobs).mockResolvedValueOnce({ jobs: [], total: 0 });
 		renderComponent(LogsPage);
 		await waitFor(() => expect(screen.getByText(/no jobs yet/i)).toBeInTheDocument());
 	});

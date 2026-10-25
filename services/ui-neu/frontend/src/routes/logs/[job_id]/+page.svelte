@@ -70,7 +70,7 @@
 		</p>
 	{/if}
 
-	<LogView {entries} {error} {loading} search={true} maxHeightClass="max-h-[70vh]" />
+	<LogView {entries} {error} {loading} appended={log.appended} search={true} maxHeightClass="max-h-[70vh]" />
 </div>
 
 <style>

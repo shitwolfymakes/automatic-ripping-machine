@@ -10,6 +10,7 @@ import { apiFetch, apiFetchResponse, post } from '$lib/api/client';
 import {
 	fetchJobs,
 	fetchJobsPage,
+	fetchAllJobs,
 	fetchJob,
 	abandonJob,
 	deleteJob,
@@ -203,5 +204,31 @@ describe('fetchJobsPage', () => {
 		const page = await fetchJobsPage();
 		expect(mockApiFetchResponse.mock.calls[0][0]).toBe('/api/jobs');
 		expect(page.total).toBe(2);
+	});
+});
+
+describe('fetchAllJobs', () => {
+	const ids = (n: number, from = 0) => Array.from({ length: n }, (_, i) => ({ id: `job_${from + i}` }));
+
+	it('pages through until the total is reached', async () => {
+		mockApiFetchResponse
+			.mockResolvedValueOnce({ data: ids(500), headers: new Headers({ 'X-Total-Count': '620' }) })
+			.mockResolvedValueOnce({ data: ids(120, 500), headers: new Headers({ 'X-Total-Count': '620' }) });
+		const all = await fetchAllJobs({ status: 'failed' });
+		expect(mockApiFetchResponse.mock.calls.map((c) => c[0])).toEqual([
+			'/api/jobs?status=failed&limit=500&offset=0',
+			'/api/jobs?status=failed&limit=500&offset=500'
+		]);
+		expect(all.jobs).toHaveLength(620);
+		expect(all.total).toBe(620);
+	});
+
+	it('stops on an empty page even if the total says more', async () => {
+		mockApiFetchResponse
+			.mockResolvedValueOnce({ data: ids(500), headers: new Headers({ 'X-Total-Count': '600' }) })
+			.mockResolvedValueOnce({ data: [], headers: new Headers({ 'X-Total-Count': '500' }) });
+		const all = await fetchAllJobs();
+		expect(mockApiFetchResponse).toHaveBeenCalledTimes(2);
+		expect(all.total).toBe(500);
 	});
 });

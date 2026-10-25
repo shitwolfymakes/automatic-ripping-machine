@@ -1,14 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	discPosition,
-	discKindLabel,
-	jobTypeConfig,
-	formatShortDateTime,
-	orderByLastModified,
-	indexLogFiles,
-	logRelativeTime,
-	shortJobId
-} from './log-list';
+import { discPosition, discKindLabel, jobTypeConfig, orderByLastModified, indexLogFiles, shortJobId } from './log-list';
 
 const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
 
@@ -54,22 +45,6 @@ describe('jobTypeConfig', () => {
 	});
 });
 
-describe('formatShortDateTime', () => {
-	const now = new Date(2026, 9, 16, 12, 0);
-	it('formats month, day and time', () => {
-		const out = formatShortDateTime(new Date(2026, 9, 16, 8, 18).toISOString(), now);
-		expect(out).toMatch(/Oct 16/);
-		expect(out).toMatch(/8:18/);
-		expect(out).not.toMatch(/2026/);
-	});
-	it('adds the year when it is not the current year', () => {
-		expect(formatShortDateTime(new Date(2025, 11, 30, 9, 5).toISOString(), now)).toMatch(/2025/);
-	});
-	it('is empty for an unparseable date', () => {
-		expect(formatShortDateTime('not a date', now)).toBe('');
-	});
-});
-
 describe('indexLogFiles', () => {
 	it('maps job id to modified_at, dropping unparseable dates', () => {
 		const map = indexLogFiles([
@@ -88,39 +63,6 @@ describe('orderByLastModified', () => {
 			['d', '2026-10-16T10:00:00Z']
 		]);
 		expect(orderByLastModified(jobs, mod).map((j) => j.id)).toEqual(['d', 'b', 'a', 'c']);
-	});
-});
-
-describe('logRelativeTime', () => {
-	// Fixed local "now": Oct 16 2026, 12:00
-	const now = new Date(2026, 9, 16, 12, 0, 0);
-	const at = (...args: [number, number, number, number, number]) => new Date(...args).toISOString();
-
-	it('says just now under a minute', () => {
-		expect(logRelativeTime(new Date(now.getTime() - 30_000).toISOString(), now)).toBe('Just now');
-	});
-	it('counts minutes, then hours the same day', () => {
-		expect(logRelativeTime(at(2026, 9, 16, 11, 18), now)).toBe('42 min ago');
-		expect(logRelativeTime(at(2026, 9, 16, 9, 0), now)).toBe('3h ago');
-		expect(logRelativeTime(at(2026, 9, 16, 0, 5), now)).toBe('11h ago');
-	});
-	it('says yesterday for the previous calendar day', () => {
-		expect(logRelativeTime(at(2026, 9, 15, 23, 0), now)).toBe('Yesterday');
-		expect(logRelativeTime(at(2026, 9, 15, 0, 1), now)).toBe('Yesterday');
-	});
-	it('counts days up to six', () => {
-		expect(logRelativeTime(at(2026, 9, 14, 20, 0), now)).toBe('2 days ago');
-		expect(logRelativeTime(at(2026, 9, 10, 1, 0), now)).toBe('6 days ago');
-	});
-	it('is null for an unparseable date', () => {
-		expect(logRelativeTime('garbage', now)).toBeNull();
-	});
-	it('is null past six days, so only the absolute date shows', () => {
-		expect(logRelativeTime(at(2026, 9, 9, 23, 0), now)).toBeNull();
-	});
-	it('counts minutes across midnight before calendar days', () => {
-		const justAfterMidnight = new Date(2026, 9, 16, 0, 10);
-		expect(logRelativeTime(at(2026, 9, 15, 23, 50), justAfterMidnight)).toBe('20 min ago');
 	});
 });
 

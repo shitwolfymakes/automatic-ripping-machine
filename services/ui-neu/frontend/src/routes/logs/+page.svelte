@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchJobsPage } from '$lib/api/jobs';
+	import { fetchAllJobs } from '$lib/api/jobs';
 	import { fetchJobLogIndex } from '$lib/api/logs';
 	import type { JobView } from '$lib/types/api.gen';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
@@ -13,13 +13,12 @@
 	import {
 		discKindLabel,
 		discPosition,
-		formatShortDateTime,
 		jobTypeConfig,
 		orderByLastModified,
 		indexLogFiles,
-		logRelativeTime,
 		shortJobId
 	} from '$lib/utils/log-list';
+	import { calendarTimeAgo, formatShortDateTime } from '$lib/utils/format';
 	import { dashboard } from '$lib/stores/dashboard';
 
 	const COLUMNS = ['Title', 'Status', 'Type', 'Disc', 'Drive', 'Last modified'];
@@ -49,9 +48,11 @@
 	const countText = $derived(statusFilter || search ? `${filtered.length} of ${total} ${noun}` : `${total} ${noun}`);
 
 	onMount(async () => {
-		// The log index is best-effort: if it fails the jobs still list, each
-		// showing "No log yet".
-		const [page, index] = await Promise.allSettled([fetchJobsPage({ limit: 200 }), fetchJobLogIndex()]);
+		// Every job, not one page: the list sorts by log modified time and
+		// filters client-side, which a server page would cut short. The log
+		// index is best-effort: if it fails the jobs still list, each showing
+		// "No log yet".
+		const [page, index] = await Promise.allSettled([fetchAllJobs(), fetchJobLogIndex()]);
 		if (page.status === 'fulfilled') {
 			jobs = page.value.jobs;
 			total = page.value.total;
@@ -72,10 +73,10 @@
 
 <!-- One panel in the dashboard All Jobs style. Plain divs inside, not
      header/.panel: the winamp-97 scheme styles those as the app titlebar. -->
-<section class="logs-panel">
-	<div class="logs-panel-header">
-		<h1 class="logs-panel-title">Job logs</h1>
-		<span class="logs-panel-count">{countText}</span>
+<section class="list-panel logs-panel">
+	<div class="list-panel-header">
+		<h1 class="list-panel-title">Job logs</h1>
+		<span class="list-panel-count">{countText}</span>
 		<JobFilterBar {statusFilter} onstatusfilter={(v) => (statusFilter = v)} />
 		<span class="flex-1"></span>
 		<input
@@ -87,7 +88,7 @@
 		/>
 	</div>
 
-	<div class="logs-panel-body">
+	<div class="list-panel-body">
 		<LoadState data={jobs} {loading} {error} transitionKey="logs-job-list">
 			{#snippet loadingSlot()}
 				<p class="logs-panel-muted logs-panel-message">Loading jobs...</p>
@@ -151,7 +152,7 @@
 										</td>
 										<td class="table-cell logs-panel-nowrap" data-label="Last modified">
 											{#if logAt}
-												{@const relative = logRelativeTime(logAt)}
+												{@const relative = calendarTimeAgo(logAt)}
 												{#if relative}
 													<div>{relative}</div>
 													<div class="logs-panel-muted logs-panel-small">{formatShortDateTime(logAt)}</div>
@@ -174,35 +175,6 @@
 </section>
 
 <style>
-	/* Panel chrome: a scoped copy of the dashboard's .dashboard-jobs /
-	   -header / -title / -count / -body (routes/+page.svelte). */
-	.logs-panel {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		background: var(--color-surface);
-		box-shadow: var(--shadow-1);
-		overflow: hidden;
-	}
-	.logs-panel-header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.625rem 0.875rem;
-		padding: 0.75rem 1rem;
-	}
-	.logs-panel-title {
-		font-size: 1.125rem;
-		line-height: 1.75rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.logs-panel-count {
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-	}
-	.logs-panel-body {
-		border-top: 1px solid var(--color-border);
-	}
 	.logs-panel-search {
 		width: 14rem;
 		max-width: 100%;
