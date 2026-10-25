@@ -15,6 +15,9 @@ The bag holds four kinds of content, and this module gives each a home:
   reason; no countdown runs while it is set).
 - `identity_suggestion` — a confident match held for the operator to confirm (auto-apply
   off; no countdown runs while it is set).
+- `identify_attempts` — on an automatic-match miss, each source the dispatcher
+  tried and its outcome (`{source, step, kind, outcome, detail}`, at most 20);
+  the review card says why the match missed. Dropped on a hit or a resolve.
 - `provider_raw` — everything a provider returned, keyed by provider name.
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
@@ -142,6 +145,9 @@ class JobMetadata(BaseModel):
     # Set when a media type's auto-apply switch held a confident match for
     # the operator to confirm; no countdown runs while it is set.
     identity_suggestion: IdentitySuggestion | None = None
+    # Set on an automatic-match miss: what the dispatcher tried and how each
+    # attempt ended (arm_backend.metadata.dispatcher.last_attempts).
+    identify_attempts: list[dict[str, Any]] | None = None
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 

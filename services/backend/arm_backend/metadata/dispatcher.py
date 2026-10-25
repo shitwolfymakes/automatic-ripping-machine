@@ -1,13 +1,22 @@
 import asyncio
+import contextvars
 import logging
 import re
 import unicodedata
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import httpx
 
-from arm_backend.identity.sources.registry import fingerprint_sources, hint_sources_setting, sources_for
+from arm_backend.identity.sources.registry import (
+    fingerprint_sources,
+    hint_sources_setting,
+    online_source_ids,
+    sources_for,
+)
 from arm_backend.metadata.base import LookupError, MetadataResult
+from arm_backend.metadata.musicbrainz import TOC_NOT_FOUND
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_common import Config, DiscType
@@ -38,6 +47,27 @@ _NTSC_TOKEN_RE = re.compile(r"_NTSC(?=[_.\s\-]|$)", re.IGNORECASE)
 _BLURAY_BRANDING_RE = re.compile(r"[\s_\-]*blu[\s_\-]?ray(?:\s*(?:tm|™))?", re.IGNORECASE)
 # `_BD` (Blu-ray Disc) token, mirroring the `_NTSC` treatment.
 _BD_TOKEN_RE = re.compile(r"_BD(?=[_.\s\-]|$)", re.IGNORECASE)
+
+# One entry per source the dispatcher tried (or skipped) during an identify
+# call: why the automatic match missed, shown on the job's review card.
+AttemptStep = Literal["fingerprint", "disc_id", "title", "imdb"]
+AttemptKind = Literal["movie", "tv", "music"]
+AttemptOutcome = Literal["hit", "miss", "timeout", "error", "not_configured", "no_sources"]
+
+
+@dataclass
+class _AttemptLog:
+    """One identify call's attempts, plus the skips it already recorded."""
+
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+    skips_seen: set[tuple[str | None, str, str | None, str]] = field(default_factory=set)
+
+
+# The current identify call's log. A context variable, not an attribute of the
+# shared dispatcher: each request handler runs in its own asyncio task with its
+# own copy of the context, so two discs identified at once never see (or
+# suppress) each other's attempts.
+_attempt_log: contextvars.ContextVar[_AttemptLog | None] = contextvars.ContextVar("identify_attempt_log", default=None)
 
 
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
@@ -74,6 +104,16 @@ class MetadataDispatcher:
         self._sources: dict[str, OnlineSource] = dict(sources) if sources is not None else build_online_sources(http)
 
     @property
+    def last_attempts(self) -> list[dict[str, Any]]:
+        """The attempts of the identify / identify_from_imdb call last made in
+        the caller's context (task). Each call starts a fresh list in its own
+        context (see `_attempt_log`), so concurrent identifies on this shared
+        dispatcher are isolated; read it in the same task, after (or while
+        cancelling) the call."""
+        log = _attempt_log.get()
+        return log.attempts if log is not None else []
+
+    @property
     def sources(self) -> Mapping[str, OnlineSource]:
         """The online-source registry (shared with the metadata routes)."""
         return self._sources
@@ -90,6 +130,7 @@ class MetadataDispatcher:
         title_hint_is_tv: bool = False,
         prefer_tv: bool = False,
     ) -> MetadataResult | None:
+        self._reset_attempts()
         if scan.disc_type in (DiscType.DATA, DiscType.UNKNOWN):
             return None
 
@@ -104,11 +145,14 @@ class MetadataDispatcher:
     async def _identify_cd(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
             return None
-        for source in sources_for(cfg, "music", self._sources):
+        disc_id = scan.musicbrainz_disc_id
+        for source in self._walk(cfg, "music", "disc_id", disc_id):
             lookup = capability(source, "lookup_disc_id")
             if lookup is None:
                 continue
-            hit = await self._call(source.id, lookup(cfg, scan.musicbrainz_disc_id))
+            hit = await self._call(
+                source.id, lookup(cfg, disc_id, scan.cd_toc), step="disc_id", kind="music", detail=disc_id
+            )
             if hit is not None:
                 return hit
         return None
@@ -199,18 +243,18 @@ class MetadataDispatcher:
             lookup = capability(source, "lookup_fingerprint")
             if lookup is None:
                 continue
-            hit = await self._call(source.id, lookup(cfg, "crc64", crc64))
+            hit = await self._call(source.id, lookup(cfg, "crc64", crc64), step="fingerprint", kind=None, detail=crc64)
             if hit is not None:
                 return hit
         return None
 
     async def _search_kind(self, title: str, year: int | None, cfg: Config, kind: Kind) -> MetadataResult | None:
         """One kind: every enabled source for it, in the operator's order."""
-        for source in sources_for(cfg, kind, self._sources):
+        for source in self._walk(cfg, kind, "title", title):
             search = capability(source, "search_title")
             if search is None:
                 continue
-            hit = await self._call(source.id, search(cfg, kind, title, year))
+            hit = await self._call(source.id, search(cfg, kind, title, year), step="title", kind=kind, detail=title)
             if hit is not None:
                 return hit
         return None
@@ -224,13 +268,14 @@ class MetadataDispatcher:
         enabled sources for `kind`, in rank order, first hit wins. None when
         the id is empty, no source offers the lookup, or every source misses
         (the caller falls back to the fuzzy identify in that last case)."""
+        self._reset_attempts()
         if not imdb_id:
             return None
-        for source in sources_for(cfg, kind, self._sources):
+        for source in self._walk(cfg, kind, "imdb", imdb_id):
             lookup = capability(source, "lookup_imdb")
             if lookup is None:
                 continue
-            hit = await self._call(source.id, lookup(cfg, imdb_id))
+            hit = await self._call(source.id, lookup(cfg, imdb_id), step="imdb", kind=kind, detail=imdb_id)
             if hit is not None:
                 hit.payload.setdefault("imdb_id", imdb_id)
                 return await self.fill_external_ids(hit, cfg)
@@ -281,16 +326,83 @@ class MetadataDispatcher:
             hit.payload.setdefault(key, value)
         return hit
 
-    async def _call(self, source_id: str, coro) -> MetadataResult | None:  # type: ignore[no-untyped-def]
+    def _reset_attempts(self) -> None:
+        _attempt_log.set(_AttemptLog())
+
+    def _log(self) -> _AttemptLog:
+        log = _attempt_log.get()
+        if log is None:
+            log = _AttemptLog()
+            _attempt_log.set(log)
+        return log
+
+    def _record(
+        self,
+        source: str | None,
+        step: AttemptStep,
+        kind: AttemptKind | None,
+        outcome: AttemptOutcome,
+        detail: str | None,
+    ) -> None:
+        self._log().attempts.append(
+            {"source": source, "step": step, "kind": kind, "outcome": outcome, "detail": detail}
+        )
+
+    def _walk(self, cfg: Config, kind: AttemptKind, step: AttemptStep, detail: str | None) -> tuple[OnlineSource, ...]:
+        """`sources_for(cfg, kind)`, recording the listed sources skipped for a
+        missing key (`not_configured`) and, when nothing is listed for the kind
+        at all, one `no_sources` entry. Each skip is recorded once per call,
+        however many search candidates walk the same list."""
+        walk = sources_for(cfg, kind, self._sources)
+        skipped = False
+        for sid in online_source_ids(cfg, kind):
+            source = self._sources.get(sid)
+            if source is None or kind not in source.media_types or source.configured(cfg) is None:
+                continue
+            skipped = True
+            self._record_skip(sid, step, kind, "not_configured", detail)
+        if not walk and not skipped:
+            self._record_skip(None, step, kind, "no_sources", detail)
+        return walk
+
+    def _record_skip(
+        self, source: str | None, step: AttemptStep, kind: AttemptKind, outcome: AttemptOutcome, detail: str | None
+    ) -> None:
+        key = (source, step, kind, outcome)
+        seen = self._log().skips_seen
+        if key not in seen:
+            seen.add(key)
+            self._record(source, step, kind, outcome, detail)
+
+    async def _call(  # type: ignore[no-untyped-def]
+        self,
+        source_id: str,
+        coro,
+        *,
+        step: AttemptStep | None = None,
+        kind: AttemptKind | None = None,
+        detail: str | None = None,
+    ) -> MetadataResult | None:
+        """Await one provider call. With a `step`, the outcome is recorded in
+        `last_attempts` (id enrichment passes none: it is not a match)."""
+        outcome: AttemptOutcome
         try:
             result: MetadataResult | None = await asyncio.wait_for(coro, timeout=PROVIDER_TIMEOUT_SECONDS)
             if result is not None:
                 # The source id keys provider_raw and identity.provider.
                 result.provider = source_id
-            return result
+            outcome = "miss" if result is None else "hit"
+            if step == "disc_id" and result is not None and (result.payload or {}).get("toc_match") == "fuzzy":
+                detail = "matched by track layout"
         except asyncio.TimeoutError:
             logger.info("metadata.%s timeout", source_id)
-            return None
+            result, outcome = None, "timeout"
         except LookupError as e:
             logger.info("metadata.%s miss: %s", source_id, e)
-            return None
+            result, outcome = None, "error"
+            if str(e) == TOC_NOT_FOUND:
+                # The fuzzy TOC fallback ran and nothing fit: an answer, not a fault.
+                outcome, detail = "miss", "no release fits the track layout"
+        if step is not None:
+            self._record(source_id, step, kind, outcome, detail)
+        return result

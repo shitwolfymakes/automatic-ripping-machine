@@ -607,6 +607,29 @@ def test_resolve_not_in_resolvable_status_409(signing_key: bytes, bad_status: Jo
     assert "not in an identify-resolvable status" in r.json()["detail"]
 
 
+def test_resolve_drops_the_identify_attempts(signing_key: bytes) -> None:
+    """The miss reasons describe the automatic match; once the operator
+    identifies the disc they no longer apply."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    attempts = [{"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY DISC"}]
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.AWAITING_USER_ID,
+            meta={"scan_result": {"disc_type": "dvd"}, "identify_attempts": attempts},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Blade Runner", "year": 1982},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert r.json()["job"]["metadata_json"].get("identify_attempts") is None
+    assert "identify_attempts" not in db.rows["jobs"][0].metadata_json
+
+
 def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
     db = FakeSession()
     hub = _Hub()

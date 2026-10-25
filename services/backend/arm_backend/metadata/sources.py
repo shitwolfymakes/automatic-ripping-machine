@@ -50,7 +50,7 @@ class OnlineSource(Protocol):
     #   search_title(cfg, kind, title, year) -> MetadataResult | None
     #   search_candidates(cfg, kind, title, limit=10) -> list[MetadataResult]
     #   lookup_imdb(cfg, imdb_id) -> MetadataResult | None
-    #   lookup_disc_id(cfg, disc_id) -> MetadataResult | None
+    #   lookup_disc_id(cfg, disc_id, toc=None) -> MetadataResult | None
     #   lookup_fingerprint(cfg, algo, value) -> MetadataResult | None
     #   search_releases(cfg, query, *, artist, track_count, release_type,
     #                   format, country, status) -> list[MetadataResult]
@@ -196,8 +196,8 @@ class MusicBrainzSource(_Adapter):
     def _client(self) -> MusicBrainzClient:
         return MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
 
-    async def lookup_disc_id(self, cfg: Config | None, disc_id: str) -> MetadataResult | None:
-        return await self._client().lookup_disc_id(disc_id)
+    async def lookup_disc_id(self, cfg: Config | None, disc_id: str, toc: str | None = None) -> MetadataResult | None:
+        return await self._client().lookup_disc_id(disc_id, toc)
 
     async def search_releases(
         self,

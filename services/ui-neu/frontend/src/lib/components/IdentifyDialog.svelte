@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolveJob } from '$lib/api/jobs';
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
+	import TitleSearch from './TitleSearch.svelte';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
 
@@ -53,9 +54,18 @@
 		submitting ? false : isCd ? album.trim().length > 0 && artist.trim().length > 0 : title.trim().length > 0
 	);
 
+	// A TV disc saved by hand has no show id, so episodes cannot be matched
+	// automatically; the operator confirms that with a second click.
+	const isEpisodic = $derived(!isCd && (job.looks_episodic || job.media_type === 'tv') && !job.has_series);
+	let confirmNoMatch = $state(false);
+
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		if (!canSubmit) return;
+		if (isEpisodic && !confirmNoMatch) {
+			confirmNoMatch = true;
+			return;
+		}
 		submitting = true;
 		error = null;
 		try {
@@ -107,7 +117,14 @@
 			</p>
 		{/if}
 
-		<form class="mt-4" onsubmit={submit}>
+		{#if !isCd}
+			<div class="mt-4 mb-3">
+				<TitleSearch {job} onresolved={onidentified} />
+			</div>
+			<p class="field-help mt-4 mb-2">Or enter the title yourself</p>
+		{/if}
+
+		<form class={isCd ? 'mt-4' : 'mt-2'} onsubmit={submit}>
 			{#if isCd}
 				<div class="mb-3 flex gap-3">
 					<label class="field identify-dialog-field-wide">
@@ -159,7 +176,14 @@
 				<div class="mb-3 flex gap-3">
 					<label class="field identify-dialog-field-wide">
 						<span class="field-label">Title</span>
-						<input bind:value={title} type="text" required data-testid="identify-title" disabled={submitting} />
+						<input
+							bind:value={title}
+							oninput={() => (confirmNoMatch = false)}
+							type="text"
+							required
+							data-testid="identify-title"
+							disabled={submitting}
+						/>
 					</label>
 					<label class="field flex-1">
 						<span class="field-label">Year</span>
@@ -175,10 +199,22 @@
 				</div>
 			{/if}
 
+			{#if confirmNoMatch}
+				<p class="field-help mb-2" data-testid="identify-no-match-warning">
+					Without a search result ARM has no show id, so episodes can't be matched automatically.
+				</p>
+			{/if}
+
 			<div class="modal-actions">
 				<button type="button" onclick={onclose} disabled={submitting} class="btn"> Cancel </button>
 				<button type="submit" disabled={!canSubmit} data-testid="identify-submit" class="btn btn-primary">
-					{submitting ? 'Saving...' : isEditMode ? 'Edit identity' : 'Identify disc'}
+					{submitting
+						? 'Saving...'
+						: confirmNoMatch
+							? 'Save without a match'
+							: isEditMode
+								? 'Edit identity'
+								: 'Identify disc'}
 				</button>
 			</div>
 		</form>

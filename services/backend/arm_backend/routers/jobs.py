@@ -1310,6 +1310,8 @@ async def resolve_identity(
     new_metadata.pop("unidentified", None)
     # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
     new_metadata.pop("identity_suggestion", None)
+    # ...and the automatic match's miss reasons no longer apply.
+    new_metadata.pop("identify_attempts", None)
     if isinstance(new_metadata.get("flags"), dict):
         new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
