@@ -7,7 +7,6 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.identity.sources import registry as reg_mod  # noqa: E402
 from arm_backend.identity.sources.registry import (  # noqa: E402
-    DEFAULT_ONLINE_SOURCES,
     fingerprint_sources,
     known_source_ids,
     lookup_sources,
@@ -44,7 +43,8 @@ def _cfg(**kw) -> Config:
 
 
 def test_default_order_matches_today():
-    assert DEFAULT_ONLINE_SOURCES == {"movie": ("tmdb", "omdb"), "music": ("musicbrainz",)}
+    assert reg_mod.DEFAULT_MOVIE_SOURCES == ("tmdb", "omdb")
+    assert reg_mod.DEFAULT_MUSIC_SOURCES == ("musicbrainz",)
     assert online_source_ids(_cfg(), "movie") == ("tmdb", "omdb")
     assert online_source_ids(None, "music") == ("musicbrainz",)
     assert online_source_ids(_cfg(), "data") == ()
@@ -66,12 +66,17 @@ def test_sources_for_skips_ids_missing_from_registry():
 
 
 def test_sources_for_requires_media_type_membership(monkeypatch):
-    monkeypatch.setitem(reg_mod.DEFAULT_ONLINE_SOURCES, "music", ("musicbrainz", "tmdb"))
+    """A listed id whose adapter does not serve the media type is dropped.
+    `_MUSIC_KNOWN` is widened because the column validator would otherwise
+    refuse to put tmdb on the music list at all."""
+    monkeypatch.setitem(reg_mod._MUSIC_KNOWN, "tmdb", "tmdb")
     reg = _registry(
         FakeSource("musicbrainz", {"music"}, lookup_disc_id=_noop),
         FakeSource("tmdb", {"movie", "tv"}, search_title=_noop),
     )
-    assert [s.id for s in sources_for(_cfg(), "music", reg)] == ["musicbrainz"]
+    cfg = _cfg(music_sources=["musicbrainz", "tmdb"])
+    assert online_source_ids(cfg, "music") == ("musicbrainz", "tmdb")
+    assert [s.id for s in sources_for(cfg, "music", reg)] == ["musicbrainz"]
 
 
 def test_search_source_is_first_configured_of_the_list():
@@ -112,18 +117,18 @@ def test_search_source_reads_the_search_provider_setting(caplog):
     assert search_source(_cfg(search_provider_tv="tmdb"), "tv", reg).id == "tmdb"
     assert search_source(_cfg(), "music", reg).id == "musicbrainz"
     reg["omdb"]._reason = "no omdb key"
-    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
         assert search_source(_cfg(search_provider_movie="omdb"), "movie", reg).id == "tmdb"
-    assert "search provider omdb is not available for movie; using tmdb" in caplog.text
+    assert "search provider omdb unusable (no omdb key); using tmdb for movie" in caplog.text
 
 
 def test_search_source_falls_back_for_an_unknown_id(caplog):
     """A row may hold an unknown id the registry does not know (a downgrade, a hand
     edit); the box falls back to the first usable ranked source."""
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
-    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
         assert search_source(_cfg(search_provider_tv="bogus"), "tv", reg).id == "tmdb"
-    assert "search provider bogus is not available for tv; using tmdb" in caplog.text
+    assert "search provider bogus unusable (no adapter named bogus); using tmdb for tv" in caplog.text
 
 
 def test_settings_readers_default_for_legacy_rows():
@@ -213,6 +218,44 @@ def test_auto_apply_for_maps_each_kind_to_its_switch() -> None:
     assert auto_apply_for(None, "movie") is True
 
 
+def test_search_provider_need_not_be_on_the_ranked_list():
+    """D-7 keeps OMDb off the automatic TV order (`episode_sources`) while
+    `search_provider_tv` still offers it, so the box's provider is honoured
+    whenever its adapter serves the type and has its key -- looking it up in
+    the ranked list only meant the choice could never take effect."""
+    reg = _registry(
+        FakeSource("tmdb", {"movie", "tv"}),
+        FakeSource("omdb", {"movie", "tv"}),
+        FakeSource("tvmaze", {"tv"}),
+    )
+    assert "omdb" not in online_source_ids(_cfg(), "tv")
+    assert search_source(_cfg(search_provider_tv="omdb"), "tv", reg).id == "omdb"
+    # ...and with no TMDb key either, so the ranked list cannot supply it.
+    cfg = _cfg(search_provider_tv="omdb", episode_sources=["tvmaze"])
+    assert search_source(cfg, "tv", reg).id == "omdb"
+    # The exact-id lookup walk follows the same choice.
+    assert [s.id for s in lookup_sources(cfg, "tv", reg)] == ["omdb", "tvmaze"]
+
+
+def test_search_provider_survives_an_emptied_ranked_list(caplog):
+    """Clearing a type's ranked list stops the AUTOMATIC lookups; the job
+    page's search box is a separate, explicit operator action and keeps
+    working (and logs nothing, since nothing fell back)."""
+    reg = _registry(FakeSource("musicbrainz", {"music"}, search_releases=_noop))
+    cfg = _cfg(music_sources=[])
+    assert sources_for(cfg, "music", reg) == ()
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+        assert search_source(cfg, "music", reg).id == "musicbrainz"
+    assert "unusable" not in caplog.text
+
+
+def test_search_provider_that_cannot_serve_the_type_falls_back(caplog):
+    reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("musicbrainz", {"music"}))
+    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+        assert search_source(_cfg(search_provider_movie="musicbrainz"), "movie", reg).id == "tmdb"
+    assert "musicbrainz does not search movie" in caplog.text
+
+
 def test_search_source_uses_a_provider_outside_the_ranked_list():
     """The Search card is independent of Online lookup: OMDb is never in
     `episode_sources`, and an unticked movie source can still serve the box."""
@@ -232,7 +275,7 @@ def test_search_source_unconfigured_outside_provider_falls_back(caplog):
     cfg = _cfg(search_provider_movie="omdb", movie_sources=["tmdb"])
     with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
         assert search_source(cfg, "movie", reg).id == "tmdb"
-    assert "search provider omdb is not available for movie; using tmdb" in caplog.text
+    assert "search provider omdb unusable (no omdb key); using tmdb for movie" in caplog.text
 
 
 def test_search_source_provider_not_serving_the_type_falls_back():

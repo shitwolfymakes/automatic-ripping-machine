@@ -20,6 +20,7 @@ from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.metadata import musicbrainz as mb_mod  # noqa: E402
 from arm_backend.metadata import omdb as omdb_mod  # noqa: E402
 from arm_backend.metadata.base import LookupError as MetaLookupError  # noqa: E402
+from arm_backend.metadata.dispatcher import MetadataDispatcher  # noqa: E402
 from arm_backend.metadata.sources import build_online_sources  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
@@ -42,7 +43,9 @@ def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
     app.state.http = httpx.AsyncClient(timeout=5.0)
-    app.state.online_sources = build_online_sources(app.state.http)
+    # The routes read the registry off the dispatcher, so one wiring line
+    # serves both and they cannot disagree about order or enablement.
+    app.state.dispatcher = MetadataDispatcher(app.state.http)
     app.include_router(metadata_router.router)
 
     async def _override() -> FakeSession:
@@ -893,10 +896,88 @@ def test_search_default_tv_provider_tvmaze_without_tmdb_key(signing_key: bytes) 
 
 
 @respx.mock
-def test_search_tv_uses_omdb_although_episode_sources_omit_it(signing_key: bytes) -> None:
-    """The Search card is independent of Online lookup: OMDb is never in
-    `episode_sources`, yet `search_provider_tv=omdb` serves the TV search box."""
-    route = respx.get("https://www.omdbapi.com/").mock(
+def test_lookup_imdb_falls_through_a_missing_source(signing_key: bytes) -> None:
+    """Every client raises LookupError on a miss, so the ranked walk must
+    catch PER SOURCE: TMDb's empty /find must not end the walk before OMDb,
+    which has the title, is ever asked."""
+    tmdb = respx.get("https://api.themoviedb.org/3/find/tt0113277").mock(
+        return_value=httpx.Response(200, json={"movie_results": [], "tv_results": []})
+    )
+    omdb = respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200, json={"Response": "True", "Title": "Heat", "Year": "1995", "Type": "movie", "imdbID": "tt0113277"}
+        )
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", movie_sources=["tmdb", "omdb"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert tmdb.called and omdb.called
+    body = r.json()
+    assert [c["title"] for c in body["candidates"]] == ["Heat"]
+    assert body["candidates"][0]["provider_id"] == "tt0113277"
+
+
+@respx.mock
+def test_lookup_imdb_reports_the_last_failure_when_every_source_misses(signing_key: bytes) -> None:
+    respx.get("https://api.themoviedb.org/3/find/tt0113277").mock(
+        return_value=httpx.Response(200, json={"movie_results": [], "tv_results": []})
+    )
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(200, json={"Response": "False", "Error": "Incorrect IMDb ID."})
+    )
+    db = FakeSession()
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", movie_sources=["tmdb", "omdb"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/lookup", params={"imdb_id": "tt0113277"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["candidates"] == []
+    assert "omdb" in body["detail"]
+
+
+@respx.mock
+def test_music_search_works_with_the_ranked_list_cleared(signing_key: bytes) -> None:
+    """Clearing `music_sources` stops the AUTOMATIC CD lookups; the job page's
+    manual search box sends no provider override and must keep working."""
+    respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": [{"id": "r1", "title": "Album"}]})
+    )
+    db = FakeSession()
+    _seed(db, music_sources=[])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/search", params={"query": "album"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert [c["title"] for c in r.json()["candidates"]] == ["Album"]
+
+
+@respx.mock
+def test_music_search_needs_no_config_row(signing_key: bytes) -> None:
+    """MusicBrainz is keyless, so a missing Config singleton must not 400 the
+    search box (the crc64 lookup reads the row nullable for the same reason)."""
+    respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": [{"id": "r1", "title": "Album"}]})
+    )
+    db = FakeSession()
+    _seed(db)
+    db.rows["config"] = []
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/metadata/music/search", params={"query": "album"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert [c["title"] for c in r.json()["candidates"]] == ["Album"]
+
+
+@respx.mock
+def test_tv_search_uses_omdb_when_it_is_the_chosen_provider(signing_key: bytes) -> None:
+    """D-7 keeps OMDb off the automatic TV order, but the job page's TV search
+    select offers it, so choosing it must reach OMDb `type=series` rather than
+    silently falling back to the ranked list's first entry."""
+    omdb = respx.get("https://www.omdbapi.com/").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -906,10 +987,11 @@ def test_search_tv_uses_omdb_although_episode_sources_omit_it(signing_key: bytes
         )
     )
     db = FakeSession()
-    _seed(db, omdb_api_key="k", search_provider_tv="omdb", episode_sources=["tmdb", "tvmaze", "tvdb"])
+    _seed(db, tmdb_api_key="k", omdb_api_key="k", search_provider_tv="omdb")
     app, token = _make_app(signing_key, db)
     with TestClient(app) as c:
         r = c.get("/api/metadata/search", params={"title": "lost", "type": "tv"}, headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert route.called
-    assert r.json()["candidates"][0]["title"] == "Lost"
+    assert omdb.called
+    assert omdb.calls[0].request.url.params["type"] == "series"
+    assert [c["title"] for c in r.json()["candidates"]] == ["Lost"]
