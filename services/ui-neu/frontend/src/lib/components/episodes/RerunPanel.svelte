@@ -99,9 +99,7 @@
 			</p>
 			<div class="rerun-panel-bar-actions">
 				<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={ondiscard}>Discard</button>
-				<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={onapply}>
-					Apply & pin {preview.label}
-				</button>
+				<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={onapply}>Apply</button>
 			</div>
 		</div>
 	{/if}

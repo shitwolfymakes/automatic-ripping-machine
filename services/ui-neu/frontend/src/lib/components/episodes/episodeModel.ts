@@ -7,8 +7,9 @@ import type {
 	TrackView
 } from '$lib/types/api.gen';
 
-export type PanelState = 'noseries' | 'matching' | 'unavailable' | 'nomatch' | 'suggestion' | 'pinned' | 'applied';
-export type Origin = { kind: 'auto' | 'suggestion' | 'you' | 'none'; source: string | null };
+export type PanelState = 'noseries' | 'matching' | 'unavailable' | 'nomatch' | 'unsure' | 'applied';
+/** `guess`: placed by a source whose result was held; shown amber, never auto-started. */
+export type Origin = { kind: 'auto' | 'guess' | 'you' | 'none'; source: string | null };
 export interface EpisodeRow {
 	trackId: string;
 	ref: string;
@@ -96,11 +97,15 @@ export function panelState(job: JobView, identity: IdentityView | null, matching
 	const ran = Object.entries(sources)
 		.filter(([id, s]) => id.startsWith(EPISODE_PREFIX) && RAN.has(s?.status ?? 'ok'))
 		.map(([, s]) => s);
-	if (!identity || ran.length === 0) return 'unavailable';
-	if (identity.pin?.episode) return 'pinned';
-	const active = activeSource(identity);
-	if (active && sources[active]?.suggestion) return 'suggestion';
+	if (!identity) return 'unavailable';
+	// Every episode source skipped as not configured: nothing can ever place
+	// these tracks. No episode source at all (cleared, or not yet run) is a
+	// plain no match, so Fix match is at hand.
+	const configured = ran.filter((s) => !(s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '')));
+	if (ran.length > 0 && configured.length === 0) return 'unavailable';
 	if (!ran.some((s) => (s?.status ?? 'ok') === 'ok')) return 'nomatch';
+	// The resolver's own word: the winning placement came from a held result.
+	if (job.episodes_unsure) return 'unsure';
 	return 'applied';
 }
 
@@ -109,7 +114,7 @@ function origin(t: TrackIdentityView, identity: IdentityView): Origin {
 	if (Object.values(prov).includes('manual')) return { kind: 'you', source: null };
 	const src = prov.episode_number ?? prov.role ?? null;
 	if (src && src.startsWith(EPISODE_PREFIX)) {
-		return { kind: identity.sources?.[src]?.suggestion ? 'suggestion' : 'auto', source: src };
+		return { kind: identity.sources?.[src]?.suggestion ? 'guess' : 'auto', source: src };
 	}
 	return { kind: 'none', source: null };
 }
@@ -128,12 +133,6 @@ export function buildRows(tracks: TrackView[], identity: IdentityView, preview: 
 		if (!code && t) {
 			code = episodeCode(t.season, t.episode_number, t.episode_number_end);
 			name = t.episode_name ?? '';
-		}
-		if (!code && proposal && active && o.kind !== 'you' && identity.sources?.[active]?.suggestion) {
-			code = episodeCode(proposal.season, proposal.episode, proposal.episode_end);
-			name = proposal.episode_name ?? '';
-			o.kind = 'suggestion';
-			o.source = active;
 		}
 		const m = matches.get(track.source_ref);
 		const proposed = m
@@ -191,11 +190,10 @@ export function pickerOptions(
 	return [...items.map(({ value, label }) => ({ value, label })), ...ROLE_OPTIONS];
 }
 
-/** Rows with an applied placement (an episode or a non-episode role). A held
- * suggestion's proposed code is not a placement, the same rule the Home card's
- * Episodes row uses. */
+/** Rows with a placement on the track: an episode (sure or a guess) or a
+ * non-episode role, the same rule the Home card's Episodes row uses. */
 export function placedCount(rows: EpisodeRow[]): number {
-	return rows.filter((r) => r.code !== 'Not placed' && r.origin.kind !== 'suggestion').length;
+	return rows.filter((r) => r.code !== 'Not placed').length;
 }
 
 /** Why a held (suggestion) result was not applied, by the backend's

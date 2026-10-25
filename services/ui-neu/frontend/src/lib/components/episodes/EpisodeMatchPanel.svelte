@@ -12,11 +12,11 @@
 		TrackView
 	} from '$lib/types/api.gen';
 	import {
+		clearEpisodeMatch,
 		fetchEpisodes,
 		fetchIdentity,
 		fetchSeasons,
 		matchIdentity,
-		unpinIdentity,
 		type EpisodeSource
 	} from '$lib/api/identity';
 	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
@@ -78,12 +78,9 @@
 	let previewRequest: MatchRequest | null = null;
 	let previewSeq = 0;
 	let busy = $state(false);
-	let accepting = $state(false);
-	let unpinBusy = $state(false);
+	let clearing = $state(false);
 	let actionError = $state<string | null>(null);
 	let lastRequest = $state.raw<MatchRequest | null>(null);
-	let unpinAsk = $state(false);
-	let unpinError = $state<string | null>(null);
 	// The picker's episode lists by season, for the job and source in episodesFor.
 	let episodesBySeason = $state.raw(new Map<number, EpisodeSummary[]>());
 	let episodesFor = '';
@@ -130,8 +127,6 @@
 		rerun = { ...NO_RERUN };
 		dropPreview();
 		lastRequest = null;
-		unpinAsk = false;
-		unpinError = null;
 		seasons = [];
 		seasonsKey = '';
 		episodesBySeason = new Map();
@@ -176,14 +171,16 @@
 	const labelOf = (id: string | null | undefined) => SOURCE_LABEL[`episodes_${id}`] ?? id ?? '';
 	const shortId = (id: string | null) => (id ?? '').replace(/^episodes_/, '') as EpisodeSource;
 
-	function openRerun() {
+	// Fix match: the one control for changing a match. Opens the form seeded
+	// with the current source and, for a guess, the season it guessed.
+	function fixMatch() {
 		rerunOpen = !rerunOpen;
 		if (!rerunOpen) return;
 		const current = source ? shortId(source) : null;
 		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
 		rerun = {
 			source: current && EPISODE_SOURCES.includes(current) ? current : first,
-			season: job.season ?? null,
+			season: ownSeason?.season ?? altSeasons[0]?.season ?? job.season ?? null,
 			disc: job.disc_number ?? null,
 			tolerance: null
 		};
@@ -207,12 +204,12 @@
 		return req;
 	}
 
-	// The held result's season and the other seasons the scan fit, shown as
-	// facts under the status line; Fix match opens the re-run form on the held
-	// season so the operator picks from there.
-	const ownSeason = $derived(identity && view === 'suggestion' ? heldSeason(identity, source, rows.length) : null);
+	// A guess: the season the source guessed and the other seasons the scan
+	// fit, shown as facts under the status line; Fix match opens the form on
+	// the guessed season.
+	const ownSeason = $derived(identity && view === 'unsure' ? heldSeason(identity, source, rows.length) : null);
 	const altSeasons = $derived<SeasonCandidate[]>(
-		identity && view === 'suggestion'
+		identity && view === 'unsure'
 			? seasonAlternatives(identity, source, rows.length).filter((a) => a.season !== ownSeason?.season)
 			: []
 	);
@@ -220,13 +217,27 @@
 	const fitText = (c: SeasonCandidate) => `${seasonName(c.season)} (${c.matches} of ${c.total} titles)`;
 	const alsoFits = $derived(altSeasons.map(fitText).join(', '));
 	const held = $derived(
-		identity && view === 'suggestion' ? holdHeadline(identity, source, ownSeason?.season ?? null) : null
+		identity && view === 'unsure' ? holdHeadline(identity, source, ownSeason?.season ?? null) : null
 	);
-	function fixMatch() {
-		const season = ownSeason?.season ?? altSeasons[0]?.season ?? job.season ?? null;
-		rerun = { source: pickerSource ?? rerun.source, season, disc: job.disc_number ?? null, tolerance: null };
-		rerunOpen = true;
-		dropPreview();
+	// Clear episodes: forget the match so the placements come off the tracks.
+	// Hand-set tracks keep theirs; Fix match brings a match back.
+	async function clearEpisodes() {
+		if (clearing) return;
+		clearing = true;
+		actionError = null;
+		const jobId = job.id;
+		try {
+			const next = await clearEpisodeMatch(jobId);
+			if (job.id !== jobId) return;
+			identity = next;
+			dropPreview();
+			rerunOpen = false;
+			onchanged?.();
+		} catch (e) {
+			if (job.id === jobId) actionError = `Could not clear the episodes (${e instanceof Error ? e.message : 'error'}).`;
+		} finally {
+			clearing = false;
+		}
 	}
 	async function run(req: MatchRequest) {
 		busy = true;
@@ -443,35 +454,8 @@
 		if (await saveTrack(trackId, { revert_fields: [...REVERT] })) clearRowSeason(trackId);
 	}
 
-	async function accept() {
-		accepting = true;
-		try {
-			await run({ source: shortId(source), apply: true });
-		} finally {
-			accepting = false;
-		}
-	}
-
 	function applyPreview() {
 		if (previewRequest) return run({ ...previewRequest, apply: true });
-	}
-
-	async function unpin() {
-		if (unpinBusy) return;
-		unpinBusy = true;
-		unpinError = null;
-		const jobId = job.id;
-		try {
-			const next = await unpinIdentity(jobId);
-			if (job.id !== jobId) return;
-			identity = next;
-			unpinAsk = false;
-			onchanged?.();
-		} catch (e) {
-			if (job.id === jobId) unpinError = e instanceof Error ? e.message : 'Could not unpin';
-		} finally {
-			unpinBusy = false;
-		}
 	}
 </script>
 
@@ -508,12 +492,8 @@
 				<span class="episode-panel-text">Loading episodes...</span>
 			{:else}
 				{#if sourceLabel}<span class="chip chip-sm chip-info">{sourceLabel}</span>{/if}
-				{#if view === 'applied'}
-					<span class="chip chip-sm chip-success">Applied automatically</span>
-				{:else if view === 'suggestion'}
-					<span class="chip chip-sm chip-warning">Suggestion, not applied</span>
-				{:else if view === 'pinned'}
-					<span class="chip chip-sm chip-info">Pinned by you</span>
+				{#if view === 'unsure'}
+					<span class="chip chip-sm chip-warning">Guess</span>
 				{:else if view === 'nomatch'}
 					<span class="chip chip-sm">No match</span>
 				{/if}
@@ -526,7 +506,14 @@
 					<button type="button" class="btn btn-sm" disabled={busy} onclick={fillTheRest}>Fill the rest</button>
 				{/if}
 				{#if canAct}
-					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} onclick={openRerun}>Re-run...</button>
+					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} disabled={busy} onclick={fixMatch}
+						>Fix match</button
+					>
+				{/if}
+				{#if canAct && placedCount(rows) > 0 && !preview}
+					<button type="button" class="btn btn-sm" disabled={busy || clearing} onclick={clearEpisodes}
+						>{clearing ? 'Clearing...' : 'Clear episodes'}</button
+					>
 				{/if}
 				{#if others.length > 0 && view !== 'matching'}
 					<button
@@ -549,9 +536,6 @@
 					>
 				{/if}
 				{#if alsoFits}<span class="episode-panel-text">Also fits {alsoFits}</span>{/if}
-				{#if canAct}
-					<button type="button" class="btn btn-sm" disabled={busy} onclick={fixMatch}>Fix match</button>
-				{/if}
 			</div>
 		{/if}
 
@@ -588,7 +572,7 @@
 					<a href="/settings#Identification/episode_sources">Settings › Identification › Identity</a>.
 				</p>
 			</div>
-		{:else if view === 'suggestion' && held}
+		{:else if view === 'unsure' && held}
 			<div class="alert alert-warning">
 				<p class="alert-title episode-panel-hold-line">
 					<span>{held.line}</span>
@@ -608,32 +592,6 @@
 							<li>{reason}</li>
 						{/each}
 					</ul>
-				{/if}
-				{#if canAct}
-					<div class="episode-panel-banner-actions">
-						<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={accept}>
-							{accepting ? 'Accepting...' : `Accept and pin ${sourceLabel}`}
-						</button>
-					</div>
-				{/if}
-			</div>
-		{:else if view === 'pinned'}
-			<div class="alert alert-info">
-				<p class="alert-title">{sourceLabel} is pinned.</p>
-				<p class="alert-body">ARM uses its placement and won't switch to another source on its own.</p>
-				{#if canAct}
-					<div class="episode-panel-banner-actions">
-						{#if unpinAsk}
-							<span class="alert-body">Unpin and let ARM pick the source again?</span>
-							<button type="button" class="btn btn-primary btn-sm" disabled={unpinBusy} onclick={unpin}>Unpin</button>
-							<button type="button" class="btn btn-ghost btn-sm" disabled={unpinBusy} onclick={() => (unpinAsk = false)}
-								>Cancel</button
-							>
-						{:else}
-							<button type="button" class="btn btn-sm" onclick={() => (unpinAsk = true)}>Unpin...</button>
-						{/if}
-					</div>
-					{#if unpinError}<p class="field-error">Could not unpin: {unpinError}</p>{/if}
 				{/if}
 			</div>
 		{:else if view === 'nomatch'}
@@ -758,13 +716,6 @@
 	.episode-panel-why-list {
 		margin: 0.25rem 0 0;
 		padding-left: 1.25rem;
-	}
-	.episode-panel-banner-actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.5rem;
-		margin-top: 0.5rem;
 	}
 	.episode-panel-error {
 		display: flex;

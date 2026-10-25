@@ -48,12 +48,12 @@
 
 	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
 
-	const ORIGIN_CHIP = { auto: 'chip-info', suggestion: 'chip-warning', you: '', none: '' } as const;
+	const ORIGIN_CHIP = { auto: 'chip-info', guess: 'chip-warning', you: '', none: '' } as const;
 
 	function originLabel(row: EpisodeRow): string {
 		const label = SOURCE_LABEL[row.origin.source ?? ''] ?? row.origin.source ?? '';
 		if (row.origin.kind === 'auto') return `Auto, ${label}`;
-		if (row.origin.kind === 'suggestion') return `Suggestion, ${label}`;
+		if (row.origin.kind === 'guess') return `Guess, ${label}`;
 		if (row.origin.kind === 'you') return 'Set by you';
 		return '-';
 	}

@@ -27,10 +27,11 @@ function identity(o: Partial<IdentityView> = {}, suggestion = false): IdentityVi
 		tracks: LENGTHS.map((_, i): TrackIdentityView => ({
 			track_id: `trk_${i}`,
 			source_ref: `t0${i}`,
+			// A held result is on the tracks like a clean one; only the source's flag differs.
 			role: i === 5 ? 'extra' : 'episode',
-			season: i === 5 || suggestion ? null : 1,
-			episode_number: i === 5 || suggestion ? null : i + 1,
-			episode_name: i === 5 || suggestion ? null : NAMES[i],
+			season: i === 5 ? null : 1,
+			episode_number: i === 5 ? null : i + 1,
+			episode_name: i === 5 ? null : NAMES[i],
 			identity_provenance: i === 5 ? {} : { episode_number: 'episodes_tmdb' },
 			proposals:
 				i === 5
@@ -46,17 +47,24 @@ describe('panelState', () => {
 		expect(panelState(job({ has_series: false }), identity(), false)).toBe('noseries');
 	});
 	it('matching wins over stored rows', () => expect(panelState(job(), identity(), true)).toBe('matching'));
-	it('applied / suggestion / pinned', () => {
+	it('applied / unsure; a pin is not a state', () => {
 		expect(panelState(job(), identity(), false)).toBe('applied');
-		expect(panelState(job(), identity({}, true), false)).toBe('suggestion');
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), false)).toBe('pinned');
+		// The resolver's flag on the job says a guess is applied, not the source's own suggestion flag.
+		expect(panelState(job(), identity({}, true), false)).toBe('applied');
+		expect(panelState(job({ episodes_unsure: true }), identity({}, true), false)).toBe('unsure');
+		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), false)).toBe('applied');
 	});
 	it('no match when every source missed', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'miss' }, episodes_tvdb: { status: 'skipped' } } });
 		expect(panelState(job(), id, false)).toBe('nomatch');
 	});
-	it('unavailable with no sources at all', () =>
-		expect(panelState(job(), identity({ sources: {} }), false)).toBe('unavailable'));
+	it('no sources at all is a plain no match (cleared, or not yet run); only not-configured sources are unavailable', () => {
+		expect(panelState(job(), identity({ sources: {} }), false)).toBe('nomatch');
+		const off = { status: 'skipped', detail: 'not configured' } as const;
+		expect(panelState(job(), identity({ sources: { episodes_tmdb: off, episodes_tvmaze: off } }), false)).toBe(
+			'unavailable'
+		);
+	});
 });
 
 describe('buildRows', () => {
@@ -73,9 +81,13 @@ describe('buildRows', () => {
 		expect(rows[5].origin.kind).toBe('none');
 		expect(placedCount(rows)).toBe(6);
 	});
-	it('suggestion rows come from the proposals and say so', () => {
+	it('rows placed by a held source are a guess', () => {
 		const rows = buildRows(tracks, identity({}, true), null);
-		expect(rows[0]).toMatchObject({ code: 'S01E01', origin: { kind: 'suggestion' }, confidence: 0.6 });
+		expect(rows[0]).toMatchObject({
+			code: 'S01E01',
+			origin: { kind: 'guess', source: 'episodes_tmdb' },
+			confidence: 0.6
+		});
 	});
 	it('a hand-set row is "you"', () => {
 		const id = identity();
@@ -161,10 +173,12 @@ describe('fix round 1', () => {
 		id.tracks![0].identity_provenance = { role: 'manual', episode_number: 'episodes_tmdb' };
 		expect(buildRows(tracks, id, null)[0]).toMatchObject({ handSet: true, origin: { kind: 'you' } });
 	});
-	it('precedence: matching > pinned > suggestion; manual-only is unavailable', () => {
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }), true)).toBe('matching');
-		expect(panelState(job(), identity({ pin: { episode: 'episodes_tmdb' } }, true), false)).toBe('pinned');
-		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('unavailable');
+	it('precedence: matching > unsure; manual-only is a plain no match', () => {
+		expect(panelState(job({ episodes_unsure: true }), identity({}, true), true)).toBe('matching');
+		expect(
+			panelState(job({ episodes_unsure: true }), identity({ pin: { episode: 'episodes_tmdb' } }, true), false)
+		).toBe('unsure');
+		expect(panelState(job(), identity({ sources: { manual: { status: 'ok' } } }), false)).toBe('nomatch');
 	});
 });
 
@@ -276,20 +290,20 @@ describe('pickerOptions', () => {
 });
 
 describe('placedCount', () => {
-	const row = (code: string, kind: 'auto' | 'suggestion' | 'you' | 'none') =>
+	const row = (code: string, kind: 'auto' | 'guess' | 'you' | 'none') =>
 		({ code, origin: { kind, source: kind === 'none' ? null : 'episodes_tmdb' } }) as unknown as ReturnType<
 			typeof buildRows
 		>[number];
 
-	it('counts applied placements and extras, not a held suggestion', () => {
+	it('counts every placement on the tracks, a guess included', () => {
 		const rows = [
 			row('S01E01', 'auto'),
 			row('S01E02', 'you'),
 			row('Extra', 'none'),
-			row('S01E04', 'suggestion'),
+			row('S01E04', 'guess'),
 			row('Not placed', 'none')
 		];
-		expect(placedCount(rows)).toBe(3);
+		expect(placedCount(rows)).toBe(4);
 	});
 });
 
