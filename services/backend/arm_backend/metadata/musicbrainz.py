@@ -107,7 +107,9 @@ class MusicBrainzClient:
     async def _lookup_toc(self, toc: str, inc: str) -> MetadataResult:
         body = await self._get(
             "/discid/-",
-            params={"toc": "+".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
+            # Space-separated: httpx encodes a space as the "+" MusicBrainz documents
+            # (toc=1+12+...); a pre-joined "+" would go out as a literal %2B.
+            params={"toc": " ".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
             not_found_detail=TOC_NOT_FOUND,
         )
         releases = body.get("releases") or []
