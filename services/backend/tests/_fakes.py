@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 from sqlalchemy.sql import Select, Update
 from sqlalchemy.sql.elements import BinaryExpression
+from sqlalchemy.sql.functions import count
 
 
 def _all_filters(stmt: Select) -> list[BinaryExpression]:
@@ -98,6 +99,36 @@ def _table_for_stmt(stmt: Select) -> str | None:
         if tbl is not None:
             return tbl.name
     return None
+
+
+def _is_count(stmt: Select) -> bool:
+    cols = list(stmt.selected_columns)
+    return len(cols) == 1 and isinstance(cols[0], count)
+
+
+def _apply_order(rows: list[Any], stmt: Select) -> list[Any]:
+    """Honour `order_by(col(...).desc(), col(...))` the way Postgres would,
+    applying the clauses from least to most significant so Python's stable
+    sort yields the composite order. `None` sorts first ascending (last
+    descending), which keeps unset timestamps out of a real row's way."""
+    clauses = list(stmt._order_by_clauses)
+    for clause in reversed(clauses):
+        element = getattr(clause, "element", clause)
+        name = getattr(element, "name", None)
+        if name is None:
+            continue
+        descending = getattr(getattr(clause, "modifier", None), "__name__", "") == "desc_op"
+
+        def key(row: Any, _name: str = name) -> tuple[int, Any]:
+            value = getattr(row, _name, None)
+            return (0, 0) if value is None else (1, value)
+
+        try:
+            rows = sorted(rows, key=key, reverse=descending)
+        except TypeError:
+            # Mixed, incomparable values: keep insertion order like before.
+            return rows
+    return rows
 
 
 class _Result:
@@ -239,6 +270,17 @@ class FakeSession:
         rows = list(self.rows.get(table, [])) if table else []
         filters = _all_filters(stmt)
         rows = [r for r in rows if _matches(r, filters)]
+        rows = _apply_order(rows, stmt)
+
+        # `select(func.count()).select_from(Model)`: the count of the filtered
+        # rows, before limit/offset (which a count query never carries).
+        if _is_count(stmt):
+            return _Result([len(rows)])
+
+        if stmt._offset is not None:
+            rows = rows[stmt._offset :]
+        if stmt._limit is not None:
+            rows = rows[: stmt._limit]
 
         # Heuristic: `select(Model)` exposes >=5 columns (every model field);
         # `select(Model.id, Model.name)` has 1-3. Treat the small case as a

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
 	apiFetch,
+	apiFetchResponse,
 	apiFormPost,
 	get,
 	post,
@@ -281,5 +282,25 @@ describe('apiFormPost', () => {
 		await apiFormPost('/api/upload', new FormData());
 		const init = mockFetch.mock.calls[0][1];
 		expect(init.headers).not.toHaveProperty('Authorization');
+	});
+});
+
+describe('apiFetchResponse', () => {
+	it('returns the parsed body together with the response headers', async () => {
+		mockFetch.mockResolvedValue({
+			...jsonResponse([{ id: 'job_1' }]),
+			headers: new Headers({ 'X-Total-Count': '142' })
+		});
+		const { data, headers } = await apiFetchResponse<{ id: string }[]>('/api/jobs');
+		expect(data).toEqual([{ id: 'job_1' }]);
+		expect(headers.get('X-Total-Count')).toBe('142');
+	});
+
+	it('rejects like apiFetch on an error status', async () => {
+		mockFetch.mockResolvedValue({
+			...jsonResponse({ detail: 'nope' }, false, 403, 'Forbidden'),
+			headers: new Headers()
+		});
+		await expect(apiFetchResponse('/api/jobs')).rejects.toThrow('nope');
 	});
 });

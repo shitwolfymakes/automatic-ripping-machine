@@ -1343,6 +1343,7 @@
           "jobs"
         ],
         "summary": "List Jobs",
+        "description": "One page of jobs, newest first with a stable `id` tiebreak so a page\ndoes not shuffle between polls. The filtered total rides in the\n`X-Total-Count` header; the body stays a plain `JobView[]`.",
         "operationId": "list_jobs_api_jobs_get",
         "parameters": [
           {
@@ -1428,6 +1429,14 @@
                     "$ref": "#/components/schemas/JobView"
                   },
                   "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            },
+            "headers": {
+              "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -7657,6 +7666,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotificationInboxView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "List Job Logs",
+        "description": "Every per-job log file under `LOG_DIR/jobs`, newest first.\n\nOnly `<job_id>.log` regular files whose stem is a valid job id are listed;\nanything else in the directory is ignored. A missing directory is `[]`.",
+        "operationId": "list_job_logs_api_logs_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobLogFileView"
+                  },
+                  "title": "Response List Job Logs Api Logs Get"
                 }
               }
             }
@@ -14128,6 +14191,31 @@
         ],
         "title": "JobIdentity",
         "description": "What identification concluded. Title/year/media_type/poster live on\nthe Job row itself \u2014 this records where they came from and the ids that\nlet a UI link out or re-query."
+      },
+      "JobLogFileView": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "size_bytes",
+          "modified_at"
+        ],
+        "title": "JobLogFileView",
+        "description": "One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`)."
       },
       "JobMetadata": {
         "properties": {

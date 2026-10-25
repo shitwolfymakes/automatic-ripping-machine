@@ -111,6 +111,9 @@ header counts their four distinct colours until they moved to the accents.
   disc-type icons, glyph tiles, and the header activity counts.
 - `--color-frame-accent` / `--color-on-frame-accent`: the section-frame bar
   (per-instance override via `--frame-accent`).
+- `--color-terminal-base` / `--color-terminal-ink` / `--color-terminal-bg`: the
+  log viewer's dark well (fixed in both modes), its text, and the base tinted
+  8% by primary.
 - Radius scale on the `--radius` (8px) base: `--radius-sm` 2px,
   `--radius-md` 6px, `--radius-lg` 8px, `--radius-xl` 12px,
   `--radius-2xl` 16px. There is deliberately no 4px step.
@@ -184,6 +187,7 @@ comment is the block's contract (name, elements, modifiers, state). Summary:
 | `field` | -label, -help, -error, -control | -row | [aria-invalid], :disabled, :focus-visible |
 | `flyout` | -item, -divider | | [data-placement] |
 | `glyph` | | -sm, -md, -lg; -danger, -warning, -success, -info | [data-glyph] |
+| `list-panel` | -header, -title, -count, -body | | |
 | `list-row` | -lead, -main, -meta, -actions | -compact | [data-active], [data-disabled], [aria-expanded] |
 | `modal` | -backdrop, -panel, -title, -body, -actions | -wide | |
 | `nav` | -item, -badge, -logo | | [data-active] |
