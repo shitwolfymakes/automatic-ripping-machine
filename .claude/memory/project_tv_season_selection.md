@@ -29,9 +29,15 @@ it, and identify on a virtual drive reuses its newest non-terminal job
 Kolchak job survived two backend restarts; the first restart (before the
 dedupe fix) left a duplicate parked job the owner retires by hand.
 
-The design canvas "TV Season Flow" (Claude Design, five clickable disc
-cases plus a state inventory) is the base for A/B options; the next design
-question is whether the matcher waits for a season before placing.
+2026-10-25, second wave (design
+`docs/superpowers/specs/2026-10-25-episode-match-no-accept-design.md`): no
+accept step. A held result is applied as a guess (resolver ranks clean over
+held, `identity_claims.unsure`, `JobView.episodes_unsure`); the ripper holds
+the review countdown while it is a guess; the panel's only controls are Fix
+match and Clear episodes (`DELETE /identity/match`); Accept, Pin and Unpin
+are gone from the UI (the pin stays in the claims as the source chosen in
+Fix match). The design canvas "TV Season Flow" still shows the old flow and
+needs its A/B row redrawn against this.
 
 Still to do before undraft: walk the design's Definition of done (section 7)
 on a dev stack with a TV disc or ISO, items 6 and 8 first.
