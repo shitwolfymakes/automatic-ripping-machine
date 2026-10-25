@@ -36,7 +36,15 @@ describe('ReviewTracksTable', () => {
 			props: {
 				job: createJob({ media_type: 'tv' }),
 				tracks: [
-					track({ id: 'trk_0', index: 0, source_ref: '0', role: 'episode', episode_number: 1, duration_seconds: 3093 }),
+					track({
+						id: 'trk_0',
+						index: 0,
+						source_ref: '0',
+						role: 'episode',
+						episode_number: 1,
+						episode_name: 'The Ripper',
+						duration_seconds: 3093
+					}),
 					track({ id: 'trk_5', index: 5, source_ref: '5', role: 'extra', duration_seconds: 542 }),
 					track({ id: 'trk_6', index: 6, source_ref: '6', duration_seconds: 2990 })
 				],
@@ -45,6 +53,8 @@ describe('ReviewTracksTable', () => {
 			}
 		});
 		expect(screen.getByTestId('track-role')).toHaveTextContent('Extra');
+		// The placed episode shows its name beside the number, as on the job page.
+		expect(screen.getByTestId('track-episode-name')).toHaveTextContent('The Ripper');
 		// The episode and the unplaced title keep their number box.
 		expect(screen.getAllByPlaceholderText('--')).toHaveLength(2);
 	});

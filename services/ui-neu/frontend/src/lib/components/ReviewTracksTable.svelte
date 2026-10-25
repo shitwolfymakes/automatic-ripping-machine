@@ -124,14 +124,21 @@
 										{#if row.trackId && nonEpisode(row)}
 											<span class="chip chip-sm" data-testid="track-role">{nonEpisode(row)}</span>
 										{:else if row.trackId}
-											<input
-												type="text"
-												value={row.episodeNumber ?? ''}
-												onchange={(e) => handleEpisodeNumberInput(row.trackId!, e.currentTarget.value)}
-												placeholder="--"
-												disabled={row.excluded}
-												class="field-control review-tracks-table-episode-input"
-											/>
+											<div class="review-tracks-table-episode">
+												<input
+													type="text"
+													value={row.episodeNumber ?? ''}
+													onchange={(e) => handleEpisodeNumberInput(row.trackId!, e.currentTarget.value)}
+													placeholder="--"
+													disabled={row.excluded}
+													class="field-control review-tracks-table-episode-input"
+												/>
+												{#if row.episodeNumber != null && row.episodeName}
+													<span class="review-tracks-table-episode-name" data-testid="track-episode-name"
+														>{row.episodeName}</span
+													>
+												{/if}
+											</div>
 										{:else}
 											<span class="review-tracks-table-faint">-</span>
 										{/if}
@@ -219,6 +226,20 @@
 		min-height: auto;
 		padding: 0.125rem 0.25rem;
 		text-align: center;
+	}
+	.review-tracks-table-episode {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+	.review-tracks-table-episode-name {
+		font-size: 0.875rem;
+		color: var(--color-text-secondary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 16rem;
 	}
 	.review-tracks-table-search-btn[aria-pressed='true'] {
 		color: var(--color-primary);

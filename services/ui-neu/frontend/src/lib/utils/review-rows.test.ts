@@ -22,6 +22,7 @@ describe('review-rows mappers', () => {
 			title: 'Main',
 			year: 2001,
 			episodeNumber: 4,
+			episodeName: null,
 			role: null,
 			excluded: false
 		});
@@ -64,6 +65,7 @@ describe('review-rows mappers', () => {
 			title: null,
 			year: null,
 			episodeNumber: null,
+			episodeName: null,
 			role: null,
 			excluded: false
 		});

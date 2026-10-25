@@ -11,6 +11,8 @@ export type ReviewRow = {
 	title: string | null;
 	year: number | null;
 	episodeNumber: number | null;
+	/** The placed episode's name, shown beside the number as on the job page. */
+	episodeName: string | null;
 	/** What the title is once a source or the operator has said: an extra is placed without an episode. */
 	role: TrackRole | null;
 	excluded: boolean;
@@ -26,6 +28,7 @@ export function trackToRow(t: TrackView): ReviewRow {
 		title: t.title ?? null,
 		year: t.year ?? null,
 		episodeNumber: t.episode_number ?? null,
+		episodeName: t.episode_name ?? null,
 		role: t.role ?? null,
 		excluded: t.excluded ?? false
 	};
@@ -40,6 +43,7 @@ export function scanTitleToRow(s: ScanTitle): ReviewRow {
 		title: null,
 		year: null,
 		episodeNumber: null,
+		episodeName: null,
 		role: null,
 		excluded: false
 	};
