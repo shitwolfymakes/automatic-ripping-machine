@@ -43,10 +43,17 @@
 		onexclude
 	}: Props = $props();
 
+	// The picker is a value select: it shows the row's placement and keeps
+	// what was picked (the save reloads the rows, which confirms it).
 	function pick(trackId: string, e: Event & { currentTarget: HTMLSelectElement }) {
 		const value = e.currentTarget.value;
-		e.currentTarget.value = '';
 		if (value) onpick?.(trackId, value);
+	}
+	// A placement the current list does not offer (another season's episode)
+	// still shows as the selected option instead of falling back to "Not placed".
+	function current(row: EpisodeRow, options: { value: string }[] | null): { value: string; label: string } | null {
+		if (!row.pickValue || options?.some((o) => o.value === row.pickValue)) return null;
+		return { value: row.pickValue, label: [row.code, row.name].filter(Boolean).join(' ') };
 	}
 
 	const seasonOf = (row: EpisodeRow) => row.season ?? panelSeason ?? null;
@@ -90,6 +97,8 @@
 
 {#snippet byHand(row: EpisodeRow)}
 	{#if optionsFor}
+		{@const options = optionsFor(row)}
+		{@const extra = current(row, options)}
 		<div class="episode-rows-hand">
 			<SeasonSelect
 				class="episode-rows-season"
@@ -101,10 +110,12 @@
 			<select
 				class="field-control episode-rows-select"
 				aria-label="Set placement for {row.ref}"
+				value={row.pickValue}
 				onchange={(e) => pick(row.trackId, e)}
 			>
-				<option value="">Change...</option>
-				{#each optionsFor(row) ?? [] as o (o.value)}
+				<option value="">Not placed</option>
+				{#if extra}<option value={extra.value}>{extra.label}</option>{/if}
+				{#each options ?? [] as o (o.value)}
 					<option value={o.value}>{o.label}</option>
 				{/each}
 			</select>

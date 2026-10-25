@@ -80,6 +80,9 @@ describe('buildRows', () => {
 		});
 		expect(rows[5].origin.kind).toBe('none');
 		expect(placedCount(rows)).toBe(6);
+		// The picker's own value: the episode as pickerOptions values it, a role for an extra.
+		expect(rows[0].pickValue).toBe('s1e1');
+		expect(rows[5].pickValue).toBe('extra');
 	});
 	it('rows placed by a held source are a guess only while the job is unsure', () => {
 		const rows = buildRows(tracks, identity({}, true), null, true);

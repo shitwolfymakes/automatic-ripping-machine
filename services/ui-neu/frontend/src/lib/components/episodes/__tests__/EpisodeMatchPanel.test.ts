@@ -418,10 +418,13 @@ describe('EpisodeMatchPanel set by hand', () => {
 	it('lists specials as season 0 and offers Extra / Trailer / Other', async () => {
 		renderComponent(EpisodeMatchPanel, { props: { job: job({ season: 1 }), tracks, matching: false } });
 		const select = (await screen.findByLabelText('Set placement for t00')) as HTMLSelectElement;
-		await waitFor(() => expect(select.options.length).toBe(6));
-		// t03 holds S01E04, so it is marked used and sorts after the special.
+		await waitFor(() => expect(select.options.length).toBe(7));
+		// The picker shows t00's own placement first (the list does not offer it
+		// here); t03 holds S01E04, so it is marked used and sorts after the special.
+		expect(select.value).toBe('s1e1');
 		expect([...select.options].map((o) => [o.value, o.text])).toEqual([
-			['', 'Change...'],
+			['', 'Not placed'],
+			['s1e1', 'S01E01 Ep 1'],
 			['s0e1', 'S00E01 The Night Stalker, 74m, special'],
 			['s1e4', 'E04 The Vampire, 51m (used)'],
 			['extra', 'Extra'],

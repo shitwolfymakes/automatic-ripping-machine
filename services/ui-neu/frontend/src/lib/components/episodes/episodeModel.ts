@@ -26,6 +26,9 @@ export interface EpisodeRow {
 	seconds: number | null;
 	/** Left out of the transcode output (the disc still rips in full). */
 	excluded: boolean;
+	/** The picker option that is this row's current placement ('' when none): a
+	 * role value, or `s<season>e<episode>` as `pickerOptions` values them. */
+	pickValue: string;
 }
 
 /** The Re-run form. An empty season or disc is null (unknown); a season of
@@ -150,6 +153,9 @@ export function buildRows(
 				}
 			: null;
 		const current = code ?? 'Not placed';
+		let pickValue = '';
+		if (t?.role && NON_EPISODE[t.role]) pickValue = t.role;
+		else if (t?.episode_number != null) pickValue = `s${t.season ?? 0}e${t.episode_number}`;
 		return {
 			trackId: track.id,
 			ref: track.source_ref,
@@ -163,7 +169,8 @@ export function buildRows(
 			handSet: o.kind === 'you',
 			season: t?.season ?? track.season ?? null,
 			seconds: track.duration_seconds ?? track.expected_duration_seconds ?? null,
-			excluded: track.excluded ?? false
+			excluded: track.excluded ?? false,
+			pickValue
 		};
 	});
 }

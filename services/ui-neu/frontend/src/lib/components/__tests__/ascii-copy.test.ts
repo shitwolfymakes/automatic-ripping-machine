@@ -51,7 +51,8 @@ describe('ASCII copy', () => {
 			handSet: false,
 			season: null,
 			seconds: null,
-			excluded: false
+			excluded: false,
+			pickValue: ''
 		};
 		renderComponent(EpisodeRows, { rows: [row], fileNames: new Map() });
 		expect(screen.getAllByText('-').length).toBeGreaterThan(0);
