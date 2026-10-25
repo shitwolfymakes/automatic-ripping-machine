@@ -195,9 +195,6 @@ async def update_config(
             if not (present or "").strip():
                 label = (meta.enum_labels or {}).get(value, value)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
-    for key in ("crc64service_enabled",):
-        if key in fields and fields[key] is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
     # The number inputs send null for an emptied box; these columns are NOT
     # NULL, so refuse it here rather than 500 on the commit (D-096).
     for key in (
@@ -247,7 +244,9 @@ async def update_config(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )
-    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply"):
+    # The checkbox inputs send null for a cleared tri-state; these columns are
+    # NOT NULL, so refuse it here rather than 500 on the commit.
+    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply", "crc64service_enabled"):
         if key in fields and fields[key] is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):

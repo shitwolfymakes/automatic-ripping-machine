@@ -20,7 +20,7 @@ import type {
 	ManualTriggerResponse,
 	RipAgainResponse
 } from '$lib/types/api.gen';
-import { apiFetch, post } from './client';
+import { apiFetch, apiFetchResponse, post } from './client';
 
 // ---------------------------------------------------------------------------
 // Job listing / detail (EXISTS in v3)
@@ -38,14 +38,46 @@ export interface FetchJobsParams {
 	offset?: number;
 }
 
-export function fetchJobs(params?: FetchJobsParams): Promise<JobView[]> {
+function jobsPath(params?: FetchJobsParams): string {
 	const query = new URLSearchParams();
 	if (params?.status) query.set('status', params.status);
 	if (params?.drive_id) query.set('drive_id', params.drive_id);
 	if (params?.limit !== undefined) query.set('limit', String(params.limit));
 	if (params?.offset !== undefined) query.set('offset', String(params.offset));
 	const qs = query.toString();
-	return apiFetch<JobView[]>(`/api/jobs${qs ? `?${qs}` : ''}`);
+	return `/api/jobs${qs ? `?${qs}` : ''}`;
+}
+
+export function fetchJobs(params?: FetchJobsParams): Promise<JobView[]> {
+	return apiFetch<JobView[]>(jobsPath(params));
+}
+
+export interface JobsPage {
+	jobs: JobView[];
+	/** Jobs matching the filters across all pages (the `X-Total-Count` header). */
+	total: number;
+}
+
+/** One page of jobs plus the filtered total, for paged lists. */
+export async function fetchJobsPage(params?: FetchJobsParams): Promise<JobsPage> {
+	const { data, headers } = await apiFetchResponse<JobView[]>(jobsPath(params));
+	const header = Number(headers.get('X-Total-Count'));
+	return { jobs: data, total: Number.isFinite(header) && header > 0 ? header : data.length };
+}
+
+// The Backend's per-request cap on `limit`.
+const MAX_JOBS_PAGE = 500;
+
+/** Every job matching `params`, paged through MAX_JOBS_PAGE at a time. For
+ *  views that sort or filter client-side on fields the API can't order by. */
+export async function fetchAllJobs(params?: Omit<FetchJobsParams, 'limit' | 'offset'>): Promise<JobsPage> {
+	const jobs: JobView[] = [];
+	for (;;) {
+		const page = await fetchJobsPage({ ...params, limit: MAX_JOBS_PAGE, offset: jobs.length });
+		jobs.push(...page.jobs);
+		if (page.jobs.length === 0 || jobs.length >= page.total) break;
+	}
+	return { jobs, total: jobs.length };
 }
 
 export function fetchJob(id: string): Promise<JobDetailView> {

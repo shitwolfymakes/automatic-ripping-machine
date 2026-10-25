@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.metadata.sources import build_online_sources  # noqa: E402
+from arm_backend.metadata.dispatcher import MetadataDispatcher  # noqa: E402
 from arm_backend.routers import metadata as metadata_router  # noqa: E402
 from arm_common import Config, User  # noqa: E402
 from arm_common.models.user import GUEST_ROLE  # noqa: E402
@@ -61,7 +61,7 @@ def _client(**keys: str | None) -> tuple[TestClient, dict[str, str], FastAPI]:
     app = FastAPI()
     app.state.signing_key = key
     app.state.http = httpx.AsyncClient(timeout=5.0)
-    app.state.online_sources = build_online_sources(app.state.http)
+    app.state.dispatcher = MetadataDispatcher(app.state.http)
     app.include_router(metadata_router.router)
 
     async def _override() -> FakeSession:
@@ -169,7 +169,7 @@ def test_details_source_without_details_capability_is_400() -> None:
             return None
 
     client, auth, app = _client()
-    app.state.online_sources = {"tvmaze": _NoDetails()}
+    app.state.dispatcher = MetadataDispatcher(app.state.http, sources={"tvmaze": _NoDetails()})
     with client:
         r = client.get("/api/metadata/details", params={"provider": "tvmaze", "type": "tv", "id": "1"}, headers=auth)
     assert r.status_code == 400
@@ -188,7 +188,7 @@ def test_details_raw_httpx_error_is_reported() -> None:
             raise httpx.ReadError("dropped")
 
     client, auth, app = _client()
-    app.state.online_sources = {"tvmaze": _Raises()}
+    app.state.dispatcher = MetadataDispatcher(app.state.http, sources={"tvmaze": _Raises()})
     with client:
         r = client.get("/api/metadata/details", params={"provider": "tvmaze", "type": "tv", "id": "1"}, headers=auth)
     assert r.status_code == 200

@@ -106,7 +106,8 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			title: 'Decryption data',
 			blurb: 'Key material MakeMKV needs for protected discs, refreshed in the background.',
 			keys: ['community_keydb_enabled', 'makemkv_sdf_enabled']
-		}
+		},
+		{ title: 'ISO Ripping', keys: ['max_parallel_iso_rips'] }
 	],
 	Transcoding: [{ title: 'Scheduling', keys: ['transcode_enabled', 'auto_transcode_on_idle'] }]
 };

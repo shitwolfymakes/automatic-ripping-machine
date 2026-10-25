@@ -1,4 +1,4 @@
-/* section-frame: the accent-barred frame around a page section (themeable via --frame-accent). Elements: section-frame-bar-top, section-frame-bar-bottom, section-frame-sidebar, section-frame-body. */
+/* section-frame: the accent-barred frame around a page section (themeable via --frame-accent). Elements: section-frame-bar-top, section-frame-bar-bottom, section-frame-sidebar, section-frame-body. State: [data-frame-emphasis] (opt-in tinted, attention-calling frame). */
 
 @layer components {
 	.section-frame {
@@ -38,5 +38,28 @@
 		padding: 0.75rem 0.5rem;
 		border-left: 2px solid color-mix(in srgb, var(--_accent) 30%, transparent);
 		border-right: 2px solid color-mix(in srgb, var(--_accent) 30%, transparent);
+	}
+
+	/* Emphasis: tints mixed from the frame's own accent replace the solid
+	   bars, so the section still calls for attention while reading as the
+	   same family as the other panels across every scheme. */
+	.section-frame[data-frame-emphasis] {
+		border: 1px solid color-mix(in srgb, var(--_accent) 35%, transparent);
+		background: color-mix(in srgb, var(--_accent) 4%, transparent);
+	}
+
+	.section-frame[data-frame-emphasis] .section-frame-bar-top {
+		background: color-mix(in srgb, var(--_accent) 12%, var(--color-surface));
+		border-bottom: 1px solid color-mix(in srgb, var(--_accent) 35%, transparent);
+		color: color-mix(in srgb, var(--_accent) 65%, var(--color-text));
+	}
+
+	.section-frame[data-frame-emphasis] .section-frame-body {
+		border-left: 0;
+		border-right: 0;
+	}
+
+	.section-frame[data-frame-emphasis] .section-frame-bar-bottom {
+		display: none;
 	}
 }

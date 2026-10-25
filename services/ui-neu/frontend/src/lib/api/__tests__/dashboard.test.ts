@@ -31,7 +31,7 @@ import { fetchDrives } from '$lib/api/drives';
 import { fetchIsoPreparing } from '$lib/api/iso';
 import { fetchJobs } from '$lib/api/jobs';
 import type { DriveView, IsoPrepareView, JobView } from '$lib/types/api.gen';
-import { fetchDashboard } from '../dashboard';
+import { fetchDashboard, fetchDashboardSnapshot } from '../dashboard';
 
 const mockFetchDrives = vi.mocked(fetchDrives);
 
@@ -77,6 +77,20 @@ describe('fetchDashboard', () => {
 
 		expect(dash.drives_online).toBe(0);
 		expect(dash.iso_sources).toEqual({});
+	});
+
+	it('reports the drive fields as null in a snapshot when the drives fetch fails', async () => {
+		// null (not {}) is what lets the store hold the last good maps
+		mockFetchDrives.mockRejectedValueOnce(new Error('boom'));
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.drives_online).toBeNull();
+		expect(snap.drive_names).toBeNull();
+		expect(snap.iso_sources).toBeNull();
+		expect(snap.iso_source_kinds).toBeNull();
+		expect(snap.drive_source_kinds).toBeNull();
+		expect(snap.active_jobs).not.toBeNull();
 	});
 
 	it('lists ISO rips that are preparing: live virtual drives with no job yet', async () => {
@@ -135,5 +149,19 @@ describe('fetchDashboard', () => {
 
 		expect(dash.iso_source_kinds).toEqual({ drv_iso: 'iso', drv_dir: 'folder', drv_old: 'iso' });
 		expect(dash.preparing[0].iso_kind).toBe('folder');
+	});
+
+	it('records the source kind of every virtual drive, retired ones included', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_live', kind: 'virtual', lifecycle: 'enrolled', display_name: 'a.iso', source_kind: 'iso' },
+			{ id: 'drv_done', kind: 'virtual', lifecycle: 'retired', display_name: 'Disc 1', source_kind: 'folder' },
+			{ id: 'drv_gone', kind: 'virtual', lifecycle: 'retired', display_name: 'b.iso' },
+			{ id: 'drv_opt', kind: 'optical', lifecycle: 'enrolled', display_name: 'sr0' }
+		] as DriveView[]);
+
+		const dash = await fetchDashboard();
+
+		expect(dash.drive_source_kinds).toEqual({ drv_live: 'iso', drv_done: 'folder', drv_gone: 'iso' });
+		expect(dash.iso_source_kinds).toEqual({ drv_live: 'iso' });
 	});
 });

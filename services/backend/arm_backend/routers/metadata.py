@@ -2,8 +2,8 @@
 POST /api/config/keys/{name}/check (routers/config.py)."""
 
 import logging
-from collections.abc import Mapping
-from typing import Literal
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -84,12 +84,19 @@ _details_cache: TtlCache[tuple[str, str, str], MetadataSearchResponse] = TtlCach
 
 
 def _registry(request: Request) -> Mapping[str, OnlineSource]:
-    registry: Mapping[str, OnlineSource] = request.app.state.online_sources
+    """The online-source registry, read off the dispatcher that owns it. These
+    routes and the dispatcher must agree on enablement and order, so there is
+    no second `app.state` copy for an app factory to forget to wire."""
+    registry: Mapping[str, OnlineSource] = request.app.state.dispatcher.sources
     return registry
 
 
+async def _maybe_config(db: AsyncSession) -> Config | None:
+    return (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+
+
 async def _config(db: AsyncSession) -> Config:
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    cfg = await _maybe_config(db)
     if cfg is None:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="config not initialised")
     return cfg
@@ -102,6 +109,35 @@ def _preferred_id(cfg: Config | None, media_type: str, registry: Mapping[str, On
     if chosen in known_source_ids(media_type, registry):
         return str(chosen)
     return next(iter(online_source_ids(cfg, media_type)), "tmdb")
+
+
+_Ranked = list[tuple[OnlineSource, Callable[..., Any]]]
+
+
+async def _first_hit(
+    ranked: _Ranked, call: Callable[[Callable[..., Any]], Awaitable[MetadataResult | None]]
+) -> tuple[MetadataResult | None, str]:
+    """Walk `ranked` until a source answers, catching PER SOURCE.
+
+    Every client raises LookupError on a miss, so one try/except around the
+    whole walk ends it at the first source's miss and never reaches the rest
+    of the operator's ranked list — the automatic walk avoids that the same
+    way, in `dispatcher._call`. Returns the hit (provider stamped) and the
+    detail to report: the last source's failure, else "no match"."""
+    detail = "no match"
+    for source, fn in ranked:
+        try:
+            result = await call(fn)
+        except (MetaLookupError, LookupTimeout) as exc:
+            detail = str(exc)
+            continue
+        except httpx.HTTPError as exc:
+            detail = f"{source.id} unavailable: {exc}"
+            continue
+        if result is not None:
+            result.provider = source.id
+            return result, detail
+    return None, detail
 
 
 @router.get("/search", response_model=MetadataSearchResponse)
@@ -194,42 +230,23 @@ async def lookup_metadata(
             detail="exactly one of imdb_id or crc64 is required",
         )
     registry = _registry(request)
-    try:
-        if imdb_id is not None:
-            cfg = await _config(db)
-            ranked = [(s, fn) for s in lookup_sources(cfg, "movie", registry) if (fn := capability(s, "lookup_imdb"))]
-            if not ranked:
-                name = _preferred_id(cfg, "movie", registry)
-                raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {name} key configured")
-            result = None
-            for source, imdb_lookup in ranked:
-                result = await imdb_lookup(cfg, imdb_id)
-                if result is not None:
-                    result.provider = source.id
-                    break
-            if result is None:
-                return MetadataSearchResponse(candidates=[], detail="no match")
-        else:
-            # The community DB needs no key or Config; a missing Config row
-            # must not block it (today's behaviour), so read the row nullable.
-            fp_cfg = (
-                await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
-            ).scalar_one_or_none()
-            result = None
-            for source in fingerprint_sources(fp_cfg, registry):
-                lookup = capability(source, "lookup_fingerprint")
-                if lookup is None:
-                    continue
-                result = await lookup(fp_cfg, "crc64", crc64)
-                if result is not None:
-                    result.provider = source.id
-                    break
-            if result is None:
-                return MetadataSearchResponse(candidates=[], detail="no match")
-    except (MetaLookupError, LookupTimeout) as exc:
-        return MetadataSearchResponse(candidates=[], detail=str(exc))
-    except httpx.HTTPError as exc:
-        return MetadataSearchResponse(candidates=[], detail=f"lookup unavailable: {exc}")
+    if imdb_id is not None:
+        cfg = await _config(db)
+        ranked = [(s, fn) for s in lookup_sources(cfg, "movie", registry) if (fn := capability(s, "lookup_imdb"))]
+        if not ranked:
+            name = _preferred_id(cfg, "movie", registry)
+            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"no {name} key configured")
+        result, detail = await _first_hit(ranked, lambda fn: fn(cfg, imdb_id))
+    else:
+        # The community DB needs no key or Config; a missing Config row
+        # must not block it (today's behaviour), so read the row nullable.
+        fp_cfg = await _maybe_config(db)
+        fp_ranked = [
+            (s, fn) for s in fingerprint_sources(fp_cfg, registry) if (fn := capability(s, "lookup_fingerprint"))
+        ]
+        result, detail = await _first_hit(fp_ranked, lambda fn: fn(fp_cfg, "crc64", crc64))
+    if result is None:
+        return MetadataSearchResponse(candidates=[], detail=detail)
     return MetadataSearchResponse(candidates=[_to_candidate(result)])
 
 
@@ -246,7 +263,7 @@ async def search_music(
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> MetadataSearchResponse:
-    cfg = await _config(db)
+    cfg = await _maybe_config(db)
     source = search_source(cfg, "music", _registry(request))
     search = capability(source, "search_releases") if source is not None else None
     if source is None or search is None:
