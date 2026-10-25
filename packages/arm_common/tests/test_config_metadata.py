@@ -127,10 +127,12 @@ def test_identity_settings_meta() -> None:
     )
     assert by_key["crc64service_enabled"].type == "bool"
     assert "metadata_provider" not in by_key
+    # The wizard asks for the movie search provider, in the slot the removed
+    # `metadata_provider` held; the rest are Settings-only.
+    assert (by_key["search_provider_movie"].setup_step, by_key["search_provider_movie"].setup_order) == ("metadata", 4)
     for key in (
         "movie_sources",
         "music_sources",
-        "search_provider_movie",
         "search_provider_tv",
         "search_provider_music",
         "crc64service_enabled",
@@ -193,7 +195,12 @@ def test_setup_step_tagging_matches_spec() -> None:
         return [m.key for m in sorted(tagged, key=lambda m: m.setup_order or 0)]
 
     assert keys("makemkv") == ["makemkv_key", "community_keydb_enabled", "makemkv_sdf_enabled"]
-    assert keys("metadata") == ["tmdb_api_key", "omdb_api_key", "tvdb_api_key"]
+    assert keys("metadata") == [
+        "tmdb_api_key",
+        "omdb_api_key",
+        "tvdb_api_key",
+        "search_provider_movie",
+    ]
     assert keys("discs") == ["auto_rip_on_insert", "on_previously_ripped"]
     assert keys("transcoding") == ["transcode_enabled", "max_parallel_transcodes"]
 

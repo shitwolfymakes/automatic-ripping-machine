@@ -1,9 +1,11 @@
 """Online metadata sources (spec §5.1): one adapter per HTTP client.
 
 An adapter knows which client method implements which capability and which
-Config key it needs. It constructs the client per call from `cfg`, so a key
-saved after boot is used on the next lookup. Order and enablement are not
-decided here: `identity.sources.registry.sources_for` does that."""
+Config key it needs. It reads the key off `cfg` on every call, so a key saved
+after boot is used on the next lookup (TVDB, whose client holds a login token,
+keeps one client per key and replaces it when the key changes). Order and
+enablement are not decided here: `identity.sources.registry.sources_for` does
+that."""
 
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
 import httpx
-from arm_common import Config
+from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT, Config
 
 from arm_backend.metadata.arm_server import ArmServerClient
 from arm_backend.metadata.base import MetadataResult
@@ -25,13 +27,18 @@ Kind = Literal["movie", "tv"]
 
 # MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
 # `AppName/version ( contact )` shape. Not operator-configurable (Config.
-# musicbrainz_user_agent is dormant — see config_metadata.py).
-MUSICBRAINZ_USER_AGENT = "ARM/3.0.0 ( https://github.com/automatic-ripping-machine/automatic-ripping-machine )"
+# musicbrainz_user_agent is dormant — see config_metadata.py), and the one
+# spelling lives in arm_common so a version bump is a single edit.
+MUSICBRAINZ_USER_AGENT = DEFAULT_MUSICBRAINZ_USER_AGENT
 
 
 class OnlineSource(Protocol):
     id: str
     media_types: frozenset[str]
+    # The Config column this source needs, or None when it needs nothing.
+    # `configured()` is derived from it (see `_Adapter`), and a test pins the
+    # key-check route's `_KEY_ATTR` map to it, so the Keys tab cannot end up
+    # checking one key while the source reads another.
     requires_key: str | None
 
     def configured(self, cfg: Config | None) -> str | None:
@@ -55,23 +62,38 @@ def capability(source: object, name: str) -> Callable[..., Any] | None:
     return method if callable(method) else None
 
 
-def _blank(value: str | None) -> bool:
-    return not (value or "").strip()
+class _Adapter:
+    """Shared adapter plumbing: the app's httpx client plus the one place a
+    source names the key it needs. `requires_key` is that declaration and
+    `configured` is read off it, so the two can never disagree and a keyless
+    source states nothing at all."""
 
-
-class TmdbSource:
-    id = "tmdb"
-    media_types = frozenset({"movie", "tv"})
-    requires_key: str | None = "tmdb_api_key"
+    id: str
+    media_types: frozenset[str] = frozenset()
+    requires_key: str | None = None
 
     def __init__(self, http: httpx.AsyncClient) -> None:
         self._http = http
 
+    def _key(self, cfg: Config | None) -> str:
+        if self.requires_key is None:
+            return ""
+        return (getattr(cfg, self.requires_key, None) or "").strip()
+
     def configured(self, cfg: Config | None) -> str | None:
-        return "no tmdb key" if _blank(getattr(cfg, "tmdb_api_key", None)) else None
+        """None when usable; otherwise the skip reason (e.g. "no tmdb key")."""
+        if self.requires_key is None:
+            return None
+        return None if self._key(cfg) else f"no {self.id} key"
+
+
+class TmdbSource(_Adapter):
+    id = "tmdb"
+    media_types = frozenset({"movie", "tv"})
+    requires_key: str | None = "tmdb_api_key"
 
     def _client(self, cfg: Config) -> TMDBClient:
-        return TMDBClient(cfg.tmdb_api_key or "", self._http)
+        return TMDBClient(self._key(cfg), self._http)
 
     async def search_title(self, cfg: Config, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
         client = self._client(cfg)
@@ -87,19 +109,10 @@ class TmdbSource:
         return await self._client(cfg).find_by_imdb_id(imdb_id)
 
 
-class OmdbSource:
+class OmdbSource(_Adapter):
     id = "omdb"
     media_types = frozenset({"movie", "tv"})
     requires_key: str | None = "omdb_api_key"
-
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-
-    def _key(self, cfg: Config | None) -> str:
-        return (getattr(cfg, "omdb_api_key", None) or "").strip()
-
-    def configured(self, cfg: Config | None) -> str | None:
-        return "no omdb key" if not self._key(cfg) else None
 
     def _client(self, cfg: Config) -> OMDBClient:
         return OMDBClient(self._key(cfg), self._http)
@@ -114,18 +127,11 @@ class OmdbSource:
         return await self._client(cfg).lookup_by_imdb_id(imdb_id)
 
 
-class TvmazeSource:
+class TvmazeSource(_Adapter):
     """TVmaze: keyless TV title search, candidates and IMDb lookup."""
 
     id = "tvmaze"
     media_types = frozenset({"tv"})
-    requires_key: str | None = None
-
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-
-    def configured(self, cfg: Config | None) -> str | None:
-        return None
 
     async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
         if kind != "tv":
@@ -143,7 +149,7 @@ class TvmazeSource:
         return await TVMazeClient(self._http).lookup_by_imdb_id(imdb_id)
 
 
-class TvdbSource:
+class TvdbSource(_Adapter):
     """TVDB v4: keyed TV title search, candidates and IMDb lookup."""
 
     id = "tvdb"
@@ -151,16 +157,21 @@ class TvdbSource:
     requires_key: str | None = "tvdb_api_key"
 
     def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-
-    def _key(self, cfg: Config | None) -> str:
-        return (getattr(cfg, "tvdb_api_key", None) or "").strip()
-
-    def configured(self, cfg: Config | None) -> str | None:
-        return "no tvdb key" if not self._key(cfg) else None
+        super().__init__(http)
+        self._cached: TVDBClient | None = None
+        self._cached_key: str | None = None
 
     def _client(self, cfg: Config | None) -> TVDBClient:
-        return TVDBClient(self._key(cfg), self._http)
+        """One client per key, reused. TVDB v4 authenticates with a login
+        handshake and caches the bearer token on the client, so building a
+        fresh one per call (as every other adapter does, their keys riding on
+        each request) cost a POST /login before every search and lookup. A key
+        saved after boot replaces the cached client on the next call."""
+        key = self._key(cfg)
+        if self._cached is None or self._cached_key != key:
+            self._cached = TVDBClient(key, self._http)
+            self._cached_key = key
+        return self._cached
 
     async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
         if kind != "tv":
@@ -178,26 +189,19 @@ class TvdbSource:
         return await self._client(cfg).lookup_by_imdb_id(imdb_id)
 
 
-class MusicBrainzSource:
+class MusicBrainzSource(_Adapter):
     id = "musicbrainz"
     media_types = frozenset({"music"})
-    requires_key: str | None = None
-
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-
-    def configured(self, cfg: Config | None) -> str | None:
-        return None
 
     def _client(self) -> MusicBrainzClient:
         return MusicBrainzClient(MUSICBRAINZ_USER_AGENT, self._http)
 
-    async def lookup_disc_id(self, cfg: Config, disc_id: str, toc: str | None = None) -> MetadataResult | None:
+    async def lookup_disc_id(self, cfg: Config | None, disc_id: str, toc: str | None = None) -> MetadataResult | None:
         return await self._client().lookup_disc_id(disc_id, toc)
 
     async def search_releases(
         self,
-        cfg: Config,
+        cfg: Config | None,
         query: str,
         *,
         artist: str | None = None,
@@ -218,21 +222,13 @@ class MusicBrainzSource:
         )
 
 
-class ArmServerSource:
+class ArmServerSource(_Adapter):
     """The ARM community database: DVD CRC64 → title. A fingerprint source
     only (spec Step 2), never a title-search source."""
 
     id = "arm_server"
-    media_types: frozenset[str] = frozenset()
-    requires_key: str | None = None
 
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-
-    def configured(self, cfg: Config | None) -> str | None:
-        return None
-
-    async def lookup_fingerprint(self, cfg: Config, algo: str, value: str) -> MetadataResult | None:
+    async def lookup_fingerprint(self, cfg: Config | None, algo: str, value: str) -> MetadataResult | None:
         if algo != "crc64" or not value:
             return None
         return await ArmServerClient(self._http).lookup_by_crc64(value)

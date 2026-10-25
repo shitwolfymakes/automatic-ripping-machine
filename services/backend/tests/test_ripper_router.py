@@ -44,6 +44,7 @@ from arm_common import (  # noqa: E402
     RipPreset,
     Session,
     SessionApplication,
+    SessionRoute,
     SessionApplicationStatus,
     TrackStatus,
     TranscodePreset,
@@ -78,8 +79,9 @@ class _Hub:
 
 
 class _Dispatcher:
-    """Mock MetadataDispatcher. `result` is returned from identify; set
-    `raise_timeout` to simulate the asyncio.wait_for timeout path."""
+    """Mock MetadataDispatcher. `result` is returned from identify,
+    `fingerprint_result` from the fingerprint-only walk; set `raise_timeout`
+    to simulate the asyncio.wait_for timeout path."""
 
     def __init__(
         self,
@@ -87,19 +89,27 @@ class _Dispatcher:
         *,
         raise_timeout: bool = False,
         attempts: list[dict[str, Any]] | None = None,
+        fingerprint_result: MetadataResult | None = None,
     ) -> None:
         self.result = result
         self.raise_timeout = raise_timeout
+        self.fingerprint_result = fingerprint_result
         self.received_kwargs: dict[str, Any] = {}
         self.attempts = attempts or []
         self.last_attempts: list[dict[str, Any]] = []
+        self.calls: list[str] = []
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+        self.calls.append("identify")
         self.received_kwargs = _kw
         self.last_attempts = list(self.attempts)
         if self.raise_timeout:
             raise asyncio.TimeoutError
         return self.result
+
+    async def identify_from_fingerprint(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        self.calls.append("identify_from_fingerprint")
+        return self.fingerprint_result
 
 
 @pytest.fixture
@@ -3249,21 +3259,12 @@ def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() ->
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
 
-    class _NoLookup:
-        last_attempts: list[dict[str, Any]] = []
-
-        def __init__(self) -> None:
-            self.calls: list[str] = []
-
+    class _NoLookup(_Dispatcher):
         def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
             return False
 
         async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
             self.calls.append("identify_from_imdb")
-            return None
-
-        async def identify(self, *a: Any, **kw: Any) -> MetadataResult | None:
-            self.calls.append("identify")
             return None
 
     dispatcher = _NoLookup()
@@ -3277,12 +3278,49 @@ def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() ->
         )
     out = r.json()
     assert r.status_code == 200, r.text
-    assert dispatcher.calls == []
+    # The keyless community database is still consulted (it needs no key, so it
+    # is the one source this install has); only the fuzzy title search, which
+    # would outrank an exact content-hash match, is skipped.
+    assert dispatcher.calls == ["identify_from_fingerprint"]
     assert out["status"] == "identified"
     assert (out["title"], out["year"], out["media_type"]) == ("Round Midnight", 1986, "movie")
     assert out["metadata_json"]["identity"]["provider"] == "thediscdb"
     assert out["metadata_json"]["identity"]["external_ids"]["imdb"] == "tt0090557"
     assert "thediscdb" in out["metadata_json"]["provider_raw"]
+
+
+def test_identify_keyless_install_still_reaches_the_community_database() -> None:
+    """A keyless install (no TMDb/OMDb key) has exactly one usable online
+    source: the community CRC64 database, which needs no key. Returning the
+    slug-derived release title straight away skipped it on the installs that
+    have nothing else, so its hit must still win."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+    dispatcher = _NoLookup(
+        fingerprint_result=MetadataResult(title="Round Midnight", year=1986, kind="movie", provider="arm_server")
+    )
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    scan = _scan_dict_with_hash()
+    scan["fingerprints"].append({"algo": "crc64", "value": "0123456789abcdef"})
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    out = r.json()
+    assert r.status_code == 200, r.text
+    # The fingerprint answered, so the fuzzy title search never ran.
+    assert dispatcher.calls == ["identify_from_fingerprint"]
+    assert out["metadata_json"]["identity"]["provider"] == "arm_server"
+    assert (out["title"], out["year"]) == ("Round Midnight", 1986)
 
 
 def test_identify_thediscdb_exact_miss_falls_through_to_fuzzy_identify() -> None:
@@ -3431,7 +3469,8 @@ def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> Non
     """movie_auto_apply off + a confident movie hit -> the hit is stored, not
     applied; the disc parks in AWAITING_REVIEW with no countdown, keeps the
     miss title and the unidentified flag, persists its review tracks and
-    emits rip.awaiting_review."""
+    emits rip.awaiting_review. Only `media_type` is taken from the hit, as
+    the routing key the review tracks' preset is resolved through."""
     db = _suggestion_db(movie_auto_apply=False)
     result = MetadataResult(
         title="Iron Man", year=2008, kind="movie", payload={"id": 1726, "poster_path": "/abc.jpg"}, provider="tmdb"
@@ -3443,7 +3482,11 @@ def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> Non
     assert out["status"] == "awaiting_review"
     assert out["wait_start_time"] is None
     assert out["title"] == "MY_DISC"  # the miss title, not the hit
-    assert out.get("year") is None and out.get("media_type") is None and out.get("poster_url") is None
+    assert out.get("year") is None and out.get("poster_url") is None
+    # The routing media type IS taken, so _persist_review_tracks below resolves
+    # the preset of the session this disc will rip into rather than the
+    # never-identified default; accept never re-persists these rows.
+    assert out["media_type"] == "movie"
     assert out["metadata_json"].get("identity") is None
     assert out["metadata_json"]["flags"]["unidentified"] is True
     s = out["metadata_json"]["identity_suggestion"]
@@ -3452,6 +3495,50 @@ def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> Non
     assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
     tracks = [row for row in db.added if type(row).__name__ == "Track"]
     assert {t.source_ref for t in tracks} == {"1"}
+
+
+def test_identify_auto_apply_off_routes_review_tracks_through_the_hit() -> None:
+    """The held hit's kind is the routing key: `session_routes` is keyed on
+    (media_type, disc_type) and SKIPPED entirely when media_type is None, so
+    leaving it unset made the review tracks carry the never-identified
+    default preset's keep/drop defaults -- and accept never re-persists them,
+    so the operator would rip that wrong set."""
+    db = _suggestion_db(movie_auto_apply=False)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_test_main_only",
+            name="Main feature only",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"] = [
+        Session(
+            id="ses_movies",
+            name="Movies",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_test_main_only",
+            output_path_template="{title}",
+        )
+    ]
+    db.rows["session_routes"] = [
+        SessionRoute(media_type=MediaType.MOVIE, disc_type=DiscType.DVD, session_id="ses_movies")
+    ]
+    scan = _scan_dict()
+    scan["titles"] = [{"index": 1, "duration_seconds": 4200}, {"index": 2, "duration_seconds": 300}]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    r = _identify_with(db, result, scan)
+    assert r.status_code == 200, r.text
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    # The routed session's MAIN_FEATURE preset drops the 5-minute extra; the
+    # disc-type default (ALL_TRACKS) would have kept both.
+    assert {t.source_ref: t.excluded for t in tracks} == {"1": False, "2": True}
+    preset_claims = r.json()["metadata_json"]["identity_claims"]["sources"]["preset"]["tracks"]
+    assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": False}
 
 
 def test_identify_hold_for_review_with_auto_apply_off_has_no_countdown() -> None:
@@ -3470,7 +3557,7 @@ def test_identify_tv_hit_follows_the_episode_switch() -> None:
     result = MetadataResult(title="Lost", year=2004, kind="tv", payload={"id": 123}, provider="tvmaze")
     out = _identify_with(db, result, _scan_dict()).json()
     assert out["status"] == "awaiting_review" and out["wait_start_time"] is None
-    assert out.get("media_type") is None
+    assert out["media_type"] == "tv"  # the routing key, see the movie case
     assert out["metadata_json"]["identity_suggestion"]["kind"] == "tv"
 
 
