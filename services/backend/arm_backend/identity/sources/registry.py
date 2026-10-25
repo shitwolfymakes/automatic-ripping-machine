@@ -124,15 +124,11 @@ def episode_auto_apply(cfg: Config | None) -> bool:
 
 # ---------------------------------------------------------------------------
 # Online sources (spec §5.2). `online_source_ids` reads the operator's
-# `movie_sources` / `episode_sources` / `music_sources` columns; the dict below
-# holds the movie and music defaults only.
+# `movie_sources` / `episode_sources` / `music_sources` columns; the tuples
+# below are the defaults it falls back to for a row that has no value.
 # ---------------------------------------------------------------------------
 
-DEFAULT_ONLINE_SOURCES: dict[str, tuple[str, ...]] = {
-    "movie": ("tmdb", "omdb"),
-    "music": ("musicbrainz",),
-}
-# Step 2 fingerprint sources (PR 1 adds the `crc64service_enabled` switch).
+# Step 2 fingerprint sources, gated as a whole by `crc64service_enabled`.
 DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
 
 DEFAULT_MOVIE_SOURCES: tuple[str, ...] = ("tmdb", "omdb")
@@ -210,7 +206,8 @@ def sources_for(
 ) -> tuple["OnlineSource", ...]:
     """The sources to try for `media_type`, in order: listed, present in the
     registry, serving that media type, and configured. The only function that
-    decides online order or enablement."""
+    decides AUTOMATIC online order or enablement; the job page's search box
+    adds the operator's explicit per-type provider on top (`search_source`)."""
     out: list[OnlineSource] = []
     for sid in online_source_ids(cfg, media_type):
         source = registry.get(sid)
@@ -224,17 +221,32 @@ def sources_for(
 
 def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]) -> "OnlineSource | None":
     """The source behind the job page's search box for `media_type`: the
-    operator's `search_provider_<type>` when it is listed, registered and
-    configured, else the first usable listed source (logged, so a provider
-    chosen before its adapter exists — TVmaze/TVDB until PR 2b — is visible)."""
-    ranked = sources_for(cfg, media_type, registry)
+    operator's `search_provider_<type>` whenever that source is registered,
+    serves the type and is configured, else the first usable source from the
+    ranked automatic list.
+
+    The chosen provider does NOT have to be on that ranked list — the two
+    settings are independent. `search_provider_tv` offers OMDb, which the
+    automatic TV order (`episode_sources`, spec D-7) deliberately does not
+    carry, and a music search box still answers after `music_sources` is
+    cleared to stop automatic CD lookups. Matching against the ranked list
+    alone silently ignored both choices. A provider that genuinely cannot be
+    used (no key, or no adapter yet) falls back and is logged, since the job
+    page shows the operator's choice as a badge either way."""
     preferred = search_provider_setting(cfg, media_type)
-    for source in ranked:
-        if source.id == preferred:
-            return source
+    chosen = registry.get(preferred) if preferred else None
+    if chosen is None:
+        unusable = f"no adapter named {preferred}"
+    elif media_type not in chosen.media_types:
+        unusable = f"{preferred} does not search {media_type}"
+    else:
+        unusable = chosen.configured(cfg) or ""
+        if not unusable:
+            return chosen
+    ranked = sources_for(cfg, media_type, registry)
     fallback = ranked[0] if ranked else None
     if preferred and fallback is not None:
-        logger.debug("search provider %s is not available for %s; using %s", preferred, media_type, fallback.id)
+        logger.info("search provider %s unusable (%s); using %s for %s", preferred, unusable, fallback.id, media_type)
     return fallback
 
 

@@ -6,6 +6,7 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders } from '$lib/stores/config';
+	import { providerLabel } from '$lib/utils/search-providers';
 
 	interface Props {
 		job: JobView;
@@ -24,10 +25,7 @@
 
 	// Pretty label for the configured search provider of the current search
 	// type; generic until the config store hydrates.
-	const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' };
-	let providerLabel = $derived(
-		PROVIDER_LABELS[(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie) ?? ''] ?? 'OMDb/TMDb'
-	);
+	let providerBadge = $derived(providerLabel(searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie));
 
 	function setSearchType(t: 'movie' | 'tv') {
 		if (t === searchType) return;
@@ -229,7 +227,7 @@
 			{searching ? 'Searching...' : 'Search'}
 		</button>
 		<span class="badge badge-sm" title="Search provider configured in Settings">
-			{providerLabel}
+			{providerBadge}
 		</span>
 	</div>
 

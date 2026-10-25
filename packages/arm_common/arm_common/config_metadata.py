@@ -205,6 +205,12 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="The service behind the job page's search box for movies.",
         type="enum",
         editable=True,
+        # The provider choice the wizard has always offered, in the slot the
+        # single `metadata_provider` field used to hold. Without it an operator
+        # who saves only an OMDb key leaves the seeded `tmdb` default in place
+        # and the Finish step reports a provider they were never shown.
+        setup_step="metadata",
+        setup_order=4,
         enum_values=["tmdb", "omdb"],
         enum_labels={"tmdb": "TMDb", "omdb": "OMDb"},
         enum_requires={"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"},

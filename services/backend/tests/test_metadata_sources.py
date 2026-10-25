@@ -249,3 +249,56 @@ async def test_tvdb_adapter_is_tv_only_and_passes_the_key(monkeypatch):
         assert (await tvdb.lookup_imdb(cfg, "tt0411008")).title == "Lost"
     assert ("series", "lost") in calls and ("cands", "lost", 2) in calls and ("imdb", "tt0411008") in calls
     assert all(c[1] == "tvdb-k" for c in calls if c[0] == "init")
+
+
+async def test_musicbrainz_user_agent_is_the_shared_constant():
+    """One spelling of the etiquette-guide User-Agent. MusicBrainz 403s a
+    non-conforming one, so a version bump must not need two edits."""
+    from arm_common import DEFAULT_MUSICBRAINZ_USER_AGENT
+
+    assert sources_mod.MUSICBRAINZ_USER_AGENT is DEFAULT_MUSICBRAINZ_USER_AGENT
+
+
+async def test_configured_is_derived_from_requires_key():
+    """`requires_key` is the one declaration; `configured` reads it, so the
+    two cannot disagree and a new adapter states its key once."""
+    async with httpx.AsyncClient() as http:
+        reg = build_online_sources(http)
+    for sid, source in reg.items():
+        if source.requires_key is None:
+            assert source.configured(Config(id=1)) is None, sid
+            assert source._key(Config(id=1)) == "", sid  # a keyless source has no key to read
+            continue
+        assert source.configured(Config(id=1, **{source.requires_key: "k"})) is None, sid
+        assert source.configured(Config(id=1, **{source.requires_key: " "})) == f"no {sid} key", sid
+
+
+async def test_tvdb_adapter_reuses_one_client_per_key(monkeypatch):
+    """TVDB caches its bearer token on the client, so the adapter must hold
+    one: a fresh client per call meant a POST /login before every search. A
+    changed key still replaces it."""
+    built: list[str] = []
+
+    class FakeTVDB:
+        def __init__(self, api_key, http):
+            built.append(api_key)
+
+        async def search_series(self, title):
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+        async def search_candidates(self, title, limit=10):
+            return []
+
+        async def lookup_by_imdb_id(self, imdb_id):
+            return MetadataResult(title="Lost", year=2004, kind="tv")
+
+    monkeypatch.setattr(sources_mod, "TVDBClient", FakeTVDB)
+    async with httpx.AsyncClient() as http:
+        tvdb = build_online_sources(http)["tvdb"]
+        cfg = _config(tvdb_api_key="k1")
+        await tvdb.search_title(cfg, "tv", "lost", None)
+        await tvdb.search_candidates(cfg, "tv", "lost")
+        await tvdb.lookup_imdb(cfg, "tt0411008")
+        assert built == ["k1"]
+        await tvdb.search_title(_config(tvdb_api_key="k2"), "tv", "lost", None)
+        assert built == ["k1", "k2"]

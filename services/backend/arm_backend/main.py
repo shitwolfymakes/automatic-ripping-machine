@@ -226,7 +226,6 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     app.state.http = http
     app.state.started_at = datetime.now(UTC)
     app.state.dispatcher = MetadataDispatcher(http)
-    app.state.online_sources = app.state.dispatcher.sources
     app.state.ws_hub = WSHub()
     # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
     # request path, triggered by identify/resolve/PATCH (routers) and the

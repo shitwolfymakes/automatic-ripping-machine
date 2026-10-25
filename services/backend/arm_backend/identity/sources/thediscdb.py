@@ -132,7 +132,11 @@ def release_kind(match: DiscMatch) -> Literal["movie", "tv"]:
     return "movie" if str(match.kind or "").lower().startswith("movie") else "tv"
 
 
-_SLUG_YEAR_RE = re.compile(r"-(19\d{2}|20\d{2})$")
+# A release-year suffix on a title slug (`round-midnight-1986`). Capped at
+# 2029, the same bound and reasoning as the dispatcher's
+# `_HINT_YEAR_SUFFIX_RE`: a title that genuinely ends in a later number
+# (`blade-runner-2049`) must never be shortened to "Blade Runner".
+_SLUG_YEAR_RE = re.compile(r"-(19\d{2}|20[0-2]\d)$")
 
 
 def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
@@ -146,9 +150,12 @@ def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
     if not slug:
         return None, None
     m = _SLUG_YEAR_RE.search(slug)
-    if m and year is None:
-        year = int(m.group(1))
-    if m:
+    # A trailing number is the release year only when it is not the tail of the
+    # title itself. TheDiscDB's own Year settles it when the snapshot has one
+    # (`blade-runner-2049` under Year=2017 keeps its 2049); without one the
+    # suffix is read as the year, which is all the slug can tell us.
+    if m and (year is None or int(m.group(1)) == year):
+        year = year if year is not None else int(m.group(1))
         slug = slug[: m.start()]
     words = [w for w in slug.split("-") if w]
     return (" ".join(w.capitalize() for w in words) or None), year

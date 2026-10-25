@@ -46,8 +46,10 @@ def suggest_identity(metadata_json: dict[str, Any] | None, result: MetadataResul
     """Store `result` for the operator to confirm instead of applying it.
 
     The job stays unidentified (flag set: a rip started without confirming
-    parks after the rip like any placeholder) and nothing from the hit
-    reaches the job row or the `identity` section."""
+    parks after the rip like any placeholder) and nothing from the hit reaches
+    the `identity` section. The caller may still take the hit's kind into
+    `job.media_type` — that is the routing key, not an identity claim (see the
+    identify route's auto-apply-off branch)."""
     payload = result.payload or {}
     suggestion = IdentitySuggestion(
         provider=result.provider or "unknown",

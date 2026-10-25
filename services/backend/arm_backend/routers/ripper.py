@@ -49,6 +49,7 @@ from arm_common import (
     Job,
     JobStatus,
     MakemkvKeyState,
+    MediaType,
     RipPreset,
     Session,
     TrackStatus,
@@ -742,20 +743,26 @@ async def identify(
         try:
 
             async def _identify() -> MetadataResult | None:
+                release: MetadataResult | None = None
                 if thediscdb_match is not None:
                     imdb = external_imdb_id(thediscdb_match)
                     if imdb:
                         kind = release_kind(thediscdb_match)
                         if not dispatcher.has_imdb_lookup(cfg, kind):
                             # D-1: no enabled source can resolve the id, so no
-                            # online call; the release names the disc.
+                            # online TITLE call; the release names the disc.
+                            # Held, not returned yet: the fingerprint database
+                            # below needs no key either, so a keyless install
+                            # would otherwise never reach the one source it can
+                            # use. The fuzzy title search IS skipped — it would
+                            # outrank this exact content-hash match.
                             release = release_result(thediscdb_match, imdb)
-                            if release is not None:
-                                return release
                         else:
                             exact = await dispatcher.identify_from_imdb(imdb, cfg, kind=kind)
                             if exact is not None:
                                 return exact
+                if release is not None:
+                    return await dispatcher.identify_from_fingerprint(scan, cfg) or release
                 return await dispatcher.identify(
                     scan,
                     cfg,
@@ -806,6 +813,15 @@ async def identify(
             job.metadata_json = suggest_identity(job.metadata_json, result, now=datetime.now(timezone.utc))
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = None
+            # The kind is the ROUTING input, not an identity claim: it is what
+            # resolve_routed_session_id keys `session_routes` on, so the review
+            # tracks below get the keep/drop defaults and preset provenance of
+            # the session this disc will actually rip into. Left unset, the
+            # disc routes as a never-identified one and accept never re-persists
+            # the tracks, so the operator would rip the wrong set. The hit's
+            # title/year/poster still reach nothing but the suggestion.
+            # result.kind is a subset of MediaType's values by construction.
+            job.media_type = MediaType(result.kind)
             await _persist_review_tracks(session, job, scan)
             logger.info(
                 "identify job_id=%s: %s hit %r held for confirmation (auto-apply off)",
