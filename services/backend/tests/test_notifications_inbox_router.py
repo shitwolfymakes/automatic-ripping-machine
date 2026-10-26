@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-import pytest  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import notifications as notif_router  # noqa: E402
-from arm_common import NotificationInbox, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import notifications as notif_router
+from arm_common import NotificationInbox, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -82,6 +79,20 @@ def test_inbox_list_excludes_cleared_by_default(signing_key: bytes) -> None:
         assert ids == {"nin_1", "nin_2"}  # nin_3 cleared, hidden
         r2 = client.get("/api/notifications/inbox?include_cleared=true", headers=_auth(token))
         assert len(r2.json()) == 3
+
+
+def test_inbox_list_limit_counts_only_uncleared_rows(signing_key: bytes) -> None:
+    """D-168: the cleared filter and the limit both run in SQL, filter first."""
+    db = FakeSession()
+    db.rows["notification_inbox"] = [
+        NotificationInbox(id="nin_c", event_type="rip.completed", title="c", message="c", seen=True, cleared=True),
+        NotificationInbox(id="nin_a", event_type="rip.completed", title="a", message="a", seen=False, cleared=False),
+        NotificationInbox(id="nin_b", event_type="rip.completed", title="b", message="b", seen=False, cleared=False),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/notifications/inbox?limit=1", headers=_auth(token))
+    assert [row["id"] for row in r.json()] == ["nin_a"]
 
 
 def test_inbox_count(signing_key: bytes) -> None:

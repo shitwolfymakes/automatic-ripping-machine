@@ -1,25 +1,22 @@
 from __future__ import annotations
 
-import os
 import secrets
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend import file_browser as fb  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import files as files_router  # noqa: E402
-from arm_common import User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
-from arm_common.schemas import FileRoot  # noqa: E402
+from arm_backend import file_browser as fb
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import files as files_router
+from arm_common import User
+from arm_common.models.user import GUEST_ROLE
+from arm_common.schemas import FileRoot
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 # Captured at import, before any fixture swaps the registry out.
 _REAL_ISO_ROOT = fb.ROOTS["ISO"]

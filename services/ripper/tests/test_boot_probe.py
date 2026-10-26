@@ -196,6 +196,6 @@ async def test_in_flight_lookup_http_error_swallowed() -> None:
     assert controller.resume_calls == []
 
 
-def test_wipe_raw_dir_idempotent_when_missing(tmp_path: Path) -> None:
+async def test_wipe_raw_dir_idempotent_when_missing(tmp_path: Path) -> None:
     # Different job_id — directory does not exist. Should not raise.
-    wipe_raw_dir("never_existed")
+    await wipe_raw_dir("never_existed")

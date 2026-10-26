@@ -9,25 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.metadata.base import MetadataResult  # noqa: E402
-from arm_backend.routers import ripper as ripper_router  # noqa: E402
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.metadata.base import MetadataResult
+from arm_backend.routers import ripper as ripper_router
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_common import (
     Config,
     ContainerFormat,
     DiscFingerprint,
@@ -50,10 +47,10 @@ from arm_common import (  # noqa: E402
     TranscodePreset,
     TranscodeTool,
 )
-from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection  # noqa: E402
-from arm_common.models import Track  # noqa: E402
+from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection
+from arm_common.models import Track
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _HOSTNAME = "ripper-host"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}

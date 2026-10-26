@@ -26,6 +26,7 @@ from arm_backend.path_template import (
     NEVER_OPTIONAL,
     TemplateValidationError,
     expand_template,
+    optional_tokens,
     referenced_tokens,
     required_tokens,
 )
@@ -174,12 +175,15 @@ def _render_with_empty_episode(template: str, ctx: dict[str, str]) -> list[str]:
     """Render a template whose episode tokens were allowed to resolve empty
     (a bonus title on a TV disc) segment by segment. Only the `/`-segments
     that referenced an empty episode token are tidied; the rest render
-    byte-for-byte."""
+    byte-for-byte. A segment left empty only by dropped optional tokens
+    (`{year?}`) collapses away, as it does in a whole-template render."""
     segments = []
     for seg_template in template.split("/"):
-        seg = expand_template(seg_template, ctx)
+        seg = expand_template(seg_template, ctx, allow_empty=True)
         if any(not ctx.get(t) for t in referenced_tokens(seg_template) & _EPISODE_TOKENS):
             seg = _tidy_segment(seg)
+        elif not seg and optional_tokens(seg_template):
+            continue
         segments.append(seg)
     return segments
 

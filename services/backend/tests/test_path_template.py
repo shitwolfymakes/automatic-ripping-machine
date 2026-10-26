@@ -1,12 +1,8 @@
-import os
-
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.path_template import (
-    tokens_for_media,  # noqa: E402
+    tokens_for_media,
     TemplateValidationError,
     expand_template,
     expand_without_optional,
@@ -15,7 +11,7 @@ from arm_backend.path_template import (
     required_tokens,
     validate_template,
 )
-from arm_common import MediaType  # noqa: E402
+from arm_common import MediaType
 
 
 def test_expand_template_substitutes_known_tokens() -> None:

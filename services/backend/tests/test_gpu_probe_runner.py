@@ -11,26 +11,23 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from sqlalchemy.orm.exc import StaleDataError  # noqa: E402
+import pytest
+from sqlalchemy.orm.exc import StaleDataError
 
-from arm_backend import gpu_probe_runner as runner_mod  # noqa: E402
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.gpu_probe_runner import PROBE_TIMEOUT_S, GpuProbeRunner  # noqa: E402
-from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
-from arm_common import Gpu  # noqa: E402
-from arm_common.enums import GpuStatus, GpuVendor  # noqa: E402
+from arm_backend import gpu_probe_runner as runner_mod
+from arm_backend.config import Settings
+from arm_backend.gpu_probe_runner import PROBE_TIMEOUT_S, GpuProbeRunner
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_common import Gpu
+from arm_common.enums import GpuStatus, GpuVendor
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 STALE = "probe failed (exit {n}); the transcode image may predate --probe-device: rebuild or pull it"
 

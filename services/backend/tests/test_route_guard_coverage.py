@@ -10,21 +10,17 @@ below.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIRoute
 
-from fastapi.dependencies.models import Dependant  # noqa: E402
-from fastapi.routing import APIRoute  # noqa: E402
-
-from arm_backend.auth import (  # noqa: E402
+from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
     require_service_token,
     require_writer,
 )
-from arm_backend.main import app  # noqa: E402
+from arm_backend.main import app
 
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 

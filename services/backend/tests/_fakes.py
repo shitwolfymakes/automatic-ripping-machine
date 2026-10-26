@@ -3,7 +3,10 @@
 Routes mostly do `select(Model).where(col(Model.id) == X)` then `scalar_one_or_none()`,
 sometimes `select(Model.id, Model.field)` with `.all()`. This fake keys rows by
 `(table_name, id)` and matches `where(col(Field) == value)` clauses recorded on
-the SQLAlchemy `Select` AST.
+the SQLAlchemy `Select` AST. It also evaluates `.is_(None)` / `.is_not(None)`
+(and `== False` style boolean constants), `.limit(n)`, and `func.count()` with
+an optional `group_by(...)`, so routes can push those filters into SQL instead
+of scanning whole tables in Python (D-168).
 """
 
 from __future__ import annotations
@@ -12,8 +15,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from sqlalchemy.sql import Select, Update
-from sqlalchemy.sql.elements import BinaryExpression
-from sqlalchemy.sql.functions import count
+from sqlalchemy.sql.elements import BinaryExpression, False_, Null, True_
+from sqlalchemy.sql.functions import count as _count_fn
 
 
 def _all_filters(stmt: Select) -> list[BinaryExpression]:
@@ -32,8 +35,15 @@ def _extract_values(right: Any) -> list[Any] | None:
     """Pull the literal value(s) from the right side of a comparison clause.
 
     Handles ordinary `BindParameter` (``==``) and `BindParameterClauseList`
-    used by ``in_(...)``.
+    used by ``in_(...)``, plus the NULL / TRUE / FALSE constants that
+    ``.is_(None)`` and ``== False`` compile to.
     """
+    if isinstance(right, Null):
+        return [None]
+    if isinstance(right, True_):
+        return [True]
+    if isinstance(right, False_):
+        return [False]
     if hasattr(right, "value") and not hasattr(right, "clauses"):
         return [right.value]
     clauses = getattr(right, "clauses", None)
@@ -61,6 +71,10 @@ def _matches(row: Any, filters: list[BinaryExpression]) -> bool:
             if not isinstance(collection, (list, tuple, set)):
                 return False
             if actual not in collection:
+                return False
+        elif op_repr in ("is_", "is_not"):
+            values = _extract_values(right)
+            if values is None or (actual is values[0]) != (op_repr == "is_"):
                 return False
         elif op_repr == "lt":
             values = _extract_values(right)
@@ -99,11 +113,6 @@ def _table_for_stmt(stmt: Select) -> str | None:
         if tbl is not None:
             return tbl.name
     return None
-
-
-def _is_count(stmt: Select) -> bool:
-    cols = list(stmt.selected_columns)
-    return len(cols) == 1 and isinstance(cols[0], count)
 
 
 def _apply_order(rows: list[Any], stmt: Select) -> list[Any]:
@@ -272,10 +281,18 @@ class FakeSession:
         rows = [r for r in rows if _matches(r, filters)]
         rows = _apply_order(rows, stmt)
 
-        # `select(func.count()).select_from(Model)`: the count of the filtered
-        # rows, before limit/offset (which a count query never carries).
-        if _is_count(stmt):
-            return _Result([len(rows)])
+        # `select(func.count())` -> one int; `select(Model.a, func.count())
+        # .group_by(Model.a)` -> (a, n) tuples, group columns first. Counted
+        # before limit/offset, which a count query never carries.
+        if any(isinstance(c, _count_fn) for c in stmt.selected_columns):
+            group_names = [g.name for g in stmt._group_by_clauses]  # type: ignore[attr-defined]
+            if not group_names:
+                return _Result([len(rows)])
+            groups: dict[tuple[Any, ...], int] = {}
+            for r in rows:
+                key = tuple(getattr(r, n, None) for n in group_names)
+                groups[key] = groups.get(key, 0) + 1
+            return _Result([(*k, n) for k, n in groups.items()])
 
         if stmt._offset is not None:
             rows = rows[stmt._offset :]

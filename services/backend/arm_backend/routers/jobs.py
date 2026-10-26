@@ -137,16 +137,18 @@ _IDENTITY_JOB_ATTRS = frozenset(JOB_CLAIM_FIELDS.values()).intersection(JobUpdat
 # Manual-trigger pre-check (drive media status). The ripper posts every
 # HEARTBEAT_INTERVAL_SECONDS (currently 30s); a 90s window forgives
 # heartbeats delayed by transient network blips while still catching
-# tray-open/no-disc clicks made seconds after the ripper noticed.
+# tray-open/no-disc clicks made seconds after the ripper noticed. A reading
+# older than this means the ripper stopped beating, and the trigger is
+# refused rather than sent to nobody (D-241).
 _MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
 _MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
 _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
     DriveMediaStatus.NO_DISC: "no disc loaded in the drive",
-    DriveMediaStatus.TRAY_OPEN: "drive tray is open — close it before starting a rip",
-    DriveMediaStatus.NOT_READY: "drive is busy / spinning up — try again in a moment",
-    DriveMediaStatus.DETACHED: "drive is detached — reconnect it before starting a rip",
+    DriveMediaStatus.TRAY_OPEN: "the drive tray is open; close it before starting a rip",
+    DriveMediaStatus.NOT_READY: "the drive is busy or spinning up; try again in a moment",
+    DriveMediaStatus.DETACHED: "the drive is detached; reconnect it before starting a rip",
     DriveMediaStatus.UNAVAILABLE: (
-        "drive node exists but could not be opened — check the device cgroup rule and CDROM_GID"
+        "the drive node exists but could not be opened; check the device cgroup rule and CDROM_GID"
     ),
 }
 
@@ -208,16 +210,13 @@ def _parked_session_ids(sas: list[SessionApplication]) -> list[str]:
 
 
 def _parked_apps_are_settled(job: Job) -> bool:
-    """Has the drain that would fill a parked application already run (or
-    can it never run)? True once the rip is over and identity is not still
-    pending: rip-complete drained what it could on a ripped job, and a
-    failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
-    parked application is still legitimately waiting for resolve, and so is
-    an unidentified RIPPED_PARTIAL one's (resolve drains both)."""
-    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
-        return False
-    if job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified"):
-        return False
+    """Is a parked application with no tasks no longer in flight? True once
+    the rip is over: rip-complete drained what it could on a ripped job, and
+    a failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
+    (or an unidentified RIPPED_PARTIAL one's) parked application is still
+    waiting for resolve to drain it, but it is waiting on identity, not
+    transcoding, so it is settled for the rollup too (D-142);
+    `parked_session_ids` shows it as waiting."""
     return job.status in TERMINAL_JOB_STATUSES
 
 
@@ -450,20 +449,22 @@ async def get_job_detail(
     )
     job_view.parked_session_ids = _parked_session_ids(list(sas))
 
-    # Most-recent transcode task status per source track (ULID ids are
-    # monotonic, so the greatest id is the newest task). Built from the
-    # already-loaded job_tasks — no extra query.
-    latest_task_status: dict[str, TranscodeTaskStatus] = {}
-    latest_task_id: dict[str, str] = {}
+    # Most-recent transcode task per source track (ULID ids are monotonic,
+    # so the greatest id is the newest task). Built from the already-loaded
+    # job_tasks — no extra query.
+    latest_task: dict[str, TranscodeTask] = {}
     for task in job_tasks:
-        prev = latest_task_id.get(task.source_track_id)
-        if prev is None or task.id > prev:
-            latest_task_id[task.source_track_id] = task.id
-            latest_task_status[task.source_track_id] = task.status
+        prev = latest_task.get(task.source_track_id)
+        if prev is None or task.id > prev.id:
+            latest_task[task.source_track_id] = task
 
     def _track_view(t: Track) -> TrackView:
         tv = TrackView.model_validate(t)
-        tv.transcode_status = latest_task_status.get(t.id)
+        task = latest_task.get(t.id)
+        if task is not None:
+            tv.transcode_status = task.status
+            tv.transcode_fps = task.fps
+            tv.transcode_avg_fps = task.avg_fps
         return tv
 
     return JobDetailView(
@@ -542,7 +543,7 @@ async def abandon_job(
     if job.status not in NON_TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job already in terminal status {job.status.value}",
+            detail=f"job already in terminal status {enum_value_str(job.status)}",
         )
 
     delete_raw = bool(req and req.delete_raw)
@@ -900,7 +901,7 @@ async def delete_job(
     if job.status not in TERMINAL_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job in non-terminal status {job.status.value}; abandon it first",
+            detail=f"job in non-terminal status {enum_value_str(job.status)}; abandon it first",
         )
 
     counters: dict[str, int] | None = None
@@ -1026,28 +1027,49 @@ async def manual_trigger(
             detail="ripping is paused; no new jobs accepted",
         )
 
-    in_flight = (
-        await db.execute(
-            select(Job).where(col(Job.drive_id) == req.drive_id).where(col(Job.status) == JobStatus.RIPPING)
+    # The ripper drops a trigger while it owns any job, and no ripper acts on
+    # one for a detached drive or after it stopped beating. Refuse those here,
+    # in the DriveCard's order and wording (D-208), so the click gets a reason
+    # it can show instead of a 202 nothing follows. The card gates the first
+    # two itself; heartbeat age it cannot judge against the browser clock.
+    live = (
+        (
+            await db.execute(
+                select(Job)
+                .where(col(Job.drive_id) == req.drive_id)
+                .where(col(Job.status).in_(NON_TERMINAL_JOB_STATUSES))
+                .limit(1)
+            )
         )
-    ).first()
-    if in_flight is not None:
+        .scalars()
+        .first()
+    )
+    if live is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"drive {req.drive_id} already has an in-flight RIPPING job",
+            detail=f"the drive already has a job in progress ({enum_value_str(live.status)})",
+        )
+    if not drive.present:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="the drive is not connected")
+    if drive.media_status_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="the drive's ripper is offline (no heartbeat yet)",
+        )
+    age = datetime.now(timezone.utc) - drive.media_status_at
+    if age >= _MEDIA_STATUS_FRESHNESS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"the drive's ripper is offline (last heartbeat {int(age.total_seconds())}s ago)",
         )
 
-    # Fast-fail when the user clicks Start without loading a disc.
-    # Heartbeat-fed; we only honour readings that arrived within the
-    # freshness window (a stale row is equivalent to "we don't know" —
-    # let the request through and let identify do the talking).
-    if drive.media_status_at is not None and drive.media_status is not None:
-        age = datetime.now(timezone.utc) - drive.media_status_at
-        if age < _MEDIA_STATUS_FRESHNESS and drive.media_status not in _MEDIA_STATUS_READY:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_MEDIA_STATUS_DETAIL[drive.media_status],
-            )
+    # Fast-fail when the user clicks Start without loading a disc. The
+    # reading is from the heartbeat that just passed the freshness check.
+    if drive.media_status is not None and drive.media_status not in _MEDIA_STATUS_READY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_MEDIA_STATUS_DETAIL[drive.media_status],
+        )
 
     if req.session_id is not None:
         sess = (await db.execute(select(Session).where(col(Session.id) == req.session_id))).scalar_one_or_none()
@@ -1227,7 +1249,7 @@ async def resolve(
     if job.status not in RESOLVABLE_JOB_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
+            detail=f"job {job_id} is in status {enum_value_str(job.status)}, not in an identify-resolvable status",
         )
     return await resolve_identity(session, job, req, hub=hub, stage_runner=stage_runner)
 

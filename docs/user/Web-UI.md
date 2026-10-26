@@ -102,5 +102,5 @@ before this change keeps `{year}`; edit its output path to add the `?`.
 
 **Settings → System** includes a read-only diagnostics section (service status
 and log levels), useful when filing a bug. For deeper digging,
-`docker compose logs <service>` on the host is still the authoritative source
+`armctl compose logs <service>` on the host is still the authoritative source
 (set `ARM_LOG_LEVEL=debug` first).

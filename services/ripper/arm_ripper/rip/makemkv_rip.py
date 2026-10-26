@@ -572,7 +572,7 @@ async def _run_makemkvcon(
         stderr = b""
         if proc.stderr is not None:
             stderr = await proc.stderr.read()
-        msg = stderr.decode(errors="replace").strip()[:400] or f"exit={proc.returncode}"
+        msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
         return _compose_error(f"makemkvcon failed: {msg}", state.diagnostics)
     return None
 

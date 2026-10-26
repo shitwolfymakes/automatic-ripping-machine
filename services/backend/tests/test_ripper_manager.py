@@ -1,24 +1,22 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import docker.errors  # noqa: E402
-import pytest  # noqa: E402
+import docker.errors
+import pytest
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.ripper_manager import (  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.ripper_manager import (
     DOCKER_LABEL_KEY,
+    SPEC_HASH_LABEL_KEY,
     ReconcileSummary,
     RipperManager,
     RipperManagerError,
 )
-from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus  # noqa: E402
+from arm_common import Drive, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -78,6 +76,12 @@ def _container(drive_id: str, status: str = "running", name: str = "arm-ripper-x
     return c
 
 
+def _current(m: RipperManager, c: MagicMock, drive: Drive) -> MagicMock:
+    """Label `c` with the spec hash `m` would create `drive`'s container with now."""
+    c.labels[SPEC_HASH_LABEL_KEY] = m.container_spec(drive)["labels"][SPEC_HASH_LABEL_KEY]
+    return c
+
+
 # --- naming --------------------------------------------------------------
 
 
@@ -123,9 +127,14 @@ def test_container_spec_matches_spec_section_3() -> None:
     spec = m.container_spec(_drive())
     assert spec["image"] == "arm-ripper:test"
     assert spec["name"] == spec["hostname"] == "arm-ripper-aaaabbbb000e-jkmnpq"
-    assert spec["labels"] == {DOCKER_LABEL_KEY: "drv_01JABCDEFGHJKMNPQ"}
+    assert spec["labels"] == {
+        DOCKER_LABEL_KEY: "drv_01JABCDEFGHJKMNPQ",
+        SPEC_HASH_LABEL_KEY: spec["labels"][SPEC_HASH_LABEL_KEY],
+    }
+    assert len(spec["labels"][SPEC_HASH_LABEL_KEY]) == 64
     assert spec["device_cgroup_rules"] == ["b 11:* rmw", "c 21:* rmw"]
     assert spec["restart_policy"] == {"Name": "unless-stopped"}
+    assert spec["log_config"] == {"type": "json-file", "config": {"max-size": "10m", "max-file": "3"}}
     assert spec["network"] == "armv3_default"
     assert spec["detach"] is True
     assert "auto_remove" not in spec and "devices" not in spec and "privileged" not in spec
@@ -232,13 +241,18 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
     assert spec["volumes"]["/host/certs/arm-ca.crt"] == {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"}
     assert "device_cgroup_rules" not in spec
     assert spec["restart_policy"] == {"Name": "no"}
+    assert spec["log_config"]["type"] == "json-file"  # inherited from the optical spec
     env = spec["environment"]
     assert env["ARM_SOURCE_PATH"] == "/source/Blade Runner.iso" and "ARM_SOURCE_KIND" not in env
     assert "ARM_DRIVE_DEV" not in env and "ARM_DRIVE_BY_ID" not in env and "CDROM_GID" not in env
     assert "ARM_HOST_DISK_ROOT" not in env and "ARM_SOURCE_SESSION_ID" not in env
     assert env["ARM_DRIVE_ID"] == d.id and env["ARM_SERVICE_TOKEN"] == "tok-service"
     assert (env["PUID"], env["PGID"]) == ("1001", "1000")
-    assert spec["labels"] == {"arm.drive_id": d.id, "arm.virtual": "1"}
+    assert spec["labels"] == {
+        "arm.drive_id": d.id,
+        "arm.virtual": "1",
+        SPEC_HASH_LABEL_KEY: spec["labels"][SPEC_HASH_LABEL_KEY],
+    }
     assert spec["name"].startswith("arm-ripper-iso-") and spec["hostname"] == spec["name"]
     assert spec["image"] == "arm-ripper:test" and spec["network"] == "armv3_default" and spec["detach"] is True
 
@@ -370,12 +384,13 @@ def test_remove_wraps_docker_errors() -> None:
 
 def test_reconcile_creates_adopts_restarts_and_removes_orphans() -> None:
     m, client = _manager()
-    running = _container("drv_running")
-    exited = _container("drv_exited", status="exited")
+    drives = [_drive("drv_running"), _drive("drv_exited"), _drive("drv_new", serial="NEW1")]
+    running = _current(m, _container("drv_running"), drives[0])
+    exited = _current(m, _container("drv_exited", status="exited"), drives[1])
     orphan = _container("drv_orphan")
     client.containers.list.return_value = [running, exited, orphan]
     client.containers.run.return_value = _container("drv_new", name="arm-ripper-new")
-    summary = m.reconcile([_drive("drv_running"), _drive("drv_exited"), _drive("drv_new", serial="NEW1")])
+    summary = m.reconcile(drives)
     assert summary == ReconcileSummary(
         created=["drv_new"],
         adopted=["drv_running"],
@@ -455,7 +470,7 @@ def test_reconcile_adopts_a_stale_image_while_the_drive_is_ripping(caplog) -> No
 def test_reconcile_keeps_a_current_image() -> None:
     m, client = _manager()
     client.images.get.return_value.id = "sha256:same"
-    running = _with_image(_container("drv_a"), "sha256:same")
+    running = _current(m, _with_image(_container("drv_a"), "sha256:same"), _drive("drv_a", serial="A"))
     client.containers.list.return_value = [running]
     summary = m.reconcile([_drive("drv_a", serial="A")])
     assert summary.adopted == ["drv_a"] and summary.recreated == []
@@ -465,12 +480,59 @@ def test_reconcile_keeps_a_current_image() -> None:
 def test_reconcile_does_not_recreate_when_the_image_lookup_fails(caplog) -> None:
     m, client = _manager()
     client.images.get.side_effect = docker.errors.ImageNotFound("gone")
-    running = _with_image(_container("drv_a"), "sha256:old")
+    running = _current(m, _with_image(_container("drv_a"), "sha256:old"), _drive("drv_a", serial="A"))
     client.containers.list.return_value = [running]
     with caplog.at_level(logging.WARNING, logger="arm_backend.ripper_manager"):
         summary = m.reconcile([_drive("drv_a", serial="A")])
     assert summary.adopted == ["drv_a"]
     assert "cannot compare image" in caplog.text
+
+
+def test_spec_hash_is_stable_and_tracks_settings() -> None:
+    m, _ = _manager()
+    d = _drive()
+    first = m.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY]
+    assert m.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY] == first
+    raised, _ = _manager(ARM_RIPPER_OPTICAL_SG_MAX="31")
+    assert raised.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY] != first
+
+
+def test_reconcile_recreates_an_idle_container_whose_spec_drifted(caplog) -> None:
+    """D-232: a changed ARM_RIPPER_* tunable reaches an existing idle ripper."""
+    old, _ = _manager()
+    m, client = _manager(ARM_RIPPER_OPTICAL_SG_MAX="31")
+    d = _drive("drv_a", serial="A")
+    drifted = _current(old, _container("drv_a"), d)
+    client.containers.list.return_value = [drifted]
+    client.containers.run.return_value = _container("drv_a", name="arm-ripper-a")
+    with caplog.at_level(logging.INFO, logger="arm_backend.ripper_manager"):
+        summary = m.reconcile([d])
+    assert summary.recreated == ["drv_a"] and summary.adopted == []
+    drifted.remove.assert_called_once()
+    assert client.containers.run.call_args.kwargs["environment"]["ARM_OPTICAL_SG_MAX"] == "31"
+    assert "differs from the current settings" in caplog.text
+
+
+def test_reconcile_recreates_an_idle_container_without_a_spec_hash_label() -> None:
+    """A ripper created before the label existed is recreated once, when idle."""
+    m, client = _manager()
+    unlabelled = _container("drv_a")
+    client.containers.list.return_value = [unlabelled]
+    client.containers.run.return_value = _container("drv_a", name="arm-ripper-a")
+    summary = m.reconcile([_drive("drv_a", serial="A")])
+    assert summary.recreated == ["drv_a"]
+    unlabelled.remove.assert_called_once()
+
+
+def test_reconcile_adopts_a_drifted_spec_while_the_drive_is_ripping(caplog) -> None:
+    m, client = _manager()
+    drifted = _container("drv_a")
+    client.containers.list.return_value = [drifted]
+    with caplog.at_level(logging.INFO, logger="arm_backend.ripper_manager"):
+        summary = m.reconcile([_drive("drv_a", serial="A")], busy=frozenset({"drv_a"}))
+    assert summary.adopted == ["drv_a"] and summary.recreated == []
+    drifted.remove.assert_not_called()
+    assert "differs from the current settings" in caplog.text and "ripping" in caplog.text
 
 
 # --- probe -----------------------------------------------------------------
@@ -527,3 +589,23 @@ def test_container_statuses_missing_when_no_container_carries_the_label() -> Non
     m, client = _manager()
     client.containers.list.return_value = []
     assert m.container_statuses(["drv_none"]) == {"drv_none": ("missing", None)}
+
+
+def test_reconcile_records_a_drift_check_failure_per_drive(monkeypatch) -> None:
+    """A container_spec that raises for one drive lands in summary.failed;
+    the other drives are still reconciled."""
+    m, client = _manager()
+    bad, good = _drive("drv_bad", serial="B"), _drive("drv_good", serial="G")
+    client.containers.list.return_value = [_container("drv_bad"), _container("drv_good")]
+    client.containers.run.return_value = _container("drv_good", name="arm-ripper-g")
+    real_spec = m.container_spec
+
+    def spec(drive):
+        if drive.id == "drv_bad":
+            raise RuntimeError("no host path for drive")
+        return real_spec(drive)
+
+    monkeypatch.setattr(m, "container_spec", spec)
+    summary = m.reconcile([bad, good])
+    assert "no host path" in summary.failed["drv_bad"]
+    assert summary.recreated == ["drv_good"]

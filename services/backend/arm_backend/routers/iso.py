@@ -21,7 +21,7 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.iso_library import library_configured, library_host_path
 from arm_backend.iso_rips import IsoRipError, cancel_iso_rip, create_iso_rip
-from arm_backend.ripper_manager import RipperManager
+from arm_backend.routers.drives import _manager
 from arm_backend.ws import WSHub
 from arm_common import Drive, DriveKind, DriveLifecycle, User
 from arm_common.schemas import (
@@ -46,16 +46,6 @@ _LIST_STATUS = {"not_found": status.HTTP_404_NOT_FOUND}
 def _get_hub(request: Request) -> WSHub:
     hub: WSHub = request.app.state.ws_hub
     return hub
-
-
-def _manager(request: Request) -> RipperManager:
-    manager: RipperManager | None = getattr(request.app.state, "ripper_manager", None)
-    if manager is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ripper manager unavailable: docker socket not available",
-        )
-    return manager
 
 
 async def _ripping_paths(db: AsyncSession) -> set[str]:

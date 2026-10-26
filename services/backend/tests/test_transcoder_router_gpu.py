@@ -7,20 +7,17 @@ can pick it up on the next dispatcher tick.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import AsyncIterator
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.routers import transcoder as transcoder_router  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.routers import transcoder as transcoder_router
+from arm_backend.ws import WSHub
+from arm_common import (
     DiscType,
     Gpu,
     GpuStatus,
@@ -32,7 +29,7 @@ from arm_common import (  # noqa: E402
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}

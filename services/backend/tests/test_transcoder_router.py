@@ -6,20 +6,17 @@ Service-token auth (no JWT plumbing required).
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import AsyncIterator
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.routers import transcoder as transcoder_router  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.routers import transcoder as transcoder_router
+from arm_backend.ws import WSHub
+from arm_common import (
     ContainerFormat,
     DiscType,
     IdentificationMode,
@@ -40,7 +37,7 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     TranscodeTool,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
@@ -202,7 +199,24 @@ def test_claim_transitions_task_and_application() -> None:
     assert body["task"]["status"] == "in_progress"
     assert body["task"]["claimed_by"] == _HOSTNAME
     assert body["task"]["attempts"] == 1
+    # started_at marks the claim so the UI measures encode time, not queue wait (D-130/D-202).
+    assert db.rows["transcode_tasks"][0].started_at is not None
+    assert body["task"]["started_at"] is not None
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
+
+
+def test_claim_resets_the_previous_attempts_telemetry() -> None:
+    # A retry must not show the failed attempt's ETA or frame rate until its
+    # own first heartbeat (D-242, D-248).
+    db = FakeSession()
+    _seed(db)
+    row = db.rows["transcode_tasks"][0]
+    row.current_pass, row.eta_seconds, row.fps, row.avg_fps = "1/1", 600, 45.7, 23.5
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/transcoder/tasks/txt_1/claim", headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    task = r.json()["task"]
+    assert (task["current_pass"], task["eta_seconds"], task["fps"], task["avg_fps"]) == (None, None, None, None)
 
 
 def test_claim_idempotent_for_same_host() -> None:
@@ -233,12 +247,31 @@ def test_heartbeat_updates_progress_and_timestamp() -> None:
     with TestClient(app) as client:
         r = client.patch(
             "/api/transcoder/tasks/txt_1/heartbeat",
-            json={"progress_pct": 42, "current_pass": "main", "eta_seconds": 600},
+            json={"progress_pct": 42, "current_pass": "main", "eta_seconds": 600, "fps": 45.7, "avg_fps": 23.5},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 200, r.text
-    assert r.json()["progress_pct"] == 42
-    assert db.rows["transcode_tasks"][0].progress_pct == 42
+    body = r.json()
+    assert body["progress_pct"] == 42
+    row = db.rows["transcode_tasks"][0]
+    assert row.progress_pct == 42
+    # The reported telemetry lands on the row and the view, so a polling
+    # client sees the same ETA and frame rate as the live event (D-242, D-248).
+    assert (row.current_pass, row.eta_seconds, row.fps, row.avg_fps) == ("main", 600, 45.7, 23.5)
+    assert (body["current_pass"], body["eta_seconds"], body["fps"], body["avg_fps"]) == ("main", 600, 45.7, 23.5)
+
+
+def test_heartbeat_without_telemetry_clears_the_previous_values() -> None:
+    # HandBrake's early ticks carry no ETA or fps; the row follows the latest
+    # report rather than keeping a stale one.
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    row = db.rows["transcode_tasks"][0]
+    row.eta_seconds, row.fps = 600, 45.7
+    with TestClient(_make_app(db)) as client:
+        r = client.patch("/api/transcoder/tasks/txt_1/heartbeat", json={"progress_pct": 1}, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert (row.current_pass, row.eta_seconds, row.fps, row.avg_fps) == (None, None, None, None)
 
 
 def test_heartbeat_403_when_not_owner() -> None:

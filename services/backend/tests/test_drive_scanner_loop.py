@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import drive_scanner as mod  # noqa: E402
-from arm_backend.drive_scanner import DriveScanner, PruneUnavailable, ScanSummary  # noqa: E402
-from arm_common import Config, DriveLifecycle  # noqa: E402
+from arm_backend import drive_scanner as mod
+from arm_backend.drive_scanner import DriveScanner, PruneUnavailable, ScanSummary
+from arm_common import Config, DriveLifecycle
 
-from tests._fakes import FakeSession, _table_for_stmt  # noqa: E402
-from tests.test_drive_scanner_enumerate import Tree  # noqa: E402
+from tests._fakes import FakeSession, _table_for_stmt
+from tests.test_drive_scanner_enumerate import Tree
 
 
 def _db(interval: int = 30, prune: int = 7) -> FakeSession:

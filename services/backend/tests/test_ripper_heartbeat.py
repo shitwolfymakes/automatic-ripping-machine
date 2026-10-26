@@ -3,21 +3,18 @@ media_status / media_status_at / last_seen_at on the drive row."""
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.routers import ripper as ripper_router  # noqa: E402
-from arm_common import Drive, DriveMediaStatus, DriveStatus  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.routers import ripper as ripper_router
+from arm_common import Drive, DriveMediaStatus, DriveStatus
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture

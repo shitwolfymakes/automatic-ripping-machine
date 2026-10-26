@@ -26,7 +26,7 @@ never touch; the ones you might are flagged **editable** below.
 | `POSTGRES_PASSWORD` | Random DB password (`openssl rand -hex 24`). Changing it means re-creating the DB. |
 | `ARM_SERVICE_TOKEN` | Shared secret the rippers/transcoders use to authenticate to the backend (`openssl rand -hex 32`). Changing it requires restarting every service. |
 | `PUID` / `PGID` | **Editable.** UID/GID that owns everything ARM writes to `raw`/`media`. Match your media server (Plex/Jellyfin) so it can read the files. A fresh install sets your own account; re-running `armctl install` keeps whatever is there. See [File ownership](#file-ownership). |
-| `CDROM_GID` | The host's optical group GID, detected via `stat -c %g /dev/sr0` (usually `44` on Debian/Ubuntu, `19` on Arch). Lets the ripper read the drive. |
+| `CDROM_GID` | The host's optical group GID, read from the host's `cdrom` group (`getent group cdrom`), or `44` (the Debian/Ubuntu default) when there is no such group. On a distro whose optical group has another name, such as Arch's `optical` (usually `19`), set it here yourself. Lets the ripper read the drive. |
 | `ARM_LOG_LEVEL` | **Editable.** `info` (default) or `debug`. Set `debug` before reproducing a bug. |
 | `ARM_ALLOWED_ORIGINS` | **Editable.** Comma-separated allowlist of *extra* origins the WebSocket endpoint accepts from browsers. Same-origin connections are accepted automatically, so this stays empty unless the UI sits behind your own reverse proxy on a different origin — e.g. `https://arm.example.com`. |
 | `MAX_PARALLEL_TRANSCODES` | **Editable.** How many transcoder containers may run at once. Default `1` (a 1080p HandBrake job pegs every core). |
@@ -38,7 +38,6 @@ never touch; the ones you might are flagged **editable** below.
 | `ARM_GPUS` / `ARM_GPUS_MANUAL` | `ARM_GPUS` is the GPU list, rewritten from host detection on every `armctl install`, `up` and `upgrade`. The backend reads it only to fill an empty GPU list in Settings > GPUs; once that list has rows, delete them there and restart the backend to re-seed. **Editable** only with `ARM_GPUS_MANUAL=true`, which keeps your list as written; see [Hardware Transcoding](Hardware-Transcoding). |
 | `ARM_DOCKER_NETWORK` | The compose network a spawned transcoder joins to reach the backend (`armv3_default`). |
 | `COMPOSE_FILE` | Not used by `armctl`. `armctl` names its Compose files itself, so this value and a `docker-compose.override.yml` beside the install are both ignored. This release has no supported way to add your own Compose override. GPUs need no overlay; see [Hardware Transcoding](Hardware-Transcoding). |
-| `MAKEMKV_KEY` | **Editable (add it yourself), fallback only.** A permanent/operator MakeMKV key. Prefer setting this in the UI (**Config → MakeMKV key**), which overrides this var and survives a recreate; this env var is used only when the UI key is blank. When both are unset, the ripper scrapes the monthly free beta. See [MakeMKV](MakeMKV). |
 
 After editing `.env`, apply it with:
 

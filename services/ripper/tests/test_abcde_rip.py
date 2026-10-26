@@ -18,6 +18,8 @@ fires its `on_track_done` callback. Covers:
     unfinalised track gets a timeout failure.
   - on_track_done=None: no callback fires; the return dict still has an
     entry per requested track.
+  - Kill path: abcde runs in its own session and the whole process group
+    is killed, so cdparanoia does not outlive an abandon or timeout.
 """
 
 from __future__ import annotations
@@ -32,6 +34,17 @@ import pytest
 import arm_ripper.rip.abcde_rip as abcde_rip
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.makemkv_rip import RipResult
+
+
+_FAKE_PID = 424242
+
+
+@pytest.fixture(autouse=True)
+def killpg_calls(monkeypatch) -> list[tuple[int, int]]:
+    """Record os.killpg instead of signalling a real process group."""
+    calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(abcde_rip.os, "killpg", lambda pgid, sig: calls.append((pgid, sig)))
+    return calls
 
 
 class _FakeStream:
@@ -63,6 +76,7 @@ class _FakeProc:
         self.stderr = _FakeStream(stderr_lines or [])
         self.returncode: int | None = None
         self._final_returncode = returncode
+        self.pid = _FAKE_PID
 
     async def wait(self) -> int:
         await asyncio.sleep(0)
@@ -434,3 +448,42 @@ async def test_rip_cd_clean_exit_but_wav_missing_yields_failure(monkeypatch, tmp
     )
     assert results[1].ok is False
     assert "did not produce" in (results[1].error or "")
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_kills_the_whole_process_group_on_timeout(monkeypatch, tmp_path, killpg_calls):
+    """D-174: abcde forks cdparanoia per track. Killing bash alone left
+    cdparanoia holding the drive; the spawn must start a new session and
+    the kill must target its process group."""
+
+    class _HangingProc(_FakeProc):
+        async def wait(self) -> int:
+            if self.returncode is not None:
+                return self.returncode
+            await asyncio.sleep(3600)
+            return 0
+
+    captured: dict[str, Any] = {}
+    fake = _HangingProc([])
+
+    async def fake_create(*_a: Any, **kw: Any) -> _HangingProc:
+        captured.update(kw)
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(abcde_rip, "CD_RIP_TIMEOUT_SECONDS", 0.05)
+
+    results = await rip_cd(device_path="/dev/sr0", output_dir=tmp_path, track_indexes=[1])
+    assert captured.get("start_new_session") is True
+    assert killpg_calls == [(_FAKE_PID, abcde_rip.signal.SIGKILL)]
+    assert results[1].ok is False
+
+
+def test_kill_group_tolerates_an_already_empty_group(monkeypatch):
+    def gone(_pgid: int, _sig: int) -> None:
+        raise ProcessLookupError
+
+    monkeypatch.setattr(abcde_rip.os, "killpg", gone)
+    fake = _FakeProc([])
+    abcde_rip._kill_group(fake)  # type: ignore[arg-type]
+    assert fake.returncode == -9

@@ -14,6 +14,8 @@ RipperManagerError for docker/transport failures.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 from collections.abc import Iterable, Sequence
@@ -25,6 +27,7 @@ import docker.errors  # type: ignore[import-untyped]
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.container_logging import log_config
 from arm_backend.docker_probe import TtlProbe, probe_docker
 from arm_backend.iso_library import iso_host_path
 from arm_common import Drive, DriveKind, DriveLifecycle, DriveStatus, Job, JobStatus
@@ -36,6 +39,9 @@ logger = logging.getLogger("arm_backend.ripper_manager")
 
 DOCKER_LABEL_KEY = "arm.drive_id"
 VIRTUAL_LABEL_KEY = "arm.virtual"
+# sha256 of the spec the container was created from; reconcile recreates an idle
+# ripper whose label no longer matches (a changed ARM_RIPPER_* tunable, PUID, ...).
+SPEC_HASH_LABEL_KEY = "arm.spec_hash"
 # Seconds docker waits for the ripper to exit on SIGTERM before SIGKILL.
 # A rip in flight is refused at the router (unenroll while RIPPING), so
 # this only ever interrupts idle polling.
@@ -72,6 +78,14 @@ class ReconcileSummary:
 
 def _err(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:300]
+
+
+def _spec_hash(spec: dict[str, Any]) -> str:
+    """Hash of every `containers.run` kwarg except the labels that carry it.
+    Image drift is caught by image id in `_image_current`; this catches the
+    rest (environment, mounts, network, ...)."""
+    material = {k: v for k, v in spec.items() if k != "labels"}
+    return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
 class RipperManager:
@@ -154,10 +168,12 @@ class RipperManager:
             "network": s.ARM_DOCKER_NETWORK,
             "device_cgroup_rules": list(_DEVICE_CGROUP_RULES),
             "restart_policy": {"Name": "unless-stopped"},
+            "log_config": log_config(),
             "detach": True,
         }
         if drive.kind == DriveKind.VIRTUAL:
-            return self._virtual_spec(drive, spec)
+            spec = self._virtual_spec(drive, spec)
+        spec["labels"][SPEC_HASH_LABEL_KEY] = _spec_hash(spec)
         return spec
 
     def _virtual_spec(self, drive: Drive, spec: dict[str, Any]) -> dict[str, Any]:
@@ -274,6 +290,18 @@ class RipperManager:
             logger.warning("cannot compare image for container %s: %s", getattr(container, "name", "?"), _err(exc))
             return True
 
+    def _drift(self, drive: Drive, container: Any) -> str | None:
+        """Why the container no longer matches what `container_spec` would
+        create now, or None. A container from before the spec-hash label
+        existed has no label and counts as drifted: reconcile recreates it
+        once, when idle."""
+        if not self._image_current(container):
+            return "a stale image"
+        wanted = self.container_spec(drive)["labels"][SPEC_HASH_LABEL_KEY]
+        if (container.labels or {}).get(SPEC_HASH_LABEL_KEY) != wanted:
+            return "a spec that differs from the current settings"
+        return None
+
     def container_statuses(self, drive_ids: Iterable[str]) -> dict[str, tuple[str, bool | None]]:
         """(docker state, image current?) per drive id for /api/drives/diagnostic, from ONE
         container listing. Every id maps to ("unknown", None) when docker is unreachable
@@ -303,8 +331,10 @@ class RipperManager:
     def reconcile(self, enrolled: Sequence[Drive], *, busy: frozenset[str] = frozenset()) -> ReconcileSummary:
         """Boot-time: the Drive table is the source of truth (spec §3).
         Per-drive failures are recorded, not raised; only an un-listable
-        daemon raises. A running ripper whose container image no longer
-        matches ARM_RIPPER_IMAGE is recreated so `docker compose build`
+        daemon raises. A ripper whose container image no longer matches
+        ARM_RIPPER_IMAGE, or whose spec no longer matches the current
+        settings (a changed ARM_RIPPER_* tunable, PUID, ARM_LOG_LEVEL, ...),
+        is recreated so `docker compose build` or an edited `.env`
         actually takes effect — unless the drive is mid-rip (`busy`), in
         which case it's adopted as-is and picked up on the next reconcile
         after the job finishes. `busy` is RIPPING-only on purpose: a scan
@@ -330,12 +360,20 @@ class RipperManager:
                 summary.failed[drive_id] = _err(exc)
         for drive in enrolled:
             existing = by_drive.get(drive.id)
-            if existing is not None and not self._image_current(existing):
+            try:
+                drift = self._drift(drive, existing) if existing is not None else None
+            except Exception as exc:  # noqa: BLE001
+                # container_spec can raise for one bad drive; that must not
+                # abort the reconcile for every other drive.
+                summary.failed[drive.id] = _err(exc)
+                continue
+            if drift is not None:
                 if drive.id in busy:
                     logger.info(
-                        "ripper drive_id=%s runs a stale image but is ripping — adopting; recreated at the "
+                        "ripper drive_id=%s runs %s but is ripping — adopting; recreated at the "
                         "next backend restart once the drive is idle",
                         drive.id,
+                        drift,
                     )
                 else:
                     try:
@@ -344,6 +382,7 @@ class RipperManager:
                     except Exception as exc:  # noqa: BLE001
                         summary.failed[drive.id] = _err(exc)
                         continue
+                    logger.info("ripper recreated drive_id=%s: it ran %s", drive.id, drift)
                     summary.recreated.append(drive.id)
                     continue
             try:

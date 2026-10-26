@@ -23,7 +23,7 @@ from arm_backend.disk_usage_cache import get_disk_usage
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import effective_transcode_capable, settings
@@ -31,9 +31,21 @@ from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
 from arm_backend.transcode_dispatcher import count_queued_encode_tasks
-from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
+from arm_backend.identity.sources.thediscdb_snapshot import RefreshBusy, refresh as thediscdb_refresh
+from arm_backend.identity.sources.thediscdb_snapshot import refresh_running as thediscdb_refresh_running
 from arm_backend.utils import default_roots
-from arm_common import Config, Drive, DriveStatus, Event, Job, KeydbState, MakemkvSdfState, User
+from arm_common import (
+    Config,
+    Drive,
+    DriveKind,
+    DriveLifecycle,
+    DriveStatus,
+    Event,
+    Job,
+    KeydbState,
+    MakemkvSdfState,
+    User,
+)
 from arm_common.schemas import (
     DiagnosticDetail,
     MemoryInfo,
@@ -139,7 +151,7 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
                 )
             )
 
-    drives = list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
+    drives = await _online_enrolled_drives(db)
     checks.append(
         SystemDiagnosticCheck(
             name="drives",
@@ -260,6 +272,21 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
     return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
 
 
+async def _online_enrolled_drives(db: AsyncSession) -> list[Drive]:
+    """Online drives a ripper actually serves.
+
+    Scanner-created DETECTED rows and virtual ISO rows are ``online`` by default,
+    so ``status`` alone would count a drive that is merely plugged in (D-149).
+    """
+    stmt = (
+        select(Drive)
+        .where(col(Drive.status) == DriveStatus.ONLINE)
+        .where(col(Drive.kind) == DriveKind.OPTICAL)
+        .where(col(Drive.lifecycle) == DriveLifecycle.ENROLLED)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def stats(
     request: Request,
@@ -269,21 +296,16 @@ async def stats(
     started_at = getattr(request.app.state, "started_at", None)
     uptime = int((datetime.now(timezone.utc) - started_at).total_seconds()) if started_at is not None else 0
 
-    jobs = list((await db.execute(select(Job))).scalars().all())
     by_status: dict[str, int] = {}
-    for j in jobs:
-        key = j.status.value if hasattr(j.status, "value") else str(j.status)
-        by_status[key] = by_status.get(key, 0) + 1
+    for job_status, n in (await db.execute(select(Job.status, func.count()).group_by(col(Job.status)))).all():
+        key = job_status.value if hasattr(job_status, "value") else str(job_status)
+        by_status[key] = n
 
-    drives_online = len(
-        list((await db.execute(select(Drive).where(col(Drive.status) == DriveStatus.ONLINE))).scalars().all())
-    )
+    drives_online = len(await _online_enrolled_drives(db))
 
-    # Fetch all events and filter in Python — mirrors the notification_dispatcher
-    # pattern to stay compatible with the in-memory FakeSession (which cannot
-    # evaluate .is_(None) clauses).
-    all_events = list((await db.execute(select(Event))).scalars().all())
-    events_unsent = len([e for e in all_events if e.notified_at is None])
+    events_unsent = (
+        await db.execute(select(func.count()).select_from(Event).where(col(Event.notified_at).is_(None)))
+    ).scalar_one()
 
     return StatsResponse(
         uptime_seconds=uptime,
@@ -381,8 +403,13 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
 async def thediscdb_refresh_now(request: Request, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     """Rebuild the TheDiscDB snapshot index from GitHub, on demand."""
+    if thediscdb_refresh_running():
+        raise HTTPException(status_code=409, detail="thediscdb refresh already in progress")
     try:
         count = await thediscdb_refresh(request.app.state.http, Path(settings.ARM_THEDISCDB_PATH))
+    except RefreshBusy as e:
+        # The daily loop took the lock between the check above and the call.
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001 — network/tar/sqlite: report, keep old index
         raise HTTPException(status_code=502, detail=f"thediscdb refresh failed: {e}") from e
     now = datetime.now(timezone.utc)

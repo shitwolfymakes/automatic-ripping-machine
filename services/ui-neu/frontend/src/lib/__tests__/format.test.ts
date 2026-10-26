@@ -7,6 +7,7 @@ import {
 	timeAgo,
 	elapsedTime,
 	etaTime,
+	formatRemaining,
 	formatDateTime,
 	formatShortDateTime,
 	calendarTimeAgo
@@ -194,6 +195,19 @@ describe('etaTime', () => {
 	it('caps absurdly long estimates at 24h+', () => {
 		// 5m elapsed at 0.1% → ~83h. Cap.
 		expect(etaTime('2025-06-15T11:55:00Z', 0.1)).toBe('24h+');
+	});
+});
+
+describe('formatRemaining', () => {
+	it('formats a reported ETA like etaTime does', () => {
+		expect(formatRemaining(42)).toBe('42s');
+		expect(formatRemaining(1800)).toBe('30m 0s');
+		expect(formatRemaining(5400)).toBe('1h 30m');
+	});
+
+	it('clamps negatives to 0s and caps at 24h+', () => {
+		expect(formatRemaining(-5)).toBe('0s');
+		expect(formatRemaining(24 * 3600)).toBe('24h+');
 	});
 });
 

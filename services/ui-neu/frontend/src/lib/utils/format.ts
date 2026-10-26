@@ -99,11 +99,20 @@ export function etaTime(startTime: string | null | undefined, progressPct: numbe
 	const start = new Date(startTime);
 	const elapsedSec = (Date.now() - start.getTime()) / 1000;
 	if (elapsedSec < 30) return null;
-	const remainingSec = (elapsedSec * (100 - progressPct)) / progressPct;
+	return formatRemaining((elapsedSec * (100 - progressPct)) / progressPct);
+}
+
+/**
+ * Format a remaining-time estimate in seconds the way etaTime does, for an
+ * ETA that arrives ready-made (the transcoder reports HandBrake's own).
+ * Capped at 24h+.
+ */
+export function formatRemaining(remainingSec: number): string {
 	if (remainingSec >= 24 * 3600) return '24h+';
-	const h = Math.floor(remainingSec / 3600);
-	const m = Math.floor((remainingSec % 3600) / 60);
-	const s = Math.floor(remainingSec % 60);
+	const sec = Math.max(0, remainingSec);
+	const h = Math.floor(sec / 3600);
+	const m = Math.floor((sec % 3600) / 60);
+	const s = Math.floor(sec % 60);
 	if (h > 0) return `${h}h ${m}m`;
 	if (m > 0) return `${m}m ${s}s`;
 	return `${s}s`;

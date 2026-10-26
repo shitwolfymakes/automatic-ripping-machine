@@ -1,11 +1,6 @@
 """Tier-4: log query/zip caps are env-tunable, defaulting to current values."""
 
-import os
-
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "x")
-
-from arm_backend.config import Settings  # noqa: E402
+from arm_backend.config import Settings
 
 
 def test_log_caps_default_to_current_values():

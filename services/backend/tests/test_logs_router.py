@@ -14,20 +14,18 @@ import secrets
 import zipfile
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import logs as logs_router  # noqa: E402
-from arm_common import User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import logs as logs_router
+from arm_common import User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -339,6 +337,27 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=2", headers=_auth(token))
     assert r.status_code == 200
     assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped (133)
+
+
+def test_stream_limit_zero_returns_no_lines(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
+    _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
+        (tmp_path / "jobs").mkdir()
+        (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").write_text(
+            json.dumps(_line(msg="l0")) + "\n", encoding="utf-8"
+        )
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
 
 
 def test_stream_fallback_skips_unreadable_log(

@@ -6,20 +6,18 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import system as system_router  # noqa: E402
-from arm_common import Config, DiscType, Drive, DriveStatus, Event, Job, JobStatus, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import system as system_router
+from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Job, JobStatus, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 not_root = pytest.mark.skipif(os.geteuid() == 0, reason="chmod-based unwritable dirs don't bind as root")
 
@@ -175,6 +173,45 @@ def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
     assert r.status_code == 200, r.text
     drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
     assert drives["status"] == "warning"
+
+
+def _unserved_online_drives() -> list[Drive]:
+    # Every row here is status=online but has no ripper serving it (D-149).
+    return [
+        Drive(
+            id="drv_det000000000000000000003",
+            hostname="h1",
+            device_path="/dev/sr2",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.DETECTED,
+        ),
+        Drive(
+            id="drv_ign000000000000000000004",
+            hostname="h1",
+            device_path="/dev/sr3",
+            status=DriveStatus.ONLINE,
+            lifecycle=DriveLifecycle.IGNORED,
+        ),
+        Drive(
+            id="drv_iso000000000000000000005",
+            hostname="h1",
+            device_path="iso:x",
+            status=DriveStatus.ONLINE,
+            kind=DriveKind.VIRTUAL,
+        ),
+    ]
+
+
+def test_diagnostics_detected_ignored_and_virtual_drives_do_not_count(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"] = _unserved_online_drives()
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    r = _get(app, token)
+    assert r.status_code == 200, r.text
+    drives = next(ch for ch in r.json()["checks"] if ch["name"] == "drives")
+    assert drives["status"] == "warning"
+    assert drives["detail"] == "no online drives registered"
 
 
 def test_diagnostics_config_missing_is_error(signing_key: bytes, tmp_path) -> None:
@@ -709,6 +746,17 @@ def test_stats_counts(signing_key: bytes, tmp_path) -> None:
     assert body["jobs_by_status"].get("ripping") == 1
 
 
+def test_stats_drives_online_ignores_unserved_drives(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"] += _unserved_online_drives()
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as c:
+        r = c.get("/api/system/stats", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["drives_online"] == 1
+
+
 def test_stats_no_started_at(signing_key: bytes, tmp_path) -> None:
     """When started_at is not set on app.state, uptime_seconds should be 0."""
     db = FakeSession()
@@ -753,6 +801,49 @@ def test_thediscdb_refresh_now_maps_failure_to_502(signing_key: bytes, tmp_path,
     with TestClient(app) as c:
         r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
     assert r.status_code == 502, r.text
+    assert db.rows["config"][0].thediscdb_refreshed_at is None
+
+
+def test_thediscdb_refresh_now_409_when_the_lock_is_taken_after_the_check(
+    signing_key: bytes, tmp_path, monkeypatch
+) -> None:
+    """The daily loop can take the lock between the running check and the
+    call; refresh then raises RefreshBusy and the route still answers 409."""
+
+    async def _busy(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        raise system_router.RefreshBusy("thediscdb refresh already in progress")
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _busy)
+    monkeypatch.setattr(system_router, "thediscdb_refresh_running", lambda: False)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 409
+    assert "already in progress" in r.json()["detail"]
+
+
+def test_thediscdb_refresh_now_409_while_refresh_running(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    """D-159: a manual refresh during the loop's (or another click's) build is refused."""
+    called: list[bool] = []
+
+    async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
+        called.append(True)
+        return 1
+
+    monkeypatch.setattr(system_router, "thediscdb_refresh", _fake)
+    monkeypatch.setattr(system_router, "thediscdb_refresh_running", lambda: True)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.http = object()
+    with TestClient(app) as c:
+        r = c.post("/api/system/thediscdb/refresh", headers=_auth(token))
+    assert r.status_code == 409, r.text
+    assert "already in progress" in r.json()["detail"]
+    assert called == []
     assert db.rows["config"][0].thediscdb_refreshed_at is None
 
 

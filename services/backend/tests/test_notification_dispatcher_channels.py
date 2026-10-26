@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-import os
+from datetime import UTC, datetime
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
+import pytest
 
-from datetime import UTC, datetime  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.notification_dispatcher import MessageDispatcher
+from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_common import Config, Event, NotificationChannel
 
-import pytest  # noqa: E402
-
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.notification_dispatcher import MessageDispatcher  # noqa: E402
-from arm_backend.notifications.apprise_listener import AppriseListener  # noqa: E402
-from arm_common import Config, Event, NotificationChannel  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _FakeNotifier:
@@ -31,10 +26,6 @@ class _FakeNotifier:
 
 
 def _settings() -> Settings:
-    import os
-
-    os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-    os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
     return Settings()
 
 

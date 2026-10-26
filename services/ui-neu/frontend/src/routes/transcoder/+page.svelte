@@ -97,18 +97,28 @@
 		loadJobs(getJobsCache(tab) == null);
 	}
 
-	async function handleRetry(id: string) {
-		await retryTranscoderJob(id);
+	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+
+	// A failed action (409 retry of a task no longer failed, 503 delete with
+	// the dispatcher down, a network error) shows in the feedback banner, and
+	// the list refreshes either way since the failure usually means it is stale.
+	async function runAction(action: () => Promise<unknown>, verb: string) {
+		actionFeedback = null;
+		try {
+			await action();
+		} catch (e) {
+			actionFeedback = { type: 'error', message: e instanceof Error ? e.message : `${verb} failed` };
+		}
 		loadJobs();
 	}
 
-	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	function handleRetry(id: string) {
+		return runAction(() => retryTranscoderJob(id), 'Retry');
+	}
 
-	async function handleDelete(id: string) {
-		if (confirm('Delete this transcode task?')) {
-			await deleteTranscoderJob(id);
-			loadJobs();
-		}
+	function handleDelete(id: string) {
+		if (!confirm('Delete this transcode task?')) return;
+		return runAction(() => deleteTranscoderJob(id), 'Delete');
 	}
 
 	let jobsTimer: ReturnType<typeof setInterval> | null = null;
@@ -482,8 +492,10 @@
 										{#if job.updated_at}
 											<span>Updated <TimeAgo date={job.updated_at} /></span>
 										{/if}
-										{#if job.status === 'done' && job.created_at && job.updated_at}
-											{@const dur = formatDuration(job.created_at, job.updated_at)}
+										<!-- From claim to finish: created_at would add the queue wait (D-202).
+										     Tasks from before started_at existed fall back to created_at. -->
+										{#if job.status === 'done' && (job.started_at ?? job.created_at) && job.updated_at}
+											{@const dur = formatDuration(job.started_at ?? job.created_at, job.updated_at)}
 											{#if dur}
 												<span class="transcoder-page-took">Took {dur}</span>
 											{/if}

@@ -7,20 +7,17 @@ unlink OSError, and cancel_running's row-gone / docker-stop-error paths.
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import transcode_dispatcher as tdmod  # noqa: E402
-from arm_backend.transcode_dispatcher import TranscodeDispatcher  # noqa: E402
-from arm_backend.ws import WSHub  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend import transcode_dispatcher as tdmod
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.ws import WSHub
+from arm_common import (
     ContainerFormat,
     Gpu,
     GpuStatus,
@@ -35,8 +32,8 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
-from tests.test_transcode_dispatcher import _db_factory, _settings  # noqa: E402
+from tests._fakes import FakeSession
+from tests.test_transcode_dispatcher import _db_factory, _settings
 
 
 def _disp(db: FakeSession, **sett: Any) -> TranscodeDispatcher:

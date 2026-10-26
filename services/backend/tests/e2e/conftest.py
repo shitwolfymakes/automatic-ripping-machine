@@ -28,37 +28,27 @@ exercised here — `main._run_migrations` is replaced with a metadata
 
 from __future__ import annotations
 
-import os
-
-# Set before `arm_backend.config` instantiates its Settings singleton.
-#
-# This conftest is imported during collection *before* any test module, so
-# its `setdefault` calls win the session-wide singleton. The values must
-# therefore match the rest of the suite's convention or unrelated
-# fake-session tests (which assume these exact values) start 401'ing:
-#   - DATABASE_URL: a dummy Postgres URL. `db._build_engine` runs at import
-#     and its urlparse round-trip can't handle `sqlite+aiosqlite://`; asyncpg
-#     connects lazily so no DB is touched, and `app_client` swaps the engine
-#     for a real SQLite one before the lifespan opens a connection.
-#   - ARM_SERVICE_TOKEN: "tok-service" — the value the service-token tests
-#     (e.g. test_transcoder_router) hard-code in their auth headers.
+# DATABASE_URL and ARM_SERVICE_TOKEN come from the parent `tests/conftest.py`,
+# which pytest loads before this one. DATABASE_URL is a dummy Postgres URL
+# there on purpose: `db._build_engine` runs at import and its urlparse
+# round-trip can't handle `sqlite+aiosqlite://`; asyncpg connects lazily so no
+# DB is touched, and `app_client` swaps the engine for a real SQLite one before
+# the lifespan opens a connection.
 # Empty ARM_HOST_* + no docker client => the transcode dispatcher still starts
 # and ticks live (sweeps + in-process passthrough), but never spawns a container.
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from collections.abc import AsyncIterator, Iterator  # noqa: E402
-from pathlib import Path  # noqa: E402
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from sqlalchemy import JSON  # noqa: E402
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-from sqlalchemy.ext.compiler import compiles  # noqa: E402
-from sqlmodel import SQLModel  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.compiler import compiles
+from sqlmodel import SQLModel
 
-import arm_common.models  # noqa: E402,F401  (populate SQLModel.metadata)
+import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
 
 
 @compiles(JSONB, "sqlite")

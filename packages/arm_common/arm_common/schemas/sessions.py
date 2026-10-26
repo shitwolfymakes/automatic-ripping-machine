@@ -187,6 +187,15 @@ class TranscodeTaskView(BaseModel):
     attempts: int
     claimed_by: str | None
     claim_heartbeat_at: datetime | None
+    # When the current attempt was claimed (null while queued, and on rows
+    # claimed before it existed). Encode time runs from here, not created_at.
+    started_at: datetime | None = None
+    # Encoder telemetry from the latest heartbeat (null before the first one,
+    # and for engines that do not report the value).
+    current_pass: str | None = None
+    eta_seconds: int | None = None
+    fps: float | None = None
+    avg_fps: float | None = None
     last_error: str | None
     created_at: datetime | None
     updated_at: datetime | None

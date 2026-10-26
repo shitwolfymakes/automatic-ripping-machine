@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.drive_scanner import ScannedDrive, ScanSummary, reconcile_drives  # noqa: E402
-from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus  # noqa: E402
+from arm_backend.drive_scanner import ScannedDrive, ScanSummary, reconcile_drives
+from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 NOW = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
 BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
