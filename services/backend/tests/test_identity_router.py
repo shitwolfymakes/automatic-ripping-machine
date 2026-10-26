@@ -127,6 +127,7 @@ class _FakeStageRunner:
         self.provider_calls: list[Config] = []
         self.invalidate_calls: list[str] = []
         self.release_calls: list[str] = []
+        self.release_reruns: list[bool] = []
 
     def providers(self, cfg: Config) -> list[Any]:
         self.provider_calls.append(cfg)
@@ -135,10 +136,11 @@ class _FakeStageRunner:
     def invalidate(self, job_id: str) -> None:
         self.invalidate_calls.append(job_id)
 
-    def release(self, job_id: str) -> None:
+    def release(self, job_id: str, rerun: bool = True) -> None:
         # D-093: every invalidate is released, after the router's commit.
         assert job_id in self.invalidate_calls
         self.release_calls.append(job_id)
+        self.release_reruns.append(rerun)
 
 
 @pytest.fixture
@@ -772,6 +774,7 @@ def test_clear_match_invalidates_an_in_flight_run_and_releases_it(signing_key: b
         r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
     assert r.status_code == 200
     assert runner.invalidate_calls == [JOB_ID] and runner.release_calls == [JOB_ID]
+    assert runner.release_reruns == [False]  # the clear is not undone by a rerun
 
 
 def test_clear_match_unknown_job_404_and_reader_403(signing_key: bytes) -> None:

@@ -1069,6 +1069,28 @@ async def test_overlapping_holds_wait_for_the_last_release_d093() -> None:
     assert runs == [job.id] and runner._held == {}
 
 
+async def test_release_without_rerun_drops_the_in_flight_outcome() -> None:
+    """Clear episodes: the hold is released with `rerun=False` while a run is
+    still waiting on providers. That run writes nothing when it reaches its
+    apply phase, and no rerun follows to put the placements back."""
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    gate = asyncio.Event()
+    reached = asyncio.Event()
+    provider = _GatedSeasonProvider(seasons={1: _season(1, DISTINCT)}, gates=[gate], reached=reached)
+    runner = _runner(db, _Hub(), [provider])
+
+    runner.schedule(job.id)
+    await asyncio.wait_for(reached.wait(), timeout=1)
+    runner.invalidate(job.id)
+    runner.release(job.id, rerun=False)  # the clear committed first
+    gate.set()
+    await runner.drain()
+    assert claims_of(job).sources == {}
+    assert provider._call_n == 1  # no rerun fetched the season again
+    assert runner._pending == {} and runner._rerun == set() and runner._discarded == set()
+
+
 async def test_release_without_a_pending_rerun_runs_nothing() -> None:
     job = _job()
     db = _db(job, tracks=[])

@@ -298,7 +298,8 @@ async def clear_episode_match(
     source choice, then re-resolve so the placements come off the tracks.
     Hand-placed tracks keep their manual claims; show ids stay for the next
     Fix match. An in-flight background run is invalidated first so its
-    outcome cannot land after the clear, and the startup sweep leaves a
+    outcome cannot land after the clear, with no rerun after it (that would
+    put the placements straight back), and the startup sweep leaves a
     cleared job alone. Emits `job.identity_updated` and a `track.updated`
     per track the resolver changed."""
     if stage_runner is not None:
@@ -314,7 +315,7 @@ async def clear_episode_match(
         await db.commit()
     finally:
         if stage_runner is not None:
-            stage_runner.release(job_id)
+            stage_runner.release(job_id, rerun=False)
     await db.refresh(job)
     tracks = await _get_tracks(db, job_id)
     return _identity_view(job, tracks)
