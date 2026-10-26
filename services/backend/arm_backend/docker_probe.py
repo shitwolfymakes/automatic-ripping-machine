@@ -30,7 +30,12 @@ BACKEND_URL_TIMEOUT_SECONDS = 5.0
 
 
 def probe_docker(client: Any, image: str) -> tuple[bool, str | None]:
-    """Ping the daemon, then check `image` exists there. (ok, detail)."""
+    """Ping the daemon, then check `image` exists there. (ok, detail).
+
+    A transcode-host `client` is a `HealingDockerClient`, so a docker-over-SSH
+    transport that died while idle is reopened by whichever of the two calls
+    meets it, and that call is retried once before it counts as a failure.
+    """
     try:
         client.ping()
     except Exception as exc:  # noqa: BLE001 — any transport failure is the same answer

@@ -27,12 +27,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
-from paramiko.ssh_exception import SSHException  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
 from arm_backend.container_logging import log_config
+from arm_backend.docker_client import HealingDockerClient
 from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.transcode_images import (
     VARIANT_SUFFIX,
@@ -94,29 +94,6 @@ _QUEUE_SCAN_LIMIT = 50
 # While `probe()` says the transcode image or docker host is unusable, encode
 # spawns are skipped and one line says why, repeated at most this often.
 _PROBE_HOLD_LOG_SECONDS = 600
-
-# A dead docker-over-SSH transport (idle paramiko connection reset by the
-# remote end) surfaces as one of these, either raw or wrapped inside
-# docker-py's APIError cause chain. EOFError is included because paramiko
-# commonly surfaces a dead transport that way (the read side hits EOF when
-# the remote end has silently closed the connection).
-_TRANSPORT_DEAD_ERRORS = (SSHException, ConnectionResetError, BrokenPipeError, EOFError)
-
-
-def _is_transport_death(exc: BaseException) -> bool:
-    """A dead docker-over-SSH transport surfaces either as a raw paramiko
-    SSHException or wrapped inside docker's APIError cause chain (docker-py
-    wraps the underlying requests/urllib3 error, whose root cause is
-    paramiko's SSHException). Walk __cause__/__context__ to find it.
-    """
-    seen: set[int] = set()
-    cur: BaseException | None = exc
-    while cur is not None and id(cur) not in seen:
-        seen.add(id(cur))
-        if isinstance(cur, _TRANSPORT_DEAD_ERRORS):
-            return True
-        cur = cur.__cause__ or cur.__context__
-    return False
 
 
 class GpuAssignment(NamedTuple):
@@ -249,8 +226,14 @@ class TranscodeDispatcher:
     ) -> None:
         self._settings = settings
         self._db_factory = db_factory
-        self._docker = docker_client
-        self._docker_factory = docker_client_factory
+        # Every docker call goes through this wrapper, which reopens a dead
+        # docker-over-SSH transport (see arm_backend.docker_client) and then
+        # drops every cached probe answer made against the dead client.
+        self._docker_client: HealingDockerClient | None = (
+            HealingDockerClient(docker_client, docker_client_factory, on_rebuild=self._invalidate_docker_probes)
+            if docker_client is not None
+            else None
+        )
         self._hub = hub
         self._stop = asyncio.Event()
         self._tick_interval = settings.ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS
@@ -259,7 +242,7 @@ class TranscodeDispatcher:
         self.last_spawn_error: str | None = None
         # (detail, monotonic time) of the last "spawns held" log line.
         self._probe_hold_logged: tuple[str | None, float] | None = None
-        self._probe = TtlProbe(lambda: probe_docker(self._docker, self._settings.ARM_TRANSCODE_IMAGE))
+        self._probe = TtlProbe(lambda: probe_docker(self._docker_client, self._settings.ARM_TRANSCODE_IMAGE))
         # The URL a remote-spawned transcoder calls home on; only checked
         # when spawning remotely (see `probe`).
         self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
@@ -306,11 +289,24 @@ class TranscodeDispatcher:
         self._enabled_gpu_vendors: set[GpuVendor] = set()
 
     @property
-    def docker_client(self) -> Any:
-        """The current docker client (None for a ripper-only deployment). A
-        property rather than a cached reference: a dead ssh transport can
-        rebuild it during a spawn."""
-        return self._docker
+    def docker_client(self) -> HealingDockerClient | None:
+        """The docker client every transcode-host caller shares (None for a
+        ripper-only deployment). Calls through it reopen a dead ssh
+        transport, so holding it across a rebuild is safe."""
+        return self._docker_client
+
+    @property
+    def _docker(self) -> Any:
+        """The docker-py client the shared wrapper currently forwards to."""
+        return self._docker_client.current if self._docker_client is not None else None
+
+    def _invalidate_docker_probes(self) -> None:
+        """Forget every cached probe answer: they were made against the client
+        a rebuild just replaced. Copied first, since a probe in another thread
+        may be adding an image's entry."""
+        self._probe.invalidate()
+        for probe in list(self._image_probes.values()):
+            probe.invalidate()
 
     def stop(self) -> None:
         self._stop.set()
@@ -748,13 +744,13 @@ class TranscodeDispatcher:
                 try:
                     # `_spawn_container` is a blocking call: a plain docker
                     # socket round-trip normally, but on the SSH-transport-
-                    # rebuild path (see `_is_transport_death`) it also does a
+                    # rebuild path (see arm_backend.docker_client) it also does a
                     # blocking TCP+SSH handshake that can take tens of
                     # seconds against a black-holed remote host. Run it off
                     # the event loop so a stuck spawn doesn't freeze
                     # HTTP/WS/ripper callbacks for the whole tick.
-                    # `_spawn_container` touches only `self._docker`,
-                    # `self._docker_factory`, `self._settings`, and its own
+                    # `_spawn_container` touches only the docker client,
+                    # `self._settings`, and its own
                     # locals/args (never the AsyncSession), so moving it to a
                     # thread doesn't put any DB access off the loop.
                     await asyncio.to_thread(self._spawn_container, task, assignment=assignment)
@@ -1044,7 +1040,7 @@ class TranscodeDispatcher:
             # `image` is this call's own local (not a loop variable), so a
             # plain closure captures the right value with no late-binding
             # hazard; each distinct image gets its own TtlProbe + closure.
-            cached = TtlProbe(lambda: probe_docker(self._docker, image))
+            cached = TtlProbe(lambda: probe_docker(self._docker_client, image))
             self._image_probes[image] = cached
         ok, _ = cached()
         return ok
@@ -1085,7 +1081,7 @@ class TranscodeDispatcher:
         A failed pull is not retried for VARIANT_PULL_RETRY_SECONDS, and
         concurrent callers for one image share a pull. A digest reference has
         no tag to pull and is never pulled. Blocking."""
-        assert self._docker is not None
+        assert self._docker_client is not None
         parts = split_reference(image)
         if parts is None:
             return False
@@ -1099,7 +1095,7 @@ class TranscodeDispatcher:
             repo, tag = parts
             logger.info("%s image %s not present on the docker host; pulling it", kind, image)
             try:
-                self._docker.images.pull(repo, tag=tag)
+                self._docker_client.images.pull(repo, tag=tag)
             except Exception as exc:  # noqa: BLE001 - any pull failure is reported, then retried later
                 logger.warning(
                     "could not pull %s image %s (%s); %s, next pull attempt in %.0f s",
@@ -1232,51 +1228,10 @@ class TranscodeDispatcher:
             log_config=log_config(),
             **extra_run_kwargs,
         )
-        try:
-            container = self._docker.containers.run(**run_kwargs)
-        except Exception as exc:
-            if self._docker_factory is not None and _is_transport_death(exc):
-                logger.warning(
-                    "docker ssh transport dead; rebuilding client and retrying spawn task_id=%s: %s",
-                    task.id,
-                    exc,
-                )
-                old_docker = self._docker
-                try:
-                    rebuilt = self._docker_factory()
-                except Exception as factory_exc:  # noqa: BLE001 - factory failure must not wedge the dispatcher
-                    logger.warning(
-                        "docker client rebuild failed; keeping old client task_id=%s: %s",
-                        task.id,
-                        factory_exc,
-                    )
-                    raise
-                if rebuilt is None:
-                    # _build_docker_client (main.py) returns None on any
-                    # failure (dev without the socket, unreachable/
-                    # misconfigured remote host). Assigning self._docker =
-                    # None here would make every LATER spawn raise
-                    # AttributeError instead of the transport-death path
-                    # that can actually recover — permanently wedging the
-                    # dispatcher. Keep the old (dead) client instead: this
-                    # tick's spawn still fails via the original exception
-                    # below, and the next tick's spawn attempt will detect
-                    # transport death again and retry the rebuild.
-                    logger.warning(
-                        "docker client rebuild returned None; keeping old client task_id=%s",
-                        task.id,
-                    )
-                    raise
-                self._docker = rebuilt
-                try:
-                    old_docker.close()
-                except Exception:  # noqa: BLE001 - best-effort cleanup of the dead client
-                    pass
-                # A second failure here propagates into the existing
-                # error handling in spawn_pending — no infinite retry.
-                container = self._docker.containers.run(**run_kwargs)
-            else:
-                raise
+        assert self._docker_client is not None
+        # A dead ssh transport is rebuilt and the run retried once by the
+        # client; a second failure propagates into spawn_pending's handling.
+        container = self._docker_client.containers.run(**run_kwargs)
         logger.info(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
@@ -1413,9 +1368,9 @@ class TranscodeDispatcher:
         # cancel inside the grace window. No docker client (ripper-only
         # deployment) means there's no container to stop; the row delete
         # below still runs.
-        if still_running and self._docker is not None:
+        if still_running and self._docker_client is not None:
             try:
-                survivors = self._docker.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
+                survivors = self._docker_client.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"})
                 for container in survivors:
                     logger.warning(
                         "force-stopping unresponsive transcoder task_id=%s container=%s",
