@@ -2002,7 +2002,7 @@
           "identity"
         ],
         "summary": "Clear Episode Match",
-        "description": "Clear episodes: forget every episode source's result and the operator's\nsource choice, then re-resolve so the placements come off the tracks.\nHand-placed tracks keep their manual claims; show ids stay for the next\nFix match. An in-flight background run is invalidated first so its\noutcome cannot land after the clear, and the startup sweep leaves a\ncleared job alone. Emits `job.identity_updated` and a `track.updated`\nper track the resolver changed.",
+        "description": "Clear episodes: forget every episode source's result and the operator's\nsource choice, then re-resolve so the placements come off the tracks.\nHand-placed tracks keep their manual claims; show ids stay for the next\nFix match. An in-flight background run is invalidated first so its\noutcome cannot land after the clear, with no rerun after it (that would\nput the placements straight back), and the startup sweep leaves a\ncleared job alone. Emits `job.identity_updated` and a `track.updated`\nper track the resolver changed.",
         "operationId": "clear_episode_match_api_jobs__job_id__identity_match_delete",
         "security": [
           {
