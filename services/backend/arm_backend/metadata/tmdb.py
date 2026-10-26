@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from typing import Any, Literal
+from urllib.parse import quote
 
 import httpx
 
@@ -110,20 +111,86 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        # Enrich each candidate with its imdb/tvdb ids concurrently. A result
-        # without an id can't be enriched and degrades to None ids.
-        # gather(return_exceptions=True) keeps one failure from failing the batch.
+        # One detail call per candidate (external ids + credits appended):
+        # the same call count as the old external_ids fan-out, but it also
+        # carries the facts the match picker shows. A TV row takes the latest
+        # season's `credits`, not `aggregate_credits`: a long-running show's
+        # all-seasons credits run to megabytes, and a row shows two names.
+        # The details endpoint fetches the full set. A failed call keeps the
+        # search row with None ids; gather(return_exceptions=True) keeps one
+        # failure from failing the batch.
         enrichable = [r for r in out if r.payload.get("id") is not None]
-        maps = await asyncio.gather(
-            *(self.get_external_id_map(r.payload["id"], kind) for r in enrichable),
+        details = await asyncio.gather(
+            *(self.fetch_detail(r.payload["id"], kind, all_seasons=False) for r in enrichable),
             return_exceptions=True,
         )
-        resolved = {id(r): (m if isinstance(m, dict) else {}) for r, m in zip(enrichable, maps)}
+        resolved = {id(r): d for r, d in zip(enrichable, details) if isinstance(d, dict)}
         for r in out:
-            found = resolved.get(id(r), {})
-            r.payload["imdb_id"] = found.get("imdb_id")
-            r.payload["tvdb_id"] = found.get("tvdb_id")
+            self._merge_detail(r, resolved.get(id(r), {}))
         return out
+
+    @staticmethod
+    def _id_map(body: dict[str, Any]) -> dict[str, str]:
+        """`{"imdb_id", "tvdb_id"}` from a TMDb `external_ids` body, known ones only."""
+        out: dict[str, str] = {}
+        imdb = body.get("imdb_id")
+        if isinstance(imdb, str) and imdb:
+            out["imdb_id"] = imdb
+        tvdb = body.get("tvdb_id")
+        if isinstance(tvdb, int) or (isinstance(tvdb, str) and tvdb):
+            out["tvdb_id"] = str(tvdb)
+        return out
+
+    async def fetch_detail(
+        self, tmdb_id: int | str, kind: Literal["movie", "tv"], *, all_seasons: bool = True
+    ) -> dict[str, Any]:
+        """`/{kind}/{id}` with external ids and credits appended in one call
+        (match picker spec 3.3). A show's credits cover every season unless
+        `all_seasons` is false. Raises LookupError/LookupTimeout."""
+        credits = "aggregate_credits" if kind == "tv" and all_seasons else "credits"
+        try:
+            r = await self._http.get(
+                f"{_base_url()}/{kind}/{tmdb_id}",
+                params={"append_to_response": f"external_ids,{credits}"},
+                headers=self._headers,
+            )
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("tmdb timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"tmdb transport error: {e}") from e
+        if r.status_code == 404:
+            raise LookupError("tmdb miss")
+        if r.status_code != 200:
+            raise LookupError(f"tmdb status={r.status_code}")
+        try:
+            body = r.json()
+        except ValueError as e:
+            raise LookupError("tmdb malformed response") from e
+        if not isinstance(body, dict):
+            raise LookupError("tmdb malformed response")
+        return body
+
+    @staticmethod
+    def _merge_detail(result: MetadataResult, detail: dict[str, Any]) -> None:
+        external = detail.get("external_ids")
+        ids = TMDBClient._id_map(external) if isinstance(external, dict) else {}
+        result.payload.update(detail)
+        result.payload.pop("external_ids", None)
+        result.payload["imdb_id"] = ids.get("imdb_id")
+        result.payload["tvdb_id"] = ids.get("tvdb_id")
+
+    async def detail_result(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> MetadataResult:
+        """One title's full record as a MetadataResult (details endpoint)."""
+        body = await self.fetch_detail(tmdb_id, kind)
+        external = body.pop("external_ids", None)
+        result = self._parse_one(body, kind)
+        if result is None:
+            raise LookupError("tmdb detail missing title")
+        # The parsed payload is `body` itself: only the ids need flattening.
+        ids = self._id_map(external) if isinstance(external, dict) else {}
+        result.payload["imdb_id"] = ids.get("imdb_id")
+        result.payload["tvdb_id"] = ids.get("tvdb_id")
+        return result
 
     async def get_external_id_map(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> dict[str, str]:
         """A result's IMDb and TVDB ids via TMDb `external_ids`, as
@@ -142,25 +209,25 @@ class TMDBClient:
             return {}
         if not isinstance(body, dict):
             return {}
-        out: dict[str, str] = {}
-        imdb = body.get("imdb_id")
-        if isinstance(imdb, str) and imdb:
-            out["imdb_id"] = imdb
-        tvdb = body.get("tvdb_id")
-        if isinstance(tvdb, int) or (isinstance(tvdb, str) and tvdb):
-            out["tvdb_id"] = str(tvdb)
-        return out
+        return self._id_map(body)
 
     async def get_external_ids(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> str | None:
         """The result's IMDb id only (kept for callers that need just that)."""
         return (await self.get_external_id_map(tmdb_id, kind)).get("imdb_id")
 
+    @staticmethod
+    def _with_imdb_id(parsed: MetadataResult, imdb_id: str) -> MetadataResult:
+        """/find payloads carry no imdb_id; keep the one that was looked up."""
+        if not parsed.payload.get("imdb_id"):
+            parsed.payload["imdb_id"] = imdb_id
+        return parsed
+
     async def find_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         """Resolve an imdb_id to a TMDB record via /find. Used by the
-        provider-driven detail lookup when metadata_provider == 'tmdb'."""
+        provider-driven detail lookup when TMDb is the movie search provider."""
         try:
             r = await self._http.get(
-                f"{_base_url()}/find/{imdb_id}",
+                f"{_base_url()}/find/{quote(imdb_id, safe='')}",
                 params={"external_source": "imdb_id"},
                 headers=self._headers,
             )
@@ -180,12 +247,12 @@ class TMDBClient:
             parsed = self._parse_one(data["movie_results"][0], "movie")
             if parsed is None:
                 raise LookupError("tmdb find result missing title")
-            return parsed
+            return self._with_imdb_id(parsed, imdb_id)
         if data.get("tv_results"):
             parsed = self._parse_one(data["tv_results"][0], "tv")
             if parsed is None:
                 raise LookupError("tmdb find result missing title")
-            return parsed
+            return self._with_imdb_id(parsed, imdb_id)
         raise LookupError(f"tmdb find no results for {imdb_id}")
 
     async def _search(

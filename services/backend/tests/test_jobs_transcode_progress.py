@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_common import DiscType, JobStatus  # noqa: E402
-from arm_common.schemas.jobs import JobView, TranscodeProgressSummary  # noqa: E402
+from arm_common import DiscType, JobStatus
+from arm_common.schemas.jobs import JobView, TranscodeProgressSummary
 
 
 def test_transcode_progress_summary_shape() -> None:
@@ -156,20 +152,23 @@ def test_settled_parked_app_is_left_out_of_the_rollup() -> None:
     assert s is not None and s.state == "done" and s.tasks_total == 1
 
 
-def test_parked_apps_settle_only_once_identity_is_not_pending() -> None:
-    """D-081 follow-up: resolve drains the parked app of an unidentified
-    partial rip, as it does for ripped_awaiting_identify, so neither counts
-    as settled. An identified partial rip has had its drain."""
+def test_parked_apps_settle_once_the_rip_is_over() -> None:
+    """D-142: a parked app waiting on resolve (ripped_awaiting_identify, or an
+    unidentified partial rip) is waiting on identity, not transcoding, so it
+    is settled for the rollup like any other post-rip job's. A job that has
+    not ripped yet still drains at rip-complete."""
     from arm_backend.routers.jobs import _parked_apps_are_settled
     from arm_common import Job
 
     def job(status: JobStatus, metadata: dict[str, Any]) -> Job:
         return Job(id="job_1", drive_id=None, disc_type=DiscType.DVD, status=status, metadata_json=metadata)
 
-    assert not _parked_apps_are_settled(job(JobStatus.RIPPED_AWAITING_IDENTIFY, {}))
-    assert not _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {"flags": {"unidentified": True}}))
+    assert _parked_apps_are_settled(job(JobStatus.RIPPED_AWAITING_IDENTIFY, {}))
+    assert _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {"flags": {"unidentified": True}}))
     assert _parked_apps_are_settled(job(JobStatus.RIPPED_PARTIAL, {}))
     assert _parked_apps_are_settled(job(JobStatus.RIPPED, {}))
+    assert not _parked_apps_are_settled(job(JobStatus.IDENTIFIED, {}))
+    assert not _parked_apps_are_settled(job(JobStatus.AWAITING_USER_ID, {}))
 
 
 import secrets  # noqa: E402
@@ -359,6 +358,8 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
         track_a.id,
         TranscodeTaskStatus.FAILED,
     )
+    task_old.fps, task_old.avg_fps = 99.0, 98.0
+    task_new.fps, task_new.avg_fps = 45.7, 23.5
     db.rows["transcode_tasks"] = [task_old, task_new]
 
     app, token = _make_app(db)
@@ -369,8 +370,11 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
     tracks = {t["source_ref"]: t for t in r.json()["tracks"]}
     # Most-recent task (greater ULID id) wins → failed
     assert tracks["t:1"]["transcode_status"] == "failed"
+    # The frame rate comes from the same task (D-248).
+    assert (tracks["t:1"]["transcode_fps"], tracks["t:1"]["transcode_avg_fps"]) == (45.7, 23.5)
     # track_b has no task → None
     assert tracks["t:2"]["transcode_status"] is None
+    assert (tracks["t:2"]["transcode_fps"], tracks["t:2"]["transcode_avg_fps"]) == (None, None)
 
 
 def test_summarize_includes_tasks_failed() -> None:

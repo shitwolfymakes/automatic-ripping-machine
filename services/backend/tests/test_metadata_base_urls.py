@@ -1,20 +1,15 @@
 """Tier-3: metadata base URLs are env-overridable, defaulting to current literals."""
 
-import os
+import httpx
+import pytest
+import respx
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "x")
-
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-import respx  # noqa: E402
-
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.metadata.arm_server import ArmServerClient  # noqa: E402
-from arm_backend.metadata.musicbrainz import MusicBrainzClient  # noqa: E402
-from arm_backend.metadata.omdb import OMDBClient  # noqa: E402
-from arm_backend.metadata.tmdb import TMDBClient  # noqa: E402
-from arm_backend.metadata.tvdb import TVDBClient  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.metadata.arm_server import ArmServerClient
+from arm_backend.metadata.musicbrainz import MusicBrainzClient
+from arm_backend.metadata.omdb import OMDBClient
+from arm_backend.metadata.tmdb import TMDBClient
+from arm_backend.metadata.tvdb import TVDBClient
 
 
 @pytest.fixture
@@ -63,7 +58,7 @@ async def test_omdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
 @respx.mock
 async def test_tvdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
     monkeypatch.setattr("arm_backend.metadata.tvdb._base_url", lambda: "http://tvdb.lan/v4")
-    route = respx.post("http://tvdb.lan/v4/login").mock(return_value=httpx.Response(200, json={}))
+    route = respx.post("http://tvdb.lan/v4/login").mock(return_value=httpx.Response(200, json={"data": {"token": "t"}}))
     await TVDBClient("k", http_client).validate_key()
     assert route.called
 

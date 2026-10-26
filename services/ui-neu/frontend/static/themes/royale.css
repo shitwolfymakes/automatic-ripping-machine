@@ -3,16 +3,16 @@
 	text-transform: uppercase;
 }
 
-[data-scheme="royale"] aside {
+[data-scheme="royale"] aside:where([data-sidebar]) {
 	border-right-width: 4px;
 	border-color: #112a5e !important;
 }
 
-[data-scheme="royale"] aside .nav-logo {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav-logo {
 	transform: skew(-10deg);
 }
 
-[data-scheme="royale"] aside .nav-logo img {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav-logo img {
 	filter: drop-shadow(3px 3px 0px #007bff);
 }
 
@@ -20,7 +20,7 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme="royale"] aside .nav {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav {
 	gap: 2px;
 	/* the link margin also sat above the first link and below the
 	   last one, which a gap does not reproduce */
@@ -28,7 +28,7 @@
 	padding-bottom: calc(1rem + 2px);
 }
 
-[data-scheme="royale"] aside .nav-item {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav-item {
 	font-style: italic;
 	font-weight: 900;
 	letter-spacing: 0.05em;
@@ -40,20 +40,20 @@
 	transition: all 0.1s;
 }
 
-[data-scheme="royale"] aside .nav-item:hover {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav-item:hover {
 	background: #007bff !important;
 	transform: scale(1.05) skew(-2deg);
 	color: #fff !important;
 }
 
-[data-scheme="royale"] aside .nav-item[data-active="true"] {
+[data-scheme="royale"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background: #f8fb11 !important;
 	color: #000 !important;
 	box-shadow: 0 0 20px rgba(248, 251, 17, 0.4);
 	text-shadow: none;
 }
 
-[data-scheme="royale"] aside hr {
+[data-scheme="royale"] aside:where([data-sidebar]) hr {
 	border: none;
 	height: 4px;
 	background: #112a5e;
@@ -75,12 +75,12 @@
 /* Muted sidebar readouts (the stats labels and the Storage eyebrow).
    The colour is a token override scoped to the sidebar, so it reaches
    component-local text too; the typography rides the .eyebrow block. */
-[data-scheme="royale"] aside {
+[data-scheme="royale"] aside:where([data-sidebar]) {
 	--color-text-muted: #aaa;
 	--color-text-faint: #aaa;
 }
 
-[data-scheme="royale"] aside .eyebrow {
+[data-scheme="royale"] aside:where([data-sidebar]) .eyebrow {
 	color: #aaa;
 	font-size: 0.65rem;
 	letter-spacing: 0.05em;
@@ -88,7 +88,7 @@
 
 /* The CPU temperature readout in the sidebar stats reads the
    accent-1 role. */
-[data-scheme="royale"] aside {
+[data-scheme="royale"] aside:where([data-sidebar]) {
 	--color-accent-1: #f8fb11;
 }
 

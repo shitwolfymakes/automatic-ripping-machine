@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import tarfile
@@ -10,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from arm_backend.identity.sources import thediscdb_snapshot
 from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, build_index, refresh
 
 DISC = {
@@ -78,7 +80,38 @@ def test_build_replaces_atomically(tmp_path: Path) -> None:
     build_index(_mini_tarball(tmp_path), dest)  # rebuild over live index
     assert dest.exists() and SnapshotStore(tmp_path).count() == 1
     assert dest.stat().st_mtime_ns != before
-    assert not dest.with_suffix(".sqlite.new").exists()
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
+
+
+def test_build_failure_removes_temp_file_and_keeps_live_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    dest = tmp_path / "index.sqlite"
+    build_index(_mini_tarball(tmp_path), dest)
+
+    def _boom(src: object, dst: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(thediscdb_snapshot.os, "replace", _boom)
+    with pytest.raises(OSError, match="disk full"):
+        build_index(_mini_tarball(tmp_path), dest)
+    assert SnapshotStore(tmp_path).count() == 1
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
+
+
+def test_overlapping_builds_use_distinct_temp_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # D-159: two builds into the same dest must not share a temp path.
+    seen: list[Path] = []
+    real_write = thediscdb_snapshot._write_index
+
+    def _spy(new_path: Path, *args: object) -> int:
+        seen.append(new_path)
+        return real_write(new_path, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(thediscdb_snapshot, "_write_index", _spy)
+    dest = tmp_path / "index.sqlite"
+    build_index(_mini_tarball(tmp_path), dest)
+    build_index(_mini_tarball(tmp_path), dest)
+    assert len(seen) == 2 and seen[0] != seen[1]
+    assert all(p.parent == tmp_path for p in seen)
 
 
 def test_missing_store(tmp_path: Path) -> None:
@@ -111,7 +144,7 @@ def test_empty_tarball_refuses_to_replace(tmp_path: Path) -> None:
 
     # Verify live index unchanged and no .new leftover
     assert SnapshotStore(tmp_path).count() == 1
-    assert not dest.with_suffix(".sqlite.new").exists()
+    assert not list(tmp_path.glob("index.sqlite.*.new"))
 
 
 # --- build_index: member filtering and malformed entries ----------------------
@@ -189,3 +222,100 @@ async def test_refresh_http_failure_propagates_and_keeps_index_absent(tmp_path: 
             await refresh(http, store_dir)
 
     assert not SnapshotStore(store_dir).exists()
+
+
+async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-159: a second refresh is refused at once instead of building alongside
+    the first, or queueing behind it."""
+    active = 0
+    peak = 0
+    running_during: list[bool] = []
+
+    async def _fake_locked(http: object, dir_path: Path) -> int:
+        nonlocal active, peak
+        running_during.append(thediscdb_snapshot.refresh_running())
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return 1
+
+    monkeypatch.setattr(thediscdb_snapshot, "_refresh_locked", _fake_locked)
+    assert not thediscdb_snapshot.refresh_running()
+    results = await asyncio.gather(
+        refresh(object(), tmp_path),  # type: ignore[arg-type]
+        refresh(object(), tmp_path),  # type: ignore[arg-type]
+        return_exceptions=True,
+    )
+    assert results[0] == 1
+    assert isinstance(results[1], thediscdb_snapshot.RefreshBusy)
+    assert peak == 1
+    assert running_during == [True]
+    assert not thediscdb_snapshot.refresh_running()
+
+
+def _series_disc(index: int, season: str, hash_: str) -> dict:
+    return {
+        "Index": index,
+        "ContentHash": hash_,
+        "Titles": [
+            {
+                "SourceFile": "00001.mpls",
+                "Duration": "0:45:00",
+                "Item": {"Type": "Episode", "Season": season, "Episode": "1"},
+            },
+            {"SourceFile": "00002.mpls", "Duration": "0:10:00", "Item": {"Type": "Extra"}},
+        ],
+    }
+
+
+DISC_S1 = _series_disc(1, "1", "A" * 32)
+DISC_S2 = _series_disc(2, "2", "B" * 32)
+
+
+def _series_tarball(path: Path, discs: list[tuple[str, dict]]) -> Path:
+    tar_path = path / "data.tar.gz"
+    base = "data-main/data/series/Some Show (2020)"
+    with tarfile.open(tar_path, "w:gz") as tar:
+        for i, (release_dir, disc) in enumerate(discs):
+            raw = json.dumps(disc).encode()
+            info = tarfile.TarInfo(f"{base}/{release_dir}/disc{i + 1:02d}.json")
+            info.size = len(raw)
+            tar.addfile(info, io.BytesIO(raw))
+    return tar_path
+
+
+def test_index_records_the_release_seasons(tmp_path: Path) -> None:
+    tarball = _series_tarball(tmp_path, discs=[("season-1-2", DISC_S1), ("season-1-2", DISC_S2)])
+    build_index(tarball, tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup(str(DISC_S1["ContentHash"]))
+    assert hit is not None and hit.release_seasons == [1, 2]
+
+
+def test_index_leaves_release_seasons_null_without_episodes(tmp_path: Path) -> None:
+    build_index(_mini_tarball(tmp_path), tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup(str(DISC["ContentHash"]))
+    assert hit is not None and hit.release_seasons is None
+
+
+def test_lookup_tolerates_an_index_without_release_seasons(tmp_path: Path) -> None:
+    import sqlite3
+
+    build_index(_mini_tarball(tmp_path), tmp_path / "index.sqlite")
+    conn = sqlite3.connect(tmp_path / "index.sqlite")
+    conn.execute("ALTER TABLE discs DROP COLUMN release_seasons")
+    conn.commit()
+    conn.close()
+    hit = SnapshotStore(tmp_path).lookup(str(DISC["ContentHash"]))
+    assert hit is not None and hit.release_seasons is None
+
+
+def test_index_ignores_episodes_without_a_usable_season(tmp_path: Path) -> None:
+    disc = _series_disc(1, "1", "C" * 32)
+    disc["Titles"] += [
+        {"SourceFile": "00003.mpls", "Item": {"Type": "Episode", "Season": "special"}},
+        {"SourceFile": "00004.mpls", "Item": {"Type": "Episode"}},
+    ]
+    build_index(_series_tarball(tmp_path, discs=[("s1", disc)]), tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup("C" * 32)
+    assert hit is not None and hit.release_seasons == [1]

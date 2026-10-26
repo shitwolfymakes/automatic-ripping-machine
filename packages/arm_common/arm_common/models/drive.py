@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, JSON, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
@@ -91,7 +92,7 @@ class Drive(SQLModel, table=True):
     media_status_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     rip_params_json: dict[str, Any] = Field(
         default_factory=dict,
-        sa_column=Column(JSON, nullable=False, server_default="{}"),
+        sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
     rip_speed: int | None = Field(default=None)
     drive_mode: DriveMode | None = Field(sa_column=enum_column(DriveMode, "drive_mode", nullable=True))

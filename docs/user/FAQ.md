@@ -14,10 +14,10 @@ namespaced `armv3-*` vs `arm-*`). See [Upgrading](Upgrading).
 
 ## Do I need API keys?
 
-No, but they help. ARM tries the community CRC64 database first (no key), then
-TMDb and OMDb (keys improve naming hit rates a lot), and MusicBrainz for audio
-CDs (no key). Add TMDb/OMDb keys on the Settings page — see
-[Configuration](Configuring-ARM#metadata--identification).
+No, but they help. TheDiscDB, the ARM community CRC64 database (DVDs), TVmaze
+(TV shows) and MusicBrainz (audio CDs) need no key. A free TMDb key, or an OMDb
+key, is what names most movies. Add keys on **Settings, API Keys** — see
+[Configuration](Configuring-ARM#identification-and-keys).
 
 ## Can I rip on Windows or macOS?
 
@@ -54,8 +54,8 @@ completion/failure. See [Configuration § Notifications](Configuring-ARM#notific
 ## Do I have to pay for MakeMKV?
 
 Not while it's in beta — ARM uses the free monthly beta key automatically. You
-can supply a purchased permanent key via `MAKEMKV_KEY` to skip the monthly
-rotation. DVDs don't need a key at all; Blu-ray/UHD do. See [MakeMKV](MakeMKV).
+can paste a purchased permanent key into **Config → MakeMKV key** to skip the
+monthly rotation. DVDs don't need a key at all; Blu-ray/UHD do. See [MakeMKV](MakeMKV).
 
 ## How do I turn on GPU transcoding?
 
@@ -73,6 +73,15 @@ Not yet as a user feature — that's designed but not built. ARM *can* produce a
 `armctl compose logs <service>`, or browse `~/arm/logs/`. Set
 `ARM_LOG_LEVEL=debug` in `~/arm/.armctl/.env` first for detail. More in
 [Troubleshooting](Troubleshooting).
+
+Docker keeps each ARM container's own output (what `docker logs` shows) and
+rotates it at 3 files of 10 MB, so a looping error can't fill the disk. The job
+logs in `~/arm/logs/` are separate files. For other containers on the same
+host, set a daemon-wide limit in `/etc/docker/daemon.json`:
+
+```json
+{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }
+```
 
 ## How do I back up my install?
 

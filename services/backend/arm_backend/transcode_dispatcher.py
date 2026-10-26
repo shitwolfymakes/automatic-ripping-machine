@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
+from arm_backend.container_logging import log_config
 from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.transcode_images import (
     VARIANT_SUFFIX,
@@ -1266,6 +1267,7 @@ class TranscodeDispatcher:
             network=(None if remote else self._settings.ARM_DOCKER_NETWORK),
             detach=True,
             auto_remove=True,
+            log_config=log_config(),
             **extra_run_kwargs,
         )
         try:

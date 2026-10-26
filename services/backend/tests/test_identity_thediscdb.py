@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.identity.sources.thediscdb import (  # noqa: E402
+from arm_backend.identity.sources.thediscdb import (
     build_claims,
     external_imdb_id,
     parse_duration,
     role_for_disc_type,
 )
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
-from arm_common import DiscType  # noqa: E402
-from arm_common.enums import TrackRole  # noqa: E402
-from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_common import DiscType
+from arm_common.enums import TrackRole
+from arm_common.schemas import ScanResult, ScanTitle
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 
@@ -346,3 +343,133 @@ def test_external_imdb_id_malformed_external_ids_returns_none() -> None:
         release={},
     )
     assert external_imdb_id(match) is None
+
+
+def _release_match(**overrides: Any) -> DiscMatch:
+    base: dict[str, Any] = dict(
+        kind="movie", title_slug="round-midnight-1986", release_slug="r", disc={}, metadata={}, release={}
+    )
+    base.update(overrides)
+    return DiscMatch(**base)
+
+
+def test_release_kind_maps_thediscdb_directories() -> None:
+    from arm_backend.identity.sources.thediscdb import release_kind
+
+    assert release_kind(_release_match(kind="movies")) == "movie"
+    assert release_kind(_release_match(kind="movie")) == "movie"
+    assert release_kind(_release_match(kind="series")) == "tv"
+    assert release_kind(_release_match(kind="tv")) == "tv"
+
+
+def test_release_identity_prefers_metadata_then_slug() -> None:
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": 1986})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={"Title": "Round Midnight", "Year": "1986"})) == (
+        "Round Midnight",
+        1986,
+    )
+    assert release_identity(_release_match(metadata={}, title_slug="round-midnight-1986")) == ("Round Midnight", 1986)
+    assert release_identity(_release_match(metadata={}, title_slug="lost")) == ("Lost", None)
+    assert release_identity(_release_match(metadata={}, title_slug="")) == (None, None)
+
+
+def test_release_identity_keeps_a_title_that_ends_in_a_year() -> None:
+    """The slug's trailing number is a year suffix, not the tail of the title
+    -- unless it is. This names the completed folder (ripper `miss_title`), so
+    "Blade Runner 2049" must not become "Blade Runner"."""
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    # Past the 2029 cap the dispatcher's own year-suffix regex uses.
+    assert release_identity(_release_match(metadata={}, title_slug="blade-runner-2049")) == ("Blade Runner 2049", None)
+    # TheDiscDB's own Year settles the ambiguous ones either way.
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049-2017")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 1975}, title_slug="death-race-2000")) == (
+        "Death Race 2000",
+        1975,
+    )
+    # A year-only title keeps its suffix read as the year, the one reading the
+    # slug alone supports.
+    assert release_identity(_release_match(metadata={}, title_slug="1917-2019")) == ("1917", 2019)
+
+
+def test_release_result_builds_the_thediscdb_identity() -> None:
+    from arm_backend.identity.sources.thediscdb import release_result
+
+    result = release_result(_release_match(kind="series", metadata={"Title": "Round Midnight", "Year": 1986}), "tt1")
+    assert result is not None
+    assert (result.title, result.year, result.kind, result.provider) == ("Round Midnight", 1986, "tv", "thediscdb")
+    assert result.payload == {"imdb_id": "tt1", "thediscdb_release": "r"}
+    assert release_result(_release_match(title_slug=""), "tt1") is None
+
+
+def _episodes(season: str, count: int = 3) -> list[dict[str, Any]]:
+    return [
+        {
+            "SourceFile": f"0000{i}.mpls",
+            "Duration": "0:45:00",
+            "Item": {"Type": "Episode", "Season": season, "Episode": str(i)},
+        }
+        for i in range(1, count + 1)
+    ]
+
+
+_EPISODES_S3 = _episodes("3")
+
+
+def _scan(titles: list[dict[str, Any]]) -> ScanResult:
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[ScanTitle(index=i, duration_seconds=2700, source_file=t["SourceFile"]) for i, t in enumerate(titles)],
+    )
+
+
+def test_build_claims_claims_the_season_and_disc_for_a_single_season_release() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = 2
+    match.release_seasons = [3]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number == 2
+
+
+def test_build_claims_skips_disc_number_for_a_multi_season_release() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = 14
+    match.release_seasons = [1, 2, 3, 4]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number is None
+
+
+def test_build_claims_skips_disc_number_when_index_is_not_an_int() -> None:
+    match = _match(_EPISODES_S3, kind="series")
+    match.disc["Index"] = "two"
+    match.release_seasons = [3]
+    claims = build_claims(match, _scan(_EPISODES_S3), now=NOW)
+    assert claims.job.season == 3 and claims.job.disc_number is None
+
+
+def test_build_claims_claims_no_season_when_titles_span_seasons() -> None:
+    titles = _episodes("3", 2) + [
+        {"SourceFile": "00009.mpls", "Duration": "0:45:00", "Item": {"Type": "Episode", "Season": "4", "Episode": "1"}}
+    ]
+    claims = build_claims(_match(titles, kind="series"), _scan(titles), now=NOW)
+    assert claims.job.season is None
+
+
+def test_build_claims_ignores_the_season_of_non_episode_titles() -> None:
+    titles = _episodes("3", 2) + [
+        {"SourceFile": "00009.mpls", "Duration": "0:05:00", "Item": {"Type": "Extra", "Season": "9"}}
+    ]
+    claims = build_claims(_match(titles, kind="series"), _scan(titles), now=NOW)
+    assert claims.job.season == 3

@@ -1,7 +1,9 @@
 import asyncio
 import contextlib
 import logging
+import os
 import re
+import signal
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -20,6 +22,22 @@ _TRACK_DONE_RE = re.compile(r"Track\s+(\d+)\s*:\s*Reading.*?\bdone\b", re.IGNORE
 
 
 OnAbcdeTrackDone = Callable[[int, RipResult], Awaitable[None]]
+
+
+def _kill_group(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL abcde and everything it forked.
+
+    abcde is a bash script that runs cdparanoia and the encoders as
+    children. Killing bash alone orphans a cdparanoia that keeps the
+    drive open (the abandon eject then fails EBUSY) and keeps writing
+    into a raw dir that is about to be deleted. The group id is bash's
+    pid because of `start_new_session=True`; a group that already
+    emptied out is fine.
+    """
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    with contextlib.suppress(ProcessLookupError):
+        proc.kill()
 
 
 def _abcde_config(output_dir: Path) -> str:
@@ -128,6 +146,7 @@ async def rip_cd(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(output_dir),
+            start_new_session=True,
         )
     except FileNotFoundError as e:
         conf_path.unlink(missing_ok=True)
@@ -170,10 +189,10 @@ async def rip_cd(
     finally:
         # Cancel-safe: if the parent task was cancelled (abandon flow) or
         # we timed out above, abcde is still running and writing to the raw
-        # dir. Kill it before letting CancelledError propagate / before
-        # returning a timeout result.
+        # dir. Kill it and its children before letting CancelledError
+        # propagate / before returning a timeout result.
         if proc.returncode is None:
-            proc.kill()
+            _kill_group(proc)
             with contextlib.suppress(BaseException):
                 await proc.wait()
         with contextlib.suppress(asyncio.CancelledError):

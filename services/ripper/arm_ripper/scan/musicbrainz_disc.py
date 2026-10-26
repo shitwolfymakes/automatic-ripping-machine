@@ -20,11 +20,12 @@ async def scan_cd(device_path: str) -> ScanResult | None:
         logger.warning("python-discid not installed; CD identification skipped")
         return None
 
-    def _read() -> tuple[str, list[tuple[int, int]]] | None:
+    def _read() -> tuple[str, list[tuple[int, int]], str | None] | None:
         try:
             with discid.read(device_path) as disc:
                 tracks = [(t.number, int(t.seconds)) for t in disc.tracks]
-                return disc.id, tracks
+                toc = getattr(disc, "toc_string", None)
+                return disc.id, tracks, toc if isinstance(toc, str) and toc else None
         except Exception as e:  # libdiscid raises a bare DiscError
             logger.info("discid read failed device=%s err=%s", device_path, e)
             return None
@@ -32,7 +33,7 @@ async def scan_cd(device_path: str) -> ScanResult | None:
     result = await asyncio.to_thread(_read)
     if result is None:
         return None
-    disc_id, tracks = result
+    disc_id, tracks, cd_toc = result
     if not tracks:
         return None
 
@@ -40,6 +41,7 @@ async def scan_cd(device_path: str) -> ScanResult | None:
     return ScanResult(
         disc_type=DiscType.CD,
         musicbrainz_disc_id=disc_id,
+        cd_toc=cd_toc,
         titles=titles,
         raw={"track_count": len(tracks)},
     )

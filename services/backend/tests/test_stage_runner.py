@@ -4,28 +4,25 @@ sweep (design spec 5, 6.2, 6.3, 9; plan Task 8)."""
 
 import asyncio
 import logging
-import os
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
+import httpx
+import pytest
 
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import MediaType  # noqa: E402
-from arm_common.schemas import ExternalIds  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import MediaType
+from arm_common.schemas import ExternalIds
 
-from arm_backend.identity.episodes.model import Episode  # noqa: E402
-from arm_backend.identity.http import SourceError  # noqa: E402
-from arm_backend.identity.proposals import claims_of, record_manual_job  # noqa: E402
-from arm_backend.identity import stage_runner as stage_runner_module  # noqa: E402
-from arm_backend.identity.stage_runner import (  # noqa: E402
+from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.http import SourceError
+from arm_backend.identity.proposals import claims_of, record_manual_job
+from arm_backend.identity import stage_runner as stage_runner_module
+from arm_backend.identity.stage_runner import (
     EpisodeStageRunner,
     build_providers,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 CFG = Config(id=1)
 
@@ -910,6 +907,8 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
         meta={"identity_claims": {"sources": {"episodes_tmdb": {}}}},
     )
     not_tv = _job("job_movie", status=JobStatus.IDENTIFIED, media_type=MediaType.MOVIE)
+    # The operator cleared this one: the sweep must not bring the match back.
+    cleared = _job("job_cleared", status=JobStatus.IDENTIFIED, meta={"identity_claims": {"episodes_cleared": True}})
     # RIPPED is terminal: pre-PR-3b jobs must not all be matched on upgrade.
     wrong_status = _job("job_ripped", status=JobStatus.RIPPED)
 
@@ -920,8 +919,9 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
         eligible_ripping,
         already_ran,
         not_tv,
+        cleared,
         wrong_status,
-        tracks=[_track(eligible.id, 0, 1500), _track(eligible_ripping.id, 0, 1500)],
+        tracks=[_track(eligible.id, 0, 1500), _track(eligible_ripping.id, 0, 1500), _track(cleared.id, 0, 1500)],
     )
     hub = _Hub()
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
@@ -1067,6 +1067,28 @@ async def test_overlapping_holds_wait_for_the_last_release_d093() -> None:
     runner.release(job.id)  # B is done
     await runner.drain()
     assert runs == [job.id] and runner._held == {}
+
+
+async def test_release_without_rerun_drops_the_in_flight_outcome() -> None:
+    """Clear episodes: the hold is released with `rerun=False` while a run is
+    still waiting on providers. That run writes nothing when it reaches its
+    apply phase, and no rerun follows to put the placements back."""
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    gate = asyncio.Event()
+    reached = asyncio.Event()
+    provider = _GatedSeasonProvider(seasons={1: _season(1, DISTINCT)}, gates=[gate], reached=reached)
+    runner = _runner(db, _Hub(), [provider])
+
+    runner.schedule(job.id)
+    await asyncio.wait_for(reached.wait(), timeout=1)
+    runner.invalidate(job.id)
+    runner.release(job.id, rerun=False)  # the clear committed first
+    gate.set()
+    await runner.drain()
+    assert claims_of(job).sources == {}
+    assert provider._call_n == 1  # no rerun fetched the season again
+    assert runner._pending == {} and runner._rerun == set() and runner._discarded == set()
 
 
 async def test_release_without_a_pending_rerun_runs_nothing() -> None:

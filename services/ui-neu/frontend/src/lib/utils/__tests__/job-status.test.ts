@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveJobStatus, isPartialComplete, reviewPhaseBadge, hasTitleMatch } from '$lib/utils/job-status';
+import {
+	effectiveJobStatus,
+	isPartialComplete,
+	reviewPhaseBadge,
+	hasTitleMatch,
+	identitySuggestionOf,
+	isIdentifyMiss,
+	missReason,
+	episodeStatus,
+	providerLabel,
+	PROVIDER_LABELS
+} from '$lib/utils/job-status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
@@ -95,6 +106,77 @@ describe('reviewPhaseBadge', () => {
 	});
 });
 
+const SUGGESTION = {
+	provider: 'tmdb',
+	title: 'Iron Man',
+	year: 2008,
+	kind: 'movie',
+	poster_url: null,
+	external_ids: {},
+	overview: null,
+	payload: {},
+	suggested_at: '2026-10-15T10:00:00Z'
+};
+const heldJob = (status: string, extra: Record<string, unknown> = {}) =>
+	({
+		status,
+		title: 'MY_DISC',
+		transcode_progress: null,
+		metadata_json: { identity_suggestion: SUGGESTION, flags: { unidentified: true }, ...extra }
+	}) as any;
+
+describe('reviewPhaseBadge with an identity suggestion', () => {
+	it('awaiting_review + suggestion -> CONFIRM TITLE', () => {
+		const b = reviewPhaseBadge(heldJob('awaiting_review'));
+		expect(b.label).toBe('CONFIRM TITLE');
+		expect(b.accent).toBe('var(--color-accent-4)');
+	});
+	it('awaiting_user_id + suggestion -> CONFIRM TITLE', () => {
+		expect(reviewPhaseBadge(heldJob('awaiting_user_id')).label).toBe('CONFIRM TITLE');
+	});
+	it('ripped_awaiting_identify + suggestion -> CONFIRM TITLE', () => {
+		expect(reviewPhaseBadge(heldJob('ripped_awaiting_identify')).label).toBe('CONFIRM TITLE');
+	});
+	it('previously ripped still wins over a suggestion', () => {
+		const b = reviewPhaseBadge(heldJob('awaiting_review', { previously_ripped: { job_id: 'job_old' } }));
+		expect(b.label).toBe('ALREADY RIPPED');
+	});
+	it('a suggestion on another status does not change its badge', () => {
+		expect(reviewPhaseBadge(heldJob('identified')).label).toBe('READY');
+	});
+});
+
+describe('identitySuggestionOf', () => {
+	it('returns the held suggestion', () => {
+		expect(identitySuggestionOf(heldJob('awaiting_review'))?.title).toBe('Iron Man');
+	});
+	it('null when absent, null metadata, or no job', () => {
+		expect(identitySuggestionOf({ metadata_json: {} } as any)).toBeNull();
+		expect(identitySuggestionOf({ metadata_json: { identity_suggestion: null } } as any)).toBeNull();
+		expect(identitySuggestionOf({ metadata_json: null } as any)).toBeNull();
+		expect(identitySuggestionOf(null)).toBeNull();
+		expect(identitySuggestionOf(undefined)).toBeNull();
+	});
+});
+
+describe('PROVIDER_LABELS / providerLabel', () => {
+	it('maps every known provider', () => {
+		expect(PROVIDER_LABELS).toEqual({
+			tmdb: 'TMDb',
+			omdb: 'OMDb',
+			tvmaze: 'TVmaze',
+			tvdb: 'TVDB',
+			musicbrainz: 'MusicBrainz',
+			arm_server: 'ARM community database',
+			thediscdb: 'TheDiscDB'
+		});
+		expect(providerLabel('arm_server')).toBe('ARM community database');
+	});
+	it('falls back to the id itself', () => {
+		expect(providerLabel('somewhere_else')).toBe('somewhere_else');
+	});
+});
+
 import { transcodeColumnStatus } from '$lib/utils/job-status';
 
 const tp = (state: string, tasks_total: number, tasks_done: number, tasks_failed: number) =>
@@ -130,5 +212,189 @@ describe('transcodeColumnStatus', () => {
 			label: 'Transcoding 2/4',
 			badgeStatus: 'transcoding'
 		});
+	});
+});
+
+describe('isIdentifyMiss', () => {
+	it('is awaiting_user_id, or flagged unidentified', () => {
+		expect(isIdentifyMiss({ status: 'awaiting_user_id', metadata_json: null } as any)).toBe(true);
+		expect(isIdentifyMiss({ status: 'identified', metadata_json: { flags: { unidentified: true } } } as any)).toBe(
+			true
+		);
+		expect(isIdentifyMiss({ status: 'awaiting_review', metadata_json: { flags: {} } } as any)).toBe(false);
+	});
+});
+
+describe('missReason', () => {
+	const a = (outcome: string, extra: Record<string, unknown> = {}) => ({
+		source: 'tmdb',
+		step: 'title',
+		kind: 'movie',
+		outcome,
+		detail: null,
+		...extra
+	});
+	const missed = (attempts: unknown[] | null | undefined, over: Record<string, unknown> = {}) =>
+		({
+			status: 'awaiting_user_id',
+			title: 'MY_DISC',
+			metadata_json: { flags: {}, identify_attempts: attempts },
+			...over
+		}) as any;
+
+	it('no attempts (an older job) gives no line', () => {
+		expect(missReason(missed(undefined))).toBeNull();
+		expect(missReason(missed(null))).toBeNull();
+		expect(missReason(missed([]))).toBeNull();
+		expect(missReason({ status: 'awaiting_user_id', title: 'X', metadata_json: null } as any)).toBeNull();
+	});
+	it('a job that is not a miss gives no line', () => {
+		expect(missReason(missed([a('miss')], { status: 'awaiting_review' }))).toBeNull();
+	});
+	it('an unidentified job past the review gate still gets the line', () => {
+		const job = missed([a('miss', { detail: 'HEAT' })], {
+			status: 'identified',
+			metadata_json: { flags: { unidentified: true }, identify_attempts: [a('miss', { detail: 'HEAT' })] }
+		});
+		expect(missReason(job)).toContain('"HEAT"');
+	});
+	it('any no_sources wins', () => {
+		expect(missReason(missed([a('miss'), a('no_sources', { source: null, kind: 'tv' })]))).toBe(
+			'No online source is switched on for this kind of disc.'
+		);
+	});
+	it('every attempt not_configured', () => {
+		expect(missReason(missed([a('not_configured'), a('not_configured', { source: 'omdb' })]))).toBe(
+			'No API keys are saved for the sources in your lists.'
+		);
+	});
+	it('a timeout with no miss', () => {
+		expect(missReason(missed([a('timeout'), a('error', { source: 'omdb' })]))).toBe(
+			'The lookup timed out. Try the search below.'
+		);
+		expect(
+			missReason(
+				missed([
+					{ source: null, step: 'title', kind: null, outcome: 'timeout', detail: 'lookup took longer than 25 s' }
+				])
+			)
+		).toBe('The lookup timed out. Try the search below.');
+	});
+	it('otherwise names the last searched title', () => {
+		expect(
+			missReason(missed([a('miss', { detail: 'MY DISC' }), a('miss', { detail: 'MY DISC 2' }), a('timeout')]))
+		).toBe('No source found a close match for "MY DISC 2". Try another source in the search below.');
+	});
+	it('a CD miss has no source-switch hint', () => {
+		expect(missReason(missed([a('miss', { detail: 'ALBUM' })], { disc_type: 'cd' }))).toBe(
+			'No source found a close match for "ALBUM".'
+		);
+	});
+	it('falls back to the job title when no title attempt carries one', () => {
+		expect(missReason(missed([a('miss', { step: 'imdb', detail: 'tt1' })]))).toBe(
+			'No source found a close match for "MY_DISC". Try another source in the search below.'
+		);
+	});
+	it('the whole-dispatch timeout entry is not a searched title', () => {
+		const attempts = [
+			a('miss', { detail: 'HEAT' }),
+			{ source: null, step: 'title', kind: null, outcome: 'timeout', detail: 'lookup took longer than 25 s' }
+		];
+		expect(missReason(missed(attempts))).toBe(
+			'No source found a close match for "HEAT". Try another source in the search below.'
+		);
+	});
+});
+
+describe('episodeStatus', () => {
+	const tv = (over: Record<string, unknown> = {}, claims?: Record<string, { status: string }>) =>
+		({
+			id: 'job_1',
+			status: 'awaiting_review',
+			media_type: 'tv',
+			has_series: true,
+			metadata_json: claims ? { identity_claims: { sources: claims } } : {},
+			...over
+		}) as any;
+	const ep = (n: number | null, over: Record<string, unknown> = {}) =>
+		({ kind: 'video_title', excluded: false, episode_number: n, role: n == null ? null : 'episode', ...over }) as any;
+
+	it('no series known waits for the show', () => {
+		expect(episodeStatus(tv({ has_series: false }))).toEqual({
+			state: 'waiting',
+			source: null,
+			total: null,
+			unmatched: null
+		});
+	});
+	it('an ok episode claim with every title placed is matched, naming its source', () => {
+		const c = { episodes_tvmaze: { status: 'ok' }, episodes_tmdb: { status: 'miss' } };
+		expect(episodeStatus(tv({}, c), [ep(1), ep(2), ep(null, { role: 'extra' })])).toEqual({
+			state: 'matched',
+			source: 'TVmaze',
+			total: 3,
+			unmatched: 0
+		});
+		expect(episodeStatus(tv({}, { episodes_tvdb: { status: 'ok' } }))?.source).toBe('TVDB');
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }))?.source).toBe('TMDb');
+	});
+	it('every title placed from a held result is a guess, not matched', () => {
+		const c = { episodes_tmdb: { status: 'ok' } };
+		expect(episodeStatus(tv({ episodes_unsure: true }, c), [ep(1), ep(2)])).toEqual({
+			state: 'guess',
+			source: 'TMDb',
+			total: 2,
+			unmatched: 0
+		});
+		// A guess with unplaced titles is attention first.
+		expect(episodeStatus(tv({ episodes_unsure: true }, c), [ep(1), ep(null)])?.state).toBe('attention');
+	});
+	it('an ok claim with unplaced titles needs attention, counting only selected video titles', () => {
+		const tracks = [ep(1), ep(null), ep(null, { excluded: true }), ep(null, { kind: 'audio_track' })];
+		expect(episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }), tracks)).toEqual({
+			state: 'attention',
+			source: 'TMDb',
+			total: 2,
+			unmatched: 1
+		});
+	});
+	it('a pinned source wins over an earlier ok source', () => {
+		const c = { episodes_tmdb: { status: 'ok' }, episodes_tvmaze: { status: 'ok' } };
+		const j = tv({ metadata_json: { identity_claims: { sources: c, pin: { episode: 'episodes_tvmaze' } } } });
+		expect(episodeStatus(j)?.source).toBe('TVmaze');
+	});
+	it('an ok non-suggestion beats an earlier ok suggestion', () => {
+		const c = { episodes_tmdb: { status: 'ok', suggestion: true }, episodes_tvdb: { status: 'ok' } };
+		expect(episodeStatus(tv({}, c as any))?.source).toBe('TVDB');
+	});
+	it('claims present but none ok needs attention', () => {
+		const c = { episodes_tmdb: { status: 'miss' }, episodes_tvmaze: { status: 'error' } };
+		expect(episodeStatus(tv({}, c), [ep(null), ep(null)])).toEqual({
+			state: 'attention',
+			source: null,
+			total: 2,
+			unmatched: 2
+		});
+		expect(episodeStatus(tv({}, c))?.state).toBe('attention');
+	});
+	it('claims present but none ok, with every title placed by hand, is matched', () => {
+		const c = { episodes_tmdb: { status: 'miss' } };
+		expect(episodeStatus(tv({}, c), [ep(1), ep(null, { role: 'extra' })])).toEqual({
+			state: 'matched',
+			source: null,
+			total: 2,
+			unmatched: 0
+		});
+	});
+	it('no episode claims yet, or a re-match running, is matching', () => {
+		expect(episodeStatus(tv())?.state).toBe('matching');
+		expect(episodeStatus(tv({}, { tmdb: { status: 'ok' } }))?.state).toBe('matching');
+		const running = episodeStatus(tv({}, { episodes_tmdb: { status: 'ok' } }), [ep(1), ep(null)], true);
+		expect(running).toEqual({ state: 'matching', source: 'TMDb', total: 2, unmatched: 1 });
+	});
+	it('absent for movies and post-rip jobs', () => {
+		expect(episodeStatus(tv({ media_type: 'movie' }))).toBeNull();
+		expect(episodeStatus(tv({ status: 'ripped' }))).toBeNull();
+		expect(episodeStatus(tv({ status: 'ripped_partial' }))).toBeNull();
 	});
 });

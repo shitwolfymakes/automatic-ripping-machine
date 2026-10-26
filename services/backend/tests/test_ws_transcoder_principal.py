@@ -5,7 +5,8 @@ Covers:
   passes a service token AND `task_id_hint` is set (sourced from
   `X-ARM-Task-Id` at the handshake).
 - `can_subscribe` allows a transcoder to subscribe `transcoder.commands.{task_id}`
-  but no other topic.
+  (its own task, while QUEUED pre-claim or IN_PROGRESS claimed by the same
+  hostname) but no other topic.
 - `can_publish` allows a transcoder to publish on `transcode.progress.{task_id}`
   iff the underlying TranscodeTask is `claimed_by` the same hostname AND in
   `IN_PROGRESS`. Other progress topics, other tasks, or stale claim → 403.
@@ -13,23 +14,20 @@ Covers:
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.ws.authz import can_publish, can_subscribe  # noqa: E402
-from arm_backend.ws.principal import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.ws.authz import can_publish, can_subscribe
+from arm_backend.ws.principal import (
     AuthError,
     ServicePrincipal,
     UIPrincipal,
     resolve_principal,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
@@ -125,6 +123,34 @@ def test_service_token_without_hostname_raises() -> None:
 async def test_transcoder_can_subscribe_own_command_topic(session: Any) -> None:
     p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_live")
     assert await can_subscribe(p, "transcoder.commands.txt_live", session) is True
+
+
+async def test_transcoder_can_subscribe_queued_task_before_claim(session: Any) -> None:
+    # The transcoder subscribes before POST /claim, so the unclaimed QUEUED row must pass.
+    p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_stale")
+    assert await can_subscribe(p, "transcoder.commands.txt_stale", session) is True
+
+
+async def test_transcoder_cannot_subscribe_task_claimed_by_other_host(session: Any) -> None:
+    # D-231: X-ARM-Task-Id alone is not enough once another host holds the claim.
+    p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_other")
+    assert await can_subscribe(p, "transcoder.commands.txt_other", session) is False
+
+
+async def test_transcoder_cannot_subscribe_unknown_or_terminal_task(session: Any) -> None:
+    p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_missing")
+    assert await can_subscribe(p, "transcoder.commands.txt_missing", session) is False
+    session._tasks["txt_done"] = TranscodeTask(
+        id="txt_done",
+        session_application_id="sap_1",
+        source_track_id="trk_4",
+        status=TranscodeTaskStatus.DONE,
+        claimed_by=_HOSTNAME,
+        attempts=1,
+        progress_pct=100,
+    )
+    p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_done")
+    assert await can_subscribe(p, "transcoder.commands.txt_done", session) is False
 
 
 async def test_transcoder_cannot_subscribe_other_command_topic(session: Any) -> None:

@@ -3,23 +3,20 @@ episode_auto_apply) on the config API: view defaults + PATCH validation."""
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-import pytest  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import config as config_router  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_common import Config, RetentionPolicy, User  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import config as config_router
+from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_common import Config, RetentionPolicy, User
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -40,7 +37,6 @@ def _seed(db: FakeSession) -> None:
             default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
             notification_apprise_urls=[],
             notifications_enabled=False,
-            metadata_provider="tmdb",
         )
     ]
     db.rows.setdefault("users", []).append(
@@ -282,6 +278,45 @@ def test_not_null_int_settings_refuse_null_with_400(signing_key: bytes, body: di
     assert r.json()["detail"] == detail  # type: ignore[attr-defined]
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "auto_transcode_on_idle",
+        "auto_rip_on_insert",
+        "block_on_miss",
+        "community_keydb_enabled",
+        "makemkv_sdf_enabled",
+        "thediscdb_enabled",
+        "ripping_paused",
+        "hold_for_review",
+        "notifications_enabled",
+    ],
+)
+def test_not_null_bool_settings_refuse_null_with_400(signing_key: bytes, key: str) -> None:
+    """D-164: a JSON null for a NOT NULL toggle is a 400, not a 500 on commit."""
+    db = FakeSession()
+    _seed(db)
+    before = getattr(_row(db), key)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {key: None})
+    assert r.status_code == 400  # type: ignore[attr-defined]
+    assert r.json()["detail"] == f"{key} must not be null"  # type: ignore[attr-defined]
+    assert getattr(_row(db), key) == before
+
+
+def test_null_still_clears_a_nullable_setting(signing_key: bytes) -> None:
+    """The D-164 guard only covers NOT NULL columns; a secret still clears."""
+    db = FakeSession()
+    _seed(db)
+    _row(db).tmdb_api_key = "old"
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _patch(client, token, {"tmdb_api_key": None})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert _row(db).tmdb_api_key is None
+
+
 def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
@@ -290,3 +325,72 @@ def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
         r = _patch(client, token, {"manual_wait_seconds": 0})
     assert r.status_code == 200, r.text  # type: ignore[attr-defined]
     assert _row(db).manual_wait_seconds == 0
+
+
+def _request(**state: object) -> object:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(**state)))
+
+
+async def test_re_resolve_listing_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The PATCH has committed before the re-resolve runs; a failed job listing
+    is logged and nothing is resolved."""
+    db = FakeSession()
+    resolved: list[str] = []
+
+    async def _raising_execute(_stmt: object) -> None:
+        raise RuntimeError("db went away")
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        resolved.append(job.id)
+
+    monkeypatch.setattr(db, "execute", _raising_execute)
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    await config_router._reresolve_identity(db, _request())  # type: ignore[arg-type]
+    assert resolved == []
+
+
+async def test_re_resolve_skips_a_job_deleted_after_the_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _identity_jobs(db)
+    real_execute = db.execute
+    resolved: list[str] = []
+
+    async def _execute(stmt: object) -> object:
+        result = await real_execute(stmt)
+        if "session_applications" in str(stmt):
+            db.rows["jobs"] = []  # every candidate deleted before its lock
+        return result
+
+    async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
+        resolved.append(job.id)
+
+    monkeypatch.setattr(db, "execute", _execute)
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    stage = _Stage()
+    await config_router._reresolve_identity(db, _request(episode_stage=stage))  # type: ignore[arg-type]
+    assert resolved == [] and stage.scheduled == []
+
+
+async def test_re_resolve_emits_when_the_identity_changed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A changed identity is committed then announced on the hub, per job."""
+    from arm_backend.identity.pipeline import ResolveOutcome
+
+    db = FakeSession()
+    _identity_jobs(db)
+    emitted: list[str] = []
+    hub = object()
+
+    async def fake_resolve(_session, _job):  # type: ignore[no-untyped-def]
+        return ResolveOutcome(changed=1, track_ids=frozenset())
+
+    async def fake_emit(_session, got_hub, job, _resolved, *, sources):  # type: ignore[no-untyped-def]
+        assert got_hub is hub and sources == {}
+        emitted.append(job.id)
+
+    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_router, "emit_identity_resolved", fake_emit)
+    await config_router._reresolve_identity(db, _request(ws_hub=hub))  # type: ignore[arg-type]
+    assert sorted(emitted) == ["job_live", "job_ripped_unapplied"]
+    assert db.committed == 4  # resolve + emit, per job

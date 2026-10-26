@@ -8,17 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend import log_tailer as lt_mod  # noqa: E402
-from arm_backend.log_tailer import LogTailer, _FileState  # noqa: E402
+from arm_backend import log_tailer as lt_mod
+from arm_backend.log_tailer import LogTailer, _FileState
 
 
 class _Hub:

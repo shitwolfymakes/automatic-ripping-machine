@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from fastapi.testclient import TestClient
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
-from tests.test_ripper_heartbeat import _make_app, _seed, _service_auth  # noqa: E402
+from tests._fakes import FakeSession
+from tests.test_ripper_heartbeat import _make_app, _seed, _service_auth
 
 
 def test_get_drive_returns_the_table_model_shape() -> None:

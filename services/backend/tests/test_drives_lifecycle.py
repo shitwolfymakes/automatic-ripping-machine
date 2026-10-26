@@ -3,26 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import secrets
 import time
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import httpx
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.ripper_manager import RipperManagerError  # noqa: E402
-from arm_backend.routers import drives as drives_router  # noqa: E402
-from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus, User  # noqa: E402
-from arm_common.enums import DiscType  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.ripper_manager import RipperManagerError
+from arm_backend.routers import drives as drives_router
+from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus, User
+from arm_common.enums import DiscType
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture

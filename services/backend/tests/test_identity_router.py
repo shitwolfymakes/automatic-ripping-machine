@@ -9,31 +9,27 @@ import copy
 import secrets
 from typing import Any
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import identity as identity_router
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import MediaType
+from arm_common.models.user import GUEST_ROLE
+from arm_common.schemas import ExternalIds
+from arm_common import User
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import identity as identity_router  # noqa: E402
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import MediaType  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
-from arm_common.schemas import ExternalIds  # noqa: E402
-from arm_common import User  # noqa: E402
+from arm_backend.identity import episode_stage
+from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.http import SourceError, SourceMiss
+from arm_backend.identity.proposals import claims_of
 
-from arm_backend.identity import episode_stage  # noqa: E402
-from arm_backend.identity.episodes.model import Episode  # noqa: E402
-from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
-from arm_backend.identity.proposals import claims_of  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 CFG = Config(id=1)
 
@@ -131,6 +127,7 @@ class _FakeStageRunner:
         self.provider_calls: list[Config] = []
         self.invalidate_calls: list[str] = []
         self.release_calls: list[str] = []
+        self.release_reruns: list[bool] = []
 
     def providers(self, cfg: Config) -> list[Any]:
         self.provider_calls.append(cfg)
@@ -139,10 +136,11 @@ class _FakeStageRunner:
     def invalidate(self, job_id: str) -> None:
         self.invalidate_calls.append(job_id)
 
-    def release(self, job_id: str) -> None:
+    def release(self, job_id: str, rerun: bool = True) -> None:
         # D-093: every invalidate is released, after the router's commit.
         assert job_id in self.invalidate_calls
         self.release_calls.append(job_id)
+        self.release_reruns.append(rerun)
 
 
 @pytest.fixture
@@ -453,11 +451,12 @@ def test_match_apply_with_source_pins_and_survives_forced_suggestion(signing_key
     assert outcome["suggestion"] is True
 
 
-def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(signing_key: bytes) -> None:
-    """End to end (Task 9 F4 round 2): pin-apply a forced suggestion via
-    `/identity/match`, then `DELETE /identity/pin`. Nothing else claims these
-    tracks, so they revert immediately (episode_number cleared), and
-    `track.updated` fires for every track the resolver reverted."""
+def test_pin_then_unpin_keeps_the_guess_on_the_tracks(signing_key: bytes) -> None:
+    """End to end: apply a held result via `/identity/match` with a source
+    (which records the choice as the pin), then `DELETE /identity/pin`. A
+    held result is applied as a guess whether or not it is pinned, so the
+    tracks keep their episodes, the job stays unsure, and only
+    `job.identity_updated` fires (no track changed)."""
     job = _job()
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks, cfg=Config(id=1, episode_auto_apply=False))
@@ -483,12 +482,12 @@ def test_pin_then_unpin_reverts_tracks_and_emits_track_updated(signing_key: byte
 
     assert r.status_code == 200
     assert claims_of(job).pin == {}
-    assert all(t.episode_number is None for t in db.rows["tracks"])  # reverted: no other source claims them
+    assert {t.id for t in db.rows["tracks"] if t.episode_number is not None} == applied_track_ids
+    assert claims_of(job).unsure is True
 
     identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
     assert len(identity_events) == 1
-    track_events = {e["payload"]["track_id"] for e in hub.events if e["event_type"] == "track.updated"}
-    assert track_events == applied_track_ids
+    assert [e for e in hub.events if e["event_type"] == "track.updated"] == []
 
 
 def test_match_apply_persists_season_disc_and_tolerance_i3(signing_key: bytes) -> None:
@@ -705,6 +704,89 @@ def test_clear_pin_when_nothing_pinned_is_a_noop(signing_key: bytes) -> None:
 
     assert r.status_code == 200
     assert claims_of(job).pin == {}
+
+
+def test_clear_match_takes_the_placements_off_and_keeps_a_hand_set_track(signing_key: bytes) -> None:
+    """Clear episodes: the stored episode results and the pin go, the
+    resolver unplaces every track they placed, a hand-set track keeps its
+    manual claim, the job is no longer unsure, and the events fire."""
+    job = _job(
+        meta={
+            "identity": {"external_ids": {"imdb": "tt1"}},
+            "identity_claims": {
+                "sources": {
+                    "episodes_tmdb": {
+                        "status": "ok",
+                        "suggestion": True,
+                        "inputs": {"show_id": "5084"},
+                        "tracks": {
+                            "0": {"role": "episode", "season": 1, "episode": 3, "episode_name": "Ep3"},
+                            "1": {"role": "episode", "season": 1, "episode": 4, "episode_name": "Ep4"},
+                        },
+                    },
+                    "manual": {"status": "ok", "tracks": {"1": {"role": "episode", "season": 1, "episode": 9}}},
+                },
+                "pin": {"episode": "episodes_tmdb"},
+                "unsure": True,
+            },
+        }
+    )
+    tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
+    # Track 0 carries the guess an earlier resolve put on it.
+    tracks[0].role, tracks[0].season, tracks[0].episode_number, tracks[0].episode_name = "episode", 1, 3, "Ep3"
+    tracks[0].identity_provenance = {k: "episodes_tmdb" for k in ("role", "season", "episode_number", "episode_name")}
+    db = _db(job, tracks=tracks)
+    hub = _Hub()
+    app, admin_token, _ = _make_app(signing_key, db, hub=hub, stage_runner=None)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert db.locked == ["jobs"]
+    claims = claims_of(job)
+    assert set(claims.sources) == {"manual"} and claims.pin == {} and claims.unsure is False
+    assert r.json()["pin"] == {}
+    track_0 = next(t for t in db.rows["tracks"] if t.source_ref == "0")
+    track_1 = next(t for t in db.rows["tracks"] if t.source_ref == "1")
+    assert track_0.episode_number is None
+    assert track_1.episode_number == 9  # the operator's placement survives
+    identity_events = [e for e in hub.events if e["event_type"] == "job.identity_updated"]
+    assert len(identity_events) == 1
+    assert any(e["payload"]["track_id"] == track_0.id for e in hub.events if e["event_type"] == "track.updated")
+
+
+def test_clear_match_when_nothing_matched_is_a_noop(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert claims_of(job).sources == {}
+    assert claims_of(job).episodes_cleared is True  # the startup sweep leaves it alone
+
+
+def test_clear_match_invalidates_an_in_flight_run_and_releases_it(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert runner.invalidate_calls == [JOB_ID] and runner.release_calls == [JOB_ID]
+    assert runner.release_reruns == [False]  # the clear is not undone by a rerun
+
+
+def test_clear_match_unknown_job_404_and_reader_403(signing_key: bytes) -> None:
+    db = _db()
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        assert client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(admin_token)).status_code == 404
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    app, _, guest_token = _make_app(signing_key, db, stage_runner=None)
+    with TestClient(app) as client:
+        assert client.delete(f"/api/jobs/{JOB_ID}/identity/match", headers=_auth(guest_token)).status_code == 403
 
 
 def test_clear_pin_unknown_job_404(signing_key: bytes) -> None:
@@ -950,3 +1032,105 @@ def test_episodes_browse_never_offers_a_movie_tmdb_id_as_a_show_id(signing_key: 
 
     assert r.status_code == 200
     assert r.json()["show_id"] == "5084"  # resolved afresh, not the movie id
+
+
+# --- GET /identity/seasons -------------------------------------------------------
+
+
+def test_seasons_browse_happy_path(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT), 2: _season(2, DISTINCT)})
+    runner = _FakeStageRunner([provider])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 200
+    assert r.json() == {"source_id": "episodes_tmdb", "show_id": "100", "seasons": [1, 2]}
+
+
+def test_seasons_browse_without_show_id_404(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    runner = _FakeStageRunner([FakeProvider(show_id=None)])
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 404
+
+
+def test_seasons_browse_without_stage_runner_503(signing_key: bytes) -> None:
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=None)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 503
+
+
+def test_seasons_browse_source_error_502(signing_key: bytes) -> None:
+    class _Failing(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise SourceError("timeout")
+
+    runner = _FakeStageRunner([_Failing()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 502
+    assert "tmdb" in r.json()["detail"]
+
+
+def test_seasons_browse_show_miss_404(signing_key: bytes) -> None:
+    class _Gone(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise SourceMiss("no such show")
+
+    runner = _FakeStageRunner([_Gone()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 404
+    assert r.json()["detail"] == "tmdb: show not found"
+
+
+def test_seasons_browse_unexpected_exception_502(signing_key: bytes, caplog: pytest.LogCaptureFixture) -> None:
+    class _Boom(FakeProvider):
+        async def seasons(self, show_id: str) -> list[int]:
+            raise RuntimeError("boom")
+
+    runner = _FakeStageRunner([_Boom()])
+    app, admin_token, _ = _make_app(signing_key, _db(_job()), stage_runner=runner)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{JOB_ID}/identity/seasons", params={"source": "tmdb"}, headers=_auth(admin_token))
+    assert r.status_code == 502
+    assert r.json()["detail"] == "tmdb: unexpected error"
+    assert "Traceback" in caplog.text
+
+
+def test_match_scan_seasons_scans_despite_a_job_season(signing_key: bytes) -> None:
+    """`scan_seasons: true` reaches the stage: the provider's season list is
+    asked for even though the job already has a season."""
+    job = _job(season=1)
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT), 2: _season(2, DISTINCT)})
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([provider]))
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"source": "tmdb", "scan_seasons": True},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 200
+    assert "seasons" in provider.calls
+
+
+def test_match_season_and_scan_seasons_together_422(signing_key: bytes) -> None:
+    job = _job()
+    db = _db(job)
+    app, admin_token, _ = _make_app(signing_key, db, stage_runner=_FakeStageRunner([FakeProvider()]))
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{JOB_ID}/identity/match",
+            json={"season": 2, "scan_seasons": True},
+            headers=_auth(admin_token),
+        )
+    assert r.status_code == 422

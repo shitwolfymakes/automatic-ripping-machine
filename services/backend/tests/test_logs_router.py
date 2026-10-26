@@ -14,20 +14,18 @@ import secrets
 import zipfile
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import logs as logs_router  # noqa: E402
-from arm_common import User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import logs as logs_router
+from arm_common import User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -341,6 +339,27 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
     assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped (133)
 
 
+def test_stream_limit_zero_returns_no_lines(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
+    _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
+        (tmp_path / "jobs").mkdir()
+        (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").write_text(
+            json.dumps(_line(msg="l0")) + "\n", encoding="utf-8"
+        )
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.content == b""
+
+
 def test_stream_fallback_skips_unreadable_log(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -369,3 +388,79 @@ def test_zip_fallback_skips_unreadable_log(tmp_path: Path, signing_key: bytes, m
     with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
         assert "arm-backend.log" in zf.namelist()
         assert "bad.log" not in zf.namelist()
+
+
+# --- GET /api/logs (index of per-job log files) ---------------------------
+
+_JOB_A = "job_01JZXR7K3M5Q8N4VWA00000001"
+_JOB_B = "job_01JZXR7K3M5Q8N4VWA00000002"
+
+
+def _job_file(log_dir: Path, name: str, body: str, mtime: float) -> Path:
+    jobs = log_dir / "jobs"
+    jobs.mkdir(exist_ok=True)
+    path = jobs / name
+    path.write_text(body, encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_index_lists_size_and_mtime_newest_first(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", "abc\n", 1_700_000_000)
+    _job_file(tmp_path, f"{_JOB_B}.log", "abcdef\n", 1_700_000_100)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert [row["job_id"] for row in body] == [_JOB_B, _JOB_A]
+    assert [row["size_bytes"] for row in body] == [7, 4]
+    assert body[0]["modified_at"] == "2023-11-14T22:15:00Z"
+
+
+def test_index_skips_invalid_names_and_non_log_files(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", "x", 1_700_000_000)
+    _job_file(tmp_path, "notes.log", "x", 1_700_000_000)
+    _job_file(tmp_path, "..x.log", "x", 1_700_000_000)
+    _job_file(tmp_path, f"{_JOB_B}.txt", "x", 1_700_000_000)
+    (tmp_path / "jobs" / f"{_JOB_B}.log").mkdir()  # a directory is not a log file
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert [row["job_id"] for row in r.json()] == [_JOB_A]
+
+
+def test_index_missing_directory_is_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path / "nope")
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_index_rejects_bad_token(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    app, _ = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth("not-a-jwt"))
+    assert r.status_code == 401
+
+
+def test_index_does_not_shadow_job_routes(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", '{"job_id": "x", "msg": "hi"}\n', 1_700_000_000)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        one = client.get(f"/api/logs/{_JOB_A}", headers=_auth(token))
+        zipped = client.get(f"/api/logs/{_JOB_A}.zip", headers=_auth(token))
+    assert one.status_code == 200
+    assert one.headers["content-type"].startswith("application/x-ndjson")
+    assert zipped.status_code == 200
+    assert zipped.headers["content-type"] == "application/zip"

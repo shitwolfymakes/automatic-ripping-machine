@@ -20,7 +20,23 @@ from arm_common.enums import (
 )
 from arm_common.disc_shape import looks_episodic as _looks_episodic
 from arm_common.schemas.identity import IdentityClaims
-from arm_common.schemas.job_metadata import ExternalIds, JobMetadata, MusicMeta
+from arm_common.schemas.job_metadata import ExternalIds, IdentityFacts, JobMetadata, MusicMeta
+
+
+class ResolveMatch(BaseModel):
+    """A search result the operator picked (match picker spec 3.6). Its
+    presence makes `external_ids` replace the stored show ids wholesale."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["tmdb", "omdb", "tvmaze", "tvdb"]
+    # The candidate's own poster, edited or not: it becomes the automatic one.
+    poster_url: str | None = None
+    # True when the operator edited the poster URL before using the match;
+    # `poster_url_manual` is then the override (null clears it).
+    poster_is_manual: bool = False
+    poster_url_manual: str | None = None
+    facts: IdentityFacts | None = None
 
 
 class ResolveRequest(BaseModel):
@@ -58,6 +74,7 @@ class ResolveRequest(BaseModel):
     # Typed replacements for the last free-form uses.
     music: MusicMeta | None = None
     external_ids: ExternalIds | None = None
+    match: ResolveMatch | None = None
 
 
 class PreviousRipView(BaseModel):
@@ -224,6 +241,8 @@ class JobView(BaseModel):
     parked_session_ids: list[str] = []
     disc_number: int | None = None
     disc_total: int | None = None
+    # {attribute: source_id} for resolver-managed fields (display-only).
+    identity_provenance: dict[str, str] | None = None
     # Computed at identify; UI prefers `poster_url_manual` if set.
     poster_url: str | None = None
     poster_url_manual: str | None = None
@@ -268,6 +287,16 @@ class JobView(BaseModel):
         if isinstance(claims, IdentityClaims):
             return any(src.inputs.get("show_id") for src in claims.sources.values())
         return False
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def episodes_unsure(self) -> bool:
+        """The episode placement on the tracks came from a held result (a
+        guess): the card shows it amber and the review countdown holds."""
+        if self.media_type != MediaType.TV:
+            return False
+        claims = self.metadata_json.identity_claims
+        return isinstance(claims, IdentityClaims) and claims.unsure
 
 
 class HeldJobView(BaseModel):
@@ -342,6 +371,11 @@ class TrackView(BaseModel):
     # music, data tracks). NOT the rip status (`status` above) — this is the
     # transcode phase. Display-only; set by get_job_detail, not a Track column.
     transcode_status: TranscodeTaskStatus | None = None
+    # Encoder frame rate from that task's latest heartbeat, so the job page
+    # can show it beside an in-progress transcode. Same provenance as
+    # transcode_status: display-only, set by get_job_detail.
+    transcode_fps: float | None = None
+    transcode_avg_fps: float | None = None
     output_path: str | None
     size_bytes: int | None
     # `expected_size_bytes` is the scan-time MakeMKV estimate (TINFO:t,11);

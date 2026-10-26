@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.auto_session import (  # noqa: E402
+from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
     fan_out_waiting_identify_applications,
     media_mismatch_detail,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     Config,
     ContainerFormat,
     DiscType,
@@ -44,7 +41,7 @@ from arm_common import (  # noqa: E402
     TranscodeTool,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class CapturingHub:
@@ -618,6 +615,87 @@ async def test_awaiting_user_id_parks_as_waiting_identify(tmp_path: Path) -> Non
     # No transcode tasks fanned out → no session.queued emit (the dropdown
     # value sits idle until the user resolves identity).
     assert hub.events == []
+
+
+async def _manual_apply(db: FakeSession, job: Job) -> Any:
+    return await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("job_status", "skipped_reason"),
+    [(JobStatus.IDENTIFIED, "no_tracks"), (JobStatus.AWAITING_USER_ID, None)],
+)
+async def test_repeat_manual_park_returns_the_parked_row(
+    tmp_path: Path, job_status: JobStatus, skipped_reason: str | None
+) -> None:
+    """D-141: a second manual apply of the same session before the rip (or
+    before identify) returns the already-parked row instead of parking a
+    duplicate that the drain would later leave stuck on `collisions`."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=job_status)
+
+    first = await _manual_apply(db, job)
+    second = await _manual_apply(db, job)
+
+    assert first.idempotent is False
+    assert second.idempotent is True
+    assert second.skipped_reason == skipped_reason
+    assert second.application is not None and first.application is not None
+    assert second.application.id == first.application.id
+    assert len(db.rows["session_applications"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_lookup_tolerates_duplicate_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-141: rows parked as duplicates before the fix must not make the auto
+    idempotency lookup raise MultipleResultsFound; it takes the first."""
+    from sqlalchemy.exc import MultipleResultsFound
+
+    from tests import _fakes
+
+    def _strict_one_or_none(self: Any) -> Any | None:
+        # The fake returns rows[0]; make it raise like the real Result does.
+        if len(self.rows) > 1:
+            raise MultipleResultsFound()
+        return self.rows[0] if self.rows else None
+
+    monkeypatch.setattr(_fakes._Result, "scalar_one_or_none", _strict_one_or_none)
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id=f"sap_{n}",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+        for n in (1, 2)
+    ]
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="auto",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.application is not None
+    assert outcome.application.id == "sap_1"
 
 
 @pytest.mark.asyncio

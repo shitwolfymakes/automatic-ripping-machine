@@ -4,12 +4,8 @@ walkthrough after upgrading. Rendered offline like test_migration_chain."""
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from tests.test_migration_chain import _render_sql  # noqa: E402
+from tests.test_migration_chain import _render_sql
 
 _PARENT = "0041_virtual_drives"
 _REV = "0042_setup_state"

@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
+from datetime import UTC, datetime
 
-from datetime import UTC, datetime  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
+from arm_backend.config import Settings
+from arm_backend.notification_dispatcher import MessageDispatcher
+from arm_backend.notifications.message import Message
+from arm_common import Config, Event
 
-from arm_backend.config import Settings  # noqa: E402
-from arm_backend.notification_dispatcher import MessageDispatcher  # noqa: E402
-from arm_backend.notifications.message import Message  # noqa: E402
-from arm_common import Config, Event  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _settings() -> Settings:

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend.auth import declare_guest_reads
 from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
@@ -225,7 +226,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
     app.state.http = http
     app.state.started_at = datetime.now(UTC)
-    app.state.dispatcher = MetadataDispatcher(http, omdb_api_key_override=settings.OMDB_API_KEY)
+    app.state.dispatcher = MetadataDispatcher(http)
     app.state.ws_hub = WSHub()
     # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
     # request path, triggered by identify/resolve/PATCH (routers) and the
@@ -508,6 +509,7 @@ app.include_router(setup_router.router)
 app.include_router(files_router.router)
 app.include_router(users_router.router)
 app.include_router(ws_router)
+declare_guest_reads(app.routes)
 
 
 def main() -> None:

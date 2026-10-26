@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_common.enums import DiscType, JobStatus  # noqa: E402
-from arm_common.models.job import Job  # noqa: E402
-from arm_common.schemas import JobMetadata, JobView, flag_is_set, with_flags  # noqa: E402
+from arm_common.enums import DiscType, JobStatus
+from arm_common.models.job import Job
+from arm_common.schemas import JobMetadata, JobView, flag_is_set, with_flags
 
 
 def make_job(**overrides: object) -> Job:
@@ -208,3 +204,18 @@ def test_jobview_has_series_by_ids() -> None:
 def test_jobview_has_series_when_a_source_resolved_a_show() -> None:
     md = {"identity_claims": {"sources": {"episodes_tvmaze": {"status": "ok", "inputs": {"show_id": "1234"}}}}}
     assert JobView.model_validate(make_job(metadata_json=md)).has_series is True
+
+
+def test_jobview_episodes_unsure_reads_the_claims_flag_for_tv_only() -> None:
+    held = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}}
+    tv = make_job(metadata_json=held)
+    tv.media_type = "tv"
+    assert JobView.model_validate(tv).episodes_unsure is True
+    movie = make_job(metadata_json=held)
+    movie.media_type = "movie"
+    assert JobView.model_validate(movie).episodes_unsure is False  # switched to Movie: nothing to hold
+    sure = {"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok"}}}}
+    sure_tv = make_job(metadata_json=sure)
+    sure_tv.media_type = "tv"
+    assert JobView.model_validate(sure_tv).episodes_unsure is False
+    assert JobView.model_validate(make_job(metadata_json={})).episodes_unsure is False

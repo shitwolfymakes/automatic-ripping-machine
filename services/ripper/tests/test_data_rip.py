@@ -99,3 +99,23 @@ def test_source_size(tmp_path: Path) -> None:
     f.write_bytes(b"x" * 42)
     assert data_rip.source_size(str(f)) == 42
     assert data_rip.source_size(str(tmp_path / "missing.iso")) is None
+
+
+async def test_dd_failure_keeps_the_stderr_tail(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The decisive dd line comes last; a long stderr must keep its end, not its start (D-177)."""
+    src = tmp_path / "movie.iso"
+    src.write_bytes(b"x")
+    _patch_dd(monkeypatch, [], [], rc=1)
+    real_init = _FakeProc.__init__
+
+    def init_with_stderr(self: _FakeProc, *a: object, **kw: object) -> None:
+        real_init(self, *a, **kw)  # type: ignore[arg-type]
+        reader = asyncio.StreamReader()
+        reader.feed_data(("noise " * 200 + "dd: error reading '/dev/sr0': Input/output error").encode())
+        reader.feed_eof()
+        self.stderr = reader  # type: ignore[assignment]
+
+    monkeypatch.setattr(_FakeProc, "__init__", init_with_stderr)
+    result = await data_rip.rip_data(str(src), tmp_path / "out")
+    assert not result.ok
+    assert (result.error or "").endswith("Input/output error")

@@ -217,6 +217,7 @@ go_live() {
     else
         compose up -d --no-build
     fi
+    restart_ui_for_new_leaf
     respawn_rippers_if_needed "${started_before}"
 }
 
@@ -227,6 +228,7 @@ stack_up() {
     verify_images_present
     guard_running_spawned
     refresh_arm_gpus
+    refresh_ui_leaf
     backup_db
     go_live
 }
@@ -537,6 +539,7 @@ cmd_apply_upgrade() {
     verify_images_present
     guard_running_spawned
     refresh_arm_gpus
+    refresh_ui_leaf
     backup_db
 
     # The switch. From here the install is on the new release.

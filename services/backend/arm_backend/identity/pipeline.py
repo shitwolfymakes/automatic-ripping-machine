@@ -5,16 +5,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, Job, Track
+from arm_common import Config, Job, JobStatus, Track
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims
 
-from arm_backend.identity.proposals import claims_of, put_source
+from arm_backend.identity.proposals import claims_of, put_source, set_unsure
 from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.sources.base import JobContext, Source
 from arm_backend.identity.sources.registry import SOURCE_TIERS, HINT_SOURCES, disabled_source_ids, source_ranks
@@ -37,6 +37,14 @@ async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
     changed_ids: set[str] = set()
     resolution = resolve(claims_of(job), tiers=SOURCE_TIERS, ranks=source_ranks(cfg), disabled=disabled_source_ids(cfg))
     changed = apply_resolution(job, tracks, resolution, changed_track_ids=changed_ids)
+    # A guess flips to sure (or back) only through the resolver, so the flag
+    # counts as a change: callers emit `job.identity_updated` on it.
+    if set_unsure(job, resolution.episode_unsure):
+        changed += 1
+        if not resolution.episode_unsure and job.status == JobStatus.AWAITING_REVIEW and job.wait_start_time:
+            # The guess held the countdown, which kept running underneath:
+            # restart it so the now-confident disc does not auto-rip at once.
+            job.wait_start_time = datetime.now(timezone.utc)
     for track in tracks:
         session.add(track)
     session.add(job)
@@ -86,11 +94,9 @@ def hint_title(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> str | None
     return None
 
 
-def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
-    """True when any ok disc-hint source proposed a `season` — the hint title
-    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
-    first, not movie-first (a movie label ending in a season-shaped number,
-    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+def hint_season(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> int | None:
+    """The season of the first ok disc-hint source, in source order, that
+    proposed one; None when none did."""
     claim_sources = claims_of(job).sources
     for source in sources:
         entry = claim_sources.get(source.id)
@@ -100,5 +106,13 @@ def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
             and "season" in entry.job.model_fields_set
             and entry.job.season is not None
         ):
-            return True
-    return False
+            return entry.job.season
+    return None
+
+
+def hint_is_tv(job: Job, sources: Sequence[Source] = HINT_SOURCES) -> bool:
+    """True when any ok disc-hint source proposed a `season` — the hint title
+    is then TV-shaped (a season/box-set disc) and should be searched TMDb-TV
+    first, not movie-first (a movie label ending in a season-shaped number,
+    e.g. a real season disc, must not be mismatched to TMDb's top movie hit)."""
+    return hint_season(job, sources) is not None

@@ -10,8 +10,9 @@ Refresh keeps the previous index on any failure (mirror philosophy: a
 third-party outage must never break local operation). Build raises an
 exception if the tarball contains zero indexable discs (e.g., upstream
 layout change), so refresh propagates the error and the previous index
-remains untouched. Build is atomic: write `<dest>.new`, then os.replace
-over the live file.
+remains untouched. Build is atomic: write a uniquely named temp file next
+to the live index, then os.replace over it. `refresh` holds a process-wide
+lock so the daily loop and a manual refresh never build concurrently.
 """
 
 from __future__ import annotations
@@ -47,7 +48,8 @@ CREATE TABLE IF NOT EXISTS discs (
     release_slug TEXT NOT NULL,
     disc_json TEXT NOT NULL,
     metadata_json TEXT NOT NULL,
-    release_json TEXT NOT NULL
+    release_json TEXT NOT NULL,
+    release_seasons TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_discs_global ON discs(global_disc_id);
 """
@@ -61,6 +63,21 @@ class DiscMatch:
     disc: dict[str, Any]
     metadata: dict[str, Any]
     release: dict[str, Any]
+    # Seasons covered by the whole release (sorted); None when it has no Episode titles.
+    release_seasons: list[int] | None = None
+
+
+def _episode_seasons(disc: dict[str, Any]) -> set[int]:
+    seasons: set[int] = set()
+    for entry in disc.get("Titles") or []:
+        item = entry.get("Item") if isinstance(entry, dict) else None
+        if not isinstance(item, dict) or item.get("Type") != "Episode":
+            continue
+        try:
+            seasons.add(int(item["Season"]))
+        except KeyError, TypeError, ValueError:
+            continue
+    return seasons
 
 
 def build_index(tarball: Path, dest_sqlite: Path) -> int:
@@ -103,18 +120,40 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
     if not discs:
         raise ValueError("thediscdb: tarball contained no indexable discs — refusing to replace index")
 
-    new_path = dest_sqlite.with_suffix(".sqlite.new")
-    new_path.unlink(missing_ok=True)
     dest_sqlite.parent.mkdir(parents=True, exist_ok=True)
+    # Unique name per build: a fixed `<dest>.new` let two overlapping builds
+    # unlink each other's open database (D-159).
+    fd, tmp_name = tempfile.mkstemp(dir=dest_sqlite.parent, prefix=f"{dest_sqlite.name}.", suffix=".new")
+    os.close(fd)
+    new_path = Path(tmp_name)
+    try:
+        rows = _write_index(new_path, discs, metadata_by_title, release_by_dir)
+        os.replace(new_path, dest_sqlite)
+    except BaseException:
+        new_path.unlink(missing_ok=True)
+        raise
+    logger.info("thediscdb: index built with %d discs", rows)
+    return rows
+
+
+def _write_index(
+    new_path: Path,
+    discs: list[tuple[str, str, str, dict[str, Any]]],
+    metadata_by_title: dict[str, dict[str, Any]],
+    release_by_dir: dict[str, dict[str, Any]],
+) -> int:
     conn = sqlite3.connect(new_path)
     try:
         conn.executescript(_SCHEMA)
         rows = 0
+        seasons_by_release: dict[tuple[str, str, str], set[int]] = {}
+        for kind, title_dir, release_dir, disc in discs:
+            seasons_by_release.setdefault((kind, title_dir, release_dir), set()).update(_episode_seasons(disc))
         for kind, title_dir, release_dir, disc in discs:
             meta = metadata_by_title.get(f"{kind}/{title_dir}", {})
             release = release_by_dir.get(f"{kind}/{title_dir}/{release_dir}", {})
             conn.execute(
-                "INSERT OR REPLACE INTO discs VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO discs VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     str(disc["ContentHash"]).upper(),
                     (str(disc["GlobalDiscId"]).upper() if disc.get("GlobalDiscId") else None),
@@ -124,14 +163,15 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
                     json.dumps(disc),
                     json.dumps(meta),
                     json.dumps(release),
+                    json.dumps(sorted(seasons))
+                    if (seasons := seasons_by_release[(kind, title_dir, release_dir)])
+                    else None,
                 ),
             )
             rows += 1
         conn.commit()
     finally:
         conn.close()
-    os.replace(new_path, dest_sqlite)
-    logger.info("thediscdb: index built with %d discs", rows)
     return rows
 
 
@@ -159,11 +199,11 @@ class SnapshotStore:
         if not content_hash or not self.exists():
             return None
         with sqlite3.connect(f"file:{self._path}?mode=ro", uri=True) as conn:
-            row = conn.execute(
-                "SELECT kind, title_slug, release_slug, disc_json, metadata_json, release_json"
-                " FROM discs WHERE content_hash = ?",
-                (content_hash.upper(),),
-            ).fetchone()
+            select = "SELECT kind, title_slug, release_slug, disc_json, metadata_json, release_json{} FROM discs WHERE content_hash = ?"
+            try:
+                row = conn.execute(select.format(", release_seasons"), (content_hash.upper(),)).fetchone()
+            except sqlite3.OperationalError:  # index built before release_seasons existed
+                row = conn.execute(select.format(""), (content_hash.upper(),)).fetchone()
         if row is None:
             return None
         return DiscMatch(
@@ -173,12 +213,36 @@ class SnapshotStore:
             disc=json.loads(row[3]),
             metadata=json.loads(row[4]),
             release=json.loads(row[5]),
+            release_seasons=json.loads(row[6]) if len(row) > 6 and row[6] else None,
         )
+
+
+# Serialises refreshes within the process (daily loop vs the manual route).
+_refresh_lock = asyncio.Lock()
+
+
+def refresh_running() -> bool:
+    """True while a refresh holds the lock; the manual route answers 409."""
+    return _refresh_lock.locked()
+
+
+class RefreshBusy(RuntimeError):
+    """A refresh is already running in this process."""
 
 
 async def refresh(http: httpx.AsyncClient, dir_path: Path) -> int:
     """Download the tarball and rebuild the index. Raises on failure — the
-    caller logs and keeps the previous index."""
+    caller logs and keeps the previous index. Raises RefreshBusy, without
+    waiting, while another refresh holds the lock: a manual refresh must not
+    hang behind the daily download, and the daily loop has nothing to add
+    after a manual one."""
+    if _refresh_lock.locked():
+        raise RefreshBusy("thediscdb refresh already in progress")
+    async with _refresh_lock:
+        return await _refresh_locked(http, dir_path)
+
+
+async def _refresh_locked(http: httpx.AsyncClient, dir_path: Path) -> int:
     dir_path.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = Path(tmp.name)

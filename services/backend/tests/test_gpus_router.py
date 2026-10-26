@@ -5,24 +5,20 @@ card calls."""
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import secrets
+from datetime import UTC, datetime
 
-import secrets  # noqa: E402
-from datetime import UTC, datetime  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import gpus as gpus_router
+from arm_common import Gpu, User
+from arm_common.enums import GpuStatus, GpuVendor
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import gpus as gpus_router  # noqa: E402
-from arm_common import Gpu, User  # noqa: E402
-from arm_common.enums import GpuStatus, GpuVendor  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _app(gpus: list[Gpu]) -> tuple[FastAPI, str, FakeSession]:
@@ -263,8 +259,9 @@ def test_probe_all_skips_busy_disabled_and_already_probing() -> None:
     with TestClient(app) as c:
         r = c.post("/api/gpus/probe", headers=_auth(token))
     assert r.status_code == 202, r.text
-    assert r.json() == {"scheduled": ["gpu_free", "gpu_free2"]}
-    assert runner.started == ["gpu_free", "gpu_free2"]
+    # The router orders by (vendor, device_path): "nvenc" sorts before "qsv".
+    assert r.json() == {"scheduled": ["gpu_free2", "gpu_free"]}
+    assert runner.started == ["gpu_free2", "gpu_free"]
 
 
 def test_probe_all_not_capable_409() -> None:

@@ -82,14 +82,24 @@ const fieldByLabel = (fields: ReturnType<typeof buildMetadataFields>, label: str
 	fields.find((f) => f.label === label);
 
 describe('buildMetadataFields — promoted fields', () => {
-	it('promotes Disc # with total', () => {
+	it('promotes Disc # and Disc total as two cells, each set in place', () => {
 		const fields = buildMetadataFields(createJob({ disc_number: 1, disc_total: 2 }));
-		expect(fieldByLabel(fields, 'Disc #')?.value).toBe('1 of 2');
+		expect(fieldByLabel(fields, 'Disc #')).toMatchObject({ value: '1', edit: 'disc_number', raw: '1' });
+		expect(fieldByLabel(fields, 'Disc total')).toMatchObject({ value: '2', edit: 'disc_total', raw: '2' });
 	});
 
 	it('promotes Disc # without total', () => {
 		const fields = buildMetadataFields(createJob({ disc_number: 1, disc_total: null }));
 		expect(fieldByLabel(fields, 'Disc #')?.value).toBe('1');
+		expect(fieldByLabel(fields, 'Disc total')).toBeUndefined();
+	});
+
+	it('a TV job always offers Season, Disc # and Disc total, empty as "-"', () => {
+		const fields = buildMetadataFields(createJob({ media_type: 'tv', metadata_json: {} }));
+		expect(fieldByLabel(fields, 'Season')).toMatchObject({ value: '-', edit: 'season', raw: '' });
+		expect(fieldByLabel(fields, 'Disc #')).toMatchObject({ value: '-', edit: 'disc_number', raw: '' });
+		expect(fieldByLabel(fields, 'Disc total')).toMatchObject({ value: '-', edit: 'disc_total', raw: '' });
+		expect(fieldByLabel(fields, 'Year')).toMatchObject({ edit: 'year' });
 	});
 
 	it('shows Poster source Manual then Auto', () => {

@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from arm_common import Config, Drive
 
-from arm_common import Config, Drive  # noqa: E402
-
-from tests.test_migration_chain import _render_sql  # noqa: E402
+from tests.test_migration_chain import _render_sql
 
 _PARENT = "0028_user_role_disabled"
 _REV = "0030_drive_lifecycle"

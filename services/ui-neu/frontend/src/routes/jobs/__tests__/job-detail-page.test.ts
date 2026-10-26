@@ -137,11 +137,20 @@ describe('Job Detail Page', () => {
 			expect(screen.queryByRole('button', { name: /Poster & metadata search/ })).not.toBeInTheDocument();
 		});
 
-		it('shows Edit identity on a held review disc', async () => {
+		it('a held review disc with an identity edits it in place: no dialog button, the title is a field', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'awaiting_review' }));
 			renderComponent(JobDetailPage);
-			await waitFor(() => expect(screen.getByTestId('identify-open')).toHaveTextContent('Edit identity'));
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Title' })).toBeInTheDocument());
+			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
+			expect(screen.getByRole('button', { name: 'Edit Year' })).toBeInTheDocument();
+		});
+
+		it('keeps Identify disc for a disc still waiting for an identity', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'awaiting_user_id' }));
+			renderComponent(JobDetailPage);
+			await waitFor(() => expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc'));
 		});
 
 		it('shows Apply session for a ripped disc awaiting identification', async () => {
@@ -151,12 +160,10 @@ describe('Job Detail Page', () => {
 			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
 		});
 
-		it('shows the Identify (resolve) and Apply session buttons for a resolvable status', async () => {
+		it('shows Apply session for a resolvable status, and Identify only while the identity is missing', async () => {
 			renderComponent(JobDetailPage);
-			await waitFor(() => {
-				expect(screen.getByTestId('identify-open')).toBeInTheDocument();
-			});
-			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
+			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
+			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
 		});
 	});
 
@@ -195,7 +202,9 @@ describe('Job Detail Page', () => {
 			expect(screen.queryByText('Delete')).not.toBeInTheDocument();
 		});
 
-		it('shows Identify, Apply session, and Delete for admins', async () => {
+		it('shows Identify (on a disc awaiting identity), Apply session, and Delete for admins', async () => {
+			const { fetchJob } = await import('$lib/api/jobs');
+			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'ripped_awaiting_identify' }));
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
 				expect(screen.getByTestId('identify-open')).toBeInTheDocument();

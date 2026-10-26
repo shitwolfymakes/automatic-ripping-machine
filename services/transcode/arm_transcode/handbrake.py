@@ -5,10 +5,10 @@ text-mode progress as one line per tick:
 
     Encoding: task 1 of 1, 12.34 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)
 
-We parse each line as it streams in and surface % + ETA to the caller's
-`progress_callback`. Text mode beats `--json` here because HandBrake's
-JSON output pretty-prints every block over a dozen lines, which both
-floods the per-job log and defeats simple regex extraction (the
+We parse each line as it streams in and surface %, ETA and the two frame
+rates to the caller's `progress_callback`. Text mode beats `--json` here
+because HandBrake's JSON output pretty-prints every block over a dozen
+lines, which both floods the per-job log and defeats simple regex extraction (the
 non-greedy `\\{.*?\\}` regex stops at the first inner `}` instead of the
 outer one — `json.loads` then fails on truncated input and progress
 silently never advances). Text mode is naturally one-liner per tick.
@@ -32,7 +32,9 @@ from typing import Awaitable, Callable
 
 logger = logging.getLogger("arm_transcode.handbrake")
 
-ProgressCallback = Callable[[int, int | None, str | None], Awaitable[None]]
+# (pct, eta_seconds, current_pass, fps, avg_fps); the last four are None
+# until the engine reports them.
+ProgressCallback = Callable[[int, int | None, str | None, float | None, float | None], Awaitable[None]]
 
 # How many trailing stderr lines to attach to the rc!=0 error. HandBrake prints
 # the verbose title/audio dump *before* the decisive failure line (e.g. the
@@ -47,9 +49,12 @@ _STDERR_TAIL_LINES = 1000
 # `Encoding: task 1 of 1, 0.00 %`           ← no ETA yet (HandBrake hasn't
 #                                              estimated frame rate)
 # Anchored on `task N of M,` so we don't accidentally match `Scanning title 1
-# of 1, 70.00 %` (which is title-scan progress, not encode progress).
+# of 1, 70.00 %` (which is title-scan progress, not encode progress). The fps
+# pair and the ETA are matched independently so a tail with only one of them
+# still yields that one.
 _PROGRESS_LINE_RE = re.compile(
     r"task\s+(?P<pass>\d+)\s+of\s+(?P<pass_total>\d+),\s+(?P<pct>\d+(?:\.\d+)?)\s*%"
+    r"(?:.*?\((?P<fps>\d+(?:\.\d+)?)\s*fps,\s*avg\s+(?P<avg_fps>\d+(?:\.\d+)?)\s*fps)?"
     r"(?:.*?ETA\s+(?P<h>\d+)h(?P<m>\d+)m(?P<s>\d+)s)?",
     re.IGNORECASE,
 )
@@ -185,8 +190,9 @@ async def _process_progress_line(line: str, cb: ProgressCallback, last_emitted: 
     # internal pass count (e.g. `1/1` for a single-pass encode, `1/2`/`2/2`
     # for a two-pass encode) without having to know the schema's history.
     current_pass = f"{match.group('pass')}/{match.group('pass_total')}"
+    fps, avg_fps = _parse_fps(match)
     try:
-        await cb(pct, eta, current_pass)
+        await cb(pct, eta, current_pass, fps, avg_fps)
     except Exception as exc:  # noqa: BLE001
         logger.debug("progress_callback raised: %s", exc)
     return pct
@@ -199,3 +205,12 @@ def _parse_eta(match: re.Match[str]) -> int | None:
     if match.group("h") is None:
         return None
     return int(match.group("h")) * 3600 + int(match.group("m")) * 60 + int(match.group("s"))
+
+
+def _parse_fps(match: re.Match[str]) -> tuple[float | None, float | None]:
+    """The instantaneous and average frame rate from the `(N fps, avg M fps, ...)`
+    tail, or (None, None) on the early ticks that have no tail yet.
+    """
+    if match.group("fps") is None:
+        return None, None
+    return float(match.group("fps")), float(match.group("avg_fps"))

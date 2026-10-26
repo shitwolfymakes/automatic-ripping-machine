@@ -7,10 +7,8 @@ from pathlib import Path
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.drive_scanner import ScannedDrive, enumerate_optical, parse_short_serial  # noqa: E402
+from arm_backend.drive_scanner import ScannedDrive, enumerate_optical, parse_short_serial
 
 BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
 

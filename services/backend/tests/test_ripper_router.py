@@ -9,25 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.metadata.base import MetadataResult  # noqa: E402
-from arm_backend.routers import ripper as ripper_router  # noqa: E402
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.metadata.base import MetadataResult
+from arm_backend.routers import ripper as ripper_router
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_common import (
     Config,
     ContainerFormat,
     DiscFingerprint,
@@ -44,15 +41,16 @@ from arm_common import (  # noqa: E402
     RipPreset,
     Session,
     SessionApplication,
+    SessionRoute,
     SessionApplicationStatus,
     TrackStatus,
     TranscodePreset,
     TranscodeTool,
 )
-from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection  # noqa: E402
-from arm_common.models import Track  # noqa: E402
+from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection
+from arm_common.models import Track
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _HOSTNAME = "ripper-host"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
@@ -78,19 +76,37 @@ class _Hub:
 
 
 class _Dispatcher:
-    """Mock MetadataDispatcher. `result` is returned from identify; set
-    `raise_timeout` to simulate the asyncio.wait_for timeout path."""
+    """Mock MetadataDispatcher. `result` is returned from identify,
+    `fingerprint_result` from the fingerprint-only walk; set `raise_timeout`
+    to simulate the asyncio.wait_for timeout path."""
 
-    def __init__(self, result: MetadataResult | None = None, *, raise_timeout: bool = False) -> None:
+    def __init__(
+        self,
+        result: MetadataResult | None = None,
+        *,
+        raise_timeout: bool = False,
+        attempts: list[dict[str, Any]] | None = None,
+        fingerprint_result: MetadataResult | None = None,
+    ) -> None:
         self.result = result
         self.raise_timeout = raise_timeout
+        self.fingerprint_result = fingerprint_result
         self.received_kwargs: dict[str, Any] = {}
+        self.attempts = attempts or []
+        self.last_attempts: list[dict[str, Any]] = []
+        self.calls: list[str] = []
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+        self.calls.append("identify")
         self.received_kwargs = _kw
+        self.last_attempts = list(self.attempts)
         if self.raise_timeout:
             raise asyncio.TimeoutError
         return self.result
+
+    async def identify_from_fingerprint(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
+        self.calls.append("identify_from_fingerprint")
+        return self.fingerprint_result
 
 
 @pytest.fixture
@@ -125,6 +141,10 @@ def _config(
     hold_for_review: bool = False,
     ripping_paused: bool = False,
     thediscdb_enabled: bool = False,
+    disc_hint_sources: list[str] | None = None,
+    movie_auto_apply: bool = True,
+    episode_auto_apply: bool = True,
+    music_auto_apply: bool = True,
 ) -> Config:
     return Config(
         id=1,
@@ -136,6 +156,10 @@ def _config(
         hold_for_review=hold_for_review,
         ripping_paused=ripping_paused,
         thediscdb_enabled=thediscdb_enabled,
+        movie_auto_apply=movie_auto_apply,
+        episode_auto_apply=episode_auto_apply,
+        music_auto_apply=music_auto_apply,
+        **({"disc_hint_sources": disc_hint_sources} if disc_hint_sources is not None else {}),
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
@@ -863,6 +887,150 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
+_MISS = {"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY DISC"}
+
+
+def _identify(app: FastAPI, scan: dict[str, Any] | None = None) -> dict[str, Any]:
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan or _scan_dict()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    out: dict[str, Any] = r.json()
+    return out
+
+
+def test_identify_miss_stores_the_attempts() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None, attempts=[_MISS])))
+    assert out["status"] == "awaiting_user_id"
+    assert out["metadata_json"]["identify_attempts"] == [_MISS]
+
+
+def test_identify_miss_keeps_at_most_twenty_attempts() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=False)]
+    many = [{**_MISS, "detail": f"T{i}"} for i in range(30)]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None, attempts=many)))
+    assert out["metadata_json"]["flags"]["unidentified"] is True
+    assert out["metadata_json"]["identify_attempts"] == many[-20:]
+
+
+def test_identify_timeout_keeps_the_timeout_entry_last_under_the_cap() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    many = [{**_MISS, "detail": f"T{i}"} for i in range(30)]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(raise_timeout=True, attempts=many)))
+    stored = out["metadata_json"]["identify_attempts"]
+    assert len(stored) == 20
+    assert stored[:-1] == many[-19:]
+    assert stored[-1]["outcome"] == "timeout" and stored[-1]["source"] is None
+
+
+def test_identify_real_dispatch_timeout_keeps_the_partial_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """wait_for cancels identify mid-walk: what it tried so far is still stored."""
+
+    import contextvars
+
+    # Like the real dispatcher, the attempts live in the identify call's own
+    # context, so the route must read them inside the task wait_for runs.
+    attempts_var: contextvars.ContextVar[list[dict[str, Any]]] = contextvars.ContextVar("attempts", default=[])
+
+    class _Slow(_Dispatcher):
+        @property  # type: ignore[override]
+        def last_attempts(self) -> list[dict[str, Any]]:
+            return attempts_var.get()
+
+        @last_attempts.setter
+        def last_attempts(self, value: list[dict[str, Any]]) -> None:
+            pass
+
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+            attempts_var.set([_MISS])
+            await asyncio.sleep(5)
+            return None
+
+    monkeypatch.setattr(ripper_router, "DISPATCH_TIMEOUT_SECONDS", 0.05)
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    out = _identify(_make_app(db, dispatcher=_Slow()))
+    assert out["metadata_json"]["flags"]["dispatch_timeout"] is True
+    stored = out["metadata_json"]["identify_attempts"]
+    assert stored[0] == _MISS
+    assert stored[-1]["outcome"] == "timeout" and stored[-1]["detail"].startswith("lookup took longer than")
+    assert len(stored) == 2
+
+
+def test_identify_hit_stores_no_attempts() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    hit = MetadataResult(title="Heat", year=1995, kind="movie", provider="tmdb")
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(hit, attempts=[_MISS])))
+    assert out["metadata_json"].get("identify_attempts") is None
+
+
+def test_identify_hit_removes_stale_attempts() -> None:
+    """A hit drops an identify_attempts list already on the job. A reused job never
+    re-identifies, so the stale list is planted on the fresh job mid-dispatch."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    hit = MetadataResult(title="Heat", year=1995, kind="movie", provider="tmdb")
+
+    class _Stale(_Dispatcher):
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+            for row in db.added:
+                if isinstance(row, Job):
+                    row.metadata_json = {**(row.metadata_json or {}), "identify_attempts": [_MISS]}
+            return hit
+
+    out = _identify(_make_app(db, dispatcher=_Stale(hit, attempts=[])))
+    assert "identify_attempts" not in out["metadata_json"]
+
+
+def test_identify_dispatch_timeout_stores_the_timeout_attempt() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(raise_timeout=True, attempts=[_MISS])))
+    assert out["metadata_json"]["flags"]["dispatch_timeout"] is True
+    assert out["metadata_json"]["identify_attempts"] == [
+        _MISS,
+        {"source": None, "step": "title", "kind": None, "outcome": "timeout", "detail": "lookup took longer than 25 s"},
+    ]
+
+
+def test_identify_miss_stores_the_exact_and_the_fuzzy_attempts() -> None:
+    imdb_miss = {"source": "tmdb", "step": "imdb", "kind": "movie", "outcome": "miss", "detail": "tt0000001"}
+
+    class _BothMiss(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return True
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            self.last_attempts = [imdb_miss]
+            return None
+
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+    app = _make_app(db, dispatcher=_BothMiss(None, attempts=[_MISS]))
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    scan = _scan_dict("bluray")
+    scan["titles"] = [{"index": 0, "duration_seconds": 7894, "source_file": "00001.mpls"}]
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+    out = _identify(app, scan)
+    assert out["metadata_json"]["identify_attempts"] == [imdb_miss, _MISS]
+
+
 # --- /identify (background episode stage trigger) -----------------------------
 
 
@@ -985,12 +1153,19 @@ class _ImdbExactDispatcher:
     """Fake dispatcher for the TheDiscDB exact-identity path: identify_from_imdb
     returns a hit and identify(...) must NEVER be called (exact path wins)."""
 
+    last_attempts: list[dict[str, Any]] = []
+
     def __init__(self, result: MetadataResult | None) -> None:
         self.result = result
         self.identify_from_imdb_calls: list[str] = []
+        self.kinds: list[Any] = []
 
-    async def identify_from_imdb(self, imdb_id: str, _cfg: Any) -> MetadataResult | None:
+    def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+        return True
+
+    async def identify_from_imdb(self, imdb_id: str, _cfg: Any, **kw: Any) -> MetadataResult | None:
         self.identify_from_imdb_calls.append(imdb_id)
+        self.kinds.append(kw.get("kind"))
         return self.result
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
@@ -1015,6 +1190,23 @@ def _thediscdb_match() -> DiscMatch:
         metadata={"ExternalIds": {"Imdb": "tt0090557"}},
         release={},
     )
+
+
+def _thediscdb_match_series() -> DiscMatch:
+    return DiscMatch(
+        kind="series",
+        title_slug="lost-2004",
+        release_slug="s1",
+        disc={"Titles": []},
+        metadata={"Title": "Lost", "Year": 2004, "ExternalIds": {"Imdb": "tt0411008"}},
+        release={},
+    )
+
+
+def _scan_dict_with_hash() -> dict[str, Any]:
+    scan = _scan_dict()
+    scan["fingerprints"] = [{"algo": "thediscdb", "value": "2D61282D8DA5EAC2CA87B451BCE9A055"}]
+    return scan
 
 
 class _FakeStore:
@@ -1134,7 +1326,12 @@ def test_identify_thediscdb_lookup_raises_behaves_as_no_match() -> None:
 class _AllMissDispatcher:
     """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
 
-    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any) -> MetadataResult | None:
+    last_attempts: list[dict[str, Any]] = []
+
+    def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+        return True
+
+    async def identify_from_imdb(self, _imdb_id: str, _cfg: Any, **_kw: Any) -> MetadataResult | None:
         return None
 
     async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
@@ -1275,6 +1472,19 @@ def test_held_job_paused_flag_from_global() -> None:
     assert r.json()["paused"] is True
 
 
+_SUGGESTION = {
+    "provider": "tmdb",
+    "title": "Iron Man",
+    "year": 2008,
+    "kind": "movie",
+    "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
+    "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
+    "overview": "Tony Stark.",
+    "payload": {"id": 1726, "poster_path": "/abc.jpg"},
+    "suggested_at": "2026-10-15T10:00:00Z",
+}
+
+
 def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     """paused is global ripping_paused OR this disc's manual_pause — a per-job
     pause alone (global off) still marks it paused for reboot recovery."""
@@ -1283,6 +1493,41 @@ def test_held_job_paused_flag_from_per_job_manual_pause() -> None:
     db.rows["config"] = [_config(ripping_paused=False)]
     held = _job("job_01JZXR7K3M5Q8N4VWA0000H07", status=JobStatus.AWAITING_REVIEW)
     held.manual_pause = True
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
+def test_held_job_paused_flag_from_a_guessed_episode_placement() -> None:
+    """A guessed placement holds the countdown; the hold must survive a ripper
+    restart the same way a per-job pause does."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job(
+        "job_01JZXR7K3M5Q8N4VWA0000H09",
+        status=JobStatus.AWAITING_REVIEW,
+        meta={"identity_claims": {"sources": {"episodes_tmdb": {"status": "ok", "suggestion": True}}, "unsure": True}},
+    )
+    held.media_type = MediaType.TV
+    db.rows["jobs"] = [held]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+    assert r.json()["job"]["episodes_unsure"] is True
+
+
+def test_held_job_paused_flag_from_a_suggestion_hold() -> None:
+    """A held identity suggestion waits for the operator with no pause flag set."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    held = _job("job_01JZXR7K3M5Q8N4VWA0000H08", status=JobStatus.AWAITING_REVIEW)
+    held.manual_pause = False
+    held.metadata_json = {"identity_suggestion": _SUGGESTION, "flags": {"unidentified": True}}
     db.rows["jobs"] = [held]
     with TestClient(_make_app(db)) as client:
         r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
@@ -1777,6 +2022,33 @@ def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
     assert new_jobs == []  # no duplicate Job
     new_fps = [r for r in db.added if type(r).__name__ == "DiscFingerprint"]
     assert new_fps == []  # no duplicate fingerprint rows
+
+
+def test_identify_on_a_virtual_drive_reuses_its_parked_job_without_fingerprints() -> None:
+    """A ripper started again for a rip parked at a review gate re-identifies
+    the ISO; ISO scans carry no fingerprints, so the parked job is matched by
+    the virtual drive itself instead of a second job appearing on it."""
+    db = FakeSession()
+    drive = _drive()
+    drive.kind = DriveKind.VIRTUAL
+    db.rows["drives"] = [drive]
+    db.rows["config"] = [_config(block_on_miss=True, hold_for_review=False)]
+    existing = _job("job_parked", status=JobStatus.AWAITING_REVIEW, disc_type="dvd")
+    existing.title = "Kolchak: The Night Stalker"
+    db.rows["jobs"] = [existing]
+    dispatcher = _Dispatcher(result=None)
+    app = _make_app(db, dispatcher=dispatcher, hub=_Hub())
+    scan = _scan_dict("dvd")
+    scan["fingerprints"] = []
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "job_parked"
+    assert [r for r in db.added if type(r).__name__ == "Job"] == []
 
 
 def test_identify_terminal_match_mints_fresh() -> None:
@@ -3002,3 +3274,381 @@ def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.L
     assert r.status_code == 200, r.text
     assert r.json()["pending_session_id"] is None
     assert "ses_deleted no longer exists" in caplog.text
+
+
+def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
+    """D-1: the route passes the TheDiscDB kind so a series id asks the TV sources."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+    dispatcher = _ImdbExactDispatcher(MetadataResult(title="Lost", year=2004, kind="tv", provider="omdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match_series())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert dispatcher.identify_from_imdb_calls == ["tt0411008"]
+    assert dispatcher.kinds == ["tv"]
+    assert r.json()["media_type"] == "tv"
+
+
+def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() -> None:
+    """D-1: no enabled source offers an IMDb lookup → no online call; the job is
+    identified from the release's own title/year/kind with provider thediscdb."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            self.calls.append("identify_from_imdb")
+            return None
+
+    dispatcher = _NoLookup()
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    out = r.json()
+    assert r.status_code == 200, r.text
+    # The keyless community database is still consulted (it needs no key, so it
+    # is the one source this install has); only the fuzzy title search, which
+    # would outrank an exact content-hash match, is skipped.
+    assert dispatcher.calls == ["identify_from_fingerprint"]
+    assert out["status"] == "identified"
+    assert (out["title"], out["year"], out["media_type"]) == ("Round Midnight", 1986, "movie")
+    assert out["metadata_json"]["identity"]["provider"] == "thediscdb"
+    assert out["metadata_json"]["identity"]["external_ids"]["imdb"] == "tt0090557"
+    assert "thediscdb" in out["metadata_json"]["provider_raw"]
+
+
+def test_identify_keyless_install_still_reaches_the_community_database() -> None:
+    """A keyless install (no TMDb/OMDb key) has exactly one usable online
+    source: the community CRC64 database, which needs no key. Returning the
+    slug-derived release title straight away skipped it on the installs that
+    have nothing else, so its hit must still win."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+    dispatcher = _NoLookup(
+        fingerprint_result=MetadataResult(title="Round Midnight", year=1986, kind="movie", provider="arm_server")
+    )
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    scan = _scan_dict_with_hash()
+    scan["fingerprints"].append({"algo": "crc64", "value": "0123456789abcdef"})
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": scan},
+            headers=_SERVICE_AUTH,
+        )
+    out = r.json()
+    assert r.status_code == 200, r.text
+    # The fingerprint answered, so the fuzzy title search never ran.
+    assert dispatcher.calls == ["identify_from_fingerprint"]
+    assert out["metadata_json"]["identity"]["provider"] == "arm_server"
+    assert (out["title"], out["year"]) == ("Round Midnight", 1986)
+
+
+def test_identify_thediscdb_exact_miss_falls_through_to_fuzzy_identify() -> None:
+    """A source exists but does not know the id (review focus 1): fuzzy identify runs."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _ExactMiss(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return True
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+    dispatcher = _ExactMiss(MetadataResult(title="Iron Man", year=2008, kind="movie", provider="tmdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Iron Man"
+    assert dispatcher.received_kwargs  # identify() was called
+
+
+def test_identify_thediscdb_release_without_a_title_falls_through_to_fuzzy_identify() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
+
+    class _NoLookup(_Dispatcher):
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return False
+
+    dispatcher = _NoLookup(MetadataResult(title="Iron Man", year=2008, kind="movie", provider="tmdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(
+        DiscMatch(
+            kind="movie",
+            title_slug="",
+            release_slug="r",
+            disc={"Titles": []},
+            metadata={"ExternalIds": {"Imdb": "tt1"}},
+            release={},
+        )
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Iron Man"
+    assert dispatcher.received_kwargs  # identify() was called
+
+
+def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None:
+    def _miss(scan: dict[str, Any], **cfg: Any) -> str:
+        db = FakeSession()
+        db.rows["drives"] = [_drive()]
+        db.rows["config"] = [_config(block_on_miss=True, **cfg)]
+        app = _make_app(db, dispatcher=_Dispatcher(None))
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+            )
+        assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+        return str(r.json()["title"])
+
+    bd = _scan_dict("bluray")
+    bd["volume_label"] = "THE_OFFICE_S1_D2"
+    bd["bd_meta"] = {"name": "The Office: Season One"}
+    assert _miss(bd) == "The Office: Season One"  # the disc's name as written
+    assert _miss(bd, disc_hint_sources=["label"]) == "THE_OFFICE_S1_D2"  # bd_title off: gate
+    dvd = _scan_dict()
+    dvd["volume_label"] = "THE_OFFICE_S1_D2"
+    assert _miss(dvd) == "THE_OFFICE_S1_D2"
+
+
+def test_identify_miss_title_prefers_release_then_label() -> None:
+    """D-4 miss title: TheDiscDB release title → raw label (with every hint off)."""
+    # 1. Release title beats the raw label when every lookup misses.
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True, disc_hint_sources=[])]
+
+    class _AllMiss:
+        last_attempts: list[dict[str, Any]] = []
+
+        def has_imdb_lookup(self, _cfg: Any, _kind: Any) -> bool:
+            return True
+
+        async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+        async def identify(self, *a: Any, **kw: Any) -> MetadataResult | None:
+            return None
+
+    app = _make_app(db, dispatcher=_AllMiss())
+    app.state.thediscdb = _FakeStore(_thediscdb_match())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+    assert r.json()["title"] == "Round Midnight"
+    # 2. With every hint off and no match, the raw label is the last resort (review focus 3).
+    db2 = FakeSession()
+    db2.rows["drives"] = [_drive()]
+    db2.rows["config"] = [_config(block_on_miss=True, disc_hint_sources=[])]
+    app2 = _make_app(db2, dispatcher=_Dispatcher(None))
+    with TestClient(app2) as client:
+        r2 = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    assert r2.json()["title"] == "MY_DISC"
+
+
+# --- identify: auto-apply switches off -----------------------------------------
+
+
+def _identify_with(db: FakeSession, result: MetadataResult, scan: dict[str, Any], hub: _Hub | None = None) -> Any:
+    app = _make_app(db, dispatcher=_Dispatcher(result), hub=hub)
+    with TestClient(app) as client:
+        return client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
+        )
+
+
+def _suggestion_db(**cfg: Any) -> FakeSession:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(**cfg)]
+    db.rows["rip_presets"] = [_movie_preset()]
+    return db
+
+
+def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> None:
+    """movie_auto_apply off + a confident movie hit -> the hit is stored, not
+    applied; the disc parks in AWAITING_REVIEW with no countdown, keeps the
+    miss title and the unidentified flag, persists its review tracks and
+    emits rip.awaiting_review. Only `media_type` is taken from the hit, as
+    the routing key the review tracks' preset is resolved through."""
+    db = _suggestion_db(movie_auto_apply=False)
+    result = MetadataResult(
+        title="Iron Man", year=2008, kind="movie", payload={"id": 1726, "poster_path": "/abc.jpg"}, provider="tmdb"
+    )
+    hub = _Hub()
+    r = _identify_with(db, result, _scan_dict(), hub)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["title"] == "MY_DISC"  # the miss title, not the hit
+    assert out.get("year") is None and out.get("poster_url") is None
+    # The routing media type IS taken, so _persist_review_tracks below resolves
+    # the preset of the session this disc will rip into rather than the
+    # never-identified default; accept never re-persists these rows.
+    assert out["media_type"] == "movie"
+    assert out["metadata_json"].get("identity") is None
+    assert out["metadata_json"]["flags"]["unidentified"] is True
+    s = out["metadata_json"]["identity_suggestion"]
+    assert (s["provider"], s["title"], s["year"], s["kind"]) == ("tmdb", "Iron Man", 2008, "movie")
+    assert s["poster_url"] == "https://image.tmdb.org/t/p/w500/abc.jpg"
+    assert any(e["event_type"] == "rip.awaiting_review" for e in hub.events)
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    assert {t.source_ref for t in tracks} == {"1"}
+
+
+def test_identify_auto_apply_off_routes_review_tracks_through_the_hit() -> None:
+    """The held hit's kind is the routing key: `session_routes` is keyed on
+    (media_type, disc_type) and SKIPPED entirely when media_type is None, so
+    leaving it unset made the review tracks carry the never-identified
+    default preset's keep/drop defaults -- and accept never re-persists them,
+    so the operator would rip that wrong set."""
+    db = _suggestion_db(movie_auto_apply=False)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_test_main_only",
+            name="Main feature only",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            track_selection=TrackSelection.MAIN_FEATURE,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"] = [
+        Session(
+            id="ses_movies",
+            name="Movies",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_test_main_only",
+            output_path_template="{title}",
+        )
+    ]
+    db.rows["session_routes"] = [
+        SessionRoute(media_type=MediaType.MOVIE, disc_type=DiscType.DVD, session_id="ses_movies")
+    ]
+    scan = _scan_dict()
+    scan["titles"] = [{"index": 1, "duration_seconds": 4200}, {"index": 2, "duration_seconds": 300}]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    r = _identify_with(db, result, scan)
+    assert r.status_code == 200, r.text
+    tracks = [row for row in db.added if type(row).__name__ == "Track"]
+    # The routed session's MAIN_FEATURE preset drops the 5-minute extra; the
+    # disc-type default (ALL_TRACKS) would have kept both.
+    assert {t.source_ref: t.excluded for t in tracks} == {"1": False, "2": True}
+    preset_claims = r.json()["metadata_json"]["identity_claims"]["sources"]["preset"]["tracks"]
+    assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": False}
+
+
+def test_identify_hold_for_review_with_auto_apply_off_has_no_countdown() -> None:
+    db = _suggestion_db(hold_for_review=True, movie_auto_apply=False)
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["identity_suggestion"]["title"] == "Iron Man"
+    tracks = {id(row) for row in db.added if type(row).__name__ == "Track"}
+    assert len(tracks) == len(_scan_dict()["titles"])  # persisted once, not twice
+
+
+def test_identify_tv_hit_follows_the_episode_switch() -> None:
+    db = _suggestion_db(episode_auto_apply=False, movie_auto_apply=True)
+    result = MetadataResult(title="Lost", year=2004, kind="tv", payload={"id": 123}, provider="tvmaze")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "awaiting_review" and out["wait_start_time"] is None
+    assert out["media_type"] == "tv"  # the routing key, see the movie case
+    assert out["metadata_json"]["identity_suggestion"]["kind"] == "tv"
+
+
+def test_identify_music_hit_with_auto_apply_off_keeps_disc_number_unset() -> None:
+    db = _suggestion_db(music_auto_apply=False)
+    result = MetadataResult(title="Album", year=1999, kind="music", payload={"disc": 2}, provider="musicbrainz")
+    out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert out["status"] == "awaiting_review"
+    assert out.get("disc_number") is None
+    assert out["metadata_json"]["identity_suggestion"]["payload"]["disc"] == 2
+
+
+def test_identify_switch_off_for_another_kind_still_applies_this_one() -> None:
+    db = _suggestion_db(music_auto_apply=False, episode_auto_apply=False)
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}, provider="tmdb")
+    out = _identify_with(db, result, _scan_dict()).json()
+    assert out["status"] == "identified" and out["title"] == "Iron Man"
+    assert out["metadata_json"].get("identity_suggestion") is None
+
+
+def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = _suggestion_db(music_auto_apply=True)
+    cands = [{"id": "a", "title": "Album", "date": "1999", "artist": "X"}, {"id": "b", "title": "Album (Deluxe)"}]
+    result = MetadataResult(
+        title="Album",
+        year=1999,
+        kind="music",
+        payload={"toc_match": "fuzzy", "toc_candidates": cands},
+        provider="musicbrainz",
+    )
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.ripper"):
+        out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert "(several releases fit the track layout)" in caplog.text
+    assert "auto-apply off" not in caplog.text
+    assert out["status"] == "awaiting_review"
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["identity_suggestion"]["title"] == "Album"
+    assert out["metadata_json"].get("identity") is None
+
+
+def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> None:
+    db = _suggestion_db(music_auto_apply=True)
+    result = MetadataResult(
+        title="Album", year=1999, kind="music", payload={"toc_match": "fuzzy"}, provider="musicbrainz"
+    )
+    out = _identify_with(db, result, _scan_dict("cd")).json()
+    assert out["status"] == "identified" and out["title"] == "Album"
+    assert out["metadata_json"].get("identity_suggestion") is None

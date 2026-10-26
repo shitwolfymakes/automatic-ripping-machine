@@ -14,6 +14,8 @@ drive+status, then match fingerprints in Python — mirroring drives.py:_current
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import logging
 from collections.abc import Sequence
 from typing import Literal, NamedTuple
@@ -38,19 +40,23 @@ async def find_reusable_job_for_disc(
     *,
     drive_id: str,
     fingerprints: Sequence[tuple[str, str]],
+    same_source: bool = False,
 ) -> ReuseDecision | None:
     """Return a ReuseDecision if a non-terminal job on the same drive shares
     any (algo, value) fingerprint with the caller's scan; else None.
+
+    `same_source` says the drive only ever holds one disc (a virtual drive
+    over an ISO or disc folder): the newest non-terminal job on it is that
+    disc's, fingerprints or not, so a ripper started again for a parked rip
+    lands in the job the operator is looking at instead of minting another.
 
     Steps (single-table queries + Python matching, FakeSession-compatible):
       1. Fetch all non-terminal jobs for the given drive_id.
       2. Fetch all DiscFingerprint rows whose job_id is among those candidates.
       3. Match (algo, value) in Python; return on first hit.
     """
-    if not fingerprints:
-        return None
     wanted = {(a, v) for a, v in fingerprints if a and v}
-    if not wanted:
+    if not wanted and not same_source:
         return None
 
     # Step 1: candidate jobs — drive_id match + non-terminal status.
@@ -67,6 +73,9 @@ async def find_reusable_job_for_disc(
     )
     if not candidates:
         return None
+    if same_source and not wanted:
+        newest = max(candidates, key=lambda j: (j.created_at is not None, j.created_at or datetime.min, j.id))
+        return ReuseDecision(job=newest, action="reuse" if newest.status in PRE_RIP_JOB_STATUSES else "in_flight")
     by_id = {j.id: j for j in candidates}
 
     # Step 2: fingerprints for those jobs.

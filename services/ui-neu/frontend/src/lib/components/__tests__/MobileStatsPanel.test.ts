@@ -81,7 +81,7 @@ describe('MobileStatsPanel', () => {
 
 	it('Key row deep-links to the MakeMKV key field', () => {
 		renderComponent(MobileStatsPanel, { props: { onnavigate: vi.fn() } });
-		expect(screen.getByRole('link', { name: /key/i })).toHaveAttribute('href', '/settings#Metadata/makemkv_key');
+		expect(screen.getByRole('link', { name: /key/i })).toHaveAttribute('href', '/settings#Keys/makemkv_key');
 	});
 
 	it('renders live activity counts from the dashboard store', () => {

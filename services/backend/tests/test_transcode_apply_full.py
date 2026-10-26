@@ -6,17 +6,13 @@ duplicate-in-request), and stat_exists.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from pathlib import Path
 
-from pathlib import Path  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.transcode_apply import (  # noqa: E402
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.transcode_apply import (
     _build_track_ctx,
     _track_kinds_for_media,
     compute_outputs,
@@ -25,7 +21,7 @@ from arm_backend.transcode_apply import (  # noqa: E402
     stat_exists,
     transcode_enabled_now,
 )
-from arm_common import (  # noqa: E402
+from arm_common import (
     Config,
     ContainerFormat,
     DiscType,
@@ -37,10 +33,10 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     TranscodeTool,
 )
-from arm_common.enums import TrackKind  # noqa: E402
-from arm_common.models import Track, TranscodeTask  # noqa: E402
+from arm_common.enums import TrackKind
+from arm_common.models import Track, TranscodeTask
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _job(meta: dict | None = None) -> Job:

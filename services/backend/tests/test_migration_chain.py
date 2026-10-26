@@ -7,17 +7,16 @@ crash-loops — so assert the chain is intact statically. No DB required.
 """
 
 import io
-import os
+import re
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
-from alembic.script import ScriptDirectory  # noqa: E402
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlmodel import SQLModel
 
-from arm_common import User  # noqa: E402
+from arm_common import TranscodeTask, User
 
 _BACKEND_DIR = Path(__file__).parent.parent
 
@@ -73,7 +72,8 @@ def _render_sql(from_rev: str, to_rev: str, *, downgrade: bool = False) -> str:
 
 # The full base:head range can't be rendered offline: 0011_plex_movie_track_token
 # seeds rows through a parameterised statement that raises CompileError under
-# `literal_binds`. Scoped to the range this branch introduced; widening it means
+# `literal_binds`. Everything after it renders (see
+# test_every_revision_after_0011_renders_offline); widening to base means
 # rewriting that seed first.
 _PARENT_REV = "0026_add_makemkv_sdf_columns"
 _REV = "0028_user_role_disabled"
@@ -102,3 +102,121 @@ def test_0028_matches_the_user_model() -> None:
         assert f"ADD COLUMN {name} " in sql, f"0028 does not add users.{name}"
         assert not column.nullable, f"User.{name} is nullable but 0028 declares NOT NULL"
         assert column.server_default is not None, f"User.{name} has no server_default to match 0028's"
+
+
+_IDENT_PARENT = "0044_previously_ripped"
+_IDENT_REV = "0045_identification_sources"
+
+
+def test_0045_upgrade_adds_the_identification_columns_and_seeds_them() -> None:
+    sql = _render_sql(_IDENT_PARENT, _IDENT_REV)
+    assert "ALTER TABLE config ADD COLUMN movie_sources VARCHAR[] DEFAULT '{tmdb,omdb}'::text[] NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN music_sources VARCHAR[] DEFAULT '{musicbrainz}'::text[] NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_movie VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_tv VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_music VARCHAR DEFAULT 'musicbrainz' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN movie_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN music_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN crc64service_enabled BOOLEAN DEFAULT true NOT NULL" in sql
+    # D-8: the old choice goes first in the movie order and stays the search provider.
+    assert "WHEN metadata_provider = 'omdb' THEN '{omdb,tmdb}'::text[]" in sql
+    assert "WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
+    assert "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
+    assert "COALESCE(episode_sources" not in sql
+    assert sql.index("UPDATE config SET") < sql.index("ALTER TABLE config DROP COLUMN metadata_provider")
+
+
+def test_0045_downgrade_restores_metadata_provider_from_the_movie_search_provider() -> None:
+    sql = _render_sql(_IDENT_REV, _IDENT_PARENT, downgrade=True)
+    assert "ALTER TABLE config ADD COLUMN metadata_provider VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "WHEN search_provider_movie IN ('tmdb', 'omdb') THEN search_provider_movie" in sql
+    for name in (
+        "crc64service_enabled",
+        "music_auto_apply",
+        "movie_auto_apply",
+        "search_provider_music",
+        "search_provider_tv",
+        "search_provider_movie",
+        "music_sources",
+        "movie_sources",
+    ):
+        assert f"ALTER TABLE config DROP COLUMN {name}" in sql
+
+
+def test_0045_matches_the_config_model() -> None:
+    from arm_common import Config as ConfigModel
+
+    sql = _render_sql(_IDENT_PARENT, _IDENT_REV)
+    for name in (
+        "movie_sources",
+        "music_sources",
+        "search_provider_movie",
+        "search_provider_tv",
+        "search_provider_music",
+        "movie_auto_apply",
+        "music_auto_apply",
+        "crc64service_enabled",
+    ):
+        column = ConfigModel.__table__.columns[name]
+        assert f"ADD COLUMN {name} " in sql, f"0045 does not add config.{name}"
+        assert not column.nullable, f"Config.{name} is nullable but 0045 declares NOT NULL"
+        assert column.server_default is not None, f"Config.{name} has no server_default to match 0045's"
+    assert "metadata_provider" not in ConfigModel.__table__.columns
+
+
+def test_0049_matches_the_transcode_task_model() -> None:
+    """The heartbeat telemetry columns (D-242, D-248) exist on both sides,
+    nullable, so a row from before the revision reads back as null."""
+    sql = _render_sql("0048_drive_status_ripping", "0049_transcode_task_telemetry")
+    for name in ("current_pass", "eta_seconds", "fps", "avg_fps"):
+        column = TranscodeTask.__table__.columns[name]
+        assert f"ADD COLUMN {name} " in sql, f"0049 does not add transcode_tasks.{name}"
+        assert column.nullable, f"TranscodeTask.{name} is not nullable but 0049 adds it without a default"
+    down = _render_sql("0049_transcode_task_telemetry", "0048_drive_status_ripping", downgrade=True)
+    assert "ALTER TABLE transcode_tasks DROP COLUMN fps" in down
+
+
+def test_every_revision_after_0011_renders_offline() -> None:
+    """The data-lift revisions (0032, 0033) iterate SELECT rows from
+    ``op.get_bind()``; offline the bind renders statements and returns nothing,
+    so ``env.py`` hands back an empty result. Without that, ``--sql`` over any
+    range spanning 0032 crashed with ``'NoneType' object is not iterable``."""
+    up = _render_sql("0011_plex_movie_track_token", "head")
+    assert "-> 0032_job_metadata_sections" in up
+    assert "-> 0033_drop_metadata_mirrors" in up
+    down = _render_sql("head", "0011_plex_movie_track_token", downgrade=True)
+    assert "0033_drop_metadata_mirrors -> 0032_job_metadata_sections" in down
+
+
+def _migrated_indexes() -> dict[str, tuple[str, tuple[str, ...], bool, str]]:
+    """Index inventory at head, read from the rendered DDL. 0011 is skipped (it
+    can't render, see above) and creates no indexes."""
+    sql = _render_sql("base", "0010_fix_passthrough_mkv_preset") + _render_sql("0011_plex_movie_track_token", "head")
+    found: dict[str, tuple[str, tuple[str, ...], bool, str]] = {}
+    for stmt in sql.split(";"):
+        flat = " ".join(stmt.split())
+        created = re.search(r"CREATE (UNIQUE )?INDEX (\w+) ON (\w+) \(([^)]*)\)(?: WHERE (.*))?", flat)
+        if created:
+            cols = tuple(c.strip() for c in created.group(4).split(","))
+            found[created.group(2)] = (created.group(3), cols, bool(created.group(1)), created.group(5) or "")
+        dropped = re.search(r"DROP INDEX (\w+)", flat)
+        if dropped:
+            found.pop(dropped.group(1), None)
+    return found
+
+
+def test_model_indexes_match_migrations() -> None:
+    """Metadata-built schemas (the e2e harness, autogenerate) must carry the
+    same indexes as the migrated one, including the partial unique index that
+    backs the output_path collision check."""
+    modelled: dict[str, tuple[str, tuple[str, ...], bool, str]] = {}
+    for table in SQLModel.metadata.tables.values():
+        for index in table.indexes:
+            where = index.dialect_options["postgresql"]["where"]
+            modelled[str(index.name)] = (
+                table.name,
+                tuple(c.name for c in index.columns),
+                bool(index.unique),
+                str(where) if where is not None else "",
+            )
+    assert modelled == _migrated_indexes()

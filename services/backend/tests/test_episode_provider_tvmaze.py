@@ -336,3 +336,13 @@ async def test_season_non_str_name_maps_to_none(provider, name):
     )
     episodes = await provider.season("169", 1)
     assert episodes[0].name is None
+
+
+@respx.mock
+async def test_show_id_is_escaped_in_episodes_path(provider):
+    """D-161: an operator-pasted id cannot add path segments or query params."""
+    route = respx.get(url__startswith=f"{BASE}/shows/").mock(
+        return_value=httpx.Response(200, json=[{"season": 1, "number": 1, "name": "Pilot", "runtime": 30}])
+    )
+    await provider.seasons("123/season/1?x=1#f")
+    assert route.calls.last.request.url.raw_path == b"/shows/123%2Fseason%2F1%3Fx%3D1%23f/episodes?specials=1"

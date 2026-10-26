@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend import image_cache  # noqa: E402
+from arm_backend import image_cache
 
 
 @pytest.fixture

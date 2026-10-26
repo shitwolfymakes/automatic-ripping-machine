@@ -6,26 +6,25 @@ collision paths are covered by test_jobs_delete.py / test_apply_session.py.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError
+from arm_backend.db import get_session
+from arm_backend.identity.proposals import record_manual_job
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.routers import jobs as jobs_router
+from arm_common import (
+    Config,
     DiscFingerprint,
     DiscType,
     Drive,
@@ -40,10 +39,11 @@ from arm_common import (  # noqa: E402
     TrackStatus,
     User,
 )
-from arm_common.enums import TrackKind, TrackRole  # noqa: E402
-from arm_common.models import Track  # noqa: E402
+from arm_common.enums import TrackKind, TrackRole
+from arm_common.models import Track
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -99,6 +99,20 @@ def _make_app(signing_key: bytes, db: FakeSession, hub: _Hub | None = None) -> t
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+_SUGGESTION = {
+    "provider": "tmdb",
+    "title": "Iron Man",
+    "year": 2008,
+    "kind": "movie",
+    "poster_url": "https://image.tmdb.org/t/p/w500/abc.jpg",
+    "external_ids": {"imdb": "tt0371746", "tmdb": "1726", "tmdb_kind": "movie"},
+    "overview": "Tony Stark.",
+    # A real hit carries its ids in the payload; accept re-derives them from it.
+    "payload": {"id": 1726, "imdb_id": "tt0371746", "poster_path": "/abc.jpg"},
+    "suggested_at": "2026-10-15T10:00:00Z",
+}
 
 
 def _job(
@@ -165,6 +179,75 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
     assert len(by_drive.json()) == 2
 
 
+def _dated_job(job_id: str, *, day: int, status: JobStatus = JobStatus.RIPPED) -> Job:
+    j = _job(job_id, status=status)
+    j.created_at = datetime(2026, 1, day, tzinfo=timezone.utc)
+    return j
+
+
+def test_list_jobs_total_count_header_reflects_filter_not_page(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=2),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3, status=JobStatus.FAILED),
+    ]
+    with TestClient(app) as client:
+        page = client.get("/api/jobs?limit=1", headers=_auth(token))
+        failed = client.get("/api/jobs?status=failed", headers=_auth(token))
+    assert page.status_code == 200
+    assert len(page.json()) == 1
+    assert page.headers["X-Total-Count"] == "3"
+    assert failed.headers["X-Total-Count"] == "1"
+
+
+def test_list_jobs_pages_newest_first_with_id_tiebreak(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000004", day=2),
+    ]
+    with TestClient(app) as client:
+        first = client.get("/api/jobs?limit=2&offset=0", headers=_auth(token))
+        second = client.get("/api/jobs?limit=2&offset=2", headers=_auth(token))
+    assert [j["id"] for j in first.json()] == ["job_01JZXR7K3M5Q8N4VWA00000003", "job_01JZXR7K3M5Q8N4VWA00000002"]
+    assert [j["id"] for j in second.json()] == ["job_01JZXR7K3M5Q8N4VWA00000004", "job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_list_jobs_limit_defaults_to_50_and_caps_at_500(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i % 28) for i in range(60)]
+    with TestClient(app) as client:
+        default = client.get("/api/jobs", headers=_auth(token))
+        too_big = client.get("/api/jobs?limit=501", headers=_auth(token))
+        max_ok = client.get("/api/jobs?limit=500", headers=_auth(token))
+    assert len(default.json()) == 50
+    assert default.headers["X-Total-Count"] == "60"
+    assert too_big.status_code == 422
+    assert max_ok.status_code == 200
+    assert max_ok.headers["X-Total-Count"] == "60"
+
+
+def test_list_jobs_total_count_is_exact_on_short_and_past_end_pages(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i) for i in range(5)]
+    with TestClient(app) as client:
+        short = client.get("/api/jobs?limit=10&offset=2", headers=_auth(token))
+        past_end = client.get("/api/jobs?limit=10&offset=20", headers=_auth(token))
+        full = client.get("/api/jobs?limit=5", headers=_auth(token))
+    assert len(short.json()) == 3
+    assert short.headers["X-Total-Count"] == "5"
+    assert past_end.json() == []
+    assert past_end.headers["X-Total-Count"] == "5"
+    assert full.headers["X-Total-Count"] == "5"
+
+
 # --- get_job_detail ----------------------------------------------------------
 
 
@@ -212,6 +295,31 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
         r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", headers=_auth(token))
     assert r.status_code == 409
     assert "terminal status" in r.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/abandon", None),
+        ("DELETE", "", None),
+        ("POST", "/resolve", {"title": "T"}),
+    ],
+)
+def test_status_409_survives_raw_string_status(
+    signing_key: bytes, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409 on abandon / delete / resolve, not an
+    AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.request(method, f"/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001{path}", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
@@ -360,6 +468,20 @@ def test_review_pause_sets_manual_pause(signing_key: bytes) -> None:
     assert any(e["event_type"] == "review.pause" for e in hub.events)
 
 
+def test_review_pause_409_on_a_suggestion_hold(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(
+        status=JobStatus.AWAITING_REVIEW, meta={"identity_suggestion": _SUGGESTION, "flags": {"unidentified": True}}
+    )
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/review-pause?paused=true", headers=_auth(token))
+    assert r.status_code == 409
+    assert "confirm its identity" in r.json()["detail"]
+    assert job.manual_pause is False
+
+
 def test_review_resume_clears_pause_and_resets_countdown(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -456,7 +578,7 @@ def test_manual_trigger_in_flight_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "in-flight RIPPING" in r.json()["detail"]
+    assert "job in progress (ripping)" in r.json()["detail"]
 
 
 def test_manual_trigger_media_not_ready_400(signing_key: bytes) -> None:
@@ -575,6 +697,29 @@ def test_resolve_not_in_resolvable_status_409(signing_key: bytes, bad_status: Jo
         r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json={"title": "T"}, headers=_auth(token))
     assert r.status_code == 409
     assert "not in an identify-resolvable status" in r.json()["detail"]
+
+
+def test_resolve_drops_the_identify_attempts(signing_key: bytes) -> None:
+    """The miss reasons describe the automatic match; once the operator
+    identifies the disc they no longer apply."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    attempts = [{"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY DISC"}]
+    db.rows["jobs"] = [
+        _job(
+            status=JobStatus.AWAITING_USER_ID,
+            meta={"scan_result": {"disc_type": "dvd"}, "identify_attempts": attempts},
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Blade Runner", "year": 1982},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200
+    assert r.json()["job"]["metadata_json"].get("identify_attempts") is None
+    assert "identify_attempts" not in db.rows["jobs"][0].metadata_json
 
 
 def test_resolve_success_preserves_scan_and_emits(signing_key: bytes) -> None:
@@ -1704,10 +1849,10 @@ def test_resolve_without_disc_fields_keeps_hinted_disc(signing_key: bytes) -> No
     assert job.identity_provenance == {"disc_number": "label", "disc_total": "label"}
 
 
-def test_resolve_explicit_null_disc_clears_hint(signing_key: bytes) -> None:
-    """An EXPLICIT null for disc_number is the operator saying "clear it" --
-    distinct from omitting the field (test_resolve_without_disc_fields_keeps_hinted_disc
-    above), and still wins over the hint as a manual claim."""
+def test_resolve_explicit_null_disc_forgets_the_operator_value_only(signing_key: bytes) -> None:
+    """An EXPLICIT null for disc_number removes the operator's own value (it
+    is no longer recorded as a manual "unknown" claim), so the label hint, an
+    automatic proposer, still stands -- nothing manual is left to pin."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job_with_label_disc_hint()]
@@ -1719,8 +1864,9 @@ def test_resolve_explicit_null_disc_clears_hint(signing_key: bytes) -> None:
         )
     assert r.status_code == 200, r.text
     job = db.rows["jobs"][0]
-    assert job.disc_number is None
-    assert job.identity_provenance == {"disc_number": "manual", "disc_total": "label"}
+    assert job.disc_number == 3
+    assert job.identity_provenance == {"disc_number": "label", "disc_total": "label"}
+    assert "manual" not in job.metadata_json.get("identity_claims", {}).get("sources", {})
 
 
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
@@ -1771,6 +1917,8 @@ def test_resolve_explicit_null_media_type_and_season_clears_them(signing_key: by
     job = _job(status=JobStatus.AWAITING_USER_ID, meta={})
     job.media_type = MediaType.TV
     job.season = 3
+    job.identity_provenance = {"season": "manual"}
+    record_manual_job(job, {"season": 3}, keep_restated=True)
     db.rows["jobs"] = [job]
     with TestClient(app) as client:
         r = client.post(
@@ -2001,3 +2149,225 @@ def test_patch_switches_media_type_and_reschedules_matching(signing_key: bytes) 
     assert r.json()["media_type"] == "tv"
     assert r.json()["metadata_json"]["identity"]["external_ids"]["tmdb"] == "1749913"  # ids kept
     assert runner.scheduled == [job.id]
+
+
+def _suggested_job(status: JobStatus = JobStatus.AWAITING_REVIEW) -> Job:
+    job = _job(status=status)
+    job.title = "MY_DISC"
+    job.year = None
+    job.media_type = None
+    job.wait_start_time = None
+    job.metadata_json = {"identity_suggestion": dict(_SUGGESTION), "flags": {"unidentified": True}}
+    return job
+
+
+def test_accept_applies_the_suggestion_and_releases_the_rip_when_the_gate_is_off(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "identified"
+    assert (body["title"], body["year"], body["media_type"]) == ("Iron Man", 2008, "movie")
+    assert body["poster_url"] == "https://image.tmdb.org/t/p/w500/abc.jpg"
+    assert body["metadata_json"]["identity"]["provider"] == "tmdb"
+    assert body["metadata_json"]["identity"]["external_ids"]["imdb"] == "tt0371746"
+    assert body["metadata_json"]["provider_raw"]["tmdb"]["id"] == 1726
+    assert body["metadata_json"].get("identity_suggestion") is None
+    assert body["metadata_json"]["flags"].get("unidentified", False) is False
+    assert any(e["event_type"] == "identify.resolved" for e in hub.events)
+
+
+def test_accept_with_the_review_gate_on_keeps_the_hold_and_starts_the_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=True, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is not None
+    assert body["title"] == "Iron Man"
+
+
+def test_accept_while_ripping_is_paused_stays_held_with_no_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["metadata_json"].get("identity_suggestion") is None
+
+
+def test_accept_on_a_ripped_placeholder_promotes_to_ripped(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job(JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["status"] == "ripped"
+    assert r.json()["job"]["title"] == "Iron Man"
+
+
+def test_accept_music_suggestion_sets_the_disc_number(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["identity_suggestion"].update(
+        {"provider": "musicbrainz", "kind": "music", "title": "Album", "year": 1999, "payload": {"disc": 2}}
+    )
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.json()["job"]["disc_number"] == 2
+
+
+def test_accept_409_without_a_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _job(status=JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 409
+    assert "no identity suggestion" in r.json()["detail"]
+
+
+def test_accept_409_in_a_non_resolvable_status(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job(JobStatus.RIPPING)
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 409
+    assert job.title == "MY_DISC"
+
+
+def test_accept_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA0000000M/identity/accept", headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_accept_requires_a_writer(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    app, _ = _make_app(signing_key, db)
+    db.rows["users"].append(
+        User(id="usr_guest", username="guest", password_hash="x", password_must_change=False, role=GUEST_ROLE)
+    )
+    guest_token, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(guest_token))
+    assert r.status_code == 403
+    # Nothing was applied: the job keeps its miss title, hold and suggestion.
+    assert (job.title, job.status) == ("MY_DISC", JobStatus.AWAITING_REVIEW)
+    assert "identity_suggestion" in job.metadata_json
+
+
+def test_accept_schedules_the_episode_stage_for_a_tv_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["identity_suggestion"].update(
+        {
+            "provider": "tvmaze",
+            "kind": "tv",
+            "title": "Some Show",
+            "year": 2010,
+            "external_ids": {"tvmaze": "123"},
+            "payload": {"id": 123},
+        }
+    )
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=False, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert (body["title"], body["media_type"]) == ("Some Show", "tv")
+    assert body["metadata_json"]["identity"]["external_ids"]["tvmaze"] == "123"
+    assert stage_runner.scheduled == [job.id]
+
+
+def test_resolve_clears_a_held_suggestion(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(
+            f"/api/jobs/{job.id}/resolve", json={"title": "Something Else", "year": 2001}, headers=_auth(token)
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["job"]["metadata_json"].get("identity_suggestion") is None
+        assert r.json()["job"]["metadata_json"]["flags"].get("unidentified", False) is False
+        again = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert again.status_code == 409
+
+
+def test_accept_with_the_gate_on_while_paused_stays_held_with_no_countdown(signing_key: bytes) -> None:
+    db = FakeSession()
+    job = _suggested_job()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=True, ripping_paused=True)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["metadata_json"].get("identity_suggestion") is None
+
+
+_PRIOR_JOB_ID = "job_01JZXR7K3M5Q8N4VWA0000PR10"
+
+
+@pytest.mark.parametrize("hold_for_review", [False, True])
+def test_accept_keeps_a_previously_ripped_hold_in_place(signing_key: bytes, hold_for_review: bool) -> None:
+    """A held hit on a disc ARM already ripped: accepting identifies it but
+    neither releases it to rip nor starts a countdown; the operator still
+    leaves the previously-ripped hold via Rip again or Discard."""
+    db = FakeSession()
+    job = _suggested_job()
+    job.metadata_json["previously_ripped"] = {"job_id": _PRIOR_JOB_ID}
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1, hold_for_review=hold_for_review, ripping_paused=False)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review"
+    assert body["wait_start_time"] is None
+    assert body["title"] == "Iron Man"
+    assert body["metadata_json"].get("identity_suggestion") is None
+    assert body["metadata_json"]["previously_ripped"] == {"job_id": _PRIOR_JOB_ID}

@@ -44,7 +44,7 @@
 		},
 		{
 			label: 'Key',
-			href: '/settings#Metadata/makemkv_key',
+			href: '/settings#Keys/makemkv_key',
 			status: $dashboard.makemkv_key_valid === true ? 'ok' : 'error'
 		}
 	]);

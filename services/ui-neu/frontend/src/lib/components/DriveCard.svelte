@@ -223,6 +223,31 @@
 	let isError = $derived(drive?.status === 'error');
 	let isOfflinePresent = $derived(!isError && !isDetached && drive?.status === 'offline' && drive?.present === true);
 
+	// Why Start rip cannot work right now, or null when it can (D-208). The
+	// backend refuses a trigger while the drive rips (409) or reports no disc
+	// ready (400), and the ripper silently drops one while it owns any job or
+	// when no ripper is listening, so gate the button up front instead of
+	// letting the click spin and fail (or do nothing). `unknown` is let through
+	// like the backend does: the ripper decides once it scans.
+	let startRipBlocked = $derived.by((): string | null => {
+		if (!drive) return null;
+		if (hasLiveJob(drive)) return 'The drive already has a job in progress';
+		if (isDetached) return 'The drive is not connected';
+		if (isOfflinePresent) return "The drive's ripper is offline";
+		switch (drive.media_status) {
+			case 'no_disc':
+				return 'No disc in the drive';
+			case 'tray_open':
+				return 'The tray is open';
+			case 'not_ready':
+				return 'The drive is not ready yet';
+			case 'unavailable':
+				return 'The drive cannot be opened: check its permissions';
+			default:
+				return null;
+		}
+	});
+
 	async function startManualRip() {
 		if (!drive || triggering) return;
 		triggering = true;
@@ -573,10 +598,10 @@
 			</select>
 			<button
 				onclick={startManualRip}
-				disabled={triggering}
+				disabled={triggering || startRipBlocked !== null}
 				data-testid="drive-start-rip"
 				class="flex items-center justify-center gap-1 btn btn-primary btn-sm drive-card-start-btn"
-				title="Start a manual rip on this drive"
+				title={startRipBlocked ?? 'Start a manual rip on this drive'}
 			>
 				{triggering ? 'Starting...' : 'Start rip'}
 			</button>

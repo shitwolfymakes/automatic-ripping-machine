@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 import arm_ripper.job_controller as jc_module
-from arm_common import DiscType, Job, JobStatus
+from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
     JobView,
     RipperConfigView,
@@ -47,6 +47,7 @@ def _view(
     title: str | None = None,
     wait_start_time: datetime | None = None,
     manual_pause: bool = False,
+    episodes_unsure: bool = False,
 ) -> JobView:
     return JobView(
         id="job_test",
@@ -55,7 +56,8 @@ def _view(
         status=status,
         title=title,
         year=None,
-        metadata_json={},
+        media_type=MediaType.TV if episodes_unsure else None,
+        metadata_json={"identity_claims": {"unsure": True}} if episodes_unsure else {},
         resumed_from_crash=False,
         wait_start_time=wait_start_time,
         manual_pause=manual_pause,
@@ -366,9 +368,49 @@ async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eje
     assert client.rip_complete_calls == []
 
 
+async def test_review_gate_guessed_episodes_do_not_auto_start(stub_scan, stub_eject, monkeypatch, caplog):
+    """A placement that is a guess holds the countdown like a per-job pause:
+    elapsed, not paused, but `episodes_unsure` on every view -> no auto-start,
+    logged once."""
+    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    client.ripping_paused = False
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Show"))
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, episodes_unsure=True) for _ in range(6)]
+    )
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level(logging.INFO):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.rip_start_calls == []
+    assert client.rip_complete_calls == []
+    assert sum("countdown held, its episode placement is a guess" in r.message for r in caplog.records) == 1
+
+
+async def test_review_gate_auto_starts_once_the_guess_is_fixed(stub_scan, stub_eject):
+    """The hold lifts with the flag: a later view without `episodes_unsure`
+    (a Fix match left a confident placement) auto-starts as usual."""
+    client = FakeClient()
+    client.manual_wait_seconds = 1
+    past = datetime.now(timezone.utc) - timedelta(seconds=10)
+    client.identify_responses.append(_job(JobStatus.AWAITING_REVIEW, title="Held Show"))
+    client.get_job_responses.extend(
+        [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past, episodes_unsure=True) for _ in range(2)]
+        + [_view(JobStatus.AWAITING_REVIEW, wait_start_time=past) for _ in range(4)]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=4.0)
+
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
+
+
 # --- resolution_timeout: source mode's indefinite wait ----------------------
-
-
 async def test_resolution_timeout_default_still_times_out(stub_scan, stub_eject):
     """No override passed to the constructor: the wait still honours
     RESOLUTION_WAIT_TIMEOUT_SECONDS exactly as before (the `fast_polls` fixture
@@ -1030,3 +1072,46 @@ async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
     rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
     assert rc is None
     assert msg == "timeout"
+
+
+async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
+    """D-175: the raw-dir wipe runs in a thread via a spawned task, so the
+    WS handler returns before a multi-GB rmtree finishes."""
+    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)
+    raw = tmp_path / "job_test"
+    (raw / "sub").mkdir(parents=True)
+    (raw / "sub" / "title_t00.mkv").write_bytes(b"x")
+    threads: list[object] = []
+    real_to_thread = jc_module.asyncio.to_thread
+
+    async def spy_to_thread(fn, *a, **kw):
+        threads.append(fn)
+        return await real_to_thread(fn, *a, **kw)
+
+    monkeypatch.setattr(jc_module.asyncio, "to_thread", spy_to_thread)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._handle_abandon("job_test", delete_raw=True)
+    assert raw.exists()  # not deleted inline
+    await asyncio.gather(*controller._wipe_tasks)
+
+    assert not raw.exists()
+    assert threads == [jc_module.shutil.rmtree]
+    assert controller._wipe_tasks == set()
+
+
+async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await controller._wipe_raw("never_existed")
+    assert "already absent" in caplog.text
+
+    def denied(_p):
+        raise PermissionError("read-only mount")
+
+    monkeypatch.setattr(jc_module.shutil, "rmtree", denied)
+    await controller._wipe_raw("job_x")
+    assert "raw-dir cleanup failed" in caplog.text

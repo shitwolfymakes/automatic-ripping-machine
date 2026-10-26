@@ -199,6 +199,29 @@ async def apply_session_internal(
         )
 
 
+async def _existing_parked_application(db: AsyncSession, session_id: str, job_id: str) -> SessionApplication | None:
+    """The WAITING_IDENTIFY application already parked for (session, job), if any.
+
+    Parking is idempotent: a parked row does nothing until a drain fills it, so a
+    repeat apply of the same session before the rip (or before identify) returns
+    the parked row instead of parking a duplicate. A duplicate would be drained
+    into a `collisions` park against its twin's tasks and list the session as
+    waiting forever.
+    """
+    return (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.session_id) == session_id)
+                .where(col(SessionApplication.job_id) == job_id)
+                .where(col(SessionApplication.status) == SessionApplicationStatus.WAITING_IDENTIFY)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
 async def _apply_session_internal(
     db: AsyncSession,
     *,
@@ -224,15 +247,32 @@ async def _apply_session_internal(
     # collision flow surfaces a confirm dialog; on overwrite=True the
     # colliding DONE/QUEUED tasks are deleted before we fan out fresh
     # rows. IN_PROGRESS collisions are still refused — can't safely
-    # replace a transcoder that's actively writing.
+    # replace a transcoder that's actively writing. The exception is a park
+    # (pre-rip or pre-identify): it does no work yet, so a repeat click
+    # returns the already-parked row (see `_existing_parked_application`).
     if source == "auto":
-        existing = (
-            await db.execute(
-                select(SessionApplication)
-                .where(col(SessionApplication.session_id) == session_id)
-                .where(col(SessionApplication.job_id) == job.id)
+        existing_rows = (
+            (
+                await db.execute(
+                    select(SessionApplication)
+                    .where(col(SessionApplication.session_id) == session_id)
+                    .where(col(SessionApplication.job_id) == job.id)
+                )
             )
-        ).scalar_one_or_none()
+            .scalars()
+            .all()
+        )
+        if len(existing_rows) > 1:
+            # Parked twice before D-141; the extra rows still drain, each into
+            # its own collisions park, until someone deletes them.
+            logger.warning(
+                "job %s has %d applications of session %s; using the first (%s)",
+                job.id,
+                len(existing_rows),
+                session_id,
+                existing_rows[0].id,
+            )
+        existing = existing_rows[0] if existing_rows else None
         if existing is not None:
             tasks = await _load_tasks(db, existing.id)
             retried = await _retry_failed_tasks(db, tasks)
@@ -310,6 +350,15 @@ async def _apply_session_internal(
     # same way: transcode is gated on identity, and resolve's after-rip pass
     # promotes the application once the operator supplies it.
     if job.status in APPLY_PARK_JOB_STATUSES:
+        parked = await _existing_parked_application(db, session_id, job.id)
+        if parked is not None:
+            return ApplySessionOutcome(
+                application=parked,
+                tasks=[],
+                collisions=[],
+                idempotent=True,
+                skipped_reason=None,
+            )
         application = SessionApplication(
             session_id=session_id,
             job_id=job.id,
@@ -333,7 +382,7 @@ async def _apply_session_internal(
         # `maybe_auto_apply_session` gates on RIPPED/RIPPED_PARTIAL.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"job is in status {job.status.value}; cannot apply a session",
+            detail=f"job is in status {enum_value_str(job.status)}; cannot apply a session",
         )
 
     rip_preset = (
@@ -509,6 +558,15 @@ async def _fan_out_tasks_for_application(
     # it surfaces as a parked `template` outcome rather than blocking apply.
     if job.status not in POST_RIP_JOB_STATUSES:
         if application is None:
+            parked = await _existing_parked_application(db, sess.id, job.id)
+            if parked is not None:
+                return ApplySessionOutcome(
+                    application=parked,
+                    tasks=[],
+                    collisions=[],
+                    idempotent=True,
+                    skipped_reason="no_tracks",
+                )
             application = SessionApplication(
                 session_id=sess.id,
                 job_id=job.id,

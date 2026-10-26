@@ -5,7 +5,11 @@ A virtual drive is created `enrolled` with a one-shot ripper container
 just exits; this module's watchdog owns the cleanup. `sweep_virtual_drives`
 runs every 30 seconds as a lifespan task and once at boot, before
 `reconcile_enrolled_rippers` loads the enrolled list, so a finished ISO rip is
-never respawned.
+never respawned. A rip parked at a review gate is the one exception: its
+ripper only heartbeats, so when a backend restart (or anything else) takes the
+container away the watchdog starts it again and the ripper re-identifies
+into the same job (`disc_dedupe` reuses a pre-rip job on the same drive),
+within a crash-loop window and a budget of starts per hour.
 
 The pure library helpers live in `iso_library` (no cycle with
 `ripper_manager`). The `/api/iso` router adds create and cancel here.
@@ -16,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,7 +48,7 @@ from arm_common import (
     Track,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, PRE_RIP_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.ulid import new_id
 
 if TYPE_CHECKING:
@@ -68,6 +73,20 @@ SPAWN_GRACE_SECONDS = 120
 # and so is "unknown" (docker unreachable): retiring on a guess would fail a
 # live rip.
 _DEAD_STATES = frozenset({"exited", "dead", "missing"})
+# When each virtual drive's parked ripper was started again (monotonic
+# seconds, oldest first). A ripper that dies again within this window never
+# got going: it is crash-looping and is failed like any other dead rip. One
+# that ran longer before dying was stopped by something else (a backend
+# restart, even one a few minutes after the last) and is started again. The
+# sweep runs every 30 seconds, so a container that crashes on start is seen
+# well inside the window.
+CRASH_LOOP_WINDOW_SECONDS = 90
+# A ripper that dies reproducibly later than the window (a slow scan that then
+# crashes) is crash-looping too: past this many starts within the budget
+# window, the job is failed. Backend rollouts a few minutes apart stay under it.
+RESPAWN_BUDGET = 3
+RESPAWN_BUDGET_WINDOW_SECONDS = 3600
+_respawned: dict[str, list[float]] = {}
 
 _EPOCH = datetime.min.replace(tzinfo=UTC)
 
@@ -172,13 +191,42 @@ def _within_spawn_grace(drive: Drive) -> bool:
     return (datetime.now(UTC) - created_at).total_seconds() < SPAWN_GRACE_SECONDS
 
 
+async def _respawn_parked(manager: RipperManager, drive: Drive, job: Job) -> bool:
+    """Start the ripper of a drive whose job is parked before the rip, unless it
+    was started again less than `CRASH_LOOP_WINDOW_SECONDS` ago or has used its
+    `RESPAWN_BUDGET` starts in the last `RESPAWN_BUDGET_WINDOW_SECONDS`. False
+    when it is crash-looping or the manager could not start it; the caller then
+    fails the job as for any dead rip."""
+    now = time.monotonic()
+    starts = [t for t in _respawned.get(drive.id, []) if now - t < RESPAWN_BUDGET_WINDOW_SECONDS]
+    _respawned[drive.id] = starts
+    if starts and now - starts[-1] < CRASH_LOOP_WINDOW_SECONDS:
+        return False
+    if len(starts) >= RESPAWN_BUDGET:
+        logger.warning("iso drive_id=%s ripper started %d times within the hour; failing", drive.id, len(starts))
+        return False
+    try:
+        await asyncio.to_thread(manager.ensure_running, drive)
+    except RipperManagerError as exc:
+        logger.warning("iso drive_id=%s ripper could not be started again for job_id=%s: %s", drive.id, job.id, exc)
+        return False
+    starts.append(time.monotonic())
+    logger.info("iso drive_id=%s ripper started again for parked job_id=%s (%s)", drive.id, job.id, job.status.value)
+    return True
+
+
 async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WSHub) -> int:
     """One watchdog pass over the enrolled virtual drives. Returns how many it retired.
 
     - container running (or state unknown): nothing happens;
     - container exited or missing, latest job terminal or no job: retire;
-    - container exited or missing, latest job not terminal: fail the job
-      ("ISO ripper stopped unexpectedly", `rip.failed`), then retire.
+    - container exited or missing, latest job parked before the rip (a review
+      gate), not started again within the crash-loop window and under the
+      hourly budget: start the ripper again and leave the drive enrolled; it
+      re-identifies into the same job;
+    - container exited or missing, latest job not terminal otherwise (ripping,
+      or parked and crash-looping): fail the job ("ISO ripper stopped
+      unexpectedly", `rip.failed`), then retire.
 
     Each drive is re-read `FOR UPDATE` before it is acted on and skipped if
     it is no longer enrolled; its job is re-read too, so a job a cancel has
@@ -214,6 +262,9 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
             await db.commit()  # release the lock; nothing to do
             continue
         job = await _latest_job(db, drive.id)
+        if job is not None and job.status in PRE_RIP_JOB_STATUSES and await _respawn_parked(manager, drive, job):
+            await db.commit()  # release the lock; the drive stays enrolled
+            continue
         if job is not None and job.status not in TERMINAL_JOB_STATUSES:
             await _fail_job(db, hub, job)
         await retire_virtual_drive(db, manager, drive)

@@ -1,16 +1,11 @@
-import os
-
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_backend.transcode_apply import aggregate_session_application  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.transcode_apply import aggregate_session_application
+from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _app(status: SessionApplicationStatus = SessionApplicationStatus.RUNNING) -> SessionApplication:

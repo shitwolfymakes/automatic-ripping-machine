@@ -172,12 +172,13 @@ Arbitrary proprietary discs are never tested — obvious legal reasons.
 These cost real debugging time; they are load-bearing, not trivia.
 
 - **The `arm_backend.config` Settings object is a process singleton.**
-  `tests/e2e/conftest.py` is imported during collection *before any test
-  module*, so its module-level `os.environ.setdefault(...)` wins the
-  singleton session-wide. Its values **must match the rest of the suite's
-  convention** (`ARM_SERVICE_TOKEN="tok-service"`, a dummy Postgres
-  `DATABASE_URL`) or unrelated fake-session tests start 401'ing. New
-  shared env defaults go through this lens.
+  `services/backend/tests/conftest.py` assigns `DATABASE_URL` (a dummy
+  Postgres URL) and `ARM_SERVICE_TOKEN="tok-service"` before pytest imports
+  any backend test module, in every invocation and order, so the singleton
+  sees the same values session-wide. Test modules must not set either
+  variable themselves: a per-module default is only honoured when that
+  module happens to import first, which made the WS tests order-dependent.
+  New shared env defaults belong in that conftest.
 - **Test module basenames must be unique across services.** pytest's
   default prepend import mode with no `tests/` package `__init__.py` means
   two `test_dispatcher.py` files (one in `backend`, one in `ripper`) abort

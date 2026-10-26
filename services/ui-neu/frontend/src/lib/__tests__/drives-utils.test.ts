@@ -79,8 +79,7 @@ describe('utils/drives', () => {
 		expect(serialLabel(drive())).toEqual({ text: 'AAAABBBB000E', warn: false });
 		expect(serialLabel(drive({ serial: null, identity_kind: 'port' }))).toEqual({ text: NO_SERIAL_LABEL, warn: true });
 	});
-	it('isRipping reads status or the current job', () => {
-		expect(isRipping(drive({ status: 'ripping' }))).toBe(true);
+	it('isRipping reads the current job', () => {
 		expect(isRipping(drive({ current_job: { id: 'job_1', title: null, status: 'ripping' } }))).toBe(true);
 		expect(isRipping(drive())).toBe(false);
 	});

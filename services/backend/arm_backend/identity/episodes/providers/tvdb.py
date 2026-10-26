@@ -108,7 +108,7 @@ class TvdbEpisodes:
 
     async def seasons(self, show_id: str) -> list[int]:
         body = await self._get_authed(
-            f"{settings.ARM_TVDB_BASE_URL}/series/{show_id}/extended", params={"short": "true"}
+            f"{settings.ARM_TVDB_BASE_URL}/series/{quote(show_id, safe='')}/extended", params={"short": "true"}
         )
         try:
             data = body["data"]
@@ -145,7 +145,7 @@ class TvdbEpisodes:
         while page < _MAX_PAGES:
             try:
                 body = await self._get_authed(
-                    f"{settings.ARM_TVDB_BASE_URL}/series/{show_id}/episodes/{order}",
+                    f"{settings.ARM_TVDB_BASE_URL}/series/{quote(show_id, safe='')}/episodes/{order}",
                     params={"season": season_number, "page": page},
                 )
             except SourceMiss:

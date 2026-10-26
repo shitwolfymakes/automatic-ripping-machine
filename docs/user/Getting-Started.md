@@ -58,8 +58,9 @@ Your user must be able to reach the Docker daemon — either a member of the
 sudo usermod -aG docker "$USER" && newgrp docker
 ```
 
-You do **not** need to be in the host's optical group; the ripper container is
-granted access to the drive via `group_add` automatically.
+You do **not** need to be in the host's optical group. The installer records
+that group's ID as `CDROM_GID`, and each ripper container joins it and creates
+its own drive nodes when it starts.
 
 ## Install
 
@@ -94,8 +95,11 @@ The installer asks a few questions:
 
 - **How the host is used.** Full box (rip and transcode here), ripper-only, or
   rip here and transcode on another machine.
-- **Where raw rips and finished media go.** The default is inside `~/arm`;
-  point them at a NAS mount or a second disk if you have one.
+- **Where raw rips and finished media go.** The default is inside `~/arm`.
+  Keep raw rips on the fastest local disk you have, sized for a few discs:
+  every rip is written there and then read back in full to hash it, so raw on
+  a network share costs twice. Finished media can go on a NAS mount or a
+  second disk.
 - **Host changes, one at a time.** Installing Docker (Debian and Ubuntu only),
   the NVIDIA container toolkit if you have an NVIDIA GPU, and a udev rule that
   stops a desktop session auto-mounting discs. You can decline any of them.
@@ -147,7 +151,7 @@ If `armctl` is not found, use `~/arm/armctl`.
 > **Alpha note:** during early v3 development the published registry images may
 > not yet exist for every tag, and the image pull can 404. To run today,
 > build the images locally from a checkout — see
-> [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
+> [Local development in CONTRIBUTING.md](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md#local-development).
 
 ## First login
 
@@ -177,9 +181,9 @@ pick up where you left off.
    rest. No drive? You can rip ISO image files instead.
 4. **MakeMKV.** Use the free monthly beta key or your purchased key. A drive
    checks the key for you.
-5. **Find titles** (optional). Add a free [TMDb](https://www.themoviedb.org/settings/api)
+5. **Identification** (optional). Add a free [TMDb](https://www.themoviedb.org/settings/api)
    and/or [OMDb](https://www.omdbapi.com/apikey.aspx) key and test it in place.
-   TV episodes and music CDs work without one.
+   TV shows and music CDs work without one.
 6. **Disc handling.** Fully automatic, review the title first, or manual.
 7. **Transcoding** (optional). Test your graphics card's encoders.
 8. **Notifications** (optional). Get a phone or chat message when a rip
@@ -203,6 +207,13 @@ good on every device on your LAN, import the CA once. The Finish step has a
 This is a one-time action per device. The per-service leaf certs are
 regenerated whenever you rerun the installer, but they're all signed by this CA,
 so trusting the CA is enough: you never re-import after a leaf changes.
+
+The UI certificate names `localhost`, the host's name and the host's IPv4
+addresses. If the host later gets a new address (a DHCP change, a new network
+card), browsers warn on the new address until the certificate names it: run
+`armctl up`, which issues a fresh certificate when the host has an address the
+current one lacks and restarts the UI with it. If that does not clear the
+warning, run `armctl down`, then `armctl install`.
 
 ## Your first rip
 
