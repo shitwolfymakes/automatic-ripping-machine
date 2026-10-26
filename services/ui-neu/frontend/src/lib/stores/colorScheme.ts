@@ -91,7 +91,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(15, 15, 15)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="stealth-ops"] .section-frame {\n\tborder: 1px solid #222 !important;\n}\n[data-scheme="stealth-ops"] .section-frame-bar-top {\n\tbackground: #111 !important;\n\tcolor: #666 !important;\n\tborder-bottom: 1px solid #222;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.2em;\n}\n[data-scheme="stealth-ops"] aside .nav-item[data-active="true"] {\n\tcolor: #ef4444 !important;\n\tbackground: transparent !important;\n\tborder-right: 2px solid #ef4444;\n}\n[data-scheme="stealth-ops"] [data-progress-fill] {\n\tbackground: #ef4444 !important;\n\tbox-shadow: 0 0 15px rgba(239, 68, 68, 0.4);\n}'
+		css: '[data-scheme="stealth-ops"] .section-frame {\n\tborder: 1px solid #222 !important;\n}\n[data-scheme="stealth-ops"] .section-frame-bar-top {\n\tbackground: #111 !important;\n\tcolor: #666 !important;\n\tborder-bottom: 1px solid #222;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.2em;\n}\n[data-scheme="stealth-ops"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tcolor: #ef4444 !important;\n\tbackground: transparent !important;\n\tborder-right: 2px solid #ef4444;\n}\n[data-scheme="stealth-ops"] [data-progress-fill] {\n\tbackground: #ef4444 !important;\n\tbox-shadow: 0 0 15px rgba(239, 68, 68, 0.4);\n}'
 	},
 	{
 		id: 'library-archive',
@@ -116,7 +116,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(28, 25, 23)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="library-archive"] {\n\tfont-family: \'Georgia\', serif;\n}\n[data-scheme="library-archive"] aside {\n\tbackground-color: rgb(240, 235, 220) !important;\n\tborder-right: 2px solid #ddd !important;\n}\n[data-scheme="library-archive"] .section-frame-bar-top {\n\tborder-bottom: 2px solid #333 !important;\n\tbackground: transparent !important;\n\tcolor: #333 !important;\n\tfont-family: \'Times New Roman\', serif;\n\tfont-variant: small-caps;\n}\n[data-scheme="library-archive"] [data-progress-fill] {\n\tbackground: #7f1d1d !important;\n\tborder-radius: 0 !important;\n}'
+		css: '[data-scheme="library-archive"] {\n\tfont-family: \'Georgia\', serif;\n}\n[data-scheme="library-archive"] aside:where([data-sidebar]) {\n\tbackground-color: rgb(240, 235, 220) !important;\n\tborder-right: 2px solid #ddd !important;\n}\n[data-scheme="library-archive"] .section-frame-bar-top {\n\tborder-bottom: 2px solid #333 !important;\n\tbackground: transparent !important;\n\tcolor: #333 !important;\n\tfont-family: \'Times New Roman\', serif;\n\tfont-variant: small-caps;\n}\n[data-scheme="library-archive"] [data-progress-fill] {\n\tbackground: #7f1d1d !important;\n\tborder-radius: 0 !important;\n}'
 	},
 	{
 		id: 'synth-retro',
@@ -141,7 +141,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(22, 14, 32)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="synth-retro"] {\n\tfont-family: \'Inter\', sans-serif;\n}\n[data-scheme="synth-retro"] body {\n\tbackground-image: linear-gradient(to bottom, rgb(18, 12, 28) 0%, rgb(12, 8, 20) 100%);\n}\n[data-scheme="synth-retro"] aside .nav-item[data-active="true"] {\n\ttext-shadow: 0 0 10px rgb(255, 0, 127);\n\tborder-right: 3px solid rgb(255, 0, 127);\n}\n[data-scheme="synth-retro"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, rgb(150, 0, 80), rgb(255, 0, 127)) !important;\n\tbox-shadow: 0 0 12px rgba(255, 0, 127, 0.6);\n}'
+		css: '[data-scheme="synth-retro"] {\n\tfont-family: \'Inter\', sans-serif;\n}\n[data-scheme="synth-retro"] body {\n\tbackground-image: linear-gradient(to bottom, rgb(18, 12, 28) 0%, rgb(12, 8, 20) 100%);\n}\n[data-scheme="synth-retro"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\ttext-shadow: 0 0 10px rgb(255, 0, 127);\n\tborder-right: 3px solid rgb(255, 0, 127);\n}\n[data-scheme="synth-retro"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, rgb(150, 0, 80), rgb(255, 0, 127)) !important;\n\tbox-shadow: 0 0 12px rgba(255, 0, 127, 0.6);\n}'
 	},
 	{
 		id: 'synth-retro-v2',
@@ -166,7 +166,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(14, 10, 18)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="synth-retro-v2"] .section-frame {\n\tborder: 1px solid rgba(255, 0, 127, 0.2) !important;\n\tbackground: rgba(255, 0, 127, 0.02) !important;\n\tborder-radius: 4px;\n}\n[data-scheme="synth-retro-v2"] .section-frame-bar-top {\n\tbackground: linear-gradient(90deg, rgba(255, 0, 127, 0.4), transparent) !important;\n\tborder-bottom: 1px solid rgba(255, 0, 127, 0.3);\n\theight: 28px !important;\n}\n[data-scheme="synth-retro-v2"] aside {\n\tbackground: linear-gradient(180deg, rgb(14, 10, 18) 0%, rgb(8, 4, 10) 100%) !important;\n\tborder-right: 1px solid rgba(255, 0, 127, 0.1) !important;\n}\n[data-scheme="synth-retro-v2"] [data-progress-track] {\n\tbackground: rgba(255, 0, 127, 0.05) !important;\n\tborder: 1px solid rgba(255, 0, 127, 0.1);\n\theight: 6px !important;\n}\n[data-scheme="synth-retro-v2"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #9333ea, #ff007f) !important;\n\tbox-shadow: 0 0 10px rgba(255, 0, 127, 0.5);\n}\n[data-scheme="synth-retro-v2"] aside .nav-item[data-active="true"] {\n\tcolor: #ff007f !important;\n\tbackground: rgba(255, 0, 127, 0.05) !important;\n\tborder-left: 3px solid #ff007f;\n\ttext-shadow: 0 0 8px rgba(255, 0, 127, 0.3);\n}'
+		css: '[data-scheme="synth-retro-v2"] .section-frame {\n\tborder: 1px solid rgba(255, 0, 127, 0.2) !important;\n\tbackground: rgba(255, 0, 127, 0.02) !important;\n\tborder-radius: 4px;\n}\n[data-scheme="synth-retro-v2"] .section-frame-bar-top {\n\tbackground: linear-gradient(90deg, rgba(255, 0, 127, 0.4), transparent) !important;\n\tborder-bottom: 1px solid rgba(255, 0, 127, 0.3);\n\theight: 28px !important;\n}\n[data-scheme="synth-retro-v2"] aside:where([data-sidebar]) {\n\tbackground: linear-gradient(180deg, rgb(14, 10, 18) 0%, rgb(8, 4, 10) 100%) !important;\n\tborder-right: 1px solid rgba(255, 0, 127, 0.1) !important;\n}\n[data-scheme="synth-retro-v2"] [data-progress-track] {\n\tbackground: rgba(255, 0, 127, 0.05) !important;\n\tborder: 1px solid rgba(255, 0, 127, 0.1);\n\theight: 6px !important;\n}\n[data-scheme="synth-retro-v2"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #9333ea, #ff007f) !important;\n\tbox-shadow: 0 0 10px rgba(255, 0, 127, 0.5);\n}\n[data-scheme="synth-retro-v2"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tcolor: #ff007f !important;\n\tbackground: rgba(255, 0, 127, 0.05) !important;\n\tborder-left: 3px solid #ff007f;\n\ttext-shadow: 0 0 8px rgba(255, 0, 127, 0.3);\n}'
 	},
 	{
 		id: 'research-outpost',
@@ -191,7 +191,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(20, 20, 26)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="research-outpost"] .section-frame {\n\tborder: 1px solid rgba(249, 115, 22, 0.2) !important;\n\tborder-left: 4px solid #f97316 !important;\n}\n[data-scheme="research-outpost"] .section-frame-bar-top {\n\tbackground: linear-gradient(90deg, rgba(249, 115, 22, 0.3), transparent) !important;\n\tborder-bottom: 1px solid rgba(249, 115, 22, 0.2);\n\tcolor: #fdba74 !important;\n}\n[data-scheme="research-outpost"] aside {\n\tbackground: #0f0f14 !important;\n\tborder-right: 2px solid #1e1e24 !important;\n}\n[data-scheme="research-outpost"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #f97316, #fbbf24) !important;\n}'
+		css: '[data-scheme="research-outpost"] .section-frame {\n\tborder: 1px solid rgba(249, 115, 22, 0.2) !important;\n\tborder-left: 4px solid #f97316 !important;\n}\n[data-scheme="research-outpost"] .section-frame-bar-top {\n\tbackground: linear-gradient(90deg, rgba(249, 115, 22, 0.3), transparent) !important;\n\tborder-bottom: 1px solid rgba(249, 115, 22, 0.2);\n\tcolor: #fdba74 !important;\n}\n[data-scheme="research-outpost"] aside:where([data-sidebar]) {\n\tbackground: #0f0f14 !important;\n\tborder-right: 2px solid #1e1e24 !important;\n}\n[data-scheme="research-outpost"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #f97316, #fbbf24) !important;\n}'
 	},
 	{
 		id: 'lcars',
@@ -295,7 +295,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(15, 23, 42)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="royal-archive"] .section-frame {\n\tborder: 1px solid rgba(251, 191, 36, 0.1) !important;\n}\n[data-scheme="royal-archive"] .section-frame-bar-top {\n\tbackground: #1e293b !important;\n\tcolor: #fbbf24 !important;\n\tborder-bottom: 2px solid #fbbf24;\n}\n[data-scheme="royal-archive"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #b45309, #fbbf24) !important;\n}\n[data-scheme="royal-archive"] aside .nav-item[data-active="true"] {\n\tcolor: #fbbf24 !important;\n\tfont-weight: 900;\n}'
+		css: '[data-scheme="royal-archive"] .section-frame {\n\tborder: 1px solid rgba(251, 191, 36, 0.1) !important;\n}\n[data-scheme="royal-archive"] .section-frame-bar-top {\n\tbackground: #1e293b !important;\n\tcolor: #fbbf24 !important;\n\tborder-bottom: 2px solid #fbbf24;\n}\n[data-scheme="royal-archive"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #b45309, #fbbf24) !important;\n}\n[data-scheme="royal-archive"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tcolor: #fbbf24 !important;\n\tfont-weight: 900;\n}'
 	},
 	{
 		id: 'royale',
@@ -451,7 +451,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(10, 15, 25)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="deep-sea-abyss"] .section-frame {\n\tborder: 1px solid rgba(14, 165, 233, 0.1) !important;\n\tbox-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);\n}\n[data-scheme="deep-sea-abyss"] .section-frame-bar-top {\n\tbackground: rgba(14, 165, 233, 0.2) !important;\n\tcolor: rgb(125, 211, 252) !important;\n\tborder-bottom: 1px solid rgba(14, 165, 233, 0.15);\n}\n[data-scheme="deep-sea-abyss"] .section-frame-bar-bottom {\n\tbackground: rgba(14, 165, 233, 0.1) !important;\n}\n[data-scheme="deep-sea-abyss"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #0ea5e9, #2dd4bf) !important;\n}\n[data-scheme="deep-sea-abyss"] aside .nav-item:hover {\n\tbackground: linear-gradient(90deg, rgba(14, 165, 233, 0.1), transparent) !important;\n}'
+		css: '[data-scheme="deep-sea-abyss"] .section-frame {\n\tborder: 1px solid rgba(14, 165, 233, 0.1) !important;\n\tbox-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);\n}\n[data-scheme="deep-sea-abyss"] .section-frame-bar-top {\n\tbackground: rgba(14, 165, 233, 0.2) !important;\n\tcolor: rgb(125, 211, 252) !important;\n\tborder-bottom: 1px solid rgba(14, 165, 233, 0.15);\n}\n[data-scheme="deep-sea-abyss"] .section-frame-bar-bottom {\n\tbackground: rgba(14, 165, 233, 0.1) !important;\n}\n[data-scheme="deep-sea-abyss"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #0ea5e9, #2dd4bf) !important;\n}\n[data-scheme="deep-sea-abyss"] aside:where([data-sidebar]) .nav-item:hover {\n\tbackground: linear-gradient(90deg, rgba(14, 165, 233, 0.1), transparent) !important;\n}'
 	},
 	{
 		id: 'nordic-frost',
@@ -475,7 +475,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(59, 66, 82)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="nordic-frost"] .section-frame {\n\tborder: 1px solid rgba(136, 192, 208, 0.2) !important;\n}\n[data-scheme="nordic-frost"] .section-frame-bar-top {\n\tbackground: rgba(76, 86, 106, 0.8) !important;\n\tcolor: rgb(236, 239, 244) !important;\n}\n[data-scheme="nordic-frost"] .section-frame-bar-bottom {\n\tbackground: rgba(136, 192, 208, 0.15) !important;\n}\n[data-scheme="nordic-frost"] aside .nav-item[data-active="true"] {\n\tbackground: rgba(136, 192, 208, 0.15) !important;\n\tcolor: rgb(94, 129, 172) !important;\n}\n[data-scheme="nordic-frost"] [data-progress-track] {\n\tbackground: rgba(76, 86, 106, 0.3) !important;\n}'
+		css: '[data-scheme="nordic-frost"] .section-frame {\n\tborder: 1px solid rgba(136, 192, 208, 0.2) !important;\n}\n[data-scheme="nordic-frost"] .section-frame-bar-top {\n\tbackground: rgba(76, 86, 106, 0.8) !important;\n\tcolor: rgb(236, 239, 244) !important;\n}\n[data-scheme="nordic-frost"] .section-frame-bar-bottom {\n\tbackground: rgba(136, 192, 208, 0.15) !important;\n}\n[data-scheme="nordic-frost"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tbackground: rgba(136, 192, 208, 0.15) !important;\n\tcolor: rgb(94, 129, 172) !important;\n}\n[data-scheme="nordic-frost"] [data-progress-track] {\n\tbackground: rgba(76, 86, 106, 0.3) !important;\n}'
 	},
 	{
 		id: 'solarized-dark',
@@ -500,7 +500,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(7, 54, 66)',
 			'--radius': '0.25rem'
 		},
-		css: '[data-scheme="solarized-dark"] {\n\tletter-spacing: 0.02em;\n}\n[data-scheme="solarized-dark"] aside {\n\tbackground: #002b36 !important;\n\tborder-right: 1px solid #073642 !important;\n}\n[data-scheme="solarized-dark"] .section-frame-bar-top {\n\tbackground: #073642 !important;\n\tcolor: #93a1a1 !important;\n}'
+		css: '[data-scheme="solarized-dark"] {\n\tletter-spacing: 0.02em;\n}\n[data-scheme="solarized-dark"] aside:where([data-sidebar]) {\n\tbackground: #002b36 !important;\n\tborder-right: 1px solid #073642 !important;\n}\n[data-scheme="solarized-dark"] .section-frame-bar-top {\n\tbackground: #073642 !important;\n\tcolor: #93a1a1 !important;\n}'
 	},
 	{
 		id: 'blockbuster',
@@ -547,7 +547,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(0, 0, 180)',
 			'--radius': '0px'
 		},
-		css: '[data-scheme="vcr-osd"] {\n\tfont-family: \'Courier New\', monospace !important;\n\ttext-transform: uppercase;\n}\n[data-scheme="vcr-osd"] .section-frame-bar-top {\n\tbackground: white !important;\n\tcolor: #0000bb !important;\n\tfont-weight: 900 !important;\n}\n[data-scheme="vcr-osd"] [data-progress-fill] {\n\tbackground: #00ff00 !important;\n\tbox-shadow: 0 0 10px #00ff00;\n}\n[data-scheme="vcr-osd"] aside .nav-item[data-active="true"] {\n\tbackground: white !important;\n\tcolor: #0000bb !important;\n}'
+		css: '[data-scheme="vcr-osd"] {\n\tfont-family: \'Courier New\', monospace !important;\n\ttext-transform: uppercase;\n}\n[data-scheme="vcr-osd"] .section-frame-bar-top {\n\tbackground: white !important;\n\tcolor: #0000bb !important;\n\tfont-weight: 900 !important;\n}\n[data-scheme="vcr-osd"] [data-progress-fill] {\n\tbackground: #00ff00 !important;\n\tbox-shadow: 0 0 10px #00ff00;\n}\n[data-scheme="vcr-osd"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tbackground: white !important;\n\tcolor: #0000bb !important;\n}'
 	},
 	{
 		id: 'glass',
@@ -594,7 +594,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(22, 22, 30)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="tokyo-night"] .section-frame {\n\tborder: 1px solid rgba(122, 162, 247, 0.1) !important;\n}\n[data-scheme="tokyo-night"] .section-frame-bar-top {\n\tbackground: rgba(122, 162, 247, 0.15) !important;\n\tcolor: rgb(122, 162, 247) !important;\n}\n[data-scheme="tokyo-night"] .section-frame-bar-bottom {\n\tbackground: rgba(122, 162, 247, 0.08) !important;\n}\n[data-scheme="tokyo-night"] aside .nav-item[data-active="true"] {\n\tcolor: #7aa2f7 !important;\n\tbackground: rgba(122, 162, 247, 0.1) !important;\n}\n[data-scheme="tokyo-night"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #7aa2f7, #bb9af7) !important;\n}'
+		css: '[data-scheme="tokyo-night"] .section-frame {\n\tborder: 1px solid rgba(122, 162, 247, 0.1) !important;\n}\n[data-scheme="tokyo-night"] .section-frame-bar-top {\n\tbackground: rgba(122, 162, 247, 0.15) !important;\n\tcolor: rgb(122, 162, 247) !important;\n}\n[data-scheme="tokyo-night"] .section-frame-bar-bottom {\n\tbackground: rgba(122, 162, 247, 0.08) !important;\n}\n[data-scheme="tokyo-night"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tcolor: #7aa2f7 !important;\n\tbackground: rgba(122, 162, 247, 0.1) !important;\n}\n[data-scheme="tokyo-night"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #7aa2f7, #bb9af7) !important;\n}'
 	},
 	{
 		id: 'violet',
@@ -639,7 +639,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(31, 41, 55)',
 			'--radius': '0px'
 		},
-		css: '[data-scheme="retro-console"] .section-frame {\n\tborder: 2px solid #4b5563 !important;\n\tbox-shadow: 2px 2px 0px #000;\n}\n[data-scheme="retro-console"] .section-frame-bar-top {\n\tbackground: rgb(124, 58, 237) !important;\n\tcolor: white !important;\n\ttext-transform: uppercase;\n\tclip-path: polygon(0 0, 98% 0, 100% 100%, 0% 100%);\n\tletter-spacing: 0.15em;\n\tfont-weight: 800;\n}\n[data-scheme="retro-console"] aside .nav-item[data-active="true"] {\n\tbox-shadow: inset 4px 0 0 rgb(124, 58, 237);\n\ttext-shadow: 0 0 8px rgba(124, 58, 237, 0.5);\n}\n[data-scheme="retro-console"] [data-progress-track] {\n\tbackground: #000 !important;\n\tborder: 1px solid #4b5563;\n}'
+		css: '[data-scheme="retro-console"] .section-frame {\n\tborder: 2px solid #4b5563 !important;\n\tbox-shadow: 2px 2px 0px #000;\n}\n[data-scheme="retro-console"] .section-frame-bar-top {\n\tbackground: rgb(124, 58, 237) !important;\n\tcolor: white !important;\n\ttext-transform: uppercase;\n\tclip-path: polygon(0 0, 98% 0, 100% 100%, 0% 100%);\n\tletter-spacing: 0.15em;\n\tfont-weight: 800;\n}\n[data-scheme="retro-console"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tbox-shadow: inset 4px 0 0 rgb(124, 58, 237);\n\ttext-shadow: 0 0 8px rgba(124, 58, 237, 0.5);\n}\n[data-scheme="retro-console"] [data-progress-track] {\n\tbackground: #000 !important;\n\tborder: 1px solid #4b5563;\n}'
 	},
 	{
 		id: 'hollywood-video-v2',
@@ -686,7 +686,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-surface-dark': 'rgb(40, 42, 54)',
 			'--radius': '0.5rem'
 		},
-		css: '[data-scheme="dracula-pro"] .section-frame {\n\tborder: 1px solid rgba(189, 147, 249, 0.15) !important;\n\tborder-radius: var(--radius) !important;\n\toverflow: hidden;\n}\n[data-scheme="dracula-pro"] .section-frame-bar-top {\n\tbackground: #44475a !important;\n\tcolor: #f8f8f2 !important;\n}\n[data-scheme="dracula-pro"] .section-frame-bar-bottom {\n\tbackground: #44475a !important;\n}\n[data-scheme="dracula-pro"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #bd93f9, #ff79c6) !important;\n}\n[data-scheme="dracula-pro"] aside .nav-item[data-active="true"] {\n\tborder-left: 2px solid #ff79c6;\n\tbackground: rgba(189, 147, 249, 0.1) !important;\n}'
+		css: '[data-scheme="dracula-pro"] .section-frame {\n\tborder: 1px solid rgba(189, 147, 249, 0.15) !important;\n\tborder-radius: var(--radius) !important;\n\toverflow: hidden;\n}\n[data-scheme="dracula-pro"] .section-frame-bar-top {\n\tbackground: #44475a !important;\n\tcolor: #f8f8f2 !important;\n}\n[data-scheme="dracula-pro"] .section-frame-bar-bottom {\n\tbackground: #44475a !important;\n}\n[data-scheme="dracula-pro"] [data-progress-fill] {\n\tbackground: linear-gradient(90deg, #bd93f9, #ff79c6) !important;\n}\n[data-scheme="dracula-pro"] aside:where([data-sidebar]) .nav-item[data-active="true"] {\n\tborder-left: 2px solid #ff79c6;\n\tbackground: rgba(189, 147, 249, 0.1) !important;\n}'
 	},
 	{
 		id: 'gaming',

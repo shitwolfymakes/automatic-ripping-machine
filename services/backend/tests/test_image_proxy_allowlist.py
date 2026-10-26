@@ -24,3 +24,12 @@ def test_allowed_hosts_includes_defaults_and_extras(monkeypatch):
     hosts = images._allowed_image_hosts()
     assert "image.tmdb.org" in hosts  # built-in default preserved
     assert "posters.lan" in hosts  # extra added
+
+
+def test_tvmaze_and_tvdb_poster_hosts_are_allowed():
+    from arm_backend.routers import images
+
+    assert images._host_allowed("static.tvmaze.com")
+    assert images._host_allowed("artworks.thetvdb.com")
+    assert not images._host_allowed("static.tvmaze.com.evil.example")
+    assert not images._host_allowed("evil-artworks.thetvdb.com")

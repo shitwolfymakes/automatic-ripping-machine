@@ -381,8 +381,8 @@
 		{/if}
 
 		<!-- Jobs section -->
-		<section class="space-y-4">
-			<h2 class="transcoder-page-section-title">Transcode Jobs</h2>
+		<section class="space-y-4" data-page-section>
+			<h2 class="transcoder-page-section-title" data-page-section-title>Transcode Jobs</h2>
 
 			{#if actionFeedback}
 				<div class="alert {actionFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">

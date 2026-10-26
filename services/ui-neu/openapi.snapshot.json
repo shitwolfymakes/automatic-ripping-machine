@@ -1107,6 +1107,7 @@
           "jobs"
         ],
         "summary": "List Jobs",
+        "description": "One page of jobs, newest first with a stable `id` tiebreak so a page\ndoes not shuffle between polls. The filtered total rides in the\n`X-Total-Count` header; the body stays a plain `JobView[]`.",
         "operationId": "list_jobs_api_jobs_get",
         "security": [
           {
@@ -1182,6 +1183,14 @@
                     "$ref": "#/components/schemas/JobView"
                   },
                   "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            },
+            "headers": {
+              "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {
+                  "type": "integer"
                 }
               }
             }
@@ -1751,6 +1760,55 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/identity/accept": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Accept Identity Suggestion",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
+        "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4699,7 +4757,9 @@
                 {
                   "enum": [
                     "tmdb",
-                    "omdb"
+                    "omdb",
+                    "tvmaze",
+                    "tvdb"
                   ],
                   "type": "string"
                 },
@@ -4708,6 +4768,101 @@
                 }
               ],
               "title": "Provider"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/details": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Match Details",
+        "description": "One title's full record for the match picker's detail pane. `id` is\nthe provider's own id (TMDb id, IMDb id for OMDb, TVmaze id, TVDB id).",
+        "operationId": "match_details_api_metadata_details_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tmdb",
+                "omdb",
+                "tvmaze",
+                "tvdb"
+              ],
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,32}$",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "movie",
+                "tv"
+              ],
+              "type": "string",
+              "default": "movie",
+              "title": "Type"
             }
           }
         ],
@@ -6050,6 +6205,38 @@
             }
           }
         }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "List Job Logs",
+        "description": "Every per-job log file under `LOG_DIR/jobs`, newest first.\n\nOnly `<job_id>.log` regular files whose stem is a valid job id are listed;\nanything else in the directory is ignored. A missing directory is `[]`.",
+        "operationId": "list_job_logs_api_logs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobLogFileView"
+                  },
+                  "type": "array",
+                  "title": "Response List Job Logs Api Logs Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ]
       }
     },
     "/api/logs/{job_id}.zip": {
@@ -8650,7 +8837,35 @@
             ],
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "anyOf": [
               {
                 "type": "string"
@@ -8659,7 +8874,62 @@
                 "type": "null"
               }
             ],
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crc64Service Enabled"
           }
         },
         "type": "object",
@@ -8825,9 +9095,43 @@
             "type": "boolean",
             "title": "Notifications Enabled"
           },
-          "metadata_provider": {
+          "movie_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Movie Sources"
+          },
+          "music_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Music Sources"
+          },
+          "search_provider_movie": {
             "type": "string",
-            "title": "Metadata Provider"
+            "title": "Search Provider Movie"
+          },
+          "search_provider_tv": {
+            "type": "string",
+            "title": "Search Provider Tv"
+          },
+          "search_provider_music": {
+            "type": "string",
+            "title": "Search Provider Music"
+          },
+          "movie_auto_apply": {
+            "type": "boolean",
+            "title": "Movie Auto Apply"
+          },
+          "music_auto_apply": {
+            "type": "boolean",
+            "title": "Music Auto Apply"
+          },
+          "crc64service_enabled": {
+            "type": "boolean",
+            "title": "Crc64Service Enabled"
           },
           "makemkv_key_valid": {
             "anyOf": [
@@ -8929,7 +9233,14 @@
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
-          "metadata_provider",
+          "movie_sources",
+          "music_sources",
+          "search_provider_movie",
+          "search_provider_tv",
+          "search_provider_music",
+          "movie_auto_apply",
+          "music_auto_apply",
+          "crc64service_enabled",
           "updated_by_user_id",
           "updated_at"
         ],
@@ -11010,6 +11321,182 @@
         "type": "object",
         "title": "IdentityClaims"
       },
+      "IdentityFacts": {
+        "properties": {
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "rating_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "imdb",
+                  "tmdb",
+                  "tvmaze"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating Source"
+          },
+          "votes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Votes"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genres"
+          },
+          "creators": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Creators"
+          },
+          "cast": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cast"
+          },
+          "episode_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Count"
+          }
+        },
+        "type": "object",
+        "title": "IdentityFacts",
+        "description": "What a person uses to tell titles apart: run, plot, rating, people.\nFilled from a provider payload by `arm_backend.metadata.facts`; shown in\nthe match picker and snapshotted on the job when a match is used."
+      },
+      "IdentitySuggestion": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "movie",
+              "tv",
+              "music"
+            ],
+            "title": "Kind"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "external_ids": {
+            "$ref": "#/components/schemas/ExternalIds"
+          },
+          "overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overview"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "suggested_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Suggested At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provider",
+          "title",
+          "kind",
+          "suggested_at"
+        ],
+        "title": "IdentitySuggestion",
+        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off (identification-sources\nspec D-10). The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+      },
       "IdentityView": {
         "properties": {
           "sources": {
@@ -11754,6 +12241,28 @@
               }
             ],
             "title": "Identified At"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts_fetched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts Fetched At"
           }
         },
         "additionalProperties": true,
@@ -11763,6 +12272,31 @@
         ],
         "title": "JobIdentity",
         "description": "What identification concluded. Title/year/media_type/poster live on\nthe Job row itself \u2014 this records where they came from and the ids that\nlet a UI link out or re-query."
+      },
+      "JobLogFileView": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "size_bytes",
+          "modified_at"
+        ],
+        "title": "JobLogFileView",
+        "description": "One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`)."
       },
       "JobMetadata": {
         "properties": {
@@ -11823,6 +12357,31 @@
                 "type": "null"
               }
             ]
+          },
+          "identity_suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentitySuggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identify_attempts": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identify Attempts"
           },
           "provider_raw": {
             "additionalProperties": {
@@ -12828,6 +13387,27 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
               },
               {
                 "type": "null"
@@ -14341,6 +14921,64 @@
         "title": "ResolveFanOutOutcomeView",
         "description": "One waiting_identify application's post-resolve outcome.\n\n`status='queued'` + `skipped_reason=None` \u2192 the application was\npromoted and `task_count` newly-created transcode tasks are queued.\nAnything else \u2192 the application stays parked in `waiting_identify`\nand `error_detail` carries the reason for the UI to surface.\n`skipped_reason='no_tracks'` is the benign case: the rip has not started\nyet (no Track rows exist), so the application fans out at rip-complete."
       },
+      "ResolveMatch": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "tmdb",
+              "omdb",
+              "tvmaze",
+              "tvdb"
+            ],
+            "title": "Provider"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "poster_is_manual": {
+            "type": "boolean",
+            "title": "Poster Is Manual",
+            "default": false
+          },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "ResolveMatch",
+        "description": "A search result the operator picked (match picker spec 3.6). Its\npresence makes `external_ids` replace the stored show ids wholesale."
+      },
       "ResolveRequest": {
         "properties": {
           "title": {
@@ -14415,6 +15053,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ExternalIds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolveMatch"
               },
               {
                 "type": "null"
@@ -14856,6 +15504,17 @@
               }
             ],
             "title": "Musicbrainz Disc Id"
+          },
+          "cd_toc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cd Toc"
           },
           "fingerprints": {
             "items": {

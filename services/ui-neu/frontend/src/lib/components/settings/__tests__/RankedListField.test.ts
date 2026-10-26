@@ -2,11 +2,12 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { tick } from 'svelte';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import RankedListField from '../RankedListField.svelte';
-import type { ConfigFieldMeta } from '$lib/types/api.gen';
+import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
+import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
 
 const f = (): ConfigFieldMeta => ({
 	key: 'episode_sources',
-	group: 'Metadata',
+	group: 'Identification',
 	tier: 'operator',
 	label: 'Episode sources',
 	help: 'Tried top to bottom.',
@@ -69,11 +70,26 @@ describe('RankedListField', () => {
 
 	it('flags a missing key on any row, and treats a masked secret as set', () => {
 		renderComponent(RankedListField, {
+			props: { field: f(), value: ['tmdb'], config: { tmdb_api_key: '<hidden>', tvdb_api_key: '' } },
+			context: new Map([
+				[
+					SETTINGS_SCHEMA_CONTEXT,
+					() => [{ name: 'Keys', fields: [{ key: 'tvdb_api_key', label: 'TVDb API key' }] }] as SettingsGroup[]
+				]
+			])
+		});
+		const chip = screen.getByRole('link', { name: /Needs TVDB key/ });
+		expect(chip).toHaveAttribute('href', '#Keys/tvdb_api_key');
+		expect(chip).toHaveAttribute('title', 'Open TVDb API key');
+		expect(screen.queryByRole('link', { name: /Needs TMDb key/ })).toBeNull();
+	});
+
+	it("links a missing key to the field's anchor on this page with no schema context or keyTab", () => {
+		renderComponent(RankedListField, {
 			props: { field: f(), value: ['tmdb'], config: { tmdb_api_key: '<hidden>', tvdb_api_key: '' } }
 		});
 		const chip = screen.getByRole('link', { name: /Needs TVDB key/ });
-		expect(chip).toHaveAttribute('href', '#Metadata/tvdb_api_key');
-		expect(screen.queryByRole('link', { name: /Needs TMDb key/ })).toBeNull();
+		expect(chip).toHaveAttribute('href', '#setting-tvdb_api_key');
 	});
 
 	it('deep-links a missing key into the tab the caller names', () => {

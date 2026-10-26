@@ -11,6 +11,7 @@
 	import { createPollingStore } from '$lib/stores/polling';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { driveTitle } from '$lib/utils/drives';
+	import { effectiveMovieProvider, providerLabel } from '$lib/utils/search-providers';
 	import type { StepCommitResult } from '../steps';
 
 	// Step 9: the first disc, the summary, and the certificate (setup spec §5.10).
@@ -58,9 +59,12 @@
 		};
 		if (config) {
 			out.makemkv = `${config.makemkv_key ? 'Purchased key' : 'Free beta key'}${config.makemkv_key_valid ? ', valid' : ''}`;
-			out.metadata = keys
-				? `${keys} key${keys === 1 ? '' : 's'} saved. Titles looked up with ${config.metadata_provider === 'omdb' ? 'OMDb' : 'TMDb'}.`
-				: 'No lookup key yet';
+			// The provider the backend will actually search with, not the raw
+			// setting: an unkeyed choice falls back, and a TVDb-only install has
+			// no movie provider at all (see effectiveMovieProvider).
+			const movieProvider = effectiveMovieProvider(config);
+			const lookedUpWith = movieProvider ? ` Titles looked up with ${providerLabel(movieProvider)}.` : '';
+			out.metadata = keys ? `${keys} key${keys === 1 ? '' : 's'} saved.${lookedUpWith}` : 'No lookup key yet';
 			out.discs = !config.auto_rip_on_insert ? 'Manual' : config.hold_for_review ? 'Review first' : 'Fully automatic';
 		}
 		out.transcoding = !$transcoderEnabled

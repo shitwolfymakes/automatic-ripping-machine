@@ -46,6 +46,17 @@ match on its own: **accept** it to use that source. **Re-run** matches again
 keeps that source for the job, and **Unpin** returns to the automatic choice. You
 can also set a track's season and episode by hand, and **revert** it to the
 matched value. Guests see the tab read-only.
+
+When a media type's **Apply confident matches** switch is off (Settings,
+Identification, step 4), a match ARM found waits for you instead of being
+applied. The review card on the dashboard and the job page show **ARM found a
+match** with the title, year and source. **Use this title** applies it: the
+rip starts, or the review countdown starts when discs are held for review,
+and a paused ripper keeps it held.
+**Search instead** opens the title search. The disc is held with no countdown
+until you do one or the other; **Start rip** without confirming rips a
+placeholder you name afterwards.
+
 **`/logs`** and **`/logs/:job_id`** show the structured logs; **`/files`**,
 **`/notifications`** and **`/transcoder`** cover the file browser, the
 notification history and the transcode queue.
@@ -54,8 +65,10 @@ notification history and the transcode queue.
 
 **`/settings`** is the Settings page, split into tabs:
 
-- **Metadata** and **Ripping**: API keys and rip behaviour. Every field is documented in
-  [Configuration § The UI Settings page](Configuring-ARM#the-ui-settings-page).
+- **API Keys**, **Identification** and **Ripping**: how discs are identified, the API
+  keys, and rip behaviour. Every field is documented in
+  [Configuration § Identification and Keys](Configuring-ARM#identification-and-keys)
+  and [§ Rip / transcode behaviour](Configuring-ARM#rip--transcode-behaviour).
 - **Sessions**: **sessions** are named bundles of transcode work you apply to a
   job (a drive can have a default session so finished rips transcode
   automatically), plus the **rip presets** (how titles are pulled off the disc:

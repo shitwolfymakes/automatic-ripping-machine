@@ -87,6 +87,10 @@ async def test_tmdb_movie_miss_tv_hit() -> None:
         respx.get("https://api.themoviedb.org/3/search/movie").mock(
             return_value=httpx.Response(200, json={"results": []})
         )
+        # Kind-major order (spec D-6): OMDb's movie search runs before TMDb TV.
+        respx.get("https://www.omdbapi.com/").mock(
+            return_value=httpx.Response(200, json={"Response": "False", "Error": "Movie not found!"})
+        )
         respx.get("https://api.themoviedb.org/3/search/tv").mock(
             return_value=httpx.Response(200, json={"results": [{"name": "Show", "first_air_date": "2015"}]})
         )
@@ -111,7 +115,9 @@ async def test_call_swallows_lookup_error() -> None:
     with respx.mock:
         respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(503))
         async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(_scan(volume_label="BOOM"), _config(tmdb_api_key=None))
+            result = await MetadataDispatcher(http).identify(
+                _scan(volume_label="BOOM"), _config(tmdb_api_key=None, episode_sources=["tmdb"])
+            )
     assert result is None
 
 
@@ -119,7 +125,9 @@ async def test_call_swallows_timeout() -> None:
     with respx.mock:
         respx.get("https://www.omdbapi.com/").mock(side_effect=httpx.TimeoutException("t"))
         async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(_scan(volume_label="SLOW"), _config(tmdb_api_key=None))
+            result = await MetadataDispatcher(http).identify(
+                _scan(volume_label="SLOW"), _config(tmdb_api_key=None, episode_sources=["tmdb"])
+            )
     assert result is None
 
 
@@ -128,7 +136,7 @@ async def test_no_providers_configured_returns_none() -> None:
     (the `if omdb_key:` false branch, 96->102)."""
     async with httpx.AsyncClient(timeout=5.0) as http:
         result = await MetadataDispatcher(http).identify(
-            _scan(volume_label="TITLE"), _config(tmdb_api_key=None, omdb_api_key=None)
+            _scan(volume_label="TITLE"), _config(tmdb_api_key=None, omdb_api_key=None, episode_sources=["tmdb"])
         )
     assert result is None
 

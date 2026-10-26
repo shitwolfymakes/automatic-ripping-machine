@@ -52,11 +52,13 @@ def test_schema_returns_grouped_fields():
         r = c.get("/api/settings/schema", headers=_auth(token))
     assert r.status_code == 200, r.text
     groups = {g["name"] for g in r.json()["groups"]}
-    assert {"Metadata", "Ripping", "Transcoding", "Notifications", "System"} <= groups
+    assert {"Identification", "Keys", "Ripping", "Transcoding", "Notifications", "System"} <= groups
+    order = [g["name"] for g in r.json()["groups"]]
+    assert order.index("Identification") < order.index("Keys") < order.index("Ripping")
     all_fields = [f for g in r.json()["groups"] for f in g["fields"]]
     by_key = {f["key"]: f for f in all_fields}
     assert by_key["omdb_api_key"]["tier"] == "secret"
-    assert by_key["metadata_provider"]["type"] == "enum"
+    assert by_key["search_provider_movie"]["type"] == "enum"
     assert by_key["MEDIA_ROOT"]["editable"] is False
 
 

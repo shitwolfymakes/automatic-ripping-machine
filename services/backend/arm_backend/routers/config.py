@@ -31,10 +31,16 @@ from arm_backend.db import get_session
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.stage_runner import emit_identity_resolved
 from arm_backend.identity.sources.registry import (
+    crc64service_enabled,
     episode_auto_apply,
     episode_sources_setting,
     episode_tolerance,
     hint_sources_setting,
+    movie_auto_apply,
+    movie_sources_setting,
+    music_auto_apply,
+    music_sources_setting,
+    search_provider_setting,
 )
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.seeders import CONFIG_SINGLETON_ID
@@ -46,6 +52,7 @@ from arm_common.schemas import (
     ConfigView,
     KeyCheckRequest,
     KeyCheckResponse,
+    identity_suggestion_of,
     previously_ripped_job_id,
 )
 from arm_common.secrets import HIDDEN_SECRET
@@ -65,6 +72,7 @@ _NON_EDITABLE_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if not m.editabl
 _SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
 
 _RANKED_META = {m.key: m for m in CONFIG_FIELD_META if m.type == "ranked"}
+_ENUM_META = {m.key: m for m in CONFIG_FIELD_META if m.type == "enum" and m.key != "on_previously_ripped"}
 
 
 def _to_view(cfg: Config) -> ConfigView:
@@ -110,7 +118,14 @@ def _to_view(cfg: Config) -> ConfigView:
         default_retention_policy=cfg.default_retention_policy,
         notification_apprise_urls=list(cfg.notification_apprise_urls or []),
         notifications_enabled=cfg.notifications_enabled,
-        metadata_provider=cfg.metadata_provider or "tmdb",
+        movie_sources=list(movie_sources_setting(cfg)),
+        music_sources=list(music_sources_setting(cfg)),
+        search_provider_movie=search_provider_setting(cfg, "movie"),
+        search_provider_tv=search_provider_setting(cfg, "tv"),
+        search_provider_music=search_provider_setting(cfg, "music"),
+        movie_auto_apply=movie_auto_apply(cfg),
+        music_auto_apply=music_auto_apply(cfg),
+        crc64service_enabled=crc64service_enabled(cfg),
         makemkv_key_valid=cfg.makemkv_key_valid,
         makemkv_key_state=cfg.makemkv_key_state,
         makemkv_key_checked_at=cfg.makemkv_key_checked_at,
@@ -165,11 +180,22 @@ async def update_config(
     for key in _SECRET_KEYS:
         if fields.get(key) == HIDDEN_SECRET:
             del fields[key]
-    if "metadata_provider" in fields and fields["metadata_provider"] not in ("tmdb", "omdb"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"invalid metadata_provider: {fields['metadata_provider']!r} (must be 'tmdb' or 'omdb')",
-        )
+    for key, meta in _ENUM_META.items():
+        if key not in fields:
+            continue
+        value = fields[key]
+        allowed = meta.enum_values or []
+        if value is None or value not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be one of {', '.join(allowed)}"
+            )
+        required = (meta.enum_requires or {}).get(value)
+        if required:
+            # The key sent in this body counts; otherwise the stored one.
+            present = fields[required] if required in fields else getattr(cfg, required, None)
+            if not (present or "").strip():
+                label = (meta.enum_labels or {}).get(value, value)
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
     # The number inputs send null for an emptied box; these columns are NOT
     # NULL, so refuse it here rather than 500 on the commit (D-096).
     for key in (
@@ -219,11 +245,14 @@ async def update_config(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )
-    if "episode_auto_apply" in fields and fields["episode_auto_apply"] is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="episode_auto_apply must be true or false")
-    # Catch-all for the rest of the NOT NULL columns (the boolean toggles): a
-    # JSON null would otherwise reach the commit and 500 (D-164). The checks
-    # above keep their field-specific messages.
+    # The checkbox inputs send null for a cleared tri-state; these columns are
+    # NOT NULL, so refuse it here rather than 500 on the commit.
+    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply", "crc64service_enabled"):
+        if key in fields and fields[key] is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
+    # Catch-all for the rest of the NOT NULL columns: a JSON null would
+    # otherwise reach the commit and 500 (D-164). The checks above keep their
+    # field-specific messages.
     columns = sa_inspect(Config).columns
     for key, value in fields.items():
         if value is None and key in columns and not columns[key].nullable:
@@ -267,8 +296,11 @@ async def update_config(
         now = datetime.now(timezone.utc)
         held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
         for job in held:
-            # A previously-ripped hold has no countdown to restart.
-            if previously_ripped_job_id(job.metadata_json) is not None:
+            # A previously-ripped hold and a held suggestion have no countdown to restart.
+            if (
+                previously_ripped_job_id(job.metadata_json) is not None
+                or identity_suggestion_of(job.metadata_json) is not None
+            ):
                 continue
             job.wait_start_time = now
             session.add(job)
@@ -285,7 +317,7 @@ async def update_config(
 
 # Settings that pick which identity sources run (and so which stored claims
 # the resolver applies).
-_IDENTITY_SOURCE_KEYS = ("episode_sources", "disc_hint_sources")
+_IDENTITY_SOURCE_KEYS = ("episode_sources", "disc_hint_sources", "movie_sources", "music_sources")
 # Ripped jobs are re-resolved only while no session has been applied: once
 # transcodes exist their output paths were built from the identity as it was.
 _RERESOLVE_JOB_STATUSES = NON_TERMINAL_JOB_STATUSES | {JobStatus.RIPPED_AWAITING_IDENTIFY}

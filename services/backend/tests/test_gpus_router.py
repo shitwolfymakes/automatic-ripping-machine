@@ -259,8 +259,9 @@ def test_probe_all_skips_busy_disabled_and_already_probing() -> None:
     with TestClient(app) as c:
         r = c.post("/api/gpus/probe", headers=_auth(token))
     assert r.status_code == 202, r.text
-    assert r.json() == {"scheduled": ["gpu_free", "gpu_free2"]}
-    assert runner.started == ["gpu_free", "gpu_free2"]
+    # The router orders by (vendor, device_path): "nvenc" sorts before "qsv".
+    assert r.json() == {"scheduled": ["gpu_free2", "gpu_free"]}
+    assert runner.started == ["gpu_free2", "gpu_free"]
 
 
 def test_probe_all_not_capable_409() -> None:

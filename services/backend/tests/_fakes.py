@@ -115,6 +115,31 @@ def _table_for_stmt(stmt: Select) -> str | None:
     return None
 
 
+def _apply_order(rows: list[Any], stmt: Select) -> list[Any]:
+    """Honour `order_by(col(...).desc(), col(...))` the way Postgres would,
+    applying the clauses from least to most significant so Python's stable
+    sort yields the composite order. `None` sorts first ascending (last
+    descending), which keeps unset timestamps out of a real row's way."""
+    clauses = list(stmt._order_by_clauses)
+    for clause in reversed(clauses):
+        element = getattr(clause, "element", clause)
+        name = getattr(element, "name", None)
+        if name is None:
+            continue
+        descending = getattr(getattr(clause, "modifier", None), "__name__", "") == "desc_op"
+
+        def key(row: Any, _name: str = name) -> tuple[int, Any]:
+            value = getattr(row, _name, None)
+            return (0, 0) if value is None else (1, value)
+
+        try:
+            rows = sorted(rows, key=key, reverse=descending)
+        except TypeError:
+            # Mixed, incomparable values: keep insertion order like before.
+            return rows
+    return rows
+
+
 class _Result:
     def __init__(self, rows: list[Any], scalar_columns: list[str] | None = None) -> None:
         self.rows = rows
@@ -254,9 +279,11 @@ class FakeSession:
         rows = list(self.rows.get(table, [])) if table else []
         filters = _all_filters(stmt)
         rows = [r for r in rows if _matches(r, filters)]
+        rows = _apply_order(rows, stmt)
 
         # `select(func.count())` -> one int; `select(Model.a, func.count())
-        # .group_by(Model.a)` -> (a, n) tuples, group columns first.
+        # .group_by(Model.a)` -> (a, n) tuples, group columns first. Counted
+        # before limit/offset, which a count query never carries.
         if any(isinstance(c, _count_fn) for c in stmt.selected_columns):
             group_names = [g.name for g in stmt._group_by_clauses]  # type: ignore[attr-defined]
             if not group_names:
@@ -267,9 +294,10 @@ class FakeSession:
                 groups[key] = groups.get(key, 0) + 1
             return _Result([(*k, n) for k, n in groups.items()])
 
-        limit = stmt._limit  # no ORDER BY evaluation: the first `limit` rows in fixture order
-        if isinstance(limit, int):
-            rows = rows[:limit]
+        if stmt._offset is not None:
+            rows = rows[stmt._offset :]
+        if stmt._limit is not None:
+            rows = rows[: stmt._limit]
 
         # Heuristic: `select(Model)` exposes >=5 columns (every model field);
         # `select(Model.id, Model.name)` has 1-3. Treat the small case as a

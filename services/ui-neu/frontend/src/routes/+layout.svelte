@@ -199,7 +199,7 @@
 {:else}
 	<div class="flex h-screen overflow-hidden">
 		<!-- Sidebar -->
-		<aside class="sidebar hidden lg:block">
+		<aside data-sidebar class="sidebar hidden lg:block">
 			<div class="flex h-full flex-col">
 				<div data-logo class="nav-logo">
 					<img src="/img/arm-logo-black.png" alt="ARM" class="layout-logo-light" />
@@ -276,7 +276,7 @@
 						</a>
 						<svelte:element
 							this={$isGuest ? 'span' : 'a'}
-							href={$isGuest ? undefined : '/settings#Metadata/makemkv_key'}
+							href={$isGuest ? undefined : '/settings#Keys/makemkv_key'}
 							class="layout-health-link"
 							title={$dashboard.makemkv_key_valid === true
 								? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
@@ -462,7 +462,7 @@
 				<div class="layout-drawer-overlay fixed inset-0 lg:hidden">
 					<button class="layout-scrim absolute inset-0" aria-label="Close sidebar" onclick={() => (sidebarOpen = false)}
 					></button>
-					<aside class="layout-drawer relative flex h-full flex-col">
+					<aside data-sidebar class="layout-drawer relative flex h-full flex-col">
 						<div data-logo class="nav-logo layout-drawer-logo">
 							<img src="/img/arm-logo-black.png" alt="ARM" class="layout-logo-light layout-logo-sm" />
 							<img src="/img/arm-logo-white.png" alt="ARM" class="layout-logo-dark layout-logo-sm" />
@@ -508,7 +508,7 @@
 			{/if}
 
 			<!-- Page content -->
-			<main class="flex-1 overflow-y-auto p-4 lg:p-6">
+			<main data-stats-bar={$uiPrefs.showStats || undefined} class="layout-main flex-1 overflow-y-auto p-4 lg:p-6">
 				<LiveUpdatesBanner />
 				{@render children()}
 			</main>
@@ -544,6 +544,14 @@
 	}
 	.layout-stats-bar {
 		font-size: 0.875rem;
+	}
+	/* The fixed BottomStatsBar (h-10, shown lg to 2xl) overlays main's
+	   bottom edge; viewport-sized content in main (help's sticky rails)
+	   subtracts this to end above it. */
+	@media (min-width: 64rem) and (max-width: 95.98rem) {
+		.layout-main[data-stats-bar] {
+			--shell-footer-height: 2.5rem;
+		}
 	}
 	.layout-activity-group {
 		font-size: 0.75rem;

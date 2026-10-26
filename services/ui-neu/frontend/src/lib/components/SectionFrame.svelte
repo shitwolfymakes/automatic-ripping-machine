@@ -7,13 +7,20 @@
 		 * (or the #f90 default) applies via the CSS fallback chain. */
 		accent?: string;
 		label?: string;
+		/** Tinted, attention-calling frame (used by Waiting for review). */
+		emphasis?: boolean;
 		children: Snippet;
 	}
 
-	let { variant = 'full', accent = undefined, label = '', children }: Props = $props();
+	let { variant = 'full', accent = undefined, label = '', emphasis = false, children }: Props = $props();
 </script>
 
-<div class="section-frame" data-frame-variant={variant} style:--frame-accent={accent}>
+<div
+	class="section-frame"
+	data-frame-variant={variant}
+	data-frame-emphasis={emphasis || undefined}
+	style:--frame-accent={accent}
+>
 	<div class="section-frame-bar section-frame-bar-top" aria-hidden="true">
 		{#if label}<span>{label}</span>{/if}
 	</div>

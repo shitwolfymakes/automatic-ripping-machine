@@ -27,6 +27,7 @@ import io
 import json
 import os
 import zipfile
+from datetime import UTC, datetime
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -37,6 +38,7 @@ from arm_backend.auth import require_jwt
 from arm_backend.config import settings
 from arm_backend.routers._params import JobIdParam
 from arm_common import User
+from arm_common.schemas import JobLogFileView
 from arm_common.ulid import is_valid_id
 
 # Resolved at import time so tests can monkeypatch this module attribute.
@@ -66,6 +68,41 @@ def per_job_log_path(job_id: str) -> Path:
 # (not global) — see the module docstring.
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+
+# Plain `def`: the directory scan and per-file stat are blocking I/O, so
+# FastAPI runs this in its threadpool instead of on the event loop.
+@router.get("", response_model=list[JobLogFileView])
+def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
+    """Every per-job log file under `LOG_DIR/jobs`, newest first.
+
+    Only `<job_id>.log` regular files whose stem is a valid job id are listed;
+    anything else in the directory is ignored. A missing directory is `[]`.
+    """
+    jobs_dir = LOG_DIR / "jobs"
+    out: list[JobLogFileView] = []
+    try:
+        entries = list(jobs_dir.iterdir())
+    except OSError:
+        return out
+    for path in entries:
+        if path.suffix != ".log" or not is_valid_id("job", path.stem):
+            continue
+        try:
+            if not path.is_file():
+                continue
+            st = path.stat()
+        except OSError:
+            continue
+        out.append(
+            JobLogFileView(
+                job_id=path.stem,
+                size_bytes=st.st_size,
+                modified_at=datetime.fromtimestamp(st.st_mtime, tz=UTC),
+            )
+        )
+    out.sort(key=lambda v: v.modified_at, reverse=True)
+    return out
 
 
 # Declared before `/{job_id}` so FastAPI matches the `.zip` suffix first;

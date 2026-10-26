@@ -104,15 +104,75 @@ def test_0028_matches_the_user_model() -> None:
         assert column.server_default is not None, f"User.{name} has no server_default to match 0028's"
 
 
-def test_0048_matches_the_transcode_task_model() -> None:
+_IDENT_PARENT = "0044_previously_ripped"
+_IDENT_REV = "0045_identification_sources"
+
+
+def test_0045_upgrade_adds_the_identification_columns_and_seeds_them() -> None:
+    sql = _render_sql(_IDENT_PARENT, _IDENT_REV)
+    assert "ALTER TABLE config ADD COLUMN movie_sources VARCHAR[] DEFAULT '{tmdb,omdb}'::text[] NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN music_sources VARCHAR[] DEFAULT '{musicbrainz}'::text[] NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_movie VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_tv VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN search_provider_music VARCHAR DEFAULT 'musicbrainz' NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN movie_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN music_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
+    assert "ALTER TABLE config ADD COLUMN crc64service_enabled BOOLEAN DEFAULT true NOT NULL" in sql
+    # D-8: the old choice goes first in the movie order and stays the search provider.
+    assert "WHEN metadata_provider = 'omdb' THEN '{omdb,tmdb}'::text[]" in sql
+    assert "WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
+    assert "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
+    assert "COALESCE(episode_sources" not in sql
+    assert sql.index("UPDATE config SET") < sql.index("ALTER TABLE config DROP COLUMN metadata_provider")
+
+
+def test_0045_downgrade_restores_metadata_provider_from_the_movie_search_provider() -> None:
+    sql = _render_sql(_IDENT_REV, _IDENT_PARENT, downgrade=True)
+    assert "ALTER TABLE config ADD COLUMN metadata_provider VARCHAR DEFAULT 'tmdb' NOT NULL" in sql
+    assert "WHEN search_provider_movie IN ('tmdb', 'omdb') THEN search_provider_movie" in sql
+    for name in (
+        "crc64service_enabled",
+        "music_auto_apply",
+        "movie_auto_apply",
+        "search_provider_music",
+        "search_provider_tv",
+        "search_provider_movie",
+        "music_sources",
+        "movie_sources",
+    ):
+        assert f"ALTER TABLE config DROP COLUMN {name}" in sql
+
+
+def test_0045_matches_the_config_model() -> None:
+    from arm_common import Config as ConfigModel
+
+    sql = _render_sql(_IDENT_PARENT, _IDENT_REV)
+    for name in (
+        "movie_sources",
+        "music_sources",
+        "search_provider_movie",
+        "search_provider_tv",
+        "search_provider_music",
+        "movie_auto_apply",
+        "music_auto_apply",
+        "crc64service_enabled",
+    ):
+        column = ConfigModel.__table__.columns[name]
+        assert f"ADD COLUMN {name} " in sql, f"0045 does not add config.{name}"
+        assert not column.nullable, f"Config.{name} is nullable but 0045 declares NOT NULL"
+        assert column.server_default is not None, f"Config.{name} has no server_default to match 0045's"
+    assert "metadata_provider" not in ConfigModel.__table__.columns
+
+
+def test_0049_matches_the_transcode_task_model() -> None:
     """The heartbeat telemetry columns (D-242, D-248) exist on both sides,
     nullable, so a row from before the revision reads back as null."""
-    sql = _render_sql("0047_drive_status_ripping", "0048_transcode_task_telemetry")
+    sql = _render_sql("0048_drive_status_ripping", "0049_transcode_task_telemetry")
     for name in ("current_pass", "eta_seconds", "fps", "avg_fps"):
         column = TranscodeTask.__table__.columns[name]
-        assert f"ADD COLUMN {name} " in sql, f"0048 does not add transcode_tasks.{name}"
-        assert column.nullable, f"TranscodeTask.{name} is not nullable but 0048 adds it without a default"
-    down = _render_sql("0048_transcode_task_telemetry", "0047_drive_status_ripping", downgrade=True)
+        assert f"ADD COLUMN {name} " in sql, f"0049 does not add transcode_tasks.{name}"
+        assert column.nullable, f"TranscodeTask.{name} is not nullable but 0049 adds it without a default"
+    down = _render_sql("0049_transcode_task_telemetry", "0048_drive_status_ripping", downgrade=True)
     assert "ALTER TABLE transcode_tasks DROP COLUMN fps" in down
 
 

@@ -37,7 +37,6 @@ def _seed(db: FakeSession) -> None:
             default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
             notification_apprise_urls=[],
             notifications_enabled=False,
-            metadata_provider="tmdb",
         )
     ]
     db.rows.setdefault("users", []).append(

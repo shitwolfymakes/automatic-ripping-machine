@@ -711,8 +711,8 @@ async def test_tmdb_search_candidate_without_id_skips_enrichment(http_client):
             },
         )
     )
-    respx.get("https://api.themoviedb.org/3/movie/42/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0000042"})
+    respx.get("https://api.themoviedb.org/3/movie/42").mock(
+        return_value=httpx.Response(200, json={"id": 42, "external_ids": {"imdb_id": "tt0000042"}})
     )
     client = TMDBClient("k", http_client)
     results = await client.search_movie_candidates("x")
@@ -1326,8 +1326,8 @@ async def test_tmdb_tv_candidates_carry_tvdb_id(http_client) -> None:
             200, json={"results": [{"id": 5084, "name": "Kolchak: The Night Stalker", "first_air_date": "1974-09-13"}]}
         )
     )
-    respx.get("https://api.themoviedb.org/3/tv/5084/external_ids").mock(
-        return_value=httpx.Response(200, json={"imdb_id": "tt0071003", "tvdb_id": 77170})
+    respx.get("https://api.themoviedb.org/3/tv/5084").mock(
+        return_value=httpx.Response(200, json={"id": 5084, "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170}})
     )
     [hit] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
     assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
@@ -1351,3 +1351,232 @@ async def test_get_release_escapes_release_id_in_path(http_client):
     )
     await MusicBrainzClient("armv3", http_client).get_release("abc?inc=x")
     assert route.calls.last.request.url.raw_path.startswith(b"/ws/2/release/abc%3Finc%3Dx?")
+
+
+_TOC = "1 2 200000 150 100000"
+
+
+def _fuzzy_release(rid, title, tracks=2, media=None):
+    return {
+        "id": rid,
+        "title": title,
+        "date": "2001-05-01",
+        "artist-credit": [{"name": "Band", "joinphrase": ""}],
+        "media": media
+        if media is not None
+        else [{"position": 1, "track-count": tracks, "tracks": [{"title": "t1", "position": 1, "length": 1}]}],
+    }
+
+
+@respx.mock
+async def test_musicbrainz_toc_exact_hit_makes_no_fuzzy_call(http_client):
+    exact = respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Exact")]})
+    )
+    fuzzy = respx.get("https://musicbrainz.org/ws/2/discid/-").mock(return_value=httpx.Response(404))
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.title == "Exact"
+    assert "toc_match" not in result.payload
+    assert exact.called and not fuzzy.called
+
+
+@respx.mock
+async def test_musicbrainz_toc_404_falls_back_to_fuzzy_single_release(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    fuzzy = respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Other Pressing")]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.title == "Other Pressing"
+    assert result.payload["toc_match"] == "fuzzy"
+    assert "toc_candidates" not in result.payload
+    params = dict(fuzzy.calls.last.request.url.params)
+    assert params["toc"] == "1 2 200000 150 100000"
+    assert "toc=1+2+200000+150+100000" in str(fuzzy.calls.last.request.url)
+    assert params["cdstubs"] == "no"
+    assert params["inc"] == "artists+recordings+release-groups"
+    assert params["fmt"] == "json"
+    assert fuzzy.calls.last.request.headers["User-Agent"] == "arm/test"
+
+
+@respx.mock
+async def test_musicbrainz_toc_no_releases_falls_back_to_fuzzy(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(200, json={"releases": []}))
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Fuzzy")]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.payload["toc_match"] == "fuzzy"
+
+
+@respx.mock
+async def test_musicbrainz_toc_several_releases_capped_candidates(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    releases = [_fuzzy_release(f"r{i}", f"Album {i}") for i in range(7)]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": releases})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.title == "Album 0"
+    assert result.payload["toc_match"] == "fuzzy"
+    cands = result.payload["toc_candidates"]
+    assert [c["id"] for c in cands] == ["r0", "r1", "r2", "r3", "r4"]
+    assert cands[0] == {"id": "r0", "title": "Album 0", "date": "2001-05-01", "artist": "Band"}
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_zero_releases_raises(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(return_value=httpx.Response(200, json={"releases": []}))
+    with pytest.raises(LookupError, match="musicbrainz toc not found"):
+        await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_404_raises_toc_not_found(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(return_value=httpx.Response(404))
+    with pytest.raises(LookupError, match="musicbrainz toc not found"):
+        await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+
+
+@respx.mock
+async def test_musicbrainz_no_toc_keeps_current_behaviour(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    fuzzy = respx.get("https://musicbrainz.org/ws/2/discid/-").mock(return_value=httpx.Response(200, json={}))
+    with pytest.raises(LookupError, match="disc_id not found"):
+        await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc")
+    assert not fuzzy.called
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_picks_medium_by_track_count(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [
+        {"position": 1, "track-count": 9, "tracks": [{"title": "nine", "position": 1}]},
+        {"position": 2, "track-count": 2, "tracks": [{"title": "two", "position": 1}]},
+    ]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.payload["disc"] == 2
+    assert result.payload["tracks"][0]["title"] == "two"
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_no_matching_medium_uses_first(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [{"position": 1, "track-count": 9, "tracks": [{"title": "nine", "position": 1}]}]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC)
+    assert result.payload["disc"] == 1
+
+
+# Two tracks of 180 s and 200 s (75 sectors per second).
+_TOC_180_200 = "1 2 28650 150 13650"
+
+
+def _medium(position, lengths_ms):
+    return {
+        "position": position,
+        "track-count": len(lengths_ms),
+        "tracks": [
+            {"title": f"d{position}t{i + 1}", "position": i + 1, "length": ms} for i, ms in enumerate(lengths_ms)
+        ],
+    }
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_picks_medium_by_track_lengths(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [100_000, 300_000]), _medium(2, [180_500, 199_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.payload["disc"] == 2
+    assert [t["title"] for t in result.payload["tracks"]] == ["d2t1", "d2t2"]
+    assert {t["disc_number"] for t in result.payload["tracks"]} == {2}
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_missing_length_is_penalised(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [180_000, 200_000]), _medium(2, [100_000, 300_000])]
+    del media[0]["tracks"][1]["length"]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.payload["disc"] == 2
+
+
+@respx.mock
+async def test_musicbrainz_toc_fuzzy_ranks_releases_by_track_lengths(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    releases = [
+        _fuzzy_release("far", "Far", media=[_medium(1, [120_000, 260_000])]),
+        _fuzzy_release("nocount", "No Count", media=[_medium(1, [180_000, 200_000, 10_000])]),
+        _fuzzy_release("close", "Close", media=[_medium(1, [9_000, 9_000]), _medium(2, [181_000, 200_000])]),
+    ]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": releases})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", _TOC_180_200)
+    assert result.title == "Close"
+    assert result.payload["disc"] == 2
+    assert [c["id"] for c in result.payload["toc_candidates"]] == ["close", "far", "nocount"]
+
+
+@respx.mock
+async def test_musicbrainz_toc_malformed_falls_back_to_first_medium(http_client):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [100_000, 300_000]), _medium(2, [180_000, 200_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", "1 two x")
+    assert result.payload["disc"] == 1
+    assert result.payload["tracks"][0]["title"] == "d1t1"
+
+
+@pytest.mark.parametrize("toc", ["1 2 x 150 13650", "1 2 28650 150", "2 1 28650 150 13650"])
+@respx.mock
+async def test_musicbrainz_toc_unreadable_offsets_use_first_count_match(http_client, toc):
+    respx.get("https://musicbrainz.org/ws/2/discid/abc").mock(return_value=httpx.Response(404))
+    media = [_medium(1, [1_000]), _medium(2, [100_000, 300_000]), _medium(3, [180_000, 200_000])]
+    respx.get("https://musicbrainz.org/ws/2/discid/-").mock(
+        return_value=httpx.Response(200, json={"releases": [_fuzzy_release("r1", "Box", media=media)]})
+    )
+    result = await MusicBrainzClient("arm/test", http_client).lookup_disc_id("abc", toc)
+    # "2 1 …" has no positive track count, so it keeps the first medium.
+    assert result.payload["disc"] == (1 if toc.startswith("2 1") else 2)
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_keeps_the_queried_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt0371746").mock(
+        return_value=httpx.Response(
+            200, json={"movie_results": [{"id": 1726, "title": "Iron Man", "release_date": "2008-04-30"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt0371746")
+    assert r.payload["imdb_id"] == "tt0371746"
+
+
+@respx.mock
+async def test_tmdb_find_by_imdb_id_does_not_clobber_existing_imdb_id(http_client) -> None:
+    from arm_backend.metadata.tmdb import TMDBClient
+
+    respx.get("https://api.themoviedb.org/3/find/tt1").mock(
+        return_value=httpx.Response(
+            200, json={"tv_results": [{"id": 9, "name": "X", "first_air_date": "2011-01-01", "imdb_id": "tt2"}]}
+        )
+    )
+    r = await TMDBClient("k", http_client).find_by_imdb_id("tt1")
+    assert r.payload["imdb_id"] == "tt2"

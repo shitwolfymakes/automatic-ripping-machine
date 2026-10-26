@@ -181,9 +181,9 @@ pick up where you left off.
    rest. No drive? You can rip ISO image files instead.
 4. **MakeMKV.** Use the free monthly beta key or your purchased key. A drive
    checks the key for you.
-5. **Find titles** (optional). Add a free [TMDb](https://www.themoviedb.org/settings/api)
+5. **Identification** (optional). Add a free [TMDb](https://www.themoviedb.org/settings/api)
    and/or [OMDb](https://www.omdbapi.com/apikey.aspx) key and test it in place.
-   TV episodes and music CDs work without one.
+   TV shows and music CDs work without one.
 6. **Disc handling.** Fully automatic, review the title first, or manual.
 7. **Transcoding** (optional). Test your graphics card's encoders.
 8. **Notifications** (optional). Get a phone or chat message when a rip

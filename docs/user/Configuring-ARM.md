@@ -52,18 +52,54 @@ armctl up
 Open **Settings** (`/settings`) in the web UI. These values live in the database
 and apply immediately. The full set:
 
-### Metadata / identification
+### Identification and Keys
+
+Two tabs cover how ARM names a disc. **Identification** is what ARM reads from
+the disc, which services it asks, and when it trusts the answer. **API Keys** holds
+the API keys those services need.
+
+#### Identification
+
+**Search** picks the service behind the job page's search box, one per media
+type: Movies (TMDb or OMDb) and TV shows (TMDb, OMDb, TVmaze or TVDB). Audio CDs
+always use MusicBrainz, so there is nothing to pick for them. Every service is listed; saving a choice whose key is not saved is
+refused. The search box uses the service you chose even when it is unticked
+under Online lookup.
+
+**Identity** shows the pipeline in the order ARM runs it. Before any of it, ARM
+reads the disc itself: the volume label on every disc, the disc title metadata on
+a Blu-ray and the track layout on a CD. When they disagree, the disc's own
+metadata beats its label. The Blu-ray | DVD | CD selector above the summary only
+changes what the summary shows; nothing is saved for it.
+
+| Step | Setting | Default | Effect |
+|---|---|---|---|
+| Disc database | **TheDiscDB disc map** | on | Matches the disc itself against a local snapshot of TheDiscDB, labels its titles and picks the main feature. A match beats the disc's labels; ARM then resolves the match's IMDb id through the first online source in your lists that can look one up, and with none, the TheDiscDB release itself names the disc. |
+| Disc database | **ARM community database (CRC64)** | on | Sends a DVD's CRC64 fingerprint to the ARM project's database and takes its title when it has one. DVDs only, no key. |
+| Online lookup | **Movies**, **TV shows** | TMDb, OMDb · TMDb, TVmaze, TVDB | Tried top to bottom; the first confident match wins. Audio CDs are looked up on MusicBrainz by their track layout; when that exact disc isn't listed, ARM matches the track lengths instead and asks you to confirm when several releases fit. Untick a source to skip it, move it to change the order. A source whose key is not saved shows "Needs … key" and is skipped. With every source unticked, ARM makes no online lookup for that type. |
+| Online lookup | **Match tolerance (seconds)** | 300 | How far a track's runtime may differ from an episode's and still match, 1 to 1800. ARM narrows it to a tenth of the episode's runtime, but not below 60 seconds or above the value you set. |
+| Trust | **Apply confident matches** (Movies, TV shows, Music) | on | With a switch on, a match is applied and the disc rips (or waits in the review gate when **Ripping › Review first** is on). With it off, the match waits on the job page for you to confirm it and the disc is held with no countdown. |
+| Advanced | **Ignore the disc title metadata**, **Ignore the volume label** | off | For collections where the disc's own text is usually wrong. ARM stops reading that hint on every disc; fix a single disc from its job page instead. With the volume label ignored, a DVD with no disc title metadata gets no automatic title search at all. |
+
+A disc with no confident match follows **Ripping › Block on metadata miss**:
+held for you to identify, or ripped as a placeholder you name afterwards.
+Data discs skip identification and follow the same setting.
+
+#### Keys
 
 | Setting | Default | Effect |
 |---|---|---|
-| **TMDb API key** | empty | Enables TMDb movie/TV lookups. Get one free at <https://www.themoviedb.org/settings/api>. |
-| **OMDb API key** | empty | Enables OMDb lookups. Get one at <https://www.omdbapi.com/apikey.aspx>. |
-| **MusicBrainz user-agent** | `armv3` | The UA string ARM sends to MusicBrainz for audio-CD lookups. No key needed. |
+| **TMDb API key** | empty | The Movie Database, free. Names movies and TV shows. Get one at <https://www.themoviedb.org/settings/api>. |
+| **OMDb API key** | empty | Open Movie Database, 1000 requests a day free. Get one at <https://www.omdbapi.com/apikey.aspx>. |
+| **TVDb API key** | empty | TVDB. TV show titles and episode numbers. Get one at <https://thetvdb.com/api-information>. |
+| **TheDiscDB refresh interval (days)** | 7 | How often ARM refreshes its TheDiscDB snapshot from GitHub. |
+| **MakeMKV key** | empty | The purchased key or the free monthly beta key. See [MakeMKV](MakeMKV). |
 
-ARM identifies video discs in this order: the **community CRC64 database**
-(no key, tried first) → **TMDb** (movie, then TV) → **OMDb**. Audio CDs use
-**MusicBrainz**. Data discs skip identification entirely. So ARM works with no
-keys at all, but TMDb/OMDb dramatically improve naming hit rates.
+Press **Test** next to the TMDb, OMDb or TVDb key to check it; a drive's ripper
+checks the MakeMKV key. Keys live here only, and no `.env` variable sets them.
+
+ARM works with no keys at all. TheDiscDB, the CRC64 database, TVmaze and
+MusicBrainz need none; a TMDb or OMDb key is what names most movies.
 
 ### Rip / transcode behaviour
 

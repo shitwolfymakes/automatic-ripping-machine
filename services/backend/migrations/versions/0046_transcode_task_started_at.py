@@ -5,8 +5,8 @@ that waited in the queue counted the wait as encode time in the UI's ETA and
 "Took" label; `claim_heartbeat_at` is overwritten by every heartbeat. Set at
 claim, nullable (rows claimed before this revision have none).
 
-Revision ID: 0045_transcode_task_started_at
-Revises: 0044_previously_ripped
+Revision ID: 0046_transcode_task_started_at
+Revises: 0045_identification_sources
 Create Date: 2026-10-20
 """
 
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0045_transcode_task_started_at"
-down_revision: Union[str, None] = "0044_previously_ripped"
+revision: str = "0046_transcode_task_started_at"
+down_revision: Union[str, None] = "0045_identification_sources"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

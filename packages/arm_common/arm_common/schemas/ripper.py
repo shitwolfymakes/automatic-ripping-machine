@@ -100,6 +100,7 @@ class ScanResult(BaseModel):
     volume_label: str | None = None
     titles: list[ScanTitle] = Field(default_factory=list)
     musicbrainz_disc_id: str | None = None
+    cd_toc: str | None = None
     # All disc fingerprints the scan was able to compute. Drives 1337server
     # lookup (crc64), and reverse "have we seen this disc before?" lookup
     # in future flows. Empty when nothing fingerprintable.

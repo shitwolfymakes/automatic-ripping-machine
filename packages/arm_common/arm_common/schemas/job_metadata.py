@@ -13,6 +13,11 @@ The bag holds four kinds of content, and this module gives each a home:
   `rerip_allowed` lets a ripped disc through the previously-ripped check once).
 - `previously_ripped` — the earlier rip a held disc matched (the review hold's
   reason; no countdown runs while it is set).
+- `identity_suggestion` — a confident match held for the operator to confirm (auto-apply
+  off; no countdown runs while it is set).
+- `identify_attempts` — on an automatic-match miss, each source the dispatcher
+  tried and its outcome (`{source, step, kind, outcome, detail}`, at most 20);
+  the review card says why the match missed. Dropped on a hit or a resolve.
 - `provider_raw` — everything a provider returned, keyed by provider name.
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
@@ -28,7 +33,7 @@ whatever was there; tighten to `forbid` once those rows are confirmed gone.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from arm_common.schemas.identity import IdentityClaims
 from arm_common.schemas.ripper import ScanResult
@@ -49,6 +54,24 @@ class ExternalIds(BaseModel):
     tmdb_kind: Literal["movie", "tv"] | None = None
 
 
+class IdentityFacts(BaseModel):
+    """What a person uses to tell titles apart: run, plot, rating, people.
+    Filled from a provider payload by `arm_backend.metadata.facts`; shown in
+    the match picker and snapshotted on the job when a match is used."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    end_year: int | None = None
+    overview: str | None = None
+    rating: float | None = None  # 0-10
+    rating_source: Literal["imdb", "tmdb", "tvmaze"] | None = None
+    votes: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    creators: list[str] = Field(default_factory=list)  # series creators, or a movie's directors
+    cast: list[str] = Field(default_factory=list)  # top billed, at most three
+    episode_count: int | None = None
+
+
 class JobIdentity(BaseModel):
     """What identification concluded. Title/year/media_type/poster live on
     the Job row itself — this records where they came from and the ids that
@@ -60,6 +83,10 @@ class JobIdentity(BaseModel):
     external_ids: ExternalIds = Field(default_factory=ExternalIds)
     overview: str | None = None
     identified_at: datetime | None = None
+    # Snapshot of the picked match's facts (match picker spec 3.6). Not
+    # refreshed; a later identify or accept replaces the whole identity.
+    facts: IdentityFacts | None = None
+    facts_fetched_at: datetime | None = None
 
 
 class MusicTrackMeta(BaseModel):
@@ -98,6 +125,29 @@ class PreviouslyRipped(BaseModel):
     job_id: str
 
 
+class IdentitySuggestion(BaseModel):
+    """A confident online match identify did not apply because the media
+    type's "Apply confident matches" switch is off (identification-sources
+    spec D-10). The job keeps its miss title and the `unidentified` flag and
+    waits in AWAITING_REVIEW with no countdown until the operator accepts
+    it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
+    way (any resolve clears this section)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    provider: str
+    title: str
+    year: int | None = None
+    kind: Literal["movie", "tv", "music"]
+    poster_url: str | None = None
+    external_ids: ExternalIds = Field(default_factory=ExternalIds)
+    overview: str | None = None
+    # The provider's raw hit, so accepting re-applies exactly what identify
+    # would have applied (provider_raw, music section, disc number).
+    payload: dict[str, Any] = Field(default_factory=dict)
+    suggested_at: datetime
+
+
 class JobMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -114,6 +164,12 @@ class JobMetadata(BaseModel):
     flags: JobFlags = Field(default_factory=JobFlags)
     # Set when on_previously_ripped=hold parked this job; names the earlier rip.
     previously_ripped: PreviouslyRipped | None = None
+    # Set when a media type's auto-apply switch held a confident match for
+    # the operator to confirm; no countdown runs while it is set.
+    identity_suggestion: IdentitySuggestion | None = None
+    # Set on an automatic-match miss: what the dispatcher tried and how each
+    # attempt ended (arm_backend.metadata.dispatcher.last_attempts).
+    identify_attempts: list[dict[str, Any]] | None = None
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -145,3 +201,22 @@ def previously_ripped_job_id(metadata_json: dict[str, Any] | None) -> str | None
     if isinstance(section, dict) and isinstance(section.get("job_id"), str):
         return str(section["job_id"])
     return None
+
+
+def identity_suggestion_of(metadata_json: dict[str, Any] | None) -> IdentitySuggestion | None:
+    """The confident match a held job is waiting for the operator to
+    confirm (see IdentitySuggestion), or None when absent or malformed."""
+    section = (metadata_json or {}).get("identity_suggestion")
+    if not isinstance(section, dict):
+        return None
+    try:
+        return IdentitySuggestion.model_validate(section)
+    except ValidationError:
+        return None
+
+
+def without_identity_suggestion(metadata_json: dict[str, Any] | None) -> dict[str, Any]:
+    """A copy of the bag with the suggestion section removed."""
+    md = dict(metadata_json or {})
+    md.pop("identity_suggestion", None)
+    return md

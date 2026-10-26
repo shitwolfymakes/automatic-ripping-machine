@@ -3,7 +3,7 @@
 	background-attachment: fixed !important;
 }
 
-[data-scheme="glass"] aside {
+[data-scheme="glass"] aside:where([data-sidebar]) {
 	background: rgba(255, 255, 255, 0.05) !important;
 	backdrop-filter: blur(20px);
 	-webkit-backdrop-filter: blur(20px);
@@ -22,20 +22,20 @@
 	background: transparent;
 }
 
-[data-scheme="glass"] aside .nav-logo {
+[data-scheme="glass"] aside:where([data-sidebar]) .nav-logo {
 	text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
-[data-scheme="glass"] aside .nav-item {
+[data-scheme="glass"] aside:where([data-sidebar]) .nav-item {
 	border-radius: 9999px;
 	border: 1px solid transparent;
 }
 
-[data-scheme="glass"] aside .nav-item:hover {
+[data-scheme="glass"] aside:where([data-sidebar]) .nav-item:hover {
 	background: rgba(255, 255, 255, 0.1) !important;
 }
 
-[data-scheme="glass"] aside .nav-item[data-active="true"] {
+[data-scheme="glass"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background: rgba(255, 255, 255, 0.15) !important;
 	border-color: rgba(255, 255, 255, 0.2);
 	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);

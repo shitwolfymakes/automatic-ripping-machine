@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import secrets
 import zipfile
 from pathlib import Path
@@ -387,3 +388,79 @@ def test_zip_fallback_skips_unreadable_log(tmp_path: Path, signing_key: bytes, m
     with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
         assert "arm-backend.log" in zf.namelist()
         assert "bad.log" not in zf.namelist()
+
+
+# --- GET /api/logs (index of per-job log files) ---------------------------
+
+_JOB_A = "job_01JZXR7K3M5Q8N4VWA00000001"
+_JOB_B = "job_01JZXR7K3M5Q8N4VWA00000002"
+
+
+def _job_file(log_dir: Path, name: str, body: str, mtime: float) -> Path:
+    jobs = log_dir / "jobs"
+    jobs.mkdir(exist_ok=True)
+    path = jobs / name
+    path.write_text(body, encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_index_lists_size_and_mtime_newest_first(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", "abc\n", 1_700_000_000)
+    _job_file(tmp_path, f"{_JOB_B}.log", "abcdef\n", 1_700_000_100)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert [row["job_id"] for row in body] == [_JOB_B, _JOB_A]
+    assert [row["size_bytes"] for row in body] == [7, 4]
+    assert body[0]["modified_at"] == "2023-11-14T22:15:00Z"
+
+
+def test_index_skips_invalid_names_and_non_log_files(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", "x", 1_700_000_000)
+    _job_file(tmp_path, "notes.log", "x", 1_700_000_000)
+    _job_file(tmp_path, "..x.log", "x", 1_700_000_000)
+    _job_file(tmp_path, f"{_JOB_B}.txt", "x", 1_700_000_000)
+    (tmp_path / "jobs" / f"{_JOB_B}.log").mkdir()  # a directory is not a log file
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert [row["job_id"] for row in r.json()] == [_JOB_A]
+
+
+def test_index_missing_directory_is_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path / "nope")
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_index_rejects_bad_token(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    app, _ = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth("not-a-jwt"))
+    assert r.status_code == 401
+
+
+def test_index_does_not_shadow_job_routes(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", '{"job_id": "x", "msg": "hi"}\n', 1_700_000_000)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        one = client.get(f"/api/logs/{_JOB_A}", headers=_auth(token))
+        zipped = client.get(f"/api/logs/{_JOB_A}.zip", headers=_auth(token))
+    assert one.status_code == 200
+    assert one.headers["content-type"].startswith("application/x-ndjson")
+    assert zipped.status_code == 200
+    assert zipped.headers["content-type"] == "application/zip"

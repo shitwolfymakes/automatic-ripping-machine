@@ -13,6 +13,48 @@ export function timeAgo(dateString: string | null | undefined): string {
 	return `${days}d ago`;
 }
 
+const MINUTE = 60_000;
+
+function startOfDay(d: Date): number {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Relative time in local calendar days, for a list that pairs it with an
+ * absolute date (the Logs list's "Last modified"): `Just now`, `42 min ago`,
+ * `3h ago` (same day), `Yesterday`, `2 days ago` up to six days. Older than
+ * that it returns null and the row shows only the absolute date.
+ */
+export function calendarTimeAgo(iso: string, now: Date = new Date()): string | null {
+	const then = new Date(iso);
+	if (Number.isNaN(then.getTime())) return null;
+	const ms = Math.max(0, now.getTime() - then.getTime());
+	if (ms < MINUTE) return 'Just now';
+	if (ms < 60 * MINUTE) return `${Math.floor(ms / MINUTE)} min ago`;
+	// Math.round absorbs a DST shift (a 23h or 25h day)
+	const days = Math.round((startOfDay(now) - startOfDay(then)) / (24 * 60 * MINUTE));
+	if (days <= 0) return `${Math.floor(ms / (60 * MINUTE))}h ago`;
+	if (days === 1) return 'Yesterday';
+	if (days <= 6) return `${days} days ago`;
+	return null;
+}
+
+/**
+ * `Oct 16, 8:18 AM` in the viewer's locale and time zone, with the year when
+ * it is not the current one; empty for an unparseable date.
+ */
+export function formatShortDateTime(iso: string, now: Date = new Date()): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return '';
+	return d.toLocaleString(undefined, {
+		month: 'short',
+		day: 'numeric',
+		...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+		hour: 'numeric',
+		minute: '2-digit'
+	});
+}
+
 export function formatBytes(bytes: number): string {
 	if (bytes === 0) return '0 B';
 	const k = 1024;

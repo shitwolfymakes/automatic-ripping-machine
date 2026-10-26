@@ -6,8 +6,8 @@ fingerprint row on Postgres stored NULL. Backfill existing rows from the
 owning job's created_at (the fingerprint is recorded at scan, right after the
 job is created), then set the default and the constraint the model expects.
 
-Revision ID: 0046_disc_fingerprint_created_at
-Revises: 0045_transcode_task_started_at
+Revision ID: 0047_disc_fingerprint_created_at
+Revises: 0046_transcode_task_started_at
 Create Date: 2026-10-20
 """
 
@@ -16,8 +16,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0046_disc_fingerprint_created_at"
-down_revision: Union[str, None] = "0045_transcode_task_started_at"
+revision: str = "0047_disc_fingerprint_created_at"
+down_revision: Union[str, None] = "0046_transcode_task_started_at"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

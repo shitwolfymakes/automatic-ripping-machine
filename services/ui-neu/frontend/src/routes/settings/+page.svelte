@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { restartSetup } from '$lib/api/setup';
 	import { slide } from 'svelte/transition';
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -17,6 +17,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import { SETTINGS_SCHEMA_CONTEXT, groupLabel, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -47,6 +48,9 @@
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
 	let settingsError = $state<Error | null>(null);
+	// A getter, not a value: the schema arrives after mount and context is set
+	// once. Field widgets use it to deep-link to another tab's field.
+	setContext(SETTINGS_SCHEMA_CONTEXT, () => settings?.schema?.groups);
 
 	// --- Tab state ---
 	type Tab = string;
@@ -61,13 +65,20 @@
 		'users',
 		'system'
 	] as const;
-	// Config-group tabs derived from the backend schema. Metadata + Ripping have
-	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
+	// Config-group tabs derived from the backend schema. Identification, Keys and
+	// Ripping have no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
 	// tabs; System read-only rows fold into the system tab — see template.)
-	const configGroupNames = ['Metadata', 'Ripping'] as const;
+	const configGroupNames = ['Keys', 'Identification', 'Ripping'] as const;
 	const configGroups = $derived(
-		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+		(settings?.schema?.groups ?? [])
+			.filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+			// Tab order is this page's, not the schema's (API Keys first).
+			.sort(
+				(a, b) =>
+					(configGroupNames as readonly string[]).indexOf(a.name) -
+					(configGroupNames as readonly string[]).indexOf(b.name)
+			)
 	);
 	// Full visible-tab list: config groups first, then screen-tabs. The
 	// Transcoding tab always shows (even on a ripper-only, not-capable
@@ -79,7 +90,8 @@
 	function group(name: string): SettingsGroup | undefined {
 		return (settings?.schema?.groups ?? []).find((g) => g.name === name);
 	}
-	const metaGroup = $derived(group('Metadata'));
+	const identificationGroup = $derived(group('Identification'));
+	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
 	const systemGroup = $derived(group('System'));
@@ -96,28 +108,30 @@
 		system: 'System'
 	};
 	function tabLabel(id: string): string {
-		return TAB_LABELS[id] ?? id;
+		return TAB_LABELS[id] ?? groupLabel(id);
 	}
 
 	function parseHash(): Tab {
-		if (typeof window === 'undefined') return 'Metadata';
+		if (typeof window === 'undefined') return 'Identification';
 		const hash = window.location.hash.replace('#', '');
-		const tabPart = hash.split('/')[0];
+		// Retired names (#Metadata, #appearance) open the tab that replaced them.
+		const tabPart = legacyTab(hash.split('/')[0]);
 		// Validate the hash tab against the known-valid set: the static
 		// config-group tabs (group names, not knowable from the schema at parse
 		// time but fixed in this file) plus the bespoke screen-tabs. A stale or
 		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
-		// 'Metadata' instead of leaving the content pane blank.
+		// 'Identification' instead of leaving the content pane blank.
 		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
-		if (tabPart === 'appearance') return 'themes'; // pre-rename bookmarks and links
-		return allowed.includes(tabPart) ? tabPart : 'Metadata';
+		return allowed.includes(tabPart) ? tabPart : 'Identification';
 	}
 
 	let activeTab = $state<Tab>(parseHash());
 
 	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
-	// #Metadata/makemkv_key). The field is scrolled into view, focused and
-	// briefly highlighted once its tab has rendered.
+	// #Keys/makemkv_key). The field is scrolled into view, focused and
+	// briefly highlighted once its tab has rendered. The field's own schema
+	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
+	// still lands on the tab that now holds the field.
 	function parseHashField(): string | null {
 		if (typeof window === 'undefined') return null;
 		const part = window.location.hash.replace('#', '').split('/')[1];
@@ -125,12 +139,26 @@
 	}
 	let pendingField = $state<string | null>(parseHashField());
 
+	/** The visible tab that renders `key`'s schema group, if any. */
+	function fieldTab(key: string): Tab | undefined {
+		const owner = settings?.schema?.groups?.find((g) => g.fields.some((f) => f.key === key));
+		const tab = owner && settingsTabFor(owner.name);
+		return tab && visibleTabs.includes(tab) ? tab : undefined;
+	}
+
 	$effect(() => {
 		const key = pendingField;
 		if (!key || !settings) return;
+		const home = fieldTab(key);
+		if (home && home !== activeTab) {
+			activeTab = home;
+			return; // re-runs once the field's tab has rendered
+		}
 		const el = document.getElementById(`setting-${key}`);
-		if (!el) return;
+		// One shot: a field that never renders must not keep pulling later tab
+		// clicks back to its tab.
 		pendingField = null;
+		if (!el) return;
 		el.scrollIntoView({ block: 'center' });
 		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
 		el.classList.add('settings-field-highlight');
@@ -242,7 +270,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'themes') loadCacheStats();
+		if (tab === 'interface') loadCacheStats();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -267,7 +295,7 @@
 			.then(() => drives.start());
 		loadSettings();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'themes') loadCacheStats();
+		if (activeTab === 'interface') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -277,7 +305,7 @@
 			const tab = parseHash();
 			activeTab = tab;
 			pendingField = parseHashField();
-			if (tab === 'themes') loadCacheStats();
+			if (tab === 'interface') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -319,6 +347,22 @@
 		}
 	}
 
+	// A form's saved values folded back into `settings.config`, so every other
+	// tab sees them: the Identity card's "Needs ... key" chip reads the keys
+	// from it, and a form diffs its next save against it. A saved secret is
+	// stored as the masked sentinel the backend returns for a set secret (a
+	// cleared one, sent as null, stays null).
+	function foldSaved(payload: Record<string, unknown>) {
+		if (!settings) return;
+		const secret = new Set(
+			(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
+		);
+		const saved = Object.fromEntries(
+			Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
+		);
+		settings = { ...settings, config: { ...settings.config, ...saved } };
+	}
+
 	// Keep the app-wide runtime toggle in step with a Settings save so an SPA
 	// navigation to /transcoder (banner) or an apply dialog (passthrough-only
 	// filter) reflects the new value without a reload. The saved values are
@@ -327,7 +371,7 @@
 	// disable-then-re-enable in one visit would diff against the stale
 	// original value and never send the re-enable.
 	function onTranscodingSaved(payload: Record<string, unknown>) {
-		if (settings) settings = { ...settings, config: { ...settings.config, ...payload } };
+		foldSaved(payload);
 		if ('transcode_enabled' in payload) {
 			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
 		}
@@ -360,8 +404,9 @@
 			 same shape SessionsArea.svelte uses. The <nav aria-label="Settings
 			 tabs"> wrapper is kept because the parity harness selects the strip
 			 with nav[aria-label="Settings tabs"]; it is an unstyled block box,
-			 so the inner div reproduces the previous nav's own box exactly. -->
-			<nav aria-label="Settings tabs">
+			 so the inner div reproduces the previous nav's own box exactly.
+			 data-settings-tabs is the published hook schemes style it by. -->
+			<nav aria-label="Settings tabs" data-settings-tabs>
 				<div class="tabs settings-page-tabs" role="tablist">
 					{#each visibleTabs as tab (tab)}
 						<button
@@ -375,15 +420,18 @@
 				</div>
 			</nav>
 
-			<!-- Metadata config tab (schema-driven) -->
-			{#if activeTab === 'Metadata' && metaGroup}
-				<SchemaConfigForm group={metaGroup} config={settings.config} />
-			{/if}
-
-			<!-- Ripping config tab (schema-driven) -->
-			{#if activeTab === 'Ripping' && rippingGroup}
-				<SchemaConfigForm group={rippingGroup} config={settings.config} />
-			{/if}
+			<!-- Identification, Keys and Ripping config tabs (schema-driven). All
+			 three stay mounted and the inactive ones are hidden, so a chip's deep
+			 link to a key on another tab (and the way back) keeps every unsaved
+			 edit. Each folds its save into settings.config for the others.
+			 Every tab's content sits in one data-page-section box (the published
+			 hook a scheme frames a page region by), headed by its
+			 data-page-section-title heading. -->
+			{#each [identificationGroup, keysGroup, rippingGroup].filter((g) => g !== undefined) as g (g.name)}
+				<div hidden={activeTab !== g.name} data-page-section>
+					<SchemaConfigForm group={g} config={settings.config} onsaved={foldSaved} />
+				</div>
+			{/each}
 
 			<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
 			 GPU inventory) when this deployment can run transcode containers.
@@ -392,27 +440,29 @@
 			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
 			 stay hidden. -->
 			{#if activeTab === 'transcoding'}
-				{#if $transcoderEnabled && transcodingGroup}
-					<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
-						{#snippet beforeSave()}
-							<GpusCard />
-						{/snippet}
-					</SchemaConfigForm>
-				{:else}
-					<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
-						<label class="field field-row settings-page-notif-toggle-row">
-							<!-- Always rendered off: on a ripper-only box the backend column
-							 still defaults to true, but it has no effect without capability. -->
-							<Toggle checked={false} label="Enable transcoding" disabled />
-							<span class="field-label">Enable transcoding</span>
-						</label>
-						<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
-					</div>
-				{/if}
+				<div data-page-section>
+					{#if $transcoderEnabled && transcodingGroup}
+						<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
+							{#snippet beforeSections()}
+								<GpusCard />
+							{/snippet}
+						</SchemaConfigForm>
+					{:else}
+						<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
+							<label class="field field-row settings-page-notif-toggle-row">
+								<!-- Always rendered off: on a ripper-only box the backend column
+								 still defaults to true, but it has no effect without capability. -->
+								<Toggle checked={false} label="Enable transcoding" disabled />
+								<span class="field-label">Enable transcoding</span>
+							</label>
+							<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
+						</div>
+					{/if}
+				</div>
 			{/if}
 
 			{#if activeTab === 'sessions'}
-				<div class="space-y-6">
+				<div class="space-y-6" data-page-section>
 					<SessionsArea />
 					<SessionRoutesCard />
 				</div>
@@ -420,9 +470,9 @@
 
 			<!-- Notifications Tab -->
 			{#if activeTab === 'notifications'}
-				<div class="stack">
+				<div class="stack" data-page-section>
 					<div>
-						<h2 class="settings-page-section-title">Notifications</h2>
+						<h2 class="settings-page-section-title" data-page-section-title>Notifications</h2>
 						<p class="settings-page-description">
 							Manage notification channels - Discord, Slack, webhooks, scripts, and more.
 						</p>
@@ -448,167 +498,61 @@
 
 			<!-- Users Tab: account management (admin password + guest access) -->
 			{#if activeTab === 'users'}
-				<div in:reveal class="stack stack-lg">
-					<h2 class="settings-page-section-title">Users</h2>
+				<div in:reveal class="stack stack-lg" data-page-section>
+					<h2 class="settings-page-section-title" data-page-section-title>Users</h2>
 					<UsersCard />
 				</div>
 			{/if}
 
 			<!-- System Info Tab -->
 			{#if activeTab === 'system'}
-				<div class="stack stack-lg">
-					<h2 class="settings-page-section-title">System</h2>
+				<div class="stack stack-lg" data-page-section>
+					<div class="stack stack-lg">
+						<h2 class="settings-page-section-title" data-page-section-title>System</h2>
 
-					<!-- Health check (API keys + path permissions) -->
-					<!-- First-run walkthrough re-entry (setup spec §5.11) -->
-					<section class="panel settings-page-setup-again" data-testid="run-setup-again">
-						<div>
-							<h3 class="settings-page-section-title">Setup walkthrough</h3>
-							<p class="settings-page-setup-again-help">
-								Walk through drives, keys and defaults again. Your current values are kept.
-							</p>
-						</div>
-						<button type="button" class="btn" onclick={runSetupAgain} disabled={restartingSetup}>
-							{restartingSetup ? 'Opening...' : 'Run setup again'}
-						</button>
-					</section>
-
-					<SystemHealth grouped />
-
-					<!-- Read-only infra configuration (schema-driven) -->
-					{#if systemGroup}
-						<section class="stack">
-							<h3 class="settings-page-section-title">Configuration (read-only)</h3>
-							<div class="panel stack">
-								{#each systemGroup.fields as f (f.key)}
-									<ConfigSchemaField
-										field={f}
-										value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
-									/>
-								{/each}
+						<!-- Health check (API keys + path permissions) -->
+						<!-- First-run walkthrough re-entry (setup spec §5.11) -->
+						<section class="panel settings-page-setup-again" data-testid="run-setup-again">
+							<div>
+								<h3 class="settings-page-section-title">Setup walkthrough</h3>
+								<p class="settings-page-setup-again-help">
+									Walk through drives, keys and defaults again. Your current values are kept.
+								</p>
 							</div>
+							<button type="button" class="btn" onclick={runSetupAgain} disabled={restartingSetup}>
+								{restartingSetup ? 'Opening...' : 'Run setup again'}
+							</button>
 						</section>
-					{/if}
-				</div>
 
-				<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
-				<section class="mt-6">
-					<DiagnosticsSection />
-				</section>
+						<SystemHealth grouped />
+
+						<!-- Read-only infra configuration (schema-driven) -->
+						{#if systemGroup}
+							<section class="stack">
+								<h3 class="settings-page-section-title">Configuration (read-only)</h3>
+								<div class="panel stack">
+									{#each systemGroup.fields as f (f.key)}
+										<ConfigSchemaField
+											field={f}
+											value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
+										/>
+									{/each}
+								</div>
+							</section>
+						{/if}
+					</div>
+
+					<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
+					<section class="mt-6">
+						<DiagnosticsSection />
+					</section>
+				</div>
 			{/if}
 
 			<!-- Appearance Tab -->
 			{#if activeTab === 'interface'}
-				<InterfaceSettings />
-			{/if}
-
-			{#if activeTab === 'themes'}
-				<h2 class="settings-page-section-title mb-4">Themes</h2>
-				<section class="stack stack-lg">
-					<!-- Feedback toast -->
-					{#if themeFeedback}
-						<div class="alert {themeFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-							{themeFeedback.message}
-						</div>
-					{/if}
-
-					<!-- Built-in Themes -->
-					<div class="panel settings-page-panel-wide">
-						<h3 class="settings-page-panel-title">Color Scheme</h3>
-						<p class="settings-page-description settings-page-panel-hint">
-							Choose an accent color for buttons, links, and highlights throughout the UI.
-						</p>
-						<div class="flex flex-wrap gap-3">
-							{#each $allSchemes.filter((s) => s.builtin !== false) as scheme (scheme.id)}
-								<button
-									type="button"
-									onclick={() => ($colorScheme = scheme.id)}
-									class="scheme-swatch-btn"
-									data-selected={$colorScheme === scheme.id}
-								>
-									<span class="scheme-swatch" style:--swatch={scheme.swatch}></span>
-									<span class="scheme-swatch-label">{scheme.label}</span>
-									{#if scheme.description}
-										<span class="scheme-swatch-tooltip">{scheme.description}</span>
-									{/if}
-								</button>
-							{/each}
-						</div>
-					</div>
-
-					<!-- User Themes -->
-					{#if $allSchemes.filter((s) => s.builtin === false).length > 0}
-						<div class="panel settings-page-panel-wide">
-							<h3 class="settings-page-panel-title">User Themes</h3>
-							<p class="settings-page-description settings-page-panel-hint">
-								Custom themes loaded from your themes directory.
-							</p>
-							<div class="flex flex-wrap gap-3">
-								{#each $allSchemes.filter((s) => s.builtin === false) as scheme (scheme.id)}
-									<div class="relative">
-										<button
-											type="button"
-											onclick={() => ($colorScheme = scheme.id)}
-											class="scheme-swatch-btn"
-											data-selected={$colorScheme === scheme.id}
-										>
-											<span class="scheme-swatch" style:--swatch={scheme.swatch}></span>
-											<span class="scheme-swatch-label">{scheme.label}</span>
-											{#if scheme.author}
-												<span class="scheme-swatch-author">by {scheme.author}</span>
-											{/if}
-										</button>
-										<div class="absolute -right-1 -top-1 flex gap-0.5">
-											<button
-												type="button"
-												onclick={() => handleThemeDelete(scheme.id, scheme.label)}
-												class="btn btn-icon scheme-swatch-delete"
-												title="Delete"
-											>
-												<Glyph name="x" class="h-3 w-3" />
-											</button>
-										</div>
-									</div>
-								{/each}
-							</div>
-							{#if themeFeedback}
-								<p class="mt-3 settings-page-feedback" data-error={themeFeedback.type !== 'success'}>
-									{themeFeedback.message}
-								</p>
-							{/if}
-						</div>
-					{/if}
-
-					<!-- Dark Mode -->
-					<div class="panel settings-page-panel-wide">
-						<div class="flex items-center justify-between">
-							<div>
-								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Dark Mode</h3>
-								{#if $schemeLocksMode}
-									<p class="settings-page-description">Locked by theme</p>
-								{:else}
-									<p class="settings-page-description">Toggle between light and dark mode.</p>
-								{/if}
-							</div>
-							{#if !$schemeLocksMode}
-								<div class="flex items-center gap-2">
-									<button
-										type="button"
-										onclick={toggleTheme}
-										role="switch"
-										aria-checked={$theme === 'dark'}
-										aria-label="Dark mode"
-										class="toggle toggle-lg"
-									>
-										<span class="toggle-thumb"></span>
-									</button>
-									<span class="settings-page-toggle-label" data-on={$theme === 'dark'}>
-										{$theme === 'dark' ? 'On' : 'Off'}
-									</span>
-								</div>
-							{/if}
-						</div>
-					</div>
+				<div class="stack stack-lg" data-page-section>
+					<InterfaceSettings />
 
 					<!-- Image Cache -->
 					<div class="panel settings-page-panel-wide">
@@ -638,154 +582,264 @@
 							</p>
 						{/if}
 					</div>
-
-					<!-- Feature request prompt -->
-					<div class="flex justify-center pt-2">
-						<span class="badge settings-page-feature-request">
-							<Glyph name="info" class="h-3.5 w-3.5" />
-							Not seeing what you want? Submit your feature requests on GitHub.
-						</span>
-					</div>
-				</section>
+				</div>
 			{/if}
 
-			{#if activeTab === 'drives'}
-				<div class="mb-4 flex items-start justify-between gap-3">
-					<h2 class="settings-page-section-title">Drives</h2>
-					<DriveMaintenance onrescanned={() => drives.refresh()} />
-				</div>
-				<section class="stack stack-lg">
-					{#if $driveError}
-						<div class="alert alert-danger">
-							{$driveError}
-						</div>
-					{:else}
-						{#if parts.enrolled.length > 0}
-							<div class="grid-2 settings-page-drive-grid">
-								{#each parts.enrolled as drive (drive.id)}
-									<DriveCard
-										{drive}
-										sessions={driveSessions}
-										transcodePresets={driveTranscodePresets}
-										globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
-										onupdate={() => drives.refresh()}
-										globalDefaults={{
-											prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
-											prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
-											prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
-											disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60
-										}}
-									/>
-								{/each}
+			{#if activeTab === 'themes'}
+				<div class="stack stack-lg" data-page-section>
+					<h2 class="settings-page-section-title mb-4" data-page-section-title>Themes</h2>
+					<section class="stack stack-lg">
+						<!-- Feedback toast -->
+						{#if themeFeedback}
+							<div class="alert {themeFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
+								{themeFeedback.message}
 							</div>
 						{/if}
-						<DriveLifecycleLists detected={parts.detected} ignored={parts.ignored} onchanged={() => drives.refresh()} />
-					{/if}
 
-					<!-- Diagnostics -->
-					<hr class="settings-page-diag-divider" />
-					<div data-diag>
-						<button
-							onclick={() => {
-								diagOpen = !diagOpen;
-							}}
-							aria-expanded={diagOpen}
-							class="btn settings-page-diag-toggle"
-						>
-							<Glyph name="shield-check" />
-							Udev & Drive Diagnostics
-							<Glyph name="chevron-down" class="chevron ml-auto" />
-						</button>
-
-						{#if diagOpen}
-							<div class="panel-section settings-page-diag-panel" transition:slide={{ duration: 200 }}>
-								<div class="mb-2.5 flex items-center justify-between">
+						<!-- Built-in Themes -->
+						<div class="panel settings-page-panel-wide">
+							<h3 class="settings-page-panel-title">Color Scheme</h3>
+							<p class="settings-page-description settings-page-panel-hint">
+								Choose an accent color for buttons, links, and highlights throughout the UI.
+							</p>
+							<div class="flex flex-wrap gap-3">
+								{#each $allSchemes.filter((s) => s.builtin !== false) as scheme (scheme.id)}
 									<button
-										onclick={runDiagnostic}
-										disabled={diagRunning}
-										data-busy={diagRunning}
-										class="btn settings-page-diag-run"
+										type="button"
+										onclick={() => ($colorScheme = scheme.id)}
+										class="scheme-swatch-btn"
+										data-selected={$colorScheme === scheme.id}
 									>
-										<Glyph name="refresh" class="settings-page-diag-run-icon" />
-										{diagRunning ? 'Running...' : 'Run Check'}
+										<span class="scheme-swatch" style:--swatch={scheme.swatch}></span>
+										<span class="scheme-swatch-label">{scheme.label}</span>
+										{#if scheme.description}
+											<span class="scheme-swatch-tooltip">{scheme.description}</span>
+										{/if}
 									</button>
-									{#if diagLastRun}
-										<span class="settings-page-diag-last-run">Last run: {diagLastRun}</span>
-									{/if}
-									{#if diagError}
-										<span class="settings-page-diag-error">{diagError}</span>
-									{/if}
-								</div>
+								{/each}
+							</div>
+						</div>
 
-								{#if diagResult}
-									{@const system = diagResult.system ?? []}
-									<!-- The backend decides which drives are unhealthy; a healthy drive's notes are informational. -->
-									{@const unhealthy = diagResult.drives.filter((d) => !d.healthy)}
-									{#if system.length > 0}
-										<div class="alert alert-warning mb-2 settings-page-diag-system" data-testid="diag-system">
-											{#each system as note, i (i)}
-												<div>{note}</div>
-											{/each}
-										</div>
-									{/if}
-
-									<!-- Status bar -->
-									<div
-										class="alert {unhealthy.length > 0 || system.length > 0
-											? 'alert-warning'
-											: 'alert-success'} mb-2 flex flex-wrap items-center gap-3"
-									>
-										<span class="settings-page-diag-count">
-											{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
-										</span>
-										<span class="alert-title">
-											{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}
-										</span>
-									</div>
-
-									<!-- Every drive, healthy or not -->
-									{#each diagResult.drives as diag (diag.id)}
-										{@const flagged = unhealthy.includes(diag)}
-										<div data-testid="diag-drive-{diag.id}" class="settings-page-diag-drive" data-flagged={flagged}>
-											<div class="flex flex-wrap items-center gap-x-2 gap-y-1 settings-page-diag-drive-row">
-												<code class="mono settings-page-diag-drive-path">{diag.device_path}</code>
-												<span class="badge badge-sm">{diag.lifecycle}</span>
-												<span data-warn={!diag.present}>{diag.present ? 'connected' : 'not connected'}</span>
-												{#if diag.container}<span>container: {diag.container}</span>{/if}
-												{#if diag.status}<span>ripper: {diag.status}</span>{/if}
-												{#if diag.media_status}<span>media: {diag.media_status.replace('_', ' ')}</span>{/if}
-												{#if diag.media_status_at}<span class="settings-page-diag-heartbeat"
-														>heartbeat {formatDateTime(diag.media_status_at)}</span
-													>{/if}
-												{#if !flagged}<span class="ml-auto settings-page-diag-ok">OK</span>{/if}
+						<!-- User Themes -->
+						{#if $allSchemes.filter((s) => s.builtin === false).length > 0}
+							<div class="panel settings-page-panel-wide">
+								<h3 class="settings-page-panel-title">User Themes</h3>
+								<p class="settings-page-description settings-page-panel-hint">
+									Custom themes loaded from your themes directory.
+								</p>
+								<div class="flex flex-wrap gap-3">
+									{#each $allSchemes.filter((s) => s.builtin === false) as scheme (scheme.id)}
+										<div class="relative">
+											<button
+												type="button"
+												onclick={() => ($colorScheme = scheme.id)}
+												class="scheme-swatch-btn"
+												data-selected={$colorScheme === scheme.id}
+											>
+												<span class="scheme-swatch" style:--swatch={scheme.swatch}></span>
+												<span class="scheme-swatch-label">{scheme.label}</span>
+												{#if scheme.author}
+													<span class="scheme-swatch-author">by {scheme.author}</span>
+												{/if}
+											</button>
+											<div class="absolute -right-1 -top-1 flex gap-0.5">
+												<button
+													type="button"
+													onclick={() => handleThemeDelete(scheme.id, scheme.label)}
+													class="btn btn-icon scheme-swatch-delete"
+													title="Delete"
+												>
+													<Glyph name="x" class="h-3 w-3" />
+												</button>
 											</div>
-											{#if diag.last_error}
-												<div class="field-error mt-1">{diag.last_error}</div>
-											{/if}
-											{#each diag.notes as note, i (i)}
-												<div class="mt-1 flex items-start gap-1.5 settings-page-diag-note">
-													{#if note === 'ignored'}
-														<span class="settings-page-diag-ignored">ignored</span>
-													{:else if diag.healthy}
-														<span class="settings-page-diag-ignored">{note}</span>
-													{:else}
-														<Glyph name="warning" class="mt-0.5 h-3 w-3 flex-shrink-0 settings-page-diag-warn-icon" />
-														<span class="settings-page-diag-warn-text">{note}</span>
-													{/if}
-												</div>
-											{/each}
-											{#if diag.notes.length === 0 && !diag.healthy}
-												<div class="settings-page-diag-warn-text mt-1">unhealthy</div>
-											{/if}
 										</div>
 									{/each}
-								{:else if !diagRunning}
-									<p class="settings-page-diag-empty">Click "Run Check" to scan drives and udev configuration.</p>
+								</div>
+								{#if themeFeedback}
+									<p class="mt-3 settings-page-feedback" data-error={themeFeedback.type !== 'success'}>
+										{themeFeedback.message}
+									</p>
 								{/if}
 							</div>
 						{/if}
+
+						<!-- Dark Mode -->
+						<div class="panel settings-page-panel-wide">
+							<div class="flex items-center justify-between">
+								<div>
+									<h3 class="settings-page-panel-title settings-page-panel-title-flush">Dark Mode</h3>
+									{#if $schemeLocksMode}
+										<p class="settings-page-description">Locked by theme</p>
+									{:else}
+										<p class="settings-page-description">Toggle between light and dark mode.</p>
+									{/if}
+								</div>
+								{#if !$schemeLocksMode}
+									<div class="flex items-center gap-2">
+										<button
+											type="button"
+											onclick={toggleTheme}
+											role="switch"
+											aria-checked={$theme === 'dark'}
+											aria-label="Dark mode"
+											class="toggle toggle-lg"
+										>
+											<span class="toggle-thumb"></span>
+										</button>
+										<span class="settings-page-toggle-label" data-on={$theme === 'dark'}>
+											{$theme === 'dark' ? 'On' : 'Off'}
+										</span>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</section>
+				</div>
+			{/if}
+
+			{#if activeTab === 'drives'}
+				<div class="stack stack-lg" data-page-section>
+					<div class="mb-4 flex items-start justify-between gap-3">
+						<h2 class="settings-page-section-title" data-page-section-title>Drives</h2>
+						<DriveMaintenance onrescanned={() => drives.refresh()} />
 					</div>
-				</section>
+					<section class="stack stack-lg">
+						{#if $driveError}
+							<div class="alert alert-danger">
+								{$driveError}
+							</div>
+						{:else}
+							{#if parts.enrolled.length > 0}
+								<div class="grid-2 settings-page-drive-grid">
+									{#each parts.enrolled as drive (drive.id)}
+										<DriveCard
+											{drive}
+											sessions={driveSessions}
+											transcodePresets={driveTranscodePresets}
+											globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
+											onupdate={() => drives.refresh()}
+											globalDefaults={{
+												prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
+												prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
+												prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
+												disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60
+											}}
+										/>
+									{/each}
+								</div>
+							{/if}
+							<DriveLifecycleLists
+								detected={parts.detected}
+								ignored={parts.ignored}
+								onchanged={() => drives.refresh()}
+							/>
+						{/if}
+
+						<!-- Diagnostics -->
+						<hr class="settings-page-diag-divider" />
+						<div data-diag>
+							<button
+								onclick={() => {
+									diagOpen = !diagOpen;
+								}}
+								aria-expanded={diagOpen}
+								class="btn settings-page-diag-toggle"
+							>
+								<Glyph name="shield-check" />
+								Drive Diagnostics
+								<Glyph name="chevron-down" class="chevron ml-auto" />
+							</button>
+
+							{#if diagOpen}
+								<div class="panel-section settings-page-diag-panel" transition:slide={{ duration: 200 }}>
+									<div class="mb-2.5 flex items-center justify-between">
+										<button
+											onclick={runDiagnostic}
+											disabled={diagRunning}
+											data-busy={diagRunning}
+											class="btn settings-page-diag-run"
+										>
+											<Glyph name="refresh" class="settings-page-diag-run-icon" />
+											{diagRunning ? 'Running...' : 'Run Check'}
+										</button>
+										{#if diagLastRun}
+											<span class="settings-page-diag-last-run">Last run: {diagLastRun}</span>
+										{/if}
+										{#if diagError}
+											<span class="settings-page-diag-error">{diagError}</span>
+										{/if}
+									</div>
+
+									{#if diagResult}
+										{@const system = diagResult.system ?? []}
+										<!-- The backend decides which drives are unhealthy; a healthy drive's notes are informational. -->
+										{@const unhealthy = diagResult.drives.filter((d) => !d.healthy)}
+										{#if system.length > 0}
+											<div class="alert alert-warning mb-2 settings-page-diag-system" data-testid="diag-system">
+												{#each system as note, i (i)}
+													<div>{note}</div>
+												{/each}
+											</div>
+										{/if}
+
+										<!-- Status bar -->
+										<div
+											class="alert {unhealthy.length > 0 || system.length > 0
+												? 'alert-warning'
+												: 'alert-success'} mb-2 flex flex-wrap items-center gap-3"
+										>
+											<span class="settings-page-diag-count">
+												{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
+											</span>
+											<span class="alert-title">
+												{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}
+											</span>
+										</div>
+
+										<!-- Every drive, healthy or not -->
+										{#each diagResult.drives as diag (diag.id)}
+											{@const flagged = unhealthy.includes(diag)}
+											<div data-testid="diag-drive-{diag.id}" class="settings-page-diag-drive" data-flagged={flagged}>
+												<div class="flex flex-wrap items-center gap-x-2 gap-y-1 settings-page-diag-drive-row">
+													<code class="mono settings-page-diag-drive-path">{diag.device_path}</code>
+													<span class="badge badge-sm">{diag.lifecycle}</span>
+													<span data-warn={!diag.present}>{diag.present ? 'connected' : 'not connected'}</span>
+													{#if diag.container}<span>container: {diag.container}</span>{/if}
+													{#if diag.status}<span>ripper: {diag.status}</span>{/if}
+													{#if diag.media_status}<span>media: {diag.media_status.replace('_', ' ')}</span>{/if}
+													{#if diag.media_status_at}<span class="settings-page-diag-heartbeat"
+															>heartbeat {formatDateTime(diag.media_status_at)}</span
+														>{/if}
+													{#if !flagged}<span class="ml-auto settings-page-diag-ok">OK</span>{/if}
+												</div>
+												{#if diag.last_error}
+													<div class="field-error mt-1">{diag.last_error}</div>
+												{/if}
+												{#each diag.notes as note, i (i)}
+													<div class="mt-1 flex items-start gap-1.5 settings-page-diag-note">
+														{#if note === 'ignored'}
+															<span class="settings-page-diag-ignored">ignored</span>
+														{:else if diag.healthy}
+															<span class="settings-page-diag-ignored">{note}</span>
+														{:else}
+															<Glyph name="warning" class="mt-0.5 h-3 w-3 flex-shrink-0 settings-page-diag-warn-icon" />
+															<span class="settings-page-diag-warn-text">{note}</span>
+														{/if}
+													</div>
+												{/each}
+												{#if diag.notes.length === 0 && !diag.healthy}
+													<div class="settings-page-diag-warn-text mt-1">unhealthy</div>
+												{/if}
+											</div>
+										{/each}
+									{:else if !diagRunning}
+										<p class="settings-page-diag-empty">Click "Run Check" to scan drives and udev configuration.</p>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</section>
+				</div>
 			{/if}
 		{/snippet}
 	</LoadState>
@@ -976,13 +1030,7 @@
 		}
 	}
 
-	.settings-page-feature-request {
-		gap: 0.375rem;
-		background: var(--color-primary-tint-2);
-		padding: 0.5rem 1rem;
-	}
-
-	/* Udev & Drive Diagnostics disclosure: a full-width outlined toggle
+	/* Drive Diagnostics disclosure: a full-width outlined toggle
 	   button over a collapsible detail panel, none of it matching .panel's
 	   metrics (this reuses .panel-section's tint but at its own padding). */
 	/* the original `<hr class="my-2">` sat in a `space-y-6` (margin) stack:

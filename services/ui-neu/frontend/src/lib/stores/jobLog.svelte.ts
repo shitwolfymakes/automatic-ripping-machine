@@ -28,6 +28,10 @@ export function createJobLog(jobId: string, { limit = 200 }: JobLogOptions = {})
 	let loading = $state(false);
 	let error = $state<Error | null>(null);
 	let live = $state(false);
+	// Running count of live-tailed lines. entries.length stops growing once the
+	// MAX_LIVE_ENTRIES cap starts dropping old lines, so a paused view counts
+	// new arrivals from this instead.
+	let appended = $state(0);
 	let unsub: (() => void) | null = null;
 
 	// Bumped on every live-appended line while a load() is in flight, so the
@@ -60,6 +64,7 @@ export function createJobLog(jobId: string, { limit = 200 }: JobLogOptions = {})
 		next.push(toLogEntry(env.payload));
 		if (next.length > MAX_LIVE_ENTRIES) next.splice(0, next.length - MAX_LIVE_ENTRIES);
 		entries = next;
+		appended += 1;
 	}
 
 	function start(): void {
@@ -88,6 +93,9 @@ export function createJobLog(jobId: string, { limit = 200 }: JobLogOptions = {})
 		},
 		get live() {
 			return live;
+		},
+		get appended() {
+			return appended;
 		},
 		load,
 		start,

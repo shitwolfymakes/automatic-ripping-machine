@@ -1,22 +1,43 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { getContext, tick } from 'svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { ConfigFieldMeta } from '$lib/types/api.gen';
+	import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
+	import { SETTINGS_SCHEMA_CONTEXT, settingsFieldHref } from '$lib/utils/settings-sections';
 
 	let {
 		field,
 		value = $bindable(),
 		config = {},
 		helpId,
-		keyTab = () => 'Metadata'
+		keyTab,
+		disabled = false
 	}: {
 		field: ConfigFieldMeta;
 		value: unknown;
 		config?: Record<string, unknown>;
 		helpId?: string;
-		/** The Settings tab that holds the field for a required key, for the "Needs ... key" deep link. */
-		keyTab?: (key: string) => string;
+		/** The Settings tab that holds the field for a required key, for the
+		 *  "Needs ... key" deep link when no schema context is set. */
+		keyTab?: (key: string) => string | undefined;
+		/** Every checkbox and move button disabled (a guest's read-only view). */
+		disabled?: boolean;
 	} = $props();
+
+	// Settings sets this context with the loaded schema; the setup wizard does not.
+	const schemaGroups = getContext<(() => SettingsGroup[] | undefined) | undefined>(SETTINGS_SCHEMA_CONTEXT);
+
+	/** Where the chip sends the operator: the key field's tab on Settings
+	 *  (`#<tab>/<key>`, the page's deep-link form), else the field's own anchor
+	 *  on the current page (setup wizard, where the key is on the same step). */
+	function keyHref(key: string): string {
+		if (schemaGroups) return settingsFieldHref(key, schemaGroups());
+		const tab = keyTab?.(key);
+		return tab ? `#${tab}/${key}` : `#setting-${key}`;
+	}
+	const keyLabel = (key: string) =>
+		schemaGroups?.()
+			?.flatMap((g) => g.fields)
+			.find((f) => f.key === key)?.label ?? `${key} key`;
 
 	const known = $derived(field.enum_values ?? []);
 	const selected = $derived(
@@ -81,6 +102,7 @@
 					id={useId(v)}
 					type="checkbox"
 					checked={isOn}
+					{disabled}
 					aria-label={`Use ${labelOf(v)}`}
 					aria-describedby={rankId(v)}
 					onchange={(e) => toggle(v, (e.currentTarget as HTMLInputElement).checked)}
@@ -91,7 +113,7 @@
 				<div id={rankId(v)} class="ranked-list-field-rank">
 					<span>{isOn ? `Rank ${rank + 1}` : 'Not used'}</span>
 					{#if missing}
-						<a class="chip chip-warning chip-sm" href="#{keyTab(missing)}/{missing}">
+						<a class="chip chip-warning chip-sm" href={keyHref(missing)} title={`Open ${keyLabel(missing)}`}>
 							<Glyph name="warning" />
 							Needs {labelOf(v)} key
 						</a>
@@ -105,7 +127,7 @@
 						type="button"
 						class="btn btn-icon ranked-list-field-move"
 						aria-label={`Move ${labelOf(v)} up`}
-						disabled={rank === 0}
+						disabled={disabled || rank === 0}
 						onclick={() => move(v, 'up')}
 					>
 						<Glyph name="chevron-up" />
@@ -115,7 +137,7 @@
 						type="button"
 						class="btn btn-icon ranked-list-field-move"
 						aria-label={`Move ${labelOf(v)} down`}
-						disabled={rank === selected.length - 1}
+						disabled={disabled || rank === selected.length - 1}
 						onclick={() => move(v, 'down')}
 					>
 						<Glyph name="chevron-down" />
