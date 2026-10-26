@@ -160,9 +160,10 @@ poster.
 ```
 match: {
   provider: "tmdb" | "omdb" | "tvmaze" | "tvdb"
-  poster_url: str | None      # the candidate's poster
-  poster_is_manual: bool      # true when edited under "Edit before using"
-  facts: IdentityFacts | None # snapshot, see below
+  poster_url: str | None        # the candidate's poster, edited or not
+  poster_is_manual: bool        # true when edited under "Edit before using"
+  poster_url_manual: str | None # the edited poster (null clears the override)
+  facts: IdentityFacts | None   # snapshot, see below
 }
 ```
 
@@ -170,13 +171,20 @@ When `match` is present:
 
 - `external_ids` **replaces** `identity.external_ids` wholesale, `tvmaze`
   included; ids the request lacks become `None`. (`musicbrainz_release` and
-  `anidb` are not show ids for this path and are kept.)
+  `anidb` are not show ids for this path and are kept.) The exception is a
+  re-pick of the **same show**: at least one of imdb/tmdb/tvdb/tvmaze agrees
+  with the stored id and none disagrees. Then the sent ids only fill in, and
+  the ids the picked provider lacks (TMDb has no TVmaze id, OMDb only IMDb)
+  are kept. That is not a show change.
 - `identity.provider = match.provider`, `identity.identified_at = now`,
   `identity.overview = facts.overview`.
 - `identity.facts = match.facts` with `identity.facts_fetched_at = now`.
-- Poster: when `poster_is_manual` is false, `poster_url = match.poster_url`
-  and `poster_url_manual = None`; when true, `poster_url_manual =
-  match.poster_url` and `poster_url` is left alone.
+- Poster: `poster_url = match.poster_url`, unless that is null and the show
+  did not change (the stored poster is still this show's). When
+  `poster_is_manual` is true, `poster_url_manual = match.poster_url_manual`
+  (a cleared field clears the override, so the new automatic poster shows);
+  otherwise a match with a poster sets `poster_url_manual = None`, and one
+  without keeps the override.
 - Everything else (title, year, media_type, status promotion, fan-out,
   episode re-run via `_identity_snapshot`, `forget_episode_show_ids` on a show
   change) runs as today. Ids that changed count as a show change.

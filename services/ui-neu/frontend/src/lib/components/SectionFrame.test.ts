@@ -74,5 +74,21 @@ describe('SectionFrame', () => {
 			const frame = container.querySelector('.section-frame') as HTMLElement;
 			expect(frame.style.getPropertyValue('--frame-accent')).toBe('');
 		});
+
+		it('sets data-frame-emphasis only when emphasis is true', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { emphasis: true, children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame).toHaveAttribute('data-frame-emphasis');
+		});
+
+		it('omits data-frame-emphasis by default', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame).not.toHaveAttribute('data-frame-emphasis');
+		});
 	});
 });

@@ -1,4 +1,5 @@
 import type { DashboardData } from '$lib/api/dashboard';
+import type { JobView } from '$lib/types/api.gen';
 
 export const emptyDashboard: DashboardData = {
 	db_available: true,
@@ -8,6 +9,7 @@ export const emptyDashboard: DashboardData = {
 	drive_names: {},
 	iso_sources: {},
 	iso_source_kinds: {},
+	drive_source_kinds: {},
 	preparing: [],
 	notification_count: 0,
 	ripping_enabled: true,
@@ -18,12 +20,9 @@ export const emptyDashboard: DashboardData = {
 	active_transcodes: []
 };
 
-export const emptyJobs = {
-	jobs: [],
-	total: 0,
-	page: 1,
-	per_page: 25
-};
+// GET /api/jobs answers a plain JobView[] page (the total rides in the
+// X-Total-Count header, absent here, so the page falls back to the length).
+export const emptyJobs: JobView[] = [];
 
 export const emptyStats = {
 	total: 0,

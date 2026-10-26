@@ -1371,7 +1371,8 @@ async def test_musicbrainz_toc_404_falls_back_to_fuzzy_single_release(http_clien
     assert result.payload["toc_match"] == "fuzzy"
     assert "toc_candidates" not in result.payload
     params = dict(fuzzy.calls.last.request.url.params)
-    assert params["toc"] == "1+2+200000+150+100000"
+    assert params["toc"] == "1 2 200000 150 100000"
+    assert "toc=1+2+200000+150+100000" in str(fuzzy.calls.last.request.url)
     assert params["cdstubs"] == "no"
     assert params["inc"] == "artists+recordings+release-groups"
     assert params["fmt"] == "json"

@@ -1,5 +1,5 @@
 import { createPollingStore } from './polling';
-import { fetchDashboard } from '$lib/api/dashboard';
+import { fetchDashboardSnapshot, STICKY_FIELDS } from '$lib/api/dashboard';
 import type { DashboardData } from '$lib/api/dashboard';
 const emptyDashboard: DashboardData = {
 	db_available: true,
@@ -9,6 +9,7 @@ const emptyDashboard: DashboardData = {
 	drive_names: {},
 	iso_sources: {},
 	iso_source_kinds: {},
+	drive_source_kinds: {},
 	preparing: [],
 	notification_count: 0,
 	ripping_enabled: true,
@@ -18,19 +19,6 @@ const emptyDashboard: DashboardData = {
 	transcoder_stats: null,
 	active_transcodes: []
 };
-
-// Fields the BFF marks `null` when their underlying ARM endpoint blipped on
-// this poll. We hold the previous value for these so a transient timeout
-// doesn't flicker badges/counts to zero.
-const STICKY_FIELDS = [
-	'active_jobs',
-	'drives_online',
-	'drive_names',
-	'iso_sources',
-	'iso_source_kinds',
-	'notification_count',
-	'ripping_enabled'
-] as const satisfies readonly (keyof DashboardData)[];
 
 // Booleans that flip to `false` on a single backend blip (RemoteProtocolError,
 // timeout, etc). Don't pop the sidebar to "Cannot reach …" until we've seen
@@ -45,7 +33,10 @@ const consecutiveFalse: Record<(typeof TWO_STRIKE_FIELDS)[number], number> = {
 };
 
 async function fetchDashboardSticky(): Promise<DashboardData> {
-	const fresh = (await fetchDashboard()) as DashboardData & Partial<Record<(typeof STICKY_FIELDS)[number], unknown>>;
+	// A sticky field comes back `null` when its endpoint blipped on this
+	// poll; hold the previous value so a transient timeout doesn't flicker
+	// badges/counts to zero.
+	const fresh = await fetchDashboardSnapshot();
 	const merged = { ...fresh } as DashboardData;
 	for (const key of STICKY_FIELDS) {
 		if (fresh[key] === null || fresh[key] === undefined) {

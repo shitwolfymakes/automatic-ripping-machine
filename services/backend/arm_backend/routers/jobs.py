@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -278,8 +279,21 @@ def _summarize_transcode_progress(
     )
 
 
-@router.get("", response_model=list[JobView])
+_LIST_JOBS_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "headers": {
+            "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {"type": "integer"},
+            }
+        }
+    }
+}
+
+
+@router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
 async def list_jobs(
+    response: Response,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
     status_filter: JobStatus | None = Query(default=None, alias="status"),
@@ -287,13 +301,26 @@ async def list_jobs(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[JobView]:
-    stmt = select(Job).order_by(col(Job.created_at).desc()).limit(limit).offset(offset)
+    """One page of jobs, newest first with a stable `id` tiebreak so a page
+    does not shuffle between polls. The filtered total rides in the
+    `X-Total-Count` header; the body stays a plain `JobView[]`."""
+    filters = []
     if status_filter is not None:
-        stmt = stmt.where(col(Job.status) == status_filter)
+        filters.append(col(Job.status) == status_filter)
     if drive_id is not None:
-        stmt = stmt.where(col(Job.drive_id) == drive_id)
+        filters.append(col(Job.drive_id) == drive_id)
+    stmt = (
+        select(Job).where(*filters).order_by(col(Job.created_at).desc(), col(Job.id).desc()).limit(limit).offset(offset)
+    )
     result = await session.execute(stmt)
     jobs = list(result.scalars().all())
+    # A short page already pins the total (the poll's common case), so the
+    # COUNT round trip runs only for a full page or one past the end.
+    if len(jobs) < limit and (jobs or offset == 0):
+        total = offset + len(jobs)
+    else:
+        total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
 
     # One batched track lookup keyed on the ripping-job IDs feeds the
     # dashboard's "Track N of M" line without an N+1 fetch. Skipped
@@ -1134,21 +1161,44 @@ _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
 _MATCH_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")
 
 
+def _same_show(old: ExternalIds, sent: ExternalIds) -> bool:
+    """Whether a picked match names the show already stored: at least one show
+    id agrees and none disagrees. An id only one side knows proves nothing
+    either way (TMDb has no TVmaze id, OMDb only an IMDb one)."""
+    agree = False
+    for name in ("imdb", "tmdb", "tvdb", "tvmaze"):
+        a, b = getattr(old, name), getattr(sent, name)
+        if a is None or b is None:
+            continue
+        if a != b:
+            return False
+        agree = True
+    return agree
+
+
 def _apply_match(md: JobMetadata, req: ResolveRequest, now: datetime) -> bool:
     """A picked search result states the whole show (match picker spec 3.6):
-    its ids replace the stored show ids wholesale, tvmaze included, and the
-    identity records the provider and a facts snapshot. Returns whether a
-    stored show id changed or was cleared (a show change)."""
+    a different show's ids replace the stored show ids wholesale, tvmaze
+    included; the same show re-picked from another provider only fills in,
+    so the ids that provider lacks are kept. The identity records the
+    provider and a facts snapshot. Returns whether a stored show id was
+    replaced or cleared (a show change)."""
     assert req.match is not None
     sent = req.external_ids or ExternalIds()
     old = md.identity.external_ids if md.identity is not None else ExternalIds()
-    show_changed = any(
-        getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
-        for name in ("imdb", "tmdb", "tvdb", "tvmaze")
-    )
     ids = old.model_copy()
-    for name in _MATCH_ID_FIELDS:
-        setattr(ids, name, getattr(sent, name))
+    if _same_show(old, sent):
+        show_changed = False
+        for name in _MATCH_ID_FIELDS:
+            if getattr(sent, name) is not None:
+                setattr(ids, name, getattr(sent, name))
+    else:
+        show_changed = any(
+            getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
+            for name in ("imdb", "tmdb", "tvdb", "tvmaze")
+        )
+        for name in _MATCH_ID_FIELDS:
+            setattr(ids, name, getattr(sent, name))
     facts = req.match.facts
     md.identity = JobIdentity(
         provider=req.match.provider,
@@ -1320,11 +1370,14 @@ async def resolve_identity(
     job.year = req.year
     if req.match is not None:
         # A picked match's poster is the automatic one; an operator-edited
-        # URL stays a manual override (match picker spec 3.6).
-        if req.match.poster_is_manual:
-            job.poster_url_manual = req.match.poster_url
-        else:
+        # URL is a manual override (match picker spec 3.6). A match with no
+        # poster keeps the stored one unless it belongs to the old show, and
+        # never clears an override.
+        if req.match.poster_url is not None or show_changed:
             job.poster_url = req.match.poster_url
+        if req.match.poster_is_manual:
+            job.poster_url_manual = req.match.poster_url_manual
+        elif req.match.poster_url is not None:
             job.poster_url_manual = None
     # Fix 75-5: media_type is a classification, not part of the identity
     # statement -- omitted keeps the stored value, but an EXPLICIT null

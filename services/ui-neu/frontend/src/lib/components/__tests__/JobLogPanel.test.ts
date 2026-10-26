@@ -263,7 +263,7 @@ describe('JobLogPanel', () => {
 			props: { jobId: 'job_a', job: { status: 'failed', transcode_progress: null }, defaultOpen: true }
 		});
 		await waitFor(() => {
-			expect(screen.getByText(/3 lines/)).toBeInTheDocument();
+			expect(screen.getByTestId('log-view-titlebar')).toHaveTextContent('(3 lines)');
 		});
 	});
 });

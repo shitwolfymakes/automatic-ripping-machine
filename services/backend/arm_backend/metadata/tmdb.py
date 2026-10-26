@@ -112,12 +112,15 @@ class TMDBClient:
                 out.append(parsed)
         # One detail call per candidate (external ids + credits appended):
         # the same call count as the old external_ids fan-out, but it also
-        # carries the facts the match picker shows. A failed call keeps the
+        # carries the facts the match picker shows. A TV row takes the latest
+        # season's `credits`, not `aggregate_credits`: a long-running show's
+        # all-seasons credits run to megabytes, and a row shows two names.
+        # The details endpoint fetches the full set. A failed call keeps the
         # search row with None ids; gather(return_exceptions=True) keeps one
         # failure from failing the batch.
         enrichable = [r for r in out if r.payload.get("id") is not None]
         details = await asyncio.gather(
-            *(self.fetch_detail(r.payload["id"], kind) for r in enrichable),
+            *(self.fetch_detail(r.payload["id"], kind, all_seasons=False) for r in enrichable),
             return_exceptions=True,
         )
         resolved = {id(r): d for r, d in zip(enrichable, details) if isinstance(d, dict)}
@@ -137,10 +140,13 @@ class TMDBClient:
             out["tvdb_id"] = str(tvdb)
         return out
 
-    async def fetch_detail(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> dict[str, Any]:
+    async def fetch_detail(
+        self, tmdb_id: int | str, kind: Literal["movie", "tv"], *, all_seasons: bool = True
+    ) -> dict[str, Any]:
         """`/{kind}/{id}` with external ids and credits appended in one call
-        (match picker spec 3.3). Raises LookupError/LookupTimeout."""
-        credits = "aggregate_credits" if kind == "tv" else "credits"
+        (match picker spec 3.3). A show's credits cover every season unless
+        `all_seasons` is false. Raises LookupError/LookupTimeout."""
+        credits = "aggregate_credits" if kind == "tv" and all_seasons else "credits"
         try:
             r = await self._http.get(
                 f"{_base_url()}/{kind}/{tmdb_id}",
@@ -167,17 +173,22 @@ class TMDBClient:
     def _merge_detail(result: MetadataResult, detail: dict[str, Any]) -> None:
         external = detail.get("external_ids")
         ids = TMDBClient._id_map(external) if isinstance(external, dict) else {}
-        result.payload.update({k: v for k, v in detail.items() if k != "external_ids"})
+        result.payload.update(detail)
+        result.payload.pop("external_ids", None)
         result.payload["imdb_id"] = ids.get("imdb_id")
         result.payload["tvdb_id"] = ids.get("tvdb_id")
 
     async def detail_result(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> MetadataResult:
         """One title's full record as a MetadataResult (details endpoint)."""
         body = await self.fetch_detail(tmdb_id, kind)
+        external = body.pop("external_ids", None)
         result = self._parse_one(body, kind)
         if result is None:
             raise LookupError("tmdb detail missing title")
-        self._merge_detail(result, body)
+        # The parsed payload is `body` itself: only the ids need flattening.
+        ids = self._id_map(external) if isinstance(external, dict) else {}
+        result.payload["imdb_id"] = ids.get("imdb_id")
+        result.payload["tvdb_id"] = ids.get("tvdb_id")
         return result
 
     async def get_external_id_map(self, tmdb_id: int | str, kind: Literal["movie", "tv"]) -> dict[str, str]:

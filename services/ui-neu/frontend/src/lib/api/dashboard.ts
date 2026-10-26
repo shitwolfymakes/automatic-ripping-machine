@@ -49,6 +49,10 @@ export interface DashboardData {
 	// drive id -> 'iso' / 'folder' for the same drives, so the source chip
 	// says ISO or Folder.
 	iso_source_kinds: Record<string, IsoSourceKind>;
+	// drive id -> 'iso' / 'folder' for EVERY virtual drive, retired ones
+	// included, so a finished ISO job (whose drive is retired) still reads as
+	// ISO / Folder (the log list's disc chip).
+	drive_source_kinds: Record<string, IsoSourceKind>;
 	// ISO rips with no job yet (scanning / unpacking the image), so the
 	// dashboard can show them before identify creates the job.
 	preparing: IsoPreparing[];
@@ -60,6 +64,26 @@ export interface DashboardData {
 	transcoder_stats: TranscoderStats | null;
 	active_transcodes: TranscodeTaskView[];
 }
+
+// Fields whose endpoint can blip independently. A snapshot reports them as
+// `null` when their read failed this poll, so the store can hold the last
+// good value instead of flickering to an empty map or a zero count.
+export const STICKY_FIELDS = [
+	'active_jobs',
+	'drives_online',
+	'drive_names',
+	'iso_sources',
+	'iso_source_kinds',
+	'drive_source_kinds',
+	'notification_count',
+	'ripping_enabled'
+] as const satisfies readonly (keyof DashboardData)[];
+
+type StickyField = (typeof STICKY_FIELDS)[number];
+
+export type DashboardSnapshot = Omit<DashboardData, StickyField> & {
+	[K in StickyField]: DashboardData[K] | null;
+};
 
 // JobView.status values that mean "in-flight" (non-terminal). v3 GET /api/jobs
 // has no "all active" status_filter, so we fetch the full list and filter here.
@@ -77,12 +101,29 @@ function fetchConfig(): Promise<ConfigView> {
 	return apiFetch<ConfigView>('/api/config');
 }
 
+/** The dashboard with every failed read's fields filled with empty defaults. */
+export async function fetchDashboard(): Promise<DashboardData> {
+	const s = await fetchDashboardSnapshot();
+	return {
+		...s,
+		active_jobs: s.active_jobs ?? [],
+		drives_online: s.drives_online ?? 0,
+		drive_names: s.drive_names ?? {},
+		iso_sources: s.iso_sources ?? {},
+		iso_source_kinds: s.iso_source_kinds ?? {},
+		drive_source_kinds: s.drive_source_kinds ?? {},
+		notification_count: s.notification_count ?? 0,
+		ripping_enabled: s.ripping_enabled ?? true
+	};
+}
+
 /**
  * Compose the dashboard from independent v3 endpoints. Uses Promise.allSettled
- * so a single failing endpoint degrades only its field(s); `arm_online` /
- * `transcoder_online` are derived from which fetches settled.
+ * so a single failing endpoint degrades only its field(s), which come back
+ * `null` (see STICKY_FIELDS); `arm_online` / `transcoder_online` are derived
+ * from which fetches settled.
  */
-export async function fetchDashboard(): Promise<DashboardData> {
+export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes, preparingRes] =
 		await Promise.allSettled([
 			fetchConfig(),
@@ -110,10 +151,12 @@ export async function fetchDashboard(): Promise<DashboardData> {
 	const driveNames: Record<string, string> = {};
 	const isoSources: Record<string, string> = {};
 	const isoSourceKinds: Record<string, IsoSourceKind> = {};
+	const driveSourceKinds: Record<string, IsoSourceKind> = {};
 	// `drives` includes retired rows so a finished ISO job keeps its label in
 	// drive_names; the live-only maps below skip them.
 	for (const d of drives ?? []) {
 		driveNames[d.id] = d.display_name ?? d.device_path;
+		if (d.kind === 'virtual') driveSourceKinds[d.id] = d.source_kind === 'folder' ? 'folder' : 'iso';
 		if (d.kind === 'virtual' && d.lifecycle !== 'retired') {
 			// display_name is the ISO's file name for a virtual drive; fall back
 			// to the last path segment of source_path if it's ever missing.
@@ -136,14 +179,16 @@ export async function fetchDashboard(): Promise<DashboardData> {
 		// sidebar uses it to gate drive counts / the ripping toggle.
 		db_available: config !== null,
 		arm_online: armOnline,
-		active_jobs: activeJobs,
-		drives_online: (drives ?? []).filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
-		drive_names: driveNames,
-		iso_sources: isoSources,
-		iso_source_kinds: isoSourceKinds,
+		active_jobs: jobs === null ? null : activeJobs,
+		drives_online:
+			drives === null ? null : drives.filter((d) => d.kind === 'optical' && d.lifecycle !== 'retired').length,
+		drive_names: drives === null ? null : driveNames,
+		iso_sources: drives === null ? null : isoSources,
+		iso_source_kinds: drives === null ? null : isoSourceKinds,
+		drive_source_kinds: drives === null ? null : driveSourceKinds,
 		preparing,
-		notification_count: notifications?.unseen ?? 0,
-		ripping_enabled: config ? !config.ripping_paused : true,
+		notification_count: notifications === null ? null : (notifications.unseen ?? 0),
+		ripping_enabled: config === null ? null : !config.ripping_paused,
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,
 		transcoder_online: transcoderOnline,

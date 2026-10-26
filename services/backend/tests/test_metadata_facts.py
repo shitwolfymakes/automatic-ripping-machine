@@ -59,6 +59,12 @@ def test_tmdb_tv_facts() -> None:
     )
 
 
+def test_tmdb_tv_search_row_reads_the_latest_season_credits() -> None:
+    row = {k: v for k, v in TMDB_TV.items() if k != "aggregate_credits"}
+    row["credits"] = {"cast": [{"name": "Darren McGavin", "order": 0}]}
+    assert tmdb_facts(row, "tv").cast == ["Darren McGavin"]
+
+
 def test_tmdb_running_show_has_no_end_year() -> None:
     assert tmdb_facts({**TMDB_TV, "status": "Returning Series"}, "tv").end_year is None
 

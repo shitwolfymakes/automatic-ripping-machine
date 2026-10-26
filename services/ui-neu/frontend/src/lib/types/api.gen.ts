@@ -2485,6 +2485,26 @@ export type JobIdentity = {
 };
 
 /**
+ * JobLogFileView
+ *
+ * One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`).
+ */
+export type JobLogFileView = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Modified At
+     */
+    modified_at: string;
+};
+
+/**
  * JobMetadata
  */
 export type JobMetadata = {
@@ -3916,6 +3936,10 @@ export type ResolveMatch = {
      * Poster Is Manual
      */
     poster_is_manual?: boolean;
+    /**
+     * Poster Url Manual
+     */
+    poster_url_manual?: string | null;
     facts?: IdentityFacts | null;
 };
 
@@ -10118,6 +10142,39 @@ export type PatchInboxApiNotificationsInboxInboxIdPatchResponses = {
 };
 
 export type PatchInboxApiNotificationsInboxInboxIdPatchResponse = PatchInboxApiNotificationsInboxInboxIdPatchResponses[keyof PatchInboxApiNotificationsInboxInboxIdPatchResponses];
+
+export type ListJobLogsApiLogsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/logs';
+};
+
+export type ListJobLogsApiLogsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListJobLogsApiLogsGetError = ListJobLogsApiLogsGetErrors[keyof ListJobLogsApiLogsGetErrors];
+
+export type ListJobLogsApiLogsGetResponses = {
+    /**
+     * Response List Job Logs Api Logs Get
+     *
+     * Successful Response
+     */
+    200: Array<JobLogFileView>;
+};
+
+export type ListJobLogsApiLogsGetResponse = ListJobLogsApiLogsGetResponses[keyof ListJobLogsApiLogsGetResponses];
 
 export type DownloadJobLogsZipApiLogsJobIdZipGetData = {
     body?: never;

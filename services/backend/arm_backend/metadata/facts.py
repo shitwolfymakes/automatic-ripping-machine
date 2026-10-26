@@ -92,7 +92,9 @@ def _rating(value: Any, votes: int | None, source: RatingSource) -> tuple[float 
 def tmdb_facts(payload: dict[str, Any], kind: str) -> IdentityFacts:
     is_tv = kind == "tv"
     status = str(payload.get("status") or "").lower()
-    credits = _dict(payload.get("aggregate_credits" if is_tv else "credits"))
+    # A show's details carry every season's credits; a search row only the latest.
+    credits = _dict(payload.get("aggregate_credits")) if is_tv else {}
+    credits = credits or _dict(payload.get("credits"))
     cast = sorted(_dicts(credits.get("cast")), key=lambda c: _sort_key(c, "order"))
     votes = _count(payload.get("vote_count"))
     rating, source = _rating(payload.get("vote_average"), votes, "tmdb")
