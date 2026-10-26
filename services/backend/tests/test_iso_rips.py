@@ -406,6 +406,48 @@ async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_window(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_sweep_fails_a_parked_job_whose_ripper_keeps_dying_past_the_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A ripper that dies every few minutes (a slow scan that then crashes) is
+    # crash-looping too: it is started again up to the hourly budget, then failed.
+    now = {"t": 1000.0}
+    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(), _Hub()
+    for _ in range(iso_rips.RESPAWN_BUDGET):
+        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+        now["t"] += 180
+    assert manager.started == ["drv_iso1"] * iso_rips.RESPAWN_BUDGET
+    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert job.status is JobStatus.FAILED
+    assert [e["event_type"] for e in hub.events] == ["rip.failed"]
+
+
+@pytest.mark.asyncio
+async def test_sweep_respawn_budget_frees_up_after_the_hour(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Starts older than the budget window no longer count: a disc parked for
+    # days survives the occasional backend rollout.
+    now = {"t": 1000.0}
+    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    db = FakeSession()
+    drive = _virtual()
+    db.rows["drives"] = [drive]
+    job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
+    db.rows["jobs"] = [job]
+    manager, hub = _Manager(), _Hub()
+    for _ in range(iso_rips.RESPAWN_BUDGET + 1):
+        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+        now["t"] += iso_rips.RESPAWN_BUDGET_WINDOW_SECONDS / iso_rips.RESPAWN_BUDGET
+    assert manager.started == ["drv_iso1"] * (iso_rips.RESPAWN_BUDGET + 1)
+    assert job.status is JobStatus.AWAITING_REVIEW and hub.events == []
+
+
+@pytest.mark.asyncio
 async def test_sweep_fails_a_parked_job_when_the_ripper_cannot_start(caplog: pytest.LogCaptureFixture) -> None:
     db = FakeSession()
     drive = _virtual()
