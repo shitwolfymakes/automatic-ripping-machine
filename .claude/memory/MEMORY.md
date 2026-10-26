@@ -36,3 +36,5 @@
 - [Never rename a PR head branch](feedback_no_head_branch_rename.md) — GitHub closes the PR; only base renames retarget. Name the branch for its final scope up front.
 - [Run affected CI suites on the new toolchain](feedback_run_affected_ci_suites.md) — a CI toolchain change (Node/Python version) needs that job run locally on it; `npx -p node@26` runs vitest without installing.
 - [S4 sweep state](project_s4_sweep.md) — wolfy PR #383 `fix/s4-defects`: A, B, E done; C1 in progress; C2 and D held for UI PRs #375-#379; F, G pending.
+- [TV match corpus and baseline](project_tv_match_corpus.md) — 260 real TheDiscDB discs (9 series) under tests/fixtures/thediscdb/; run devtools/tv-match-baseline.py before and after any episode-matcher change (season known 24%; nothing known 164 correct on the 7-series floor)
+- [TV season selection PR #402](project_tv_season_selection.md) — draft on wolfy, stacked on #379; DoD walk pending; follow-ups: fill both sides of a mid-disc hand pick, interleaved-seasons scenario, alignment model

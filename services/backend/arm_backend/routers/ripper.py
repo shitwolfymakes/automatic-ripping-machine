@@ -619,7 +619,10 @@ async def identify(
 
     scan = req.scan_result
     fps = [(fp.algo.lower(), fp.value) for fp in scan.fingerprints if fp.algo and fp.value]
-    decision = await find_reusable_job_for_disc(session, drive_id=req.drive_id, fingerprints=fps)
+    # A virtual drive holds one source for its whole life: its parked job is this disc's.
+    decision = await find_reusable_job_for_disc(
+        session, drive_id=req.drive_id, fingerprints=fps, same_source=drive.kind == DriveKind.VIRTUAL
+    )
     if decision is not None and decision.action == "in_flight":
         # Disc re-scanned while its rip is in flight (restart race) — return the
         # live job; in-flight recovery owns it. No new job, no re-identify.
@@ -1258,14 +1261,17 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     # paused = the hold survives a reboot: global ripping_paused OR this disc's
     # per-job manual_pause. Either means the operator deliberately held it.
     global_paused = bool(cfg.ripping_paused) if cfg is not None else False
-    # A previously-ripped hold or a held suggestion waits for the operator however it got there.
+    # A previously-ripped hold, a held suggestion or a guessed episode
+    # placement waits for the operator however it got there.
+    view = JobView.model_validate(rows[0])
     paused = (
         global_paused
         or bool(rows[0].manual_pause)
         or previously_ripped_job_id(rows[0].metadata_json) is not None
         or identity_suggestion_of(rows[0].metadata_json) is not None
+        or view.episodes_unsure
     )
-    return HeldJobView(job=JobView.model_validate(rows[0]), paused=paused)
+    return HeldJobView(job=view, paused=paused)
 
 
 @router.post(

@@ -45,6 +45,7 @@ from arm_common.schemas.identity import (
 )
 from arm_common.schemas.identity_api import (
     EpisodeListView,
+    SeasonListView,
     EpisodeSourceSetting,
     EpisodeSummary,
     IdentityView,
@@ -422,6 +423,7 @@ __all__ = [
     "GpuView",
     "EncoderAvailabilityView",
     "EpisodeListView",
+    "SeasonListView",
     "EpisodeSourceSetting",
     "EpisodeSummary",
     "IdentityView",

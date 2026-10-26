@@ -9,9 +9,11 @@
 		inverted?: boolean;
 		onpause?: () => void;
 		onresume?: () => void;
+		/** A hold the operator cannot toggle here, named: the ripper is holding the countdown for this reason. */
+		held?: string | null;
 	}
 
-	let { startTime, waitSeconds, paused = false, inverted = false, onpause, onresume }: Props = $props();
+	let { startTime, waitSeconds, paused = false, inverted = false, onpause, onresume, held = null }: Props = $props();
 
 	let now = $state(Date.now());
 	let deadline = $derived(new Date(startTime).getTime() + waitSeconds * 1000);
@@ -39,27 +41,31 @@
 	});
 </script>
 
-<div class="countdown-timer" data-inverted={inverted}>
-	<button
-		type="button"
-		onclick={handleClick}
-		class="countdown-timer-btn"
-		title={paused ? 'Resume timer' : 'Pause timer'}
-	>
-		{#if paused}
-			<!-- Play icon -->
-			<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-				<path d="M8 5v14l11-7z" />
-			</svg>
-		{:else}
-			<!-- Pause icon -->
-			<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-				<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-			</svg>
-		{/if}
-	</button>
+<div class="countdown-timer" data-inverted={inverted} data-held={held ? 'true' : undefined}>
+	{#if !held}
+		<button
+			type="button"
+			onclick={handleClick}
+			class="countdown-timer-btn"
+			title={paused ? 'Resume timer' : 'Pause timer'}
+		>
+			{#if paused}
+				<!-- Play icon -->
+				<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M8 5v14l11-7z" />
+				</svg>
+			{:else}
+				<!-- Pause icon -->
+				<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+				</svg>
+			{/if}
+		</button>
+	{/if}
 
-	{#if paused}
+	{#if held}
+		<span class="countdown-timer-label">{held}</span>
+	{:else if paused}
 		<span class="countdown-timer-label">Paused</span>
 	{:else if expired}
 		<span class="countdown-timer-label">Auto-proceeding...</span>

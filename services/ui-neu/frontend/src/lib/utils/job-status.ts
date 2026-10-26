@@ -142,10 +142,11 @@ export function missReason(
 /**
  * How a TV job's episode matching stands: `waiting` (no show yet), `matching`
  * (running, or no episode source has reported), `matched` (every title is
- * placed, by a source or by hand) or `attention` (some titles are unplaced,
- * or no source could match and the tracks have not loaded).
+ * placed, by a source or by hand), `guess` (every title placed, but from a
+ * held result) or `attention` (some titles are unplaced, or no source could
+ * match and the tracks have not loaded).
  */
-export type EpisodeState = 'waiting' | 'matching' | 'matched' | 'attention';
+export type EpisodeState = 'waiting' | 'matching' | 'matched' | 'guess' | 'attention';
 
 export interface EpisodeStatus {
 	state: EpisodeState;
@@ -164,7 +165,11 @@ type EpisodeTrack = Pick<TrackView, 'kind' | 'excluded' | 'episode_number' | 'ro
  * `matching` is the card's own "re-matching now" flag.
  */
 export function episodeStatus(
-	job: Pick<JobView, 'status' | 'media_type' | 'has_series'> & { metadata_json?: JobView['metadata_json'] },
+	job: Pick<JobView, 'status' | 'media_type' | 'has_series'> & {
+		metadata_json?: JobView['metadata_json'];
+		/** The resolver's word that the placement is a guess (a held result). */
+		episodes_unsure?: boolean;
+	},
 	tracks: EpisodeTrack[] | null = null,
 	matching = false
 ): EpisodeStatus | null {
@@ -180,13 +185,14 @@ export function episodeStatus(
 	const sources = claims.sources ?? {};
 	const episodes = Object.keys(sources).filter((id) => id.startsWith('episodes_'));
 	// The card has no per-track provenance, so activeSource falls back to its
-	// pin, then first ok non-suggestion, then first ok suggestion: the panel's
-	// answer unless provenance says another ok source won.
+	// pin, then the first ok clean source, then the first ok held source: the
+	// panel's answer unless provenance says another ok source won.
 	const active = activeSource({ pin: claims.pin, sources } as unknown as IdentityView);
 	const label = (id: string | null | undefined) => (id ? (SOURCE_LABEL[id] ?? id) : null);
 	if (matching) return { state: 'matching', source: label(active ?? episodes[0]), total, unmatched };
 	if (active && sources[active]?.status === 'ok') {
-		const state = unmatched ? 'attention' : 'matched';
+		// Placed but from a held result: the card says so in amber and keeps Review at hand.
+		const state = unmatched ? 'attention' : job.episodes_unsure ? 'guess' : 'matched';
 		return { state, source: label(active), total, unmatched };
 	}
 	// No source placed them, but the operator may have by hand.

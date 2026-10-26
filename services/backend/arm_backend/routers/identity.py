@@ -36,7 +36,7 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import claims_of, clear_pin, record_manual_job, set_pin
+from arm_backend.identity.proposals import claims_of, clear_pin, forget_episode_sources, record_manual_job, set_pin
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.routers._params import JobIdParam
@@ -48,6 +48,7 @@ from arm_common.models import Track
 from arm_common.schemas.identity import SourceClaims
 from arm_common.schemas.identity_api import (
     EpisodeListView,
+    SeasonListView,
     EpisodeSourceSetting,
     EpisodeSummary,
     IdentityView,
@@ -212,6 +213,7 @@ async def _match_identity(
     source_id = EPISODE_SOURCE_BY_SETTING[req.source] if req.source is not None else None
     opts = StageOptions(
         season=req.season,
+        scan_seasons=req.scan_seasons,
         disc_number=req.disc_number,
         # None: the pinned source's stored tolerance, else the default (I3).
         tolerance=req.tolerance,
@@ -272,17 +274,51 @@ async def _match_identity(
             for o in outcomes
         ]
     if source_id is not None:
-        # The operator explicitly chose this source. Pinning it is enough --
-        # the stored claims keep whatever `suggestion` was computed, but the
-        # RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
-        # through regardless, so it still gets applied. Unpinning (DELETE
-        # /identity/pin) reverts on the very next resolve.
+        # The operator explicitly chose this source: the pin records that
+        # choice so the resolver keeps this source's placement over another
+        # source that answers later. A held result is applied as a guess
+        # whether or not it is pinned.
         set_pin(fresh_job, _EPISODE_PIN, source_id)
 
     await apply_outcomes_and_emit(db, fresh_job, outcomes, hub)
 
     stored = claims_of(fresh_job).sources
     return MatchPreview(outcomes=[_outcome_view(o.source_id, stored.get(o.source_id, o.claims)) for o in outcomes])
+
+
+@router.delete("/{job_id}/identity/match", response_model=IdentityView)
+async def clear_episode_match(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+) -> IdentityView:
+    """Clear episodes: forget every episode source's result and the operator's
+    source choice, then re-resolve so the placements come off the tracks.
+    Hand-placed tracks keep their manual claims; show ids stay for the next
+    Fix match. An in-flight background run is invalidated first so its
+    outcome cannot land after the clear, with no rerun after it (that would
+    put the placements straight back), and the startup sweep leaves a
+    cleared job alone. Emits `job.identity_updated` and a `track.updated`
+    per track the resolver changed."""
+    if stage_runner is not None:
+        stage_runner.invalidate(job_id)
+    try:
+        # M2: lock the job row before the identity write (lock order: job, then tracks).
+        job = await _get_job(db, job_id, for_update=True)
+        forget_episode_sources(job)
+        db.add(job)
+        resolved = await resolve_job(db, job)
+        await db.commit()
+        await emit_identity_resolved(db, hub, job, resolved, sources={})
+        await db.commit()
+    finally:
+        if stage_runner is not None:
+            stage_runner.release(job_id, rerun=False)
+    await db.refresh(job)
+    tracks = await _get_tracks(db, job_id)
+    return _identity_view(job, tracks)
 
 
 @router.delete("/{job_id}/identity/pin", response_model=IdentityView)
@@ -309,11 +345,9 @@ async def clear_identity_pin(
     return _identity_view(job, tracks)
 
 
-async def _browse_season(
-    provider: EpisodeListProvider, cfg: Config, job: Job, source: str, season: int
-) -> tuple[str, list[Episode]]:
-    """The show id and one season's episodes for `/identity/episodes`, or the
-    HTTPException that says why not."""
+async def _browse_show_id(provider: EpisodeListProvider, cfg: Config, job: Job, source: str) -> str:
+    """The show id the browse endpoints use, or the HTTPException that says
+    why there is none."""
     # F7: distinguish "not usable at all" (409 / 503) from "no show id" (404)
     # from a transient provider failure resolving that id (502) -- the
     # multi-provider `resolve_show_ids` wrapper swallows SourceError/SourceMiss
@@ -341,6 +375,15 @@ async def _browse_season(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no {source} show id known for job {job.id}",
         )
+    return str(show_id)
+
+
+async def _browse_season(
+    provider: EpisodeListProvider, cfg: Config, job: Job, source: str, season: int
+) -> tuple[str, list[Episode]]:
+    """The show id and one season's episodes for `/identity/episodes`, or the
+    HTTPException that says why not."""
+    show_id = await _browse_show_id(provider, cfg, job, source)
     try:
         episodes = await provider.season(show_id, season)
     except SourceMiss as e:
@@ -396,3 +439,40 @@ async def browse_episodes(
             EpisodeSummary(number=e.number, name=e.name, runtime_s=e.runtime_s, special=e.special) for e in episodes
         ],
     )
+
+
+@router.get("/{job_id}/identity/seasons", response_model=SeasonListView)
+async def browse_seasons(
+    job_id: JobIdParam,
+    source: EpisodeSourceSetting,
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+) -> SeasonListView:
+    job = await _get_job(db, job_id)
+    if stage_runner is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="episode stage runner not available",
+        )
+
+    cfg = await _get_config(db)
+    providers = stage_runner.providers(cfg)
+    source_id = EPISODE_SOURCE_BY_SETTING[source]
+    provider = {p.source_id: p for p in providers}[source_id]
+
+    try:
+        show_id = await _browse_show_id(provider, cfg, job, source)
+        seasons = await provider.seasons(show_id)
+    except HTTPException:
+        raise
+    except SourceMiss as e:
+        # A stale cached show id: the provider no longer knows the show.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{source}: show not found") from e
+    except SourceError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: {e}") from e
+    except Exception as e:
+        logger.exception("seasons browse: source %s raised job_id=%s", source_id, job_id)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: unexpected error") from e
+
+    return SeasonListView(source_id=source_id, show_id=show_id, seasons=seasons)

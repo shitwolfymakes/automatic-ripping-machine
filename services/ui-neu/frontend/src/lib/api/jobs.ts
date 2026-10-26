@@ -164,12 +164,12 @@ export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<
 // Identify / resolve + apply-session (EXISTS in v3)
 // ---------------------------------------------------------------------------
 
-// v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, disc_number?, disc_total?, media_type?, music? }.
+// v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, season?, disc_number?, disc_total?, media_type?, music? }.
 // Stamps the chosen identity onto the job (status → identified). `year` defaults
 // to null; `music`/`media_type` are only sent by callers that have something
 // typed to say; `external_ids` and `match` carry a picked candidate (the free-form `metadata` bag is gone — unknown keys 422).
 //
-// disc_number/disc_total are a classification like media_type/season on the
+// season/disc_number/disc_total are a classification like media_type on the
 // Backend, not part of the identity statement: omitted keeps whatever value
 // is already stored (a disc-hint source may have filled it before the
 // operator ever opened the identify dialog -- Review Focus 5), while an
@@ -180,6 +180,7 @@ export function resolveJob(
 	body: {
 		title: string;
 		year?: number | null;
+		season?: number | null;
 		disc_number?: number | null;
 		disc_total?: number | null;
 		media_type?: MediaType | null;
@@ -192,6 +193,9 @@ export function resolveJob(
 		title: body.title,
 		year: body.year ?? null
 	};
+	if (body.season !== undefined) {
+		payload.season = body.season;
+	}
 	if (body.disc_number !== undefined) {
 		payload.disc_number = body.disc_number;
 	}

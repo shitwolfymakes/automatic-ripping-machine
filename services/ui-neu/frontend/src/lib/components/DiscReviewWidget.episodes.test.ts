@@ -14,6 +14,7 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(),
 	setJobMediaType: vi.fn(() => Promise.resolve({})),
+	resolveJob: vi.fn(() => Promise.resolve({})),
 	fetchNamingPreview: vi.fn(() => Promise.resolve({ items: [] })),
 	updateTrack: vi.fn(() => Promise.resolve({}))
 }));
@@ -129,21 +130,21 @@ describe('DiscReviewWidget episode matching', () => {
 		const panel = await screen.findByTestId('episode-panel');
 		expect(screen.getByRole('button', { name: 'Episodes' })).toHaveAttribute('aria-pressed', 'true');
 		expect(screen.queryByRole('button', { name: 'Pick a series' })).not.toBeInTheDocument();
-		await waitFor(() => expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument());
+		await waitFor(() => expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument());
 
 		vi.mocked(fetchIdentity).mockResolvedValue({ sources: {}, pin: null } as unknown as IdentityView);
 		fireRipperEvent('job_other', 'job.identity_updated');
-		expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument();
+		expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument();
 
 		const fetches = mockFetchJob.mock.calls.length;
 		fireRipperEvent('job_42', 'rip.identify_resolved');
 		await waitFor(() => expect(mockFetchJob.mock.calls.length).toBeGreaterThan(fetches));
 		await new Promise((r) => setTimeout(r, 50));
-		expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument();
+		expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument();
 
 		const identityCalls = vi.mocked(fetchIdentity).mock.calls.length;
 		fireRipperEvent('job_42', 'job.identity_updated');
-		await waitFor(() => expect(within(panel).queryByText('Matching episodes…')).not.toBeInTheDocument());
+		await waitFor(() => expect(within(panel).queryByText('Matching episodes...')).not.toBeInTheDocument());
 		expect(vi.mocked(fetchIdentity).mock.calls.length).toBeGreaterThan(identityCalls);
 	});
 
@@ -163,7 +164,7 @@ describe('DiscReviewWidget episode matching', () => {
 		await fireEvent.click(await screen.findByRole('radio', { name: 'TV' }));
 		expect(setJobMediaType).toHaveBeenCalledWith('job_42', 'tv');
 		const panel = await screen.findByTestId('episode-panel');
-		await waitFor(() => expect(within(panel).getByText('Matching episodes…')).toBeInTheDocument());
+		await waitFor(() => expect(within(panel).getByText('Matching episodes...')).toBeInTheDocument());
 	});
 
 	it("the panel's series search opens Search looking for TV", async () => {
@@ -176,5 +177,67 @@ describe('DiscReviewWidget episode matching', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 		expect(screen.getByTestId('title-initial-type')).toHaveTextContent('none');
+	});
+
+	it('a guessed placement: amber Episodes row with Review, and the countdown held', async () => {
+		const guess = {
+			...TV,
+			episodes_unsure: true,
+			wait_start_time: new Date().toISOString(),
+			metadata_json: {
+				identity_claims: { sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, unsure: true }
+			}
+		} as Partial<JobView>;
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({
+				tracks: [
+					{ id: 'trk_0', kind: 'video_title', excluded: false, episode_number: 1, role: 'episode' },
+					{ id: 'trk_1', kind: 'video_title', excluded: false, episode_number: 2, role: 'episode' }
+				] as never
+			}),
+			job: createJob(guess)
+		});
+		renderComponent(DiscReviewWidget, { props: { job: createJob(guess) } });
+		const row = await screen.findByTestId('episode-status');
+		await waitFor(() => expect(row).toHaveAttribute('data-state', 'guess'));
+		expect(row).toHaveTextContent('Episodes placed, a guess');
+		expect(within(row).getByRole('button', { name: 'Review' })).toBeInTheDocument();
+		expect(screen.getByText('Held: episodes are a guess')).toBeInTheDocument();
+		expect(screen.queryByTitle('Pause timer')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Episodes' })).toBeInTheDocument();
+	});
+
+	it('says the season is not set for a pre-rip TV job without one', async () => {
+		renderCard();
+		expect(await screen.findByText(/Season not set/)).toBeTruthy();
+	});
+
+	it('"Season not set" opens Info with the cursor in the Season field', async () => {
+		renderCard();
+		await fireEvent.click(await screen.findByRole('button', { name: 'Season not set' }));
+		const season = screen.getByLabelText('Season');
+		expect(season).toBeInTheDocument();
+		await waitFor(() => expect(season).toHaveFocus());
+		expect(screen.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('does not say it for a ripped job or when a season is known', async () => {
+		renderCard({ ...TV, status: 'ripped' });
+		await screen.findByTestId('match-row');
+		expect(screen.queryByRole('button', { name: 'Episodes' })).toBeNull();
+		expect(screen.queryByText(/Season not set/)).toBeNull();
+		cleanup();
+		renderCard({ ...TV, season: 5 });
+		await episodesButton();
+		expect(screen.queryByText(/Season not set/)).toBeNull();
+		expect(screen.getByText(/Season 5/)).toBeTruthy();
+	});
+
+	it('starts matching when Info saves a season on a TV job', async () => {
+		renderCard();
+		await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
+		await fireEvent.input(await screen.findByLabelText('Season'), { target: { value: '7' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		expect(await screen.findByText('Matching episodes...')).toBeTruthy();
 	});
 });

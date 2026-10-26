@@ -1,15 +1,18 @@
 <script lang="ts">
-	// Re-run the episode match with other settings (design spec 2026-10-02
-	// section 4.3 #2): pick a source / season / disc / tolerance, preview the
-	// outcome, then apply & pin it or discard it. Presentational - the panel
-	// owns the requests.
+	// Fix match: pick a source / season / disc / tolerance, preview the
+	// outcome, then apply it or discard it. Presentational - the panel owns
+	// the requests.
 	import type { Snippet } from 'svelte';
 	import type { EpisodeSource } from '$lib/api/identity';
 	import type { RerunForm } from './episodeModel';
+	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface Props {
 		form: RerunForm;
 		sources: { id: EpisodeSource; label: string; disabled: boolean }[];
+		/** The source's regular seasons; null when the list could not load (the
+		 * season is then a number input). */
+		seasons: number[] | null;
 		busy: boolean;
 		/** Changed-track count and source label of the preview on screen, if any. */
 		preview: { changed: number; label: string } | null;
@@ -22,6 +25,7 @@
 	let {
 		form = $bindable(),
 		sources,
+		seasons,
 		busy,
 		preview,
 		onfieldchange,
@@ -45,13 +49,15 @@
 		</div>
 		<div class="field">
 			<label class="field-label" for="{uid}-season">Season</label>
-			<input
+			<SeasonSelect
 				id="{uid}-season"
-				class="field-control"
-				type="number"
-				min="0"
-				bind:value={form.season}
-				oninput={onfieldchange}
+				value={form.season}
+				{seasons}
+				allowScan
+				onchange={(v) => {
+					form.season = v;
+					onfieldchange();
+				}}
 			/>
 		</div>
 		<div class="field">
@@ -61,6 +67,7 @@
 				class="field-control"
 				type="number"
 				min="1"
+				placeholder="-"
 				bind:value={form.disc}
 				oninput={onfieldchange}
 			/>
@@ -79,7 +86,7 @@
 			/>
 		</div>
 		<button type="button" class="btn btn-primary rerun-panel-preview" disabled={busy} onclick={onpreview}>
-			{busy && !preview ? 'Previewing…' : 'Preview'}
+			{busy && !preview ? 'Previewing...' : 'Preview'}
 		</button>
 	</div>
 
@@ -91,9 +98,7 @@
 			</p>
 			<div class="rerun-panel-bar-actions">
 				<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={ondiscard}>Discard</button>
-				<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={onapply}>
-					Apply & pin {preview.label}
-				</button>
+				<button type="button" class="btn btn-primary btn-sm" disabled={busy} onclick={onapply}>Apply</button>
 			</div>
 		</div>
 	{/if}

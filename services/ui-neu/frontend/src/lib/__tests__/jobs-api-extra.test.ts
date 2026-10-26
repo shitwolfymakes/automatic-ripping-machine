@@ -202,6 +202,19 @@ describe('resolveJob', () => {
 	});
 });
 
+describe('resolveJob season', () => {
+	it('sends season only when the caller passes it, null included', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_5' }, fan_out: [] }));
+		await resolveJob('job_5', { title: 'Lost', season: 2 });
+		await resolveJob('job_5', { title: 'Lost', season: null });
+		await resolveJob('job_5', { title: 'Lost' });
+		const bodies = mockFetch.mock.calls.map((c) => JSON.parse((c[1] as RequestInit).body as string));
+		expect(bodies[0].season).toBe(2);
+		expect(bodies[1]).toHaveProperty('season', null);
+		expect(bodies[2]).not.toHaveProperty('season');
+	});
+});
+
 describe('applySession', () => {
 	it('POSTs /api/jobs/{id}/transcode with {session_id, overwrite:false} by default', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ collisions: [] }));

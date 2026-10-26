@@ -138,6 +138,8 @@ class JobController:
         resolution_timeout: float | None = _RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
+        # Jobs whose countdown hold for a guessed placement was already logged.
+        self._held_for_guess: set[str] = set()
         self._keydb_tasks: set[asyncio.Task[None]] = set()
         self._sdf_tasks: set[asyncio.Task[None]] = set()
         self._wipe_tasks: set[asyncio.Task[None]] = set()
@@ -645,6 +647,14 @@ class JobController:
         pause / resume / duration change applies on the next cycle.
         """
         if view.manual_pause:
+            return False
+        if view.episodes_unsure:
+            # The episode placement is a guess: never auto-start on it. Start
+            # rip by hand still works; the hold lifts when a Fix match or a
+            # re-run leaves a confident placement.
+            if view.id not in self._held_for_guess:
+                self._held_for_guess.add(view.id)
+                logger.info("job %s: countdown held, its episode placement is a guess", view.id)
             return False
         cfg = await self._safe_get_ripper_config()
         if cfg is None or cfg.ripping_paused:

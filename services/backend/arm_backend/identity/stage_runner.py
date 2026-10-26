@@ -182,6 +182,10 @@ class EpisodeStageRunner:
         # the latest state on its own once it does start.
         self._started: set[str] = set()
         self._rerun: set[str] = set()
+        # Jobs whose current run's outcome is dropped with no rerun after it
+        # (`release(rerun=False)`): Clear episodes must not be undone by a run
+        # that computed before it.
+        self._discarded: set[str] = set()
         # Jobs a caller is about to write (`invalidate` .. `release`), with how
         # many callers hold each (two identity writes can overlap): no run may
         # start for them until the last caller's write has landed.
@@ -234,6 +238,7 @@ class EpisodeStageRunner:
             # coroutine at all, and would otherwise never clear `_pending`.
             self._pending.pop(job_id, None)
             self._started.discard(job_id)
+            self._discarded.discard(job_id)
             if job_id in self._rerun and job_id not in self._held and not self._shutdown:
                 self._rerun.discard(job_id)
                 self.schedule(job_id)
@@ -265,10 +270,16 @@ class EpisodeStageRunner:
         if job_id in self._pending:
             self._rerun.add(job_id)
 
-    def release(self, job_id: str) -> None:
+    def release(self, job_id: str, rerun: bool = True) -> None:
         """End an `invalidate` hold once the caller's write has committed (or
         failed): run the rerun it deferred, if any, against the current
-        state, once no other caller still holds the job."""
+        state, once no other caller still holds the job. With `rerun=False`
+        the deferred rerun is dropped and an in-flight run still writes
+        nothing: the caller's write is meant to stand (Clear episodes)."""
+        if not rerun:
+            self._rerun.discard(job_id)
+            if job_id in self._pending:
+                self._discarded.add(job_id)
         holders = self._held.get(job_id, 0) - 1
         if holders > 0:
             self._held[job_id] = holders
@@ -308,6 +319,7 @@ class EpisodeStageRunner:
         self._pending.clear()
         self._started.clear()
         self._rerun.clear()
+        self._discarded.clear()
 
     # -- one run ------------------------------------------------------------
 
@@ -381,12 +393,13 @@ class EpisodeStageRunner:
                         .execution_options(populate_existing=True)
                     )
                 ).scalar_one_or_none()
-                if fresh_job is None or job_id in self._rerun:
-                    # Vanished meanwhile, or another `schedule()` for this
-                    # job arrived while we were waiting on providers: write
-                    # nothing, commit nothing, emit nothing. The queued
-                    # rerun-once (if any) will apply fresh outcomes against
-                    # the current state instead.
+                if fresh_job is None or job_id in self._rerun or job_id in self._discarded:
+                    # Vanished meanwhile, another `schedule()` for this job
+                    # arrived while we were waiting on providers, or a caller
+                    # dropped this run's outcome: write nothing, commit
+                    # nothing, emit nothing. The queued rerun-once (if any)
+                    # will apply fresh outcomes against the current state
+                    # instead.
                     return
 
                 merge_new_ids(fresh_job, found)
@@ -401,8 +414,8 @@ class EpisodeStageRunner:
     async def sweep_startup(self) -> int:
         """Schedule every eligible job once: identified / awaiting review /
         awaiting user id, a TV candidate, with no episode source entry at
-        all yet in its identity claims (Review Focus 5). Returns how many
-        were scheduled."""
+        all yet in its identity claims (Review Focus 5) and not one the
+        operator cleared (Clear episodes). Returns how many were scheduled."""
         count = 0
         async with self._session_factory() as session:
             jobs = list(
@@ -417,7 +430,8 @@ class EpisodeStageRunner:
             for job in jobs:
                 if not is_tv_candidate(job, tracks_by_job.get(job.id, [])):
                     continue
-                if any(source_id in claims_of(job).sources for source_id in _EPISODE_SOURCE_IDS):
+                claims = claims_of(job)
+                if claims.episodes_cleared or any(source_id in claims.sources for source_id in _EPISODE_SOURCE_IDS):
                     continue
                 self.schedule(job.id)
                 count += 1

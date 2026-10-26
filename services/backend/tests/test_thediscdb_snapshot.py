@@ -252,3 +252,70 @@ async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: 
     assert peak == 1
     assert running_during == [True]
     assert not thediscdb_snapshot.refresh_running()
+
+
+def _series_disc(index: int, season: str, hash_: str) -> dict:
+    return {
+        "Index": index,
+        "ContentHash": hash_,
+        "Titles": [
+            {
+                "SourceFile": "00001.mpls",
+                "Duration": "0:45:00",
+                "Item": {"Type": "Episode", "Season": season, "Episode": "1"},
+            },
+            {"SourceFile": "00002.mpls", "Duration": "0:10:00", "Item": {"Type": "Extra"}},
+        ],
+    }
+
+
+DISC_S1 = _series_disc(1, "1", "A" * 32)
+DISC_S2 = _series_disc(2, "2", "B" * 32)
+
+
+def _series_tarball(path: Path, discs: list[tuple[str, dict]]) -> Path:
+    tar_path = path / "data.tar.gz"
+    base = "data-main/data/series/Some Show (2020)"
+    with tarfile.open(tar_path, "w:gz") as tar:
+        for i, (release_dir, disc) in enumerate(discs):
+            raw = json.dumps(disc).encode()
+            info = tarfile.TarInfo(f"{base}/{release_dir}/disc{i + 1:02d}.json")
+            info.size = len(raw)
+            tar.addfile(info, io.BytesIO(raw))
+    return tar_path
+
+
+def test_index_records_the_release_seasons(tmp_path: Path) -> None:
+    tarball = _series_tarball(tmp_path, discs=[("season-1-2", DISC_S1), ("season-1-2", DISC_S2)])
+    build_index(tarball, tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup(str(DISC_S1["ContentHash"]))
+    assert hit is not None and hit.release_seasons == [1, 2]
+
+
+def test_index_leaves_release_seasons_null_without_episodes(tmp_path: Path) -> None:
+    build_index(_mini_tarball(tmp_path), tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup(str(DISC["ContentHash"]))
+    assert hit is not None and hit.release_seasons is None
+
+
+def test_lookup_tolerates_an_index_without_release_seasons(tmp_path: Path) -> None:
+    import sqlite3
+
+    build_index(_mini_tarball(tmp_path), tmp_path / "index.sqlite")
+    conn = sqlite3.connect(tmp_path / "index.sqlite")
+    conn.execute("ALTER TABLE discs DROP COLUMN release_seasons")
+    conn.commit()
+    conn.close()
+    hit = SnapshotStore(tmp_path).lookup(str(DISC["ContentHash"]))
+    assert hit is not None and hit.release_seasons is None
+
+
+def test_index_ignores_episodes_without_a_usable_season(tmp_path: Path) -> None:
+    disc = _series_disc(1, "1", "C" * 32)
+    disc["Titles"] += [
+        {"SourceFile": "00003.mpls", "Item": {"Type": "Episode", "Season": "special"}},
+        {"SourceFile": "00004.mpls", "Item": {"Type": "Episode"}},
+    ]
+    build_index(_series_tarball(tmp_path, discs=[("s1", disc)]), tmp_path / "index.sqlite")
+    hit = SnapshotStore(tmp_path).lookup("C" * 32)
+    assert hit is not None and hit.release_seasons == [1]

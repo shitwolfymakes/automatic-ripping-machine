@@ -2,11 +2,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+	import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { posterSrc, posterFallback, jobPoster } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
 	import type { JobDetailView, ResolveResponse, ApplySessionResponse, NamingPreviewItem } from '$lib/types/api.gen';
+	import InlineField from '$lib/components/InlineField.svelte';
+	import type { EditableJobField } from '$lib/utils/job-fields';
 	import JobActions from '$lib/components/JobActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
@@ -43,7 +45,7 @@
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
-	// "Matching episodes…" while the Backend re-matches after a type flip or a
+	// "Matching episodes..." while the Backend re-matches after a type flip or a
 	// series apply; job.identity_updated for this job (or a timeout) ends it.
 	const matching = new EpisodeMatching();
 	let editingTrackId = $state<string | null>(null);
@@ -184,6 +186,31 @@
 		loadJob();
 	}
 
+	// A fact edited in place: title, year, season, disc number or disc total go
+	// through resolve (title and year restate the identity; the rest are
+	// classifications, null clears). A TV job's season or disc change re-runs
+	// the episode match, so the panel shows it matching until the run reports.
+	async function saveFact(field: EditableJobField | 'title', raw: string) {
+		if (!detail) return;
+		const job = detail.job;
+		const num = (v: string) => (v.trim() === '' ? null : Number(v));
+		if (field === 'title' && !raw.trim()) throw new Error('A title is required');
+		const body: Parameters<typeof resolveJob>[1] = {
+			title: field === 'title' ? raw.trim() : (job.title ?? ''),
+			year: field === 'year' ? num(raw) : (job.year ?? null)
+		};
+		if (field !== 'title' && field !== 'year') body[field] = num(raw);
+		const before = { season: job.season ?? null, disc: job.disc_number ?? null };
+		const resp = await resolveJob(job.id, body);
+		const after = resp?.job;
+		const changed =
+			!!after &&
+			job.media_type === 'tv' &&
+			(before.season !== (after.season ?? null) || before.disc !== (after.disc_number ?? null));
+		await loadJob();
+		if (changed) matching.start();
+	}
+
 	function handleSeriesApplied() {
 		activePanel = 'episodes';
 		matching.start();
@@ -303,7 +330,12 @@
 				<!-- Title bar -->
 				<div class="flex flex-wrap items-center gap-2 job-detail-title-bar">
 					<h1 class="job-detail-title">
-						{job.title || 'Untitled'}
+						<InlineField
+							label="Title"
+							value={job.title || 'Untitled'}
+							canEdit={$isAdmin && canResolve}
+							onsave={(raw) => saveFact('title', raw)}
+						/>
 					</h1>
 					{#if job.year}
 						<span class="job-detail-year">({job.year})</span>
@@ -335,7 +367,10 @@
 						{#if isVideoDisc && $isAdmin}
 							<MediaTypeSwitch {job} {handSetCount} onchanged={handleMediaTypeChanged} />
 						{/if}
-						{#if canResolve && $isAdmin}
+						<!-- A video job with an identity edits it in place on the facts grid and
+						     searches from the tab below; the dialog stays for a disc still waiting
+						     for an identity, and for CDs (album, artist, track titles). -->
+						{#if canResolve && $isAdmin && (isCdDisc || isAwaitingIdentity(job.status))}
 							<button
 								type="button"
 								data-testid="identify-open"
@@ -395,6 +430,21 @@
 												? 'mono job-detail-metadata-mono'
 												: ''}">{field.value}</a
 										>
+									{:else if field.edit}
+										<div class="mt-1 job-detail-metadata-value" data-testid="fact-{field.edit}">
+											<InlineField
+												label={field.label}
+												value={field.raw ?? ''}
+												type={field.edit === 'season' ||
+												field.edit === 'disc_number' ||
+												field.edit === 'disc_total' ||
+												field.edit === 'year'
+													? 'number'
+													: 'text'}
+												canEdit={$isAdmin && canResolve}
+												onsave={(raw) => saveFact(field.edit!, raw)}
+											/>
+										</div>
 									{:else}
 										<div
 											class="mt-1 job-detail-metadata-value {field.mono
@@ -459,6 +509,7 @@
 							{job}
 							{tracks}
 							matching={matching.active}
+							onchanged={() => loadJob()}
 							onsearchseries={() => {
 								titleInitialType = 'tv';
 								activePanel = 'title';
@@ -586,7 +637,10 @@
 										</td>
 										{#if tracksAreSeries}
 											<td class="table-cell" data-label="Episode">
-												{#if track.episode_number != null}
+												{#if preview?.output_name}
+													<!-- A session names the track: the generated name is the episode. -->
+													<span class="mono job-detail-track-generated">{preview.output_name}</span>
+												{:else if track.episode_number != null}
 													<span class="job-detail-track-title job-detail-track-title-strong"
 														>{track.episode_number}</span
 													>
@@ -1056,6 +1110,9 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-muted);
+	}
+	.job-detail-track-generated {
+		font-size: 0.8125rem;
 	}
 	.job-detail-track-faint {
 		color: var(--color-text-faint);

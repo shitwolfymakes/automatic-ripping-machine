@@ -1,0 +1,903 @@
+{
+ "title": "Sherlock",
+ "year": 2010,
+ "external_ids": {
+  "tmdb": "19885",
+  "imdb": "tt1475582",
+  "tvdb": "176941"
+ },
+ "tmdb": {
+  "number_of_seasons": 4,
+  "number_of_episodes": 12,
+  "episode_run_time": [
+   90
+  ],
+  "seasons": [
+   {
+    "season_number": 0,
+    "episode_count": 9,
+    "name": "Specials"
+   },
+   {
+    "season_number": 1,
+    "episode_count": 3,
+    "name": "Series 1"
+   },
+   {
+    "season_number": 2,
+    "episode_count": 3,
+    "name": "Series 2"
+   },
+   {
+    "season_number": 3,
+    "episode_count": 3,
+    "name": "Series 3"
+   },
+   {
+    "season_number": 4,
+    "episode_count": 3,
+    "name": "Series 4"
+   }
+  ]
+ },
+ "releases": [
+  {
+   "slug": "2010-bd-uk",
+   "title": "Sherlock - Series 1",
+   "year": 2010,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "BD-S01D01",
+     "name": "Disc One",
+     "format": "Blu-Ray",
+     "content_hash": "8DA6C52B5125F09488F8CEB3DD95DF04",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00002.mpls",
+       "duration_s": 5286,
+       "size": 21233018880,
+       "item": {
+        "type": "Episode",
+        "title": "A Study in pink",
+        "season": 1,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00002.mpls(1)",
+       "duration_s": 5306,
+       "size": 21162977280,
+       "item": {
+        "type": "Episode",
+        "title": "The Blind Banker",
+        "season": 1,
+        "episode": 2
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "disc02",
+     "name": "disc02",
+     "format": "Blu-Ray",
+     "content_hash": "C52562A70C54CB7767301A71C9A060B8",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00002.mpls",
+       "duration_s": 1958,
+       "size": 7760480256,
+       "item": {
+        "type": "Extra",
+        "title": "Unlocking Sherlock",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00001.mpls",
+       "duration_s": 3315,
+       "size": 13104408576,
+       "item": {
+        "type": "Extra",
+        "title": "Pilot: A study in pink",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00000.mpls",
+       "duration_s": 5360,
+       "size": 21555283968,
+       "item": {
+        "type": "Episode",
+        "title": "The great game",
+        "season": 1,
+        "episode": 3
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00005.m2ts",
+       "duration_s": 60,
+       "size": 225257472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "slug": "2012-complete-series-one-and-two-uk",
+   "title": "Complete Series One & Two",
+   "year": 2012,
+   "discs": [
+    {
+     "index": 3,
+     "slug": "season-2-disc-1",
+     "name": "Season 2, Disc 1",
+     "format": "Blu-ray",
+     "content_hash": "44FF4AB4FB43DCD3AC753D85BC60754E",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00850.mpls",
+       "duration_s": 5374,
+       "size": 22999044096,
+       "item": {
+        "type": "Episode",
+        "title": "A Scandal in Belgravia",
+        "season": 2,
+        "episode": 1
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00851.mpls",
+       "duration_s": 5303,
+       "size": 22684907520,
+       "item": {
+        "type": "Episode",
+        "title": "The Hounds of Baskerville",
+        "season": 2,
+        "episode": 2
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00800.mpls",
+       "duration_s": 10677,
+       "size": 45683951616,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00065.m2ts",
+       "duration_s": 33,
+       "size": 34093056,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00067.m2ts",
+       "duration_s": 16,
+       "size": 34418688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00071.m2ts",
+       "duration_s": 33,
+       "size": 146227200,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 4,
+     "slug": "season-2-disc-2",
+     "name": "Season 2, Disc 2",
+     "format": "Blu-ray",
+     "content_hash": "C2779B26A1BF1D412A582A7380A1C9E0",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00800.mpls",
+       "duration_s": 5307,
+       "size": 22545721344,
+       "item": {
+        "type": "Episode",
+        "title": "The Reichenbach Fall",
+        "season": 2,
+        "episode": 3
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00250.mpls",
+       "duration_s": 1147,
+       "size": 4842663936,
+       "item": {
+        "type": "Featurette",
+        "title": "Sherlock Uncovered",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00065.m2ts",
+       "duration_s": 33,
+       "size": 34093056,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00067.m2ts",
+       "duration_s": 16,
+       "size": 34418688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00071.m2ts",
+       "duration_s": 33,
+       "size": 146227200,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "slug": "2016-blu-ray",
+   "title": "2016 blu-ray",
+   "year": 2016,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "blu-ray",
+     "name": "blu-ray",
+     "format": "Blu-ray",
+     "content_hash": "D41DBB9BBF4B86BC05F5F827AA02995B",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": 0,
+       "source_file": "00800.mpls",
+       "duration_s": 5588,
+       "size": 23670632448,
+       "item": {
+        "type": "Episode",
+        "title": "The Abominable Bride",
+        "season": 0,
+        "episode": 9
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": 1,
+       "source_file": "00250.mpls",
+       "duration_s": 1794,
+       "size": 6182885376,
+       "item": {
+        "type": "Featurette",
+        "title": "Mark Gatiss - A Study in Sherlock",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": 2,
+       "source_file": "00253.mpls",
+       "duration_s": 1223,
+       "size": 4212314112,
+       "item": {
+        "type": "Interview",
+        "title": "Sherlockology Q&A",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": 3,
+       "source_file": "00020.mpls",
+       "duration_s": 31,
+       "size": 102463488,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": 4,
+       "source_file": "00052.mpls",
+       "duration_s": 109,
+       "size": 291588096,
+       "item": {
+        "type": "Trailer",
+        "title": "Peaky Blinders Season Two Trailer",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": 5,
+       "source_file": "00254.mpls",
+       "duration_s": 1834,
+       "size": 6319841280,
+       "item": {
+        "type": "Featurette",
+        "title": "Creating the Look",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": 6,
+       "source_file": "00007.m2ts",
+       "duration_s": 12,
+       "size": 18112512,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": 7,
+       "source_file": "00008.m2ts",
+       "duration_s": 16,
+       "size": 66097152,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": 8,
+       "source_file": "00009.m2ts",
+       "duration_s": 103,
+       "size": 275779584,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": 9,
+       "source_file": "00019.m2ts",
+       "duration_s": 75,
+       "size": 309737472,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": 10,
+       "source_file": "00020.m2ts",
+       "duration_s": 306,
+       "size": 1056509952,
+       "item": {
+        "type": "Featurette",
+        "title": "Mark Gatiss Production Diary",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": 11,
+       "source_file": "00021.m2ts",
+       "duration_s": 230,
+       "size": 793350144,
+       "item": {
+        "type": "Interview",
+        "title": "Writers Interview",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": 12,
+       "source_file": "00023.m2ts",
+       "duration_s": 148,
+       "size": 511248384,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 13,
+       "makemkv_title": 13,
+       "source_file": "00024.m2ts",
+       "duration_s": 123,
+       "size": 423745536,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 14,
+       "makemkv_title": 14,
+       "source_file": "00025.m2ts",
+       "duration_s": 203,
+       "size": 700569600,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 15,
+       "makemkv_title": 15,
+       "source_file": "00026.m2ts",
+       "duration_s": 152,
+       "size": 525717504,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 16,
+       "makemkv_title": 16,
+       "source_file": "00027.m2ts",
+       "duration_s": 333,
+       "size": 1149431808,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 17,
+       "makemkv_title": 17,
+       "source_file": "00028.m2ts",
+       "duration_s": 300,
+       "size": 1035890688,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 18,
+       "makemkv_title": 18,
+       "source_file": "00029.m2ts",
+       "duration_s": 275,
+       "size": 947558400,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 19,
+       "makemkv_title": 19,
+       "source_file": "00030.m2ts",
+       "duration_s": 297,
+       "size": 1025679360,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 20,
+       "makemkv_title": 20,
+       "source_file": "00031.m2ts",
+       "duration_s": 5,
+       "size": 15808512,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "slug": "2018-season-1-4k",
+   "title": "Season 1 4K",
+   "year": 2018,
+   "discs": [
+    {
+     "index": 1,
+     "slug": "disc-1",
+     "name": "Disc 1",
+     "format": "UHD",
+     "content_hash": "237F8BA825A5D04CA114B11A3F6DC853",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": null,
+       "source_file": "00011.mpls",
+       "duration_s": 5,
+       "size": 7636992,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": null,
+       "source_file": "00115.mpls",
+       "duration_s": 62,
+       "size": 470083584,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": null,
+       "source_file": "00020.mpls",
+       "duration_s": 5,
+       "size": 4257792,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": null,
+       "source_file": "00000.mpls",
+       "duration_s": 5505,
+       "size": 42988068864,
+       "item": {
+        "type": "Episode",
+        "title": "A Study in Pink",
+        "season": 1,
+        "episode": 1
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": null,
+       "source_file": "00809.mpls",
+       "duration_s": 11,
+       "size": 13983744,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": null,
+       "source_file": "00818.mpls",
+       "duration_s": 5530,
+       "size": 41732597760,
+       "item": {
+        "type": "Episode",
+        "title": "The Blind Banker",
+        "season": 1,
+        "episode": 2
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": null,
+       "source_file": "00001.mpls",
+       "duration_s": 10,
+       "size": 190464,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": null,
+       "source_file": "00812.mpls",
+       "duration_s": 12,
+       "size": 102899712,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "slug": "disc-2",
+     "name": "Disc 2",
+     "format": "UHD",
+     "content_hash": "B0FBA4E00DCA057554C9CE490B3CA28A",
+     "titles": [
+      {
+       "index": 0,
+       "makemkv_title": null,
+       "source_file": "00011.mpls",
+       "duration_s": 5,
+       "size": 7636992,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 1,
+       "makemkv_title": null,
+       "source_file": "00115.mpls",
+       "duration_s": 62,
+       "size": 470083584,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 2,
+       "makemkv_title": null,
+       "source_file": "00020.mpls",
+       "duration_s": 5,
+       "size": 4257792,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 3,
+       "makemkv_title": null,
+       "source_file": "00001.mpls",
+       "duration_s": 10,
+       "size": 190464,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 4,
+       "makemkv_title": null,
+       "source_file": "00000.mpls",
+       "duration_s": 5586,
+       "size": 43587520512,
+       "item": {
+        "type": "Episode",
+        "title": "The Great Game",
+        "season": 1,
+        "episode": 3
+       }
+      },
+      {
+       "index": 5,
+       "makemkv_title": null,
+       "source_file": "00809.mpls",
+       "duration_s": 11,
+       "size": 13983744,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 6,
+       "makemkv_title": null,
+       "source_file": "00812.mpls",
+       "duration_s": 12,
+       "size": 102899712,
+       "item": {
+        "type": null,
+        "title": null,
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 7,
+       "makemkv_title": null,
+       "source_file": "00818.mpls",
+       "duration_s": 3455,
+       "size": 12203470848,
+       "item": {
+        "type": "Extra",
+        "title": "Pilot Episode: A Study in Pink",
+        "season": 1,
+        "episode": 1
+       }
+      },
+      {
+       "index": 8,
+       "makemkv_title": null,
+       "source_file": "00819.mpls",
+       "duration_s": 2039,
+       "size": 7214770176,
+       "item": {
+        "type": "Extra",
+        "title": "Unlocking Sherlock",
+        "season": null,
+        "episode": null
+       }
+      },
+      {
+       "index": 9,
+       "makemkv_title": null,
+       "source_file": "00820.mpls",
+       "duration_s": 538,
+       "size": 1903349760,
+       "item": {
+        "type": "Extra",
+        "title": "Breakfast Interview with Benedict Cumberbatch",
+        "season": 1,
+        "episode": null
+       }
+      },
+      {
+       "index": 10,
+       "makemkv_title": null,
+       "source_file": "00827.mpls",
+       "duration_s": 476,
+       "size": 1682644992,
+       "item": {
+        "type": "Extra",
+        "title": "Newsnight Interview with Steven Moffat and Mark Ravenhill",
+        "season": 1,
+        "episode": null
+       }
+      },
+      {
+       "index": 11,
+       "makemkv_title": null,
+       "source_file": "00828.mpls",
+       "duration_s": 502,
+       "size": 1774436352,
+       "item": {
+        "type": "Extra",
+        "title": "Andrew Marr Interview with Benedict Cumberbatch and Martin Freeman",
+        "season": 1,
+        "episode": null
+       }
+      },
+      {
+       "index": 12,
+       "makemkv_title": null,
+       "source_file": "00829.mpls",
+       "duration_s": 516,
+       "size": 1823582208,
+       "item": {
+        "type": "Extra",
+        "title": "Breakfast Interview with Steven Moffat and Sue Vertue",
+        "season": 1,
+        "episode": null
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
