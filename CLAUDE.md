@@ -91,6 +91,39 @@ The ui-neu hooks need `npm ci --prefix services/ui-neu/frontend` once (`setup-de
 
 Trunk-based: `main` is the trunk and always releasable; short-lived branches merge back via PR; releases are semver **tags** on `main` (built by `release.yml`), and `latest` tracks `main`. There is no long-lived dev branch. See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/developers/architecture/08-v2-isolation-and-cutover.md](docs/developers/architecture/08-v2-isolation-and-cutover.md).
 
+## Development guidelines
+
+These rules apply to every change in every service. A PR that breaks one is not ready for review.
+
+### Single responsibility
+
+Be ruthless about it. Each module, class, function and component does one thing, and its name says what that thing is. If describing a function takes an "and", split it. Keep I/O, parsing, decisions and side effects in separate functions so each one can be tested alone. New behaviour gets its own function, not another branch in an existing one.
+
+### Cognitive complexity of 15 or less
+
+No function may have a cognitive complexity greater than 15. Confirm it with the **SonarQube for IDE** extension in the local VS Code: rule S3776 (Python and JavaScript/TypeScript, default threshold 15) reports each violation in the Problems panel for the open file. Open every file the diff touches and clear its S3776 warnings before opening the PR. Claude reads the same diagnostics through the VS Code `getDiagnostics` tool.
+
+Bring complexity down by extracting named helpers, returning early, and replacing flag-driven branching with lookup tables or separate functions. Never suppress the rule.
+
+### 100% unit test coverage of touched symbols
+
+Every PR covers 100% of the symbols it adds or changes (functions, methods, classes, components) with unit tests, counting every line and every branch. Covering the changed lines is not enough; a touched symbol is covered in full. Untouched code is out of scope.
+
+Python uses `coverage` (a root dev dependency, branch coverage on). The configured `source` is the Backend only, so name the packages you touched:
+
+```bash
+uv run coverage run --source=services/ripper/arm_ripper -m pytest
+uv run coverage report --include='services/ripper/arm_ripper/<changed_file>.py'
+```
+
+JS/TS uses Vitest's v8 provider (`@vitest/coverage-v8`, configured in [services/ui-neu/frontend/vitest.config.ts](services/ui-neu/frontend/vitest.config.ts)):
+
+```bash
+cd services/ui-neu/frontend && npx vitest run --coverage --coverage.include='src/lib/<changed_file>.ts'
+```
+
+Any missing line or branch inside a touched symbol fails the rule. Use `# pragma: no cover` or `/* v8 ignore next */` only for code that cannot run, with a comment saying why.
+
 ## Gotchas / invariants
 
 - **OpenAPI drift gates CI.** Touching Backend routers or `arm_common` schemas without regenerating the snapshot + TS types fails the `openapi-drift` job — see [Wire contract](#wire-contract-openapi).
