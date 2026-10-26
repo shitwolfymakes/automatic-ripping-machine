@@ -53,9 +53,9 @@
 /* ─────────────────────────────────────────────────────────────────────────
    Sidebar. The LCARS elbow: a curved plate along the top, a stack of
    coloured blocks down the left gutter, a curved plate along the bottom.
-   Pure decoration on the .sidebar/aside shell and the .nav block.
+   Pure decoration on the aside[data-sidebar] shell and the .nav block.
    ───────────────────────────────────────────────────────────────────────── */
-[data-scheme="lcars"][data-scheme] aside:where(.sidebar, .layout-drawer) {
+[data-scheme="lcars"][data-scheme] aside:where([data-sidebar]) {
 	width: 22rem;
 	position: relative;
 	background: #000;
@@ -64,7 +64,7 @@
 	overflow: hidden;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer)::before {
+[data-scheme="lcars"] aside:where([data-sidebar])::before {
 	content: '';
 	position: absolute;
 	top: 15px;
@@ -76,7 +76,7 @@
 	background: linear-gradient(to right, #c9c 0, #c9c 100px, transparent 100px, transparent 115px, #c9c 115px);
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-logo {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-logo {
 	display: flex;
 	position: absolute;
 	top: 12px;
@@ -89,12 +89,12 @@
 	justify-content: center;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-logo img {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-logo img {
 	height: 32px;
 	width: 32px;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer)::after {
+[data-scheme="lcars"] aside:where([data-sidebar])::after {
 	content: '';
 	position: absolute;
 	top: 79px;
@@ -116,7 +116,7 @@
 		);
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) > div::after {
+[data-scheme="lcars"] aside:where([data-sidebar]) > div::after {
 	content: '';
 	position: absolute;
 	bottom: 0;
@@ -128,7 +128,7 @@
 	background: linear-gradient(to right, #fc3 0, #fc3 100px, transparent 100px, transparent 115px, #fc3 115px);
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) > div {
+[data-scheme="lcars"] aside:where([data-sidebar]) > div {
 	position: relative;
 	z-index: 11;
 	padding-left: 105px;
@@ -136,7 +136,7 @@
 	padding-bottom: 70px;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) hr {
+[data-scheme="lcars"] aside:where([data-sidebar]) hr {
 	display: none;
 }
 
@@ -145,7 +145,7 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav {
 	gap: 3px;
 	/* the link margin also sat above the first link and below the
 	   last one, which a gap does not reproduce */
@@ -153,7 +153,7 @@
 	padding-bottom: calc(1rem + 3px);
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item {
 	background: #99f;
 	color: #000;
 	font-weight: bold;
@@ -166,7 +166,7 @@
 	transition: all 0.2s;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item svg {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item svg {
 	display: none;
 }
 
@@ -174,24 +174,24 @@
    same specificity, so source order is what decides which wins: the state
    rules must come last or an inactive position would beat the active one.
    (The original sheet forced this with !important instead.) */
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item:nth-child(2) {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item:nth-child(2) {
 	background: #fca;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item:nth-child(3) {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item:nth-child(3) {
 	background: #f90;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item:nth-child(4) {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item:nth-child(4) {
 	background: #c9c;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item[data-active="true"] {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background: #fca;
 	color: #000;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-item:hover {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-item:hover {
 	background: #fff;
 	color: #000;
 	transform: translateX(5px);
@@ -199,14 +199,14 @@
 
 /* The notification count is LCARS orange, not the amber --color-warning
    carries. */
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .nav-badge {
+[data-scheme="lcars"] aside:where([data-sidebar]) .nav-badge {
 	background: #f90;
 	color: #fff;
 }
 
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .eyebrow,
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .field-help,
-[data-scheme="lcars"] aside:where(.sidebar, .layout-drawer) .panel-hint {
+[data-scheme="lcars"] aside:where([data-sidebar]) .eyebrow,
+[data-scheme="lcars"] aside:where([data-sidebar]) .field-help,
+[data-scheme="lcars"] aside:where([data-sidebar]) .panel-hint {
 	color: #fca;
 	letter-spacing: 0.1em;
 	font-weight: bold;
@@ -250,6 +250,12 @@
    families, so this is stable markup, not a component-local class). */
 [data-scheme="lcars"] .flex.h-screen > div.flex-1 {
 	padding-top: 15px;
+}
+
+/* The lift plus the 60px plate below is the header's whole height; content
+   sized to the viewport under it (help's sticky rails) reads this token. */
+[data-scheme="lcars"] {
+	--shell-header-height: calc(15px + 60px);
 }
 
 [data-scheme="lcars"] header {
@@ -878,16 +884,18 @@
 	border-left-color: #8bd3c2;
 }
 
-/* The Files page tints its "modify at your own risk" banner with a scoped
-   class (0-2-0) that outranks the plain .alert rule; it is a warning, so it
-   takes the warning cap and LCARS amber text here. */
-[data-scheme="lcars"] main .alert.files-page-warning-banner {
+/* An alert marked data-status="warning" without the alert-warning modifier
+   (the Files page's "modify at your own risk" banner keeps its own tint in
+   the stock look) takes the warning cap here too. Its tint also sets the
+   text colour, which the plain .alert rule above leaves alone, so the text
+   is set to LCARS amber as well. */
+[data-scheme="lcars"] main .alert[data-status="warning"] {
 	background: rgba(255, 153, 0, 0.1);
 	border-left-color: #f90;
 	color: #fca;
 }
 
-[data-scheme="lcars"] main .files-page-warning-banner .alert-title {
+[data-scheme="lcars"] main .alert[data-status="warning"] .alert-title {
 	color: #f90;
 }
 
@@ -990,12 +998,4 @@
 
 [data-scheme="lcars"][data-scheme] main .docs-prose h2 span {
 	color: revert-layer;
-}
-
-/* Help's sticky nav and contents rail size to the viewport less the shell's
-   chrome (help/+page.svelte), which assumes the stock 3.5rem header. The
-   LCARS header plate is 19px taller, so the rails end that much higher or
-   their foot slides under the stats bar. */
-[data-scheme="lcars"] main :is(.help-nav, .help-toc) {
-	max-height: calc(100dvh - 9rem - 19px);
 }

@@ -107,6 +107,7 @@ there are no per-tone border tokens.
 | `--motion-fast` (150ms), `--motion-base` (250ms), `--ease` | all transitions; `prefers-reduced-motion` zeroes both in `base.css` |
 | `--control-h` (2.25rem), `--control-h-sm` (1.75rem) | field and button heights, so rows line up |
 | `--eyebrow-size` (11px), `--eyebrow-tracking` (0.12em) | the small uppercase tracked label used by panel titles and table headers |
+| `--shell-header-height` (unset; read with a 3.5rem fallback) | the app header's full height, including any offset a scheme adds above it; a scheme that changes the header's height sets this so content sized to the viewport under it (help's sticky rails) still fits |
 
 ### 2.3 Dark mode
 
@@ -134,7 +135,13 @@ A scheme may select:
   `[data-frame-variant]`, `[data-frame-emphasis]`, `[data-dialog]`, `[data-logo]`,
   `[data-sidebar-stats]`, `[data-poster]` (every PosterImage img and its
   fallback tile, plus the job-detail track posters — the hook for framing
-  cover art), plus the ARIA state attributes (`[aria-selected]`,
+  cover art), `[data-sidebar]` (the shell's sidebar and its mobile drawer,
+  both `aside`s; scope sidebar rules with `aside:where([data-sidebar])` so
+  other `aside`s in pages are left alone), `[data-settings-tabs]` (the
+  Settings tab strip), `[data-file-roots]` (the Files page's root tabs),
+  `[data-page-section]` (a self-contained page region: each Settings tab's
+  content and the Transcoder's jobs list) and `[data-page-section-title]`
+  (that region's heading), plus the ARIA state attributes (`[aria-selected]`,
   `[aria-checked]`, `[aria-pressed]`, `[aria-expanded]`);
 - its own decorative pseudo-elements.
 
@@ -216,7 +223,7 @@ contract; this table is a copy of it.
 
 | Block | Elements | Modifiers | State hooks |
 |---|---|---|---|
-| `alert` | `alert-title`, `alert-body` | `alert-info` (default), `alert-warning`, `alert-danger`, `alert-success`, `alert-lg` | none |
+| `alert` | `alert-title`, `alert-body` | `alert-info` (default), `alert-warning`, `alert-danger`, `alert-success`, `alert-lg` | `[data-status="warning"]` on an alert that is a warning but keeps a custom tint instead of `alert-warning` |
 | `badge` | none | `badge-status`, `badge-danger`, `badge-warning`, `badge-success`, `badge-info`, `badge-sm`, `badge-imdb` | `[data-status]` on `badge-status` |
 | `btn` | none | `btn-primary`, `btn-danger`, `btn-warning`, `btn-ghost`, `btn-link`, `btn-icon`, `btn-sm` | `:disabled`, `[aria-pressed="true"]`, `[data-busy="true"]`; a `.chevron` child rotates on `[aria-expanded="true"]` |
 | `card` | `card-header`, `card-title`, `card-body`, `card-footer`, `card-accent` | `card-status` (accent colour from `data-status`) | `[data-status]`, `[data-selected="true"]` |

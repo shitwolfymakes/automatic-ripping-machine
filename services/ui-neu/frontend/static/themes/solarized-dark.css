@@ -1,7 +1,7 @@
 [data-scheme="solarized-dark"] {
 	letter-spacing: 0.02em;
 }
-[data-scheme="solarized-dark"] aside:where(.sidebar, .layout-drawer) {
+[data-scheme="solarized-dark"] aside:where([data-sidebar]) {
 	background: #002b36 !important;
 	border-right: 1px solid #073642 !important;
 }

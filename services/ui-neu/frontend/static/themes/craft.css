@@ -3,23 +3,23 @@
 	image-rendering: pixelated;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) {
+[data-scheme="craft"] aside:where([data-sidebar]) {
 	border-right-width: 4px;
 	border-color: #000 !important;
 	padding: 4px;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-logo {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-logo {
 	color: #38ff38;
 	text-shadow: 2px 2px #000;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-logo img {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-logo img {
 	filter: brightness(1.2) saturate(0.8);
 	image-rendering: pixelated;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) hr {
+[data-scheme="craft"] aside:where([data-sidebar]) hr {
 	border: none;
 	height: 2px;
 	background: #000;
@@ -30,7 +30,7 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav {
 	gap: 2px;
 	/* the link margin also sat above the first link and below the
 	   last one, which a gap does not reproduce */
@@ -38,7 +38,7 @@
 	padding-bottom: calc(1rem + 2px);
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-item {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-item {
 	background: #707070;
 	border: 2px solid #000;
 	border-top-color: #aaa;
@@ -52,18 +52,18 @@
 	padding: 0.7rem;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-item svg {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-item svg {
 	display: none;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-item:hover {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-item:hover {
 	background: #8080ff !important;
 	border-top-color: #9999ff;
 	border-left-color: #9999ff;
 	color: #ffffa0 !important;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .nav-item[data-active="true"] {
+[data-scheme="craft"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background: #4a4a4a !important;
 	border-top-color: #222;
 	border-left-color: #222;
@@ -87,19 +87,19 @@
 /* Muted sidebar readouts (the stats labels and the Storage eyebrow).
    The colour is a token override scoped to the sidebar, so it reaches
    component-local text too; the typography rides the .eyebrow block. */
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) {
+[data-scheme="craft"] aside:where([data-sidebar]) {
 	--color-text-muted: #fff;
 	--color-text-faint: #fff;
 }
 
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) .eyebrow {
+[data-scheme="craft"] aside:where([data-sidebar]) .eyebrow {
 	color: #fff;
 	font-size: 0.7rem;
 }
 
 /* The CPU temperature readout in the sidebar stats reads the
    accent-1 role. */
-[data-scheme="craft"] aside:where(.sidebar, .layout-drawer) {
+[data-scheme="craft"] aside:where([data-sidebar]) {
 	--color-accent-1: #ff5555;
 }
 

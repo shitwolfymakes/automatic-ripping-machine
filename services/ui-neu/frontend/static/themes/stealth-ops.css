@@ -8,7 +8,7 @@
 	text-transform: uppercase;
 	letter-spacing: 0.2em;
 }
-[data-scheme="stealth-ops"] aside:where(.sidebar, .layout-drawer) .nav-item[data-active="true"] {
+[data-scheme="stealth-ops"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	color: #ef4444 !important;
 	background: transparent !important;
 	border-right: 2px solid #ef4444;

@@ -244,7 +244,7 @@
 	<!-- Header -->
 	<div class="sessions-area-header">
 		<div>
-			<h2 class="sessions-area-title">Sessions</h2>
+			<h2 class="sessions-area-title" data-page-section-title>Sessions</h2>
 			<p class="sessions-area-lede">
 				Sessions bundle a rip preset, an optional transcode preset, and an output-path template into a reusable recipe.
 				Choose a session when inserting a disc.

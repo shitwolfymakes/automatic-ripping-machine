@@ -43,8 +43,17 @@
 	--color-status-success: rgb(0, 255, 0);
 	--color-status-error: rgb(255, 40, 40);
 }
+/* The shared window parts, set once: the double gold ridge that runs beside
+   titlebar text, the raised bevel's border colours (light top/left, dark
+   bottom/right), the titlebar's gradient and the window body. */
+[data-scheme='winamp-97'] {
+	--winamp-ridge: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	--winamp-bevel: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	--winamp-titlebar: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	--winamp-window: rgb(34, 36, 56);
+}
 /* site logo — LED-green tint (in-app this comes from the --logo-filter token) */
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-logo img {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-logo img {
 	filter: brightness(0) invert(58.5%) sepia(100%) saturate(400%) hue-rotate(9deg) brightness(93%);
 }
 /* nav — same gray plates as the transport buttons */
@@ -52,14 +61,14 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav {
 	gap: 0.5rem;
 	/* margin-bottom only in the original, so the trailing space is
 	   reproduced on the nav but there is no leading space to add */
 	padding-bottom: calc(1rem + 0.5rem);
 }
 
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item {
 	position: relative;
 	overflow: hidden;
 	padding-top: 0.4rem;
@@ -78,7 +87,7 @@
 	box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75), inset -1px -1px 0 rgba(0, 0, 0, 0.4);
 }
 /* nav count badge — pin to the plate's right edge, compact LED tag */
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item .nav-badge {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item .nav-badge {
 	position: absolute;
 	right: 5px;
 	top: 50%;
@@ -88,7 +97,7 @@
 	padding: 0.1rem 0.3rem;
 	color: rgb(20, 16, 4) !important;
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item svg {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item svg {
 	color: rgb(38, 40, 50) !important;
 	width: 1.75rem;
 	height: 1.75rem;
@@ -96,16 +105,16 @@
 	margin-bottom: -0.3rem;
 	filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.55));
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item:hover {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item:hover {
 	filter: brightness(1.06);
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item[data-active='true'] {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item[data-active='true'] {
 	background: linear-gradient(180deg, rgb(186, 188, 196), rgb(204, 206, 213)) !important;
 	color: rgb(38, 40, 50) !important;
 	border-color: rgb(58, 62, 72) rgb(250, 251, 253) rgb(250, 251, 253) rgb(58, 62, 72);
 	box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.45), inset -1px -1px 0 rgba(255, 255, 255, 0.35);
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) .nav-item[data-active='true']::before {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) .nav-item[data-active='true']::before {
 	content: '';
 	width: 7px;
 	height: 7px;
@@ -115,11 +124,11 @@
 	box-shadow: 0 0 5px rgba(0, 255, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 	flex: none;
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) hr,
+[data-scheme='winamp-97'] aside:where([data-sidebar]) hr,
 [data-scheme='winamp-97'] main hr {
 	border: none !important;
 	height: 6px;
-	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	background: var(--winamp-ridge);
 }
 /* .progress-track/.progress-fill class branches: the baseline reached every
    meter (including the sidebar/bottom stats bars) through a universal
@@ -147,8 +156,8 @@
 }
 [data-scheme='winamp-97'] .section-frame {
 	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
+	border-color: var(--winamp-bevel);
+	background-color: var(--winamp-window);
 }
 /* dark text on bright LED badge fills (white stays on error/unknown) */
 [data-scheme='winamp-97'] .badge-status[data-status='scanning'],
@@ -195,20 +204,20 @@
 /* top chrome — header as main-window titlebar, sidebar as steel panel */
 [data-scheme='winamp-97'] header {
 	background:
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left bottom / 100% 6px no-repeat,
-		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46)) !important;
+		var(--winamp-ridge) left bottom / 100% 6px no-repeat,
+		var(--winamp-titlebar) !important;
 	border-bottom: 2px solid rgb(15, 16, 26) !important;
 	box-shadow: inset 0 1px 0 rgb(85, 90, 125);
 	padding-bottom: 6px;
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) {
 	background: linear-gradient(180deg, rgb(30, 32, 50), rgb(20, 22, 38)) !important;
 	border-right: 2px solid rgb(15, 16, 26) !important;
 	box-shadow: inset -1px 0 0 rgb(60, 64, 90);
 }
 /* sidebar panel headings — titlebars above nav and stats */
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) nav::before,
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) nav + div::before {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) nav::before,
+[data-scheme='winamp-97'] aside:where([data-sidebar]) nav + div::before {
 	display: block;
 	text-align: center;
 	font-size: 0.62rem;
@@ -217,21 +226,21 @@
 	color: rgb(214, 218, 235);
 	text-shadow: 1px 1px 0 rgb(0, 0, 0);
 	background:
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left 0.5rem center / calc(50% - 5.4em) 6px no-repeat,
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) right 0.5rem center / calc(50% - 5.4em) 6px no-repeat,
-		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+		var(--winamp-ridge) left 0.5rem center / calc(50% - 5.4em) 6px no-repeat,
+		var(--winamp-ridge) right 0.5rem center / calc(50% - 5.4em) 6px no-repeat,
+		var(--winamp-titlebar);
 	border-top: 1px solid rgb(85, 90, 125);
 	border-bottom: 1px solid rgb(12, 13, 22);
 	padding: 0.3rem 0.5rem;
 	margin-bottom: 0.6rem;
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) nav::before {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) nav::before {
 	content: 'NAVIGATION';
 	/* .nav is a flex column, so its gap also lands between this titlebar
 	   pseudo-element and the first link; pull that back out. */
 	margin-bottom: calc(0.9rem - 0.5rem);
 }
-[data-scheme='winamp-97'] aside:where(.sidebar, .layout-drawer) nav + div::before {
+[data-scheme='winamp-97'] aside:where([data-sidebar]) nav + div::before {
 	content: 'SYSTEM';
 }
 /* plain-card containers — steel chassis bevel */
@@ -239,10 +248,10 @@
 [data-scheme='winamp-97'] main .card,
 [data-scheme='winamp-97'] main .stat {
 	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125) !important;
+	border-color: var(--winamp-bevel) !important;
 	border-radius: 0 !important;
 	position: relative;
-	background-image: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) !important;
+	background-image: var(--winamp-ridge) !important;
 	background-size: calc(100% - 12px) 6px !important;
 	background-position: 6px 4px !important;
 	background-repeat: no-repeat !important;
@@ -287,15 +296,15 @@
    band All Jobs' h2 gets. */
 [data-scheme='winamp-97'] main .logs-panel {
 	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
+	border-color: var(--winamp-bevel);
 	border-radius: 0;
-	background-color: rgb(34, 36, 56);
+	background-color: var(--winamp-window);
 }
 [data-scheme='winamp-97'] main .list-panel-header > h1.list-panel-title {
 	display: flex;
 	align-items: center;
 	padding: 0.35rem 0.75rem;
-	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	background: var(--winamp-titlebar);
 	border: 1px solid rgb(12, 13, 22);
 	border-top-color: rgb(85, 90, 125);
 	color: rgb(214, 218, 235);
@@ -312,14 +321,14 @@
 	flex: 1;
 	height: 6px;
 	margin: 0 0.75rem;
-	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	background: var(--winamp-ridge);
 }
 /* card headings — winamp titlebar band with gold ridge stripes */
 [data-scheme='winamp-97'][data-scheme] main h2 {
 	display: flex;
 	align-items: center;
 	flex: 1;
-	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	background: var(--winamp-titlebar);
 	border: 1px solid rgb(12, 13, 22);
 	border-top-color: rgb(85, 90, 125);
 	color: rgb(214, 218, 235) !important;
@@ -341,11 +350,11 @@
 	flex: 1;
 	height: 6px;
 	margin: 0 0.75rem;
-	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	background: var(--winamp-ridge);
 }
 /* container headers — winamp titlebar: navy bar, embossed label, gold ridge stripes */
 [data-scheme='winamp-97'] .section-frame-bar-top {
-	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46)) !important;
+	background: var(--winamp-titlebar) !important;
 	color: rgb(214, 218, 235) !important;
 	border-bottom: 1px solid rgb(12, 13, 22);
 	text-shadow: 1px 1px 0 rgb(0, 0, 0);
@@ -358,7 +367,7 @@
 	flex: 1;
 	height: 6px;
 	margin: 0 0.75rem;
-	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	background: var(--winamp-ridge);
 }
 [data-scheme='winamp-97'] .section-frame-bar-bottom {
 	background: linear-gradient(180deg, rgb(34, 36, 56), rgb(22, 24, 40)) !important;
@@ -521,19 +530,16 @@
 	box-shadow: 0 0 5px rgba(0, 255, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 	flex: none;
 }
-/* Settings tab strip — its own winamp window, titled like the sidebar's
-   NAVIGATION panel, with the tab buttons inside it */
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] {
+/* Settings tab strip and Files root tabs — each is its own small winamp
+   window, titled like the sidebar's NAVIGATION panel, with the tab buttons
+   inside it */
+[data-scheme='winamp-97'] main :is([data-settings-tabs], [data-file-roots]) {
 	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
+	border-color: var(--winamp-bevel);
+	background-color: var(--winamp-window);
 	padding: 0 0.75rem 0.75rem;
-	margin-bottom: 0.75rem;
 }
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs']::before {
-	content: 'SECTIONS';
-	display: block;
-	margin: 0 -0.75rem 0.75rem;
+[data-scheme='winamp-97'] main :is([data-settings-tabs], [data-file-roots])::before {
 	padding: 0.35rem 0.75rem;
 	text-align: center;
 	font-size: 0.68rem;
@@ -542,13 +548,21 @@
 	color: rgb(214, 218, 235);
 	text-shadow: 1px 1px 0 rgb(0, 0, 0);
 	background:
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) right 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
-		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+		var(--winamp-ridge) left 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		var(--winamp-ridge) right 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
+		var(--winamp-titlebar);
 	border-top: 1px solid rgb(85, 90, 125);
 	border-bottom: 1px solid rgb(12, 13, 22);
 }
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] > .tabs {
+[data-scheme='winamp-97'] main [data-settings-tabs] {
+	margin-bottom: 0.75rem;
+}
+[data-scheme='winamp-97'] main [data-settings-tabs]::before {
+	content: 'SECTIONS';
+	display: block;
+	margin: 0 -0.75rem 0.75rem;
+}
+[data-scheme='winamp-97'] main [data-settings-tabs] > .tabs {
 	margin-bottom: 0;
 	border-bottom: none;
 	box-shadow: none;
@@ -557,116 +571,74 @@
 	flex-wrap: wrap;
 	gap: 0.5rem;
 }
-/* Settings tabs — each tab is one winamp window: the tab's content (every
-   sibling after the tab strip; inactive ones are [hidden]) gets the
-   container bevel, and its page heading becomes the titlebar spanning the
-   window's top edge (negative margins cancel the window's side padding). */
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :not([hidden], h2) {
-	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
-	padding: 0 1rem 1rem;
-}
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ * :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title) {
-	flex: 1 1 100%;
-	margin: 0 -1rem 0.75rem;
-}
-/* the heading's block takes a whole flex header row (Sessions), and a row
-   the heading shares with buttons (Drives) wraps them below it */
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)),
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ * :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)) {
-	flex: 1 1 100%;
-	flex-wrap: wrap;
-}
-/* a heading, or a heading row, placed straight after the tab strip (Themes,
-   Drives) is the window's top; the sibling under it joins it as the body */
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ h2 {
-	margin-bottom: 0;
-}
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title)) {
-	border-bottom: none;
-	margin-bottom: 0;
-	padding-bottom: 0;
-}
-[data-scheme='winamp-97'] main nav[aria-label='Settings tabs'] ~ :is(h2, :has(> :is(h2.schema-config-form-title, h2.settings-page-section-title, h2.interface-settings-title, h2.sessions-area-title))) + * {
-	border-top: none;
-	padding-top: 1rem;
-}
-/* Files page — the root tabs are a LOCATIONS window like the settings
-   SECTIONS one, and the breadcrumb row plus the listing below it are one
-   browser window: the row is its titlebar (breadcrumb left, gold ridge
-   filling the middle, toolbar right) and the listing its body. */
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > [aria-label='File root tabs'] {
-	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
-	padding: 0 0.75rem 0.75rem;
+/* the root tabs are the .tabs strip itself, so the titlebar is a full-width
+   flex item that pushes the buttons onto the row below it */
+[data-scheme='winamp-97'] main [data-file-roots] {
 	flex-wrap: wrap;
 	gap: 0.5rem;
 	box-shadow: none;
 	overflow: visible;
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > [aria-label='File root tabs']::before {
+[data-scheme='winamp-97'] main [data-file-roots]::before {
 	content: 'LOCATIONS';
 	flex: 1 1 100%;
 	margin: 0 -0.75rem 0.25rem;
-	padding: 0.35rem 0.75rem;
-	text-align: center;
-	font-size: 0.68rem;
-	font-weight: 700;
-	letter-spacing: 0.15em;
-	color: rgb(214, 218, 235);
-	text-shadow: 1px 1px 0 rgb(0, 0, 0);
-	background:
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) left 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
-		linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px) right 0.75rem center / calc(50% - 6.5em) 6px no-repeat,
-		linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
-	border-top: 1px solid rgb(85, 90, 125);
-	border-bottom: 1px solid rgb(12, 13, 22);
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) {
+/* Page sections (each Settings tab, the Transcoder's jobs list) — each is one
+   winamp window: the section gets the container bevel, and its heading
+   becomes the titlebar spanning the window's top edge (negative margins
+   cancel the window's side padding). */
+[data-scheme='winamp-97'] main [data-page-section] {
+	border: 2px solid;
+	border-color: var(--winamp-bevel);
+	background-color: var(--winamp-window);
+	padding: 0 1rem 1rem;
+}
+[data-scheme='winamp-97'] main [data-page-section] [data-page-section-title] {
+	flex: 1 1 100%;
+	margin: 0 -1rem 0.75rem;
+}
+/* the heading's block takes a whole flex header row (Sessions), and a row
+   the heading shares with buttons (Drives) wraps them below it */
+[data-scheme='winamp-97'] main [data-page-section] :has(> [data-page-section-title]) {
+	flex: 1 1 100%;
+	flex-wrap: wrap;
+}
+[data-scheme='winamp-97'] main [data-page-section] > .tabs {
+	box-shadow: none;
+	flex-wrap: wrap;
+}
+/* Files page — the breadcrumb row plus the listing below it are one browser
+   window: the row is its titlebar (breadcrumb left, gold ridge filling the
+   middle, toolbar right) and the listing its body. */
+[data-scheme='winamp-97'] main .stack:has(> [data-file-roots]) > div:has(> nav.breadcrumb) {
 	border: 2px solid;
 	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(12, 13, 22) rgb(85, 90, 125);
 	border-bottom-width: 1px;
-	background: linear-gradient(180deg, rgb(48, 52, 78), rgb(26, 28, 46));
+	background: var(--winamp-titlebar);
 	padding: 0.35rem 0.5rem 0.35rem 0.75rem;
 	color: rgb(214, 218, 235);
 	text-shadow: 1px 1px 0 rgb(0, 0, 0);
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) > nav.breadcrumb {
+[data-scheme='winamp-97'] main .stack:has(> [data-file-roots]) > div:has(> nav.breadcrumb) > nav.breadcrumb {
 	order: 0;
 	min-width: 0;
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb)::after {
+[data-scheme='winamp-97'] main .stack:has(> [data-file-roots]) > div:has(> nav.breadcrumb)::after {
 	content: '';
 	order: 1;
 	flex: 1;
 	height: 6px;
-	background: linear-gradient(180deg, rgb(196, 178, 50) 0, rgb(196, 178, 50) 1px, rgba(0, 0, 0, 0.65) 1px, rgba(0, 0, 0, 0.65) 2px, transparent 2px, transparent 3px, rgb(196, 178, 50) 3px, rgb(196, 178, 50) 4px, rgba(0, 0, 0, 0.65) 4px, rgba(0, 0, 0, 0.65) 5px, transparent 5px);
+	background: var(--winamp-ridge);
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) > :not(nav) {
+[data-scheme='winamp-97'] main .stack:has(> [data-file-roots]) > div:has(> nav.breadcrumb) > :not(nav) {
 	order: 2;
 }
-[data-scheme='winamp-97'] main .stack:has(> [aria-label='File root tabs']) > div:has(> nav.breadcrumb) + div {
+[data-scheme='winamp-97'] main .stack:has(> [data-file-roots]) > div:has(> nav.breadcrumb) + div {
 	margin-top: -1rem;
 	border: 2px solid;
 	border-top: none;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
+	border-color: var(--winamp-bevel);
+	background-color: var(--winamp-window);
 	padding: 0.75rem;
-}
-/* Transcoder page — the Transcode Jobs section (titlebar, filter tabs and
-   task list) is one winamp window; its heading spans the top edge. */
-[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) {
-	border: 2px solid;
-	border-color: rgb(85, 90, 125) rgb(15, 16, 26) rgb(15, 16, 26) rgb(85, 90, 125);
-	background-color: rgb(34, 36, 56);
-	padding: 0 1rem 1rem;
-}
-[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) > h2 {
-	margin: 0 -1rem 0.75rem;
-}
-[data-scheme='winamp-97'] main section:has(> h2.transcoder-page-section-title) > .tabs {
-	box-shadow: none;
-	flex-wrap: wrap;
 }
