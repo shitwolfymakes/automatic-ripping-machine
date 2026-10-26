@@ -30,9 +30,12 @@ class ResolveMatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["tmdb", "omdb", "tvmaze", "tvdb"]
+    # The candidate's own poster, edited or not: it becomes the automatic one.
     poster_url: str | None = None
-    # True when the operator edited the poster URL before using the match.
+    # True when the operator edited the poster URL before using the match;
+    # `poster_url_manual` is then the override (null clears it).
     poster_is_manual: bool = False
+    poster_url_manual: str | None = None
     facts: IdentityFacts | None = None
 
 

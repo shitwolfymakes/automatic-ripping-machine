@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TitleSearch from './TitleSearch.svelte';
 import { createJob } from './__fixtures__/job';
-import type { MetadataCandidate } from '$lib/types/api.gen';
+import type { MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -469,7 +469,13 @@ describe('TitleSearch', () => {
 					year: 1974,
 					media_type: 'tv',
 					external_ids: { ...ids, tvmaze: null },
-					match: { provider: 'tmdb', poster_url: null, poster_is_manual: false, facts: null }
+					match: {
+						provider: 'tmdb',
+						poster_url: null,
+						poster_is_manual: false,
+						poster_url_manual: null,
+						facts: null
+					}
 				})
 			);
 			expect(onseries).toHaveBeenCalled();
@@ -595,6 +601,7 @@ describe('TitleSearch', () => {
 					provider: 'tvmaze',
 					poster_url: 'https://static.tvmaze.com/k.jpg',
 					poster_is_manual: false,
+					poster_url_manual: null,
 					facts: { genres: ['Horror'], cast: [], creators: [] }
 				}
 			});
@@ -611,9 +618,28 @@ describe('TitleSearch', () => {
 			await fireEvent.input(screen.getByLabelText('Poster URL'), { target: { value: 'https://x.example/p.jpg' } });
 			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
 			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			// The candidate's poster stays the automatic one; the edit is the override.
 			expect(mockResolve.mock.calls[0][1].match).toMatchObject({
-				poster_url: 'https://x.example/p.jpg',
-				poster_is_manual: true
+				poster_url: 'https://static.tvmaze.com/k.jpg',
+				poster_is_manual: true,
+				poster_url_manual: 'https://x.example/p.jpg'
+			});
+		});
+
+		it('a cleared poster is sent as a cleared override', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [tvmazeRow] });
+			renderComponent(TitleSearch, {
+				props: { job: createJob({ status: 'awaiting_user_id', title: 'Kolchak', media_type: 'tv' }) }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Edit before using' }));
+			await fireEvent.input(screen.getByLabelText('Poster URL'), { target: { value: '' } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
+			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+			expect(mockResolve.mock.calls[0][1].match).toMatchObject({
+				poster_url: 'https://static.tvmaze.com/k.jpg',
+				poster_is_manual: true,
+				poster_url_manual: null
 			});
 		});
 
@@ -696,8 +722,9 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: 'Use this match' }));
 			await waitFor(() => expect(mockResolve).toHaveBeenCalled());
 			expect(mockResolve.mock.calls[0][1].match).toMatchObject({
-				poster_url: 'https://typed/p.jpg',
-				poster_is_manual: true
+				poster_url: 'https://detail/p.jpg',
+				poster_is_manual: true,
+				poster_url_manual: 'https://typed/p.jpg'
 			});
 		});
 
@@ -721,6 +748,30 @@ describe('TitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: 'Edit before using' }));
 			expect(editTitleInput()).toHaveValue('Second Show');
 			expect(screen.getByLabelText('Year')).toHaveValue('1980');
+		});
+
+		it('a Use that lands after picking another row reports under its own row only', async () => {
+			const row2 = createCandidate({
+				title: 'Second Show',
+				year: 1980,
+				kind: 'tv',
+				provider: 'tvmaze',
+				provider_id: '2'
+			});
+			let finish!: (v: ResolveResponse) => void;
+			mockResolve.mockReturnValue(new Promise((r) => (finish = r)));
+			mockMatchDetails.mockResolvedValue({ candidates: [] });
+			mockSearchMetadata.mockResolvedValue({ candidates: [row, row2] });
+			renderComponent(TitleSearch, { props: { job: job() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await fireEvent.click(await screen.findByRole('button', { name: 'Use this match' }));
+			await fireEvent.click(screen.getByRole('button', { name: /^Second Show/ }));
+			finish({ job: job() } as unknown as ResolveResponse);
+			await flush();
+			expect(screen.queryByText('Identified')).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: /^Kolchak/ }));
+			await flush();
+			expect(screen.getByText('Identified')).toBeInTheDocument();
 		});
 	});
 });

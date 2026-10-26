@@ -17094,6 +17094,17 @@
             "title": "Poster Is Manual",
             "default": false
           },
+          "poster_url_manual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url Manual"
+          },
           "facts": {
             "anyOf": [
               {

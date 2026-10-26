@@ -1161,21 +1161,44 @@ _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
 _MATCH_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")
 
 
+def _same_show(old: ExternalIds, sent: ExternalIds) -> bool:
+    """Whether a picked match names the show already stored: at least one show
+    id agrees and none disagrees. An id only one side knows proves nothing
+    either way (TMDb has no TVmaze id, OMDb only an IMDb one)."""
+    agree = False
+    for name in ("imdb", "tmdb", "tvdb", "tvmaze"):
+        a, b = getattr(old, name), getattr(sent, name)
+        if a is None or b is None:
+            continue
+        if a != b:
+            return False
+        agree = True
+    return agree
+
+
 def _apply_match(md: JobMetadata, req: ResolveRequest, now: datetime) -> bool:
     """A picked search result states the whole show (match picker spec 3.6):
-    its ids replace the stored show ids wholesale, tvmaze included, and the
-    identity records the provider and a facts snapshot. Returns whether a
-    stored show id changed or was cleared (a show change)."""
+    a different show's ids replace the stored show ids wholesale, tvmaze
+    included; the same show re-picked from another provider only fills in,
+    so the ids that provider lacks are kept. The identity records the
+    provider and a facts snapshot. Returns whether a stored show id was
+    replaced or cleared (a show change)."""
     assert req.match is not None
     sent = req.external_ids or ExternalIds()
     old = md.identity.external_ids if md.identity is not None else ExternalIds()
-    show_changed = any(
-        getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
-        for name in ("imdb", "tmdb", "tvdb", "tvmaze")
-    )
     ids = old.model_copy()
-    for name in _MATCH_ID_FIELDS:
-        setattr(ids, name, getattr(sent, name))
+    if _same_show(old, sent):
+        show_changed = False
+        for name in _MATCH_ID_FIELDS:
+            if getattr(sent, name) is not None:
+                setattr(ids, name, getattr(sent, name))
+    else:
+        show_changed = any(
+            getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
+            for name in ("imdb", "tmdb", "tvdb", "tvmaze")
+        )
+        for name in _MATCH_ID_FIELDS:
+            setattr(ids, name, getattr(sent, name))
     facts = req.match.facts
     md.identity = JobIdentity(
         provider=req.match.provider,
@@ -1347,11 +1370,14 @@ async def resolve_identity(
     job.year = req.year
     if req.match is not None:
         # A picked match's poster is the automatic one; an operator-edited
-        # URL stays a manual override (match picker spec 3.6).
-        if req.match.poster_is_manual:
-            job.poster_url_manual = req.match.poster_url
-        else:
+        # URL is a manual override (match picker spec 3.6). A match with no
+        # poster keeps the stored one unless it belongs to the old show, and
+        # never clears an override.
+        if req.match.poster_url is not None or show_changed:
             job.poster_url = req.match.poster_url
+        if req.match.poster_is_manual:
+            job.poster_url_manual = req.match.poster_url_manual
+        elif req.match.poster_url is not None:
             job.poster_url_manual = None
     # Fix 75-5: media_type is a classification, not part of the identity
     # statement -- omitted keeps the stored value, but an EXPLICIT null

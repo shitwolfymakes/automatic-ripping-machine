@@ -3936,6 +3936,10 @@ export type ResolveMatch = {
      * Poster Is Manual
      */
     poster_is_manual?: boolean;
+    /**
+     * Poster Url Manual
+     */
+    poster_url_manual?: string | null;
     facts?: IdentityFacts | null;
 };
 
