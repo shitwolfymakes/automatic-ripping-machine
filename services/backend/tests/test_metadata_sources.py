@@ -7,6 +7,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
+import respx  # noqa: E402
 from arm_backend.metadata import sources as sources_mod  # noqa: E402
 from arm_backend.metadata.base import MetadataResult  # noqa: E402
 from arm_backend.metadata.sources import build_online_sources, capability  # noqa: E402
@@ -249,6 +250,32 @@ async def test_tvdb_adapter_is_tv_only_and_passes_the_key(monkeypatch):
         assert (await tvdb.lookup_imdb(cfg, "tt0411008")).title == "Lost"
     assert ("series", "lost") in calls and ("cands", "lost", 2) in calls and ("imdb", "tt0411008") in calls
     assert all(c[1] == "tvdb-k" for c in calls if c[0] == "init")
+
+
+@respx.mock
+async def test_each_title_source_has_a_details_capability():
+    respx.get("https://api.themoviedb.org/3/tv/5").mock(
+        return_value=httpx.Response(200, json={"id": 5, "name": "K", "external_ids": {}})
+    )
+    respx.get("https://www.omdbapi.com/").mock(
+        return_value=httpx.Response(
+            200, json={"Response": "True", "Title": "K", "Year": "1974", "Type": "series", "imdbID": "tt1"}
+        )
+    )
+    respx.get("https://api.tvmaze.com/shows/7").mock(return_value=httpx.Response(200, json={"id": 7, "name": "K"}))
+    respx.post("https://api4.thetvdb.com/v4/login").mock(
+        return_value=httpx.Response(200, json={"data": {"token": "t"}})
+    )
+    respx.get("https://api4.thetvdb.com/v4/series/9/extended").mock(
+        return_value=httpx.Response(200, json={"data": {"id": 9, "name": "K"}})
+    )
+    cfg = _config(tvdb_api_key="k")
+    async with httpx.AsyncClient() as http:
+        sources = build_online_sources(http)
+        assert (await sources["tmdb"].details(cfg, "tv", "5")).title == "K"
+        assert (await sources["omdb"].details(cfg, "tv", "tt1")).kind == "tv"
+        assert (await sources["tvmaze"].details(cfg, "tv", "7")).payload["tvmaze_id"] == "7"
+        assert (await sources["tvdb"].details(cfg, "tv", "9")).payload["tvdb_id"] == "9"
 
 
 async def test_musicbrainz_user_agent_is_the_shared_constant():

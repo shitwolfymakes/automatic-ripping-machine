@@ -138,3 +138,31 @@ def test_show_to_result_poster_fallbacks():
     assert original is not None and original.payload["poster_url"] == "https://x/o.jpg"
     bad = show_to_result({"name": "X", "image": {"medium": "ftp://x/m.jpg"}})
     assert bad is not None and "poster_url" not in bad.payload
+
+
+@respx.mock
+async def test_show_details_embeds_cast_and_episodes(http_client):
+    route = respx.get(f"{_BASE}/shows/4607").mock(
+        return_value=httpx.Response(
+            200,
+            json={**_SHOW, "_embedded": {"cast": [{"person": {"name": "Matthew Fox"}}], "episodes": [{"id": 1}]}},
+        )
+    )
+    result = await TVMazeClient(http_client).show_details("4607")
+    assert route.calls.last.request.url.params.get_list("embed[]") == ["cast", "episodes"]
+    assert result.payload["tvmaze_id"] == "4607"
+    assert result.payload["_embedded"]["cast"][0]["person"]["name"] == "Matthew Fox"
+
+
+@respx.mock
+async def test_show_details_404_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/shows/9").mock(return_value=httpx.Response(404))
+    with pytest.raises(LookupError):
+        await TVMazeClient(http_client).show_details("9")
+
+
+@respx.mock
+async def test_show_details_missing_name_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/shows/9").mock(return_value=httpx.Response(200, json={"id": 9}))
+    with pytest.raises(LookupError):
+        await TVMazeClient(http_client).show_details("9")

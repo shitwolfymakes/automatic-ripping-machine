@@ -139,3 +139,17 @@ class TVDBClient:
         """POST /v4/login. Returns None on success; raises LookupError on
         auth/transport failure, LookupTimeout on timeout."""
         await self._login()
+
+    async def series_details(self, tvdb_id: str) -> MetadataResult:
+        """`/series/{id}/extended` with translations, characters included
+        (no `short`), for the details endpoint."""
+        body = await self._get_authed(f"/series/{quote(tvdb_id, safe='')}/extended", {"meta": "translations"})
+        data = body.get("data") if isinstance(body, dict) else None
+        result = series_to_result(data)
+        if result is None or not isinstance(data, dict):
+            raise LookupError("tvdb malformed response")
+        for remote in data.get("remoteIds") or []:
+            if isinstance(remote, dict) and str(remote.get("sourceName", "")).upper() == "IMDB" and remote.get("id"):
+                result.payload["imdb_id"] = str(remote["id"])
+                break
+        return result

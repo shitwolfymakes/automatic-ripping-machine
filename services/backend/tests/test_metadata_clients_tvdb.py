@@ -143,3 +143,61 @@ async def test_malformed_login_body_is_a_lookup_error(http_client):
         await TVDBClient("key", http_client).search_series("lost")
     with pytest.raises(LookupError):
         await TVDBClient("key", http_client).validate_key()
+
+
+@respx.mock
+async def test_series_details_reads_extended_with_translations(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    route = respx.get(f"{_BASE}/series/77170/extended").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": 77170,
+                    "name": "Kolchak: The Night Stalker",
+                    "year": "1974",
+                    "image": "https://artworks.thetvdb.com/banners/posters/77170-1.jpg",
+                    "remoteIds": [
+                        "junk",
+                        {"id": "5", "sourceName": "TheMovieDB.com"},
+                        {"id": "tt0071003", "sourceName": "IMDB"},
+                    ],
+                    "characters": [{"personName": "Darren McGavin", "peopleType": "Actor", "sort": 0}],
+                }
+            },
+        )
+    )
+    result = await TVDBClient("k", http_client).series_details("77170")
+    assert route.calls.last.request.url.params["meta"] == "translations"
+    assert "short" not in route.calls.last.request.url.params
+    assert (result.title, result.year) == ("Kolchak: The Night Stalker", 1974)
+    assert result.payload["tvdb_id"] == "77170" and result.payload["imdb_id"] == "tt0071003"
+    assert result.payload["poster_url"].startswith("https://artworks.thetvdb.com/")
+
+
+@respx.mock
+async def test_series_details_without_imdb_remote_id_skips_it(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    respx.get(f"{_BASE}/series/2/extended").mock(
+        return_value=httpx.Response(
+            200, json={"data": {"id": 2, "name": "X", "remoteIds": [{"id": "1", "sourceName": "Other"}]}}
+        )
+    )
+    result = await TVDBClient("k", http_client).series_details("2")
+    assert result.payload.get("imdb_id") in (None, "")
+
+
+@respx.mock
+async def test_series_details_malformed_is_a_lookup_error(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    respx.get(f"{_BASE}/series/1/extended").mock(return_value=httpx.Response(200, json={"data": []}))
+    with pytest.raises(LookupError):
+        await TVDBClient("k", http_client).series_details("1")
+
+
+@respx.mock
+async def test_series_details_missing_name_is_a_lookup_error(http_client):
+    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
+    respx.get(f"{_BASE}/series/1/extended").mock(return_value=httpx.Response(200, json={"data": {"id": 1}}))
+    with pytest.raises(LookupError):
+        await TVDBClient("k", http_client).series_details("1")
