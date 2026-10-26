@@ -177,7 +177,11 @@
 	.help-toc {
 		position: sticky;
 		top: 0;
-		max-height: calc(100dvh - 6rem);
+		/* the viewport less the shell around main's scroll area: the header
+		   (h-14 unless a scheme says otherwise), main's lg:p-6 top padding, the
+		   fixed stats bar when the layout shows one, and the same padding as a
+		   gap above the bottom edge */
+		max-height: calc(100dvh - var(--shell-header-height, 3.5rem) - var(--shell-footer-height, 0px) - 3rem);
 		overflow-y: auto;
 	}
 	.help-topics {

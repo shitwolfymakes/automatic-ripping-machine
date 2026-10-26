@@ -17,7 +17,7 @@
 	opacity: 0.4;
 }
 
-[data-scheme="hollywood-video-v2"] aside {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) {
 	background-color: #160E26 !important;
 	border-right: 4px solid #D90B1C !important;
 	box-shadow: 10px 0 30px rgba(0,0,0,0.8);
@@ -27,7 +27,7 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme="hollywood-video-v2"] aside .nav {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) .nav {
 	gap: 8px;
 	/* the link margin also sat above the first link and below the
 	   last one, which a gap does not reproduce */
@@ -35,7 +35,7 @@
 	padding-bottom: calc(1rem + 8px);
 }
 
-[data-scheme="hollywood-video-v2"] aside .nav-item {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) .nav-item {
 	text-transform: uppercase;
 	font-weight: 900;
 	letter-spacing: 0.1em;
@@ -45,19 +45,19 @@
 	border: 2px solid transparent;
 }
 
-[data-scheme="hollywood-video-v2"] aside .nav-item:hover {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) .nav-item:hover {
 	color: #F2B705 !important;
 	background: rgba(242, 183, 5, 0.1) !important;
 }
 
-[data-scheme="hollywood-video-v2"] aside .nav-item[data-active="true"] {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background-color: #231640 !important;
 	color: #F2B705 !important;
 	border: 2px solid #231640;
 	text-shadow: 0 0 8px rgba(35, 22, 64, 0.5);
 }
 
-[data-scheme="hollywood-video-v2"] aside .nav-logo img {
+[data-scheme="hollywood-video-v2"] aside:where([data-sidebar]) .nav-logo img {
 	filter: drop-shadow(0 0 6px rgba(217, 11, 28, 0.4));
 }
 

@@ -293,7 +293,7 @@
 		{/if}
 	{:else}
 		<div>
-			<h2 class="schema-config-form-title">{groupLabel(group.name)}</h2>
+			<h2 class="schema-config-form-title" data-page-section-title>{groupLabel(group.name)}</h2>
 			{#if blurb}
 				<p class="schema-config-form-description mt-1">{blurb}</p>
 			{/if}
