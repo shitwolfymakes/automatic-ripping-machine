@@ -164,7 +164,9 @@ cython_debug/
 
 
 
-.vscode/settings.json
+# VS Code: share only the recommended-extensions list (SonarQube for IDE).
+.vscode/*
+!.vscode/extensions.json
 arm.conf.yaml
 logs/*
 *.log
