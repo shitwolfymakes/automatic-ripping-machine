@@ -53,14 +53,15 @@ No drive at all? ARM can rip ISO image files. Set
 Use the free beta key (ARM fetches and renews it each month) or your purchased
 key. ARM can't test a key on its own: a drive's ripper checks it, and the status
 line updates when it has. Two options keep Blu-ray decryption data current.
-Later: **Settings, Metadata** and **Settings, Ripping**.
+Later: **Settings, API Keys** and **Settings, Ripping**.
 
-## 5. Find titles (optional)
+## 5. Identification (optional)
 
-Add a free TMDb or OMDb key so ARM can name your files, and press **Test** to
-check it. TVDB adds TV episode numbering. TVmaze, MusicBrainz and the ARM disc
-database need no key. Skip this and ARM names files from the disc label, and
-you confirm titles by hand. Later: **Settings, Metadata**.
+Add a free TMDb or OMDb key so ARM can name movies, and press **Test** to
+check it. TVDB adds TV episode numbering. TheDiscDB, the ARM disc database,
+TVmaze and MusicBrainz need no key. Skip this and ARM still identifies what it
+can without a key and names the rest from the disc label for you to confirm.
+Later: **Settings, Identification** and **Settings, API Keys**.
 
 ## 6. Disc handling
 

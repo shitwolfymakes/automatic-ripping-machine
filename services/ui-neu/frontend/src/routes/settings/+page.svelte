@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { restartSetup } from '$lib/api/setup';
 	import { slide } from 'svelte/transition';
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
@@ -17,6 +17,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import { SETTINGS_SCHEMA_CONTEXT, groupLabel, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -47,6 +48,9 @@
 	let settings = $state<SettingsData | null>(null);
 	let settingsLoading = $state(true);
 	let settingsError = $state<Error | null>(null);
+	// A getter, not a value: the schema arrives after mount and context is set
+	// once. Field widgets use it to deep-link to another tab's field.
+	setContext(SETTINGS_SCHEMA_CONTEXT, () => settings?.schema?.groups);
 
 	// --- Tab state ---
 	type Tab = string;
@@ -61,13 +65,20 @@
 		'users',
 		'system'
 	] as const;
-	// Config-group tabs derived from the backend schema. Metadata + Ripping have
-	// no bespoke screen-tab home → render as their own tabs. (Transcoding/
+	// Config-group tabs derived from the backend schema. Identification, Keys and
+	// Ripping have no bespoke screen-tab home → render as their own tabs. (Transcoding/
 	// Notifications single toggles fold into the existing transcoding/notifications
 	// tabs; System read-only rows fold into the system tab — see template.)
-	const configGroupNames = ['Metadata', 'Ripping'] as const;
+	const configGroupNames = ['Keys', 'Identification', 'Ripping'] as const;
 	const configGroups = $derived(
-		(settings?.schema?.groups ?? []).filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+		(settings?.schema?.groups ?? [])
+			.filter((g) => (configGroupNames as readonly string[]).includes(g.name))
+			// Tab order is this page's, not the schema's (API Keys first).
+			.sort(
+				(a, b) =>
+					(configGroupNames as readonly string[]).indexOf(a.name) -
+					(configGroupNames as readonly string[]).indexOf(b.name)
+			)
 	);
 	// Full visible-tab list: config groups first, then screen-tabs. The
 	// Transcoding tab always shows (even on a ripper-only, not-capable
@@ -79,7 +90,8 @@
 	function group(name: string): SettingsGroup | undefined {
 		return (settings?.schema?.groups ?? []).find((g) => g.name === name);
 	}
-	const metaGroup = $derived(group('Metadata'));
+	const identificationGroup = $derived(group('Identification'));
+	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
 	const systemGroup = $derived(group('System'));
@@ -96,28 +108,30 @@
 		system: 'System'
 	};
 	function tabLabel(id: string): string {
-		return TAB_LABELS[id] ?? id;
+		return TAB_LABELS[id] ?? groupLabel(id);
 	}
 
 	function parseHash(): Tab {
-		if (typeof window === 'undefined') return 'Metadata';
+		if (typeof window === 'undefined') return 'Identification';
 		const hash = window.location.hash.replace('#', '');
-		const tabPart = hash.split('/')[0];
+		// Retired names (#Metadata, #appearance) open the tab that replaced them.
+		const tabPart = legacyTab(hash.split('/')[0]);
 		// Validate the hash tab against the known-valid set: the static
 		// config-group tabs (group names, not knowable from the schema at parse
 		// time but fixed in this file) plus the bespoke screen-tabs. A stale or
 		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
-		// 'Metadata' instead of leaving the content pane blank.
+		// 'Identification' instead of leaving the content pane blank.
 		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
-		if (tabPart === 'appearance') return 'themes'; // pre-rename bookmarks and links
-		return allowed.includes(tabPart) ? tabPart : 'Metadata';
+		return allowed.includes(tabPart) ? tabPart : 'Identification';
 	}
 
 	let activeTab = $state<Tab>(parseHash());
 
 	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
-	// #Metadata/makemkv_key). The field is scrolled into view, focused and
-	// briefly highlighted once its tab has rendered.
+	// #Keys/makemkv_key). The field is scrolled into view, focused and
+	// briefly highlighted once its tab has rendered. The field's own schema
+	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
+	// still lands on the tab that now holds the field.
 	function parseHashField(): string | null {
 		if (typeof window === 'undefined') return null;
 		const part = window.location.hash.replace('#', '').split('/')[1];
@@ -125,12 +139,26 @@
 	}
 	let pendingField = $state<string | null>(parseHashField());
 
+	/** The visible tab that renders `key`'s schema group, if any. */
+	function fieldTab(key: string): Tab | undefined {
+		const owner = settings?.schema?.groups?.find((g) => g.fields.some((f) => f.key === key));
+		const tab = owner && settingsTabFor(owner.name);
+		return tab && visibleTabs.includes(tab) ? tab : undefined;
+	}
+
 	$effect(() => {
 		const key = pendingField;
 		if (!key || !settings) return;
+		const home = fieldTab(key);
+		if (home && home !== activeTab) {
+			activeTab = home;
+			return; // re-runs once the field's tab has rendered
+		}
 		const el = document.getElementById(`setting-${key}`);
-		if (!el) return;
+		// One shot: a field that never renders must not keep pulling later tab
+		// clicks back to its tab.
 		pendingField = null;
+		if (!el) return;
 		el.scrollIntoView({ block: 'center' });
 		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
 		el.classList.add('settings-field-highlight');
@@ -242,7 +270,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'themes') loadCacheStats();
+		if (tab === 'interface') loadCacheStats();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -267,7 +295,7 @@
 			.then(() => drives.start());
 		loadSettings();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'themes') loadCacheStats();
+		if (activeTab === 'interface') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -277,7 +305,7 @@
 			const tab = parseHash();
 			activeTab = tab;
 			pendingField = parseHashField();
-			if (tab === 'themes') loadCacheStats();
+			if (tab === 'interface') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -319,6 +347,22 @@
 		}
 	}
 
+	// A form's saved values folded back into `settings.config`, so every other
+	// tab sees them: the Identity card's "Needs ... key" chip reads the keys
+	// from it, and a form diffs its next save against it. A saved secret is
+	// stored as the masked sentinel the backend returns for a set secret (a
+	// cleared one, sent as null, stays null).
+	function foldSaved(payload: Record<string, unknown>) {
+		if (!settings) return;
+		const secret = new Set(
+			(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
+		);
+		const saved = Object.fromEntries(
+			Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
+		);
+		settings = { ...settings, config: { ...settings.config, ...saved } };
+	}
+
 	// Keep the app-wide runtime toggle in step with a Settings save so an SPA
 	// navigation to /transcoder (banner) or an apply dialog (passthrough-only
 	// filter) reflects the new value without a reload. The saved values are
@@ -327,7 +371,7 @@
 	// disable-then-re-enable in one visit would diff against the stale
 	// original value and never send the re-enable.
 	function onTranscodingSaved(payload: Record<string, unknown>) {
-		if (settings) settings = { ...settings, config: { ...settings.config, ...payload } };
+		foldSaved(payload);
 		if ('transcode_enabled' in payload) {
 			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
 		}
@@ -375,15 +419,15 @@
 				</div>
 			</nav>
 
-			<!-- Metadata config tab (schema-driven) -->
-			{#if activeTab === 'Metadata' && metaGroup}
-				<SchemaConfigForm group={metaGroup} config={settings.config} />
-			{/if}
-
-			<!-- Ripping config tab (schema-driven) -->
-			{#if activeTab === 'Ripping' && rippingGroup}
-				<SchemaConfigForm group={rippingGroup} config={settings.config} />
-			{/if}
+			<!-- Identification, Keys and Ripping config tabs (schema-driven). All
+			 three stay mounted and the inactive ones are hidden, so a chip's deep
+			 link to a key on another tab (and the way back) keeps every unsaved
+			 edit. Each folds its save into settings.config for the others. -->
+			{#each [identificationGroup, keysGroup, rippingGroup].filter((g) => g !== undefined) as g (g.name)}
+				<div hidden={activeTab !== g.name}>
+					<SchemaConfigForm group={g} config={settings.config} onsaved={foldSaved} />
+				</div>
+			{/each}
 
 			<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
 			 GPU inventory) when this deployment can run transcode containers.
@@ -394,7 +438,7 @@
 			{#if activeTab === 'transcoding'}
 				{#if $transcoderEnabled && transcodingGroup}
 					<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
-						{#snippet beforeSave()}
+						{#snippet beforeSections()}
 							<GpusCard />
 						{/snippet}
 					</SchemaConfigForm>
@@ -499,7 +543,38 @@
 
 			<!-- Appearance Tab -->
 			{#if activeTab === 'interface'}
-				<InterfaceSettings />
+				<div class="stack stack-lg">
+					<InterfaceSettings />
+
+					<!-- Image Cache -->
+					<div class="panel settings-page-panel-wide">
+						<div class="flex items-center justify-between">
+							<div>
+								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
+								<p class="settings-page-description mt-1">
+									{#if cacheLoading}Loading...
+									{:else if cacheStats}{cacheStats.count} cached image{cacheStats.count !== 1 ? 's' : ''} ({cacheStats.size_mb}
+										MB)
+									{:else}Unable to load cache stats
+									{/if}
+								</p>
+							</div>
+							<button
+								type="button"
+								onclick={() => (cacheConfirmOpen = true)}
+								disabled={cacheBusy || !cacheStats?.count}
+								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
+							>
+								Clear Cache
+							</button>
+						</div>
+						{#if cacheFeedback}
+							<p class="mt-2 settings-page-feedback" data-error={cacheFeedback.type !== 'success'}>
+								{cacheFeedback.message}
+							</p>
+						{/if}
+					</div>
+				</div>
 			{/if}
 
 			{#if activeTab === 'themes'}
@@ -609,43 +684,6 @@
 							{/if}
 						</div>
 					</div>
-
-					<!-- Image Cache -->
-					<div class="panel settings-page-panel-wide">
-						<div class="flex items-center justify-between">
-							<div>
-								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
-								<p class="settings-page-description mt-1">
-									{#if cacheLoading}Loading...
-									{:else if cacheStats}{cacheStats.count} cached image{cacheStats.count !== 1 ? 's' : ''} ({cacheStats.size_mb}
-										MB)
-									{:else}Unable to load cache stats
-									{/if}
-								</p>
-							</div>
-							<button
-								type="button"
-								onclick={() => (cacheConfirmOpen = true)}
-								disabled={cacheBusy || !cacheStats?.count}
-								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
-							>
-								Clear Cache
-							</button>
-						</div>
-						{#if cacheFeedback}
-							<p class="mt-2 settings-page-feedback" data-error={cacheFeedback.type !== 'success'}>
-								{cacheFeedback.message}
-							</p>
-						{/if}
-					</div>
-
-					<!-- Feature request prompt -->
-					<div class="flex justify-center pt-2">
-						<span class="badge settings-page-feature-request">
-							<Glyph name="info" class="h-3.5 w-3.5" />
-							Not seeing what you want? Submit your feature requests on GitHub.
-						</span>
-					</div>
 				</section>
 			{/if}
 
@@ -693,7 +731,7 @@
 							class="btn settings-page-diag-toggle"
 						>
 							<Glyph name="shield-check" />
-							Udev & Drive Diagnostics
+							Drive Diagnostics
 							<Glyph name="chevron-down" class="chevron ml-auto" />
 						</button>
 
@@ -976,13 +1014,7 @@
 		}
 	}
 
-	.settings-page-feature-request {
-		gap: 0.375rem;
-		background: var(--color-primary-tint-2);
-		padding: 0.5rem 1rem;
-	}
-
-	/* Udev & Drive Diagnostics disclosure: a full-width outlined toggle
+	/* Drive Diagnostics disclosure: a full-width outlined toggle
 	   button over a collapsible detail panel, none of it matching .panel's
 	   metrics (this reuses .panel-section's tint but at its own padding). */
 	/* the original `<hr class="my-2">` sat in a `space-y-6` (margin) stack:

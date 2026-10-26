@@ -683,9 +683,37 @@ export type ConfigUpdateRequest = {
      */
     notifications_enabled?: boolean | null;
     /**
-     * Metadata Provider
+     * Movie Sources
      */
-    metadata_provider?: string | null;
+    movie_sources?: Array<string> | null;
+    /**
+     * Music Sources
+     */
+    music_sources?: Array<string> | null;
+    /**
+     * Search Provider Movie
+     */
+    search_provider_movie?: string | null;
+    /**
+     * Search Provider Tv
+     */
+    search_provider_tv?: string | null;
+    /**
+     * Search Provider Music
+     */
+    search_provider_music?: string | null;
+    /**
+     * Movie Auto Apply
+     */
+    movie_auto_apply?: boolean | null;
+    /**
+     * Music Auto Apply
+     */
+    music_auto_apply?: boolean | null;
+    /**
+     * Crc64Service Enabled
+     */
+    crc64service_enabled?: boolean | null;
 };
 
 /**
@@ -805,9 +833,37 @@ export type ConfigView = {
      */
     notifications_enabled: boolean;
     /**
-     * Metadata Provider
+     * Movie Sources
      */
-    metadata_provider: string;
+    movie_sources: Array<string>;
+    /**
+     * Music Sources
+     */
+    music_sources: Array<string>;
+    /**
+     * Search Provider Movie
+     */
+    search_provider_movie: string;
+    /**
+     * Search Provider Tv
+     */
+    search_provider_tv: string;
+    /**
+     * Search Provider Music
+     */
+    search_provider_music: string;
+    /**
+     * Movie Auto Apply
+     */
+    movie_auto_apply: boolean;
+    /**
+     * Music Auto Apply
+     */
+    music_auto_apply: boolean;
+    /**
+     * Crc64Service Enabled
+     */
+    crc64service_enabled: boolean;
     /**
      * Makemkv Key Valid
      */
@@ -1907,6 +1963,101 @@ export type IdentityClaims = {
 };
 
 /**
+ * IdentityFacts
+ *
+ * What a person uses to tell titles apart: run, plot, rating, people.
+ * Filled from a provider payload by `arm_backend.metadata.facts`; shown in
+ * the match picker and snapshotted on the job when a match is used.
+ */
+export type IdentityFacts = {
+    /**
+     * End Year
+     */
+    end_year?: number | null;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Rating
+     */
+    rating?: number | null;
+    /**
+     * Rating Source
+     */
+    rating_source?: 'imdb' | 'tmdb' | 'tvmaze' | null;
+    /**
+     * Votes
+     */
+    votes?: number | null;
+    /**
+     * Genres
+     */
+    genres?: Array<string>;
+    /**
+     * Creators
+     */
+    creators?: Array<string>;
+    /**
+     * Cast
+     */
+    cast?: Array<string>;
+    /**
+     * Episode Count
+     */
+    episode_count?: number | null;
+};
+
+/**
+ * IdentitySuggestion
+ *
+ * A confident online match identify did not apply because the media
+ * type's "Apply confident matches" switch is off (identification-sources
+ * spec D-10). The job keeps its miss title and the `unidentified` flag and
+ * waits in AWAITING_REVIEW with no countdown until the operator accepts
+ * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
+ * way (any resolve clears this section).
+ */
+export type IdentitySuggestion = {
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Kind
+     */
+    kind: 'movie' | 'tv' | 'music';
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    external_ids?: ExternalIds;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Payload
+     */
+    payload?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Suggested At
+     */
+    suggested_at: string;
+    [key: string]: unknown;
+};
+
+/**
  * IdentityView
  *
  * `GET /api/jobs/{id}/identity` response.
@@ -2325,7 +2476,32 @@ export type JobIdentity = {
      * Identified At
      */
     identified_at?: string | null;
+    facts?: IdentityFacts | null;
+    /**
+     * Facts Fetched At
+     */
+    facts_fetched_at?: string | null;
     [key: string]: unknown;
+};
+
+/**
+ * JobLogFileView
+ *
+ * One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`).
+ */
+export type JobLogFileView = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Modified At
+     */
+    modified_at: string;
 };
 
 /**
@@ -2343,6 +2519,13 @@ export type JobMetadata = {
     } | null;
     flags?: JobFlags;
     previously_ripped?: PreviouslyRipped | null;
+    identity_suggestion?: IdentitySuggestion | null;
+    /**
+     * Identify Attempts
+     */
+    identify_attempts?: Array<{
+        [key: string]: unknown;
+    }> | null;
     /**
      * Provider Raw
      */
@@ -2889,6 +3072,11 @@ export type MetadataCandidate = {
      */
     track_count?: number | null;
     external_ids?: ExternalIds | null;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    facts?: IdentityFacts | null;
 };
 
 /**
@@ -3730,6 +3918,32 @@ export type ResolveFanOutOutcomeView = {
 };
 
 /**
+ * ResolveMatch
+ *
+ * A search result the operator picked (match picker spec 3.6). Its
+ * presence makes `external_ids` replace the stored show ids wholesale.
+ */
+export type ResolveMatch = {
+    /**
+     * Provider
+     */
+    provider: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    /**
+     * Poster Is Manual
+     */
+    poster_is_manual?: boolean;
+    /**
+     * Poster Url Manual
+     */
+    poster_url_manual?: string | null;
+    facts?: IdentityFacts | null;
+};
+
+/**
  * ResolveRequest
  *
  * POST /api/jobs/{id}/resolve body.
@@ -3777,6 +3991,7 @@ export type ResolveRequest = {
     season?: number | null;
     music?: MusicMeta | null;
     external_ids?: ExternalIds | null;
+    match?: ResolveMatch | null;
 };
 
 /**
@@ -4025,6 +4240,10 @@ export type ScanResult = {
      * Musicbrainz Disc Id
      */
     musicbrainz_disc_id?: string | null;
+    /**
+     * Cd Toc
+     */
+    cd_toc?: string | null;
     /**
      * Fingerprints
      */
@@ -6705,6 +6924,42 @@ export type ResolveApiJobsJobIdResolvePostResponses = {
 
 export type ResolveApiJobsJobIdResolvePostResponse = ResolveApiJobsJobIdResolvePostResponses[keyof ResolveApiJobsJobIdResolvePostResponses];
 
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/identity/accept';
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostError = AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors[keyof AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostErrors];
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ResolveResponse;
+};
+
+export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponse = AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses[keyof AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponses];
+
 export type ApplySessionApiJobsJobIdTranscodePostData = {
     body: ApplySessionRequest;
     headers?: {
@@ -8880,7 +9135,11 @@ export type SearchMetadataApiMetadataSearchGetData = {
         /**
          * Provider
          */
-        provider?: 'tmdb' | 'omdb' | null;
+        provider?: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb' | null;
+        /**
+         * Year
+         */
+        year?: number | null;
     };
     url: '/api/metadata/search';
 };
@@ -8902,6 +9161,50 @@ export type SearchMetadataApiMetadataSearchGetResponses = {
 };
 
 export type SearchMetadataApiMetadataSearchGetResponse = SearchMetadataApiMetadataSearchGetResponses[keyof SearchMetadataApiMetadataSearchGetResponses];
+
+export type MatchDetailsApiMetadataDetailsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query: {
+        /**
+         * Provider
+         */
+        provider: 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
+        /**
+         * Id
+         */
+        id: string;
+        /**
+         * Type
+         */
+        type?: 'movie' | 'tv';
+    };
+    url: '/api/metadata/details';
+};
+
+export type MatchDetailsApiMetadataDetailsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MatchDetailsApiMetadataDetailsGetError = MatchDetailsApiMetadataDetailsGetErrors[keyof MatchDetailsApiMetadataDetailsGetErrors];
+
+export type MatchDetailsApiMetadataDetailsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataSearchResponse;
+};
+
+export type MatchDetailsApiMetadataDetailsGetResponse = MatchDetailsApiMetadataDetailsGetResponses[keyof MatchDetailsApiMetadataDetailsGetResponses];
 
 export type LookupMetadataApiMetadataLookupGetData = {
     body?: never;
@@ -9839,6 +10142,39 @@ export type PatchInboxApiNotificationsInboxInboxIdPatchResponses = {
 };
 
 export type PatchInboxApiNotificationsInboxInboxIdPatchResponse = PatchInboxApiNotificationsInboxInboxIdPatchResponses[keyof PatchInboxApiNotificationsInboxInboxIdPatchResponses];
+
+export type ListJobLogsApiLogsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/logs';
+};
+
+export type ListJobLogsApiLogsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListJobLogsApiLogsGetError = ListJobLogsApiLogsGetErrors[keyof ListJobLogsApiLogsGetErrors];
+
+export type ListJobLogsApiLogsGetResponses = {
+    /**
+     * Response List Job Logs Api Logs Get
+     *
+     * Successful Response
+     */
+    200: Array<JobLogFileView>;
+};
+
+export type ListJobLogsApiLogsGetResponse = ListJobLogsApiLogsGetResponses[keyof ListJobLogsApiLogsGetResponses];
 
 export type DownloadJobLogsZipApiLogsJobIdZipGetData = {
     body?: never;

@@ -29,7 +29,7 @@ describe('ConfigSchemaField', () => {
 	it('renders an enum field as a select with its options', () => {
 		renderComponent(ConfigSchemaField, {
 			props: {
-				field: f({ key: 'metadata_provider', type: 'enum', label: 'Provider', enum_values: ['tmdb', 'omdb'] }),
+				field: f({ key: 'search_provider_movie', type: 'enum', label: 'Provider', enum_values: ['tmdb', 'omdb'] }),
 				value: 'tmdb'
 			}
 		});

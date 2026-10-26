@@ -587,6 +587,14 @@
 	max-width: 100%;
 }
 
+/* An emphasised frame's outline and tint (section-frame.css) would trace the
+   frame's own radius around the elbow's 40px curve, a second outline at a
+   different radius. The elbow already calls attention here; no outline. */
+[data-scheme="lcars"] .section-frame[data-frame-emphasis] {
+	border: none;
+	background: transparent;
+}
+
 [data-scheme="lcars"] .section-frame[data-frame-variant="full"] {
 	padding-left: 110px;
 }

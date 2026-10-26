@@ -37,6 +37,8 @@ _ALLOWED_IMAGE_HOSTS = {
     "images-na.ssl-images-amazon.com",
     "coverartarchive.org",
     "ia.media-imdb.com",
+    "static.tvmaze.com",  # TVmaze posters (checked 2026-10-16: direct 200, no redirect)
+    "artworks.thetvdb.com",  # TVDB posters (checked 2026-10-16: direct 200, no redirect)
 }
 
 # Suffix-matched hosts: a request/redirect host is allowed when it equals the

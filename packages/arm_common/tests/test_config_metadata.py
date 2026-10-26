@@ -76,7 +76,7 @@ def test_enum_requires_names_real_secret_keys() -> None:
     secret_keys = {m.key for m in CONFIG_FIELD_META if m.tier == "secret"}
     for m in CONFIG_FIELD_META:
         if m.enum_requires is not None:
-            assert m.type == "ranked", m.key
+            assert m.type in ("ranked", "enum"), m.key
             assert set(m.enum_requires) <= set(m.enum_values or []), m.key
             assert set(m.enum_requires.values()) <= secret_keys, m.key
 
@@ -84,7 +84,7 @@ def test_enum_requires_names_real_secret_keys() -> None:
 def test_identity_settings_meta() -> None:
     by_key = {m.key: m for m in CONFIG_FIELD_META}
     eps = by_key["episode_sources"]
-    assert (eps.group, eps.tier, eps.type, eps.editable) == ("Metadata", "operator", "ranked", True)
+    assert (eps.group, eps.tier, eps.type, eps.editable) == ("Identification", "operator", "ranked", True)
     assert eps.enum_values == ["tmdb", "tvmaze", "tvdb"]
     assert eps.enum_labels == {"tmdb": "TMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"}
     assert eps.enum_requires == {"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}
@@ -94,6 +94,50 @@ def test_identity_settings_meta() -> None:
     assert hints.enum_requires is None
     assert by_key["episode_match_tolerance_seconds"].type == "int"
     assert by_key["episode_auto_apply"].type == "bool"
+    movies = by_key["movie_sources"]
+    assert (movies.group, movies.tier, movies.type, movies.editable) == ("Identification", "operator", "ranked", True)
+    assert movies.enum_values == ["tmdb", "omdb"]
+    assert movies.enum_labels == {"tmdb": "TMDb", "omdb": "OMDb"}
+    assert movies.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"}
+    music = by_key["music_sources"]
+    assert (music.type, music.enum_values, music.enum_requires) == ("ranked", ["musicbrainz"], None)
+    assert music.enum_labels == {"musicbrainz": "MusicBrainz"}
+    movie_sp = by_key["search_provider_movie"]
+    assert (movie_sp.type, movie_sp.enum_values) == ("enum", ["tmdb", "omdb"])
+    assert movie_sp.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key"}
+    tv_sp = by_key["search_provider_tv"]
+    assert (tv_sp.type, tv_sp.enum_values) == ("enum", ["tmdb", "omdb", "tvmaze", "tvdb"])
+    assert tv_sp.enum_labels == {"tmdb": "TMDb", "omdb": "OMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"}
+    assert tv_sp.enum_requires == {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key"}
+    music_sp = by_key["search_provider_music"]
+    assert (music_sp.type, music_sp.enum_values, music_sp.enum_requires) == ("enum", ["musicbrainz"], None)
+    for key, label in (
+        ("movie_auto_apply", "Apply confident movie matches"),
+        ("music_auto_apply", "Apply confident music matches"),
+    ):
+        meta = by_key[key]
+        # setup_step mirrors the movie_sources entry, which carries none.
+        assert (meta.type, meta.group, meta.editable, meta.setup_step) == ("bool", "Identification", True, None)
+        assert meta.setup_step == by_key["movie_sources"].setup_step
+        assert meta.label == label
+        assert "Review first" in meta.help
+    assert by_key["episode_auto_apply"].help == (
+        "When off, a TV show match and every episode match are kept as suggestions to confirm on the job page; "
+        "the disc is held with no countdown. Ripping › Review first still holds every disc."
+    )
+    assert by_key["crc64service_enabled"].type == "bool"
+    assert "metadata_provider" not in by_key
+    # The wizard asks for the movie search provider, in the slot the removed
+    # `metadata_provider` held; the rest are Settings-only.
+    assert (by_key["search_provider_movie"].setup_step, by_key["search_provider_movie"].setup_order) == ("metadata", 4)
+    for key in (
+        "movie_sources",
+        "music_sources",
+        "search_provider_tv",
+        "search_provider_music",
+        "crc64service_enabled",
+    ):
+        assert by_key[key].setup_step is None, key
 
 
 def test_config_model_defaults_for_identity_settings() -> None:
@@ -102,7 +146,19 @@ def test_config_model_defaults_for_identity_settings() -> None:
     assert cfg.disc_hint_sources == ["bd_title", "label"]
     assert cfg.episode_match_tolerance_seconds == 300
     assert cfg.episode_auto_apply is True
+    assert cfg.movie_sources == ["tmdb", "omdb"]
+    assert cfg.music_sources == ["musicbrainz"]
+    assert (cfg.search_provider_movie, cfg.search_provider_tv, cfg.search_provider_music) == (
+        "tmdb",
+        "tmdb",
+        "musicbrainz",
+    )
+    assert cfg.movie_auto_apply is True
+    assert cfg.music_auto_apply is True
+    assert cfg.crc64service_enabled is True
+    assert not hasattr(cfg, "metadata_provider")
     assert Config().episode_sources is not cfg.episode_sources  # no shared mutable default
+    assert Config().movie_sources is not cfg.movie_sources
 
 
 def test_iso_cap_meta() -> None:
@@ -143,8 +199,7 @@ def test_setup_step_tagging_matches_spec() -> None:
         "tmdb_api_key",
         "omdb_api_key",
         "tvdb_api_key",
-        "metadata_provider",
-        "thediscdb_enabled",
+        "search_provider_movie",
     ]
     assert keys("discs") == ["auto_rip_on_insert", "on_previously_ripped"]
     assert keys("transcoding") == ["transcode_enabled", "max_parallel_transcodes"]
@@ -181,3 +236,26 @@ def test_setup_step_order() -> None:
         "notifications",
         "finish",
     ]
+
+
+def test_groups_split_identification_and_keys() -> None:
+    by_key = {m.key: m for m in CONFIG_FIELD_META}
+    keys = {"tmdb_api_key", "omdb_api_key", "tvdb_api_key", "makemkv_key", "thediscdb_refresh_days"}
+    identification = {
+        "search_provider_movie",
+        "search_provider_tv",
+        "search_provider_music",
+        "thediscdb_enabled",
+        "crc64service_enabled",
+        "movie_sources",
+        "episode_sources",
+        "music_sources",
+        "episode_match_tolerance_seconds",
+        "movie_auto_apply",
+        "episode_auto_apply",
+        "music_auto_apply",
+        "disc_hint_sources",
+    }
+    assert {k for k, m in by_key.items() if m.group == "Keys"} == keys
+    assert {k for k, m in by_key.items() if m.group == "Identification"} == identification
+    assert not any(m.group == "Metadata" for m in CONFIG_FIELD_META)

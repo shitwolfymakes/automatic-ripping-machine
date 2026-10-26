@@ -83,14 +83,14 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	/* One contained segmented control sized like the header's buttons: no
+	/* One contained segmented control at the small control height: no
 	   block covers this shape (tabs-pills renders loose pills with no shared
 	   frame). The "Type" caption sits inside the frame so label and options
 	   read as one control. */
 	.media-type-switch-group {
 		display: inline-flex;
 		align-items: stretch;
-		min-height: var(--control-h);
+		min-height: var(--control-h-sm);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		overflow: hidden;
@@ -99,16 +99,16 @@
 	.media-type-switch-label {
 		display: inline-flex;
 		align-items: center;
-		padding: 0 0.625rem;
+		padding: 0 0.5rem;
 		border-right: 1px solid var(--color-border);
-		font-size: 0.6875rem;
+		font-size: 0.625rem;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		color: var(--color-text-muted);
 	}
 	.media-type-switch-option {
-		padding: 0 0.875rem;
-		font-size: 0.875rem;
+		padding: 0 0.625rem;
+		font-size: 0.8125rem;
 		font-weight: 500;
 		color: var(--color-text-muted);
 		cursor: pointer;

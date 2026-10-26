@@ -208,6 +208,7 @@ describe('Layout', () => {
 			drive_names: {},
 			iso_sources: {},
 			iso_source_kinds: {},
+			drive_source_kinds: {},
 			preparing: [],
 			notification_count: 0,
 			ripping_enabled: true,

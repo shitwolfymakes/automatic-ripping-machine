@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 
-// Mock fetchDashboard before the store imports it. We control its return
-// value per-test to drive the sticky-merge behavior.
+// Mock fetchDashboardSnapshot before the store imports it. We control its
+// return value per-test to drive the sticky-merge behavior.
 const fetchDashboardMock = vi.fn();
-vi.mock('$lib/api/dashboard', () => ({
-	fetchDashboard: fetchDashboardMock
+vi.mock('$lib/api/dashboard', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/api/dashboard')>()),
+	fetchDashboardSnapshot: fetchDashboardMock
 }));
 
 describe('dashboard store sticky merge', () => {

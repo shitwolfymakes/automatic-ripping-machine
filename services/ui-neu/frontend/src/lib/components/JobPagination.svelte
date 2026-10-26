@@ -8,13 +8,14 @@
 	}
 
 	let { page, pages, perPage, total, onpage }: Props = $props();
+
+	let first = $derived(total === 0 ? 0 : (page - 1) * perPage + 1);
+	let last = $derived(Math.min(page * perPage, total));
 </script>
 
-{#if pages > 1}
-	<div class="job-pagination flex items-center justify-between">
-		<p class="job-pagination-summary">
-			Showing {(page - 1) * perPage + 1}&ndash;{Math.min(page * perPage, total)} of {total}
-		</p>
+<div class="job-pagination flex flex-wrap items-center justify-between gap-2" data-testid="jobs-pagination">
+	<p class="job-pagination-summary">Showing {first}&ndash;{last} of {total}</p>
+	{#if pages > 1}
 		<div class="flex gap-1">
 			<button disabled={page <= 1} onclick={() => onpage(page - 1)} class="btn btn-sm">Prev</button>
 			{#each Array.from({ length: pages }, (_, i) => i + 1) as p (p)}
@@ -30,12 +31,12 @@
 			{/each}
 			<button disabled={page >= pages} onclick={() => onpage(page + 1)} class="btn btn-sm">Next</button>
 		</div>
-	</div>
-{/if}
+	{/if}
+</div>
 
 <style>
 	.job-pagination-summary {
-		font-size: 0.875rem;
+		font-size: 0.8125rem;
 		color: var(--color-text-muted);
 	}
 	.job-pagination-ellipsis {

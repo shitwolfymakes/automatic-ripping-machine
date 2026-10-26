@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -19,6 +20,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import (
@@ -29,6 +31,7 @@ from arm_backend.identity.proposals import (
 )
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.job_abandon import abandon_job_transition
+from arm_backend.metadata.base import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
@@ -85,11 +88,14 @@ from arm_common.enums import (
 )
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
 from arm_common.schemas.job_metadata import (
+    ExternalIds,
     JobIdentity,
     JobMetadata,
     flag_is_set,
+    identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
+    without_identity_suggestion,
 )
 from arm_common.ulid import is_valid_id
 
@@ -273,8 +279,21 @@ def _summarize_transcode_progress(
     )
 
 
-@router.get("", response_model=list[JobView])
+_LIST_JOBS_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "headers": {
+            "X-Total-Count": {
+                "description": "Number of jobs matching the filters, before limit/offset.",
+                "schema": {"type": "integer"},
+            }
+        }
+    }
+}
+
+
+@router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
 async def list_jobs(
+    response: Response,
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
     status_filter: JobStatus | None = Query(default=None, alias="status"),
@@ -282,13 +301,26 @@ async def list_jobs(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[JobView]:
-    stmt = select(Job).order_by(col(Job.created_at).desc()).limit(limit).offset(offset)
+    """One page of jobs, newest first with a stable `id` tiebreak so a page
+    does not shuffle between polls. The filtered total rides in the
+    `X-Total-Count` header; the body stays a plain `JobView[]`."""
+    filters = []
     if status_filter is not None:
-        stmt = stmt.where(col(Job.status) == status_filter)
+        filters.append(col(Job.status) == status_filter)
     if drive_id is not None:
-        stmt = stmt.where(col(Job.drive_id) == drive_id)
+        filters.append(col(Job.drive_id) == drive_id)
+    stmt = (
+        select(Job).where(*filters).order_by(col(Job.created_at).desc(), col(Job.id).desc()).limit(limit).offset(offset)
+    )
     result = await session.execute(stmt)
     jobs = list(result.scalars().all())
+    # A short page already pins the total (the poll's common case), so the
+    # COUNT round trip runs only for a full page or one past the end.
+    if len(jobs) < limit and (jobs or offset == 0):
+        total = offset + len(jobs)
+    else:
+        total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
+    response.headers["X-Total-Count"] = str(total)
 
     # One batched track lookup keyed on the ripping-job IDs feeds the
     # dashboard's "Track N of M" line without an N+1 fetch. Skipped
@@ -674,6 +706,11 @@ async def review_pause(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="this disc was ripped before; it has no countdown to pause",
+        )
+    if identity_suggestion_of(job.metadata_json) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="this disc is waiting for you to confirm its identity; it has no countdown to pause",
         )
     job.manual_pause = paused
     if not paused:
@@ -1117,8 +1154,61 @@ async def update_job(
 #      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
 #      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
 #      because there are no WAITING_IDENTIFY apps on an already-identified job.
-# Show ids an operator can send on /resolve; tvmaze is only ever derived.
+# Show ids the /resolve merge path accepts; tvmaze is never accepted there,
+# but a picked match (`match`) stores it (see _MATCH_ID_FIELDS).
 _SHOW_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tvdb")
+# Ids a picked match states; the rest (musicbrainz_release, anidb) are kept.
+_MATCH_ID_FIELDS: tuple[str, ...] = ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")
+
+
+def _same_show(old: ExternalIds, sent: ExternalIds) -> bool:
+    """Whether a picked match names the show already stored: at least one show
+    id agrees and none disagrees. An id only one side knows proves nothing
+    either way (TMDb has no TVmaze id, OMDb only an IMDb one)."""
+    agree = False
+    for name in ("imdb", "tmdb", "tvdb", "tvmaze"):
+        a, b = getattr(old, name), getattr(sent, name)
+        if a is None or b is None:
+            continue
+        if a != b:
+            return False
+        agree = True
+    return agree
+
+
+def _apply_match(md: JobMetadata, req: ResolveRequest, now: datetime) -> bool:
+    """A picked search result states the whole show (match picker spec 3.6):
+    a different show's ids replace the stored show ids wholesale, tvmaze
+    included; the same show re-picked from another provider only fills in,
+    so the ids that provider lacks are kept. The identity records the
+    provider and a facts snapshot. Returns whether a stored show id was
+    replaced or cleared (a show change)."""
+    assert req.match is not None
+    sent = req.external_ids or ExternalIds()
+    old = md.identity.external_ids if md.identity is not None else ExternalIds()
+    ids = old.model_copy()
+    if _same_show(old, sent):
+        show_changed = False
+        for name in _MATCH_ID_FIELDS:
+            if getattr(sent, name) is not None:
+                setattr(ids, name, getattr(sent, name))
+    else:
+        show_changed = any(
+            getattr(old, name) is not None and getattr(old, name) != getattr(sent, name)
+            for name in ("imdb", "tmdb", "tvdb", "tvmaze")
+        )
+        for name in _MATCH_ID_FIELDS:
+            setattr(ids, name, getattr(sent, name))
+    facts = req.match.facts
+    md.identity = JobIdentity(
+        provider=req.match.provider,
+        external_ids=ids,
+        overview=facts.overview if facts is not None else None,
+        identified_at=now,
+        facts=facts,
+        facts_fetched_at=now if facts is not None else None,
+    )
+    return show_changed
 
 
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
@@ -1139,7 +1229,84 @@ async def resolve(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
+    return await resolve_identity(session, job, req, hub=hub, stage_runner=stage_runner)
+
+
+@router.post("/{job_id}/identity/accept", response_model=ResolveResponse)
+async def accept_identity_suggestion(
+    job_id: JobIdParam,
+    _: User = Depends(require_writer),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(_get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+) -> ResolveResponse:
+    """Confirm the confident match identify held because the media type's
+    auto-apply switch was off (identification-sources spec D-10).
+
+    Applies the stored hit exactly as identify would have, then hands the
+    job to the resolve path (provenance, fan-out, `identify.resolved`, the
+    episode stage). The status is settled first: a held disc is released to
+    rip when the review gate is off, or gets the gate's countdown when it is
+    on; a pause keeps it held with no countdown until un-pause stamps one;
+    a ripped placeholder follows resolve's promote rule. A job also held as
+    previously ripped keeps that hold untouched (status, no countdown).
+    """
+    job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+    suggestion = identity_suggestion_of(job.metadata_json)
+    if suggestion is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"job {job_id} has no identity suggestion to accept"
+        )
+    if job.status not in RESOLVABLE_JOB_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
+        )
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     before_identity = _identity_snapshot(job)
+    now = datetime.now(timezone.utc)
+    result = suggestion_to_result(suggestion)
+    job.metadata_json = without_identity_suggestion(job.metadata_json)
+    apply_identity_result(job, result, now=now)
+    if previously_ripped_job_id(job.metadata_json) is not None:
+        # The previously-ripped hold still wins: identifying the disc neither
+        # releases it nor starts a countdown; Rip again / Discard leave it.
+        pass
+    elif job.status == JobStatus.AWAITING_REVIEW:
+        paused = cfg is not None and bool(cfg.ripping_paused)
+        if cfg is not None and cfg.hold_for_review:
+            job.wait_start_time = None if paused else now
+        elif paused:
+            job.wait_start_time = None
+        else:
+            job.status = JobStatus.IDENTIFIED
+    req = ResolveRequest(
+        title=result.title, year=result.year, media_type=MediaType(result.kind), external_ids=external_ids_of(result)
+    )
+    logger.info("accept job_id=%s: %s suggestion %r applied -> %s", job.id, result.kind, result.title, job.status.value)
+    return await resolve_identity(
+        session, job, req, hub=hub, stage_runner=stage_runner, before_identity=before_identity
+    )
+
+
+async def resolve_identity(
+    session: AsyncSession,
+    job: Job,
+    req: ResolveRequest,
+    *,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None = None,
+) -> ResolveResponse:
+    """The resolve route's body, shared with the suggestion accept route.
+
+    `before_identity` lets a caller that already changed the job's identity
+    (accept) still get the episode stage scheduled: the snapshot is taken
+    here only when the caller passes none."""
+    if before_identity is None:
+        before_identity = _identity_snapshot(job)
 
     # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
     # matching typed sections of the existing metadata_json; everything else
@@ -1155,7 +1322,9 @@ async def resolve(
     # omitted=keep / explicit-null=clears, via model_fields_set rather than
     # `is not None` (which can't tell "sent null" from "not sent" once
     # Pydantic has already collapsed both to None).
-    if req.external_ids is not None:
+    if req.match is not None:
+        show_changed = _apply_match(md, req, datetime.now(UTC))
+    elif req.external_ids is not None:
         if md.identity is None:
             md.identity = JobIdentity(provider="manual")
         # Per-field overlay, not a wholesale replace: a request that only
@@ -1199,6 +1368,17 @@ async def resolve(
 
     job.title = req.title
     job.year = req.year
+    if req.match is not None:
+        # A picked match's poster is the automatic one; an operator-edited
+        # URL is a manual override (match picker spec 3.6). A match with no
+        # poster keeps the stored one unless it belongs to the old show, and
+        # never clears an override.
+        if req.match.poster_url is not None or show_changed:
+            job.poster_url = req.match.poster_url
+        if req.match.poster_is_manual:
+            job.poster_url_manual = req.match.poster_url_manual
+        elif req.match.poster_url is not None:
+            job.poster_url_manual = None
     # Fix 75-5: media_type is a classification, not part of the identity
     # statement -- omitted keeps the stored value, but an EXPLICIT null
     # clears it (the operator saying "clear the kind"). model_fields_set is
@@ -1222,6 +1402,10 @@ async def resolve(
     # forever would misreport it after the operator has already identified
     # it.
     new_metadata.pop("unidentified", None)
+    # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
+    new_metadata.pop("identity_suggestion", None)
+    # ...and the automatic match's miss reasons no longer apply.
+    new_metadata.pop("identify_attempts", None)
     if isinstance(new_metadata.get("flags"), dict):
         new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
