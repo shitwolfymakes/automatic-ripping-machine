@@ -4,11 +4,12 @@
 	import { abandonJob, deleteJob, fetchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { parkedSessionLine, readJobMetadata } from '$lib/utils/job-fields';
+	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import {
 		episodeStatus,
 		identitySuggestionOf,
+		isIdentifyMiss,
 		missReason,
 		previouslyRippedJobId,
 		providerLabel,
@@ -28,7 +29,7 @@
 	import IdentitySuggestionBanner from './IdentitySuggestionBanner.svelte';
 	import MediaTypeSwitch from './episodes/MediaTypeSwitch.svelte';
 	import EpisodeMatchPanel from './episodes/EpisodeMatchPanel.svelte';
-	import { EpisodeMatching, onJobEvents } from '$lib/stores/episodeMatching.svelte';
+	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {
@@ -134,7 +135,10 @@
 	// A confident match identify held for confirmation (auto-apply off).
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
-	let episodeRow = $derived(episodeStatus(displayJob, data ? tracks : null, matching.active));
+	// A missed identify's title is the disc's own, so it is not a match yet.
+	let isMiss = $derived(isIdentifyMiss(displayJob));
+	// Null off a TV video disc and after the rip; the Episodes button follows it.
+	let episodeRow = $derived(isTv ? episodeStatus(displayJob, data ? tracks : null, matching.active) : null);
 	// "TMDb · 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
 	let matchingDetail = $derived.by(() => {
 		if (!episodeRow) return null;
@@ -143,6 +147,7 @@
 		return [source, counts].filter(Boolean).join(' · ') || null;
 	});
 	// The SHOW / MATCH row's trailing detail: "TV Series · 1974–1975 · Season 2" or "Movie · 1999".
+	// Off TV the type is jobMeta's video_type: media_type, else the provider's own.
 	let matchDetail = $derived.by(() => {
 		const facts = (displayJob.metadata_json?.identity as { facts?: { end_year?: number | null } } | undefined)?.facts;
 		const end = facts?.end_year;
@@ -153,16 +158,14 @@
 			: null;
 		const parts = isTv
 			? ['TV Series', years, jobMeta.season ? `Season ${Number(jobMeta.season)}` : null]
-			: ['Movie', years];
+			: [jobMeta.video_type ? videoTypeLabel(jobMeta.video_type) : null, years];
 		return parts.filter(Boolean).join(' · ');
 	});
 	// A match without an IMDb id names the provider that made it; a hand-set title has none.
-	let showProvider = $derived(
-		(() => {
-			const p = (displayJob.metadata_json?.identity as { provider?: string } | undefined)?.provider;
-			return p && p !== 'manual' ? providerLabel(p) : null;
-		})()
-	);
+	let showProvider = $derived.by(() => {
+		const p = (displayJob.metadata_json?.identity as { provider?: string } | undefined)?.provider;
+		return p && p !== 'manual' ? providerLabel(p) : null;
+	});
 	// "Blu-ray · Disc 1/4 · 6 titles", leaving out the parts that are empty.
 	let discLine = $derived(
 		[
@@ -176,9 +179,8 @@
 			.join(' · ')
 	);
 	// The source row names what the disc came from: a folder, an ISO, or a drive.
-	let sourceKind = $derived(
-		isoName && displayJob.drive_id ? (isoSourceKinds?.[displayJob.drive_id] ?? 'iso') : isoName ? 'iso' : null
-	);
+	// isoName is only set when drive_id is.
+	let sourceKind = $derived(isoName ? (isoSourceKinds?.[displayJob.drive_id!] ?? 'iso') : null);
 	let sourceLabel = $derived(sourceKind === 'folder' ? 'Folder' : sourceKind === 'iso' ? 'ISO' : 'Drive');
 	let sourceValue = $derived(isoName ?? driveLabel(displayJob.drive_id, driveNames));
 
@@ -212,7 +214,7 @@
 		try {
 			data = await fetchJob(job.id);
 		} catch {
-			data = null;
+			// A failed refresh keeps the last detail (and its tracks) on the card.
 		} finally {
 			initialLoading = false;
 		}
@@ -364,13 +366,12 @@
 		loadSessions();
 		// The dashboard refreshes the job prop on every event; the card's own
 		// detail (tracks) and the episode panel refresh only for this job.
-		const offJobEvents = onJobEvents(
+		const offJobEvents = watchEpisodeMatching(
 			() => job?.id,
-			(identityUpdated) => {
-				loadDetail().then(async () => {
-					await episodePanel?.reload();
-					if (identityUpdated) matching.stop();
-				});
+			matching,
+			async () => {
+				await loadDetail();
+				await episodePanel?.reload();
 			}
 		);
 		return () => {
@@ -462,7 +463,7 @@
 										class="disc-review-widget-ext-id">{jobMeta.imdb_id}</a
 									>
 									{#if matchDetail}<span class="disc-review-widget-muted">· {matchDetail}</span>{/if}
-								{:else if isTv ? displayJob.has_series : !!displayJob.title?.trim() && !missLine}
+								{:else if isTv ? displayJob.has_series : !!displayJob.title?.trim() && !isMiss}
 									<span>{showProvider ? `Matched on ${showProvider}` : 'Set by hand'}</span>
 									{#if matchDetail}<span class="disc-review-widget-muted">· {matchDetail}</span>{/if}
 								{:else}
@@ -502,7 +503,7 @@
 							</dd>
 						</div>
 					{/if}
-					{#if isMusic && !displayJob.title?.trim() && missLine}
+					{#if isMusic && missLine}
 						<div class="disc-review-widget-row">
 							<dt>Match</dt>
 							<dd>
@@ -610,7 +611,7 @@
 					aria-pressed={showTitleSearch}>Search</button
 				>
 			{/if}
-			{#if isTv && (episodeRow?.state !== 'matched' || showEpisodes)}
+			{#if episodeRow && (episodeRow.state !== 'matched' || showEpisodes)}
 				<button
 					onclick={() => toggleSection('episodes')}
 					class="btn disc-review-widget-action-btn"
@@ -940,10 +941,7 @@
 	.disc-review-widget-ext-id:hover {
 		text-decoration: underline;
 	}
-	.disc-review-widget-needs {
-		font-weight: 600;
-		color: var(--color-warning);
-	}
+	.disc-review-widget-needs,
 	.disc-review-widget-attention {
 		font-weight: 600;
 		color: var(--color-warning);

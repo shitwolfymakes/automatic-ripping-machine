@@ -28,7 +28,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
-	import { EpisodeMatching, onJobEvents } from '$lib/stores/episodeMatching.svelte';
+	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { ripProgress, reconcileSubscriptions, startWS, formatEta, formatTransfer } from '$lib/stores/rips.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { isAdmin } from '$lib/stores/auth';
@@ -237,8 +237,6 @@
 
 	onMount(() => {
 		let stopped = false;
-		// A /jobs/<id>#episodes link opens the Match Episodes panel.
-		if (window.location.hash === '#episodes') activePanel = 'episodes';
 		startWS();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
@@ -248,13 +246,12 @@
 		// events don't disturb the page. The 5s poll below stays as
 		// reconciliation. Only the identity update ends matching
 		// (rip.identify_resolved fires before the episode stage has run).
-		const offRipperEvents = onJobEvents(
+		const offRipperEvents = watchEpisodeMatching(
 			() => $page.params.id,
-			(identityUpdated) => {
-				loadJob().then(async () => {
-					await episodePanel?.reload();
-					if (identityUpdated) matching.stop();
-				});
+			matching,
+			async () => {
+				await loadJob();
+				await episodePanel?.reload();
 			}
 		);
 		async function poll() {
