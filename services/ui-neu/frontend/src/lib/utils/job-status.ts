@@ -1,4 +1,4 @@
-import type { IdentityClaims, IdentitySuggestion, IdentityView, JobView } from '$lib/types/api.gen';
+import type { IdentityClaims, IdentitySuggestion, IdentityView, JobView, TrackView } from '$lib/types/api.gen';
 import { activeSource, SOURCE_LABEL } from '$lib/components/episodes/episodeModel';
 import { isPostRipStatus } from './job-status-groups';
 
@@ -100,10 +100,19 @@ export function identitySuggestionOf(
 type MissAttempt = { source?: unknown; step?: unknown; outcome?: unknown; detail?: unknown };
 
 /**
+ * True when identify's automatic match missed and no one has resolved the
+ * title since: awaiting_user_id, or `flags.unidentified` (resolve clears it).
+ * A title on such a job came from the disc, not from a match or the operator.
+ */
+export function isIdentifyMiss(job: Pick<JobView, 'status'> & { metadata_json?: JobView['metadata_json'] }): boolean {
+	return job.status === 'awaiting_user_id' || job.metadata_json?.flags?.unidentified === true;
+}
+
+/**
  * One line saying why identify's automatic match missed, from the attempts
  * it stored (`metadata_json.identify_attempts`), or null: the job is not a
- * miss (neither `flags.unidentified` nor awaiting_user_id), or it has no
- * attempts (jobs identified before the list existed).
+ * miss (see isIdentifyMiss), or it has no attempts (jobs identified before
+ * the list existed).
  */
 export function missReason(
 	job: Pick<JobView, 'status' | 'title'> & {
@@ -112,7 +121,7 @@ export function missReason(
 	}
 ): string | null {
 	const meta = job.metadata_json;
-	if (job.status !== 'awaiting_user_id' && meta?.flags?.unidentified !== true) return null;
+	if (!isIdentifyMiss(job)) return null;
 	const attempts = (meta?.identify_attempts ?? []) as MissAttempt[];
 	if (attempts.length === 0) return null;
 	const outcomes = attempts.map((a) => a.outcome);
@@ -131,15 +140,42 @@ export function missReason(
 }
 
 /**
- * The episode-matching line on a TV job's review card, or null for a movie or
- * a post-rip job. `href` is the Match Episodes panel once a series is known.
+ * How a TV job's episode matching stands: `waiting` (no show yet), `matching`
+ * (running, or no episode source has reported), `matched` (every title is
+ * placed, by a source or by hand) or `attention` (some titles are unplaced,
+ * or no source could match and the tracks have not loaded).
+ */
+export type EpisodeState = 'waiting' | 'matching' | 'matched' | 'attention';
+
+export interface EpisodeStatus {
+	state: EpisodeState;
+	/** Display name of the episode source that matched (or is matching), if known. */
+	source: string | null;
+	/** Selected video titles, and how many of them have no episode or role; null before the tracks load. */
+	total: number | null;
+	unmatched: number | null;
+}
+
+type EpisodeTrack = Pick<TrackView, 'kind' | 'excluded' | 'episode_number' | 'role'>;
+
+/**
+ * The EPISODES row on a TV job's review card, or null for a movie or a
+ * post-rip job. `tracks` (the card's detail load) adds the title counts;
+ * `matching` is the card's own "re-matching now" flag.
  */
 export function episodeStatus(
-	job: Pick<JobView, 'id' | 'status' | 'media_type' | 'has_series'> & { metadata_json?: JobView['metadata_json'] }
-): { text: string; href: string | null } | null {
+	job: Pick<JobView, 'status' | 'media_type' | 'has_series'> & { metadata_json?: JobView['metadata_json'] },
+	tracks: EpisodeTrack[] | null = null,
+	matching = false
+): EpisodeStatus | null {
 	if (job.media_type !== 'tv' || isPostRipStatus(job.status)) return null;
-	if (!job.has_series) return { text: 'Pick the show to match episodes.', href: null };
-	const href = `/jobs/${job.id}#episodes`;
+	const titles = tracks?.length ? tracks.filter((t) => t.kind === 'video_title' && !t.excluded) : null;
+	const total = titles ? titles.length : null;
+	// A title is placed once it has an episode number, or a non-episode role (extra, trailer...).
+	const unmatched = titles
+		? titles.filter((t) => t.episode_number == null && (t.role == null || t.role === 'episode')).length
+		: null;
+	if (!job.has_series) return { state: 'waiting', source: null, total, unmatched };
 	const claims = (job.metadata_json?.identity_claims ?? {}) as IdentityClaims;
 	const sources = claims.sources ?? {};
 	const episodes = Object.keys(sources).filter((id) => id.startsWith('episodes_'));
@@ -147,11 +183,15 @@ export function episodeStatus(
 	// pin, then first ok non-suggestion, then first ok suggestion: the panel's
 	// answer unless provenance says another ok source won.
 	const active = activeSource({ pin: claims.pin, sources } as unknown as IdentityView);
+	const label = (id: string | null | undefined) => (id ? (SOURCE_LABEL[id] ?? id) : null);
+	if (matching) return { state: 'matching', source: label(active ?? episodes[0]), total, unmatched };
 	if (active && sources[active]?.status === 'ok') {
-		return { text: `Episodes matched from ${SOURCE_LABEL[active] ?? active}.`, href };
+		const state = unmatched ? 'attention' : 'matched';
+		return { state, source: label(active), total, unmatched };
 	}
-	if (episodes.length > 0) return { text: 'No source could place the episodes.', href };
-	return { text: 'Matching episodes…', href };
+	// No source placed them, but the operator may have by hand.
+	if (episodes.length > 0) return { state: unmatched === 0 ? 'matched' : 'attention', source: null, total, unmatched };
+	return { state: 'matching', source: null, total, unmatched };
 }
 
 /** Display names for identification provider ids. */

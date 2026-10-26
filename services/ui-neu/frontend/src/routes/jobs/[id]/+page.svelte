@@ -28,7 +28,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
-	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { ripProgress, reconcileSubscriptions, startWS, formatEta, formatTransfer } from '$lib/stores/rips.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { isAdmin } from '$lib/stores/auth';
@@ -42,24 +42,9 @@
 	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
-	// True while the Backend re-matches episodes after a type flip or a series
-	// apply. Cleared when job.identity_updated arrives for this job (the stage
-	// finished), or after MATCHING_TIMEOUT_MS so it never sticks.
-	const MATCHING_TIMEOUT_MS = 60_000;
-	let matching = $state(false);
-	let matchingTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function startMatching() {
-		matching = true;
-		if (matchingTimer) clearTimeout(matchingTimer);
-		matchingTimer = setTimeout(stopMatching, MATCHING_TIMEOUT_MS);
-	}
-
-	function stopMatching() {
-		matching = false;
-		if (matchingTimer) clearTimeout(matchingTimer);
-		matchingTimer = null;
-	}
+	// "Matching episodes…" while the Backend re-matches after a type flip or a
+	// series apply; job.identity_updated for this job (or a timeout) ends it.
+	const matching = new EpisodeMatching();
 	let editingTrackId = $state<string | null>(null);
 	let previewItems = $state<NamingPreviewItem[]>([]);
 	// The last preview answered 409 (no routed session, so no template). The
@@ -200,13 +185,13 @@
 
 	function handleSeriesApplied() {
 		activePanel = 'episodes';
-		startMatching();
+		matching.start();
 		loadJob();
 	}
 
 	function handleMediaTypeChanged(type: 'movie' | 'tv') {
-		if (type === 'tv') startMatching();
-		else stopMatching();
+		if (type === 'tv') matching.start();
+		else matching.stop();
 		activePanel = type === 'tv' ? 'episodes' : null;
 		loadJob();
 	}
@@ -252,8 +237,6 @@
 
 	onMount(() => {
 		let stopped = false;
-		// The review card's episode line links here as #episodes.
-		if (window.location.hash === '#episodes') activePanel = 'episodes';
 		startWS();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
@@ -261,19 +244,16 @@
 		// Instant status for the job being viewed (ripper and transcode
 		// events): refresh only when an event names this job, so other jobs'
 		// events don't disturb the page. The 5s poll below stays as
-		// reconciliation.
-		startRipperEvents();
-		const offRipperEvents = onRipperEvent((jobIds, eventTypes) => {
-			const id = $page.params.id ?? '';
-			if (id === '' || !jobIds.has(id)) return;
-			// Refresh on every event; only the identity update ends matching
-			// (rip.identify_resolved fires before the episode stage has run).
-			const identityUpdated = eventTypes.get(id)?.has('job.identity_updated') ?? false;
-			loadJob().then(async () => {
+		// reconciliation. Only the identity update ends matching
+		// (rip.identify_resolved fires before the episode stage has run).
+		const offRipperEvents = watchEpisodeMatching(
+			() => $page.params.id,
+			matching,
+			async () => {
+				await loadJob();
 				await episodePanel?.reload();
-				if (identityUpdated) stopMatching();
-			});
-		});
+			}
+		);
 		async function poll() {
 			// Never exits while mounted: a finished job can go live again (a new
 			// apply), and the next tick picks that up without a remount.
@@ -287,7 +267,7 @@
 			stopped = true;
 			offRipperEvents();
 			reconcileSubscriptions([]);
-			if (matchingTimer) clearTimeout(matchingTimer);
+			matching.stop();
 		};
 	});
 </script>
@@ -477,7 +457,7 @@
 							bind:this={episodePanel}
 							{job}
 							{tracks}
-							{matching}
+							matching={matching.active}
 							onsearchseries={() => {
 								titleInitialType = 'tv';
 								activePanel = 'title';
