@@ -53,6 +53,38 @@ async def test_resolve_job_marks_a_held_match_unsure_and_clears_it_when_a_clean_
 
 
 @pytest.mark.asyncio
+async def test_resolve_job_restarts_a_held_countdown_when_the_guess_turns_confident() -> None:
+    """The guess held the review countdown; a confident placement restarts it
+    instead of letting the long-elapsed one auto-rip the disc at once."""
+    db = FakeSession()
+    job = Job(id="job_w", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.AWAITING_REVIEW, metadata_json={})
+    track = Track(id="trk_w", job_id="job_w", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [track]
+    put_source(job, "episodes_tmdb", SourceClaims(suggestion=True, tracks={"1": TrackClaim(role=TrackRole.EPISODE)}))
+    job.wait_start_time = NOW
+    await resolve_job(db, job)  # type: ignore[arg-type]
+    assert job.wait_start_time == NOW  # turning unsure leaves the countdown alone
+    put_source(job, "episodes_tmdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
+    await resolve_job(db, job)  # type: ignore[arg-type]
+    assert job.wait_start_time is not None and job.wait_start_time > NOW
+
+
+@pytest.mark.asyncio
+async def test_resolve_job_leaves_a_paused_countdown_paused() -> None:
+    db = FakeSession()
+    job = Job(id="job_p", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.AWAITING_REVIEW, metadata_json={})
+    track = Track(id="trk_p", job_id="job_p", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [track]
+    put_source(job, "episodes_tmdb", SourceClaims(suggestion=True, tracks={"1": TrackClaim(role=TrackRole.EPISODE)}))
+    await resolve_job(db, job)  # type: ignore[arg-type]
+    put_source(job, "episodes_tmdb", SourceClaims(tracks={"1": TrackClaim(role=TrackRole.EPISODE, episode=3)}))
+    await resolve_job(db, job)  # type: ignore[arg-type]
+    assert job.wait_start_time is None
+
+
+@pytest.mark.asyncio
 async def test_resolve_job_idempotent_second_call_changes_nothing() -> None:
     # Re-resolving an already-resolved job (e.g. ripper retry) must be a
     # no-op: same winners, nothing left to change.

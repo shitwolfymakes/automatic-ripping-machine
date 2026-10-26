@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, Job, Track
+from arm_common import Config, Job, JobStatus, Track
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims
 
@@ -41,6 +41,10 @@ async def resolve_job(session: AsyncSession, job: Job) -> ResolveOutcome:
     # counts as a change: callers emit `job.identity_updated` on it.
     if set_unsure(job, resolution.episode_unsure):
         changed += 1
+        if not resolution.episode_unsure and job.status == JobStatus.AWAITING_REVIEW and job.wait_start_time:
+            # The guess held the countdown, which kept running underneath:
+            # restart it so the now-confident disc does not auto-rip at once.
+            job.wait_start_time = datetime.now(timezone.utc)
     for track in tracks:
         session.add(track)
     session.add(job)
