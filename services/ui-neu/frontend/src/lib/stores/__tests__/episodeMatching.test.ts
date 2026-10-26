@@ -10,7 +10,13 @@ vi.mock('../ripperEvents.svelte', () => ({
 	}
 }));
 
-import { EpisodeMatching, MATCHING_TIMEOUT_MS, onJobEvents } from '../episodeMatching.svelte';
+import {
+	EpisodeMatching,
+	MATCHING_TIMEOUT_MS,
+	RECENT_UPDATE_MS,
+	onJobEvents,
+	watchEpisodeMatching
+} from '../episodeMatching.svelte';
 import { startRipperEvents } from '../ripperEvents.svelte';
 
 function fire(jobId: string, type: string) {
@@ -49,6 +55,40 @@ describe('EpisodeMatching', () => {
 		m.active = true;
 		vi.advanceTimersByTime(MATCHING_TIMEOUT_MS);
 		expect(m.active).toBe(true);
+	});
+
+	it('a start() right after an identity update stays off; a later one runs', () => {
+		vi.useFakeTimers();
+		const m = new EpisodeMatching();
+		m.noteIdentityUpdated();
+		m.start();
+		expect(m.active).toBe(false);
+		vi.advanceTimersByTime(RECENT_UPDATE_MS);
+		m.start();
+		expect(m.active).toBe(true);
+	});
+});
+
+describe('watchEpisodeMatching', () => {
+	it('reloads on each burst and ends matching after the identity update reload', async () => {
+		let release!: () => void;
+		const reload = vi.fn(() => new Promise<void>((r) => (release = r)));
+		const m = new EpisodeMatching();
+		const off = watchEpisodeMatching(() => 'job_1', m, reload);
+		m.start();
+		fire('job_1', 'rip.identify_resolved');
+		release();
+		await Promise.resolve();
+		expect(m.active).toBe(true);
+		fire('job_1', 'job.identity_updated');
+		expect(reload).toHaveBeenCalledTimes(2);
+		expect(m.active).toBe(true);
+		release();
+		await vi.waitFor(() => expect(m.active).toBe(false));
+		// The apply returning after the burst does not restart it.
+		m.start();
+		expect(m.active).toBe(false);
+		off();
 	});
 });
 

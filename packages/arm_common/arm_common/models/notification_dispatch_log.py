@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, Index, String
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column
@@ -13,6 +13,7 @@ def _notification_dispatch_log_id() -> str:
 
 class NotificationDispatchLog(SQLModel, table=True):
     __tablename__ = "notification_dispatch_log"
+    __table_args__ = (Index("ix_notification_dispatch_log_created_at", "created_at"),)
 
     id: str = Field(default_factory=_notification_dispatch_log_id, primary_key=True)
     # null = ad-hoc test-send with no saved channel.
@@ -21,6 +22,7 @@ class NotificationDispatchLog(SQLModel, table=True):
             String,
             ForeignKey("notification_channels.id", ondelete="CASCADE"),
             nullable=True,
+            index=True,
         )
     )
     # null for test-sends; SET NULL so the log row survives event deletion.

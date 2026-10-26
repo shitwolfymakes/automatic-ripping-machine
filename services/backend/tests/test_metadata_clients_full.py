@@ -8,26 +8,22 @@ and extract_poster_url's provider precedence.
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import httpx
+import pytest
+import respx
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-import respx  # noqa: E402
-
-from arm_backend.metadata import musicbrainz as mb_mod  # noqa: E402
-from arm_backend.metadata.arm_server import ArmServerClient  # noqa: E402
-from arm_backend.metadata.base import (  # noqa: E402
+from arm_backend.metadata import musicbrainz as mb_mod
+from arm_backend.metadata.arm_server import ArmServerClient
+from arm_backend.metadata.base import (
     LookupError,
     LookupTimeout,
     MetadataResult,
     extract_poster_url,
 )
-from arm_backend.metadata.musicbrainz import MusicBrainzClient  # noqa: E402
-from arm_backend.metadata.omdb import OMDBClient  # noqa: E402
-from arm_backend.metadata.tmdb import TMDBClient  # noqa: E402
+from arm_backend.metadata.musicbrainz import MusicBrainzClient
+from arm_backend.metadata.omdb import OMDBClient
+from arm_backend.metadata.tmdb import TMDBClient
 
 
 @pytest.fixture
@@ -433,7 +429,8 @@ _TMDB = "https://api.themoviedb.org/3"
 
 
 @respx.mock
-async def test_tmdb_search_candidates_fetch_detail_with_credits(http_client):
+async def test_tmdb_search_candidates_fetch_detail_with_latest_season_credits(http_client):
+    """A row shows two names, so search skips the all-seasons credits."""
     respx.get(f"{_TMDB}/search/tv").mock(
         return_value=httpx.Response(
             200, json={"results": [{"id": 5084, "name": "Kolchak", "first_air_date": "1974-09-13"}]}
@@ -447,17 +444,18 @@ async def test_tmdb_search_candidates_fetch_detail_with_credits(http_client):
                 "name": "Kolchak",
                 "number_of_episodes": 20,
                 "external_ids": {"imdb_id": "tt0071003", "tvdb_id": 77170},
-                "aggregate_credits": {"cast": [{"name": "Darren McGavin", "order": 0}]},
+                "credits": {"cast": [{"name": "Darren McGavin", "order": 0}]},
             },
         )
     )
     external = respx.get(f"{_TMDB}/tv/5084/external_ids")
     [r] = await TMDBClient("k", http_client).search_tv_candidates("kolchak")
-    assert detail.calls.last.request.url.params["append_to_response"] == "external_ids,aggregate_credits"
+    assert detail.calls.last.request.url.params["append_to_response"] == "external_ids,credits"
     assert not external.called
     assert r.payload["imdb_id"] == "tt0071003" and r.payload["tvdb_id"] == "77170"
     assert r.payload["number_of_episodes"] == 20
-    assert r.payload["aggregate_credits"]["cast"][0]["name"] == "Darren McGavin"
+    assert r.payload["credits"]["cast"][0]["name"] == "Darren McGavin"
+    assert "external_ids" not in r.payload
 
 
 @respx.mock
@@ -495,6 +493,8 @@ async def test_tmdb_detail_result_raises_on_miss_and_maps_ids(http_client):
     )
     r = await TMDBClient("k", http_client).detail_result(5, "tv")
     assert (r.title, r.year, r.kind, r.payload["imdb_id"], r.payload["tvdb_id"]) == ("K", 1974, "tv", "tt1", None)
+    assert "external_ids" not in r.payload
+    assert respx.calls.last.request.url.params["append_to_response"] == "external_ids,aggregate_credits"
 
 
 @respx.mock

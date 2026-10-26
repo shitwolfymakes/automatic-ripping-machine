@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.identity.sources.thediscdb import (  # noqa: E402
+from arm_backend.identity.sources.thediscdb import (
     build_claims,
     external_imdb_id,
     parse_duration,
     role_for_disc_type,
 )
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch  # noqa: E402
-from arm_common import DiscType  # noqa: E402
-from arm_common.enums import TrackRole  # noqa: E402
-from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_common import DiscType
+from arm_common.enums import TrackRole
+from arm_common.schemas import ScanResult, ScanTitle
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 
@@ -379,6 +376,32 @@ def test_release_identity_prefers_metadata_then_slug() -> None:
     assert release_identity(_release_match(metadata={}, title_slug="round-midnight-1986")) == ("Round Midnight", 1986)
     assert release_identity(_release_match(metadata={}, title_slug="lost")) == ("Lost", None)
     assert release_identity(_release_match(metadata={}, title_slug="")) == (None, None)
+
+
+def test_release_identity_keeps_a_title_that_ends_in_a_year() -> None:
+    """The slug's trailing number is a year suffix, not the tail of the title
+    -- unless it is. This names the completed folder (ripper `miss_title`), so
+    "Blade Runner 2049" must not become "Blade Runner"."""
+    from arm_backend.identity.sources.thediscdb import release_identity
+
+    # Past the 2029 cap the dispatcher's own year-suffix regex uses.
+    assert release_identity(_release_match(metadata={}, title_slug="blade-runner-2049")) == ("Blade Runner 2049", None)
+    # TheDiscDB's own Year settles the ambiguous ones either way.
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 2017}, title_slug="blade-runner-2049-2017")) == (
+        "Blade Runner 2049",
+        2017,
+    )
+    assert release_identity(_release_match(metadata={"Year": 1975}, title_slug="death-race-2000")) == (
+        "Death Race 2000",
+        1975,
+    )
+    # A year-only title keeps its suffix read as the year, the one reading the
+    # slug alone supports.
+    assert release_identity(_release_match(metadata={}, title_slug="1917-2019")) == ("1917", 2019)
 
 
 def test_release_result_builds_the_thediscdb_identity() -> None:

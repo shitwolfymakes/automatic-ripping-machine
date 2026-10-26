@@ -4,7 +4,7 @@
 
 <div class="flex flex-col gap-6">
 	<div>
-		<h2 class="interface-settings-title">Interface</h2>
+		<h2 class="interface-settings-title" data-page-section-title>Interface</h2>
 		<p class="interface-settings-description mt-1">
 			How this browser shows ARM. These settings are saved on this device only.
 		</p>

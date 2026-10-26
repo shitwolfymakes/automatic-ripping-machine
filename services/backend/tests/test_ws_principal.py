@@ -1,15 +1,11 @@
 """Token-to-principal resolver."""
 
-import os
-
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.seeders import GUEST_USERNAME  # noqa: E402
-from arm_backend.ws.principal import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.ws.principal import (
     AuthError,
     ServicePrincipal,
     UIPrincipal,

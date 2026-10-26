@@ -16,20 +16,17 @@ success status, so a route that 500s before reaching its body can't pass as
 
 from __future__ import annotations
 
-import os
 import secrets
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_backend.routers import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.routers import (
     auth as auth_router,
     config as config_router,
     drives as drives_router,
@@ -43,10 +40,10 @@ from arm_backend.routers import (  # noqa: E402
     transcode_presets as transcode_presets_router,
     transcodes as transcodes_router,
 )
-from arm_common import Config, RetentionPolicy, User  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common import Config, RetentionPolicy, User
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 _KEY = secrets.token_bytes(32)
 _ROLE_DENIED_DETAIL = "read-only role: write access required"

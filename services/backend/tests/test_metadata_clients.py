@@ -1333,6 +1333,26 @@ async def test_tmdb_tv_candidates_carry_tvdb_id(http_client) -> None:
     assert (hit.payload["imdb_id"], hit.payload["tvdb_id"]) == ("tt0071003", "77170")
 
 
+@respx.mock
+async def test_tmdb_find_escapes_imdb_id_in_path(http_client):
+    """D-161: ?imdb_id= from /api/metadata/lookup cannot inject path or query."""
+    route = respx.get(url__startswith="https://api.themoviedb.org/3/find/").mock(
+        return_value=httpx.Response(200, json={"movie_results": [{"id": 1, "title": "X", "release_date": "2000"}]})
+    )
+    await TMDBClient("k", http_client).find_by_imdb_id("tt1/../x?y=1")
+    assert route.calls.last.request.url.raw_path.startswith(b"/3/find/tt1%2F..%2Fx%3Fy%3D1?external_source=imdb_id")
+
+
+@respx.mock
+async def test_get_release_escapes_release_id_in_path(http_client):
+    """D-161: the release id path param cannot inject path or query."""
+    route = respx.get(url__startswith="https://musicbrainz.org/ws/2/release/").mock(
+        return_value=httpx.Response(200, json={"id": "x", "title": "T"})
+    )
+    await MusicBrainzClient("armv3", http_client).get_release("abc?inc=x")
+    assert route.calls.last.request.url.raw_path.startswith(b"/ws/2/release/abc%3Finc%3Dx?")
+
+
 _TOC = "1 2 200000 150 100000"
 
 
@@ -1371,7 +1391,8 @@ async def test_musicbrainz_toc_404_falls_back_to_fuzzy_single_release(http_clien
     assert result.payload["toc_match"] == "fuzzy"
     assert "toc_candidates" not in result.payload
     params = dict(fuzzy.calls.last.request.url.params)
-    assert params["toc"] == "1+2+200000+150+100000"
+    assert params["toc"] == "1 2 200000 150 100000"
+    assert "toc=1+2+200000+150+100000" in str(fuzzy.calls.last.request.url)
     assert params["cdstubs"] == "no"
     assert params["inc"] == "artists+recordings+release-groups"
     assert params["fmt"] == "json"

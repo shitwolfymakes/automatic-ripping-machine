@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
-
-from arm_backend.ws.hub import PROGRESS_THROTTLE_SECONDS, WSHub  # noqa: E402
+from arm_backend.ws.hub import PROGRESS_THROTTLE_SECONDS, WSHub
 
 
 class _FakeWS:

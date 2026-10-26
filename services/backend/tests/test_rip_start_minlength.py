@@ -11,15 +11,11 @@ field is None — so we explicitly test:
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-import pytest  # noqa: E402
-
-from arm_backend.routers.ripper import _resolve_min_length_override  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.routers.ripper import _resolve_min_length_override
+from arm_common import (
     DiscType,
     Job,
     JobStatus,
@@ -27,7 +23,7 @@ from arm_common import (  # noqa: E402
     Session,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 def _make_job(pending_session_id: str | None = None) -> Job:

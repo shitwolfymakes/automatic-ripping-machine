@@ -9,10 +9,12 @@ export interface UiPrefs {
 	showStats: boolean;
 	/** Dashboard job list layout the page opens with (a default, not the live state). */
 	dashboardView: 'card' | 'table';
+	/** Log viewer: wrap long lines (on) or scroll them horizontally (off). */
+	logWrap: boolean;
 }
 
 const KEY = 'arm_ui_prefs';
-const DEFAULTS: UiPrefs = { showStats: true, dashboardView: 'card' };
+const DEFAULTS: UiPrefs = { showStats: true, dashboardView: 'card', logWrap: true };
 
 function load(): UiPrefs {
 	if (!browser) return { ...DEFAULTS };
@@ -22,7 +24,8 @@ function load(): UiPrefs {
 		const parsed = JSON.parse(raw) as Partial<UiPrefs>;
 		return {
 			showStats: typeof parsed.showStats === 'boolean' ? parsed.showStats : DEFAULTS.showStats,
-			dashboardView: parsed.dashboardView === 'table' ? 'table' : DEFAULTS.dashboardView
+			dashboardView: parsed.dashboardView === 'table' ? 'table' : DEFAULTS.dashboardView,
+			logWrap: typeof parsed.logWrap === 'boolean' ? parsed.logWrap : DEFAULTS.logWrap
 		};
 	} catch {
 		return { ...DEFAULTS };

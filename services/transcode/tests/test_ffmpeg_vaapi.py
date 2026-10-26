@@ -165,7 +165,7 @@ async def test_transcode_ffmpeg_vaapi_success_returns_size_and_emits_progress(mo
 
     progress: list[tuple[int, int | None, str | None]] = []
 
-    async def cb(pct: int, eta: int | None, note: str | None) -> None:
+    async def cb(pct: int, eta: int | None, note: str | None, fps: float | None, avg_fps: float | None) -> None:
         progress.append((pct, eta, note))
 
     size = await transcode_ffmpeg_vaapi(
@@ -192,7 +192,7 @@ async def test_transcode_ffmpeg_vaapi_nonzero_exit_raises_with_stderr_tail(monke
         returncode=1,
     )
 
-    async def cb(_p: int, _e: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _e: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         return None
 
     with pytest.raises(RuntimeError) as exc:
@@ -218,7 +218,7 @@ async def test_transcode_ffmpeg_vaapi_duration_none_completes_with_no_progress(m
 
     called = {"n": 0}
 
-    async def cb(_p: int, _e: int | None, _n: str | None) -> None:
+    async def cb(_p: int, _e: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
         called["n"] += 1
 
     size = await transcode_ffmpeg_vaapi(

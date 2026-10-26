@@ -6,16 +6,13 @@ combination is checked by value, not just by SQL text."""
 
 from __future__ import annotations
 
-import os
 import re
 import sqlite3
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_common import Gpu, TranscodePreset  # noqa: E402
+from arm_common import Gpu, TranscodePreset
 
-from tests.test_migration_chain import _render_sql  # noqa: E402
+from tests.test_migration_chain import _render_sql
 
 _PARENT = "0037_transcode_enabled"
 _REV = "0038_encoder_first"

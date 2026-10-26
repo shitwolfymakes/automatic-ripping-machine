@@ -472,7 +472,7 @@
 	<h1 class="page-title">Files</h1>
 
 	<!-- Warning banner -->
-	<div class="alert files-page-warning-banner">
+	<div class="alert files-page-warning-banner" data-status="warning">
 		<span class="alert-title">Warning:</span> Modify files at your own risk. This will not update database records and will
 		cause issues for any in-progress rips or transcodes.
 	</div>
@@ -493,7 +493,7 @@
 
 	<!-- Root tabs -->
 	{#if roots.length > 0}
-		<div class="tabs" role="group" aria-label="File root tabs">
+		<div class="tabs" role="group" aria-label="File root tabs" data-file-roots>
 			{#each roots as root (root.key)}
 				<button
 					type="button"

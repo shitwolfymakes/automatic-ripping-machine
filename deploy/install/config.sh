@@ -136,6 +136,10 @@ prepare_iso_library() {
 }
 
 choose_storage() {
+    if [[ -z "${RAW_ARG}" && -t 0 ]]; then
+        printf '  Raw rips are written once and then read back in full, so put them on the\n'
+        printf '  fastest local disk you have. Finished media can live on a NAS.\n'
+    fi
     RAW_PATH="$(pick_storage "raw rips" "${RAW_ARG}" ARM_HOST_RAW_PATH "${ARM_DIR}/raw")"
     MEDIA_PATH="$(pick_storage "finished media" "${MEDIA_ARG}" ARM_HOST_MEDIA_PATH "${ARM_DIR}/media")"
     ISO_PATH="$(pick_storage "ISO library" "${ISO_ARG}" ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library")"

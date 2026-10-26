@@ -8,39 +8,40 @@ directly.)
 
 ## How the key works
 
-Before each disc, the ripper runs a small script that ensures a key is in place,
-choosing one of three paths, in precedence order:
+Before each disc, the ripper runs a small script that ensures a key is in place.
+It uses one of two sources, in this order:
 
-1. **You set it in the UI** *(recommended).* Open **Config → MakeMKV key** and
-   paste your key (a purchased permanent key, or a beta you grabbed yourself).
-   The ripper fetches it from the backend before each rip — no file editing, and
-   it survives a restart or recreate. A key set here **overrides** the
-   `MAKEMKV_KEY` env var below, and you can change it without restarting anything.
-2. **You supply a key via env.** Set `MAKEMKV_KEY=T-…` in `~/arm/.armctl/.env`. Used when
-   the UI key is blank. The script writes it into the container's
-   `~/.MakeMKV/settings.conf`.
-3. **You leave both unset.** The script scrapes the *current month's free beta
-   key* from MakeMKV's public forum thread and uses that. This is the same
-   approach ARM has shipped for years and is fine for DVDs, but the forum sits
-   behind Cloudflare and rate-limits, so the scrape is brittle under load.
+1. **The key you set in the UI** *(recommended).* Open **Config → MakeMKV key**
+   and paste your key (a purchased permanent key, or a beta you grabbed
+   yourself). The ripper fetches it from the backend before each rip, so there
+   is no file to edit, it survives a restart or recreate, and you can change it
+   without restarting anything.
+2. **The free beta key, when the UI key is blank.** The script scrapes the
+   *current month's free beta key* from MakeMKV's public forum thread and uses
+   that. This is the same approach ARM has shipped for years and is fine for
+   DVDs, but the forum sits behind Cloudflare and rate-limits, so the scrape is
+   brittle under load.
+
+Rippers are started by the backend, not by Compose, so a `MAKEMKV_KEY` line in
+`~/arm/.armctl/.env` never reaches them. Set the key in the UI.
 
 The free beta key rotates roughly monthly. Because the refresh runs per disc, a
-container left running across a rotation **self-heals on the next disc** — no
+container left running across a rotation **self-heals on the next disc**, with no
 restart needed.
 
-After setting a key (whichever path), verify it landed:
+After setting a key, verify it landed on the next rip. Find the ripper container
+for your drive, then read its settings file:
 
 ```bash
-docker exec armv3-ripper-sr0 grep app_Key /home/arm/.MakeMKV/settings.conf
+docker ps --filter label=arm.drive_id --format '{{.Names}}'
+docker exec <ripper-name> grep app_Key /home/arm/.MakeMKV/settings.conf
 ```
-
-(The UI path takes effect on the next rip; the env path needs `armctl up`.)
 
 ## Buying a key
 
 While MakeMKV is in beta the free key works, but you can buy a permanent key to
 avoid the monthly rotation and the forum scrape: <https://www.makemkv.com/buy/>.
-Paste it into **Config → MakeMKV key** (path 1 above), or set it as `MAKEMKV_KEY`.
+Paste it into **Config → MakeMKV key**.
 
 ## DVD vs Blu-ray — where the key actually matters
 

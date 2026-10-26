@@ -1331,7 +1331,7 @@ export type DriveSourceKind = 'iso' | 'folder';
 /**
  * DriveStatus
  */
-export type DriveStatus = 'online' | 'offline' | 'ripping' | 'error';
+export type DriveStatus = 'online' | 'offline' | 'error';
 
 /**
  * DriveUpdateRequest
@@ -1904,6 +1904,14 @@ export type HeartbeatRequest = {
      * Eta Seconds
      */
     eta_seconds?: number | null;
+    /**
+     * Fps
+     */
+    fps?: number | null;
+    /**
+     * Avg Fps
+     */
+    avg_fps?: number | null;
 };
 
 /**
@@ -2490,6 +2498,26 @@ export type JobIdentity = {
      */
     facts_fetched_at?: string | null;
     [key: string]: unknown;
+};
+
+/**
+ * JobLogFileView
+ *
+ * One per-job aggregated log file under `/logs/jobs/` (`GET /api/logs`).
+ */
+export type JobLogFileView = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Modified At
+     */
+    modified_at: string;
 };
 
 /**
@@ -3941,6 +3969,10 @@ export type ResolveMatch = {
      * Poster Is Manual
      */
     poster_is_manual?: boolean;
+    /**
+     * Poster Url Manual
+     */
+    poster_url_manual?: string | null;
     facts?: IdentityFacts | null;
 };
 
@@ -5151,6 +5183,14 @@ export type TrackView = {
     status: TrackStatus;
     transcode_status?: TranscodeTaskStatus | null;
     /**
+     * Transcode Fps
+     */
+    transcode_fps?: number | null;
+    /**
+     * Transcode Avg Fps
+     */
+    transcode_avg_fps?: number | null;
+    /**
      * Output Path
      */
     output_path: string | null;
@@ -5460,6 +5500,26 @@ export type TranscodeTaskView = {
      * Claim Heartbeat At
      */
     claim_heartbeat_at: string | null;
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
+     * Current Pass
+     */
+    current_pass?: string | null;
+    /**
+     * Eta Seconds
+     */
+    eta_seconds?: number | null;
+    /**
+     * Fps
+     */
+    fps?: number | null;
+    /**
+     * Avg Fps
+     */
+    avg_fps?: number | null;
     /**
      * Last Error
      */
@@ -5801,12 +5861,6 @@ export type LogoutApiAuthLogoutPostResponse = LogoutApiAuthLogoutPostResponses[k
 
 export type ChangePasswordApiAuthPasswordPostData = {
     body: PasswordChangeRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/auth/password';
@@ -5836,12 +5890,6 @@ export type ChangePasswordApiAuthPasswordPostResponse = ChangePasswordApiAuthPas
 
 export type GetRipperConfigApiRipperConfigGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -5872,12 +5920,6 @@ export type GetRipperConfigApiRipperConfigGetResponse = GetRipperConfigApiRipper
 
 export type HeartbeatApiRipperHeartbeatPostData = {
     body: RipperHeartbeatRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/heartbeat';
@@ -5903,12 +5945,6 @@ export type HeartbeatApiRipperHeartbeatPostResponse = HeartbeatApiRipperHeartbea
 
 export type IsoPrepareReportApiRipperIsoPreparePostData = {
     body: IsoPrepareReport;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/iso-prepare';
@@ -5934,12 +5970,6 @@ export type IsoPrepareReportApiRipperIsoPreparePostResponse = IsoPrepareReportAp
 
 export type GetDriveApiRipperDrivesDriveIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -5970,12 +6000,6 @@ export type GetDriveApiRipperDrivesDriveIdGetResponse = GetDriveApiRipperDrivesD
 
 export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchData = {
     body: DriveDevicePathUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -6006,12 +6030,6 @@ export type UpdateDevicePathApiRipperDrivesDriveIdDevicePathPatchResponse = Upda
 
 export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostData = {
     body: MakemkvKeyStatusReport;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/makemkv-key-status';
@@ -6037,12 +6055,6 @@ export type MakemkvKeyStatusApiRipperMakemkvKeyStatusPostResponse = MakemkvKeySt
 
 export type KeydbStatusApiRipperKeydbStatusPostData = {
     body: KeydbStatusReport;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/keydb-status';
@@ -6068,12 +6080,6 @@ export type KeydbStatusApiRipperKeydbStatusPostResponse = KeydbStatusApiRipperKe
 
 export type SdfStatusApiRipperSdfStatusPostData = {
     body: SdfStatusReport;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/sdf-status';
@@ -6099,12 +6105,6 @@ export type SdfStatusApiRipperSdfStatusPostResponse = SdfStatusApiRipperSdfStatu
 
 export type RegisterApiRipperRegisterPostData = {
     body: RegisterRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/register';
@@ -6130,12 +6130,6 @@ export type RegisterApiRipperRegisterPostResponse = RegisterApiRipperRegisterPos
 
 export type IdentifyApiRipperIdentifyPostData = {
     body: IdentifyRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/ripper/identify';
@@ -6161,12 +6155,6 @@ export type IdentifyApiRipperIdentifyPostResponse = IdentifyApiRipperIdentifyPos
 
 export type GetJobApiRipperJobsJobIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6202,10 +6190,6 @@ export type RipStartApiRipperJobsJobIdRipStartPostData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -6242,10 +6226,6 @@ export type ResumeApiRipperJobsJobIdResumePostData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -6277,12 +6257,6 @@ export type ResumeApiRipperJobsJobIdResumePostResponse = ResumeApiRipperJobsJobI
 
 export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -6313,12 +6287,6 @@ export type GetInFlightJobApiRipperDrivesDriveIdInFlightJobGetResponse = GetInFl
 
 export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -6349,12 +6317,6 @@ export type GetCurrentJobApiRipperDrivesDriveIdCurrentJobGetResponse = GetCurren
 
 export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -6385,12 +6347,6 @@ export type GetHeldJobApiRipperDrivesDriveIdHeldJobGetResponse = GetHeldJobApiRi
 
 export type RecoveryAbandonApiRipperJobsJobIdRecoveryAbandonPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6426,10 +6382,6 @@ export type UpdateTrackApiRipperTracksTrackIdPatchData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -6466,10 +6418,6 @@ export type RipCompleteApiRipperJobsJobIdRipCompletePostData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -6504,12 +6452,6 @@ export type DeleteAllJobsApiJobsDeleteData = {
      * Req
      */
     body?: BulkDeleteJobsRequest | null;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -6540,12 +6482,6 @@ export type DeleteAllJobsApiJobsDeleteResponse = DeleteAllJobsApiJobsDeleteRespo
 
 export type ListJobsApiJobsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -6590,25 +6526,10 @@ export type ListJobsApiJobsGetResponse = ListJobsApiJobsGetResponses[keyof ListJ
 
 export type JobStatsApiJobsStatsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/jobs/stats';
 };
-
-export type JobStatsApiJobsStatsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type JobStatsApiJobsStatsGetError = JobStatsApiJobsStatsGetErrors[keyof JobStatsApiJobsStatsGetErrors];
 
 export type JobStatsApiJobsStatsGetResponses = {
     /**
@@ -6621,12 +6542,6 @@ export type JobStatsApiJobsStatsGetResponse = JobStatsApiJobsStatsGetResponses[k
 
 export type DeleteJobApiJobsJobIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6662,12 +6577,6 @@ export type DeleteJobApiJobsJobIdDeleteResponse = DeleteJobApiJobsJobIdDeleteRes
 
 export type GetJobDetailApiJobsJobIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6698,12 +6607,6 @@ export type GetJobDetailApiJobsJobIdGetResponse = GetJobDetailApiJobsJobIdGetRes
 
 export type UpdateJobApiJobsJobIdPatchData = {
     body: JobUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6737,12 +6640,6 @@ export type AbandonJobApiJobsJobIdAbandonPostData = {
      * Req
      */
     body?: AbandonJobRequest | null;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6773,12 +6670,6 @@ export type AbandonJobApiJobsJobIdAbandonPostResponse = AbandonJobApiJobsJobIdAb
 
 export type RipStartReviewApiJobsJobIdRipStartReviewPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6809,12 +6700,6 @@ export type RipStartReviewApiJobsJobIdRipStartReviewPostResponse = RipStartRevie
 
 export type RipAgainApiJobsJobIdRipAgainPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6845,12 +6730,6 @@ export type RipAgainApiJobsJobIdRipAgainPostResponse = RipAgainApiJobsJobIdRipAg
 
 export type ReviewPauseApiJobsJobIdReviewPausePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6886,12 +6765,6 @@ export type ReviewPauseApiJobsJobIdReviewPausePostResponse = ReviewPauseApiJobsJ
 
 export type ManualTriggerApiJobsManualPostData = {
     body: ManualTriggerRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/jobs/manual';
@@ -6917,12 +6790,6 @@ export type ManualTriggerApiJobsManualPostResponse = ManualTriggerApiJobsManualP
 
 export type ResolveApiJobsJobIdResolvePostData = {
     body: ResolveRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6953,12 +6820,6 @@ export type ResolveApiJobsJobIdResolvePostResponse = ResolveApiJobsJobIdResolveP
 
 export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -6989,12 +6850,6 @@ export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostResponse = Acc
 
 export type ApplySessionApiJobsJobIdTranscodePostData = {
     body: ApplySessionRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7025,12 +6880,6 @@ export type ApplySessionApiJobsJobIdTranscodePostResponse = ApplySessionApiJobsJ
 
 export type GetIdentityApiJobsJobIdIdentityGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7061,12 +6910,6 @@ export type GetIdentityApiJobsJobIdIdentityGetResponse = GetIdentityApiJobsJobId
 
 export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7097,12 +6940,6 @@ export type ClearEpisodeMatchApiJobsJobIdIdentityMatchDeleteResponse = ClearEpis
 
 export type MatchIdentityApiJobsJobIdIdentityMatchPostData = {
     body: MatchRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7133,12 +6970,6 @@ export type MatchIdentityApiJobsJobIdIdentityMatchPostResponse = MatchIdentityAp
 
 export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7169,12 +7000,6 @@ export type ClearIdentityPinApiJobsJobIdIdentityPinDeleteResponse = ClearIdentit
 
 export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7214,12 +7039,6 @@ export type BrowseEpisodesApiJobsJobIdIdentityEpisodesGetResponse = BrowseEpisod
 
 export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -7255,12 +7074,6 @@ export type BrowseSeasonsApiJobsJobIdIdentitySeasonsGetResponse = BrowseSeasonsA
 
 export type ListDrivesApiDrivesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -7295,25 +7108,10 @@ export type ListDrivesApiDrivesGetResponse = ListDrivesApiDrivesGetResponses[key
 
 export type DriveDiagnosticApiDrivesDiagnosticGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/drives/diagnostic';
 };
-
-export type DriveDiagnosticApiDrivesDiagnosticGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DriveDiagnosticApiDrivesDiagnosticGetError = DriveDiagnosticApiDrivesDiagnosticGetErrors[keyof DriveDiagnosticApiDrivesDiagnosticGetErrors];
 
 export type DriveDiagnosticApiDrivesDiagnosticGetResponses = {
     /**
@@ -7326,12 +7124,6 @@ export type DriveDiagnosticApiDrivesDiagnosticGetResponse = DriveDiagnosticApiDr
 
 export type RescanDrivesApiDrivesRescanPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -7364,12 +7156,6 @@ export type RescanDrivesApiDrivesRescanPostResponse = RescanDrivesApiDrivesResca
 
 export type DeleteDriveApiDrivesDriveIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7400,12 +7186,6 @@ export type DeleteDriveApiDrivesDriveIdDeleteResponse = DeleteDriveApiDrivesDriv
 
 export type UpdateDriveApiDrivesDriveIdPatchData = {
     body: DriveUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7436,12 +7216,6 @@ export type UpdateDriveApiDrivesDriveIdPatchResponse = UpdateDriveApiDrivesDrive
 
 export type EnrollDriveApiDrivesDriveIdEnrollPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7472,12 +7246,6 @@ export type EnrollDriveApiDrivesDriveIdEnrollPostResponse = EnrollDriveApiDrives
 
 export type IgnoreDriveApiDrivesDriveIdIgnorePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7508,12 +7276,6 @@ export type IgnoreDriveApiDrivesDriveIdIgnorePostResponse = IgnoreDriveApiDrives
 
 export type UnignoreDriveApiDrivesDriveIdUnignorePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7544,12 +7306,6 @@ export type UnignoreDriveApiDrivesDriveIdUnignorePostResponse = UnignoreDriveApi
 
 export type UnenrollDriveApiDrivesDriveIdUnenrollPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7584,12 +7340,6 @@ export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApi
 
 export type LibraryApiIsoLibraryGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -7620,25 +7370,10 @@ export type LibraryApiIsoLibraryGetResponse = LibraryApiIsoLibraryGetResponses[k
 
 export type FoldersApiIsoFoldersGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/iso/folders';
 };
-
-export type FoldersApiIsoFoldersGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FoldersApiIsoFoldersGetError = FoldersApiIsoFoldersGetErrors[keyof FoldersApiIsoFoldersGetErrors];
 
 export type FoldersApiIsoFoldersGetResponses = {
     /**
@@ -7651,25 +7386,10 @@ export type FoldersApiIsoFoldersGetResponse = FoldersApiIsoFoldersGetResponses[k
 
 export type PreparingApiIsoRipsPreparingGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/iso/rips/preparing';
 };
-
-export type PreparingApiIsoRipsPreparingGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PreparingApiIsoRipsPreparingGetError = PreparingApiIsoRipsPreparingGetErrors[keyof PreparingApiIsoRipsPreparingGetErrors];
 
 export type PreparingApiIsoRipsPreparingGetResponses = {
     /**
@@ -7684,12 +7404,6 @@ export type PreparingApiIsoRipsPreparingGetResponse = PreparingApiIsoRipsPrepari
 
 export type CreateRipApiIsoRipsPostData = {
     body: IsoRipRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/iso/rips';
@@ -7715,12 +7429,6 @@ export type CreateRipApiIsoRipsPostResponse = CreateRipApiIsoRipsPostResponses[k
 
 export type CancelRipApiIsoRipsDriveIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Drive Id
@@ -7751,25 +7459,10 @@ export type CancelRipApiIsoRipsDriveIdDeleteResponse = CancelRipApiIsoRipsDriveI
 
 export type ListSessionsApiSessionsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/sessions';
 };
-
-export type ListSessionsApiSessionsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListSessionsApiSessionsGetError = ListSessionsApiSessionsGetErrors[keyof ListSessionsApiSessionsGetErrors];
 
 export type ListSessionsApiSessionsGetResponses = {
     /**
@@ -7784,12 +7477,6 @@ export type ListSessionsApiSessionsGetResponse = ListSessionsApiSessionsGetRespo
 
 export type CreateSessionApiSessionsPostData = {
     body: SessionCreateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/sessions';
@@ -7815,12 +7502,6 @@ export type CreateSessionApiSessionsPostResponse = CreateSessionApiSessionsPostR
 
 export type DeleteSessionApiSessionsSessionIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Session Id
@@ -7851,12 +7532,6 @@ export type DeleteSessionApiSessionsSessionIdDeleteResponse = DeleteSessionApiSe
 
 export type GetSessionByIdApiSessionsSessionIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Session Id
@@ -7887,12 +7562,6 @@ export type GetSessionByIdApiSessionsSessionIdGetResponse = GetSessionByIdApiSes
 
 export type UpdateSessionApiSessionsSessionIdPatchData = {
     body: SessionUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Session Id
@@ -7923,12 +7592,6 @@ export type UpdateSessionApiSessionsSessionIdPatchResponse = UpdateSessionApiSes
 
 export type CloneSessionApiSessionsSessionIdClonePostData = {
     body: SessionCloneRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Session Id
@@ -7959,12 +7622,6 @@ export type CloneSessionApiSessionsSessionIdClonePostResponse = CloneSessionApiS
 
 export type PreviewTemplateApiSessionsPreviewPostData = {
     body: TemplatePreviewRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/sessions/preview';
@@ -7990,25 +7647,10 @@ export type PreviewTemplateApiSessionsPreviewPostResponse = PreviewTemplateApiSe
 
 export type ListSessionRoutesApiSessionRoutesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/session-routes';
 };
-
-export type ListSessionRoutesApiSessionRoutesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListSessionRoutesApiSessionRoutesGetError = ListSessionRoutesApiSessionRoutesGetErrors[keyof ListSessionRoutesApiSessionRoutesGetErrors];
 
 export type ListSessionRoutesApiSessionRoutesGetResponses = {
     /**
@@ -8023,12 +7665,6 @@ export type ListSessionRoutesApiSessionRoutesGetResponse = ListSessionRoutesApiS
 
 export type UpsertSessionRouteApiSessionRoutesPutData = {
     body: SessionRouteUpsert;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/session-routes';
@@ -8054,12 +7690,6 @@ export type UpsertSessionRouteApiSessionRoutesPutResponse = UpsertSessionRouteAp
 
 export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Route Id
@@ -8090,12 +7720,6 @@ export type DeleteSessionRouteApiSessionRoutesRouteIdDeleteResponse = DeleteSess
 
 export type ListRipPresetsApiRipPresetsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -8128,12 +7752,6 @@ export type ListRipPresetsApiRipPresetsGetResponse = ListRipPresetsApiRipPresets
 
 export type CreateRipPresetApiRipPresetsPostData = {
     body: RipPresetCreateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/rip-presets';
@@ -8159,12 +7777,6 @@ export type CreateRipPresetApiRipPresetsPostResponse = CreateRipPresetApiRipPres
 
 export type DeleteRipPresetApiRipPresetsPresetIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8195,12 +7807,6 @@ export type DeleteRipPresetApiRipPresetsPresetIdDeleteResponse = DeleteRipPreset
 
 export type GetRipPresetApiRipPresetsPresetIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8231,12 +7837,6 @@ export type GetRipPresetApiRipPresetsPresetIdGetResponse = GetRipPresetApiRipPre
 
 export type UpdateRipPresetApiRipPresetsPresetIdPatchData = {
     body: RipPresetUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8267,12 +7867,6 @@ export type UpdateRipPresetApiRipPresetsPresetIdPatchResponse = UpdateRipPresetA
 
 export type ListTranscodePresetsApiTranscodePresetsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -8305,12 +7899,6 @@ export type ListTranscodePresetsApiTranscodePresetsGetResponse = ListTranscodePr
 
 export type CreateTranscodePresetApiTranscodePresetsPostData = {
     body: TranscodePresetCreateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/transcode-presets';
@@ -8336,12 +7924,6 @@ export type CreateTranscodePresetApiTranscodePresetsPostResponse = CreateTransco
 
 export type DeleteTranscodePresetApiTranscodePresetsPresetIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8372,12 +7954,6 @@ export type DeleteTranscodePresetApiTranscodePresetsPresetIdDeleteResponse = Del
 
 export type GetTranscodePresetApiTranscodePresetsPresetIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8408,12 +7984,6 @@ export type GetTranscodePresetApiTranscodePresetsPresetIdGetResponse = GetTransc
 
 export type UpdateTranscodePresetApiTranscodePresetsPresetIdPatchData = {
     body: TranscodePresetUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Preset Id
@@ -8444,12 +8014,6 @@ export type UpdateTranscodePresetApiTranscodePresetsPresetIdPatchResponse = Upda
 
 export type RegisterApiTranscoderRegisterPostData = {
     body: RegisterTranscoderRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/transcoder/register';
@@ -8480,10 +8044,6 @@ export type ClaimApiTranscoderTasksTaskIdClaimPostData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -8520,10 +8080,6 @@ export type HeartbeatApiTranscoderTasksTaskIdHeartbeatPatchData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -8560,10 +8116,6 @@ export type CompleteApiTranscoderTasksTaskIdCompletePatchData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -8600,10 +8152,6 @@ export type FailApiTranscoderTasksTaskIdFailPatchData = {
          * X-Arm-Hostname
          */
         'x-arm-hostname'?: string | null;
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
     };
     path: {
         /**
@@ -8635,12 +8183,6 @@ export type FailApiTranscoderTasksTaskIdFailPatchResponse = FailApiTranscoderTas
 
 export type ListTranscodesApiTranscodesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -8677,25 +8219,10 @@ export type ListTranscodesApiTranscodesGetResponse = ListTranscodesApiTranscodes
 
 export type TranscodeStatsApiTranscodesStatsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/transcodes/stats';
 };
-
-export type TranscodeStatsApiTranscodesStatsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TranscodeStatsApiTranscodesStatsGetError = TranscodeStatsApiTranscodesStatsGetErrors[keyof TranscodeStatsApiTranscodesStatsGetErrors];
 
 export type TranscodeStatsApiTranscodesStatsGetResponses = {
     /**
@@ -8708,25 +8235,10 @@ export type TranscodeStatsApiTranscodesStatsGetResponse = TranscodeStatsApiTrans
 
 export type TranscodeWorkersApiTranscodesWorkersGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/transcodes/workers';
 };
-
-export type TranscodeWorkersApiTranscodesWorkersGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type TranscodeWorkersApiTranscodesWorkersGetError = TranscodeWorkersApiTranscodesWorkersGetErrors[keyof TranscodeWorkersApiTranscodesWorkersGetErrors];
 
 export type TranscodeWorkersApiTranscodesWorkersGetResponses = {
     /**
@@ -8741,12 +8253,6 @@ export type TranscodeWorkersApiTranscodesWorkersGetResponse = TranscodeWorkersAp
 
 export type RetryTranscodeApiTranscodesTaskIdRetryPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Task Id
@@ -8777,12 +8283,6 @@ export type RetryTranscodeApiTranscodesTaskIdRetryPostResponse = RetryTranscodeA
 
 export type DownloadTranscodeLogZipApiTranscodesTaskIdLogZipGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Task Id
@@ -8811,12 +8311,6 @@ export type DownloadTranscodeLogZipApiTranscodesTaskIdLogZipGetResponses = {
 
 export type StreamTranscodeLogApiTranscodesTaskIdLogGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Task Id
@@ -8850,12 +8344,6 @@ export type StreamTranscodeLogApiTranscodesTaskIdLogGetResponses = {
 
 export type DeleteTranscodeApiTranscodesTaskIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Task Id
@@ -8886,25 +8374,10 @@ export type DeleteTranscodeApiTranscodesTaskIdDeleteResponse = DeleteTranscodeAp
 
 export type ListGpusApiGpusGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/gpus';
 };
-
-export type ListGpusApiGpusGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListGpusApiGpusGetError = ListGpusApiGpusGetErrors[keyof ListGpusApiGpusGetErrors];
 
 export type ListGpusApiGpusGetResponses = {
     /**
@@ -8919,12 +8392,6 @@ export type ListGpusApiGpusGetResponse = ListGpusApiGpusGetResponses[keyof ListG
 
 export type DeleteGpuApiGpusGpuIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Gpu Id
@@ -8955,12 +8422,6 @@ export type DeleteGpuApiGpusGpuIdDeleteResponse = DeleteGpuApiGpusGpuIdDeleteRes
 
 export type UpdateGpuApiGpusGpuIdPatchData = {
     body: GpuUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Gpu Id
@@ -8991,25 +8452,10 @@ export type UpdateGpuApiGpusGpuIdPatchResponse = UpdateGpuApiGpusGpuIdPatchRespo
 
 export type ProbeAllGpusApiGpusProbePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/gpus/probe';
 };
-
-export type ProbeAllGpusApiGpusProbePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ProbeAllGpusApiGpusProbePostError = ProbeAllGpusApiGpusProbePostErrors[keyof ProbeAllGpusApiGpusProbePostErrors];
 
 export type ProbeAllGpusApiGpusProbePostResponses = {
     /**
@@ -9022,12 +8468,6 @@ export type ProbeAllGpusApiGpusProbePostResponse = ProbeAllGpusApiGpusProbePostR
 
 export type ProbeGpuApiGpusGpuIdProbePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Gpu Id
@@ -9058,25 +8498,10 @@ export type ProbeGpuApiGpusGpuIdProbePostResponse = ProbeGpuApiGpusGpuIdProbePos
 
 export type ListEncodersApiEncodersGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/encoders';
 };
-
-export type ListEncodersApiEncodersGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListEncodersApiEncodersGetError = ListEncodersApiEncodersGetErrors[keyof ListEncodersApiEncodersGetErrors];
 
 export type ListEncodersApiEncodersGetResponses = {
     /**
@@ -9091,25 +8516,10 @@ export type ListEncodersApiEncodersGetResponse = ListEncodersApiEncodersGetRespo
 
 export type GetConfigApiConfigGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/config';
 };
-
-export type GetConfigApiConfigGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetConfigApiConfigGetError = GetConfigApiConfigGetErrors[keyof GetConfigApiConfigGetErrors];
 
 export type GetConfigApiConfigGetResponses = {
     /**
@@ -9122,12 +8532,6 @@ export type GetConfigApiConfigGetResponse = GetConfigApiConfigGetResponses[keyof
 
 export type UpdateConfigApiConfigPatchData = {
     body: ConfigUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/config';
@@ -9153,12 +8557,6 @@ export type UpdateConfigApiConfigPatchResponse = UpdateConfigApiConfigPatchRespo
 
 export type CheckKeyApiConfigKeysNameCheckPostData = {
     body: KeyCheckRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Name
@@ -9189,25 +8587,10 @@ export type CheckKeyApiConfigKeysNameCheckPostResponse = CheckKeyApiConfigKeysNa
 
 export type GetDiagnosticsApiDiagnosticsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/diagnostics';
 };
-
-export type GetDiagnosticsApiDiagnosticsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetDiagnosticsApiDiagnosticsGetError = GetDiagnosticsApiDiagnosticsGetErrors[keyof GetDiagnosticsApiDiagnosticsGetErrors];
 
 export type GetDiagnosticsApiDiagnosticsGetResponses = {
     /**
@@ -9220,12 +8603,6 @@ export type GetDiagnosticsApiDiagnosticsGetResponse = GetDiagnosticsApiDiagnosti
 
 export type SearchMetadataApiMetadataSearchGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query: {
         /**
@@ -9268,12 +8645,6 @@ export type SearchMetadataApiMetadataSearchGetResponse = SearchMetadataApiMetada
 
 export type MatchDetailsApiMetadataDetailsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query: {
         /**
@@ -9312,12 +8683,6 @@ export type MatchDetailsApiMetadataDetailsGetResponse = MatchDetailsApiMetadataD
 
 export type LookupMetadataApiMetadataLookupGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -9352,12 +8717,6 @@ export type LookupMetadataApiMetadataLookupGetResponse = LookupMetadataApiMetada
 
 export type SearchMusicApiMetadataMusicSearchGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query: {
         /**
@@ -9412,12 +8771,6 @@ export type SearchMusicApiMetadataMusicSearchGetResponse = SearchMusicApiMetadat
 
 export type MusicReleaseDetailApiMetadataMusicReleaseIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Release Id
@@ -9448,12 +8801,6 @@ export type MusicReleaseDetailApiMetadataMusicReleaseIdGetResponse = MusicReleas
 
 export type NamingVariablesApiNamingVariablesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -9484,12 +8831,6 @@ export type NamingVariablesApiNamingVariablesGetResponse = NamingVariablesApiNam
 
 export type JobNamingPreviewApiJobsJobIdNamingPreviewGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -9527,12 +8868,6 @@ export type JobNamingPreviewApiJobsJobIdNamingPreviewGetResponse = JobNamingPrev
 
 export type NamingValidateApiNamingValidatePostData = {
     body: NamingValidateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/naming/validate';
@@ -9558,12 +8893,6 @@ export type NamingValidateApiNamingValidatePostResponse = NamingValidateApiNamin
 
 export type NamingPreviewApiNamingPreviewPostData = {
     body: NamingPreviewRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/naming/preview';
@@ -9589,25 +8918,10 @@ export type NamingPreviewApiNamingPreviewPostResponse = NamingPreviewApiNamingPr
 
 export type ListChannelsApiNotificationsChannelsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/channels';
 };
-
-export type ListChannelsApiNotificationsChannelsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListChannelsApiNotificationsChannelsGetError = ListChannelsApiNotificationsChannelsGetErrors[keyof ListChannelsApiNotificationsChannelsGetErrors];
 
 export type ListChannelsApiNotificationsChannelsGetResponses = {
     /**
@@ -9622,12 +8936,6 @@ export type ListChannelsApiNotificationsChannelsGetResponse = ListChannelsApiNot
 
 export type CreateChannelApiNotificationsChannelsPostData = {
     body: NotificationChannelCreateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/channels';
@@ -9653,12 +8961,6 @@ export type CreateChannelApiNotificationsChannelsPostResponse = CreateChannelApi
 
 export type DeleteChannelApiNotificationsChannelsChannelIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Channel Id
@@ -9689,12 +8991,6 @@ export type DeleteChannelApiNotificationsChannelsChannelIdDeleteResponse = Delet
 
 export type GetChannelApiNotificationsChannelsChannelIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Channel Id
@@ -9725,12 +9021,6 @@ export type GetChannelApiNotificationsChannelsChannelIdGetResponse = GetChannelA
 
 export type PatchChannelApiNotificationsChannelsChannelIdPatchData = {
     body: NotificationChannelUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Channel Id
@@ -9761,25 +9051,10 @@ export type PatchChannelApiNotificationsChannelsChannelIdPatchResponse = PatchCh
 
 export type GetServicesApiNotificationsServicesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/services';
 };
-
-export type GetServicesApiNotificationsServicesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetServicesApiNotificationsServicesGetError = GetServicesApiNotificationsServicesGetErrors[keyof GetServicesApiNotificationsServicesGetErrors];
 
 export type GetServicesApiNotificationsServicesGetResponses = {
     /**
@@ -9792,25 +9067,10 @@ export type GetServicesApiNotificationsServicesGetResponse = GetServicesApiNotif
 
 export type GetScriptsApiNotificationsScriptsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/scripts';
 };
-
-export type GetScriptsApiNotificationsScriptsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetScriptsApiNotificationsScriptsGetError = GetScriptsApiNotificationsScriptsGetErrors[keyof GetScriptsApiNotificationsScriptsGetErrors];
 
 export type GetScriptsApiNotificationsScriptsGetResponses = {
     /**
@@ -9825,12 +9085,6 @@ export type GetScriptsApiNotificationsScriptsGetResponse = GetScriptsApiNotifica
 
 export type PreviewScriptApiNotificationsScriptsPreviewPostData = {
     body: BashPreviewRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/scripts/preview';
@@ -9856,12 +9110,6 @@ export type PreviewScriptApiNotificationsScriptsPreviewPostResponse = PreviewScr
 
 export type GetScriptApiNotificationsScriptsNameGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Name
@@ -9892,12 +9140,6 @@ export type GetScriptApiNotificationsScriptsNameGetResponse = GetScriptApiNotifi
 
 export type ComposeUrlApiNotificationsServicesServiceIdComposeUrlPostData = {
     body: ComposeUrlRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Service Id
@@ -9928,25 +9170,10 @@ export type ComposeUrlApiNotificationsServicesServiceIdComposeUrlPostResponse = 
 
 export type EventTypesApiNotificationsEventTypesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/event-types';
 };
-
-export type EventTypesApiNotificationsEventTypesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type EventTypesApiNotificationsEventTypesGetError = EventTypesApiNotificationsEventTypesGetErrors[keyof EventTypesApiNotificationsEventTypesGetErrors];
 
 export type EventTypesApiNotificationsEventTypesGetResponses = {
     /**
@@ -9961,12 +9188,6 @@ export type EventTypesApiNotificationsEventTypesGetResponse = EventTypesApiNotif
 
 export type TestChannelApiNotificationsChannelsChannelIdTestPostData = {
     body: NotificationChannelTestRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Channel Id
@@ -9997,12 +9218,6 @@ export type TestChannelApiNotificationsChannelsChannelIdTestPostResponse = TestC
 
 export type TestConfigApiNotificationsTestPostData = {
     body: NotificationTestRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/test';
@@ -10028,12 +9243,6 @@ export type TestConfigApiNotificationsTestPostResponse = TestConfigApiNotificati
 
 export type DispatchLogApiNotificationsDispatchLogGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -10070,12 +9279,6 @@ export type DispatchLogApiNotificationsDispatchLogGetResponse = DispatchLogApiNo
 
 export type ListInboxApiNotificationsInboxGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: {
         /**
@@ -10112,25 +9315,10 @@ export type ListInboxApiNotificationsInboxGetResponse = ListInboxApiNotification
 
 export type InboxCountApiNotificationsInboxCountGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/inbox/count';
 };
-
-export type InboxCountApiNotificationsInboxCountGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type InboxCountApiNotificationsInboxCountGetError = InboxCountApiNotificationsInboxCountGetErrors[keyof InboxCountApiNotificationsInboxCountGetErrors];
 
 export type InboxCountApiNotificationsInboxCountGetResponses = {
     /**
@@ -10143,25 +9331,10 @@ export type InboxCountApiNotificationsInboxCountGetResponse = InboxCountApiNotif
 
 export type InboxDismissAllApiNotificationsInboxDismissAllPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/inbox/dismiss-all';
 };
-
-export type InboxDismissAllApiNotificationsInboxDismissAllPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type InboxDismissAllApiNotificationsInboxDismissAllPostError = InboxDismissAllApiNotificationsInboxDismissAllPostErrors[keyof InboxDismissAllApiNotificationsInboxDismissAllPostErrors];
 
 export type InboxDismissAllApiNotificationsInboxDismissAllPostResponses = {
     /**
@@ -10178,25 +9351,10 @@ export type InboxDismissAllApiNotificationsInboxDismissAllPostResponse = InboxDi
 
 export type InboxPurgeApiNotificationsInboxPurgePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/notifications/inbox/purge';
 };
-
-export type InboxPurgeApiNotificationsInboxPurgePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type InboxPurgeApiNotificationsInboxPurgePostError = InboxPurgeApiNotificationsInboxPurgePostErrors[keyof InboxPurgeApiNotificationsInboxPurgePostErrors];
 
 export type InboxPurgeApiNotificationsInboxPurgePostResponses = {
     /**
@@ -10213,12 +9371,6 @@ export type InboxPurgeApiNotificationsInboxPurgePostResponse = InboxPurgeApiNoti
 
 export type PatchInboxApiNotificationsInboxInboxIdPatchData = {
     body: NotificationInboxUpdateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Inbox Id
@@ -10247,14 +9399,26 @@ export type PatchInboxApiNotificationsInboxInboxIdPatchResponses = {
 
 export type PatchInboxApiNotificationsInboxInboxIdPatchResponse = PatchInboxApiNotificationsInboxInboxIdPatchResponses[keyof PatchInboxApiNotificationsInboxInboxIdPatchResponses];
 
+export type ListJobLogsApiLogsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/logs';
+};
+
+export type ListJobLogsApiLogsGetResponses = {
+    /**
+     * Response List Job Logs Api Logs Get
+     *
+     * Successful Response
+     */
+    200: Array<JobLogFileView>;
+};
+
+export type ListJobLogsApiLogsGetResponse = ListJobLogsApiLogsGetResponses[keyof ListJobLogsApiLogsGetResponses];
+
 export type DownloadJobLogsZipApiLogsJobIdZipGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -10283,12 +9447,6 @@ export type DownloadJobLogsZipApiLogsJobIdZipGetResponses = {
 
 export type StreamJobLogsApiLogsJobIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Job Id
@@ -10352,25 +9510,10 @@ export type ProxyImageApiImagesProxyGetResponses = {
 
 export type ImageCacheStatsApiImagesCacheGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/images/cache';
 };
-
-export type ImageCacheStatsApiImagesCacheGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ImageCacheStatsApiImagesCacheGetError = ImageCacheStatsApiImagesCacheGetErrors[keyof ImageCacheStatsApiImagesCacheGetErrors];
 
 export type ImageCacheStatsApiImagesCacheGetResponses = {
     /**
@@ -10387,25 +9530,10 @@ export type ImageCacheStatsApiImagesCacheGetResponse = ImageCacheStatsApiImagesC
 
 export type ImageCacheClearApiImagesCacheClearPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/images/cache/clear';
 };
-
-export type ImageCacheClearApiImagesCacheClearPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ImageCacheClearApiImagesCacheClearPostError = ImageCacheClearApiImagesCacheClearPostErrors[keyof ImageCacheClearApiImagesCacheClearPostErrors];
 
 export type ImageCacheClearApiImagesCacheClearPostResponses = {
     /**
@@ -10422,25 +9550,10 @@ export type ImageCacheClearApiImagesCacheClearPostResponse = ImageCacheClearApiI
 
 export type ListThemesApiThemesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/themes';
 };
-
-export type ListThemesApiThemesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListThemesApiThemesGetError = ListThemesApiThemesGetErrors[keyof ListThemesApiThemesGetErrors];
 
 export type ListThemesApiThemesGetResponses = {
     /**
@@ -10457,12 +9570,6 @@ export type ListThemesApiThemesGetResponse = ListThemesApiThemesGetResponses[key
 
 export type UploadThemeApiThemesPostData = {
     body: BodyUploadThemeApiThemesPost;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/themes';
@@ -10496,12 +9603,6 @@ export type UploadThemeApiThemesPostResponse = UploadThemeApiThemesPostResponses
 
 export type DeleteThemeApiThemesThemeIdDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Theme Id
@@ -10540,12 +9641,6 @@ export type DeleteThemeApiThemesThemeIdDeleteResponse = DeleteThemeApiThemesThem
 
 export type GetThemeApiThemesThemeIdGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Theme Id
@@ -10616,25 +9711,10 @@ export type GetThemeCssApiThemesThemeIdCssGetResponses = {
 
 export type SettingsInfraApiSettingsInfraGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/settings/infra';
 };
-
-export type SettingsInfraApiSettingsInfraGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SettingsInfraApiSettingsInfraGetError = SettingsInfraApiSettingsInfraGetErrors[keyof SettingsInfraApiSettingsInfraGetErrors];
 
 export type SettingsInfraApiSettingsInfraGetResponses = {
     /**
@@ -10651,25 +9731,10 @@ export type SettingsInfraApiSettingsInfraGetResponse = SettingsInfraApiSettingsI
 
 export type SettingsSchemaApiSettingsSchemaGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/settings/schema';
 };
-
-export type SettingsSchemaApiSettingsSchemaGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SettingsSchemaApiSettingsSchemaGetError = SettingsSchemaApiSettingsSchemaGetErrors[keyof SettingsSchemaApiSettingsSchemaGetErrors];
 
 export type SettingsSchemaApiSettingsSchemaGetResponses = {
     /**
@@ -10682,25 +9747,10 @@ export type SettingsSchemaApiSettingsSchemaGetResponse = SettingsSchemaApiSettin
 
 export type DiagnosticsApiSystemDiagnosticsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/system/diagnostics';
 };
-
-export type DiagnosticsApiSystemDiagnosticsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DiagnosticsApiSystemDiagnosticsGetError = DiagnosticsApiSystemDiagnosticsGetErrors[keyof DiagnosticsApiSystemDiagnosticsGetErrors];
 
 export type DiagnosticsApiSystemDiagnosticsGetResponses = {
     /**
@@ -10713,25 +9763,10 @@ export type DiagnosticsApiSystemDiagnosticsGetResponse = DiagnosticsApiSystemDia
 
 export type StatsApiSystemStatsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/system/stats';
 };
-
-export type StatsApiSystemStatsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type StatsApiSystemStatsGetError = StatsApiSystemStatsGetErrors[keyof StatsApiSystemStatsGetErrors];
 
 export type StatsApiSystemStatsGetResponses = {
     /**
@@ -10744,25 +9779,10 @@ export type StatsApiSystemStatsGetResponse = StatsApiSystemStatsGetResponses[key
 
 export type ResourcesApiSystemResourcesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/system/resources';
 };
-
-export type ResourcesApiSystemResourcesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ResourcesApiSystemResourcesGetError = ResourcesApiSystemResourcesGetErrors[keyof ResourcesApiSystemResourcesGetErrors];
 
 export type ResourcesApiSystemResourcesGetResponses = {
     /**
@@ -10775,25 +9795,10 @@ export type ResourcesApiSystemResourcesGetResponse = ResourcesApiSystemResources
 
 export type SystemVersionApiSystemVersionGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/system/version';
 };
-
-export type SystemVersionApiSystemVersionGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SystemVersionApiSystemVersionGetError = SystemVersionApiSystemVersionGetErrors[keyof SystemVersionApiSystemVersionGetErrors];
 
 export type SystemVersionApiSystemVersionGetResponses = {
     /**
@@ -10806,25 +9811,10 @@ export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVer
 
 export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/system/thediscdb/refresh';
 };
-
-export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostError = ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors[keyof ThediscdbRefreshNowApiSystemThediscdbRefreshPostErrors];
 
 export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostResponses = {
     /**
@@ -10857,25 +9847,10 @@ export type SetupStatusApiSetupStatusGetResponse = SetupStatusApiSetupStatusGetR
 
 export type GetSetupApiSetupGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup';
 };
-
-export type GetSetupApiSetupGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetSetupApiSetupGetError = GetSetupApiSetupGetErrors[keyof GetSetupApiSetupGetErrors];
 
 export type GetSetupApiSetupGetResponses = {
     /**
@@ -10888,12 +9863,6 @@ export type GetSetupApiSetupGetResponse = GetSetupApiSetupGetResponses[keyof Get
 
 export type PutStepApiSetupStepsStepPutData = {
     body: SetupStepUpdate;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * Step
@@ -10924,25 +9893,10 @@ export type PutStepApiSetupStepsStepPutResponse = PutStepApiSetupStepsStepPutRes
 
 export type CompleteSetupApiSetupCompletePostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup/complete';
 };
-
-export type CompleteSetupApiSetupCompletePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type CompleteSetupApiSetupCompletePostError = CompleteSetupApiSetupCompletePostErrors[keyof CompleteSetupApiSetupCompletePostErrors];
 
 export type CompleteSetupApiSetupCompletePostResponses = {
     /**
@@ -10955,25 +9909,10 @@ export type CompleteSetupApiSetupCompletePostResponse = CompleteSetupApiSetupCom
 
 export type RestartSetupApiSetupRestartPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup/restart';
 };
-
-export type RestartSetupApiSetupRestartPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RestartSetupApiSetupRestartPostError = RestartSetupApiSetupRestartPostErrors[keyof RestartSetupApiSetupRestartPostErrors];
 
 export type RestartSetupApiSetupRestartPostResponses = {
     /**
@@ -10986,25 +9925,10 @@ export type RestartSetupApiSetupRestartPostResponse = RestartSetupApiSetupRestar
 
 export type DeferSetupApiSetupDeferPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup/defer';
 };
-
-export type DeferSetupApiSetupDeferPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DeferSetupApiSetupDeferPostError = DeferSetupApiSetupDeferPostErrors[keyof DeferSetupApiSetupDeferPostErrors];
 
 export type DeferSetupApiSetupDeferPostResponses = {
     /**
@@ -11017,25 +9941,10 @@ export type DeferSetupApiSetupDeferPostResponse = DeferSetupApiSetupDeferPostRes
 
 export type DismissChecklistApiSetupChecklistDismissPostData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup/checklist/dismiss';
 };
-
-export type DismissChecklistApiSetupChecklistDismissPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DismissChecklistApiSetupChecklistDismissPostError = DismissChecklistApiSetupChecklistDismissPostErrors[keyof DismissChecklistApiSetupChecklistDismissPostErrors];
 
 export type DismissChecklistApiSetupChecklistDismissPostResponses = {
     /**
@@ -11048,25 +9957,10 @@ export type DismissChecklistApiSetupChecklistDismissPostResponse = DismissCheckl
 
 export type DiscRoutesApiSetupDiscRoutesGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/setup/disc-routes';
 };
-
-export type DiscRoutesApiSetupDiscRoutesGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DiscRoutesApiSetupDiscRoutesGetError = DiscRoutesApiSetupDiscRoutesGetErrors[keyof DiscRoutesApiSetupDiscRoutesGetErrors];
 
 export type DiscRoutesApiSetupDiscRoutesGetResponses = {
     /**
@@ -11081,25 +9975,10 @@ export type DiscRoutesApiSetupDiscRoutesGetResponse = DiscRoutesApiSetupDiscRout
 
 export type RootsApiFilesRootsGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/files/roots';
 };
-
-export type RootsApiFilesRootsGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RootsApiFilesRootsGetError = RootsApiFilesRootsGetErrors[keyof RootsApiFilesRootsGetErrors];
 
 export type RootsApiFilesRootsGetResponses = {
     /**
@@ -11114,12 +9993,6 @@ export type RootsApiFilesRootsGetResponse = RootsApiFilesRootsGetResponses[keyof
 
 export type ListDirectoryApiFilesListGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query: {
         /**
@@ -11154,12 +10027,6 @@ export type ListDirectoryApiFilesListGetResponse = ListDirectoryApiFilesListGetR
 
 export type MkdirApiFilesMkdirPostData = {
     body: MkdirRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/files/mkdir';
@@ -11185,12 +10052,6 @@ export type MkdirApiFilesMkdirPostResponse = MkdirApiFilesMkdirPostResponses[key
 
 export type RenameApiFilesRenamePostData = {
     body: RenameRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/files/rename';
@@ -11216,12 +10077,6 @@ export type RenameApiFilesRenamePostResponse = RenameApiFilesRenamePostResponses
 
 export type MoveApiFilesMovePostData = {
     body: MoveRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/files/move';
@@ -11247,12 +10102,6 @@ export type MoveApiFilesMovePostResponse = MoveApiFilesMovePostResponses[keyof M
 
 export type FixPermissionsApiFilesFixPermissionsPostData = {
     body: FilePathRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/files/fix-permissions';
@@ -11278,12 +10127,6 @@ export type FixPermissionsApiFilesFixPermissionsPostResponse = FixPermissionsApi
 
 export type DeleteApiFilesDeleteData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query: {
         /**
@@ -11322,25 +10165,10 @@ export type DeleteApiFilesDeleteResponse = DeleteApiFilesDeleteResponses[keyof D
 
 export type ListUsersApiUsersGetData = {
     body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path?: never;
     query?: never;
     url: '/api/users';
 };
-
-export type ListUsersApiUsersGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListUsersApiUsersGetError = ListUsersApiUsersGetErrors[keyof ListUsersApiUsersGetErrors];
 
 export type ListUsersApiUsersGetResponses = {
     /**
@@ -11355,12 +10183,6 @@ export type ListUsersApiUsersGetResponse = ListUsersApiUsersGetResponses[keyof L
 
 export type SetDisabledApiUsersUserIdPatchData = {
     body: UserDisabledRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * User Id
@@ -11391,12 +10213,6 @@ export type SetDisabledApiUsersUserIdPatchResponse = SetDisabledApiUsersUserIdPa
 
 export type SetPasswordApiUsersUserIdPasswordPostData = {
     body: UserPasswordSetRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-    };
     path: {
         /**
          * User Id

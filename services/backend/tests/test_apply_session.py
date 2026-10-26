@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import jobs as jobs_router
+from arm_common import (
     Config,
     ContainerFormat,
     DiscType,
@@ -45,7 +42,7 @@ from arm_common import (  # noqa: E402
     User,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -682,6 +679,23 @@ def test_apply_rejects_job_in_bad_status(signing_key: bytes, tmp_path: Path) -> 
             headers=_auth(token),
         )
     assert r.status_code == 409
+
+
+def test_apply_bad_status_409_survives_raw_string_status(signing_key: bytes, tmp_path: Path) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409, not an AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPING)
+    object.__setattr__(db.rows["jobs"][0], "status", "some_future_status")
+    app, token = _make_app(signing_key, db, tmp_path)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode",
+            json={"session_id": "ses_x"},
+            headers=_auth(token),
+        )
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_apply_unknown_session_400(signing_key: bytes, tmp_path: Path) -> None:

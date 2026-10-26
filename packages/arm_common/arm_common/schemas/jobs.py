@@ -30,9 +30,12 @@ class ResolveMatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["tmdb", "omdb", "tvmaze", "tvdb"]
+    # The candidate's own poster, edited or not: it becomes the automatic one.
     poster_url: str | None = None
-    # True when the operator edited the poster URL before using the match.
+    # True when the operator edited the poster URL before using the match;
+    # `poster_url_manual` is then the override (null clears it).
     poster_is_manual: bool = False
+    poster_url_manual: str | None = None
     facts: IdentityFacts | None = None
 
 
@@ -368,6 +371,11 @@ class TrackView(BaseModel):
     # music, data tracks). NOT the rip status (`status` above) — this is the
     # transcode phase. Display-only; set by get_job_detail, not a Track column.
     transcode_status: TranscodeTaskStatus | None = None
+    # Encoder frame rate from that task's latest heartbeat, so the job page
+    # can show it beside an in-progress transcode. Same provenance as
+    # transcode_status: display-only, set by get_job_detail.
+    transcode_fps: float | None = None
+    transcode_avg_fps: float | None = None
     output_path: str | None
     size_bytes: int | None
     # `expected_size_bytes` is the scan-time MakeMKV estimate (TINFO:t,11);

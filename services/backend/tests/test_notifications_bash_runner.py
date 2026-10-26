@@ -173,3 +173,12 @@ async def test_run_script_spawn_failure_is_a_failed_run(tmp_path: Path) -> None:
     res = await run_script(p, title="T", body="B", env={"BIG": "x" * 300_000}, timeout_seconds=5)
     assert not res.ok and res.exit_code is None
     assert res.error == "script could not start: Argument list too long: ok.sh"
+
+
+async def test_drain_tolerates_a_missing_pipe() -> None:
+    """Process.stdout/stderr are Optional; a missing pipe reads as no output."""
+    from arm_backend.notifications.bash_runner import _drain
+
+    buf = bytearray()
+    await _drain(None, buf)
+    assert buf == bytearray()

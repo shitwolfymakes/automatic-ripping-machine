@@ -1,12 +1,8 @@
-import os
-
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from arm_backend.track_selection import TrackSelectionError, select_tracks  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.track_selection import TrackSelectionError, select_tracks
+from arm_common import (
     DiscType,
     IdentificationMode,
     MediaType,
@@ -15,7 +11,7 @@ from arm_common import (  # noqa: E402
     TrackKind,
     TrackSelection,
 )
-from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
+from arm_common.schemas import ScanResult, ScanTitle
 
 
 def _scan(*durations: int) -> ScanResult:

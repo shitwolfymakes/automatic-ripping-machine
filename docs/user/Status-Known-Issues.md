@@ -12,7 +12,7 @@ versions, and incomplete docs.
 - **Published images may not exist for every tag yet.** the image pull
   (`armctl up` / `armctl upgrade`) can return 404 during the alpha. Build the images locally from a checkout —
   see
-  [Local development in the README](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/README.md#local-development).
+  [Local development in CONTRIBUTING.md](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/CONTRIBUTING.md#local-development).
 
 ## Platform limitations
 

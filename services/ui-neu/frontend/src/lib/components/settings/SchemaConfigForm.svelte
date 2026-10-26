@@ -22,6 +22,7 @@
 		config,
 		onsaved,
 		beforeSave,
+		beforeSections,
 		deferred = false,
 		bare = false
 	}: {
@@ -30,6 +31,8 @@
 		onsaved?: (payload: Record<string, unknown>) => void;
 		/** Extra content rendered after the sections, above the Save row. */
 		beforeSave?: Snippet;
+		/** Rendered above the first section card (non-bare forms only). */
+		beforeSections?: Snippet;
 		/** No Save row: the parent saves through `save()` (setup walkthrough's Continue). */
 		deferred?: boolean;
 		/** No title, blurb or section panels: the fields in one stack (setup steps). */
@@ -290,13 +293,14 @@
 		{/if}
 	{:else}
 		<div>
-			<h2 class="schema-config-form-title">{groupLabel(group.name)}</h2>
+			<h2 class="schema-config-form-title" data-page-section-title>{groupLabel(group.name)}</h2>
 			{#if blurb}
 				<p class="schema-config-form-description mt-1">{blurb}</p>
 			{/if}
 		</div>
 
 		<section class="stack stack-lg">
+			{#if beforeSections}{@render beforeSections()}{/if}
 			{#each sections as section (section.title)}
 				<div data-testid="settings-section" class="panel schema-config-form-panel">
 					<h3 class="schema-config-form-section-title">{section.title}</h3>

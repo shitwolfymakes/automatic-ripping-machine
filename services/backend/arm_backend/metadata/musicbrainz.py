@@ -3,6 +3,7 @@ import logging
 import math
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -107,7 +108,9 @@ class MusicBrainzClient:
     async def _lookup_toc(self, toc: str, inc: str) -> MetadataResult:
         body = await self._get(
             "/discid/-",
-            params={"toc": "+".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
+            # Space-separated: httpx encodes a space as the "+" MusicBrainz documents
+            # (toc=1+12+...); a pre-joined "+" would go out as a literal %2B.
+            params={"toc": " ".join(toc.split()), "cdstubs": "no", "inc": inc, "fmt": "json"},
             not_found_detail=TOC_NOT_FOUND,
         )
         releases = body.get("releases") or []
@@ -175,7 +178,7 @@ class MusicBrainzClient:
         lookup. A 404 (unknown MBID) surfaces as the not-found LookupError.
         """
         body = await self._get(
-            f"/release/{release_id}",
+            f"/release/{quote(release_id, safe='')}",
             # release-groups: so extract_poster_url can prefer the (more often
             # populated) release-group cover over the specific release's.
             params={"inc": "artists+recordings+labels+release-groups", "fmt": "json"},

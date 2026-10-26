@@ -20,6 +20,9 @@ logger = logging.getLogger("arm_backend.routers.images")
 
 _NEGATIVE_CACHE: dict[str, float] = {}
 _NEGATIVE_TTL_SECONDS = 3600
+# The proxy is unauthenticated, so the negative cache must stay bounded: one
+# entry per distinct failing URL would otherwise grow for the process lifetime.
+_NEGATIVE_CACHE_MAX_ENTRIES = 1024
 _MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB — matches the cache cap; rejects oversized at fetch time
 
 router = APIRouter(prefix="/api", tags=["images"])
@@ -70,6 +73,21 @@ def _host_allowed(hostname: str | None) -> bool:
     if hostname in _allowed_image_hosts():
         return True
     return any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in _ALLOWED_IMAGE_HOST_SUFFIXES)
+
+
+def _negative_cache_put(url: str, now: float) -> None:
+    """Record a failed fetch, dropping expired entries and capping the size.
+
+    Every entry gets the same TTL and re-inserts move to the end, so dict order
+    is expiry order: expired entries sit at the front, and the front is also the
+    oldest entry to evict when the cap is hit."""
+    _NEGATIVE_CACHE.pop(url, None)
+    while _NEGATIVE_CACHE:
+        oldest = next(iter(_NEGATIVE_CACHE))
+        if _NEGATIVE_CACHE[oldest] > now and len(_NEGATIVE_CACHE) < _NEGATIVE_CACHE_MAX_ENTRIES:
+            break
+        del _NEGATIVE_CACHE[oldest]
+    _NEGATIVE_CACHE[url] = now + _NEGATIVE_TTL_SECONDS
 
 
 def _not_found(detail: str) -> Response:
@@ -187,14 +205,14 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
                 if gp.scheme in ("http", "https") and _host_allowed(gp.hostname):
                     fetched = await _fetch_image(client, group_url)
     except _ImageTooLarge:
-        _NEGATIVE_CACHE[safe_url] = now + _NEGATIVE_TTL_SECONDS
+        _negative_cache_put(safe_url, now)
         return _not_found("Image too large")
     except httpx.HTTPError:
-        _NEGATIVE_CACHE[safe_url] = now + _NEGATIVE_TTL_SECONDS
+        _negative_cache_put(safe_url, now)
         return _not_found("Failed to fetch image")
 
     if fetched is None:
-        _NEGATIVE_CACHE[safe_url] = now + _NEGATIVE_TTL_SECONDS
+        _negative_cache_put(safe_url, now)
         return _not_found("Image unavailable")
 
     content, safe_type = fetched

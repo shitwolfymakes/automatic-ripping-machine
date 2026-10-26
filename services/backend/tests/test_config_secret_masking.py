@@ -6,25 +6,22 @@ The secret-key set is derived from the registry, not hardcoded.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-import pytest  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import config as config_router  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
-from arm_common import Config, DiscType, Job, JobStatus, RetentionPolicy, User  # noqa: E402
-from arm_common.secrets import HIDDEN_SECRET  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import config as config_router
+from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_common import Config, DiscType, Job, JobStatus, RetentionPolicy, User
+from arm_common.secrets import HIDDEN_SECRET
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture

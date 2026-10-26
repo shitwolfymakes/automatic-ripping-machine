@@ -6,27 +6,24 @@ collision paths are covered by test_jobs_delete.py / test_apply_session.py.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
-from sqlalchemy.exc import IntegrityError  # noqa: E402
+import pytest
+from sqlalchemy.exc import IntegrityError
 
-from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.identity.proposals import record_manual_job  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.path_template import TemplateValidationError  # noqa: E402
-from arm_backend.routers import jobs as jobs_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError
+from arm_backend.db import get_session
+from arm_backend.identity.proposals import record_manual_job
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.path_template import TemplateValidationError
+from arm_backend.routers import jobs as jobs_router
+from arm_common import (
     Config,
     DiscFingerprint,
     DiscType,
@@ -42,11 +39,11 @@ from arm_common import (  # noqa: E402
     TrackStatus,
     User,
 )
-from arm_common.enums import TrackKind, TrackRole  # noqa: E402
-from arm_common.models import Track  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.enums import TrackKind, TrackRole
+from arm_common.models import Track
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -182,6 +179,75 @@ def test_list_jobs_filters_and_rip_progress(signing_key: bytes) -> None:
     assert len(by_drive.json()) == 2
 
 
+def _dated_job(job_id: str, *, day: int, status: JobStatus = JobStatus.RIPPED) -> Job:
+    j = _job(job_id, status=status)
+    j.created_at = datetime(2026, 1, day, tzinfo=timezone.utc)
+    return j
+
+
+def test_list_jobs_total_count_header_reflects_filter_not_page(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=2),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3, status=JobStatus.FAILED),
+    ]
+    with TestClient(app) as client:
+        page = client.get("/api/jobs?limit=1", headers=_auth(token))
+        failed = client.get("/api/jobs?status=failed", headers=_auth(token))
+    assert page.status_code == 200
+    assert len(page.json()) == 1
+    assert page.headers["X-Total-Count"] == "3"
+    assert failed.headers["X-Total-Count"] == "1"
+
+
+def test_list_jobs_pages_newest_first_with_id_tiebreak(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000001", day=1),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000002", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000003", day=3),
+        _dated_job("job_01JZXR7K3M5Q8N4VWA00000004", day=2),
+    ]
+    with TestClient(app) as client:
+        first = client.get("/api/jobs?limit=2&offset=0", headers=_auth(token))
+        second = client.get("/api/jobs?limit=2&offset=2", headers=_auth(token))
+    assert [j["id"] for j in first.json()] == ["job_01JZXR7K3M5Q8N4VWA00000003", "job_01JZXR7K3M5Q8N4VWA00000002"]
+    assert [j["id"] for j in second.json()] == ["job_01JZXR7K3M5Q8N4VWA00000004", "job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_list_jobs_limit_defaults_to_50_and_caps_at_500(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i % 28) for i in range(60)]
+    with TestClient(app) as client:
+        default = client.get("/api/jobs", headers=_auth(token))
+        too_big = client.get("/api/jobs?limit=501", headers=_auth(token))
+        max_ok = client.get("/api/jobs?limit=500", headers=_auth(token))
+    assert len(default.json()) == 50
+    assert default.headers["X-Total-Count"] == "60"
+    assert too_big.status_code == 422
+    assert max_ok.status_code == 200
+    assert max_ok.headers["X-Total-Count"] == "60"
+
+
+def test_list_jobs_total_count_is_exact_on_short_and_past_end_pages(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_dated_job(f"job_01JZXR7K3M5Q8N4VWA{i:08d}", day=1 + i) for i in range(5)]
+    with TestClient(app) as client:
+        short = client.get("/api/jobs?limit=10&offset=2", headers=_auth(token))
+        past_end = client.get("/api/jobs?limit=10&offset=20", headers=_auth(token))
+        full = client.get("/api/jobs?limit=5", headers=_auth(token))
+    assert len(short.json()) == 3
+    assert short.headers["X-Total-Count"] == "5"
+    assert past_end.json() == []
+    assert past_end.headers["X-Total-Count"] == "5"
+    assert full.headers["X-Total-Count"] == "5"
+
+
 # --- get_job_detail ----------------------------------------------------------
 
 
@@ -229,6 +295,31 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
         r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", headers=_auth(token))
     assert r.status_code == 409
     assert "terminal status" in r.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/abandon", None),
+        ("DELETE", "", None),
+        ("POST", "/resolve", {"title": "T"}),
+    ],
+)
+def test_status_409_survives_raw_string_status(
+    signing_key: bytes, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    yield the intended 409 on abandon / delete / resolve, not an
+    AttributeError 500 from f-string `.value`."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job(status=JobStatus.IDENTIFIED)
+    object.__setattr__(job, "status", "some_future_status")
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.request(method, f"/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001{path}", json=body, headers=_auth(token))
+    assert r.status_code == 409
+    assert "some_future_status" in r.json()["detail"]
 
 
 def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
@@ -487,7 +578,7 @@ def test_manual_trigger_in_flight_409(signing_key: bytes) -> None:
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
-    assert "in-flight RIPPING" in r.json()["detail"]
+    assert "job in progress (ripping)" in r.json()["detail"]
 
 
 def test_manual_trigger_media_not_ready_400(signing_key: bytes) -> None:

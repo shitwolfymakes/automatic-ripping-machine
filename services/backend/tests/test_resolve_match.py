@@ -70,10 +70,29 @@ def test_match_with_edited_poster_saves_it_as_manual(signing_key: bytes) -> None
     out, _, _ = _post(
         signing_key,
         _identified({"tmdb": "999"}),
-        _match_body(poster_url="https://x.example/p.jpg", poster_is_manual=True),
+        _match_body(poster_is_manual=True, poster_url_manual="https://x.example/p.jpg"),
     )
     assert out["poster_url_manual"] == "https://x.example/p.jpg"
+    # The candidate's own poster still replaces the old show's automatic one.
+    assert out["poster_url"] == "https://static.tvmaze.com/k.jpg"
+
+
+def test_match_with_cleared_poster_falls_back_to_the_new_shows(signing_key: bytes) -> None:
+    out, _, _ = _post(signing_key, _identified({"tmdb": "999"}), _match_body(poster_is_manual=True))
+    assert out["poster_url_manual"] is None
+    assert out["poster_url"] == "https://static.tvmaze.com/k.jpg"
+
+
+def test_same_show_match_without_a_poster_keeps_both_posters(signing_key: bytes) -> None:
+    out, _, _ = _post(signing_key, _identified({"imdb": "tt0071003"}), _match_body(poster_url=None))
     assert out["poster_url"] == "https://image.tmdb.org/old.jpg"
+    assert out["poster_url_manual"] == "https://image.tmdb.org/manual-old.jpg"
+
+
+def test_new_show_match_without_a_poster_drops_only_the_old_automatic_one(signing_key: bytes) -> None:
+    out, _, _ = _post(signing_key, _identified({"tmdb": "999"}), _match_body(poster_url=None))
+    assert out["poster_url"] is None
+    assert out["poster_url_manual"] == "https://image.tmdb.org/manual-old.jpg"
 
 
 def test_match_without_facts_leaves_snapshot_empty(signing_key: bytes) -> None:
@@ -115,3 +134,34 @@ def test_resolve_without_match_still_merges(signing_key: bytes) -> None:
     assert ids["tmdb"] == "999" and ids["tvdb"] == "5"
     assert out["metadata_json"]["identity"]["provider"] == "tmdb"
     assert out["poster_url_manual"] == "https://image.tmdb.org/manual-old.jpg"
+
+
+def test_same_show_from_a_provider_lacking_ids_keeps_them(signing_key: bytes, monkeypatch) -> None:
+    """Re-picking the show from TMDb (no TVmaze id) or OMDb (IMDb only) is
+    not a show change: the ids that provider lacks are kept."""
+    from arm_backend.routers import jobs as jobs_router
+
+    forgotten: list[str] = []
+    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    job = _identified({"imdb": "tt0071003", "tvdb": "77170", "tvmaze": "1"})
+    body = _match_body(provider="tmdb")
+    body["external_ids"] = {"imdb": "tt0071003", "tmdb": "55", "tmdb_kind": "tv", "tvdb": None, "tvmaze": None}
+    out, runner, _ = _post(signing_key, job, body)
+    ids = out["metadata_json"]["identity"]["external_ids"]
+    shown = {k: ids[k] for k in ("imdb", "tmdb", "tmdb_kind", "tvdb", "tvmaze")}
+    assert shown == {"imdb": "tt0071003", "tmdb": "55", "tmdb_kind": "tv", "tvdb": "77170", "tvmaze": "1"}
+    assert out["metadata_json"]["identity"]["provider"] == "tmdb"
+    assert forgotten == []
+
+
+def test_match_with_a_conflicting_id_is_a_show_change(signing_key: bytes, monkeypatch) -> None:
+    """One agreeing id does not make it the same show when another disagrees."""
+    from arm_backend.routers import jobs as jobs_router
+
+    forgotten: list[str] = []
+    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    job = _identified({"imdb": "tt0071003", "tvmaze": "2", "tmdb": "999"})
+    out, _, _ = _post(signing_key, job, _match_body())
+    ids = out["metadata_json"]["identity"]["external_ids"]
+    assert ids["tvmaze"] == "1" and ids.get("tmdb") is None
+    assert forgotten == [job.id]

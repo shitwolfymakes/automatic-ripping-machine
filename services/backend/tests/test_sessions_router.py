@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import sessions as sessions_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import sessions as sessions_router
+from arm_common import (
     ContainerFormat,
     Drive,
     DriveStatus,
@@ -26,14 +23,15 @@ from arm_common import (  # noqa: E402
     OutputMode,
     RipPreset,
     Session,
+    SessionApplication,
     TrackSelection,
     TranscodePreset,
     TranscodeTool,
     User,
 )
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -215,7 +213,9 @@ def test_create_session_rejects_media_type_mismatch(signing_key: bytes) -> None:
     assert r.status_code == 400
 
 
-def test_patch_builtin_only_name_allowed(signing_key: bytes) -> None:
+def test_patch_builtin_name_409(signing_key: bytes) -> None:
+    # The seeder re-syncs a built-in's name on every boot, so a rename would
+    # silently revert; the router refuses it instead (D-146).
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -225,8 +225,9 @@ def test_patch_builtin_only_name_allowed(signing_key: bytes) -> None:
             json={"name": "Renamed"},
             headers=_auth(token),
         )
-    assert r.status_code == 200
-    assert r.json()["name"] == "Renamed"
+    assert r.status_code == 409
+    assert "read-only" in r.json()["detail"]
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_builtin").name != "Renamed"
 
 
 def test_patch_builtin_other_field_409(signing_key: bytes) -> None:
@@ -280,6 +281,36 @@ def test_delete_session_referenced_by_drive_409(signing_key: bytes) -> None:
         r = client.delete("/api/sessions/ses_user", headers=_auth(token))
     assert r.status_code == 409
     assert "default" in r.json()["detail"].lower()
+
+
+def test_delete_session_with_applications_409(signing_key: bytes) -> None:
+    # session_applications.session_id is ON DELETE RESTRICT, so a session
+    # that was ever applied must be refused with a 409, not left to 500.
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_user",
+            name="Used session",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id="tpr_plex",
+            output_path_template="{title}.{ext}",
+        )
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(id="sap_1", session_id="ses_user", job_id="job_a", overwrite=False),
+        SessionApplication(id="sap_2", session_id="ses_user", job_id="job_a", overwrite=True),
+        SessionApplication(id="sap_3", session_id="ses_user", job_id="job_b", overwrite=False),
+        SessionApplication(id="sap_4", session_id="ses_other", job_id="job_c", overwrite=False),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.delete("/api/sessions/ses_user", headers=_auth(token))
+    assert r.status_code == 409
+    assert "2 job(s)" in r.json()["detail"]
+    assert any(s.id == "ses_user" for s in db.rows["sessions"])
 
 
 def test_clone_session_creates_non_builtin(signing_key: bytes) -> None:

@@ -9,7 +9,7 @@
 	background-size: 100% 4px, 3px 100%;
 }
 
-[data-scheme="blockbuster"] aside {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) {
 	border-right: 4px solid rgb(255, 235, 0) !important;
 }
 
@@ -17,7 +17,7 @@
    collapse (the original block-level <nav> let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
-[data-scheme="blockbuster"] aside .nav {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) .nav {
 	gap: 4px;
 	/* the link margin also sat above the first link and below the
 	   last one, which a gap does not reproduce */
@@ -25,7 +25,7 @@
 	padding-bottom: calc(1rem + 4px);
 }
 
-[data-scheme="blockbuster"] aside .nav-item {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) .nav-item {
 	text-transform: uppercase;
 	font-weight: 900;
 	font-style: italic;
@@ -34,19 +34,19 @@
 	transition: transform 0.1s ease;
 }
 
-[data-scheme="blockbuster"] aside .nav-item:hover {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) .nav-item:hover {
 	background-color: rgb(255, 235, 0) !important;
 	color: rgb(0, 51, 153) !important;
 	transform: scale(1.05);
 }
 
-[data-scheme="blockbuster"] aside .nav-item[data-active="true"] {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) .nav-item[data-active="true"] {
 	background-color: rgb(255, 235, 0) !important;
 	color: rgb(0, 51, 153) !important;
 	box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
 }
 
-[data-scheme="blockbuster"] aside .nav-logo img {
+[data-scheme="blockbuster"] aside:where([data-sidebar]) .nav-logo img {
 	filter: drop-shadow(3px 3px 0px #000);
 }
 

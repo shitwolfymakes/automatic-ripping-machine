@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$app/environment', () => ({ browser: false }));
 vi.mock('$lib/api/dashboard', () => ({
-	fetchDashboard: vi.fn(() => Promise.resolve({ db_available: true, arm_online: true }))
+	fetchDashboardSnapshot: vi.fn(() => Promise.resolve({ db_available: true, arm_online: true })),
+	STICKY_FIELDS: []
 }));
 
 import { dashboard } from '../stores/dashboard';

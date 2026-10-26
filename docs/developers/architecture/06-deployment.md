@@ -165,8 +165,14 @@ docker socket:
 
 Unenroll stops and removes the container. On every backend boot the `drives`
 table is reconciled against the labelled containers: missing → created, exited
-→ started, orphan → removed, and a container running an image that no longer
-matches `ARM_RIPPER_IMAGE` is recreated when the drive is idle. These
+→ started, orphan → removed, and a container that has drifted is recreated
+when the drive is idle (adopted as-is while it is ripping, and picked up at the
+next boot). A container has drifted when its image no longer matches
+`ARM_RIPPER_IMAGE`, or when its `arm.spec_hash` label (a hash of the
+`containers.run` kwargs it was created with) differs from the spec the current
+settings produce: a changed `ARM_RIPPER_*` tunable, `PUID`/`PGID`/`CDROM_GID`
+or `ARM_LOG_LEVEL` reaches the ripper on the next backend start. A container
+from before the label existed counts as drifted and is recreated once. These
 containers are **outside the compose project** — `docker compose down` leaves
 them (`armctl down` removes them); `bash devtools/ripper-containers.sh {list|stop|remove}` manages them.
 
@@ -223,7 +229,7 @@ POSTGRES_DB=arm
 ARM_SERVICE_TOKEN=<generated: openssl rand -hex 32>
 PUID=<host user's UID, `id -u`>
 PGID=<host user's GID, `id -g`>
-CDROM_GID=<detected via `stat -c %g /dev/sr0`, else 44>
+CDROM_GID=<the host's `cdrom` group id (`getent group cdrom`), else 44>
 ARM_LOG_LEVEL=info
 ```
 
@@ -253,7 +259,7 @@ v3 uses the linuxserver.io-style `PUID`/`PGID` pattern to keep files on `/raw` a
 
 **Optical-drive device access:**
 
-The ripper containers also need `group_add: ["${CDROM_GID}"]` so the PUID-dropped process can read `/dev/sr*`. `CDROM_GID` is the host's optical group GID (typically `44` for Debian/Ubuntu `cdrom`, sometimes `19` for Arch `optical`). The installer detects it via `stat -c %g /dev/sr0`. **No optical groups are hardcoded at image-build time** — a common v2 failure mode where the image's `cdrom` group had a different GID from the host's and the container couldn't read the drive.
+The backend passes `CDROM_GID` into each ripper's environment. The shared entrypoint adopts the container group with that GID (or creates `cdrom-host` with it), adds the `arm` user to it, and creates `/dev/sr0..7` and `/dev/sg0..15` owned by that group, so the PUID-dropped process can open the drive. `CDROM_GID` is the host's optical group GID (typically `44` for Debian/Ubuntu `cdrom`, sometimes `19` for Arch `optical`). The installer reads it with `getent group cdrom` and falls back to `44` (`detect_cdrom_gid` in `deploy/lib/detect.sh`), so an Arch host sets it by hand. **No optical groups are hardcoded at image-build time** — a common v2 failure mode where the image's `cdrom` group had a different GID from the host's and the container couldn't read the drive.
 
 ## Privilege matrix
 
@@ -262,7 +268,7 @@ The ripper containers also need `group_add: ["${CDROM_GID}"]` so the PUID-droppe
 | `arm-db` | no | — | Standard Postgres image. |
 | `arm-backend` | no | `/var/run/docker.sock` | Root-equivalent on the host. Acceptable; documented. |
 | `arm-ui` | no | — | Stateless. |
-| `arm-ripper-*` | no | `/dev/sr*` | Drive exposed via compose `devices:` (no `--privileged`, no manual cgroup rules). Host's optical GID passed via `group_add: ["${CDROM_GID}"]` so the PUID-dropped process can read the device node. Nothing is hardcoded at image-build time. |
+| `arm-ripper-*` | no | `/dev/sr*`, `/dev/sg*` | No `devices:` bind. The backend grants `device_cgroup_rules: ["b 11:* rmw", "c 21:* rmw"]` and the entrypoint creates the sr/sg nodes itself, group-owned by the host's optical GID (`CDROM_GID` in the env) so the PUID-dropped process can open them. Nothing is hardcoded at image-build time. |
 | `arm-transcode-*` | no | optionally `/dev/dri`, NVIDIA runtime | Transient. |
 
 No `privileged: true` anywhere. If a ripper ever needs it for a weird host, we document that as an escape hatch but do not ship it on.
@@ -348,7 +354,7 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 2. **Host**: checks Docker (installed, version 24 or newer, compose plugin, running daemon, group membership) and fixes what it can with consent; it automates only Debian and Ubuntu. On a fresh install (no `.env` yet) it stops if containers named `armv3-*` exist, since the fixed project name would take over that stack (the dev stack, or another install). Also takes the lock, checks for `openssl` and creates the folder layout.
 3. **Storage**: asks for the raw and media locations, creates them, checks they are writable.
 4. **Remote transcode offload**: runs the offload walkthrough (`deploy/install/offload.sh`) for the offload profile; for any other profile it prints "not used by the <profile> profile".
-5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant.
+5. **Certificates**: the CA once, then backend, database and UI leaves. The backend's leaf carries the offload address when relevant. The UI leaf carries `localhost`, the host name and every non-loopback IPv4 address the host has at install time (`ui_leaf_sans` in `deploy/lib/certs.sh`), so a device that trusts the CA can open `https://<host-ip>:8081` without a warning. `armctl up` re-issues that leaf when the host has gained an address the certificate does not name (`refresh_ui_leaf`).
 6. **Configuration**: writes `.env` (secrets generated once, ids and GPUs detected, release pinned, profile recorded, `ARM_TRANSCODE_CAPABLE` set from the profile) and the host overlay. Offers the NVIDIA toolkit on the full profile when an NVIDIA GPU is found, offers the udev rule, and offers the PATH link (`~/.local/bin` when it is on the PATH, otherwise `/usr/local/bin` with sudo; `--no-host-changes` makes neither).
 7. **Start**: runs the same path as `armctl up`, including the health wait. On by default; `--no-start` skips it.
 8. **Finish**: the offload verification table when relevant, then the summary: the URL (`https://localhost:8081`), the first-login command, the certificate-trust hint, the everyday commands and any steps that were skipped.
@@ -363,10 +369,10 @@ The ripper and transcode images are already variables in the template (`ARM_RIPP
 
 1. **Pull** the images this host needs: the base transcode image unless the profile is ripper-only, the Intel or AMD variants only when that GPU is present, and no variants when transcodes are offloaded (`--no-pull` skips the pull). A failed pull stops here with the running stack untouched. A check that every needed image is present on the host follows, and stops the same way.
 2. **Guard**: refuses while a rip or transcode is active, unless `--force`.
-3. **Refresh** the detected GPUs in `.env`.
+3. **Refresh** the detected GPUs in `.env`, and the UI certificate when the host has an address it does not name.
 4. **Back up** the database into `~/arm/backups/`, keeping the newest five. `--no-backup` skips it.
 5. **Remove** the spawned rippers and transcoders, and containers of retired services.
-6. **Start** from the pulled images, and recreate rippers if the backend kept running.
+6. **Start** from the pulled images, restart the UI if its certificate was re-issued, and recreate rippers if the backend kept running.
 7. **Wait** up to 90 seconds for the backend's health check, then print the URL.
 
 **`armctl upgrade [--version <tag>]`:**
@@ -394,10 +400,10 @@ The install drill, `devtools/install-drill.sh`, runs this path end to end agains
 
 **First-boot sequence** (after `armctl up`):
 
-1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with a random password written to `/logs/first-boot.log` and printed to stdout.
-2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` with the printed password, is forced to change it.
+1. Backend starts, waits for Postgres, runs `alembic upgrade head`, seeds the `admin` user with the default password `admin` (flagged must-change) and writes the credentials banner to `/logs/first-boot.log` and the backend log.
+2. User navigates to `https://host:8081`, accepts the internal-CA cert warning on first visit (or imports `~/arm/certs/arm-ca.crt` into the OS/browser trust store once to clear it for every device on the LAN — see [05-cross-cutting.md § Transport (TLS)](05-cross-cutting.md#transport-tls)), logs in as `admin` / `admin`, is forced to change it.
 3. User enters third-party API keys in the UI → stored in `config`.
-4. Rippers register themselves with Backend, appear in UI.
+4. The backend lists the host's optical drives on the **Drives** page as detected; enrolling one starts its ripper container.
 5. User inserts a disc; flow proceeds as documented in [02-job-lifecycle.md](02-job-lifecycle.md).
 
 ## Update / upgrade

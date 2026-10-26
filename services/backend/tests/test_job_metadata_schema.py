@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
-
-from arm_common.enums import DiscType, JobStatus  # noqa: E402
-from arm_common.models.job import Job  # noqa: E402
-from arm_common.schemas import JobMetadata, JobView, flag_is_set, with_flags  # noqa: E402
+from arm_common.enums import DiscType, JobStatus
+from arm_common.models.job import Job
+from arm_common.schemas import JobMetadata, JobView, flag_is_set, with_flags
 
 
 def make_job(**overrides: object) -> Job:

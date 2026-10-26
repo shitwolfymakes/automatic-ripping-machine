@@ -410,6 +410,53 @@ describe('DiscReviewWidget', () => {
 			expect(value?.getAttribute('title')).toBe(value?.textContent);
 		});
 
+		it("a missed identify's disc-label title is not a match", async () => {
+			const over = { status: 'identified', title: 'MOVIE_DISC_1', metadata_json: { flags: { unidentified: true } } };
+			mockFetchJob.mockResolvedValueOnce(detail(over as never));
+			renderWidget(over as never);
+			const row = await screen.findByTestId('match-row');
+			await waitFor(() => expect(row).toHaveTextContent('No match, pick a title with Search'));
+			expect(row).not.toHaveTextContent('Set by hand');
+		});
+
+		it('a resolved title with no provider reads as set by hand', async () => {
+			mockFetchJob.mockResolvedValueOnce(detail({ status: 'identified', title: 'Heat', metadata_json: {} }));
+			renderWidget({ status: 'identified', title: 'Heat' });
+			await waitFor(() => expect(screen.getByTestId('match-row')).toHaveTextContent('Set by hand'));
+		});
+
+		it("names the provider's video type when the job has no media type", async () => {
+			const over = {
+				status: 'identified',
+				title: 'Kolchak',
+				year: 1974,
+				media_type: null,
+				metadata_json: { identity: { provider: 'arm_server' }, provider_raw: { arm_server: { video_type: 'series' } } }
+			};
+			mockFetchJob.mockResolvedValueOnce(detail(over as never));
+			renderWidget(over as never);
+			await waitFor(() =>
+				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database , Series, 1974')
+			);
+		});
+
+		it('a titled CD that missed still says why', async () => {
+			const over = {
+				status: 'awaiting_user_id',
+				title: 'CD-Text Album',
+				disc_type: 'cd',
+				metadata_json: {
+					flags: {},
+					identify_attempts: [{ source: 'musicbrainz', step: 'title', outcome: 'miss', detail: 'CD-Text Album' }]
+				}
+			};
+			mockFetchJob.mockResolvedValueOnce(detail(over as never));
+			renderWidget(over as never);
+			expect(await screen.findByTestId('identify-miss-reason')).toHaveTextContent(
+				'No source found a close match for "CD-Text Album".'
+			);
+		});
+
 		it('renders no metadata chips for a bare disc', async () => {
 			mockFetchJob.mockResolvedValueOnce(detail({ status: 'awaiting_review', disc_type: 'bluray', metadata_json: {} }));
 			renderWidget({ status: 'awaiting_review' });

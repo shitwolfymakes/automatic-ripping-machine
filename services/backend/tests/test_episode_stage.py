@@ -1,31 +1,26 @@
 """The episode stage: match a TV disc's titles against provider episode lists
 and turn the result into identity claims (design spec 5, 6.3, 9; plan Task 7)."""
 
-import os
+from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+import pytest
 
-from typing import Any  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import MediaType, TrackRole
+from arm_common.schemas import ExternalIds
 
-import pytest  # noqa: E402
-
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import MediaType, TrackRole  # noqa: E402
-from arm_common.schemas import ExternalIds  # noqa: E402
-
-from arm_backend.identity import episode_stage  # noqa: E402
-from arm_backend.identity.episode_stage import (  # noqa: E402
+from arm_backend.identity import episode_stage
+from arm_backend.identity.episode_stage import (
     StageOptions,
     compute_episode_claims,
     is_tv_candidate,
     run_episode_stage,
 )
-from arm_backend.identity.episodes.continuity import SiblingDisc  # noqa: E402
-from arm_backend.identity.episodes.model import Episode, TitleIn  # noqa: E402
-from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
-from arm_backend.identity.proposals import claims_of, forget_episode_show_ids, set_pin  # noqa: E402
-from tests._fakes import FakeSession  # noqa: E402
+from arm_backend.identity.episodes.continuity import SiblingDisc
+from arm_backend.identity.episodes.model import Episode, TitleIn
+from arm_backend.identity.http import SourceError, SourceMiss
+from arm_backend.identity.proposals import claims_of, forget_episode_show_ids, set_pin
+from tests._fakes import FakeSession
 
 CFG = Config(id=1)
 

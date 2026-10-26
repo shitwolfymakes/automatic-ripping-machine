@@ -27,6 +27,8 @@ class ProgressState:
     pct: int = 0
     eta_seconds: int | None = None
     current_pass: str | None = None
+    fps: float | None = None
+    avg_fps: float | None = None
 
 
 class HeartbeatPump:
@@ -76,6 +78,8 @@ class HeartbeatPump:
                     progress_pct=self._state.pct,
                     current_pass=self._state.current_pass,
                     eta_seconds=self._state.eta_seconds,
+                    fps=self._state.fps,
+                    avg_fps=self._state.avg_fps,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("heartbeat REST failed (will retry): %s", exc)
@@ -99,5 +103,7 @@ class HeartbeatPump:
                     "progress_pct": self._state.pct,
                     "eta_seconds": self._state.eta_seconds,
                     "current_pass": self._state.current_pass,
+                    "fps": self._state.fps,
+                    "avg_fps": self._state.avg_fps,
                 },
             )

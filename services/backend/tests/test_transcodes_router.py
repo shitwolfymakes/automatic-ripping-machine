@@ -4,25 +4,22 @@ synchronous delete path with/without a job-bearing application and WS hub."""
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import transcodes as tx_router  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import transcodes as tx_router
+from arm_common import (
     Gpu,
     GpuStatus,
     GpuVendor,
@@ -31,10 +28,10 @@ from arm_common import (  # noqa: E402
     TranscodeTaskStatus,
     User,
 )
-from arm_common.models import TranscodeTask  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
+from arm_common.models import TranscodeTask
+from arm_common.models.user import GUEST_ROLE
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 @pytest.fixture
@@ -396,6 +393,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     failed.last_error = "boom"
     failed.claimed_by = "transcoder-xyz"
     failed.claim_heartbeat_at = datetime.now(UTC)
+    failed.started_at = datetime.now(UTC)
     failed.attempts = 2
     db.rows["transcode_tasks"] = [failed]
     app, token = _make_app(signing_key, db)
@@ -408,6 +406,7 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     assert body["last_error"] is None
     assert body["claimed_by"] is None
     assert body["claim_heartbeat_at"] is None
+    assert body["started_at"] is None  # the retry's own claim sets it again
     assert body["attempts"] == 2  # preserved for audit
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 

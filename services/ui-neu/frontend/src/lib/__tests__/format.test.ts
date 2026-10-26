@@ -7,7 +7,10 @@ import {
 	timeAgo,
 	elapsedTime,
 	etaTime,
-	formatDateTime
+	formatRemaining,
+	formatDateTime,
+	formatShortDateTime,
+	calendarTimeAgo
 } from '../utils/format';
 
 describe('formatBytes', () => {
@@ -195,6 +198,19 @@ describe('etaTime', () => {
 	});
 });
 
+describe('formatRemaining', () => {
+	it('formats a reported ETA like etaTime does', () => {
+		expect(formatRemaining(42)).toBe('42s');
+		expect(formatRemaining(1800)).toBe('30m 0s');
+		expect(formatRemaining(5400)).toBe('1h 30m');
+	});
+
+	it('clamps negatives to 0s and caps at 24h+', () => {
+		expect(formatRemaining(-5)).toBe('0s');
+		expect(formatRemaining(24 * 3600)).toBe('24h+');
+	});
+});
+
 describe('formatDateTime', () => {
 	it('returns N/A for null', () => {
 		expect(formatDateTime(null)).toBe('N/A');
@@ -205,5 +221,54 @@ describe('formatDateTime', () => {
 		expect(result).toBeTypeOf('string');
 		expect(result).not.toBe('N/A');
 		expect(result).toContain('2025');
+	});
+});
+
+describe('formatShortDateTime', () => {
+	const now = new Date(2026, 9, 16, 12, 0);
+	it('formats month, day and time', () => {
+		const out = formatShortDateTime(new Date(2026, 9, 16, 8, 18).toISOString(), now);
+		expect(out).toMatch(/Oct 16/);
+		expect(out).toMatch(/8:18/);
+		expect(out).not.toMatch(/2026/);
+	});
+	it('adds the year when it is not the current year', () => {
+		expect(formatShortDateTime(new Date(2025, 11, 30, 9, 5).toISOString(), now)).toMatch(/2025/);
+	});
+	it('is empty for an unparseable date', () => {
+		expect(formatShortDateTime('not a date', now)).toBe('');
+	});
+});
+
+describe('calendarTimeAgo', () => {
+	// Fixed local "now": Oct 16 2026, 12:00
+	const now = new Date(2026, 9, 16, 12, 0, 0);
+	const at = (...args: [number, number, number, number, number]) => new Date(...args).toISOString();
+
+	it('says just now under a minute', () => {
+		expect(calendarTimeAgo(new Date(now.getTime() - 30_000).toISOString(), now)).toBe('Just now');
+	});
+	it('counts minutes, then hours the same day', () => {
+		expect(calendarTimeAgo(at(2026, 9, 16, 11, 18), now)).toBe('42 min ago');
+		expect(calendarTimeAgo(at(2026, 9, 16, 9, 0), now)).toBe('3h ago');
+		expect(calendarTimeAgo(at(2026, 9, 16, 0, 5), now)).toBe('11h ago');
+	});
+	it('says yesterday for the previous calendar day', () => {
+		expect(calendarTimeAgo(at(2026, 9, 15, 23, 0), now)).toBe('Yesterday');
+		expect(calendarTimeAgo(at(2026, 9, 15, 0, 1), now)).toBe('Yesterday');
+	});
+	it('counts days up to six', () => {
+		expect(calendarTimeAgo(at(2026, 9, 14, 20, 0), now)).toBe('2 days ago');
+		expect(calendarTimeAgo(at(2026, 9, 10, 1, 0), now)).toBe('6 days ago');
+	});
+	it('is null for an unparseable date', () => {
+		expect(calendarTimeAgo('garbage', now)).toBeNull();
+	});
+	it('is null past six days, so only the absolute date shows', () => {
+		expect(calendarTimeAgo(at(2026, 9, 9, 23, 0), now)).toBeNull();
+	});
+	it('counts minutes across midnight before calendar days', () => {
+		const justAfterMidnight = new Date(2026, 9, 16, 0, 10);
+		expect(calendarTimeAgo(at(2026, 9, 15, 23, 50), justAfterMidnight)).toBe('20 min ago');
 	});
 });

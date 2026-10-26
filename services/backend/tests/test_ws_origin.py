@@ -4,13 +4,8 @@ SERVICE_TOKEN_SUBPROTOCOL marker; browser clients must be on the
 configured allowlist.
 """
 
-import os
-
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
-
-from arm_backend.config import settings  # noqa: E402
-from arm_backend.ws.router import (  # noqa: E402
+from arm_backend.config import settings
+from arm_backend.ws.router import (
     SERVICE_TOKEN_SUBPROTOCOL,
     _origin_allowed,
 )

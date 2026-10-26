@@ -13,6 +13,48 @@ export function timeAgo(dateString: string | null | undefined): string {
 	return `${days}d ago`;
 }
 
+const MINUTE = 60_000;
+
+function startOfDay(d: Date): number {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Relative time in local calendar days, for a list that pairs it with an
+ * absolute date (the Logs list's "Last modified"): `Just now`, `42 min ago`,
+ * `3h ago` (same day), `Yesterday`, `2 days ago` up to six days. Older than
+ * that it returns null and the row shows only the absolute date.
+ */
+export function calendarTimeAgo(iso: string, now: Date = new Date()): string | null {
+	const then = new Date(iso);
+	if (Number.isNaN(then.getTime())) return null;
+	const ms = Math.max(0, now.getTime() - then.getTime());
+	if (ms < MINUTE) return 'Just now';
+	if (ms < 60 * MINUTE) return `${Math.floor(ms / MINUTE)} min ago`;
+	// Math.round absorbs a DST shift (a 23h or 25h day)
+	const days = Math.round((startOfDay(now) - startOfDay(then)) / (24 * 60 * MINUTE));
+	if (days <= 0) return `${Math.floor(ms / (60 * MINUTE))}h ago`;
+	if (days === 1) return 'Yesterday';
+	if (days <= 6) return `${days} days ago`;
+	return null;
+}
+
+/**
+ * `Oct 16, 8:18 AM` in the viewer's locale and time zone, with the year when
+ * it is not the current one; empty for an unparseable date.
+ */
+export function formatShortDateTime(iso: string, now: Date = new Date()): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return '';
+	return d.toLocaleString(undefined, {
+		month: 'short',
+		day: 'numeric',
+		...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+		hour: 'numeric',
+		minute: '2-digit'
+	});
+}
+
 export function formatBytes(bytes: number): string {
 	if (bytes === 0) return '0 B';
 	const k = 1024;
@@ -57,11 +99,20 @@ export function etaTime(startTime: string | null | undefined, progressPct: numbe
 	const start = new Date(startTime);
 	const elapsedSec = (Date.now() - start.getTime()) / 1000;
 	if (elapsedSec < 30) return null;
-	const remainingSec = (elapsedSec * (100 - progressPct)) / progressPct;
+	return formatRemaining((elapsedSec * (100 - progressPct)) / progressPct);
+}
+
+/**
+ * Format a remaining-time estimate in seconds the way etaTime does, for an
+ * ETA that arrives ready-made (the transcoder reports HandBrake's own).
+ * Capped at 24h+.
+ */
+export function formatRemaining(remainingSec: number): string {
 	if (remainingSec >= 24 * 3600) return '24h+';
-	const h = Math.floor(remainingSec / 3600);
-	const m = Math.floor((remainingSec % 3600) / 60);
-	const s = Math.floor(remainingSec % 60);
+	const sec = Math.max(0, remainingSec);
+	const h = Math.floor(sec / 3600);
+	const m = Math.floor((sec % 3600) / 60);
+	const s = Math.floor(sec % 60);
 	if (h > 0) return `${h}h ${m}m`;
 	if (m > 0) return `${m}m ${s}s`;
 	return `${s}s`;

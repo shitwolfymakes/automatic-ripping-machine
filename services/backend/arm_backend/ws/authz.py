@@ -40,7 +40,18 @@ async def can_subscribe(principal: Principal, topic: str, session: AsyncSession)
             drive = (await session.execute(select(Drive).where(col(Drive.id) == scope))).scalar_one_or_none()
             return drive is not None and drive.hostname == principal.hostname
         # transcoder
-        return prefix == "transcoder.commands" and scope is not None and scope == principal.task_id
+        if prefix != "transcoder.commands" or not scope or scope != principal.task_id:
+            return False
+        task = (await session.execute(select(TranscodeTask).where(col(TranscodeTask.id) == scope))).scalar_one_or_none()
+        if task is None:
+            return False
+        # The transcoder subscribes before it POSTs /claim (so a cancel issued
+        # right after the claim is not missed), so a QUEUED task is allowed
+        # pre-claim. Once claimed, only the claiming host may subscribe,
+        # mirroring can_publish (D-231).
+        if task.status == TranscodeTaskStatus.QUEUED:
+            return True
+        return task.status == TranscodeTaskStatus.IN_PROGRESS and task.claimed_by == principal.hostname
 
     # UIPrincipal
     if topic in _UI_TOPIC_PREFIXES_NO_SCOPE:

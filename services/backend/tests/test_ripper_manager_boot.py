@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import logging
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import pytest  # noqa: E402
+import pytest
 
-from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError, reconcile_enrolled_rippers  # noqa: E402
-from arm_common import (  # noqa: E402
+from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError, reconcile_enrolled_rippers
+from arm_common import (
     DiscType,
     Drive,
     DriveKind,
@@ -20,7 +17,7 @@ from arm_common import (  # noqa: E402
     JobStatus,
 )
 
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 
 class _StubManager:

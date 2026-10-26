@@ -4,28 +4,25 @@ sweep (design spec 5, 6.2, 6.3, 9; plan Task 8)."""
 
 import asyncio
 import logging
-import os
 from typing import Any
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
+import httpx
+import pytest
 
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import MediaType  # noqa: E402
-from arm_common.schemas import ExternalIds  # noqa: E402
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import MediaType
+from arm_common.schemas import ExternalIds
 
-from arm_backend.identity.episodes.model import Episode  # noqa: E402
-from arm_backend.identity.http import SourceError  # noqa: E402
-from arm_backend.identity.proposals import claims_of, record_manual_job  # noqa: E402
-from arm_backend.identity import stage_runner as stage_runner_module  # noqa: E402
-from arm_backend.identity.stage_runner import (  # noqa: E402
+from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.http import SourceError
+from arm_backend.identity.proposals import claims_of, record_manual_job
+from arm_backend.identity import stage_runner as stage_runner_module
+from arm_backend.identity.stage_runner import (
     EpisodeStageRunner,
     build_providers,
 )
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 CFG = Config(id=1)
 

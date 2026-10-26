@@ -23,11 +23,12 @@ Goal: drive backend coverage toward 100%. Coverage is measured in CI
 
 **Non-obvious gotchas (cost real debugging time):**
 
-- `e2e/conftest.py` is imported during collection **before any test module**,
-  so its module-level `os.environ.setdefault` wins the `arm_backend.config`
-  Settings singleton session-wide. Its values **must match the rest of the
-  suite's convention** (`ARM_SERVICE_TOKEN="tok-service"`, dummy Postgres
-  `DATABASE_URL`) or unrelated fake-session tests start 401'ing.
+- `services/backend/tests/conftest.py` assigns `DATABASE_URL` (dummy Postgres
+  URL) and `ARM_SERVICE_TOKEN="tok-service"` **before any test module is
+  imported**, so the `arm_backend.config` Settings singleton sees the same
+  values in every invocation and order. Never set either variable in a test
+  module: a per-module `setdefault` only wins when that module imports first
+  (that was D-238, the order-dependent WS tests).
 - Models pin Postgres-only `JSONB`/`ARRAY`. The harness swaps them to generic
   `JSON` in the shared `SQLModel.metadata` and **snapshots+restores** them per
   fixture, because that metadata is process-global and the fake-session tests

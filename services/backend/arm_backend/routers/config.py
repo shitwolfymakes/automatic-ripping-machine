@@ -20,6 +20,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -195,9 +196,6 @@ async def update_config(
             if not (present or "").strip():
                 label = (meta.enum_labels or {}).get(value, value)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
-    for key in ("crc64service_enabled",):
-        if key in fields and fields[key] is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
     # The number inputs send null for an emptied box; these columns are NOT
     # NULL, so refuse it here rather than 500 on the commit (D-096).
     for key in (
@@ -247,9 +245,18 @@ async def update_config(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )
-    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply"):
+    # The checkbox inputs send null for a cleared tri-state; these columns are
+    # NOT NULL, so refuse it here rather than 500 on the commit.
+    for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply", "crc64service_enabled"):
         if key in fields and fields[key] is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
+    # Catch-all for the rest of the NOT NULL columns: a JSON null would
+    # otherwise reach the commit and 500 (D-164). The checks above keep their
+    # field-specific messages.
+    columns = sa_inspect(Config).columns
+    for key, value in fields.items():
+        if value is None and key in columns and not columns[key].nullable:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must not be null")
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

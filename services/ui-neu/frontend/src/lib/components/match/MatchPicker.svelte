@@ -17,7 +17,8 @@
 		onclose: () => void;
 		onselect?: (c: MetadataCandidate, index: number) => void;
 		onuse: (c: MetadataCandidate) => void;
-		children?: Snippet;
+		/** Rendered in the pane, given the selected row (details merged in). */
+		children?: Snippet<[MetadataCandidate]>;
 	}
 
 	let { results, query, year, providerLabel, canUse, useLabel, applying, onclose, onselect, onuse, children }: Props =
@@ -107,7 +108,7 @@
 					{applying}
 					onuse={() => onuse(merged)}
 				>
-					{@render children?.()}
+					{@render children?.(merged)}
 				</MatchDetailPane>
 			</div>
 		{/if}

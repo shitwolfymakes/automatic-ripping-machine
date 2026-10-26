@@ -83,6 +83,33 @@ describe('DiscReviewWidget episode matching', () => {
 		renderCard({ ...TV, disc_type: 'data' });
 		await screen.findByRole('button', { name: 'Info' });
 		expect(screen.queryByRole('button', { name: 'Episodes' })).not.toBeInTheDocument();
+		cleanup();
+		// Post-rip has no Episodes row, so no Episodes button either.
+		renderCard({ ...TV, status: 'ripped' });
+		await screen.findByRole('button', { name: 'Search' });
+		expect(screen.queryByTestId('episode-status')).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Episodes' })).not.toBeInTheDocument();
+	});
+
+	it('an identity update that lands before the series apply returns leaves matching off', async () => {
+		renderCard({ ...TV, has_series: false }, TV);
+		await fireEvent.click(await screen.findByRole('button', { name: 'Search' }));
+		fireRipperEvent('job_42', 'job.identity_updated');
+		await fireEvent.click(screen.getByRole('button', { name: 'Pick a series' }));
+		const panel = await screen.findByTestId('episode-panel');
+		await new Promise((r) => setTimeout(r, 50));
+		expect(within(panel).queryByText('Matching episodes…')).not.toBeInTheDocument();
+	});
+
+	it('a failed refresh keeps the loaded detail', async () => {
+		renderCard({ ...TV, has_series: false }, TV);
+		await waitFor(() => expect(screen.getByTestId('episode-status')).toHaveAttribute('data-state', 'matching'));
+		mockFetchJob.mockRejectedValueOnce(new Error('offline'));
+		fireRipperEvent('job_42', 'rip.identify_resolved');
+		await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
+		await new Promise((r) => setTimeout(r, 0));
+		// Still the detail's has_series, not the prop's "Waiting for show".
+		expect(screen.getByTestId('episode-status')).toHaveAttribute('data-state', 'matching');
 	});
 
 	it('opens the episode panel, one section at a time', async () => {
@@ -196,7 +223,8 @@ describe('DiscReviewWidget episode matching', () => {
 
 	it('does not say it for a ripped job or when a season is known', async () => {
 		renderCard({ ...TV, status: 'ripped' });
-		await episodesButton();
+		await screen.findByTestId('match-row');
+		expect(screen.queryByRole('button', { name: 'Episodes' })).toBeNull();
 		expect(screen.queryByText(/Season not set/)).toBeNull();
 		cleanup();
 		renderCard({ ...TV, season: 5 });

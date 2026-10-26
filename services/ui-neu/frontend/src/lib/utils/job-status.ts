@@ -100,10 +100,19 @@ export function identitySuggestionOf(
 type MissAttempt = { source?: unknown; step?: unknown; outcome?: unknown; detail?: unknown };
 
 /**
+ * True when identify's automatic match missed and no one has resolved the
+ * title since: awaiting_user_id, or `flags.unidentified` (resolve clears it).
+ * A title on such a job came from the disc, not from a match or the operator.
+ */
+export function isIdentifyMiss(job: Pick<JobView, 'status'> & { metadata_json?: JobView['metadata_json'] }): boolean {
+	return job.status === 'awaiting_user_id' || job.metadata_json?.flags?.unidentified === true;
+}
+
+/**
  * One line saying why identify's automatic match missed, from the attempts
  * it stored (`metadata_json.identify_attempts`), or null: the job is not a
- * miss (neither `flags.unidentified` nor awaiting_user_id), or it has no
- * attempts (jobs identified before the list existed).
+ * miss (see isIdentifyMiss), or it has no attempts (jobs identified before
+ * the list existed).
  */
 export function missReason(
 	job: Pick<JobView, 'status' | 'title'> & {
@@ -112,7 +121,7 @@ export function missReason(
 	}
 ): string | null {
 	const meta = job.metadata_json;
-	if (job.status !== 'awaiting_user_id' && meta?.flags?.unidentified !== true) return null;
+	if (!isIdentifyMiss(job)) return null;
 	const attempts = (meta?.identify_attempts ?? []) as MissAttempt[];
 	if (attempts.length === 0) return null;
 	const outcomes = attempts.map((a) => a.outcome);
@@ -132,9 +141,10 @@ export function missReason(
 
 /**
  * How a TV job's episode matching stands: `waiting` (no show yet), `matching`
- * (running, or no episode source has reported), `matched` (a source placed
- * every title), `guess` (every title placed, but from a held result) or
- * `attention` (no source could, or some titles are unplaced).
+ * (running, or no episode source has reported), `matched` (every title is
+ * placed, by a source or by hand), `guess` (every title placed, but from a
+ * held result) or `attention` (some titles are unplaced, or no source could
+ * match and the tracks have not loaded).
  */
 export type EpisodeState = 'waiting' | 'matching' | 'matched' | 'guess' | 'attention';
 
@@ -185,7 +195,8 @@ export function episodeStatus(
 		const state = unmatched ? 'attention' : job.episodes_unsure ? 'guess' : 'matched';
 		return { state, source: label(active), total, unmatched };
 	}
-	if (episodes.length > 0) return { state: 'attention', source: null, total, unmatched };
+	// No source placed them, but the operator may have by hand.
+	if (episodes.length > 0) return { state: unmatched === 0 ? 'matched' : 'attention', source: null, total, unmatched };
 	return { state: 'matching', source: null, total, unmatched };
 }
 

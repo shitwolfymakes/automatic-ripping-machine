@@ -415,6 +415,27 @@ describe('Job detail page (v3)', () => {
 		).not.toBeNull();
 	});
 
+	it('shows the encoder frame rate beside an in-progress transcode (D-248)', async () => {
+		mockFetchJob.mockResolvedValue({
+			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
+			tracks: [
+				createTrack({
+					id: 'trk_1',
+					status: 'done',
+					transcode_status: 'in_progress',
+					transcode_fps: 45.67,
+					transcode_avg_fps: 23.46
+				}),
+				createTrack({ id: 'trk_2', status: 'done', transcode_status: 'done', transcode_fps: 45.67 })
+			],
+			fingerprints: []
+		});
+		renderComponent(Page);
+		await waitFor(() => expect(screen.getByText('Tracks (2)')).toBeInTheDocument());
+		// Only the running task shows a rate; the finished one keeps the badge alone.
+		expect(screen.getByTitle('Encoder frame rate')).toHaveTextContent('45.7 fps (avg 23.5)');
+	});
+
 	it('renders an Episode column only when a track is a series', async () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({ id: 'job_42', title: 'Show', status: 'ripped' }),
@@ -718,20 +739,7 @@ describe('Job detail page (v3)', () => {
 			expect(switchRoot.nextElementSibling).toBe(editIdentity);
 		});
 
-		it('opens the Match Episodes panel when the URL hash is #episodes', async () => {
-			window.location.hash = '#episodes';
-			try {
-				mockFetchJob.mockResolvedValue(tvJob());
-				renderComponent(Page);
-				await waitFor(() =>
-					expect(screen.getByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'true')
-				);
-			} finally {
-				window.location.hash = '';
-			}
-		});
-
-		it('leaves the panel closed without the hash', async () => {
+		it('starts with the Match Episodes panel closed', async () => {
 			mockFetchJob.mockResolvedValue(tvJob());
 			renderComponent(Page);
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toHaveAttribute('aria-pressed', 'false');

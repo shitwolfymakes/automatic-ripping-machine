@@ -5,6 +5,7 @@ import {
 	reviewPhaseBadge,
 	hasTitleMatch,
 	identitySuggestionOf,
+	isIdentifyMiss,
 	missReason,
 	episodeStatus,
 	providerLabel,
@@ -214,6 +215,16 @@ describe('transcodeColumnStatus', () => {
 	});
 });
 
+describe('isIdentifyMiss', () => {
+	it('is awaiting_user_id, or flagged unidentified', () => {
+		expect(isIdentifyMiss({ status: 'awaiting_user_id', metadata_json: null } as any)).toBe(true);
+		expect(isIdentifyMiss({ status: 'identified', metadata_json: { flags: { unidentified: true } } } as any)).toBe(
+			true
+		);
+		expect(isIdentifyMiss({ status: 'awaiting_review', metadata_json: { flags: {} } } as any)).toBe(false);
+	});
+});
+
 describe('missReason', () => {
 	const a = (outcome: string, extra: Record<string, unknown> = {}) => ({
 		source: 'tmdb',
@@ -363,6 +374,16 @@ describe('episodeStatus', () => {
 			source: null,
 			total: 2,
 			unmatched: 2
+		});
+		expect(episodeStatus(tv({}, c))?.state).toBe('attention');
+	});
+	it('claims present but none ok, with every title placed by hand, is matched', () => {
+		const c = { episodes_tmdb: { status: 'miss' } };
+		expect(episodeStatus(tv({}, c), [ep(1), ep(null, { role: 'extra' })])).toEqual({
+			state: 'matched',
+			source: null,
+			total: 2,
+			unmatched: 0
 		});
 	});
 	it('no episode claims yet, or a re-match running, is matching', () => {

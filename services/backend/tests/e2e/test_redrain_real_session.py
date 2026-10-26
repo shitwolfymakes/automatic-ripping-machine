@@ -10,25 +10,22 @@ no-op rollback cannot show this, hence a real session here, as in
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
-from sqlalchemy import JSON  # noqa: E402
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
-from sqlmodel import SQLModel, select  # noqa: E402
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel, select
 
-import arm_common.models  # noqa: E402,F401  (populate SQLModel.metadata)
-from arm_backend import auto_session  # noqa: E402
-from arm_backend.routers import config as config_router  # noqa: E402
-from arm_common import DiscType, Job, JobStatus, SessionApplication, SessionApplicationStatus  # noqa: E402
+import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
+from arm_backend import auto_session
+from arm_backend.routers import config as config_router
+from arm_common import DiscType, Job, JobStatus, SessionApplication, SessionApplicationStatus
 
 
 def _retype_pg_columns_to_json() -> list[tuple[object, object]]:

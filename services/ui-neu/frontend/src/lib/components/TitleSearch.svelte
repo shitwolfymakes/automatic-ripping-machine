@@ -78,10 +78,11 @@
 	let results = $state<MetadataCandidate[]>([]);
 	let searchError = $state<string | null>(null);
 
-	let selected = $state<MetadataCandidate | null>(null);
-
 	let applying = $state(false);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	// Tagged with the row and result list a Use started on, so a result that
+	// lands after the operator moved on is not shown under another row.
+	let feedback = $state<{ type: 'success' | 'error'; message: string; row: number; list: number } | null>(null);
+	let listGen = $state(0);
 
 	// Editable metadata fields, populated from the selected candidate. On a
 	// resolvable job, Apply identifies the movie via resolveJob (title/year +
@@ -97,6 +98,7 @@
 	// "Edit before using": the edit fields start from the selected match and,
 	// once opened, are what Use applies (spec 4.2).
 	let editing = $state(false);
+	// The picker owns the selection; this only spots a row change.
 	let selectedIndex = $state(-1);
 	// True once the operator typed in the poster field; only then is the poster theirs.
 	let posterEdited = $state(false);
@@ -109,24 +111,23 @@
 		posterEdited = false;
 	}
 
-	function handlePickerSelect(c: MetadataCandidate, index: number) {
+	function handlePickerSelect(_c: MetadataCandidate, index: number) {
+		// Feedback is kept: it shows again only under the row it is for.
 		if (index !== selectedIndex) {
 			editing = false;
 			posterEdited = false;
-			feedback = null;
 		}
 		selectedIndex = index;
-		selected = c;
 	}
 
-	function toggleEdit() {
-		if (!editing && selected) fillEdit(selected);
+	function toggleEdit(c: MetadataCandidate) {
+		if (!editing) fillEdit(c);
 		editing = !editing;
 	}
 
 	function closeResults() {
 		results = [];
-		selected = null;
+		listGen++;
 		selectedIndex = -1;
 		editing = false;
 		posterEdited = false;
@@ -171,7 +172,7 @@
 	}
 
 	async function applyResult(c: MetadataCandidate) {
-		selected = c;
+		const at = { row: selectedIndex, list: listGen };
 		const values = editing
 			? {
 					title: editTitle.trim(),
@@ -186,7 +187,7 @@
 					poster: c.poster_url ?? null
 				};
 		if (!values.title) {
-			feedback = { type: 'error', message: 'Title is required' };
+			feedback = { type: 'error', message: 'Title is required', ...at };
 			return;
 		}
 		applying = true;
@@ -216,12 +217,14 @@
 					external_ids: externalIds,
 					match: {
 						provider: c.provider as MatchProvider,
-						poster_url: values.poster,
+						// The candidate's own poster stays the automatic one; an edit is the override.
+						poster_url: c.poster_url ?? null,
 						poster_is_manual: editing && posterEdited,
+						poster_url_manual: editing && posterEdited ? values.poster : null,
 						facts: c.facts ?? null
 					}
 				});
-				feedback = { type: 'success', message: 'Identified' };
+				feedback = { type: 'success', message: 'Identified', ...at };
 			} else if (canResolve) {
 				resolved = await resolveJob(job.id, { title: values.title, year, media_type: mediaType });
 				let message = 'Identified';
@@ -232,18 +235,18 @@
 						message = 'Identified; poster not saved';
 					}
 				}
-				feedback = { type: 'success', message };
+				feedback = { type: 'success', message, ...at };
 			} else {
 				// Non-resolvable status (created/ripping/failed/abandoned): poster only.
 				await updateJobTitle(job.id, { poster_url_manual: values.poster });
-				feedback = { type: 'success', message: 'Poster updated' };
+				feedback = { type: 'success', message: 'Poster updated', ...at };
 			}
 			if (resolved) onresolved?.(resolved);
 			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
 			if (values.isSeries && canResolve) onseries?.();
 			else onapply?.();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };
+			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed', ...at };
 		} finally {
 			applying = false;
 		}
@@ -331,42 +334,49 @@
 			onselect={handlePickerSelect}
 			onuse={applyResult}
 		>
-			{#if $isAdmin}
-				<button type="button" class="title-search-edit-toggle" aria-expanded={editing} onclick={toggleEdit}>
-					Edit before using
-				</button>
-				{#if editing}
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						<label class="field sm:col-span-2">
-							<span class="field-label">Title</span>
-							<input type="text" bind:value={editTitle} />
-						</label>
-						<label class="field">
-							<span class="field-label">Year</span>
-							<input type="text" bind:value={editYear} />
-						</label>
-						<label class="field">
-							<span class="field-label">Type</span>
-							<select bind:value={editType}>
-								<option value="movie">Movie</option>
-								<option value="series">Series</option>
-							</select>
-						</label>
-						<label class="field sm:col-span-2">
-							<span class="field-label">Poster URL</span>
-							<input
-								type="text"
-								bind:value={editPosterUrl}
-								oninput={() => (posterEdited = true)}
-								placeholder="https://..."
-							/>
-						</label>
-					</div>
+			{#snippet children(current: MetadataCandidate)}
+				{#if $isAdmin}
+					<button
+						type="button"
+						class="title-search-edit-toggle"
+						aria-expanded={editing}
+						onclick={() => toggleEdit(current)}
+					>
+						Edit before using
+					</button>
+					{#if editing}
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							<label class="field sm:col-span-2">
+								<span class="field-label">Title</span>
+								<input type="text" bind:value={editTitle} />
+							</label>
+							<label class="field">
+								<span class="field-label">Year</span>
+								<input type="text" bind:value={editYear} />
+							</label>
+							<label class="field">
+								<span class="field-label">Type</span>
+								<select bind:value={editType}>
+									<option value="movie">Movie</option>
+									<option value="series">Series</option>
+								</select>
+							</label>
+							<label class="field sm:col-span-2">
+								<span class="field-label">Poster URL</span>
+								<input
+									type="text"
+									bind:value={editPosterUrl}
+									oninput={() => (posterEdited = true)}
+									placeholder="https://..."
+								/>
+							</label>
+						</div>
+					{/if}
 				{/if}
-			{/if}
-			{#if feedback}
-				<span in:reveal class="title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
-			{/if}
+				{#if feedback && feedback.row === selectedIndex && feedback.list === listGen}
+					<span in:reveal class="title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
+				{/if}
+			{/snippet}
 		</MatchPicker>
 	{/if}
 </div>

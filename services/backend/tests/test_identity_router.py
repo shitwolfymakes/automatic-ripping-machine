@@ -9,31 +9,27 @@ import copy
 import secrets
 from typing import Any
 
-import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
 
-import pytest  # noqa: E402
+from arm_backend.db import get_session
+from arm_backend.jwt_utils import issue_access_token
+from arm_backend.routers import identity as identity_router
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common.enums import MediaType
+from arm_common.models.user import GUEST_ROLE
+from arm_common.schemas import ExternalIds
+from arm_common import User
 
-from arm_backend.db import get_session  # noqa: E402
-from arm_backend.jwt_utils import issue_access_token  # noqa: E402
-from arm_backend.routers import identity as identity_router  # noqa: E402
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind  # noqa: E402
-from arm_common.enums import MediaType  # noqa: E402
-from arm_common.models.user import GUEST_ROLE  # noqa: E402
-from arm_common.schemas import ExternalIds  # noqa: E402
-from arm_common import User  # noqa: E402
+from arm_backend.identity import episode_stage
+from arm_backend.identity.episodes.model import Episode
+from arm_backend.identity.http import SourceError, SourceMiss
+from arm_backend.identity.proposals import claims_of
 
-from arm_backend.identity import episode_stage  # noqa: E402
-from arm_backend.identity.episodes.model import Episode  # noqa: E402
-from arm_backend.identity.http import SourceError, SourceMiss  # noqa: E402
-from arm_backend.identity.proposals import claims_of  # noqa: E402
-
-from tests._fakes import FakeSession  # noqa: E402
+from tests._fakes import FakeSession
 
 CFG = Config(id=1)
 
