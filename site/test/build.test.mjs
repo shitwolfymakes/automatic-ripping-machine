@@ -109,3 +109,57 @@ test('site build against the real ARM tree: relative URLs only, css compiled fro
 	assert.match(readFileSync(join(site, 'js/search-index.js'), 'utf8'), /^window\.ARM_DOCS_SEARCH = \{/);
 	assert.match(readFileSync(join(site, 'js/minisearch.js'), 'utf8'), /MiniSearch/);
 });
+
+function runWithNavLink(link, args = ['--target', 'app']) {
+	const manifest = structuredClone(MANIFEST);
+	manifest.sections[1].groups[0].files.push({ label: 'x', link });
+	const out = mkdtempSync(join(tmpdir(), 'arm-docs-out-'));
+	const res = run([...args, '--out', out], { ARM_ROOT: fixtureTree(), DOCS_MANIFEST: writeManifest(manifest) });
+	return { res, out };
+}
+
+test('a nav link to a missing relative target fails the build', () => {
+	const { res } = runWithNavLink('docs/user/Nope.md');
+	assert.equal(res.status, 1);
+	assert.match(res.stderr, /^error: manifest\.json \(Using ARM\): link target not found: docs\/user\/Nope\.md$/m);
+	assert.match(res.stderr, /1 error\(s\); nothing written/);
+});
+
+test('a nav link to an existing page with a missing fragment fails the build', () => {
+	const { res } = runWithNavLink('docs/user/Home.md#nowhere');
+	assert.equal(res.status, 1);
+	assert.match(res.stderr, /error: manifest\.json \(Using ARM\): missing anchor #nowhere in guide\/home/);
+});
+
+test('a nav link to a page anchor resolves to the page and fragment in nav.json', () => {
+	const { res, out } = runWithNavLink('docs/user/Configuring-ARM.md#options');
+	assert.equal(res.status, 0, res.stdout + res.stderr);
+	const nav = JSON.parse(readFileSync(join(out, 'app/nav.json'), 'utf8'));
+	const item = nav.flatMap((s) => s.groups.flatMap((g) => g.items)).find((i) => i.label === 'x');
+	assert.deepEqual(item, {
+		label: 'x',
+		href: '/help/guide/configuring-arm#options',
+		external: false,
+		pageId: 'guide/configuring-arm'
+	});
+});
+
+test('an unknown --target is reported with its stack and exits 1', () => {
+	const res = run(['--target', 'bogus']);
+	assert.equal(res.status, 1);
+	assert.match(res.stderr, /^error: Error: --target must be all, site or app \(got bogus\)\n\s+at /);
+});
+
+test('--verbose lists links to unpublished repo files; without it the summary points at --verbose', () => {
+	const env = { ARM_ROOT: fixtureTree(), DOCS_MANIFEST: FIXTURE_MANIFEST };
+	const quiet = run(['--target', 'app', '--out', mkdtempSync(join(tmpdir(), 'arm-docs-out-'))], env);
+	assert.equal(quiet.status, 0, quiet.stdout + quiet.stderr);
+	assert.match(quiet.stdout, /^info: 6 pages; 1 links point at unpublished repo files \(GitHub\), --verbose to list$/m);
+	assert.doesNotMatch(quiet.stdout, /^info: {3}/m);
+	const res = run(['--target', 'app', '--verbose', '--out', mkdtempSync(join(tmpdir(), 'arm-docs-out-'))], env);
+	assert.equal(res.status, 0, res.stdout + res.stderr);
+	assert.match(res.stdout, /^info: 6 pages; 1 links point at unpublished repo files \(GitHub\)$/m);
+	assert.doesNotMatch(res.stdout, /--verbose to list/);
+	const lines = res.stdout.split('\n').filter((l) => l.startsWith('info:   '));
+	assert.deepEqual(lines, ['info:   CONTRIBUTING.md:3: LICENSE']);
+});
