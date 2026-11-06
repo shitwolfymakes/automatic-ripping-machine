@@ -4,5 +4,8 @@
       "Bash(docker compose *)",
       "Bash(docker run *)"
     ]
+  },
+  "enabledPlugins": {
+    "refactoring@wolfy-skills": true
   }
 }
