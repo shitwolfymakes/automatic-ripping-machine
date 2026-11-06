@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 
 import arm_transcode.ffmpeg_audio as ffmpeg_audio
-from arm_transcode.ffmpeg_audio import transcode_audio
+from arm_transcode.ffmpeg_audio import build_audio_command, transcode_audio
 
 
 class _FakeStream:
@@ -268,3 +268,47 @@ async def test_transcode_audio_progress_callback_exception_does_not_propagate(mo
         progress_callback=cb,
     )
     assert size == 20
+
+
+_ARGV_HEAD = ["ffmpeg", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1", "-y", "-i"]
+
+
+def test_build_audio_command_flac_full_argv(tmp_path):
+    cmd = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "out.flac", preset_ref="flac")
+    assert cmd == [
+        *_ARGV_HEAD,
+        str(tmp_path / "in.wav"),
+        "-c:a",
+        "flac",
+        "-compression_level",
+        "8",
+        "-f",
+        "flac",
+        str(tmp_path / "out.flac"),
+    ]
+
+
+def test_build_audio_command_mp3_full_argv(tmp_path):
+    cmd = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "out.mp3", preset_ref="mp3")
+    assert cmd == [
+        *_ARGV_HEAD,
+        str(tmp_path / "in.wav"),
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "0",
+        "-f",
+        "mp3",
+        str(tmp_path / "out.mp3"),
+    ]
+
+
+def test_build_audio_command_preset_is_case_insensitive(tmp_path):
+    upper = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="FLAC")
+    lower = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="flac")
+    assert upper == lower
+
+
+def test_build_audio_command_unknown_preset_raises(tmp_path):
+    with pytest.raises(RuntimeError, match="unsupported audio preset_ref='opus'"):
+        build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="opus")

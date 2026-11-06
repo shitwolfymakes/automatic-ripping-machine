@@ -34,23 +34,16 @@ _CODEC_FLAGS: dict[str, list[str]] = {
 }
 
 
-async def transcode_audio(
-    *,
-    input_path: Path,
-    output_path: Path,
-    preset_ref: str,
-    duration_seconds: int | None,
-    progress_callback: ProgressCallback,
-) -> int:
-    """Run ffmpeg to re-encode `input_path` → `output_path`.
+def build_audio_command(*, input_path: Path, output_path: Path, preset_ref: str) -> list[str]:
+    """Build the ffmpeg argv that re-encodes `input_path` to the preset's codec.
 
-    Returns the final file size in bytes; raises `RuntimeError` on non-zero exit.
+    Progress goes to stdout; raises `RuntimeError` for an unknown preset.
     """
     flags = _CODEC_FLAGS.get(preset_ref.lower())
     if flags is None:
         raise RuntimeError(f"unsupported audio preset_ref={preset_ref!r}")
 
-    cmd: list[str] = [
+    return [
         "ffmpeg",
         "-hide_banner",
         "-nostats",
@@ -64,6 +57,21 @@ async def transcode_audio(
         *flags,
         str(output_path),
     ]
+
+
+async def transcode_audio(
+    *,
+    input_path: Path,
+    output_path: Path,
+    preset_ref: str,
+    duration_seconds: int | None,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run ffmpeg to re-encode `input_path` → `output_path`.
+
+    Returns the final file size in bytes; raises `RuntimeError` on non-zero exit.
+    """
+    cmd = build_audio_command(input_path=input_path, output_path=output_path, preset_ref=preset_ref)
     logger.info("ffmpeg launching: %s", " ".join(cmd))
 
     proc = await asyncio.create_subprocess_exec(
