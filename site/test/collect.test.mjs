@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slugFor, collectPages } from '../src/collect.mjs';
+import { slugFor, collectPages, linkItem } from '../src/collect.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 test('slugFor: lowercased stem; README takes its directory name', () => {
@@ -113,4 +113,20 @@ test('collectPages: an id with characters outside the app id rule is an error, n
 	const { pages, errors } = collectPages(root, manifest);
 	assert.deepEqual(errors, ['invalid page id guide/foo.bar from docs/user/Foo.Bar.md (slugs may use a-z, 0-9, _ and -)']);
 	assert.ok(!pages.some((p) => p.srcPath === 'docs/user/Foo.Bar.md'));
+});
+
+test('linkItem: nav item for a manifest link entry, with and without a label', () => {
+	const section = { label: 'Guide' };
+	assert.deepEqual(linkItem({ label: 'Chat', link: 'https://example.com/chat' }, section), {
+		label: 'Chat',
+		target: 'https://example.com/chat',
+		from: 'manifest.json',
+		where: 'manifest.json (Guide)'
+	});
+	assert.deepEqual(linkItem({ link: 'https://example.com/x' }, section), {
+		label: undefined,
+		target: 'https://example.com/x',
+		from: 'manifest.json',
+		where: 'manifest.json (Guide)'
+	});
 });

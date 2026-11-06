@@ -32,6 +32,16 @@ function titleOf(source, srcPath) {
 	return posix.basename(srcPath, '.md').replace(/[-_]+/g, ' ');
 }
 
+// The nav item for a manifest entry that links somewhere instead of naming a file.
+export function linkItem(entry, section) {
+	return {
+		label: entry.label,
+		target: entry.link,
+		from: 'manifest.json',
+		where: `manifest.json (${section.label})`
+	};
+}
+
 export function collectPages(armRoot, manifest) {
 	const pages = [];
 	const nav = [];
@@ -68,7 +78,7 @@ export function collectPages(armRoot, manifest) {
 			for (const entry of group.files) {
 				// typeof guard: strings inherit the legacy String.prototype.link method.
 				if (typeof entry === 'object' && entry.link) {
-					items.push({ label: entry.label, target: entry.link, from: 'manifest.json', where: `manifest.json (${section.label})` });
+					items.push(linkItem(entry, section));
 					continue;
 				}
 				const pattern = typeof entry === 'string' ? entry : entry.file;
