@@ -80,6 +80,17 @@ test('collectPages: a pattern or file matching nothing is an error', () => {
 	]);
 });
 
+test('collectPages: a file an earlier entry already placed is skipped, not placed twice', () => {
+	const manifest = structuredClone(MANIFEST);
+	manifest.sections[1].groups[0].files.push({ file: 'docs/user/Home.md', label: 'Home again' });
+	manifest.sections[2].groups[0].files.push('docs/developers/architecture/*.md');
+	const baseline = collectPages(fixtureTree(), MANIFEST);
+	const { pages, nav, errors } = collectPages(fixtureTree(), manifest);
+	assert.deepEqual(errors, []);
+	assert.deepEqual(pages.map((p) => p.id), baseline.pages.map((p) => p.id));
+	assert.deepEqual(nav, baseline.nav);
+});
+
 test('collectPages: an unknown audience is an error', () => {
 	const manifest = structuredClone(MANIFEST);
 	manifest.sections[2].audience = 'ops';
