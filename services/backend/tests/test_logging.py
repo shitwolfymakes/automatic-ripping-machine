@@ -175,3 +175,38 @@ def test_logger_name_appears_in_extra(tmp_path: Path) -> None:
     extra = named["extra"]
     assert isinstance(extra, dict)
     assert extra.get("logger") == "arm_common.tests.loop_guard"
+
+
+def test_exception_info_is_formatted_into_extra_exc(tmp_path: Path) -> None:
+    """A record logged with `exc_info` carries the formatted traceback in `extra.exc`."""
+    configure_service_logging("test-svc", log_dir=str(tmp_path))
+    logger = logging.getLogger("arm_common.tests.exc")
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logger.exception("it failed")
+
+    rows = _read_log_file(tmp_path, "test-svc")
+    failed = next(r for r in rows if r["msg"] == "it failed")
+    extra = failed["extra"]
+    assert isinstance(extra, dict)
+    exc = extra["exc"]
+    assert isinstance(exc, str)
+    assert "ValueError: boom" in exc
+    assert "Traceback" in exc
+
+
+def test_unusable_log_dir_falls_back_to_stdout_only(tmp_path: Path) -> None:
+    """When the log dir can't be created, no file handler is installed and nothing raises."""
+    blocker = tmp_path / "afile"
+    blocker.write_text("not a directory", encoding="utf-8")
+
+    configure_service_logging("test-svc", log_dir=str(blocker / "logs"))
+
+    handlers = logging.getLogger().handlers
+    assert len(handlers) == 1
+    assert isinstance(handlers[0], logging.StreamHandler)
+    assert not isinstance(handlers[0], logging.FileHandler)
+    assert not (tmp_path / "test-svc.log").exists()
+    assert not (blocker / "logs").exists()
