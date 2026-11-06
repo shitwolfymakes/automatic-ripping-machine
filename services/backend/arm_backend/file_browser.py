@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from arm_backend.config import settings
-from arm_common.fileops import safe_join
+from arm_common.path_containment import safe_join
 from arm_common.schemas import DirectoryListing, FileEntry, FileRoot
 
 # Code-resident roots registry. LOG is the fixed /logs mount (browse-only);

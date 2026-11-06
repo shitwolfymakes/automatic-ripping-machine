@@ -38,7 +38,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from arm_common.fileops import safe_join
+from arm_common.path_containment import safe_join
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

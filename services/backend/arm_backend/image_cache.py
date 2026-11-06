@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from arm_backend.config import settings
-from arm_common.fileops import safe_join
+from arm_common.path_containment import safe_join
 
 log = logging.getLogger(__name__)
 
