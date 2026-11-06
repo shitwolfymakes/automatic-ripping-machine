@@ -74,6 +74,17 @@ _track_id: ContextVar[str | None] = ContextVar("arm_log_track_id", default=None)
 _session_application_id: ContextVar[str | None] = ContextVar("arm_log_session_application_id", default=None)
 
 
+def _correlation_ids(record: logging.LogRecord) -> dict[str, str | None]:
+    """The job/track/session-application ids for this record; an explicit `extra=` value wins over the ambient context."""
+    # `extra={"job_id": ...}` lands as `record.job_id`. Explicit overrides
+    # the ambient contextvar — single call sites win against ambient state.
+    return {
+        "job_id": getattr(record, "job_id", None) or _job_id.get(),
+        "track_id": getattr(record, "track_id", None) or _track_id.get(),
+        "session_application_id": getattr(record, "session_application_id", None) or _session_application_id.get(),
+    }
+
+
 class JsonFormatter(logging.Formatter):
     """Serialise a `LogRecord` as one JSON line per the v3 logging schema."""
 
@@ -82,12 +93,6 @@ class JsonFormatter(logging.Formatter):
         self._service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        # `extra={"job_id": ...}` lands as `record.job_id`. Explicit overrides
-        # the ambient contextvar — single call sites win against ambient state.
-        job_id = getattr(record, "job_id", None) or _job_id.get()
-        track_id = getattr(record, "track_id", None) or _track_id.get()
-        sap_id = getattr(record, "session_application_id", None) or _session_application_id.get()
-
         extra: dict[str, Any] = {
             k: v for k, v in record.__dict__.items() if k not in _RESERVED_LOGRECORD_KEYS and not k.startswith("_")
         }
@@ -99,9 +104,7 @@ class JsonFormatter(logging.Formatter):
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname.lower(),
             "service": self._service,
-            "job_id": job_id,
-            "track_id": track_id,
-            "session_application_id": sap_id,
+            **_correlation_ids(record),
             "msg": record.getMessage(),
             "extra": extra,
         }
