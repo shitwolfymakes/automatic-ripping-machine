@@ -182,6 +182,32 @@ def test_copy_fallback_goes_through_inprogress_then_renames(tmp_path: Path, monk
     assert seen == ["t0.mkv" + INPROGRESS_SUFFIX] and dst.read_bytes() == b"v" * 10 and not src.exists()
 
 
+def test_copy_fallback_keeps_the_source_when_the_post_copy_unlink_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A source that cannot be removed after a good copy is left in place, with a warning."""
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v" * 10)
+    dst = tmp_path / "media" / "t0.mkv"
+    _no_rename(monkeypatch)
+    real_unlink = Path.unlink
+
+    def _unlink(self: Path, *args: object, **kwargs: object) -> None:
+        if self == src:
+            raise PermissionError(13, "Permission denied")
+        real_unlink(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "unlink", _unlink)
+    with caplog.at_level("WARNING", logger="arm_common.fileops"):
+        size = transcode_none(src, dst)
+    assert size == 10
+    assert dst.read_bytes() == b"v" * 10
+    assert src.read_bytes() == b"v" * 10
+    assert "post-copy unlink failed" in caplog.text
+    assert "will leave source in /raw" in caplog.text
+
+
 def test_cancelled_copy_removes_the_partial_and_keeps_the_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
