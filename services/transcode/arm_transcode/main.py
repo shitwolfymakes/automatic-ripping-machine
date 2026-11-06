@@ -277,6 +277,20 @@ def _backend_ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
+async def _report_complete(
+    *, api: BackendClient, task_id: str, media_root: str, final_output: Path, size: int, duration: int | None
+) -> None:
+    """Tell the Backend the task completed, with the output path relative to media_root."""
+    relative = final_output.relative_to(media_root).as_posix()
+    await api.complete(
+        task_id,
+        output_path=relative,
+        size_bytes=size,
+        duration_seconds=duration,
+    )
+    logger.info("task complete output=%s size=%d", relative, size)
+
+
 async def _encode_and_report(
     *,
     api: BackendClient,
@@ -313,14 +327,14 @@ async def _encode_and_report(
         await api.fail(task_id, last_error=_clip_error(str(exc)))
         return 1
     else:
-        relative = final_output.relative_to(registered.media_root).as_posix()
-        await api.complete(
-            task_id,
-            output_path=relative,
-            size_bytes=size,
-            duration_seconds=duration,
+        await _report_complete(
+            api=api,
+            task_id=task_id,
+            media_root=registered.media_root,
+            final_output=final_output,
+            size=size,
+            duration=duration,
         )
-        logger.info("task complete output=%s size=%d", relative, size)
         return 0
 
 

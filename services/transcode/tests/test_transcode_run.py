@@ -313,3 +313,37 @@ def test_backend_ssl_context_verifies_certificates() -> None:
     assert isinstance(ctx, ssl.SSLContext)
     assert ctx.verify_mode == ssl.CERT_REQUIRED
     assert ctx.check_hostname is True
+
+
+class _CompleteRecorder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def complete(self, task_id: str, **kwargs: Any) -> None:
+        self.calls.append((task_id, kwargs))
+
+
+async def test_report_complete_sends_path_relative_to_media_root() -> None:
+    api = _CompleteRecorder()
+    await m._report_complete(
+        api=api,  # type: ignore[arg-type]
+        task_id="t1",
+        media_root="/media",
+        final_output=Path("/media/Movies/a.mkv"),
+        size=5,
+        duration=7,
+    )
+    assert api.calls == [("t1", {"output_path": "Movies/a.mkv", "size_bytes": 5, "duration_seconds": 7})]
+
+
+async def test_report_complete_output_equal_to_media_root_is_dot() -> None:
+    api = _CompleteRecorder()
+    await m._report_complete(
+        api=api,  # type: ignore[arg-type]
+        task_id="t1",
+        media_root="/media",
+        final_output=Path("/media"),
+        size=5,
+        duration=7,
+    )
+    assert api.calls[0][1]["output_path"] == "."
