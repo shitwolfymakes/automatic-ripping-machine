@@ -31,6 +31,20 @@ export function resolveAnchor(target) {
 	return fragment === null ? { kind: 'error', message: `malformed link: ${target}` } : { kind: 'anchor', fragment };
 }
 
+// Maps a github.com wiki or main-branch blob URL on one of `repos` to its repo path and fragment;
+// null for anything else.
+export function upstreamPath(url, repos, wikiDir) {
+	if (url.hostname !== 'github.com') return null;
+	const [owner, name, kind, ...rest] = url.pathname.split('/').filter(Boolean);
+	if (!owner || !name || !repos.has(`${owner}/${name}`.toLowerCase())) return null;
+	const fragment = decode(url.hash.slice(1)) ?? '';
+	if (kind === 'wiki') return { path: `${wikiDir}/${decode(rest[0] ?? 'Home')}.md`, fragment };
+	if (kind === 'blob' && rest[0] === 'main' && rest.length > 1) {
+		return { path: rest.slice(1).map(decode).join('/'), fragment };
+	}
+	return null;
+}
+
 export function createResolver({ armRoot, pages, manifest }) {
 	const byPath = new Map(pages.map((p) => [p.srcPath, p]));
 	const repos = new Set([manifest.repo, ...(manifest.repoAliases ?? [])].map((r) => r.toLowerCase()));
@@ -58,15 +72,8 @@ export function createResolver({ armRoot, pages, manifest }) {
 			} catch {
 				return { kind: 'external', url: target };
 			}
-			if (url.hostname === 'github.com') {
-				const [owner, name, kind, ...rest] = url.pathname.split('/').filter(Boolean);
-				const fragment = decode(url.hash.slice(1)) ?? '';
-				if (owner && name && repos.has(`${owner}/${name}`.toLowerCase())) {
-					if (kind === 'wiki') return repoPath(`${wikiDir}/${decode(rest[0] ?? 'Home')}.md`, fragment);
-					if (kind === 'blob' && rest[0] === 'main' && rest.length > 1) return repoPath(rest.slice(1).map(decode).join('/'), fragment);
-				}
-			}
-			return { kind: 'external', url: target };
+			const upstream = upstreamPath(url, repos, wikiDir);
+			return upstream ? repoPath(upstream.path, upstream.fragment) : { kind: 'external', url: target };
 		}
 		const at = target.indexOf('#');
 		const pathPart = decode(at === -1 ? target : target.slice(0, at));

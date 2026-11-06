@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { collectPages } from '../src/collect.mjs';
-import { createResolver, resolveAnchor, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
+import { createResolver, resolveAnchor, upstreamPath, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 const UP = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
@@ -193,4 +193,35 @@ test('resolveAnchor accepts an empty fragment', () => {
 
 test('resolveAnchor reports a malformed escape as an error', () => {
 	assert.deepEqual(resolveAnchor('#bad%E0%A4%A'), { kind: 'error', message: 'malformed link: #bad%E0%A4%A' });
+});
+
+test('upstreamPath maps wiki and main-branch blob URLs on a known repo', () => {
+	const repos = new Set(['automatic-ripping-machine/automatic-ripping-machine']);
+	const map = (u) => upstreamPath(new URL(u), repos, 'docs/user');
+	assert.deepEqual(map(`${UP}/wiki/Getting-Started`), { path: 'docs/user/Getting-Started.md', fragment: '' });
+	assert.deepEqual(map(`${UP}/wiki`), { path: 'docs/user/Home.md', fragment: '' });
+	assert.deepEqual(map(`${UP}/blob/main/docs/a%20b/x.md#top`), { path: 'docs/a b/x.md', fragment: 'top' });
+	assert.deepEqual(map(`${UP}/wiki/Home#%E0%A4%A`), { path: 'docs/user/Home.md', fragment: '' });
+	const upper = 'https://github.com/Automatic-Ripping-Machine/Automatic-Ripping-Machine/wiki/Home';
+	assert.deepEqual(map(upper), { path: 'docs/user/Home.md', fragment: '' });
+});
+
+test('upstreamPath is null for anything that is not a known wiki or main blob', () => {
+	const repos = new Set(['automatic-ripping-machine/automatic-ripping-machine']);
+	const map = (u) => upstreamPath(new URL(u), repos, 'docs/user');
+	assert.equal(map('https://example.com/automatic-ripping-machine/automatic-ripping-machine/wiki'), null);
+	assert.equal(map('https://github.com/other/repo/wiki'), null);
+	assert.equal(map('https://github.com/automatic-ripping-machine'), null);
+	assert.equal(map(`${UP}/blob/dev/README.md`), null);
+	assert.equal(map(`${UP}/blob/main`), null);
+	assert.equal(map(`${UP}/issues/1`), null);
+	assert.equal(map('https://github.com/'), null);
+	assert.equal(map(UP), null);
+});
+
+test('upstreamPath keeps malformed escapes in the path as the resolver always has', () => {
+	const repos = new Set(['automatic-ripping-machine/automatic-ripping-machine']);
+	const map = (u) => upstreamPath(new URL(u), repos, 'docs/user');
+	assert.deepEqual(map(`${UP}/wiki/%E0%A4%A`), { path: 'docs/user/null.md', fragment: '' });
+	assert.deepEqual(map(`${UP}/blob/main/a/%E0%A4%A/b.md`), { path: 'a//b.md', fragment: '' });
 });
