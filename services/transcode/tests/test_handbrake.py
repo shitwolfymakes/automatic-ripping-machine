@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Awaitable
 
 import pytest
 
-from arm_transcode.handbrake import _PROGRESS_LINE_RE, _consume_progress, _parse_eta, _parse_fps
+from arm_transcode.handbrake import _PROGRESS_LINE_RE, _consume_progress, _parse_eta, _parse_fps, _process_progress_line
 
 
 def _match(line: str) -> re.Match[str] | None:
@@ -192,6 +193,54 @@ async def test_consume_progress_handles_chunk_boundary_mid_line() -> None:
 
     await _consume_progress(stream, cb)  # type: ignore[arg-type]
     assert seen == [33, 50]
+
+
+@pytest.mark.asyncio
+async def test_consume_progress_processes_unterminated_final_line_at_eof() -> None:
+    """A last progress line with no trailing `\\r`/`\\n` is still handled at EOF."""
+    stream = _FakeStream([b"Encoding: task 1 of 1, 10.00 %\r", b"Encoding: task 1 of 1, 20.00 %"])
+    seen: list[int] = []
+
+    async def cb(pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None) -> None:
+        seen.append(pct)
+
+    await _consume_progress(stream, cb)  # type: ignore[arg-type]
+    assert seen == [10, 20]
+
+
+@pytest.mark.asyncio
+async def test_process_progress_line_empty_line_returns_last_emitted_untouched(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    calls: list[int] = []
+
+    async def cb(pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None) -> None:
+        calls.append(pct)
+
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.handbrake"):
+        result = await _process_progress_line("", cb, 42)
+    assert result == 42
+    assert calls == []
+    assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_process_progress_line_swallows_callback_error_and_logs_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Pins current behaviour: the swallow is a known defect tracked in #412.
+    async def cb(pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None) -> None:
+        raise RuntimeError("boom")
+
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.handbrake"):
+        result = await _process_progress_line("Encoding: task 1 of 1, 30.00 %", cb, -1)
+    assert result == 30
+    assert any(
+        r.name == "arm_transcode.handbrake"
+        and r.levelno == logging.DEBUG
+        and r.getMessage() == "progress_callback raised: boom"
+        for r in caplog.records
+    )
 
 
 # Vitest-style asyncio plumbing — pytest-asyncio is already a dev dep.
