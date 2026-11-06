@@ -30,6 +30,7 @@ from arm_common import configure_service_logging, with_log_context
 from arm_common.encoders import EncoderSpec
 from arm_common.schemas import (
     HardwareCaps,
+    RegisterTranscoderResponse,
     TranscodePresetView,
     WSEnvelope,
 )
@@ -276,6 +277,53 @@ def _backend_ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
+async def _encode_and_report(
+    *,
+    api: BackendClient,
+    ws: WSClient,
+    task_id: str,
+    registered: RegisterTranscoderResponse,
+    cancel_event: asyncio.Event,
+) -> int:
+    """Encode the registered task under a heartbeat, report the outcome to the Backend, and return the exit code."""
+    raw_input = Path(registered.raw_input_path)
+    final_output = Path(registered.media_root) / (registered.task.output_path or "")
+    preset = registered.transcode_preset
+    tool = preset.tool if preset is not None else TranscodeTool.NONE
+    duration = registered.source_track.duration_seconds
+
+    state = ProgressState()
+    try:
+        async with HeartbeatPump(api=api, ws=ws, task_id=task_id, state=state):
+            size = await _run_encoder(
+                tool=tool,
+                preset=preset,
+                raw_input=raw_input,
+                final_output=final_output,
+                duration_seconds=duration,
+                state=state,
+                cancel_event=cancel_event,
+            )
+    except CancelRequested:
+        await api.fail(task_id, last_error="cancelled by user")
+        logger.info("task cancelled cleanly")
+        return 0
+    except Exception as exc:
+        logger.exception("encoder failed: %s", exc)
+        await api.fail(task_id, last_error=_clip_error(str(exc)))
+        return 1
+    else:
+        relative = final_output.relative_to(registered.media_root).as_posix()
+        await api.complete(
+            task_id,
+            output_path=relative,
+            size_bytes=size,
+            duration_seconds=duration,
+        )
+        logger.info("task complete output=%s size=%d", relative, size)
+        return 0
+
+
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
@@ -314,42 +362,9 @@ async def run() -> int:
             ):
                 await api.claim(cfg.task_id)
 
-                raw_input = Path(registered.raw_input_path)
-                final_output = Path(registered.media_root) / (registered.task.output_path or "")
-                preset = registered.transcode_preset
-                tool = preset.tool if preset is not None else TranscodeTool.NONE
-                duration = registered.source_track.duration_seconds
-
-                state = ProgressState()
-                try:
-                    async with HeartbeatPump(api=api, ws=ws, task_id=cfg.task_id, state=state):
-                        size = await _run_encoder(
-                            tool=tool,
-                            preset=preset,
-                            raw_input=raw_input,
-                            final_output=final_output,
-                            duration_seconds=duration,
-                            state=state,
-                            cancel_event=cancel_event,
-                        )
-                except CancelRequested:
-                    await api.fail(cfg.task_id, last_error="cancelled by user")
-                    logger.info("task cancelled cleanly")
-                    rc = 0
-                except Exception as exc:
-                    logger.exception("encoder failed: %s", exc)
-                    await api.fail(cfg.task_id, last_error=_clip_error(str(exc)))
-                    rc = 1
-                else:
-                    relative = final_output.relative_to(registered.media_root).as_posix()
-                    await api.complete(
-                        cfg.task_id,
-                        output_path=relative,
-                        size_bytes=size,
-                        duration_seconds=duration,
-                    )
-                    logger.info("task complete output=%s size=%d", relative, size)
-                    rc = 0
+                rc = await _encode_and_report(
+                    api=api, ws=ws, task_id=cfg.task_id, registered=registered, cancel_event=cancel_event
+                )
     finally:
         await api.close()
 
