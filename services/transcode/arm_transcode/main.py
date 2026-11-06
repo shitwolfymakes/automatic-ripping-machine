@@ -107,6 +107,14 @@ def _progress_recorder(state: ProgressState, cancel_event: asyncio.Event) -> Pro
     return _on_progress
 
 
+def _require_gpu_device() -> str:
+    """Return the GPU device path from ARM_GPU_DEVICE; raise RuntimeError when it is unset or empty."""
+    device = os.environ.get("ARM_GPU_DEVICE")
+    if not device:
+        raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
+    return device
+
+
 async def _encode_ffmpeg_vaapi(
     *,
     preset: TranscodePresetView,
@@ -117,9 +125,7 @@ async def _encode_ffmpeg_vaapi(
     progress_callback: ProgressCallback,
 ) -> int:
     """Run the ffmpeg VAAPI engine into an atomic output and return the size written."""
-    device = os.environ.get("ARM_GPU_DEVICE")
-    if not device:
-        raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
+    device = _require_gpu_device()
     with atomic_output(final_output) as tmp:
         return await transcode_ffmpeg_vaapi(
             input_path=raw_input,
