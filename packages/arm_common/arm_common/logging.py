@@ -119,6 +119,28 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(line, default=str)
 
 
+def _build_file_handler(log_dir: str, service_name: str, formatter: logging.Formatter) -> logging.Handler | None:
+    """The rotating `<service>.log` handler under `log_dir`, or None when the directory can't be created or opened."""
+    # File handler is best-effort. Inside a container `/logs` is the
+    # bind-mounted shared volume; outside (CI / dev shell / openapi
+    # snapshot regen) it may not exist or not be writable. Drop the
+    # file handler in that case rather than failing import — stdout
+    # still carries every line.
+    log_path = Path(log_dir)
+    try:
+        log_path.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_path / f"{service_name}.log",
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+    except OSError:
+        return None
+    file_handler.setFormatter(formatter)
+    return file_handler
+
+
 def configure_service_logging(service_name: str, log_dir: str = "/logs", level: str = "info") -> None:
     """Install JSONL logging on the root logger for one service.
 
@@ -138,24 +160,9 @@ def configure_service_logging(service_name: str, log_dir: str = "/logs", level: 
     stream.setFormatter(formatter)
     root.addHandler(stream)
 
-    # File handler is best-effort. Inside a container `/logs` is the
-    # bind-mounted shared volume; outside (CI / dev shell / openapi
-    # snapshot regen) it may not exist or not be writable. Drop the
-    # file handler in that case rather than failing import — stdout
-    # still carries every line.
-    log_path = Path(log_dir)
-    try:
-        log_path.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_path / f"{service_name}.log",
-            maxBytes=10 * 1024 * 1024,
-            backupCount=5,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(formatter)
+    file_handler = _build_file_handler(log_dir, service_name, formatter)
+    if file_handler is not None:
         root.addHandler(file_handler)
-    except OSError:
-        pass
 
 
 @contextmanager
