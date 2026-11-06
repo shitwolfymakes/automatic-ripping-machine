@@ -85,6 +85,17 @@ def _correlation_ids(record: logging.LogRecord) -> dict[str, str | None]:
     }
 
 
+def _extra_fields(record: logging.LogRecord) -> dict[str, Any]:
+    """The caller-supplied extra fields of this record, stamped with the source logger name."""
+    extra: dict[str, Any] = {
+        k: v for k, v in record.__dict__.items() if k not in _RESERVED_LOGRECORD_KEYS and not k.startswith("_")
+    }
+    # Stamp the source logger name so the LogTailer can self-filter records
+    # emitted from the WS hub during fan-out (loop guard).
+    extra.setdefault("logger", record.name)
+    return extra
+
+
 class JsonFormatter(logging.Formatter):
     """Serialise a `LogRecord` as one JSON line per the v3 logging schema."""
 
@@ -93,12 +104,7 @@ class JsonFormatter(logging.Formatter):
         self._service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        extra: dict[str, Any] = {
-            k: v for k, v in record.__dict__.items() if k not in _RESERVED_LOGRECORD_KEYS and not k.startswith("_")
-        }
-        # Stamp the source logger name so the LogTailer can self-filter records
-        # emitted from the WS hub during fan-out (loop guard).
-        extra.setdefault("logger", record.name)
+        extra = _extra_fields(record)
 
         line: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
