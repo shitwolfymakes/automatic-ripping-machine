@@ -1,7 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slugFor, collectPages, linkItem } from '../src/collect.mjs';
-import { fixtureTree, MANIFEST } from './helpers.mjs';
+import { slugFor, collectPages, linkItem, readPage } from '../src/collect.mjs';
+import { fixtureTree, makeTree, MANIFEST } from './helpers.mjs';
+
+test('readPage: reads the file and builds the page record with its heading as title', () => {
+	const root = makeTree({ 'docs/user/Some-Page.md': '# The Heading\n\nbody\n' });
+	const meta = { id: 'guide/some-page', audience: 'user', slug: 'some-page', srcPath: 'docs/user/Some-Page.md' };
+	assert.deepEqual(readPage(root, meta), { ...meta, title: 'The Heading', source: '# The Heading\n\nbody\n' });
+	assert.deepEqual(Object.keys(readPage(root, meta)), ['id', 'audience', 'slug', 'srcPath', 'title', 'source']);
+});
+
+test('readPage: title falls back to the de-slugged file stem without a heading', () => {
+	const root = makeTree({ 'docs/user/no-heading_page.md': 'just text\n' });
+	const srcPath = 'docs/user/no-heading_page.md';
+	const meta = { id: 'guide/no-heading_page', audience: 'user', slug: 'no-heading_page', srcPath };
+	assert.equal(readPage(root, meta).title, 'no heading page');
+});
 
 test('slugFor: lowercased stem; README takes its directory name', () => {
 	assert.equal(slugFor('docs/user/Getting-Started.md'), 'getting-started');

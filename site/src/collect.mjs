@@ -32,6 +32,12 @@ function titleOf(source, srcPath) {
 	return posix.basename(srcPath, '.md').replace(/[-_]+/g, ' ');
 }
 
+// Reads a page's markdown from the repo and builds its page record, title included.
+export function readPage(armRoot, { id, audience, slug, srcPath }) {
+	const source = readFileSync(join(armRoot, srcPath), 'utf8');
+	return { id, audience, slug, srcPath, title: titleOf(source, srcPath), source };
+}
+
 // The nav item for a manifest entry that links somewhere instead of naming a file.
 export function linkItem(entry, section) {
 	return {
@@ -60,8 +66,7 @@ export function collectPages(armRoot, manifest) {
 			errors.push(`duplicate page id ${id}: ${byId.get(id).srcPath} and ${srcPath}`);
 			return null;
 		}
-		const source = readFileSync(join(armRoot, srcPath), 'utf8');
-		const page = { id, audience, slug, srcPath, title: titleOf(source, srcPath), source };
+		const page = readPage(armRoot, { id, audience, slug, srcPath });
 		byId.set(id, page);
 		pages.push(page);
 		return page;
