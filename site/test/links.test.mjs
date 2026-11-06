@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { collectPages } from '../src/collect.mjs';
-import { createResolver, resolveAnchor, upstreamPath, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
+import { createResolver, resolveAnchor, upstreamPath, splitTarget, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 const UP = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
@@ -224,4 +224,32 @@ test('upstreamPath keeps malformed escapes in the path as the resolver always ha
 	const map = (u) => upstreamPath(new URL(u), repos, 'docs/user');
 	assert.deepEqual(map(`${UP}/wiki/%E0%A4%A`), { path: 'docs/user/null.md', fragment: '' });
 	assert.deepEqual(map(`${UP}/blob/main/a/%E0%A4%A/b.md`), { path: 'a//b.md', fragment: '' });
+});
+
+test('splitTarget returns the path with an empty fragment when there is no #', () => {
+	assert.deepEqual(splitTarget('a.md'), { pathPart: 'a.md', fragment: '' });
+});
+
+test('splitTarget splits path and fragment at the #', () => {
+	assert.deepEqual(splitTarget('a.md#x'), { pathPart: 'a.md', fragment: 'x' });
+});
+
+test('splitTarget decodes both halves', () => {
+	assert.deepEqual(splitTarget('a%20b.md#c%20d'), { pathPart: 'a b.md', fragment: 'c d' });
+});
+
+test('splitTarget splits at the first #', () => {
+	assert.deepEqual(splitTarget('a.md#x#y'), { pathPart: 'a.md', fragment: 'x#y' });
+});
+
+test('splitTarget gives an empty fragment for a trailing #', () => {
+	assert.deepEqual(splitTarget('a.md#'), { pathPart: 'a.md', fragment: '' });
+});
+
+test('splitTarget gives null for a malformed path escape', () => {
+	assert.equal(splitTarget('a%E0%A4%A.md#x'), null);
+});
+
+test('splitTarget gives null for a malformed fragment escape', () => {
+	assert.equal(splitTarget('a.md#%E0%A4%A'), null);
 });

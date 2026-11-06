@@ -45,6 +45,14 @@ export function upstreamPath(url, repos, wikiDir) {
 	return null;
 }
 
+// Splits "path#fragment" at the first # and decodes both halves; null when either has a malformed escape.
+export function splitTarget(target) {
+	const at = target.indexOf('#');
+	const pathPart = decode(at === -1 ? target : target.slice(0, at));
+	const fragment = at === -1 ? '' : decode(target.slice(at + 1));
+	return pathPart === null || fragment === null ? null : { pathPart, fragment };
+}
+
 export function createResolver({ armRoot, pages, manifest }) {
 	const byPath = new Map(pages.map((p) => [p.srcPath, p]));
 	const repos = new Set([manifest.repo, ...(manifest.repoAliases ?? [])].map((r) => r.toLowerCase()));
@@ -75,10 +83,9 @@ export function createResolver({ armRoot, pages, manifest }) {
 			const upstream = upstreamPath(url, repos, wikiDir);
 			return upstream ? repoPath(upstream.path, upstream.fragment) : { kind: 'external', url: target };
 		}
-		const at = target.indexOf('#');
-		const pathPart = decode(at === -1 ? target : target.slice(0, at));
-		const fragment = at === -1 ? '' : decode(target.slice(at + 1));
-		if (pathPart === null || fragment === null) return { kind: 'error', message: `malformed link: ${target}` };
+		const parts = splitTarget(target);
+		if (!parts) return { kind: 'error', message: `malformed link: ${target}` };
+		const { pathPart, fragment } = parts;
 		// GitHub wiki links are bare page names ("Getting-Started").
 		if (wikiDir && posix.dirname(from) === wikiDir && /^[A-Za-z0-9_-]+$/.test(pathPart) && existsSync(join(armRoot, wikiDir, `${pathPart}.md`))) {
 			return repoPath(`${wikiDir}/${pathPart}.md`, fragment);
