@@ -128,6 +128,16 @@ async def _drain_stderr(stream: asyncio.StreamReader, buf: list[str]) -> None:
         logger.debug("handbrake-stderr: %s", line)
 
 
+def _split_progress_lines(pending: str) -> tuple[list[str], str]:
+    """Split buffered stdout on `\\r` and `\\n` into complete lines and the unterminated remainder."""
+    # Treat both `\r` and `\n` as line breaks. HandBrake uses `\r` between
+    # progress updates and `\n` for everything else.
+    parts = re.split(r"[\r\n]", pending)
+    # The final segment may be incomplete — keep it in `pending` until the
+    # next chunk delivers its terminator.
+    return parts[:-1], parts[-1]
+
+
 async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) -> None:
     """Read stdout, split on the carriage return + newline HandBrake uses
     as the progress separator, log each logical line at DEBUG, and fire
@@ -158,13 +168,8 @@ async def _consume_progress(stream: asyncio.StreamReader, cb: ProgressCallback) 
                 await _process_progress_line(pending, cb, last_emitted)
             break
         pending += chunk.decode(errors="replace")
-        # Treat both `\r` and `\n` as line breaks. HandBrake uses `\r` between
-        # progress updates and `\n` for everything else.
-        parts = re.split(r"[\r\n]", pending)
-        # The final segment may be incomplete — keep it in `pending` until the
-        # next chunk delivers its terminator.
-        pending = parts[-1]
-        for line in parts[:-1]:
+        lines, pending = _split_progress_lines(pending)
+        for line in lines:
             new_emitted = await _process_progress_line(line, cb, last_emitted)
             if new_emitted >= 0:
                 last_emitted = new_emitted

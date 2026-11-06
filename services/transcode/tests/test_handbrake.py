@@ -9,7 +9,14 @@ from typing import Awaitable
 
 import pytest
 
-from arm_transcode.handbrake import _PROGRESS_LINE_RE, _consume_progress, _parse_eta, _parse_fps, _process_progress_line
+from arm_transcode.handbrake import (
+    _PROGRESS_LINE_RE,
+    _consume_progress,
+    _parse_eta,
+    _parse_fps,
+    _process_progress_line,
+    _split_progress_lines,
+)
 
 
 def _match(line: str) -> re.Match[str] | None:
@@ -246,3 +253,8 @@ async def test_process_progress_line_swallows_callback_error_and_logs_debug(
 # Vitest-style asyncio plumbing — pytest-asyncio is already a dev dep.
 def _autouse_asyncio_mode() -> None:
     asyncio.get_event_loop_policy()  # touch to silence unused-import warnings
+
+
+def test_split_progress_lines_breaks_on_cr_and_lf_and_keeps_the_unterminated_tail() -> None:
+    assert _split_progress_lines("a\rb\nc") == (["a", "b"], "c")
+    assert _split_progress_lines("no terminator") == ([], "no terminator")
