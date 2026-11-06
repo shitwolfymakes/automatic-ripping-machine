@@ -196,11 +196,19 @@ async def _process_progress_line(line: str, cb: ProgressCallback, last_emitted: 
     # for a two-pass encode) without having to know the schema's history.
     current_pass = f"{match.group('pass')}/{match.group('pass_total')}"
     fps, avg_fps = _parse_fps(match)
+    await _notify_progress(cb, pct, eta, current_pass, fps, avg_fps)
+    return pct
+
+
+async def _notify_progress(
+    cb: ProgressCallback, pct: int, eta: int | None, current_pass: str, fps: float | None, avg_fps: float | None
+) -> None:
+    """Hand one progress tick to the callback; a raising callback is logged at debug and ignored."""
     try:
         await cb(pct, eta, current_pass, fps, avg_fps)
     except Exception as exc:  # noqa: BLE001
+        # Swallowing the error is current behaviour, tracked in issue #412.
         logger.debug("progress_callback raised: %s", exc)
-    return pct
 
 
 def _parse_eta(match: re.Match[str]) -> int | None:
