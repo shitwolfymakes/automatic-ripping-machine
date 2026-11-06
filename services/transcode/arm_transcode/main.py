@@ -181,6 +181,57 @@ async def _encode_audio(
         )
 
 
+async def _encode(
+    *,
+    tool: TranscodeTool,
+    preset: TranscodePresetView | None,
+    raw_input: Path,
+    final_output: Path,
+    duration_seconds: int | None,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run the engine `tool` selects and return the size it wrote."""
+    if tool == TranscodeTool.NONE:
+        return transcode_none(raw_input, final_output)
+
+    spec = selected_encoder()
+    if tool == TranscodeTool.HANDBRAKE and spec is not None and spec.engine == "ffmpeg_vaapi":
+        # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
+        # below), so `preset` is never None on this branch.
+        assert preset is not None
+        return await _encode_ffmpeg_vaapi(
+            preset=preset,
+            spec=spec,
+            raw_input=raw_input,
+            final_output=final_output,
+            duration_seconds=duration_seconds,
+            progress_callback=progress_callback,
+        )
+
+    if preset is None or preset.preset_ref is None:
+        raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
+
+    if tool == TranscodeTool.HANDBRAKE:
+        return await _encode_handbrake(
+            preset_ref=preset.preset_ref,
+            extra_args=preset.extra_args,
+            raw_input=raw_input,
+            final_output=final_output,
+            progress_callback=progress_callback,
+        )
+
+    if tool == TranscodeTool.ABCDE:
+        return await _encode_audio(
+            preset=preset,
+            raw_input=raw_input,
+            final_output=final_output,
+            duration_seconds=duration_seconds,
+            progress_callback=progress_callback,
+        )
+
+    raise RuntimeError(f"unknown transcode tool={tool.value}")
+
+
 async def _run_encoder(
     *,
     tool: TranscodeTool,
@@ -191,57 +242,17 @@ async def _run_encoder(
     state: ProgressState,
     cancel_event: asyncio.Event,
 ) -> int:
-    """Dispatch on `tool`. Returns the size of the file we wrote."""
-
-    on_progress = _progress_recorder(state, cancel_event)
-
-    if tool == TranscodeTool.NONE:
-        size = transcode_none(raw_input, final_output)
-        state.pct = 100
-        return size
-
-    spec = selected_encoder()
-    if tool == TranscodeTool.HANDBRAKE and spec is not None and spec.engine == "ffmpeg_vaapi":
-        # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
-        # above), so `preset` is never None on this branch.
-        assert preset is not None
-        size = await _encode_ffmpeg_vaapi(
-            preset=preset,
-            spec=spec,
-            raw_input=raw_input,
-            final_output=final_output,
-            duration_seconds=duration_seconds,
-            progress_callback=on_progress,
-        )
-        state.pct = 100
-        return size
-
-    if preset is None or preset.preset_ref is None:
-        raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
-
-    if tool == TranscodeTool.HANDBRAKE:
-        size = await _encode_handbrake(
-            preset_ref=preset.preset_ref,
-            extra_args=preset.extra_args,
-            raw_input=raw_input,
-            final_output=final_output,
-            progress_callback=on_progress,
-        )
-        state.pct = 100
-        return size
-
-    if tool == TranscodeTool.ABCDE:
-        size = await _encode_audio(
-            preset=preset,
-            raw_input=raw_input,
-            final_output=final_output,
-            duration_seconds=duration_seconds,
-            progress_callback=on_progress,
-        )
-        state.pct = 100
-        return size
-
-    raise RuntimeError(f"unknown transcode tool={tool.value}")
+    """Encode with the engine for `tool`, recording progress on `state`; returns the size written."""
+    size = await _encode(
+        tool=tool,
+        preset=preset,
+        raw_input=raw_input,
+        final_output=final_output,
+        duration_seconds=duration_seconds,
+        progress_callback=_progress_recorder(state, cancel_event),
+    )
+    state.pct = 100
+    return size
 
 
 async def run() -> int:
