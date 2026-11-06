@@ -57,10 +57,16 @@ async def consume_progress(
         if pct == last_emitted:
             continue
         last_emitted = pct
-        try:
-            await cb(pct, None, "encoding", fps, None)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("progress_callback raised: %s", exc)
+        await _notify_progress(cb, pct, fps)
+
+
+async def _notify_progress(cb: ProgressCallback, pct: int, fps: float | None) -> None:
+    """Hand one percent tick to the callback; a raising callback is logged at debug and ignored."""
+    try:
+        await cb(pct, None, "encoding", fps, None)
+    except Exception as exc:  # noqa: BLE001
+        # Swallowing callback errors is current behaviour, tracked in issue #412.
+        logger.debug("progress_callback raised: %s", exc)
 
 
 def _percent_complete(us: int, duration_seconds: int | None) -> int | None:
