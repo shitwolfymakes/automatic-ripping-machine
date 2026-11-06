@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slugFor, collectPages, linkItem, readPage } from '../src/collect.mjs';
+import { slugFor, collectPages, linkItem, readPage, unplacedWikiErrors } from '../src/collect.mjs';
 import { fixtureTree, makeTree, MANIFEST } from './helpers.mjs';
 
 test('readPage: reads the file and builds the page record with its heading as title', () => {
@@ -143,4 +143,29 @@ test('linkItem: nav item for a manifest link entry, with and without a label', (
 		from: 'manifest.json',
 		where: 'manifest.json (Guide)'
 	});
+});
+
+test('unplacedWikiErrors reports a wiki page no section placed', () => {
+	assert.deepEqual(unplacedWikiErrors(['wiki/Home.md'], new Set()), [
+		'manifest: wiki/Home.md is not placed in any section'
+	]);
+});
+
+test('unplacedWikiErrors gives nothing for a placed page', () => {
+	assert.deepEqual(unplacedWikiErrors(['wiki/Home.md'], new Set(['wiki/Home.md'])), []);
+});
+
+test('unplacedWikiErrors exempts the wiki sidebar and footer', () => {
+	assert.deepEqual(unplacedWikiErrors(['wiki/_Footer.md', 'wiki/_Sidebar.md'], new Set()), []);
+});
+
+test('unplacedWikiErrors keeps the input order', () => {
+	assert.deepEqual(unplacedWikiErrors(['wiki/B.md', 'wiki/_Sidebar.md', 'wiki/A.md'], new Set()), [
+		'manifest: wiki/B.md is not placed in any section',
+		'manifest: wiki/A.md is not placed in any section'
+	]);
+});
+
+test('unplacedWikiErrors gives [] for an empty list', () => {
+	assert.deepEqual(unplacedWikiErrors([], new Set()), []);
 });

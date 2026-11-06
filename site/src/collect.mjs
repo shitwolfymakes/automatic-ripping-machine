@@ -48,6 +48,13 @@ export function linkItem(entry, section) {
 	};
 }
 
+// An error for each wiki page no section placed; files starting with _ (the wiki's sidebar and footer) are exempt.
+export function unplacedWikiErrors(wikiFiles, placed) {
+	return wikiFiles
+		.filter((f) => !posix.basename(f).startsWith('_') && !placed.has(f))
+		.map((f) => `manifest: ${f} is not placed in any section`);
+}
+
 export function collectPages(armRoot, manifest) {
 	const pages = [];
 	const nav = [];
@@ -103,8 +110,6 @@ export function collectPages(armRoot, manifest) {
 
 	// Every user doc must be placed, so a new wiki page can't silently miss
 	// the site and the app.
-	for (const f of glob(`${manifest.wiki}/*.md`)) {
-		if (!posix.basename(f).startsWith('_') && !placed.has(f)) errors.push(`manifest: ${f} is not placed in any section`);
-	}
+	errors.push(...unplacedWikiErrors(glob(`${manifest.wiki}/*.md`), placed));
 	return { pages, nav, errors };
 }
