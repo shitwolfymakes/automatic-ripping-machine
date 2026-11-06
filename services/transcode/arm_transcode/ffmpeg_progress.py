@@ -48,9 +48,8 @@ async def consume_progress(
             continue
         if not decoded.startswith("out_time_us="):
             continue
-        try:
-            us = int(decoded.partition("=")[2])
-        except ValueError:
+        us = _parse_out_time_us(decoded.partition("=")[2])
+        if us is None:
             continue
         if duration_seconds is None or duration_seconds <= 0:
             continue
@@ -62,6 +61,14 @@ async def consume_progress(
             await cb(pct, None, "encoding", fps, None)
         except Exception as exc:  # noqa: BLE001
             logger.debug("progress_callback raised: %s", exc)
+
+
+def _parse_out_time_us(value: str) -> int | None:
+    """ffmpeg's `out_time_us` value in microseconds, or None when it isn't a number."""
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def _parse_fps(value: str) -> float | None:
