@@ -269,3 +269,12 @@ test('splitTarget gives null for a malformed path escape', () => {
 test('splitTarget gives null for a malformed fragment escape', () => {
 	assert.equal(splitTarget('a.md#%E0%A4%A'), null);
 });
+
+test('createResolver without repoAliases maps only the manifest repo', () => {
+	const armRoot = fixtureTree();
+	const { repoAliases, ...manifest } = MANIFEST;
+	const r = createResolver({ armRoot, pages: collectPages(armRoot, manifest).pages, manifest });
+	assert.deepEqual(r.resolve('https://github.com/uprightbass360/arm-v3/blob/main/LICENSE', 'CONTRIBUTING.md'), LICENSE);
+	const alias = `https://github.com/${repoAliases[0]}/blob/main/LICENSE`;
+	assert.deepEqual(r.resolve(alias, 'CONTRIBUTING.md'), { kind: 'external', url: alias });
+});
