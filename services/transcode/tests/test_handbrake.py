@@ -5,17 +5,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from pathlib import Path
 from typing import Awaitable
 
 import pytest
 
 from arm_transcode.handbrake import (
     _PROGRESS_LINE_RE,
+    _STDERR_TAIL_LINES,
     _consume_progress,
     _parse_eta,
     _parse_fps,
     _process_progress_line,
     _split_progress_lines,
+    transcode_handbrake,
 )
 
 
@@ -258,3 +261,50 @@ def _autouse_asyncio_mode() -> None:
 def test_split_progress_lines_breaks_on_cr_and_lf_and_keeps_the_unterminated_tail() -> None:
     assert _split_progress_lines("a\rb\nc") == (["a", "b"], "c")
     assert _split_progress_lines("no terminator") == ([], "no terminator")
+
+
+class _FakeProc:
+    """Stand-in for the `asyncio.subprocess.Process` HandBrakeCLI launch."""
+
+    def __init__(self, stderr_lines: list[str], rc: int) -> None:
+        self.stdout = _FakeStream([])
+        self.stderr = asyncio.StreamReader()
+        self.stderr.feed_data("".join(f"{line}\n" for line in stderr_lines).encode())
+        self.stderr.feed_eof()
+        self._rc = rc
+
+    async def wait(self) -> int:
+        return self._rc
+
+
+@pytest.mark.asyncio
+async def test_transcode_handbrake_nonzero_exit_raises_with_only_the_stderr_tail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    total = _STDERR_TAIL_LINES + 5
+    lines = [f"stderr line {i}" for i in range(total)]
+    proc = _FakeProc(lines, rc=3)
+
+    async def fake_exec(*args: str, **kwargs: object) -> _FakeProc:
+        return proc
+
+    async def cb(*_args: object) -> None:  # pragma: no cover - no progress is emitted
+        raise AssertionError("no progress expected")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await transcode_handbrake(
+            input_path=tmp_path / "in.mkv",
+            output_path=tmp_path / "out.mkv",
+            preset_ref="Fast 1080p30",
+            extra_args=None,
+            encoder_args=[],
+            progress_callback=cb,
+        )
+
+    expected_tail = "\n".join(lines[-_STDERR_TAIL_LINES:])
+    assert str(excinfo.value) == f"HandBrakeCLI exited rc=3\nstderr tail:\n{expected_tail}"
+    assert "rc=3" in str(excinfo.value)
+    assert "stderr line 4\n" not in str(excinfo.value)
+    assert "stderr line 5\n" in str(excinfo.value)
