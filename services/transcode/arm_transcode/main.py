@@ -42,7 +42,7 @@ from arm_transcode.engines import selected_encoder
 from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
 from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
-from arm_transcode.handbrake import transcode_handbrake
+from arm_transcode.handbrake import ProgressCallback, transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
 from arm_transcode.ws_client import WSClient
 
@@ -89,6 +89,23 @@ def _detect_hw_caps() -> HardwareCaps:
     )
 
 
+def _progress_recorder(state: ProgressState, cancel_event: asyncio.Event) -> ProgressCallback:
+    """Build a progress callback that records each tick on `state` and raises CancelRequested once cancelled."""
+
+    async def _on_progress(
+        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
+    ) -> None:
+        state.pct = pct
+        state.eta_seconds = eta
+        state.current_pass = current
+        state.fps = fps
+        state.avg_fps = avg_fps
+        if cancel_event.is_set():
+            raise CancelRequested("task.cancel received")
+
+    return _on_progress
+
+
 async def _run_encoder(
     *,
     tool: TranscodeTool,
@@ -101,16 +118,7 @@ async def _run_encoder(
 ) -> int:
     """Dispatch on `tool`. Returns the size of the file we wrote."""
 
-    async def _on_progress(
-        pct: int, eta: int | None, current: str | None, fps: float | None, avg_fps: float | None
-    ) -> None:
-        state.pct = pct
-        state.eta_seconds = eta
-        state.current_pass = current
-        state.fps = fps
-        state.avg_fps = avg_fps
-        if cancel_event.is_set():
-            raise CancelRequested("task.cancel received")
+    on_progress = _progress_recorder(state, cancel_event)
 
     if tool == TranscodeTool.NONE:
         size = transcode_none(raw_input, final_output)
@@ -134,7 +142,7 @@ async def _run_encoder(
                 container=preset.container,
                 extra_args=preset.extra_args,
                 duration_seconds=duration_seconds,
-                progress_callback=_on_progress,
+                progress_callback=on_progress,
             )
         state.pct = 100
         return size
@@ -150,7 +158,7 @@ async def _run_encoder(
                 preset_ref=preset.preset_ref,
                 extra_args=preset.extra_args,
                 encoder_args=handbrake_encoder_args(selected_encoder()),
-                progress_callback=_on_progress,
+                progress_callback=on_progress,
             )
         state.pct = 100
         return size
@@ -165,7 +173,7 @@ async def _run_encoder(
                 output_path=tmp,
                 preset_ref=target,
                 duration_seconds=duration_seconds,
-                progress_callback=_on_progress,
+                progress_callback=on_progress,
             )
         state.pct = 100
         return size

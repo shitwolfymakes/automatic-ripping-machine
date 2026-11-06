@@ -432,3 +432,35 @@ async def test_run_encoder_unknown_tool_raises(monkeypatch, tmp_path) -> None:
             tool=bogus,  # type: ignore[arg-type]
             preset=_handbrake_preset(preset_ref="x"),
         )
+
+
+async def test_progress_recorder_records_all_fields_while_not_cancelled() -> None:
+    import arm_transcode.main as m
+
+    state = ProgressState()
+    on_progress = m._progress_recorder(state, asyncio.Event())
+
+    result = await on_progress(42, 90, "pass 1", 24.5, 23.0)
+
+    assert result is None
+    assert (state.pct, state.eta_seconds, state.current_pass, state.fps, state.avg_fps) == (
+        42,
+        90,
+        "pass 1",
+        24.5,
+        23.0,
+    )
+
+
+async def test_progress_recorder_records_then_raises_once_cancelled() -> None:
+    import arm_transcode.main as m
+
+    state = ProgressState()
+    cancel_event = asyncio.Event()
+    cancel_event.set()
+    on_progress = m._progress_recorder(state, cancel_event)
+
+    with pytest.raises(m.CancelRequested, match="task.cancel received"):
+        await on_progress(7, None, None, 1.5, 1.0)
+
+    assert (state.pct, state.eta_seconds, state.current_pass, state.fps, state.avg_fps) == (7, None, None, 1.5, 1.0)
