@@ -176,20 +176,24 @@ class WSClient:
 
         op = msg.get("op")
         if op == "event":
-            try:
-                env = WSEnvelope.model_validate(msg)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("ws envelope validation failed: %s", exc)
-                return
-            handler = self._handlers.get(env.topic)
-            if handler is not None:
-                try:
-                    await handler(env)
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("ws handler raised on topic=%s: %s", env.topic, exc)
+            await self._dispatch_event(msg)
         elif op == "error":
             err = WSError.model_validate(msg)
             logger.warning("ws error from backend: code=%s reason=%s", err.code, err.reason)
+
+    async def _dispatch_event(self, msg: Any) -> None:
+        """Validate an event frame and run its topic handler; bad envelopes and raising handlers are logged, not raised."""
+        try:
+            env = WSEnvelope.model_validate(msg)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ws envelope validation failed: %s", exc)
+            return
+        handler = self._handlers.get(env.topic)
+        if handler is not None:
+            try:
+                await handler(env)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("ws handler raised on topic=%s: %s", env.topic, exc)
 
 
 class WSAuthFailed(Exception):
