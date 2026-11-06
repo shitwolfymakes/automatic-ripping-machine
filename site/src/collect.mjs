@@ -67,32 +67,32 @@ export function collectPages(armRoot, manifest) {
 		return page;
 	};
 	const glob = (pattern) => globSync(pattern, { cwd: armRoot }).map(toPosix).sort();
+	// One manifest entry's nav items: its link item, or one item per newly placed file its pattern matches.
+	const entryItems = (entry, section) => {
+		// typeof guard: strings inherit the legacy String.prototype.link method.
+		if (typeof entry === 'object' && entry.link) return [linkItem(entry, section)];
+		const pattern = typeof entry === 'string' ? entry : entry.file;
+		const files = glob(pattern);
+		if (!files.length) errors.push(`manifest: ${pattern} matched no files`);
+		const items = [];
+		for (const f of files) {
+			if (placed.has(f)) continue;
+			placed.add(f);
+			const page = add(section.audience, f, entry.slug);
+			if (page) items.push({ label: entry.label ?? page.title, pageId: page.id });
+		}
+		return items;
+	};
 
 	for (const section of manifest.sections) {
 		if (!ID_PREFIX[section.audience]) {
 			errors.push(`manifest: section ${section.id} has unknown audience ${section.audience} (use user or dev)`);
 			continue;
 		}
-		const groups = section.groups.map((group) => {
-			const items = [];
-			for (const entry of group.files) {
-				// typeof guard: strings inherit the legacy String.prototype.link method.
-				if (typeof entry === 'object' && entry.link) {
-					items.push(linkItem(entry, section));
-					continue;
-				}
-				const pattern = typeof entry === 'string' ? entry : entry.file;
-				const files = glob(pattern);
-				if (!files.length) errors.push(`manifest: ${pattern} matched no files`);
-				for (const f of files) {
-					if (placed.has(f)) continue;
-					placed.add(f);
-					const page = add(section.audience, f, entry.slug);
-					if (page) items.push({ label: entry.label ?? page.title, pageId: page.id });
-				}
-			}
-			return { label: group.label ?? null, items };
-		});
+		const groups = section.groups.map((group) => ({
+			label: group.label ?? null,
+			items: group.files.flatMap((entry) => entryItems(entry, section))
+		}));
 		nav.push({ id: section.id, label: section.label, audience: section.audience, groups });
 	}
 
