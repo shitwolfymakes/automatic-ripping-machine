@@ -71,26 +71,39 @@ export function createResolver({ armRoot, pages, manifest }) {
 		return page ? { kind: 'page', id: page.id, fragment } : { kind: 'repo', path, fragment };
 	}
 
-	function resolve(target, from) {
-		if (target.startsWith('#')) return resolveAnchor(target);
-		if (SCHEME.test(target)) {
-			let url;
-			try {
-				url = new URL(target);
-			} catch {
-				return { kind: 'external', url: target };
-			}
-			const upstream = upstreamPath(url, repos, wikiDir);
-			return upstream ? repoPath(upstream.path, upstream.fragment) : { kind: 'external', url: target };
+	function resolveUrl(target) {
+		let url;
+		try {
+			url = new URL(target);
+		} catch {
+			return { kind: 'external', url: target };
 		}
+		const upstream = upstreamPath(url, repos, wikiDir);
+		return upstream ? repoPath(upstream.path, upstream.fragment) : { kind: 'external', url: target };
+	}
+
+	// GitHub wiki links are bare page names ("Getting-Started").
+	function isWikiPageName(pathPart, from) {
+		return (
+			wikiDir &&
+			posix.dirname(from) === wikiDir &&
+			/^[A-Za-z0-9_-]+$/.test(pathPart) &&
+			existsSync(join(armRoot, wikiDir, `${pathPart}.md`))
+		);
+	}
+
+	function resolveRelative(target, from) {
 		const parts = splitTarget(target);
 		if (!parts) return { kind: 'error', message: `malformed link: ${target}` };
 		const { pathPart, fragment } = parts;
-		// GitHub wiki links are bare page names ("Getting-Started").
-		if (wikiDir && posix.dirname(from) === wikiDir && /^[A-Za-z0-9_-]+$/.test(pathPart) && existsSync(join(armRoot, wikiDir, `${pathPart}.md`))) {
-			return repoPath(`${wikiDir}/${pathPart}.md`, fragment);
-		}
+		if (isWikiPageName(pathPart, from)) return repoPath(`${wikiDir}/${pathPart}.md`, fragment);
 		return repoPath(posix.join(posix.dirname(from), pathPart), fragment);
+	}
+
+	function resolve(target, from) {
+		if (target.startsWith('#')) return resolveAnchor(target);
+		if (SCHEME.test(target)) return resolveUrl(target);
+		return resolveRelative(target, from);
 	}
 
 	function resolveAsset(src, from) {
