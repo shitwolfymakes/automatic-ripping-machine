@@ -115,3 +115,66 @@ test('in the app, links to pages outside the app bundle go to the public site in
 	const out = fillLinks(html, { links: [{ resolved: dev }, { resolved: { kind: 'page', id: 'guide/faq', fragment: '' } }], assets: [] }, ctx);
 	assert.equal(out, '<a href="https://example.test/arm-v3/dev/architecture.html#topology" target="_blank" rel="noopener">arch</a> <a href="/help/guide/faq">faq</a>');
 });
+
+const BAD = 'bad%E0%A4%A';
+const ARCH = 'docs/developers/architecture/README.md';
+const ARM = 'automatic-ripping-machine/automatic-ripping-machine';
+const LICENSE = { kind: 'repo', path: 'LICENSE', fragment: '' };
+
+test('anchors: a malformed escape is an error, an encoded one decodes', () => {
+	const r = setup();
+	assert.deepEqual(r.resolve(`#${BAD}`, 'docs/user/Home.md'), { kind: 'error', message: `malformed link: #${BAD}` });
+	assert.deepEqual(r.resolve('#a%20b', 'docs/user/Home.md'), { kind: 'anchor', fragment: 'a b' });
+});
+
+test('a scheme-shaped target that new URL rejects stays external, verbatim', () => {
+	const r = setup();
+	assert.deepEqual(r.resolve('http://', 'CONTRIBUTING.md'), { kind: 'external', url: 'http://' });
+	assert.deepEqual(r.resolve('https://[bad', 'CONTRIBUTING.md'), { kind: 'external', url: 'https://[bad' });
+});
+
+test('an upstream blob URL with a malformed hash resolves with an empty fragment', () => {
+	const r = setup();
+	assert.deepEqual(r.resolve(`${UP}/blob/main/LICENSE#${BAD}`, 'CONTRIBUTING.md'), LICENSE);
+	assert.deepEqual(r.resolve(`${UP}/blob/main/LICENSE#x`, 'CONTRIBUTING.md'), { ...LICENSE, fragment: 'x' });
+});
+
+test('upstream mapping edges: unknown repo, other host, other branch, bare main stay external', () => {
+	const r = setup();
+	const ext = (url) => assert.deepEqual(r.resolve(url, 'CONTRIBUTING.md'), { kind: 'external', url });
+	ext('https://github.com/someone/else/blob/main/LICENSE');
+	ext(`https://gitlab.com/${ARM}/blob/main/LICENSE`);
+	ext(`${UP}/blob/dev/LICENSE`);
+	ext(`${UP}/blob/main`);
+});
+
+test('upstream repo match ignores case and honours repoAliases', () => {
+	const r = setup();
+	const from = 'CONTRIBUTING.md';
+	const upper = 'https://github.com/AUTOMATIC-Ripping-Machine/Automatic-Ripping-Machine/blob/main/LICENSE';
+	assert.deepEqual(r.resolve(upper, from), LICENSE);
+	assert.deepEqual(r.resolve('https://github.com/uprightbass360/arm-v3/blob/main/LICENSE', from), LICENSE);
+	const home = { kind: 'page', id: 'guide/home', fragment: '' };
+	assert.deepEqual(r.resolve('https://github.com/UprightBass360/ARM-v3/wiki', from), home);
+});
+
+test('bare wiki names only apply from a wiki page; otherwise they are relative paths', () => {
+	const r = setup();
+	const missing = (message) => ({ kind: 'error', message: `link target not found: ${message}` });
+	assert.deepEqual(r.resolve('Getting-Started', 'CONTRIBUTING.md'), missing('Getting-Started'));
+	assert.deepEqual(r.resolve('Getting.Started', 'docs/user/Home.md'), missing('docs/user/Getting.Started'));
+	const page = { kind: 'page', id: 'guide/getting-started', fragment: '' };
+	assert.deepEqual(r.resolve('Getting-Started.md', 'docs/user/Home.md'), page);
+});
+
+test('a malformed fragment on a relative target is an error', () => {
+	const message = `malformed link: LICENSE#${BAD}`;
+	assert.deepEqual(setup().resolve(`LICENSE#${BAD}`, ARCH), { kind: 'error', message });
+});
+
+test('upstream URLs with a malformed path segment: wiki name becomes "null", blob segment becomes empty', () => {
+	const r = setup();
+	const notFound = (path) => ({ kind: 'error', message: `link target not found: ${path}` });
+	assert.deepEqual(r.resolve(`${UP}/wiki/${BAD}`, 'CONTRIBUTING.md'), notFound('docs/user/null.md'));
+	assert.deepEqual(r.resolve(`${UP}/blob/main/docs/${BAD}/LICENSE`, 'CONTRIBUTING.md'), notFound('docs/LICENSE'));
+});
