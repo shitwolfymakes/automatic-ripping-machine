@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { collectPages } from '../src/collect.mjs';
-import { createResolver, resolveAnchor, upstreamPath, splitTarget, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
+import { createResolver, resolveAnchor, upstreamPath, splitTarget, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, fragmentTarget, checkFragments, fillLinks } from '../src/links.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 const UP = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
@@ -96,6 +96,22 @@ test('checkFragments reports missing anchors on pages and on the same page', () 
 		{ page: { id: 'a/y', srcPath: 'y.md' }, headingIds: new Set(['here']), links: [] }
 	];
 	assert.deepEqual(checkFragments(rendered), ['x.md:3: missing anchor #two in a/x']);
+});
+
+test('fragmentTarget picks the page a fragment must match', () => {
+	assert.equal(fragmentTarget({ kind: 'anchor', fragment: 'f' }, 'a/x'), 'a/x');
+	assert.equal(fragmentTarget({ kind: 'page', id: 'a/y', fragment: 'f' }, 'a/x'), 'a/y');
+	for (const kind of ['repo', 'external', 'error']) assert.equal(fragmentTarget({ kind, fragment: 'f' }, 'a/x'), null);
+});
+
+test('checkFragments skips links without a fragment and repo links with one', () => {
+	const rendered = [
+		{ page: { id: 'a/x', srcPath: 'x.md' }, headingIds: new Set(), links: [
+			{ line: 1, resolved: { kind: 'page', id: 'a/x', fragment: '' } },
+			{ line: 2, resolved: { kind: 'repo', path: 'R', fragment: 'nope' } }
+		] }
+	];
+	assert.deepEqual(checkFragments(rendered), []);
 });
 
 test('fillLinks substitutes placeholders and escapes attribute values', () => {

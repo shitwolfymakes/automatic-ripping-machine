@@ -149,13 +149,21 @@ export function assetHref(path, { target, fromId }) {
 	return posix.relative(posix.dirname(outPath(fromId)), `assets/${path}`);
 }
 
+// The page whose headings a link's fragment must match: the linking page for an in-page anchor,
+// the target for a page link, null for anything else.
+export function fragmentTarget(resolved, fromId) {
+	if (resolved.kind === 'anchor') return fromId;
+	if (resolved.kind === 'page') return resolved.id;
+	return null;
+}
+
 export function checkFragments(rendered) {
 	const ids = new Map(rendered.map((r) => [r.page.id, r.headingIds]));
 	const errors = [];
 	for (const r of rendered) {
 		for (const { line, resolved } of r.links) {
 			if (!resolved.fragment) continue;
-			const targetId = resolved.kind === 'anchor' ? r.page.id : resolved.kind === 'page' ? resolved.id : null;
+			const targetId = fragmentTarget(resolved, r.page.id);
 			if (targetId && !ids.get(targetId)?.has(resolved.fragment)) {
 				errors.push(`${r.page.srcPath}:${line}: missing anchor #${resolved.fragment} in ${targetId}`);
 			}
