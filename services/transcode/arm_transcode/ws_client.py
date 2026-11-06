@@ -140,15 +140,7 @@ class WSClient:
             ping_timeout=20.0,
             max_size=2**20,
         ) as conn:
-            await conn.send(WSAuthRequest(token=self._token).model_dump_json())
-            ack_raw = await asyncio.wait_for(conn.recv(), timeout=AUTH_ACK_TIMEOUT_SECONDS)
-            ack = json.loads(ack_raw)
-            if ack.get("op") == "error":
-                err = WSError.model_validate(ack)
-                raise WSAuthFailed(f"backend rejected auth: code={err.code} reason={err.reason}")
-            if ack.get("op") != "ack":
-                raise WSAuthFailed(f"unexpected first frame: {ack!r}")
-            WSAck.model_validate(ack)
+            await self._authenticate(conn)
             logger.info("ws transcoder connected url=%s task_id=%s", self._url, self._task_id)
 
             self._conn = conn
@@ -182,6 +174,18 @@ class WSClient:
                 elif op == "error":
                     err = WSError.model_validate(msg)
                     logger.warning("ws error from backend: code=%s reason=%s", err.code, err.reason)
+
+    async def _authenticate(self, conn: ClientConnection) -> None:
+        """Send the service token and await the ack; raise WSAuthFailed on a rejection or other first frame."""
+        await conn.send(WSAuthRequest(token=self._token).model_dump_json())
+        ack_raw = await asyncio.wait_for(conn.recv(), timeout=AUTH_ACK_TIMEOUT_SECONDS)
+        ack = json.loads(ack_raw)
+        if ack.get("op") == "error":
+            err = WSError.model_validate(ack)
+            raise WSAuthFailed(f"backend rejected auth: code={err.code} reason={err.reason}")
+        if ack.get("op") != "ack":
+            raise WSAuthFailed(f"unexpected first frame: {ack!r}")
+        WSAck.model_validate(ack)
 
 
 class WSAuthFailed(Exception):
