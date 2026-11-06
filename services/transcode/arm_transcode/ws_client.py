@@ -152,28 +152,7 @@ class WSClient:
             async for raw in conn:
                 if self._stopping.is_set():
                     break
-                try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    logger.warning("ws non-json frame discarded")
-                    continue
-
-                op = msg.get("op")
-                if op == "event":
-                    try:
-                        env = WSEnvelope.model_validate(msg)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("ws envelope validation failed: %s", exc)
-                        continue
-                    handler = self._handlers.get(env.topic)
-                    if handler is not None:
-                        try:
-                            await handler(env)
-                        except Exception as exc:  # noqa: BLE001
-                            logger.exception("ws handler raised on topic=%s: %s", env.topic, exc)
-                elif op == "error":
-                    err = WSError.model_validate(msg)
-                    logger.warning("ws error from backend: code=%s reason=%s", err.code, err.reason)
+                await self._handle_frame(raw)
 
     async def _authenticate(self, conn: ClientConnection) -> None:
         """Send the service token and await the ack; raise WSAuthFailed on a rejection or other first frame."""
@@ -186,6 +165,31 @@ class WSClient:
         if ack.get("op") != "ack":
             raise WSAuthFailed(f"unexpected first frame: {ack!r}")
         WSAck.model_validate(ack)
+
+    async def _handle_frame(self, raw: str | bytes) -> None:
+        """Decode one inbound frame: dispatch an event to its topic handler, log a backend error, ignore the rest."""
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("ws non-json frame discarded")
+            return
+
+        op = msg.get("op")
+        if op == "event":
+            try:
+                env = WSEnvelope.model_validate(msg)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ws envelope validation failed: %s", exc)
+                return
+            handler = self._handlers.get(env.topic)
+            if handler is not None:
+                try:
+                    await handler(env)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("ws handler raised on topic=%s: %s", env.topic, exc)
+        elif op == "error":
+            err = WSError.model_validate(msg)
+            logger.warning("ws error from backend: code=%s reason=%s", err.code, err.reason)
 
 
 class WSAuthFailed(Exception):
