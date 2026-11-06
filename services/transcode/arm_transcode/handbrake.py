@@ -60,6 +60,29 @@ _PROGRESS_LINE_RE = re.compile(
 )
 
 
+def build_handbrake_command(
+    *, input_path: Path, output_path: Path, preset_ref: str, extra_args: str | None, encoder_args: list[str]
+) -> list[str]:
+    """The HandBrakeCLI argv for one encode.
+
+    Input, output and preset come first, then the encoder args, then any
+    extra args split on whitespace.
+    """
+    cmd: list[str] = [
+        "HandBrakeCLI",
+        "-i",
+        str(input_path),
+        "-o",
+        str(output_path),
+        "--preset",
+        preset_ref,
+    ]
+    cmd.extend(encoder_args)
+    if extra_args:
+        cmd.extend(extra_args.split())
+    return cmd
+
+
 async def transcode_handbrake(
     *,
     input_path: Path,
@@ -74,18 +97,13 @@ async def transcode_handbrake(
     Raises `RuntimeError` on non-zero exit. The caller is responsible for
     catching and dispatching to `BackendClient.fail`.
     """
-    cmd: list[str] = [
-        "HandBrakeCLI",
-        "-i",
-        str(input_path),
-        "-o",
-        str(output_path),
-        "--preset",
-        preset_ref,
-    ]
-    cmd.extend(encoder_args)
-    if extra_args:
-        cmd.extend(extra_args.split())
+    cmd = build_handbrake_command(
+        input_path=input_path,
+        output_path=output_path,
+        preset_ref=preset_ref,
+        extra_args=extra_args,
+        encoder_args=encoder_args,
+    )
 
     logger.info("HandBrakeCLI launching: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(

@@ -11,6 +11,7 @@ from typing import Awaitable
 import pytest
 
 from arm_transcode.handbrake import (
+    build_handbrake_command,
     _PROGRESS_LINE_RE,
     _STDERR_TAIL_LINES,
     _consume_progress,
@@ -308,3 +309,41 @@ async def test_transcode_handbrake_nonzero_exit_raises_with_only_the_stderr_tail
     assert "rc=3" in str(excinfo.value)
     assert "stderr line 4\n" not in str(excinfo.value)
     assert "stderr line 5\n" in str(excinfo.value)
+
+
+def _build(extra_args: str | None = None, encoder_args: list[str] | None = None) -> list[str]:
+    return build_handbrake_command(
+        input_path=Path("/in/a.mkv"),
+        output_path=Path("/out/a.mkv"),
+        preset_ref="Fast 1080p30",
+        extra_args=extra_args,
+        encoder_args=encoder_args or [],
+    )
+
+
+_BASE_ARGV = ["HandBrakeCLI", "-i", "/in/a.mkv", "-o", "/out/a.mkv", "--preset", "Fast 1080p30"]
+
+
+def test_build_handbrake_command_base_argv() -> None:
+    assert _build() == _BASE_ARGV
+
+
+def test_build_handbrake_command_encoder_args_follow_preset() -> None:
+    assert _build(encoder_args=["--encoder", "x265"]) == [*_BASE_ARGV, "--encoder", "x265"]
+
+
+def test_build_handbrake_command_extra_args_split_and_last() -> None:
+    assert _build(extra_args="--quality  20\t--rate 30", encoder_args=["--encoder", "x265"]) == [
+        *_BASE_ARGV,
+        "--encoder",
+        "x265",
+        "--quality",
+        "20",
+        "--rate",
+        "30",
+    ]
+
+
+@pytest.mark.parametrize("extra_args", [None, ""])
+def test_build_handbrake_command_empty_extra_args_add_nothing(extra_args: str | None) -> None:
+    assert _build(extra_args=extra_args) == _BASE_ARGV
