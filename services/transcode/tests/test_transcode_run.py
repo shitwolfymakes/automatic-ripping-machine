@@ -306,3 +306,10 @@ async def test_plain_http_backend_gives_ws_url(h: Harness, monkeypatch: pytest.M
     monkeypatch.setenv("ARM_BACKEND_URL", "http://backend:8080")
     assert await m.run() == 0
     assert h.ws_kwargs["url"] == "ws://backend:8080/ws"
+
+
+def test_backend_ssl_context_verifies_certificates() -> None:
+    ctx = m._backend_ssl_context()
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True

@@ -266,6 +266,16 @@ def _cancel_listener(cancel_event: asyncio.Event) -> EnvelopeHandler:
     return _on_cancel
 
 
+def _backend_ssl_context() -> ssl.SSLContext:
+    """Build the TLS context for the Backend's wss:// endpoint from the system trust store.
+
+    The Backend serves wss:// with a cert chained to the install CA. The entrypoint already merges that CA into the
+    system trust store, at the same /etc/ssl/certs/ca-certificates.crt path api_client.py uses for the HTTP client.
+    `websockets` refuses to connect over wss:// without an explicit ssl context, so build one from the system store.
+    """
+    return ssl.create_default_context()
+
+
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
@@ -279,12 +289,7 @@ async def run() -> int:
 
     cancel_event = asyncio.Event()
 
-    # The Backend serves wss:// with a cert chained to the install CA,
-    # which the entrypoint already merges into the system trust store
-    # (see api_client.py — same `/etc/ssl/certs/ca-certificates.crt` path
-    # the HTTP client uses). `websockets` refuses to connect over `wss://`
-    # without an explicit ssl context, so build one from the system store.
-    ssl_ctx = ssl.create_default_context()
+    ssl_ctx = _backend_ssl_context()
 
     rc = 1
     try:
