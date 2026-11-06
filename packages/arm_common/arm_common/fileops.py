@@ -132,6 +132,28 @@ def _same_device_hint(src: Path, dst_dir: Path) -> None:
         )
 
 
+def _copy_across_filesystems(
+    input_path: Path,
+    output_path: Path,
+    cancel: threading.Event | None,
+    on_bytes: Callable[[int], None] | None,
+) -> None:
+    """Copy through `.arm-inprogress`, rename into place, then remove the source (best effort)."""
+    _same_device_hint(input_path, output_path.parent)
+    tmp_path = output_path.with_name(output_path.name + INPROGRESS_SUFFIX)
+    try:
+        _copy_file(input_path, tmp_path, cancel, on_bytes)
+        _fsync_file(tmp_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    os.replace(tmp_path, output_path)
+    try:
+        input_path.unlink()
+    except OSError as cleanup_exc:
+        logger.warning("post-copy unlink failed: %s (will leave source in /raw)", cleanup_exc)
+
+
 def transcode_none(
     input_path: Path,
     output_path: Path,
@@ -151,19 +173,7 @@ def transcode_none(
         os.rename(input_path, output_path)
     except OSError as exc:
         logger.info("passthrough rename failed (%s); falling back to copy+remove", exc)
-        _same_device_hint(input_path, output_path.parent)
-        tmp_path = output_path.with_name(output_path.name + INPROGRESS_SUFFIX)
-        try:
-            _copy_file(input_path, tmp_path, cancel, on_bytes)
-            _fsync_file(tmp_path)
-        except BaseException:
-            tmp_path.unlink(missing_ok=True)
-            raise
-        os.replace(tmp_path, output_path)
-        try:
-            input_path.unlink()
-        except OSError as cleanup_exc:
-            logger.warning("post-copy unlink failed: %s (will leave source in /raw)", cleanup_exc)
+        _copy_across_filesystems(input_path, output_path, cancel, on_bytes)
     _fsync_dir(output_path.parent)
     size = output_path.stat().st_size
     logger.info("passthrough wrote %s (%d bytes)", output_path, size)
