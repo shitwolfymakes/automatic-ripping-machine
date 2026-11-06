@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 from arm_common import configure_service_logging, with_log_context
+from arm_common.encoders import EncoderSpec
 from arm_common.schemas import (
     HardwareCaps,
     TranscodePresetView,
@@ -106,6 +107,74 @@ def _progress_recorder(state: ProgressState, cancel_event: asyncio.Event) -> Pro
     return _on_progress
 
 
+async def _encode_ffmpeg_vaapi(
+    *,
+    preset: TranscodePresetView,
+    spec: EncoderSpec,
+    raw_input: Path,
+    final_output: Path,
+    duration_seconds: int | None,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run the ffmpeg VAAPI engine into an atomic output and return the size written."""
+    device = os.environ.get("ARM_GPU_DEVICE")
+    if not device:
+        raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
+    with atomic_output(final_output) as tmp:
+        return await transcode_ffmpeg_vaapi(
+            input_path=raw_input,
+            output_path=tmp,
+            spec=spec,
+            device=device,
+            container=preset.container,
+            extra_args=preset.extra_args,
+            duration_seconds=duration_seconds,
+            progress_callback=progress_callback,
+        )
+
+
+async def _encode_handbrake(
+    *,
+    preset_ref: str,
+    extra_args: str | None,
+    raw_input: Path,
+    final_output: Path,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run HandBrakeCLI into an atomic output and return the size written."""
+    with atomic_output(final_output) as tmp:
+        return await transcode_handbrake(
+            input_path=raw_input,
+            output_path=tmp,
+            preset_ref=preset_ref,
+            extra_args=extra_args,
+            encoder_args=handbrake_encoder_args(selected_encoder()),
+            progress_callback=progress_callback,
+        )
+
+
+async def _encode_audio(
+    *,
+    preset: TranscodePresetView,
+    raw_input: Path,
+    final_output: Path,
+    duration_seconds: int | None,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run the ffmpeg audio engine into an atomic output and return the size written."""
+    # The ripper's abcde stage produced .wav files; we re-encode to
+    # `preset.container.value` (flac, mp3) here.
+    target = preset.preset_ref or preset.container.value
+    with atomic_output(final_output) as tmp:
+        return await transcode_audio(
+            input_path=raw_input,
+            output_path=tmp,
+            preset_ref=target,
+            duration_seconds=duration_seconds,
+            progress_callback=progress_callback,
+        )
+
+
 async def _run_encoder(
     *,
     tool: TranscodeTool,
@@ -130,20 +199,14 @@ async def _run_encoder(
         # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
         # above), so `preset` is never None on this branch.
         assert preset is not None
-        device = os.environ.get("ARM_GPU_DEVICE")
-        if not device:
-            raise RuntimeError("ffmpeg_vaapi encoder requires ARM_GPU_DEVICE")
-        with atomic_output(final_output) as tmp:
-            size = await transcode_ffmpeg_vaapi(
-                input_path=raw_input,
-                output_path=tmp,
-                spec=spec,
-                device=device,
-                container=preset.container,
-                extra_args=preset.extra_args,
-                duration_seconds=duration_seconds,
-                progress_callback=on_progress,
-            )
+        size = await _encode_ffmpeg_vaapi(
+            preset=preset,
+            spec=spec,
+            raw_input=raw_input,
+            final_output=final_output,
+            duration_seconds=duration_seconds,
+            progress_callback=on_progress,
+        )
         state.pct = 100
         return size
 
@@ -151,30 +214,24 @@ async def _run_encoder(
         raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
 
     if tool == TranscodeTool.HANDBRAKE:
-        with atomic_output(final_output) as tmp:
-            size = await transcode_handbrake(
-                input_path=raw_input,
-                output_path=tmp,
-                preset_ref=preset.preset_ref,
-                extra_args=preset.extra_args,
-                encoder_args=handbrake_encoder_args(selected_encoder()),
-                progress_callback=on_progress,
-            )
+        size = await _encode_handbrake(
+            preset_ref=preset.preset_ref,
+            extra_args=preset.extra_args,
+            raw_input=raw_input,
+            final_output=final_output,
+            progress_callback=on_progress,
+        )
         state.pct = 100
         return size
 
     if tool == TranscodeTool.ABCDE:
-        # The ripper's abcde stage produced .wav files; we re-encode to
-        # `preset.container.value` (flac, mp3) here.
-        target = preset.preset_ref or preset.container.value
-        with atomic_output(final_output) as tmp:
-            size = await transcode_audio(
-                input_path=raw_input,
-                output_path=tmp,
-                preset_ref=target,
-                duration_seconds=duration_seconds,
-                progress_callback=on_progress,
-            )
+        size = await _encode_audio(
+            preset=preset,
+            raw_input=raw_input,
+            final_output=final_output,
+            duration_seconds=duration_seconds,
+            progress_callback=on_progress,
+        )
         state.pct = 100
         return size
 
