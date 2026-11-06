@@ -338,6 +338,35 @@ async def _encode_and_report(
         return 0
 
 
+async def _run_task(*, cfg: TranscoderConfig, api: BackendClient, ssl_ctx: ssl.SSLContext) -> int:
+    """Open the WS session, register and claim the task, then encode it under its log context; return the exit code."""
+    cancel_event = asyncio.Event()
+    async with WSClient(
+        url=cfg.ws_url,
+        service_token=cfg.service_token,
+        hostname=cfg.hostname,
+        task_id=cfg.task_id,
+        ssl_context=ssl_ctx,
+    ) as ws:
+        await ws.subscribe(f"transcoder.commands.{cfg.task_id}", _cancel_listener(cancel_event))
+        await ws.wait_until_connected(timeout=10.0)
+
+        registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
+        # Phase 12 — once register lands we have job_id / track_id /
+        # session_application_id; everything below logs with full context.
+        # `job_id` lives on `source_track`, not on the task row.
+        with with_log_context(
+            job_id=registered.source_track.job_id,
+            track_id=registered.task.source_track_id,
+            session_application_id=registered.task.session_application_id,
+        ):
+            await api.claim(cfg.task_id)
+
+            return await _encode_and_report(
+                api=api, ws=ws, task_id=cfg.task_id, registered=registered, cancel_event=cancel_event
+            )
+
+
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
@@ -349,40 +378,12 @@ async def run() -> int:
         hostname=cfg.hostname,
     )
 
-    cancel_event = asyncio.Event()
-
     ssl_ctx = _backend_ssl_context()
 
-    rc = 1
     try:
-        async with WSClient(
-            url=cfg.ws_url,
-            service_token=cfg.service_token,
-            hostname=cfg.hostname,
-            task_id=cfg.task_id,
-            ssl_context=ssl_ctx,
-        ) as ws:
-            await ws.subscribe(f"transcoder.commands.{cfg.task_id}", _cancel_listener(cancel_event))
-            await ws.wait_until_connected(timeout=10.0)
-
-            registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
-            # Phase 12 — once register lands we have job_id / track_id /
-            # session_application_id; everything below logs with full context.
-            # `job_id` lives on `source_track`, not on the task row.
-            with with_log_context(
-                job_id=registered.source_track.job_id,
-                track_id=registered.task.source_track_id,
-                session_application_id=registered.task.session_application_id,
-            ):
-                await api.claim(cfg.task_id)
-
-                rc = await _encode_and_report(
-                    api=api, ws=ws, task_id=cfg.task_id, registered=registered, cancel_event=cancel_event
-                )
+        return await _run_task(cfg=cfg, api=api, ssl_ctx=ssl_ctx)
     finally:
         await api.close()
-
-    return rc
 
 
 def main() -> int:
