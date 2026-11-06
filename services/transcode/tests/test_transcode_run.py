@@ -271,6 +271,27 @@ async def test_cancel_handler_sets_event_only_for_task_cancel(h: Harness) -> Non
     assert event.is_set()
 
 
+def _cancel_envelope(event_type: str) -> WSEnvelope:
+    return WSEnvelope(
+        event_id="e1",
+        event_type=event_type,
+        emitted_at=datetime.now(UTC),
+        topic="transcoder.commands.t1",
+    )
+
+
+async def test_cancel_listener_sets_event_on_task_cancel() -> None:
+    event = asyncio.Event()
+    await m._cancel_listener(event)(_cancel_envelope("task.cancel"))
+    assert event.is_set()
+
+
+async def test_cancel_listener_ignores_other_event_types() -> None:
+    event = asyncio.Event()
+    await m._cancel_listener(event)(_cancel_envelope("something.else"))
+    assert not event.is_set()
+
+
 async def test_register_failure_propagates_and_closes(h: Harness) -> None:
     h.register_exc = ValueError("no register")
     with pytest.raises(ValueError, match="no register"):

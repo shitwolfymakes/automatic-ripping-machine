@@ -45,7 +45,7 @@ from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_enc
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import ProgressCallback, transcode_handbrake
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
-from arm_transcode.ws_client import WSClient
+from arm_transcode.ws_client import EnvelopeHandler, WSClient
 
 
 logger = logging.getLogger("arm_transcode.main")
@@ -255,6 +255,17 @@ async def _run_encoder(
     return size
 
 
+def _cancel_listener(cancel_event: asyncio.Event) -> EnvelopeHandler:
+    """Build a WS handler that sets `cancel_event` on a task.cancel envelope and ignores the rest."""
+
+    async def _on_cancel(env: WSEnvelope) -> None:
+        if env.event_type == "task.cancel":
+            logger.warning("task.cancel received over WS; signalling encoder")
+            cancel_event.set()
+
+    return _on_cancel
+
+
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
@@ -267,11 +278,6 @@ async def run() -> int:
     )
 
     cancel_event = asyncio.Event()
-
-    async def _on_cancel(env: WSEnvelope) -> None:
-        if env.event_type == "task.cancel":
-            logger.warning("task.cancel received over WS; signalling encoder")
-            cancel_event.set()
 
     # The Backend serves wss:// with a cert chained to the install CA,
     # which the entrypoint already merges into the system trust store
@@ -289,7 +295,7 @@ async def run() -> int:
             task_id=cfg.task_id,
             ssl_context=ssl_ctx,
         ) as ws:
-            await ws.subscribe(f"transcoder.commands.{cfg.task_id}", _on_cancel)
+            await ws.subscribe(f"transcoder.commands.{cfg.task_id}", _cancel_listener(cancel_event))
             await ws.wait_until_connected(timeout=10.0)
 
             registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
