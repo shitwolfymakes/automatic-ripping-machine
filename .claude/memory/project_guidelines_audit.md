@@ -28,6 +28,15 @@ prerequisites:
   exclusion settings. A postgres data dir under `arm/db` (uid 999, mode 700)
   aborts all Python analysis.
 
+The server can answer from stale copies of files edited on disk during the
+session. Consecutive calls then cycle between versions, and line numbers
+point at old positions. To spot it, sample several times and check that
+each S3776 range still lands on a function name in the current file. To
+clear it, kill the `sonarlint-ls.jar` process; VS Code restarts it, and the
+analyzers need about 20 s to warm up. The server only analyses files it
+already knows about. Fresh copies, paths outside the workspace, and
+git-ignored paths all return HTTP 500.
+
 SonarJS doesn't analyse `.svelte`, so Svelte script blocks are out of scope
 for the complexity rule (owner decision).
 
