@@ -25,6 +25,12 @@ function decode(s) {
 	}
 }
 
+// Resolves an in-page "#fragment" link to an anchor, or an error when its escapes don't decode.
+export function resolveAnchor(target) {
+	const fragment = decode(target.slice(1));
+	return fragment === null ? { kind: 'error', message: `malformed link: ${target}` } : { kind: 'anchor', fragment };
+}
+
 export function createResolver({ armRoot, pages, manifest }) {
 	const byPath = new Map(pages.map((p) => [p.srcPath, p]));
 	const repos = new Set([manifest.repo, ...(manifest.repoAliases ?? [])].map((r) => r.toLowerCase()));
@@ -44,10 +50,7 @@ export function createResolver({ armRoot, pages, manifest }) {
 	}
 
 	function resolve(target, from) {
-		if (target.startsWith('#')) {
-			const fragment = decode(target.slice(1));
-			return fragment === null ? { kind: 'error', message: `malformed link: ${target}` } : { kind: 'anchor', fragment };
-		}
+		if (target.startsWith('#')) return resolveAnchor(target);
 		if (SCHEME.test(target)) {
 			let url;
 			try {

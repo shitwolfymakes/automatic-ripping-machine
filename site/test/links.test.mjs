@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { collectPages } from '../src/collect.mjs';
-import { createResolver, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
+import { createResolver, resolveAnchor, hrefFor, isOffsite, assetHref, outPath, appRoute, rootPrefix, checkFragments, fillLinks } from '../src/links.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 const UP = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
@@ -177,4 +177,20 @@ test('upstream URLs with a malformed path segment: wiki name becomes "null", blo
 	const notFound = (path) => ({ kind: 'error', message: `link target not found: ${path}` });
 	assert.deepEqual(r.resolve(`${UP}/wiki/${BAD}`, 'CONTRIBUTING.md'), notFound('docs/user/null.md'));
 	assert.deepEqual(r.resolve(`${UP}/blob/main/docs/${BAD}/LICENSE`, 'CONTRIBUTING.md'), notFound('docs/LICENSE'));
+});
+
+test('resolveAnchor resolves a plain fragment to an anchor', () => {
+	assert.deepEqual(resolveAnchor('#install'), { kind: 'anchor', fragment: 'install' });
+});
+
+test('resolveAnchor decodes percent escapes in the fragment', () => {
+	assert.deepEqual(resolveAnchor('#a%20b'), { kind: 'anchor', fragment: 'a b' });
+});
+
+test('resolveAnchor accepts an empty fragment', () => {
+	assert.deepEqual(resolveAnchor('#'), { kind: 'anchor', fragment: '' });
+});
+
+test('resolveAnchor reports a malformed escape as an error', () => {
+	assert.deepEqual(resolveAnchor('#bad%E0%A4%A'), { kind: 'error', message: 'malformed link: #bad%E0%A4%A' });
 });
