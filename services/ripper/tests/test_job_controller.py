@@ -1635,3 +1635,15 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
     assert started == {"trk_1", "trk_2"}
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
     assert errors == [f"{reason}; 2 title(s) not ripped"]
+
+
+async def test_auto_start_due_is_false_for_a_timed_gate_with_no_job_view():
+    """A timed review gate with no job view (a failed read) never auto-starts, and never checks the countdown."""
+    controller = JobController(FakeClient(), "drv_test")
+
+    async def _never(view: JobView) -> bool:
+        raise AssertionError("the countdown must not be checked without a job view")
+
+    controller._review_countdown_expired = _never  # type: ignore[method-assign]
+
+    assert await controller._auto_start_due(None, jc_module._REVIEW_WAIT) is False

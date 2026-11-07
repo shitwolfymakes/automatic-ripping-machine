@@ -704,16 +704,19 @@ class JobController:
         outcome, proceed_view = self._classify_wait(view, job_id, spec)
         if outcome != "wait":
             return (outcome, proceed_view)
-        # Still parked. Timed review gate: if the countdown has elapsed and the
-        # disc is not paused, auto-start — return the parked view so the
-        # pipeline proceeds to _run_rip (rip-start transitions the status).
-        if spec.timed and view is not None and await self._review_countdown_expired(view):
+        # Still parked. At a timed review gate whose countdown ran out, auto-start: return
+        # the parked view so the pipeline proceeds to _run_rip (rip-start transitions the status).
+        if await self._auto_start_due(view, spec):
             logger.info("job %s review countdown elapsed; auto-starting rip", job_id)
             return ("proceed", view)
         # If a WS wake was spurious, clear+re-arm the Event.
         if woke_via_ws:
             event.clear()
         return ("wait", None)
+
+    async def _auto_start_due(self, view: JobView | None, spec: _WaitSpec) -> bool:
+        """True when a still-parked job sits at a timed review gate whose countdown has run out (and is not paused)."""
+        return spec.timed and view is not None and await self._review_countdown_expired(view)
 
     async def _review_countdown_expired(self, view: JobView) -> bool:
         """True when a held disc's auto-start countdown has elapsed AND it is not
