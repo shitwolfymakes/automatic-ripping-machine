@@ -22,7 +22,7 @@ import pytest
 
 from arm_backend.db import get_session
 from arm_backend.metadata.base import MetadataResult
-from arm_backend import rip_preset_resolution
+from arm_backend import identify_flow, rip_preset_resolution
 from arm_backend.routers import ripper as ripper_router
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_common import (
@@ -612,7 +612,7 @@ def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
 async def test_persist_review_tracks_is_idempotent() -> None:
     """Idempotency (audit M1): a title whose Track row already exists (ripper
     re-POSTed identify on the same held disc) is NOT re-inserted."""
-    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_backend.identify_flow import _persist_review_tracks
     from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -635,7 +635,7 @@ async def test_persist_review_tracks_is_idempotent() -> None:
 async def test_persist_review_tracks_no_new_titles_records_no_preset_claim() -> None:
     """Every title already has a Track row (a full re-POST idempotency case):
     no rows are added, so no preset proposal is recorded either."""
-    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_backend.identify_flow import _persist_review_tracks
     from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -733,14 +733,13 @@ def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch
     rows appear and the operator's choice stands (Review Focus 5). The
     manual-over-preset precedence itself is
     `test_resolve_job_keeps_a_manual_reenable_over_a_preset_drop`."""
-    import arm_backend.routers.ripper as ripper_router
 
     def _must_not_run(*_a: Any, **_k: Any) -> None:
         raise AssertionError("the reuse path must not touch tracks or claims")
 
-    monkeypatch.setattr(ripper_router, "_persist_review_tracks", _must_not_run)
-    monkeypatch.setattr(ripper_router, "record_preset", _must_not_run)
-    monkeypatch.setattr(ripper_router, "resolve_job", _must_not_run)
+    monkeypatch.setattr(identify_flow, "_persist_review_tracks", _must_not_run)
+    monkeypatch.setattr(identify_flow, "record_preset", _must_not_run)
+    monkeypatch.setattr(identify_flow, "resolve_job", _must_not_run)
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(hold_for_review=True)]
@@ -957,7 +956,7 @@ def test_identify_real_dispatch_timeout_keeps_the_partial_attempts(monkeypatch: 
             await asyncio.sleep(5)
             return None
 
-    monkeypatch.setattr(ripper_router, "DISPATCH_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(identify_flow, "DISPATCH_TIMEOUT_SECONDS", 0.05)
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -3129,7 +3128,7 @@ def test_rip_start_bd_backup_of_a_dvd_is_422() -> None:
 
 
 async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:
-    from arm_backend.routers.ripper import _persist_review_tracks
+    from arm_backend.identify_flow import _persist_review_tracks
     from arm_common import Job as _Job
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -3701,7 +3700,7 @@ def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on(
         payload={"toc_match": "fuzzy", "toc_candidates": cands},
         provider="musicbrainz",
     )
-    with caplog.at_level(logging.INFO, logger="arm_backend.routers.ripper"):
+    with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
         out = _identify_with(db, result, _scan_dict("cd")).json()
     assert "(several releases fit the track layout)" in caplog.text
     assert "auto-apply off" not in caplog.text
