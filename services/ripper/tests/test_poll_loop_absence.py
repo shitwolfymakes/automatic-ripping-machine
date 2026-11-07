@@ -13,6 +13,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 import asyncio  # noqa: E402
 import errno  # noqa: E402
 import logging  # noqa: E402
+from typing import Any  # noqa: E402
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
@@ -102,8 +103,10 @@ class Script:
         monkeypatch.setattr(ripper_main.asyncio, "sleep", tick_sleep)
 
     async def run(self) -> None:
+        controller: Any = self.controller
+        client: Any = self.client
         with pytest.raises(asyncio.CancelledError):
-            await ripper_main.poll_loop(self.controller, self.handle, client=self.client, drive_id="drv_1")  # type: ignore[arg-type]
+            await ripper_main.poll_loop(controller, self.handle, client=client, drive_id="drv_1")
 
 
 SR0 = ResolvedDevice(path="/dev/sr0", via="by_id")
@@ -350,3 +353,33 @@ async def test_a_node_that_answers_enxio_still_refreshes_the_hint(monkeypatch) -
     await s.run()
     assert not s.handle.absent  # the handle kept the node
     assert s.client.get_drive_calls == 1  # ...and the hint was refreshed anyway
+
+
+async def test_a_failing_boot_probe_after_reattach_is_logged_and_swallowed(monkeypatch, caplog) -> None:
+    """Recovery is best-effort: a boot_probe crash is logged at ERROR and never propagates."""
+
+    async def _boom(*_args, **_kwargs) -> None:
+        raise RuntimeError("probe exploded")
+
+    monkeypatch.setattr(ripper_main, "boot_probe", _boom)
+    with caplog.at_level(logging.ERROR):
+        await ripper_main._on_reattached(_Client(), "drv_1", DriveHandle("/dev/sr0"), _Controller())
+    records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert [r.getMessage() for r in records] == ["boot probe after reattach failed: probe exploded"]
+
+
+class _FailingNodeClient:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+    async def update_device_path(self, *, drive_id: str, device_path: str) -> None:
+        raise self.exc
+
+
+@pytest.mark.parametrize("exc", [httpx.ConnectError("boom"), OSError("disk gone")])
+async def test_a_failed_device_path_update_is_logged_and_swallowed(exc, caplog) -> None:
+    """An HTTP or OS error reporting the node is a WARNING, not a crash."""
+    with caplog.at_level(logging.WARNING):
+        await ripper_main._report_node(_FailingNodeClient(exc), "drv_1", "/dev/sr0")  # type: ignore[arg-type]
+    records = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [r.getMessage() for r in records] == [f"device-path update failed: {exc}"]
