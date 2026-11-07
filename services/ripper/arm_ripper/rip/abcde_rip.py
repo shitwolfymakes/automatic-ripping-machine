@@ -185,6 +185,19 @@ async def _stop_abcde(proc: asyncio.subprocess.Process, stderr_task: asyncio.Tas
     conf_path.unlink(missing_ok=True)
 
 
+def _exit_failure(rc: int, stderr_lines: list[str]) -> str:
+    """The error for each track still without a result once abcde has exited: the end of abcde's stderr on a
+    non-zero exit, otherwise a missing-WAV error.
+    """
+    if rc != 0:
+        stderr = "\n".join(stderr_lines).strip()
+        msg = stderr[-400:] if stderr else f"exit={rc}"
+        return f"abcde failed: {msg}"
+    # Successful exit but a particular WAV never landed — likely a per-track
+    # read failure abcde gave up on quietly. Fail just that track.
+    return "abcde did not produce the expected wav file"
+
+
 async def rip_cd(
     device_path: str,
     output_dir: Path,
@@ -247,15 +260,7 @@ async def rip_cd(
     # them.
     await tracks.finalize_pending()
 
-    if rc != 0:
-        stderr = "\n".join(stderr_buf).strip()
-        msg = stderr[-400:] if stderr else f"exit={rc}"
-        await tracks.fail_remaining(f"abcde failed: {msg}")
-        return tracks.results
-
-    # Successful exit but a particular WAV never landed — likely a per-track
-    # read failure abcde gave up on quietly. Fail just that track.
-    await tracks.fail_remaining("abcde did not produce the expected wav file")
+    await tracks.fail_remaining(_exit_failure(rc, stderr_buf))
     return tracks.results
 
 

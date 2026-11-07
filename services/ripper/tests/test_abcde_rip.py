@@ -706,3 +706,23 @@ async def test_stop_abcde_swallows_a_cancelled_stderr_task_and_tolerates_a_missi
 
     assert task.cancelled()
     assert not conf_path.exists()
+
+
+def test_exit_failure_reports_the_last_400_characters_of_stderr_on_a_non_zero_exit():
+    stderr_lines = ["early noise " * 50, "  the real error  "]
+
+    message = abcde_rip._exit_failure(2, stderr_lines)
+
+    expected_tail = "\n".join(stderr_lines).strip()[-400:]
+    assert message == f"abcde failed: {expected_tail}"
+    assert len(expected_tail) == 400
+    assert message.endswith("the real error")
+
+
+@pytest.mark.parametrize("stderr_lines", [[], ["", "   "]])
+def test_exit_failure_falls_back_to_the_exit_code_when_stderr_is_blank(stderr_lines):
+    assert abcde_rip._exit_failure(3, stderr_lines) == "abcde failed: exit=3"
+
+
+def test_exit_failure_reports_a_missing_wav_on_a_zero_exit():
+    assert abcde_rip._exit_failure(0, ["ignored"]) == "abcde did not produce the expected wav file"
