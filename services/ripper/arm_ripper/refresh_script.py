@@ -44,6 +44,12 @@ def last_status[S: StrEnum](text: str, state_re: re.Pattern[str], states: type[S
         return None
 
 
+def int_field(pattern: re.Pattern[str], line: str) -> int | None:
+    """The integer in `pattern`'s first group on `line`, or None when the pattern doesn't match."""
+    found = pattern.search(line)
+    return int(found.group(1)) if found else None
+
+
 async def run_refresh_script(
     script_path: str, *, env: dict[str, str] | None, timeout: float, label: str, logger: logging.Logger
 ) -> ScriptRun:

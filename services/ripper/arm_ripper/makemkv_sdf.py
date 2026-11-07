@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from arm_common import MakemkvSdfState
 
-from arm_ripper.refresh_script import ScriptOutcome, last_status, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, int_field, last_status, run_refresh_script
 
 logger = logging.getLogger("arm_ripper.makemkv_sdf")
 
@@ -45,8 +45,7 @@ def _parse(text: str) -> SdfResult:
     if found is None:
         return SdfResult(state=MakemkvSdfState.PROBE_FAILED)
     state, last = found
-    age = _AGE_RE.search(last)
-    return SdfResult(state=state, age_days=int(age.group("age")) if age else None)
+    return SdfResult(state=state, age_days=int_field(_AGE_RE, last))
 
 
 async def refresh_makemkv_sdf(script_path: str = UPDATE_SDF_SCRIPT, enabled: bool = True) -> SdfResult | None:

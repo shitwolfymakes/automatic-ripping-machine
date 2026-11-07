@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from arm_common import KeydbState
 
-from arm_ripper.refresh_script import ScriptOutcome, last_status, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, int_field, last_status, run_refresh_script
 
 logger = logging.getLogger("arm_ripper.community_keydb")
 
@@ -52,13 +52,7 @@ def _parse(text: str) -> KeydbResult:
     if found is None:
         return KeydbResult(state=KeydbState.PROBE_FAILED)
     state, last = found
-    vuk = _VUK_RE.search(last)
-    age = _AGE_RE.search(last)
-    return KeydbResult(
-        state=state,
-        vuk_count=int(vuk.group("vuk")) if vuk else None,
-        age_days=int(age.group("age")) if age else None,
-    )
+    return KeydbResult(state=state, vuk_count=int_field(_VUK_RE, last), age_days=int_field(_AGE_RE, last))
 
 
 async def refresh_community_keydb(script_path: str = UPDATE_KEYDB_SCRIPT, enabled: bool = True) -> KeydbResult | None:

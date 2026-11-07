@@ -3,7 +3,7 @@ import re
 import stat
 from enum import StrEnum
 
-from arm_ripper.refresh_script import ScriptOutcome, ScriptRun, last_status, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, ScriptRun, int_field, last_status, run_refresh_script
 
 _LOG = logging.getLogger("test.refresh_script")
 _LABEL = "demo refresh"
@@ -156,3 +156,19 @@ def test_last_status_invalid_last_state_is_none_even_if_earlier_valid():
 def test_last_status_matching_line_among_others():
     text = "noise\nx-status: ok n=3\nmore noise"
     assert last_status(text, _STATUS_RE, _State) == (_State.OK, "x-status: ok n=3")
+
+
+def test_int_field_match_returns_int():
+    assert int_field(re.compile(r"n=(\d+)"), "n=42") == 42
+
+
+def test_int_field_no_match_is_none():
+    assert int_field(re.compile(r"n=(\d+)"), "m=42") is None
+
+
+def test_int_field_named_group_works_via_group_one():
+    assert int_field(re.compile(r"\bvuk=(?P<vuk>\d+)"), "vuk=7") == 7
+
+
+def test_int_field_matches_anywhere_in_line():
+    assert int_field(re.compile(r"n=(\d+)"), "ok a=1 n=5 b=2") == 5
