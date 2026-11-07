@@ -24,12 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
-from arm_backend.auto_session import drain_parked_applications_after_rip
 from arm_backend.config import effective_transcode_capable, settings
+from arm_backend.config_effects import reresolve_identity, redrain_parked_applications
 from arm_backend.config_validation import reject_non_editable_keys, validate_config_update
 from arm_backend.db import get_session
-from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.stage_runner import emit_identity_resolved
 from arm_backend.identity.sources.registry import (
     crc64service_enabled,
     episode_auto_apply,
@@ -44,9 +42,9 @@ from arm_backend.identity.sources.registry import (
 )
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.constants import CONFIG_SINGLETON_ID
-from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
+from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES, PreviouslyRippedAction
+from arm_common.enums import PreviouslyRippedAction
 from arm_common.schemas import (
     ConfigUpdateRequest,
     ConfigView,
@@ -254,139 +252,17 @@ async def update_config(
     await session.refresh(cfg)
     view = _to_view(cfg)
     if reenabling_transcode:
-        await _redrain_parked_applications(session, request)
+        await redrain_parked_applications(session, getattr(request.app.state, "ws_hub", None))
     if identity_sources_changed:
-        await _reresolve_identity(session, request)
+        await reresolve_identity(
+            session, getattr(request.app.state, "ws_hub", None), getattr(request.app.state, "episode_stage", None)
+        )
     return view
 
 
 # Settings that pick which identity sources run (and so which stored claims
 # the resolver applies).
 _IDENTITY_SOURCE_KEYS = ("episode_sources", "disc_hint_sources", "movie_sources", "music_sources")
-# Ripped jobs are re-resolved only while no session has been applied: once
-# transcodes exist their output paths were built from the identity as it was.
-_RERESOLVE_JOB_STATUSES = NON_TERMINAL_JOB_STATUSES | {JobStatus.RIPPED_AWAITING_IDENTIFY}
-_RERESOLVE_IF_UNAPPLIED_STATUSES = frozenset({JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL})
-
-
-async def _reresolve_identity(session: AsyncSession, request: Request) -> None:
-    """Re-run the identity resolver on live jobs after the source settings
-    changed, and schedule the episode stage (a newly enabled episode source
-    has no stored claims yet). Per job: lock, resolve, commit, emit. A failure
-    is logged and skipped; the PATCH has already committed and never fails
-    here."""
-    hub = getattr(request.app.state, "ws_hub", None)
-    stage_runner = getattr(request.app.state, "episode_stage", None)
-    try:
-        candidates = [
-            (job.id, job.status)
-            for job in (
-                await session.execute(
-                    select(Job).where(
-                        col(Job.status).in_(list(_RERESOLVE_JOB_STATUSES | _RERESOLVE_IF_UNAPPLIED_STATUSES))
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        ]
-        applied = {
-            application.job_id
-            for application in (
-                await session.execute(
-                    select(SessionApplication).where(
-                        col(SessionApplication.job_id).in_([job_id for job_id, _ in candidates])
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        }
-    except Exception:  # noqa: BLE001 - never fail the config PATCH
-        logger.warning("identity source change: listing live jobs failed", exc_info=True)
-        return
-    job_ids = [
-        job_id
-        for job_id, job_status in candidates
-        if job_status not in _RERESOLVE_IF_UNAPPLIED_STATUSES or job_id not in applied
-    ]
-    for job_id in job_ids:
-        try:
-            job = (
-                await session.execute(
-                    select(Job).where(col(Job.id) == job_id).with_for_update().execution_options(populate_existing=True)
-                )
-            ).scalar_one_or_none()
-            if job is None:
-                continue
-            resolved = await resolve_job(session, job)
-            await session.commit()
-            if resolved.changed and hub is not None:
-                await emit_identity_resolved(session, hub, job, resolved, sources={})
-                await session.commit()
-        except Exception:  # noqa: BLE001 - one job must not stop the rest
-            await session.rollback()
-            logger.warning("identity source change: re-resolving job_id=%s failed", job_id, exc_info=True)
-            continue
-        if stage_runner is not None:
-            stage_runner.schedule(job_id)
-    if job_ids:
-        logger.info("identity source change: re-resolved %d live job(s)", len(job_ids))
-
-
-async def _redrain_parked_applications(session: AsyncSession, request: Request) -> None:
-    """Promote encode applications parked while transcoding was off.
-
-    Runs after the toggle commit, so `transcode_enabled_now` reads the new
-    value. Reuses the after-rip drain (which commits per job, logs per
-    application, and never raises); any failure here is logged and swallowed
-    so the PATCH itself always succeeds once the toggle is saved.
-    """
-    hub = getattr(request.app.state, "ws_hub", None)
-    try:
-        parked_job_ids = {
-            app.job_id
-            for app in (
-                await session.execute(
-                    select(SessionApplication).where(
-                        col(SessionApplication.status) == SessionApplicationStatus.WAITING_IDENTIFY
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        }
-        if not parked_job_ids:
-            return
-        job_ids = [
-            job.id
-            for job in (
-                await session.execute(
-                    select(Job)
-                    .where(col(Job.id).in_(sorted(parked_job_ids)))
-                    .where(col(Job.status).in_(list(REDRAIN_JOB_STATUSES)))
-                )
-            )
-            .scalars()
-            .all()
-        ]
-    except Exception:  # noqa: BLE001 - re-drain must never fail the config PATCH
-        logger.warning("transcode re-enable: listing parked session_applications failed", exc_info=True)
-        return
-    for job_id in job_ids:
-        # Load each job fresh: a failed drain rolls the session back, which
-        # expires every job loaded before it.
-        try:
-            job = (
-                await session.execute(
-                    select(Job).where(col(Job.id) == job_id).execution_options(populate_existing=True)
-                )
-            ).scalar_one_or_none()
-            if job is not None:
-                await drain_parked_applications_after_rip(session, job, hub, trigger="transcode re-enable")
-        except Exception:  # noqa: BLE001 - one job must not stop the rest
-            await session.rollback()
-            logger.warning("transcode re-enable: re-draining job_id=%s failed", job_id, exc_info=True)
 
 
 _KEY_ATTR = {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key", "makemkv": "makemkv_key"}

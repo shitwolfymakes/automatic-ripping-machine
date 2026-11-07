@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend import config_effects
 from arm_backend.config import Settings
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
@@ -323,8 +324,6 @@ def test_reenable_redrain_failure_never_fails_the_patch(
 
 async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
     """A drain that raises rolls back and the loop moves on to the next job."""
-    from types import SimpleNamespace
-
     from arm_common import DiscType, Job
 
     db = FakeSession()
@@ -345,9 +344,8 @@ async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytes
         if job.id == "job_a":
             raise RuntimeError("drain blew up")
 
-    monkeypatch.setattr(config_router, "drain_parked_applications_after_rip", _drain)
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
-    await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+    monkeypatch.setattr(config_effects, "drain_parked_applications_after_rip", _drain)
+    await config_effects.redrain_parked_applications(db, None)  # type: ignore[arg-type]
 
     assert drained == ["job_a", "job_b"]
     assert db.call_log.count("rollback") == 1
@@ -355,8 +353,6 @@ async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytes
 
 async def test_redrain_skips_a_job_deleted_after_the_listing(monkeypatch: pytest.MonkeyPatch) -> None:
     """A job deleted after the listing is skipped: no drain, no rollback."""
-    from types import SimpleNamespace
-
     from arm_common import DiscType, Job
 
     db = FakeSession()
@@ -380,9 +376,8 @@ async def test_redrain_skips_a_job_deleted_after_the_listing(monkeypatch: pytest
         drained.append(job.id)
 
     monkeypatch.setattr(db, "execute", _execute_then_delete_job)
-    monkeypatch.setattr(config_router, "drain_parked_applications_after_rip", _drain)
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
-    await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+    monkeypatch.setattr(config_effects, "drain_parked_applications_after_rip", _drain)
+    await config_effects.redrain_parked_applications(db, None)  # type: ignore[arg-type]
 
     assert drained == []
     assert "rollback" not in db.call_log

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from arm_backend import config_effects
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import config as config_router
@@ -206,7 +207,7 @@ def test_changing_identity_sources_re_resolves_live_jobs(
         resolved.append(job.id)
         return ResolveOutcome(changed=0, track_ids=frozenset())
 
-    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_effects, "resolve_job", fake_resolve)
     app, token = _make_app(signing_key, db)
     stage = _Stage()
     app.state.episode_stage = stage
@@ -230,7 +231,7 @@ def test_identity_sources_patch_without_a_change_resolves_nothing(
     async def fake_resolve(_session, job):  # type: ignore[no-untyped-def]
         resolved.append(job.id)
 
-    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_effects, "resolve_job", fake_resolve)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = _patch(client, token, {"episode_sources": ["tvmaze"], "episode_auto_apply": False})
@@ -248,7 +249,7 @@ def test_a_failing_re_resolve_never_fails_the_patch(signing_key: bytes, monkeypa
         seen.append(job.id)
         raise RuntimeError("db exploded")
 
-    monkeypatch.setattr(config_router, "resolve_job", boom)
+    monkeypatch.setattr(config_effects, "resolve_job", boom)
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = _patch(client, token, {"disc_hint_sources": ["label"]})
@@ -327,12 +328,6 @@ def test_manual_wait_seconds_accepts_zero(signing_key: bytes) -> None:
     assert _row(db).manual_wait_seconds == 0
 
 
-def _request(**state: object) -> object:
-    from types import SimpleNamespace
-
-    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(**state)))
-
-
 async def test_re_resolve_listing_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     """The PATCH has committed before the re-resolve runs; a failed job listing
     is logged and nothing is resolved."""
@@ -346,8 +341,8 @@ async def test_re_resolve_listing_failure_is_swallowed(monkeypatch: pytest.Monke
         resolved.append(job.id)
 
     monkeypatch.setattr(db, "execute", _raising_execute)
-    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
-    await config_router._reresolve_identity(db, _request())  # type: ignore[arg-type]
+    monkeypatch.setattr(config_effects, "resolve_job", fake_resolve)
+    await config_effects.reresolve_identity(db, None, None)  # type: ignore[arg-type]
     assert resolved == []
 
 
@@ -367,9 +362,9 @@ async def test_re_resolve_skips_a_job_deleted_after_the_listing(monkeypatch: pyt
         resolved.append(job.id)
 
     monkeypatch.setattr(db, "execute", _execute)
-    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_effects, "resolve_job", fake_resolve)
     stage = _Stage()
-    await config_router._reresolve_identity(db, _request(episode_stage=stage))  # type: ignore[arg-type]
+    await config_effects.reresolve_identity(db, None, stage)  # type: ignore[arg-type]
     assert resolved == [] and stage.scheduled == []
 
 
@@ -389,8 +384,8 @@ async def test_re_resolve_emits_when_the_identity_changed(monkeypatch: pytest.Mo
         assert got_hub is hub and sources == {}
         emitted.append(job.id)
 
-    monkeypatch.setattr(config_router, "resolve_job", fake_resolve)
-    monkeypatch.setattr(config_router, "emit_identity_resolved", fake_emit)
-    await config_router._reresolve_identity(db, _request(ws_hub=hub))  # type: ignore[arg-type]
+    monkeypatch.setattr(config_effects, "resolve_job", fake_resolve)
+    monkeypatch.setattr(config_effects, "emit_identity_resolved", fake_emit)
+    await config_effects.reresolve_identity(db, hub, None)  # type: ignore[arg-type]
     assert sorted(emitted) == ["job_live", "job_ripped_unapplied"]
     assert db.committed == 4  # resolve + emit, per job

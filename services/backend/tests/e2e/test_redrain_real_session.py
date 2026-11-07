@@ -11,7 +11,6 @@ no-op rollback cannot show this, hence a real session here, as in
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -23,8 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import SQLModel, select
 
 import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
-from arm_backend import auto_session
-from arm_backend.routers import config as config_router
+from arm_backend import auto_session, config_effects
 from arm_common import DiscType, Job, JobStatus, SessionApplication, SessionApplicationStatus
 
 
@@ -81,9 +79,8 @@ async def test_redrain_survives_a_failed_job_and_drains_the_rest(
                 return []
 
             monkeypatch.setattr(auto_session, "fan_out_waiting_identify_applications", fan_out)
-            request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(ws_hub=None)))
             async with factory() as db:
-                await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+                await config_effects.redrain_parked_applications(db, None)
                 assert drained == ["job_1", "job_2"]
                 # The failed job was reloaded, not left expired: reading it is safe.
                 job_1 = (await db.execute(select(Job).where(Job.id == "job_1"))).scalar_one()

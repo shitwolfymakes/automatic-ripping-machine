@@ -237,10 +237,10 @@ def test_changing_the_new_lists_re_resolves_live_jobs(
     _seed(db)
     resolved: list[str] = []
 
-    async def fake_reresolve(session, request):  # type: ignore[no-untyped-def]
+    async def fake_reresolve(session, hub, stage_runner):  # type: ignore[no-untyped-def]
         resolved.append(key)
 
-    monkeypatch.setattr(config_router, "_reresolve_identity", fake_reresolve)
+    monkeypatch.setattr(config_router, "reresolve_identity", fake_reresolve)
     app, token = _make_app(signing_key, db)
     body = {key: ["omdb"] if key == "movie_sources" else []}
     with TestClient(app) as client:
