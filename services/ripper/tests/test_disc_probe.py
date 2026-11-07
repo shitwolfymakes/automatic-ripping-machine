@@ -371,3 +371,28 @@ async def test_probe_value_returns_empty_result_without_logging(
         value = await disc_probe._probe_value("matrix256", lambda path: found, "/dev/sr0")
     assert value == found
     assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_probe_bd_meta_returns_and_logs_found_meta(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from arm_common.schemas import BdDiscMeta
+
+    meta = BdDiscMeta(name="The West Wing", set_number=2, num_sets=6, language="eng")
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: meta)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.disc_probe"):
+        result = await disc_probe._probe_bd_meta("/dev/sr0")
+    assert result == meta
+    assert [r.getMessage() for r in caplog.records] == ["bdmt device=/dev/sr0 name='The West Wing' set=2/6"]
+
+
+@pytest.mark.asyncio
+async def test_probe_bd_meta_returns_none_without_logging(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: None)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.disc_probe"):
+        result = await disc_probe._probe_bd_meta("/dev/sr0")
+    assert result is None
+    assert caplog.records == []

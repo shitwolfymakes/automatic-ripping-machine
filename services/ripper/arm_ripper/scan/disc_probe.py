@@ -105,13 +105,7 @@ async def probe_disc(device_path: str, *, bluray: bool = False) -> DiscProbe:
     crc64 = await _probe_value("dvd crc64", _compute_crc, device_path)
     thediscdb = await _probe_value("thediscdb hash", probe_thediscdb_hash, device_path)
     matrix256 = await _probe_value("matrix256", probe_matrix256, device_path)
-    bd_meta = None
-    if bluray:
-        bd_meta = await asyncio.to_thread(probe_bd_meta, device_path)
-        if bd_meta:
-            logger.info(
-                "bdmt device=%s name=%r set=%s/%s", device_path, bd_meta.name, bd_meta.set_number, bd_meta.num_sets
-            )
+    bd_meta = await _probe_bd_meta(device_path) if bluray else None
     return DiscProbe(crc64=crc64, thediscdb=thediscdb, matrix256=matrix256, bd_meta=bd_meta)
 
 
@@ -121,6 +115,14 @@ async def _probe_value(label: str, probe: Callable[[str], str | None], device_pa
     if value:
         logger.info("%s device=%s value=%s", label, device_path, value)
     return value
+
+
+async def _probe_bd_meta(device_path: str) -> BdDiscMeta | None:
+    """Read the Blu-ray BDMT disc title in a thread; log it when the disc has one."""
+    bd_meta = await asyncio.to_thread(probe_bd_meta, device_path)
+    if bd_meta:
+        logger.info("bdmt device=%s name=%r set=%s/%s", device_path, bd_meta.name, bd_meta.set_number, bd_meta.num_sets)
+    return bd_meta
 
 
 def _compute_crc(device_path: str) -> str | None:
