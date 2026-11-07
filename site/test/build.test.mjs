@@ -76,6 +76,14 @@ test('app bundle links developer docs to the public site; the site keeps them lo
 	assert.match(sitePage, /Developers/);
 });
 
+test('a site build without ui-neu styles is a clear error', () => {
+	const out = mkdtempSync(join(tmpdir(), 'arm-docs-out-'));
+	const res = run(['--target', 'site', '--out', out], { ARM_ROOT: fixtureTree(), DOCS_MANIFEST: FIXTURE_MANIFEST });
+	assert.equal(res.status, 1);
+	const tokens = /ui-neu tokens not found at \S+\/ui-neu\/frontend\/src\/lib\/styles\/tokens\.css \(set ARM_ROOT\)/;
+	assert.match(res.stderr, tokens);
+});
+
 test('a missing ARM root is a clear error', () => {
 	const res = run(['--target', 'app'], { ARM_ROOT: '/nonexistent/arm' });
 	assert.equal(res.status, 1);
