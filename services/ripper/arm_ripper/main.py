@@ -424,13 +424,18 @@ async def run_source_mode(controller: JobController, session_id: str | None) -> 
         await iso_extract.discard_all()
 
 
-async def amain() -> None:
-    client = BackendClient(
+def _build_client() -> BackendClient:
+    """The backend client for this ripper, authenticated with its service token and named by its hostname and drive."""
+    return BackendClient(
         settings.ARM_BACKEND_URL,
         settings.ARM_SERVICE_TOKEN,
         hostname=settings.HOSTNAME,
         drive_id=settings.ARM_DRIVE_ID,
     )
+
+
+async def amain() -> None:
+    client = _build_client()
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
     ws_url = _ws_url_from_backend_url(settings.ARM_BACKEND_URL)
     # In source mode the device_path is the bound ISO file; everything

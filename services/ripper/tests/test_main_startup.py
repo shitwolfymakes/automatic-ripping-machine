@@ -144,6 +144,24 @@ def _names(rig):
     return [e[0] for e in rig.events]
 
 
+def test_build_client_passes_url_token_hostname_and_drive_id(monkeypatch) -> None:
+    calls = []
+    built = object()
+
+    def recorder(*args, **kwargs):
+        calls.append((args, kwargs))
+        return built
+
+    monkeypatch.setattr(main, "BackendClient", recorder)
+    monkeypatch.setattr(main.settings, "ARM_BACKEND_URL", "https://backend.test")
+    monkeypatch.setattr(main.settings, "ARM_SERVICE_TOKEN", "tok")
+    monkeypatch.setattr(main.settings, "HOSTNAME", "host-1")
+    monkeypatch.setattr(main.settings, "ARM_DRIVE_ID", "drive-1")
+
+    assert main._build_client() is built
+    assert calls == [(("https://backend.test", "tok"), {"hostname": "host-1", "drive_id": "drive-1"})]
+
+
 async def test_amain_exits_2_when_nothing_to_rip_and_never_closes_client(monkeypatch, caplog) -> None:
     rig = _install(monkeypatch, source=None, drive_dev=None)
     with caplog.at_level(logging.ERROR, logger="arm_ripper"), pytest.raises(SystemExit) as ei:
