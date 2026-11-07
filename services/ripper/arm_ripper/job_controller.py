@@ -446,20 +446,14 @@ class JobController:
 
             # Phase 12 — every log line below carries job_id once identify lands.
             with with_log_context(job_id=job.id):
-                if job.status == JobStatus.AWAITING_USER_ID:
-                    resolved = await self._await_resolution(job.id, _IDENTIFY_WAIT)
-                    if resolved is None:
-                        return
-                    job.status = resolved.status
+                if not await self._pass_gate(job, _IDENTIFY_WAIT):
+                    return
 
                 # Timed review gate: the backend parks an identified disc here
                 # when hold_for_review is on. Wait for Start (-> ripping) or the
                 # auto-start path (-> identified); either proceeds to the rip.
-                if job.status == JobStatus.AWAITING_REVIEW:
-                    resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
-                    if resolved is None:
-                        return
-                    job.status = resolved.status
+                if not await self._pass_gate(job, _REVIEW_WAIT):
+                    return
 
                 # Proceed for: identified (normal / operator Start landed),
                 # ripping (operator Start already transitioned), or
@@ -490,6 +484,17 @@ class JobController:
                     # releases without calling rip-complete.
                     logger.info("rip cancelled job_id=%s", job.id)
                     raise
+
+    async def _pass_gate(self, job: Job, spec: _WaitSpec) -> bool:
+        """Wait a job parked at `spec`'s gate until it leaves, recording the status it left in; True unless it left
+        the gate some other way (abandoned). A job not parked there passes straight through."""
+        if job.status != spec.parked:
+            return True
+        resolved = await self._await_resolution(job.id, spec)
+        if resolved is None:
+            return False
+        job.status = resolved.status
+        return True
 
     async def _scan_or_none(self, device_path: str) -> ScanResult | None:
         """Scan the disc, or None after a log line when the scan fails or the drive goes absent mid-scan (which ends
