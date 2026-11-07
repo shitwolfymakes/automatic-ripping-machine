@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, cast
 
@@ -254,3 +255,25 @@ async def test_msg_5003_with_index_sets_unescaped_fail_reason() -> None:
     line = r'MSG:5003,0,2,"Failed to save \"weird\" title","Failed %1","2","/raw/x.mkv"'
     state = await _run([line.encode()])
     assert state.titles[2].fail_reason == 'Failed to save "weird" title'
+
+
+async def test_call_safely_awaits_callback_with_args(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    rec = _Recorder()
+    await makemkv_rip._call_safely("lbl", rec, 1, 0.5)
+    assert rec.calls == [(1, 0.5)]
+    assert caplog.records == []
+
+
+async def test_call_safely_swallows_exception_and_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    await makemkv_rip._call_safely("lbl", _Recorder(RuntimeError("boom")), 7)
+    assert [(r.name, r.levelno, r.getMessage()) for r in caplog.records] == [
+        (LOGGER, logging.DEBUG, "lbl callback raised: boom")
+    ]
+
+
+async def test_call_safely_propagates_base_exception() -> None:
+    cb = cast(Any, _Recorder(cast(Any, asyncio.CancelledError())))
+    with pytest.raises(asyncio.CancelledError):
+        await makemkv_rip._call_safely("lbl", cb)

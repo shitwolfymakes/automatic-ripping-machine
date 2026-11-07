@@ -35,6 +35,7 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.source import makemkv_source_url
@@ -260,6 +261,14 @@ def _extract_title_index_from_msg5003(args: list[str]) -> int | None:
     return None
 
 
+async def _call_safely(label: str, callback: Callable[..., Awaitable[None]], *args: Any) -> None:
+    """Await `callback(*args)`; a raise is logged at debug as "<label> callback raised: <exc>" and swallowed."""
+    try:
+        await callback(*args)
+    except Exception as exc:
+        logger.debug("%s callback raised: %s", label, exc)
+
+
 async def _emit_title_start(
     state: _ParserState,
     title_idx: int,
@@ -272,10 +281,7 @@ async def _emit_title_start(
         return
     ts.started_emitted = True
     if on_title_start is not None:
-        try:
-            await on_title_start(title_idx)
-        except Exception as exc:
-            logger.debug("title start callback raised: %s", exc)
+        await _call_safely("title start", on_title_start, title_idx)
 
 
 async def _emit_title_done(
@@ -289,10 +295,7 @@ async def _emit_title_done(
         return
     ts.done_emitted = True
     if on_title_done is not None:
-        try:
-            await on_title_done(title_idx)
-        except Exception as exc:
-            logger.debug("title done callback raised: %s", exc)
+        await _call_safely("title done", on_title_done, title_idx)
 
 
 async def _stream_output(
@@ -347,15 +350,9 @@ async def _stream_output(
         if totals is not None:
             cur_frac, tot_frac = totals
             if state.current_title is not None and on_title_progress is not None:
-                try:
-                    await on_title_progress(state.current_title, cur_frac)
-                except Exception as exc:
-                    logger.debug("title progress callback raised: %s", exc)
+                await _call_safely("title progress", on_title_progress, state.current_title, cur_frac)
             elif (state.save_phase_started or not gate_disc_progress) and on_disc_progress is not None:
-                try:
-                    await on_disc_progress(tot_frac)
-                except Exception as exc:
-                    logger.debug("disc progress callback raised: %s", exc)
+                await _call_safely("disc progress", on_disc_progress, tot_frac)
             continue
 
         # PRGC:5017 — primary per-title signal in `mkv all` mode. The
