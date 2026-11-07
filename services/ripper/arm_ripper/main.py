@@ -317,98 +317,114 @@ async def _report_node(client: BackendClient, drive_id: str, path: str) -> None:
         logger.warning("device-path update failed: %s", exc)
 
 
+class DrivePoller:
+    """Polls one drive: follows its node, reads its state, reports transitions, starts the pipeline on insert."""
+
+    def __init__(self, controller: JobController, handle: DriveHandle, *, client: BackendClient, drive_id: str) -> None:
+        self._controller = controller
+        self._handle = handle
+        self._client = client
+        self._drive_id = drive_id
+        self._detector = InsertDetector(not_ready_rearm_polls=settings.ARM_NOT_READY_REARM_POLLS)
+        self._last_state: DriveState | None = None
+        self._active_task: asyncio.Task[None] | None = None
+        self._last_error_kind: DriveErrorKind | None = None
+        # Ticks that have run with the drive already known absent: 0 on the first
+        # such tick, so it refreshes and later ones are throttled.
+        self._absent_ticks = 0
+        # The last node a hint resolved to (port-identity drives only).
+        self._last_resolved: str | None = None
+        self._last_port: str | None = None
+
+    async def run(self) -> None:
+        """Poll until cancelled."""
+        while True:
+            # Re-resolve every poll: the node behind this drive can change while we
+            # run (replug under a new srN). One readlink; cheap.
+            was_absent = self._last_state is DriveState.ABSENT
+            hint = await _current_hint(
+                self._client,
+                self._drive_id,
+                absent=was_absent,
+                absent_ticks=self._absent_ticks,
+                last_resolved=self._last_resolved,
+                last_port=self._last_port,
+            )
+            self._absent_ticks = self._absent_ticks + 1 if was_absent else 0
+            resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
+            if resolved is not None and not settings.ARM_DRIVE_BY_ID:
+                if resolved.path != self._last_resolved or self._last_port is None:
+                    # The port is this drive's identity when it has no by-id link.
+                    self._last_port = node_port(resolved.path, sysfs_root=_resolve_paths()["sysfs_root"])
+                self._last_resolved = resolved.path
+            moved = self._handle.set(resolved.path if resolved else None)
+
+            if self._handle.absent:
+                state = DriveState.ABSENT
+                self._last_error_kind = None
+            else:
+                try:
+                    state = read_drive_status(self._handle.current or "")
+                    self._last_error_kind = None
+                except OSError as exc:
+                    kind = classify_drive_error(exc)
+                    if kind is DriveErrorKind.ABSENT:
+                        # The node resolved but the hardware said no (ENXIO/ENODEV,
+                        # or it vanished between resolve and open). Keep the handle —
+                        # the node is still the right one — and report absence.
+                        state = DriveState.ABSENT
+                    elif kind is DriveErrorKind.MISCONFIGURED:
+                        if self._last_error_kind is not kind:
+                            logger.warning(
+                                "drive %s is present but misconfigured: %s "
+                                "— check the device cgroup rule and CDROM_GID",
+                                self._handle.current,
+                                exc.strerror or exc,
+                            )
+                        state = DriveState.NO_INFO
+                    else:
+                        logger.warning("ioctl failed: %s", exc)
+                        state = DriveState.NO_INFO
+                    self._last_error_kind = kind
+
+            # Transitions are keyed on state so a node that resolves but answers
+            # ENXIO cannot flap between "present" and "absent" every poll. They run
+            # BEFORE detector.update so a reset re-arms for this very reading.
+            if state is DriveState.ABSENT and self._last_state is not DriveState.ABSENT:
+                logger.warning("drive absent (by_id=%s) — polling until it returns", settings.ARM_DRIVE_BY_ID)
+            elif self._last_state is DriveState.ABSENT and state is not DriveState.ABSENT:
+                # A None resolution empties the handle, which reads as ABSENT, so a present drive has a resolution.
+                assert resolved is not None
+                logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
+                self._detector.reset()
+                # Report the node BEFORE the probe: _on_reattached can run a whole
+                # resumed rip, and the UI must not sit on the stale node for its
+                # entire duration.
+                await _report_node(self._client, self._drive_id, self._handle.current or "")
+                await _on_reattached(self._client, self._drive_id, self._handle, self._controller)
+            elif moved and not self._handle.absent:
+                assert resolved is not None  # same invariant as the reattach arm above
+                logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
+                await _report_node(self._client, self._drive_id, self._handle.current or "")
+
+            if state != self._last_state:
+                logger.info("drive state %s -> %s", self._last_state, state)
+                self._last_state = state
+
+            if self._active_task is not None and self._active_task.done():
+                self._active_task = None
+
+            # detector.update() must run every poll to track the NOT_READY
+            # streak; only act on the True edge when no rip is already running.
+            if self._detector.update(state) and self._active_task is None and self._handle.current is not None:
+                self._active_task = asyncio.create_task(self._controller.handle_disc_inserted(self._handle.current))
+
+            await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+
+
 async def poll_loop(controller: JobController, handle: DriveHandle, *, client: BackendClient, drive_id: str) -> None:
-    detector = InsertDetector(not_ready_rearm_polls=settings.ARM_NOT_READY_REARM_POLLS)
-    last_state: DriveState | None = None
-    active_task: asyncio.Task[None] | None = None
-    last_error_kind: DriveErrorKind | None = None
-    # Ticks that have run with the drive already known absent: 0 on the first
-    # such tick, so it refreshes and later ones are throttled.
-    absent_ticks = 0
-    # The last node a hint resolved to (port-identity drives only).
-    last_resolved: str | None = None
-    last_port: str | None = None
-    while True:
-        # Re-resolve every poll: the node behind this drive can change while we
-        # run (replug under a new srN). One readlink; cheap.
-        was_absent = last_state is DriveState.ABSENT
-        hint = await _current_hint(
-            client,
-            drive_id,
-            absent=was_absent,
-            absent_ticks=absent_ticks,
-            last_resolved=last_resolved,
-            last_port=last_port,
-        )
-        absent_ticks = absent_ticks + 1 if was_absent else 0
-        resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
-        if resolved is not None and not settings.ARM_DRIVE_BY_ID:
-            if resolved.path != last_resolved or last_port is None:
-                # The port is this drive's identity when it has no by-id link.
-                last_port = node_port(resolved.path, sysfs_root=_resolve_paths()["sysfs_root"])
-            last_resolved = resolved.path
-        moved = handle.set(resolved.path if resolved else None)
-
-        if handle.absent:
-            state = DriveState.ABSENT
-            last_error_kind = None
-        else:
-            try:
-                state = read_drive_status(handle.current or "")
-                last_error_kind = None
-            except OSError as exc:
-                kind = classify_drive_error(exc)
-                if kind is DriveErrorKind.ABSENT:
-                    # The node resolved but the hardware said no (ENXIO/ENODEV,
-                    # or it vanished between resolve and open). Keep the handle —
-                    # the node is still the right one — and report absence.
-                    state = DriveState.ABSENT
-                elif kind is DriveErrorKind.MISCONFIGURED:
-                    if last_error_kind is not kind:
-                        logger.warning(
-                            "drive %s is present but misconfigured: %s — check the device cgroup rule and CDROM_GID",
-                            handle.current,
-                            exc.strerror or exc,
-                        )
-                    state = DriveState.NO_INFO
-                else:
-                    logger.warning("ioctl failed: %s", exc)
-                    state = DriveState.NO_INFO
-                last_error_kind = kind
-
-        # Transitions are keyed on state so a node that resolves but answers
-        # ENXIO cannot flap between "present" and "absent" every poll. They run
-        # BEFORE detector.update so a reset re-arms for this very reading.
-        if state is DriveState.ABSENT and last_state is not DriveState.ABSENT:
-            logger.warning("drive absent (by_id=%s) — polling until it returns", settings.ARM_DRIVE_BY_ID)
-        elif last_state is DriveState.ABSENT and state is not DriveState.ABSENT:
-            # A None resolution empties the handle, which reads as ABSENT, so a present drive has a resolution.
-            assert resolved is not None
-            logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
-            detector.reset()
-            # Report the node BEFORE the probe: _on_reattached can run a whole
-            # resumed rip, and the UI must not sit on the stale node for its
-            # entire duration.
-            await _report_node(client, drive_id, handle.current or "")
-            await _on_reattached(client, drive_id, handle, controller)
-        elif moved and not handle.absent:
-            assert resolved is not None  # same invariant as the reattach arm above
-            logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
-            await _report_node(client, drive_id, handle.current or "")
-
-        if state != last_state:
-            logger.info("drive state %s -> %s", last_state, state)
-            last_state = state
-
-        if active_task is not None and active_task.done():
-            active_task = None
-
-        # detector.update() must run every poll to track the NOT_READY
-        # streak; only act on the True edge when no rip is already running.
-        if detector.update(state) and active_task is None and handle.current is not None:
-            active_task = asyncio.create_task(controller.handle_disc_inserted(handle.current))
-
-        await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+    """Poll one drive until cancelled."""
+    await DrivePoller(controller, handle, client=client, drive_id=drive_id).run()
 
 
 def _ws_url_from_backend_url(base: str) -> str:
