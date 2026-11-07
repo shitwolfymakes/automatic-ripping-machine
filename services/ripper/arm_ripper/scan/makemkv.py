@@ -213,11 +213,16 @@ async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[byt
     return b"".join(stdout_chunks), stderr_bytes, expired
 
 
+def _is_malformed_key(key: str | None) -> bool:
+    """A configured key that is set but isn't a MakeMKV serial; no key at all is not malformed."""
+    return bool(key and key.strip() and not _MAKEMKV_SERIAL_RE.match(key.strip()))
+
+
 async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
     """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
     (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
     every failure maps to a state. See the 2026-06-12 makemkv-key-validity spec."""
-    if key and key.strip() and not _MAKEMKV_SERIAL_RE.match(key.strip()):
+    if _is_malformed_key(key):
         return MakemkvKeyState.FORMAT_INVALID, "configured key is not a MakeMKV serial (expected M-…/T-…)"
 
     cmd = ["makemkvcon", "-r", "--cache=1", "info", "disc:9999"]

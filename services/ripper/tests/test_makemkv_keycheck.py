@@ -172,3 +172,18 @@ def test_makemkv_key_changed_detects_transitions():
     assert makemkv_key_changed(prev="M-a", current="M-b") is True
     assert makemkv_key_changed(prev="M-a", current=None) is True
     assert makemkv_key_changed(prev=None, current=None) is False
+
+
+@pytest.mark.parametrize("key", [None, "", "   ", "\t\n"])
+def test_is_malformed_key_false_when_no_key(key):
+    assert mk._is_malformed_key(key) is False
+
+
+@pytest.mark.parametrize("key", ["M-abc123", "  M-abc123  ", "T-xyz\n"])
+def test_is_malformed_key_false_for_serial(key):
+    assert mk._is_malformed_key(key) is False
+
+
+@pytest.mark.parametrize("key", ["junk", "  not-a-key ", "m-lowercase", "M"])
+def test_is_malformed_key_true_for_junk(key):
+    assert mk._is_malformed_key(key) is True
