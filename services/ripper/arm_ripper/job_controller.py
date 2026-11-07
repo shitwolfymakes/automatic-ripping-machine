@@ -435,15 +435,8 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._prepare_makemkv()
-            try:
-                scan_result = await self._scan_with_ready_retry(device_path)
-            except ScanError as e:
-                logger.error("scan failed device=%s err=%s", device_path, e)
-                return
-            except OSError as e:
-                if e.errno not in _ABSENT_ERRNOS:
-                    raise
-                logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
+            scan_result = await self._scan_or_none(device_path)
+            if scan_result is None:
                 return
 
             try:
@@ -511,6 +504,20 @@ class JobController:
                     # releases without calling rip-complete.
                     logger.info("rip cancelled job_id=%s", job.id)
                     raise
+
+    async def _scan_or_none(self, device_path: str) -> ScanResult | None:
+        """Scan the disc, or None after a log line when the scan fails or the drive goes absent mid-scan (which ends
+        the pipeline). Any other OSError propagates."""
+        try:
+            return await self._scan_with_ready_retry(device_path)
+        except ScanError as e:
+            logger.error("scan failed device=%s err=%s", device_path, e)
+            return None
+        except OSError as e:
+            if e.errno not in _ABSENT_ERRNOS:
+                raise
+            logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
+            return None
 
     async def _scan_with_ready_retry(self, device_path: str) -> ScanResult:
         """Scan the disc, retrying when a DISC_OK drive yields zero titles.
