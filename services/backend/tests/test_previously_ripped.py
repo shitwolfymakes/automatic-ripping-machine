@@ -501,6 +501,24 @@ def test_rip_again_leaves_a_held_copy_of_another_disc_alone() -> None:
     assert other.status == JobStatus.AWAITING_REVIEW
 
 
+def test_rip_again_without_fingerprints_only_starts_the_copy_that_names_this_job() -> None:
+    """No fingerprints on the job: a held copy of the same disc is skipped unless it names this job."""
+    db = _db(PreviouslyRippedAction.HOLD)
+    db.rows["disc_fingerprints"] = []
+    other = _held("job_01M4Q2V53S8AC69YM5CKHE11DX")
+    other.metadata_json = {"previously_ripped": {"job_id": _NEWER}}
+    named = _held()
+    db.rows["jobs"].extend([other, named])
+    db.rows["disc_fingerprints"].append(DiscFingerprint(job_id=other.id, algo=_FP["algo"], value=_FP["value"]))
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.post(f"/api/jobs/{_PRIOR}/rip-again", headers=auth)
+    assert r.status_code == 200
+    assert r.json() == {"started_job_id": named.id, "armed": False}
+    assert named.status == JobStatus.RIPPING
+    assert other.status == JobStatus.AWAITING_REVIEW
+
+
 def test_rip_again_arms_the_next_identify_when_nothing_is_held() -> None:
     db = _db(PreviouslyRippedAction.REJECT)
     client, auth = _jobs_app(db, _Hub())

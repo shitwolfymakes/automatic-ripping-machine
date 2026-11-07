@@ -1323,6 +1323,72 @@ def test_identify_thediscdb_lookup_raises_behaves_as_no_match() -> None:
     assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
 
 
+def test_identify_thediscdb_enabled_without_a_store_skips_the_lookup() -> None:
+    """thediscdb_enabled but app.state.thediscdb is None: no lookup, fuzzy identify proceeds."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = None
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Iron Man"
+    assert "thediscdb" not in r.json()["metadata_json"].get("identity_claims", {}).get("sources", {})
+
+
+def test_identify_thediscdb_lookup_returning_none_puts_no_claims() -> None:
+    """The store answers None for the hash: no claims are put and fuzzy identify carries on."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=True)]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    app = _make_app(db, dispatcher=_Dispatcher(result))
+    app.state.thediscdb = _FakeStore(None)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
+    assert r.json()["title"] == "Iron Man"
+    assert "thediscdb" not in r.json()["metadata_json"].get("identity_claims", {}).get("sources", {})
+
+
+def test_identify_thediscdb_match_without_an_imdb_id_goes_to_fuzzy_identify() -> None:
+    """A match with no IMDb id: no IMDb lookup and no release result; fuzzy identify names the job."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(thediscdb_enabled=True)]
+
+    class _Tracking(_Dispatcher):
+        async def identify_from_imdb(self, imdb_id: str, _cfg: Any, **kw: Any) -> MetadataResult | None:
+            pytest.fail("no IMDb id, so no IMDb lookup")
+
+    dispatcher = _Tracking(MetadataResult(title="Iron Man", year=2008, kind="movie", provider="tmdb"))
+    app = _make_app(db, dispatcher=dispatcher)
+    app.state.thediscdb = _FakeStore(
+        DiscMatch(kind="movie", title_slug="t", release_slug="r", disc={"Titles": []}, metadata={}, release={})
+    )
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert dispatcher.received_kwargs  # fuzzy identify() ran
+    assert r.json()["title"] == "Iron Man"
+    assert r.json()["metadata_json"]["identity"]["provider"] == "tmdb"
+
+
 class _AllMissDispatcher:
     """Both the exact-identity and fuzzy paths miss — the total-miss branch."""
 

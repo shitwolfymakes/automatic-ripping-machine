@@ -7,7 +7,7 @@ Service-token auth (no JWT plumbing required).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 
 from fastapi import FastAPI
@@ -217,6 +217,100 @@ def test_claim_resets_the_previous_attempts_telemetry() -> None:
     assert r.status_code == 200, r.text
     task = r.json()["task"]
     assert (task["current_pass"], task["eta_seconds"], task["fps"], task["avg_fps"]) == (None, None, None, None)
+
+
+class _RecordingHub(WSHub):
+    """A hub that records (event_type, payload) instead of publishing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    async def emit(  # type: ignore[override]
+        self, *, topic: str, event_type: str, payload: dict[str, Any], **_kw: Any
+    ) -> None:
+        self.events.append((event_type, payload))
+
+
+def _app_with_hub(db: FakeSession) -> tuple[FastAPI, _RecordingHub]:
+    app = _make_app(db)
+    hub = _RecordingHub()
+    app.state.ws_hub = hub
+    return app, hub
+
+
+def _add_second_task(db: FakeSession, status: TranscodeTaskStatus) -> None:
+    """A sibling task of the same application, still unfinished."""
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_2",
+            session_application_id="sap_x",
+            source_track_id="trk_1",
+            status=status,
+            output_path="Iron Man (2008)/Iron Man - other.mkv",
+            attempts=0,
+            progress_pct=0,
+        )
+    )
+
+
+def test_claim_on_a_running_application_emits_only_the_task_event() -> None:
+    """The application is already RUNNING: no session.started, the claim still succeeds."""
+    db = FakeSession()
+    _seed(db)
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    app, hub = _app_with_hub(db)
+    with TestClient(app) as client:
+        r = client.post("/api/transcoder/tasks/txt_1/claim", headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert r.json()["task"]["status"] == "in_progress"
+    assert [e for e, _ in hub.events] == ["task.started"]
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
+
+
+def test_complete_with_another_task_still_queued_emits_no_application_event() -> None:
+    """A sibling task is unfinished: only task.completed is emitted, the task update commits."""
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    _add_second_task(db, TranscodeTaskStatus.QUEUED)
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    app, hub = _app_with_hub(db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/complete",
+            json={
+                "output_path": "Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv",
+                "size_bytes": 1,
+                "duration_seconds": 1,
+            },
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "done"
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.DONE
+    assert [e for e, _ in hub.events] == ["task.completed"]
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
+    assert db.rows["session_applications"][0].completed_at is None
+
+
+def test_fail_with_another_task_still_running_emits_no_application_event() -> None:
+    """A sibling task is unfinished: only task.failed is emitted, the task update commits."""
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    _add_second_task(db, TranscodeTaskStatus.IN_PROGRESS)
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    app, hub = _app_with_hub(db)
+    with TestClient(app) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/fail",
+            json={"last_error": "HandBrakeCLI exited rc=1"},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "failed"
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.FAILED
+    assert [e for e, _ in hub.events] == ["task.failed"]
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
 
 
 def test_claim_idempotent_for_same_host() -> None:
