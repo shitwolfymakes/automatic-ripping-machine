@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import pytest
@@ -169,3 +170,28 @@ def test_blkid_stdout_timeout_kills_reaps_and_returns_none(monkeypatch: pytest.M
     assert asyncio.run(data_module._blkid_stdout("/dev/sr0")) is None
     assert proc.killed
     assert proc.waited
+
+
+def test_sniffed_video_type_logs_found_layout(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    path = _image(tmp_path, "BDMV".encode("utf-16-be"))
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.data"):
+        kind = asyncio.run(data_module._sniffed_video_type(path))
+    assert kind is DiscType.BLURAY
+    assert [r.getMessage() for r in caplog.records] == [
+        f"image {path} carries a bluray layout; classifying as bluray with no titles"
+    ]
+
+
+def test_sniffed_video_type_none_without_layout(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.data"):
+        kind = asyncio.run(data_module._sniffed_video_type(_image(tmp_path, b"backup files")))
+    assert kind is None
+    assert caplog.records == []
+
+
+def test_sniffed_video_type_skips_sniff_for_device_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(_path: str) -> DiscType | None:
+        raise AssertionError("sniff must not run for a device node")
+
+    monkeypatch.setattr(data_module, "sniff_video_image", _boom)
+    assert asyncio.run(data_module._sniffed_video_type("/dev/sr0")) is None

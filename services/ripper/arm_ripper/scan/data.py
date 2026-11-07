@@ -54,14 +54,8 @@ async def scan_data(device_path: str) -> ScanResult:
         return ScanResult(disc_type=DiscType.UNKNOWN)
 
     label = stdout.decode(errors="replace").strip() or None
-    if is_iso_source(device_path):
-        kind = await asyncio.to_thread(sniff_video_image, device_path)
-        if kind is not None:
-            logger.info(
-                "image %s carries a %s layout; classifying as %s with no titles", device_path, kind.value, kind.value
-            )
-            return ScanResult(disc_type=kind, volume_label=label)
-    return ScanResult(disc_type=DiscType.DATA, volume_label=label)
+    kind = await _sniffed_video_type(device_path)
+    return ScanResult(disc_type=kind or DiscType.DATA, volume_label=label)
 
 
 def _classify_folder(device_path: str) -> ScanResult:
@@ -95,3 +89,17 @@ async def _blkid_stdout(device_path: str) -> bytes | None:
         await proc.wait()
         return None
     return stdout
+
+
+async def _sniffed_video_type(device_path: str) -> DiscType | None:
+    """The video disc type an ISO image's directory names reveal, logged when found; None for a device node or an
+    image without a Blu-ray / DVD layout.
+    """
+    if not is_iso_source(device_path):
+        return None
+    kind = await asyncio.to_thread(sniff_video_image, device_path)
+    if kind is not None:
+        logger.info(
+            "image %s carries a %s layout; classifying as %s with no titles", device_path, kind.value, kind.value
+        )
+    return kind
