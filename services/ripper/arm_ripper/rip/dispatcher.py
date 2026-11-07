@@ -89,12 +89,8 @@ async def rip_all(
         await _rip_disc_backup(device_path, tracks[0], output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
-    if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
-        # A full-disc dump is a dump whatever the scan called the disc: an
-        # operator can pick the full-disc dump session for a bluray/dvd ISO,
-        # and makemkvcon must not be asked to rip it.
-        disc_type = DiscType.DATA
-    if disc_type in (DiscType.DVD, DiscType.BLURAY):
+    rip_as = _effective_disc_type(disc_type, tracks)
+    if rip_as in (DiscType.DVD, DiscType.BLURAY):
         await _rip_optical(
             device_path=device_path,
             tracks=tracks,
@@ -109,19 +105,29 @@ async def rip_all(
         )
         return
 
-    if disc_type == DiscType.CD:
+    if rip_as == DiscType.CD:
         await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done)
         return
 
-    if disc_type == DiscType.DATA:
+    if rip_as == DiscType.DATA:
         await _rip_data_dump(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
     for track in tracks:
         await on_track_done(
             track,
-            RipResult(ok=False, error=f"no rip path for disc_type={disc_type.value}"),
+            RipResult(ok=False, error=f"no rip path for disc_type={rip_as.value}"),
         )
+
+
+def _effective_disc_type(disc_type: DiscType, tracks: list[TrackView]) -> DiscType:
+    """The disc type to rip as: DATA when every track is a full-disc dump, else the type the scan gave."""
+    if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
+        # A full-disc dump is a dump whatever the scan called the disc: an
+        # operator can pick the full-disc dump session for a bluray/dvd ISO,
+        # and makemkvcon must not be asked to rip it.
+        return DiscType.DATA
+    return disc_type
 
 
 async def _rip_disc_backup(

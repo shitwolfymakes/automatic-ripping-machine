@@ -30,7 +30,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import rip_all
+from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.result import RipResult
 
@@ -1555,3 +1555,19 @@ async def test_rip_all_disc_backup_progress_is_dropped_without_a_progress_callba
     )
 
     assert events == [("start", "trk_0"), ("done", "trk_0", True, None, 7)]
+
+
+def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:
+    dump = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DATA_DUMP})
+
+    assert _effective_disc_type(DiscType.BLURAY, [dump]) == DiscType.DATA
+
+
+def test_effective_disc_type_keeps_the_scan_type_for_mixed_kinds() -> None:
+    dump = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DATA_DUMP})
+
+    assert _effective_disc_type(DiscType.BLURAY, [dump, _track(1)]) == DiscType.BLURAY
+
+
+def test_effective_disc_type_keeps_the_scan_type_without_tracks() -> None:
+    assert _effective_disc_type(DiscType.DVD, []) == DiscType.DVD
