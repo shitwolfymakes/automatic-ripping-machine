@@ -18,6 +18,7 @@ from arm_ripper.scan.matrix256_fp import (
     UnsafeRecordError,
     _choose_view,
     _collect_from_iso,
+    _hashed_path,
     collect_tree_records,
     fingerprint_records,
     probe_matrix256,
@@ -353,3 +354,16 @@ def test_collect_tree_records_opens_walks_and_closes_the_image(monkeypatch: pyte
     [iso] = _OpenableIso.instances
     assert iso.opened == "/dev/sr0"
     assert iso.closed == 1
+
+
+def test_hashed_path_iso9660_strips_version_suffix_and_leading_slash() -> None:
+    assert _hashed_path("/VIDEO_TS/VTS_01_1.VOB;1", "iso9660") == "VIDEO_TS/VTS_01_1.VOB"
+
+
+@pytest.mark.parametrize("view", ["udf", "joliet", "rock_ridge"])
+def test_hashed_path_extended_views_keep_a_semicolon_in_the_name(view: str) -> None:
+    assert _hashed_path("/dir/a;b.txt", view) == "dir/a;b.txt"
+
+
+def test_hashed_path_without_leading_slash_passes_through() -> None:
+    assert _hashed_path("dir/a.txt", "udf") == "dir/a.txt"

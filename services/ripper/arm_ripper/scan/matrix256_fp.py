@@ -124,6 +124,19 @@ def _is_symlink(record: Any) -> bool:
         return False
 
 
+def _hashed_path(full: str, view: str) -> str:
+    """The path matrix256 hashes for a file at pycdlib path `full`: relative to the root, and stripped of its
+    `;1` version suffix on the plain ISO 9660 view.
+    """
+    relative = full.lstrip("/")
+    if view == "iso9660":
+        # Bare ISO 9660 names carry `;1` version suffixes the kernel
+        # never shows on a mount; strip them from the hashed path
+        # (the pycdlib lookup still needs the raw name).
+        relative = relative.split(";", 1)[0]
+    return relative
+
+
 def _collect_from_iso(iso: Any) -> tuple[list[tuple[str, int]], str]:
     """Walk the opened pycdlib image's preferred view into (relative path,
     size) records for every regular file. Returns (records, view name)."""
@@ -136,13 +149,7 @@ def _collect_from_iso(iso: Any) -> tuple[list[tuple[str, int]], str]:
             record = iso.get_record(**{key: full})
             if _is_symlink(record):
                 continue
-            relative = full.lstrip("/")
-            if view == "iso9660":
-                # Bare ISO 9660 names carry `;1` version suffixes the kernel
-                # never shows on a mount; strip them from the hashed path
-                # (the pycdlib lookup above still needs the raw name).
-                relative = relative.split(";", 1)[0]
-            records.append((relative, record.get_data_length()))
+            records.append((_hashed_path(full, view), record.get_data_length()))
     return records, view
 
 
