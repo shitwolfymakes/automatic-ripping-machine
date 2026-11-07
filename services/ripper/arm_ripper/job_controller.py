@@ -523,17 +523,7 @@ class JobController:
             # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl
             # below is invalid on a regular file (ENOTTY) and would crash the
             # one-shot source pipeline. Zero titles from a file is final.
-            if is_file_source(device_path):
-                logger.warning("scan: 0 titles from ISO source %s — nothing to retry", device_path)
-                return result
-
-            state = read_drive_status(device_path)
-            if state != DriveState.DISC_OK:
-                logger.info(
-                    "scan: 0 titles and drive no longer DISC_OK (state=%s) device=%s — stopping",
-                    state.name,
-                    device_path,
-                )
+            if self._zero_titles_are_final(device_path):
                 return result
 
             if attempt < SCAN_NOT_READY_MAX_ATTEMPTS:
@@ -568,6 +558,23 @@ class JobController:
         )
         assert last is not None
         return last
+
+    @staticmethod
+    def _zero_titles_are_final(device_path: str) -> bool:
+        """Whether a zero-title scan is the answer rather than a drive still settling: an ISO source has nothing to
+        settle, and a drive no longer DISC_OK has lost its disc."""
+        if is_file_source(device_path):
+            logger.warning("scan: 0 titles from ISO source %s — nothing to retry", device_path)
+            return True
+        state = read_drive_status(device_path)
+        if state != DriveState.DISC_OK:
+            logger.info(
+                "scan: 0 titles and drive no longer DISC_OK (state=%s) device=%s — stopping",
+                state.name,
+                device_path,
+            )
+            return True
+        return False
 
     async def _identify_with_retry(
         self,
