@@ -417,16 +417,17 @@ class JobController:
             logger.debug("disc-inserted ignored: drive already busy")
             return
         # Auto-rip-on-insert is the global Config switch; default true so
-        # this is a no-op on standard deployments. Fail-open on lookup
-        # error: a flapping backend must not silently halt ripping.
-        try:
-            cfg = await self._client.get_ripper_config()
-            if not cfg.auto_rip_on_insert:
-                logger.info("disc-inserted ignored: auto_rip_on_insert=false; trigger via UI to start a rip")
-                return
-        except httpx.HTTPError as e:
-            logger.warning("auto-rip config lookup failed (%s); proceeding fail-open", e)
+        # this is a no-op on standard deployments.
+        if not await self._auto_rip_enabled():
+            logger.info("disc-inserted ignored: auto_rip_on_insert=false; trigger via UI to start a rip")
+            return
         await self._run_pipeline(device_path, pending_session_id=None)
+
+    async def _auto_rip_enabled(self) -> bool:
+        """Whether a disc insert should start a rip: the auto_rip_on_insert switch, or True when the config can't be
+        read (fail-open, so a flapping backend never silently halts ripping)."""
+        cfg = await self._ripper_config_or_none("auto-rip config lookup", "proceeding fail-open")
+        return cfg is None or cfg.auto_rip_on_insert
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
