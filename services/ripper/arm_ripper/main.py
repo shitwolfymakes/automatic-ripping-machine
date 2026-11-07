@@ -342,33 +342,7 @@ class DrivePoller:
             resolved = await self._resolve()
             moved = self._handle.set(resolved.path if resolved else None)
 
-            if self._handle.absent:
-                state = DriveState.ABSENT
-                self._last_error_kind = None
-            else:
-                try:
-                    state = read_drive_status(self._handle.current or "")
-                    self._last_error_kind = None
-                except OSError as exc:
-                    kind = classify_drive_error(exc)
-                    if kind is DriveErrorKind.ABSENT:
-                        # The node resolved but the hardware said no (ENXIO/ENODEV,
-                        # or it vanished between resolve and open). Keep the handle —
-                        # the node is still the right one — and report absence.
-                        state = DriveState.ABSENT
-                    elif kind is DriveErrorKind.MISCONFIGURED:
-                        if self._last_error_kind is not kind:
-                            logger.warning(
-                                "drive %s is present but misconfigured: %s "
-                                "— check the device cgroup rule and CDROM_GID",
-                                self._handle.current,
-                                exc.strerror or exc,
-                            )
-                        state = DriveState.NO_INFO
-                    else:
-                        logger.warning("ioctl failed: %s", exc)
-                        state = DriveState.NO_INFO
-                    self._last_error_kind = kind
+            state = self._read_state()
 
             # Transitions are keyed on state so a node that resolves but answers
             # ENXIO cannot flap between "present" and "absent" every poll. They run
@@ -429,6 +403,37 @@ class DrivePoller:
             # The port is this drive's identity when it has no by-id link.
             self._last_port = node_port(path, sysfs_root=_resolve_paths()["sysfs_root"])
         self._last_resolved = path
+
+    def _read_state(self) -> DriveState:
+        """Read the drive's state, treating an empty handle or a node the hardware refuses as ABSENT and
+        other errors as NO_INFO."""
+        if self._handle.absent:
+            state = DriveState.ABSENT
+            self._last_error_kind = None
+        else:
+            try:
+                state = read_drive_status(self._handle.current or "")
+                self._last_error_kind = None
+            except OSError as exc:
+                kind = classify_drive_error(exc)
+                if kind is DriveErrorKind.ABSENT:
+                    # The node resolved but the hardware said no (ENXIO/ENODEV,
+                    # or it vanished between resolve and open). Keep the handle —
+                    # the node is still the right one — and report absence.
+                    state = DriveState.ABSENT
+                elif kind is DriveErrorKind.MISCONFIGURED:
+                    if self._last_error_kind is not kind:
+                        logger.warning(
+                            "drive %s is present but misconfigured: %s — check the device cgroup rule and CDROM_GID",
+                            self._handle.current,
+                            exc.strerror or exc,
+                        )
+                    state = DriveState.NO_INFO
+                else:
+                    logger.warning("ioctl failed: %s", exc)
+                    state = DriveState.NO_INFO
+                self._last_error_kind = kind
+        return state
 
 
 async def poll_loop(controller: JobController, handle: DriveHandle, *, client: BackendClient, drive_id: str) -> None:
