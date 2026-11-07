@@ -22,7 +22,7 @@ from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, 
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.rip.track_callbacks import TransferStats
-from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
+from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
@@ -462,7 +462,7 @@ class JobController:
             logger.error("scan failed device=%s err=%s", device_path, e)
             return None
         except OSError as e:
-            if e.errno not in _ABSENT_ERRNOS:
+            if classify_drive_error(e) is not DriveErrorKind.ABSENT:
                 raise
             logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
             return None
@@ -652,7 +652,7 @@ class JobController:
         try:
             read_drive_status(path)
         except OSError as exc:
-            return exc.errno in _ABSENT_ERRNOS
+            return classify_drive_error(exc) is DriveErrorKind.ABSENT
         return False
 
     async def _watch_drive(self, path: str, lost: asyncio.Event) -> None:
