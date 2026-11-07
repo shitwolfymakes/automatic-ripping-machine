@@ -83,6 +83,24 @@ def _write_config(output_dir: Path) -> Path:
     return conf_path
 
 
+async def _spawn_abcde(device_path: str, conf_path: Path, output_dir: Path) -> asyncio.subprocess.Process:
+    """Start abcde on the disc with this config, in its own session and with `output_dir` as its working directory."""
+    cmd = ["abcde", "-d", device_path, "-c", str(conf_path), "-N", "-n", "-j", "1"]
+    # abcde creates a per-rip `abcde.XXXXX/` temp dir alongside its CWD
+    # for staging WAVs before the `move` action. The ripper container's
+    # default CWD (`/app/services/ripper`) is read-only for non-root
+    # users, so without `cwd=` abcde fails with "Permission denied" on
+    # the very first track. Running with `cwd=output_dir` puts the temp
+    # dir inside the raw output tree, which is always writable.
+    return await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(output_dir),
+        start_new_session=True,
+    )
+
+
 async def rip_cd(
     device_path: str,
     output_dir: Path,
@@ -107,7 +125,6 @@ async def rip_cd(
 
     conf_path = _write_config(output_dir)
 
-    cmd = ["abcde", "-d", device_path, "-c", str(conf_path), "-N", "-n", "-j", "1"]
     logger.info("abcde rip device=%s output_dir=%s", device_path, output_dir)
 
     results: dict[int, RipResult] = {}
@@ -140,20 +157,8 @@ async def rip_cd(
             if on_track_done is not None:
                 await on_track_done(idx, result)
 
-    # abcde creates a per-rip `abcde.XXXXX/` temp dir alongside its CWD
-    # for staging WAVs before the `move` action. The ripper container's
-    # default CWD (`/app/services/ripper`) is read-only for non-root
-    # users, so without `cwd=` abcde fails with "Permission denied" on
-    # the very first track. Running with `cwd=output_dir` puts the temp
-    # dir inside the raw output tree, which is always writable.
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(output_dir),
-            start_new_session=True,
-        )
+        proc = await _spawn_abcde(device_path, conf_path, output_dir)
     except FileNotFoundError as e:
         conf_path.unlink(missing_ok=True)
         await _fail_remaining(f"abcde not on PATH: {e}")

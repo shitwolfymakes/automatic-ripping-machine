@@ -497,3 +497,28 @@ def test_write_config_writes_the_abcde_config_to_a_temp_file(tmp_path):
         assert conf_path.read_text() == abcde_rip._abcde_config(tmp_path)
     finally:
         conf_path.unlink()
+
+
+@pytest.mark.asyncio
+async def test_spawn_abcde_runs_abcde_in_its_own_session_from_the_output_dir(monkeypatch, tmp_path):
+    captured: dict[str, Any] = {}
+    fake = _FakeProc([])
+
+    async def fake_create(*args: Any, **kwargs: Any) -> _FakeProc:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    conf_path = tmp_path / "x.abcde.conf"
+
+    proc = await abcde_rip._spawn_abcde("/dev/sr0", conf_path, tmp_path)
+
+    assert captured["args"] == ("abcde", "-d", "/dev/sr0", "-c", str(conf_path), "-N", "-n", "-j", "1")
+    assert captured["kwargs"] == {
+        "stdout": asyncio.subprocess.PIPE,
+        "stderr": asyncio.subprocess.PIPE,
+        "cwd": str(tmp_path),
+        "start_new_session": True,
+    }
+    assert proc is fake
