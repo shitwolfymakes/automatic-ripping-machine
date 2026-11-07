@@ -15,7 +15,7 @@ import arm_ripper.recovery as recovery_module
 from arm_common import DiscType, JobStatus
 from arm_common.schemas import HeldJobView, JobView, RipStartResponse
 from arm_ripper.drive_poll import DriveState
-from arm_ripper.recovery import boot_probe, wipe_raw_dir
+from arm_ripper.recovery import _disc_present, boot_probe, wipe_raw_dir
 
 
 def _make_view(status: JobStatus = JobStatus.RIPPING, *, job_id: str = "job_resume") -> JobView:
@@ -289,3 +289,41 @@ async def test_recovery_abandon_http_error_logs_warning_not_propagated(caplog: p
 async def test_wipe_raw_dir_idempotent_when_missing(tmp_path: Path) -> None:
     # Different job_id — directory does not exist. Should not raise.
     await wipe_raw_dir("never_existed")
+
+
+def test_disc_present_true_when_disc_ok_and_silent(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(recovery_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        assert _disc_present("/dev/sr0", "job_1") is True
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize("state", [DriveState.NO_DISC, DriveState.TRAY_OPEN])
+def test_disc_present_false_and_logs_for_other_states(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, state: DriveState
+) -> None:
+    monkeypatch.setattr(recovery_module, "read_drive_status", lambda _p: state)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        assert _disc_present("/dev/sr0", "job_1") is False
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (
+            logging.INFO,
+            f"boot probe: in-flight job_id=job_1 but drive state={state}; leaving as-is for manual recovery",
+        )
+    ]
+
+
+def test_disc_present_false_and_warns_on_oserror(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _boom(_p: str) -> DriveState:
+        raise OSError("no ioctl")
+
+    monkeypatch.setattr(recovery_module, "read_drive_status", _boom)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        assert _disc_present("/dev/sr0", "job_1") is False
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.WARNING, "boot probe: ioctl failed: no ioctl")
+    ]

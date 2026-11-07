@@ -70,18 +70,7 @@ async def boot_probe(
         await _recover_held_job(client, drive_id, device_path, controller)
         return
 
-    try:
-        state = read_drive_status(device_path)
-    except OSError as exc:
-        logger.warning("boot probe: ioctl failed: %s", exc)
-        return
-
-    if state != DriveState.DISC_OK:
-        logger.info(
-            "boot probe: in-flight job_id=%s but drive state=%s; leaving as-is for manual recovery",
-            job.id,
-            state,
-        )
+    if not _disc_present(device_path, job.id):
         return
 
     logger.info("boot probe: resuming in-flight job_id=%s on drive_id=%s", job.id, drive_id)
@@ -90,6 +79,26 @@ async def boot_probe(
         await controller.resume_inflight_job(job, device_path)
     except Exception as exc:  # noqa: BLE001 — boot must continue
         logger.exception("boot probe: resume failed for job_id=%s: %s", job.id, exc)
+
+
+def _disc_present(device_path: str, job_id: str) -> bool:
+    """Whether the drive reports a readable disc, so the in-flight job can resume; logs why not (an ioctl error, or
+    any other drive state) and leaves the job for manual recovery.
+    """
+    try:
+        state = read_drive_status(device_path)
+    except OSError as exc:
+        logger.warning("boot probe: ioctl failed: %s", exc)
+        return False
+
+    if state != DriveState.DISC_OK:
+        logger.info(
+            "boot probe: in-flight job_id=%s but drive state=%s; leaving as-is for manual recovery",
+            job_id,
+            state,
+        )
+        return False
+    return True
 
 
 async def _recover_held_job(
