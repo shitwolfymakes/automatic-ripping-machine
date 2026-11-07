@@ -382,8 +382,9 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
         if state is DriveState.ABSENT and last_state is not DriveState.ABSENT:
             logger.warning("drive absent (by_id=%s) — polling until it returns", settings.ARM_DRIVE_BY_ID)
         elif last_state is DriveState.ABSENT and state is not DriveState.ABSENT:
-            if resolved is not None:
-                logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
+            # A None resolution empties the handle, which reads as ABSENT, so a present drive has a resolution.
+            assert resolved is not None
+            logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
             detector.reset()
             # Report the node BEFORE the probe: _on_reattached can run a whole
             # resumed rip, and the UI must not sit on the stale node for its
@@ -391,8 +392,8 @@ async def poll_loop(controller: JobController, handle: DriveHandle, *, client: B
             await _report_node(client, drive_id, handle.current or "")
             await _on_reattached(client, drive_id, handle, controller)
         elif moved and not handle.absent:
-            if resolved is not None:
-                logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
+            assert resolved is not None  # same invariant as the reattach arm above
+            logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
             await _report_node(client, drive_id, handle.current or "")
 
         if state != last_state:
