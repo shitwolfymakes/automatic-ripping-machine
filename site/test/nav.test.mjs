@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveNav } from '../src/nav.mjs';
+import { navItemError, resolveNav } from '../src/nav.mjs';
 
 function fakeResolver(table) {
 	const calls = [];
@@ -108,4 +108,46 @@ test('resolveNav: keeps section and group fields and reports errors in item orde
 		{ title: 'S1', icon: 'i1', groups: [{ title: 'G1', open: true, items: [] }] },
 		{ title: 'S2', groups: [{ title: 'G2', items: [] }, { title: 'G3', items: [] }] }
 	]);
+});
+
+test('resolveNav: a resolver error with an empty message is still dropped and reported', () => {
+	const item = { label: 'x', target: 'x', from: 'm', where: 'loc' };
+	const { nav, errors } = run([item], { x: { kind: 'error', message: '' } });
+	assert.deepEqual(itemsOf(nav), []);
+	assert.deepEqual(errors, ['loc: ']);
+});
+
+test('navItemError: an error kind returns its message, even an empty one', () => {
+	assert.equal(navItemError('t', { kind: 'error', message: 'boom' }, new Map()), 'boom');
+	assert.equal(navItemError('t', { kind: 'error', message: '' }, new Map()), '');
+});
+
+test('navItemError: http, https and mailto links are fine, whatever the scheme case', () => {
+	for (const url of ['http://a', 'https://a', 'mailto:a@b', 'HTTPS://a']) {
+		assert.equal(navItemError('t', { kind: 'external', url }, new Map()), null);
+	}
+});
+
+test('navItemError: another scheme gives the unsupported message with the target', () => {
+	const resolved = { kind: 'external', url: 'ftp://host/x' };
+	assert.equal(navItemError('the-target', resolved, new Map()), 'unsupported link scheme: the-target');
+});
+
+test('navItemError: a page without a fragment is fine', () => {
+	assert.equal(navItemError('t', { kind: 'page', id: 'p', fragment: '' }, new Map()), null);
+});
+
+test('navItemError: a page fragment found in the map is fine', () => {
+	const headings = new Map([['p', new Set(['h'])]]);
+	assert.equal(navItemError('t', { kind: 'page', id: 'p', fragment: 'h' }, headings), null);
+});
+
+test('navItemError: a page fragment missing from the set, or an id missing from the map, gives the message', () => {
+	const headings = new Map([['p', new Set(['h'])]]);
+	assert.equal(navItemError('t', { kind: 'page', id: 'p', fragment: 'z' }, headings), 'missing anchor #z in p');
+	assert.equal(navItemError('t', { kind: 'page', id: 'q', fragment: 'h' }, headings), 'missing anchor #h in q');
+});
+
+test('navItemError: other kinds are fine', () => {
+	assert.equal(navItemError('t', { kind: 'repo', path: 'a' }, new Map()), null);
 });
