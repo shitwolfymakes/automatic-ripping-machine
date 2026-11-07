@@ -114,25 +114,7 @@ async def rip_all(
         return
 
     if disc_type == DiscType.DATA:
-        if not tracks:
-            return
-        first = tracks[0]
-        await on_track_start(first)
-        started = time.monotonic()
-
-        async def _on_data_progress(done: int, total: int | None) -> None:
-            if on_track_progress is None:
-                return
-            elapsed = time.monotonic() - started
-            stats: TransferStats = {
-                "bytes_done": done,
-                "bytes_total": total,
-                "rate_bps": done / elapsed if elapsed > 0 else None,
-            }
-            await on_track_progress(first, min(done / total, 1.0) if total else 0.0, stats)
-
-        result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
-        await on_track_done(first, result)
+        await _rip_data_dump(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
     for track in tracks:
@@ -196,6 +178,36 @@ async def _rip_audio_cd(
                 track,
                 RipResult(ok=False, error=f"abcde produced no entry for track {track.index}"),
             )
+
+
+async def _rip_data_dump(
+    device_path: str,
+    tracks: list[TrackView],
+    output_dir: Path,
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+    on_track_progress: OnTrackProgress | None,
+) -> None:
+    """Copy the whole disc or image with one dd run, reported as the first track with byte-level progress."""
+    if not tracks:
+        return
+    first = tracks[0]
+    await on_track_start(first)
+    started = time.monotonic()
+
+    async def _on_data_progress(done: int, total: int | None) -> None:
+        if on_track_progress is None:
+            return
+        elapsed = time.monotonic() - started
+        stats: TransferStats = {
+            "bytes_done": done,
+            "bytes_total": total,
+            "rate_bps": done / elapsed if elapsed > 0 else None,
+        }
+        await on_track_progress(first, min(done / total, 1.0) if total else 0.0, stats)
+
+    result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
+    await on_track_done(first, result)
 
 
 async def _rip_optical(
