@@ -12,7 +12,7 @@ import respx
 
 from arm_common import MakemkvKeyState
 from arm_ripper.backend_client import BackendClient
-from arm_ripper.main import makemkv_key_changed
+from arm_ripper.makemkv_keycheck import makemkv_key_changed
 from arm_ripper.scan import makemkv_key_probe as mk
 
 
