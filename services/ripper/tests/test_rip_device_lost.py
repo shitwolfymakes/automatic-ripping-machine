@@ -25,6 +25,7 @@ from arm_ripper.rip import RipResult
 from arm_ripper.rip import optical_rip as optical_rip_module
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import RipDiscResult
+from arm_ripper.rip.track_callbacks import TransferStats
 
 _JOB = "job_01M4R7157QDCVQ3MX6M2VK0XX0"
 
@@ -314,3 +315,112 @@ async def test_a_title_makemkvcon_moved_on_from_is_resumed_not_kept(monkeypatch,
 
 def _absent(_path: str) -> DriveState:
     raise OSError(19, "No such device")  # ENODEV
+
+
+async def _run_one_pass(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tracks: list[TrackView], one: Any
+) -> None:
+    _script(monkeypatch, [one])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+
+async def test_a_finished_title_reports_every_result_field(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, Any]
+) -> None:
+    """A DONE result carrying a path, size, checksum and duration patches all of them with the status."""
+    track = _track(0)
+
+    async def one(**kw: Any) -> None:
+        path = Path(kw["output_dir"]) / "Disc_t00.mkv"
+        path.write_bytes(b"x")
+        await kw["on_track_start"](track)
+        result = RipResult(ok=True, output_path=path, size_bytes=5, sha256="abc", duration_seconds=7)
+        await kw["on_track_done"](track, result)
+
+    await _run_one_pass(env, monkeypatch, [track], one)
+    done = [f for _, f in env["client"].patches if f.get("status") == TrackStatus.DONE]
+    assert done == [
+        {
+            "status": TrackStatus.DONE,
+            "output_path": str(env["raw"] / "Disc_t00.mkv"),
+            "size_bytes": 5,
+            "sha256": "abc",
+            "duration_seconds": 7,
+        }
+    ]
+
+
+async def test_a_finished_title_without_result_fields_reports_only_done(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, Any]
+) -> None:
+    """A DONE result with no optional fields patches just the status, after the IN_PROGRESS patch."""
+    track = _track(0)
+
+    async def one(**kw: Any) -> None:
+        await kw["on_track_start"](track)
+        await kw["on_track_done"](track, RipResult(ok=True))
+
+    await _run_one_pass(env, monkeypatch, [track], one)
+    assert env["client"].patches == [
+        ("trk_0", {"status": TrackStatus.IN_PROGRESS}),
+        ("trk_0", {"status": TrackStatus.DONE}),
+    ]
+
+
+async def test_progress_without_a_websocket_only_logs(monkeypatch: pytest.MonkeyPatch, env: dict[str, Any]) -> None:
+    """With no WebSocket a progress report is only logged: nothing raises and the rip completes."""
+    track = _track(0)
+
+    async def one(**kw: Any) -> None:
+        await kw["on_track_start"](track)
+        await kw["on_track_progress"](track, 0.5)
+        await kw["on_track_done"](track, RipResult(ok=True))
+
+    await _run_one_pass(env, monkeypatch, [track], one)
+    assert env["client"].completed == [_JOB]
+
+
+class _Ws:
+    def __init__(self) -> None:
+        self.published: list[dict[str, Any]] = []
+
+    async def publish(self, **kw: Any) -> None:
+        self.published.append(kw)
+
+
+async def test_progress_publishes_the_percentage_and_transfer_stats(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, Any]
+) -> None:
+    """Progress goes to the job's topic as a percentage, plus byte detail, a rounded rate and phase when given."""
+    track = _track(0)
+    ws = _Ws()
+    env["controller"]._ws = ws
+
+    async def one(**kw: Any) -> None:
+        await kw["on_track_start"](track)
+        await kw["on_track_progress"](track, 0.25)
+        copying = TransferStats(bytes_done=1, bytes_total=4, rate_bps=2.4, phase="copy")
+        await kw["on_track_progress"](track, 0.5, copying)
+        await kw["on_track_progress"](track, 0.75, TransferStats(bytes_done=2, bytes_total=4, rate_bps=None))
+        await kw["on_track_done"](track, RipResult(ok=True))
+
+    await _run_one_pass(env, monkeypatch, [track], one)
+    assert ws.published[0]["topic"] == f"ripper.progress.{_JOB}"
+    assert ws.published[0]["event_type"] == "ripper.progress"
+    assert [p["payload"] for p in ws.published] == [
+        {"track_id": "trk_0", "progress_pct": 25.0},
+        {
+            "track_id": "trk_0",
+            "progress_pct": 50.0,
+            "bytes_done": 1,
+            "bytes_total": 4,
+            "rate_bps": 2,
+            "phase": "copy",
+        },
+        {"track_id": "trk_0", "progress_pct": 75.0, "bytes_done": 2, "bytes_total": 4, "rate_bps": None},
+    ]
