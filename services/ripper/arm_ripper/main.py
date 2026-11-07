@@ -361,13 +361,7 @@ class DrivePoller:
                 logger.info("drive state %s -> %s", self._last_state, state)
                 self._last_state = state
 
-            if self._active_task is not None and self._active_task.done():
-                self._active_task = None
-
-            # detector.update() must run every poll to track the NOT_READY
-            # streak; only act on the True edge when no rip is already running.
-            if self._detector.update(state) and self._active_task is None and self._handle.current is not None:
-                self._active_task = asyncio.create_task(self._controller.handle_disc_inserted(self._handle.current))
+            self._start_rip_on_insert(state)
 
             await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
 
@@ -394,6 +388,17 @@ class DrivePoller:
         """The drive turned up on a new node: log it and report it to the backend."""
         logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
         await _report_node(self._client, self._drive_id, self._handle.current or "")
+
+    def _start_rip_on_insert(self, state: DriveState) -> None:
+        """Feed this reading to the insert detector and start the pipeline on an insert while no earlier one is still
+        running."""
+        if self._active_task is not None and self._active_task.done():
+            self._active_task = None
+
+        # detector.update() must run every poll to track the NOT_READY
+        # streak; only act on the True edge when no rip is already running.
+        if self._detector.update(state) and self._active_task is None and self._handle.current is not None:
+            self._active_task = asyncio.create_task(self._controller.handle_disc_inserted(self._handle.current))
 
     async def _resolve(self) -> ResolvedDevice | None:
         """Resolve this tick's node from the current hint, counting the ticks the drive has been absent."""
