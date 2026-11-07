@@ -1647,3 +1647,68 @@ async def test_auto_start_due_is_false_for_a_timed_gate_with_no_job_view():
     controller._review_countdown_expired = _never  # type: ignore[method-assign]
 
     assert await controller._auto_start_due(None, jc_module._REVIEW_WAIT) is False
+
+
+async def test_scan_failure_ends_the_pipeline_before_identify(monkeypatch, caplog, stub_eject):
+    """A ScanError from the scan logs one ERROR and ends the pipeline before identify or rip-start."""
+
+    async def _boom(_device_path: str) -> ScanResult:
+        raise jc_module.ScanError("no disc")
+
+    monkeypatch.setattr(jc_module, "scan_disc", _boom)
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.identify_calls == []
+    assert client.rip_start_calls == []
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors == ["scan failed device=/dev/sr0 err=no disc"]
+
+
+async def test_identify_in_an_unexpected_status_does_not_rip(caplog, stub_scan, stub_eject):
+    """An identified job in a status outside every gate (RIPPED) logs at INFO and returns without ripping."""
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.RIPPED))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.get_job_calls == []
+    assert client.rip_start_calls == []
+    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert "job job_test in unexpected status ripped; not ripping" in infos
+
+
+async def test_disc_inserted_while_busy_is_ignored(caplog, stub_scan, stub_eject):
+    """A disc-inserted event on a busy drive is dropped at DEBUG without a config lookup or identify."""
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    async with controller._active_lock:
+        assert controller.is_active
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.get_ripper_config_calls == 0
+    assert client.identify_calls == []
+    debugs = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
+    assert "disc-inserted ignored: drive already busy" in debugs
+
+
+async def test_auto_rip_lookup_failure_proceeds_fail_open(caplog, stub_scan, stub_eject):
+    """An HTTP error on the auto-rip config lookup warns and still runs the rip (fail-open)."""
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    client = FakeClient()
+    client.get_ripper_config_error = httpx.ConnectError("down")
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="X"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert "auto-rip config lookup failed (down); proceeding fail-open" in warnings
+    assert client.rip_start_calls == ["job_test"]
+    assert client.rip_complete_calls == ["job_test"]
