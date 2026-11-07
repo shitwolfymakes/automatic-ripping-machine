@@ -74,28 +74,32 @@ function compileCss(armRoot, siteDir, outFile) {
 	writeFileSync(outFile, readFileSync(outFile, 'utf8').replace(/url\((['"]?)\/fonts\//g, 'url($1fonts/'));
 }
 
+// One page's HTML: the site template filled with its nav, table of contents, content and footer.
+export function pageHtml(template, r, { nav, manifest, meta }) {
+	const id = r.page.id;
+	const ctx = { target: 'site', fromId: id, repo: manifest.repo };
+	return fillTemplate(template, {
+		root: rootPrefix(id),
+		title: escapeHtml(r.page.title),
+		repo: escapeHtml(manifest.repo),
+		nav: renderNav(navFor(nav, ctx), id),
+		toc: renderToc(r.toc),
+		content: fillLinks(r.html, r, ctx),
+		editUrl: escapeHtml(editUrl(manifest.repo, r.page.srcPath)),
+		version: escapeHtml(meta.version),
+		commit: escapeHtml(meta.commit)
+	});
+}
+
 export function writeSite({ outDir, armRoot, siteDir, rendered, nav, meta, manifest, search }) {
 	rmSync(outDir, { recursive: true, force: true });
 	mkdirSync(join(outDir, 'js'), { recursive: true });
 	const template = readFileSync(join(siteDir, 'src/template.html'), 'utf8');
 
 	for (const r of rendered) {
-		const id = r.page.id;
-		const ctx = { target: 'site', fromId: id, repo: manifest.repo };
-		const html = fillTemplate(template, {
-			root: rootPrefix(id),
-			title: escapeHtml(r.page.title),
-			repo: escapeHtml(manifest.repo),
-			nav: renderNav(navFor(nav, ctx), id),
-			toc: renderToc(r.toc),
-			content: fillLinks(r.html, r, ctx),
-			editUrl: escapeHtml(editUrl(manifest.repo, r.page.srcPath)),
-			version: escapeHtml(meta.version),
-			commit: escapeHtml(meta.commit)
-		});
-		const file = join(outDir, outPath(id));
+		const file = join(outDir, outPath(r.page.id));
 		mkdirSync(dirname(file), { recursive: true });
-		writeFileSync(file, html);
+		writeFileSync(file, pageHtml(template, r, { nav, manifest, meta }));
 	}
 
 	copyAssets(rendered, armRoot, join(outDir, 'assets'));

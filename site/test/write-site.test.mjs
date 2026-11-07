@@ -1,0 +1,88 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { pageHtml } from '../src/write-site.mjs';
+
+const ALL = ['root', 'title', 'repo', 'nav', 'toc', 'content', 'editUrl', 'version', 'commit'];
+const TEMPLATE = ALL.map((k) => `{{${k}}}`).join('|');
+const MANIFEST_ = { repo: 'o/r' };
+const META = { version: '1.0', commit: 'abc' };
+
+const page = (id, extra = {}) => ({
+	page: { id, title: 'T', srcPath: `docs/${id}.md` },
+	html: '<p>body</p>',
+	toc: [],
+	links: [],
+	assets: [],
+	...extra
+});
+const navOf = (groups) => [{ id: 's', label: 'Sec', groups }];
+const pageItem = (label, id) => ({ label, resolved: { kind: 'page', id, fragment: '' } });
+const build = (r, nav = [], template = TEMPLATE, manifest = MANIFEST_, meta = META) =>
+	pageHtml(template, r, { nav, manifest, meta });
+
+test('fills every placeholder', () => {
+	const r = page('guide/home', { toc: [{ depth: 2, id: 'a', text: 'A' }, { depth: 2, id: 'b', text: 'B' }] });
+	const nav = navOf([{ label: 'G', items: [pageItem('Home', 'guide/home')] }]);
+	assert.equal(
+		build(r, nav),
+		[
+			'',
+			'T',
+			'o/r',
+			'<div class="docs-nav-section"><p class="eyebrow docs-nav-heading">Sec</p><p class="docs-nav-group">G</p>' +
+				'<a class="nav-item" href="index.html" data-active="true" aria-current="page">Home</a></div>',
+			'<nav class="docs-toc" aria-label="On this page"><p class="eyebrow">On this page</p>' +
+				'<a class="docs-toc-link" data-depth="2" href="#a">A</a>' +
+				'<a class="docs-toc-link" data-depth="2" href="#b">B</a></nav>',
+			'<p>body</p>',
+			'https://github.com/o/r/edit/main/docs/guide/home.md',
+			'1.0',
+			'abc'
+		].join('|')
+	);
+});
+
+test('title, repo, version and commit are HTML-escaped', () => {
+	const r = page('x', { page: { id: 'x', title: '<&>', srcPath: 'x.md' } });
+	const meta = { version: '<v>', commit: '"c"' };
+	const out = build(r, [], '{{title}}|{{repo}}|{{version}}|{{commit}}', { repo: 'a&b' }, meta);
+	assert.equal(out, '&lt;&amp;&gt;|a&amp;b|&lt;v&gt;|&quot;c&quot;');
+});
+
+test('root prefix follows the page id depth', () => {
+	assert.equal(build(page('guide/home'), [], '{{root}}'), '');
+	assert.equal(build(page('guide/intro'), [], '{{root}}'), '../');
+	assert.equal(build(page('a/b/c'), [], '{{root}}'), '../../');
+});
+
+test('only the active page gets the active attributes', () => {
+	const nav = navOf([{ label: 'G', items: [pageItem('One', 'one'), pageItem('Two', 'two')] }]);
+	const out = build(page('two'), nav, '{{nav}}');
+	assert.match(out, /href="one.html">One</);
+	assert.match(out, /href="two.html" data-active="true" aria-current="page">Two</);
+	assert.equal(out.split('data-active').length, 2);
+});
+
+test('external nav items open in a new tab', () => {
+	const ext = { label: 'Ext', resolved: { kind: 'external', url: 'https://e.com/' } };
+	const out = build(page('one'), navOf([{ label: 'G', items: [ext, pageItem('One', 'one')] }]), '{{nav}}');
+	assert.match(out, /href="https:\/\/e.com\/" target="_blank" rel="noopener">Ext</);
+	assert.equal(out.split('noopener').length, 2);
+});
+
+test('a group label renders a heading, an unlabelled group does not', () => {
+	const nav = navOf([{ label: 'G', items: [pageItem('One', 'one')] }, { items: [pageItem('Two', 'two')] }]);
+	const out = build(page('one'), nav, '{{nav}}');
+	assert.equal(out.split('<p class="docs-nav-group">').length, 2);
+	assert.match(out, /<p class="docs-nav-group">G<\/p>/);
+});
+
+test('the toc renders only with two or more entries', () => {
+	const one = [{ depth: 2, id: 'a', text: 'A' }];
+	assert.equal(build(page('x', { toc: one }), [], '{{toc}}'), '');
+	assert.match(build(page('x', { toc: [...one, { depth: 3, id: 'b', text: 'B' }] }), [], '{{toc}}'), /docs-toc-link/);
+});
+
+test('an unknown placeholder throws', () => {
+	assert.throws(() => build(page('x'), [], '{{nope}}'), { message: 'template: unknown placeholder {{nope}}' });
+});
