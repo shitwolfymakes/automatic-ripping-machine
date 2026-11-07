@@ -139,3 +139,33 @@ def test_classify_folder_with_bdmv_file_is_dvd(tmp_path: Path) -> None:
     folder.mkdir()
     (folder / "BDMV").write_bytes(b"not a dir")
     assert data_module._classify_folder(str(folder)).disc_type == DiscType.DVD
+
+
+def test_blkid_stdout_returns_stdout_and_spawns_exact_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[object, ...]] = []
+
+    async def _exec(*args: object, **_kwargs: object) -> _Proc:
+        seen.append(args)
+        return _Proc(b"Half_Baked\n")
+
+    monkeypatch.setattr(data_module.asyncio, "create_subprocess_exec", _exec)
+    assert asyncio.run(data_module._blkid_stdout("/dev/sr0")) == b"Half_Baked\n"
+    assert seen == [("blkid", "-o", "value", "-s", "LABEL", "/dev/sr0")]
+
+
+def test_blkid_stdout_timeout_kills_reaps_and_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = _HangingProc()
+
+    async def _exec(*_args: object, **_kwargs: object) -> _HangingProc:
+        return proc
+
+    real_wait_for = asyncio.wait_for
+
+    async def _fast_wait_for(awaitable: object, timeout: float) -> object:
+        return await real_wait_for(awaitable, timeout=0.01)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(data_module.asyncio, "create_subprocess_exec", _exec)
+    monkeypatch.setattr(data_module.asyncio, "wait_for", _fast_wait_for)
+    assert asyncio.run(data_module._blkid_stdout("/dev/sr0")) is None
+    assert proc.killed
+    assert proc.waited

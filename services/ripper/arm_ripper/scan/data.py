@@ -49,21 +49,8 @@ async def scan_data(device_path: str) -> ScanResult:
     """
     if is_folder_source(device_path):
         return _classify_folder(device_path)
-    proc = await asyncio.create_subprocess_exec(
-        "blkid",
-        "-o",
-        "value",
-        "-s",
-        "LABEL",
-        device_path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
+    stdout = await _blkid_stdout(device_path)
+    if stdout is None:
         return ScanResult(disc_type=DiscType.UNKNOWN)
 
     label = stdout.decode(errors="replace").strip() or None
@@ -85,3 +72,26 @@ def _classify_folder(device_path: str) -> ScanResult:
     folder = Path(device_path)
     folder_type = DiscType.BLURAY if (folder / "BDMV").is_dir() else DiscType.DVD
     return ScanResult(disc_type=folder_type, volume_label=folder.name)
+
+
+async def _blkid_stdout(device_path: str) -> bytes | None:
+    """Run `blkid` for the device's volume label and return its stdout; None when it hangs past 15 s (killed and
+    reaped).
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "blkid",
+        "-o",
+        "value",
+        "-s",
+        "LABEL",
+        device_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return None
+    return stdout
