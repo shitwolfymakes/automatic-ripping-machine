@@ -5,7 +5,7 @@ Covers the real failure modes:
   2. Single delete with delete_raw=True → raw rmtree + media unlink + empty-dir prune, all in-process.
   3. Single delete on a non-terminal job → 409, row preserved.
   4. Bulk delete partitions terminal vs non-terminal correctly.
-  5. `_delete_job_files` helper: raw rmtree, per-file media unlink (sibling re-rips not clobbered),
+  5. `delete_job_files` helper: raw rmtree, per-file media unlink (sibling re-rips not clobbered),
      empty title-dir prune, idempotent over missing files.
 """
 
@@ -20,6 +20,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend import job_files
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
@@ -333,7 +334,7 @@ def test_bulk_delete_removes_per_job_logs(tmp_path: Any, signing_key: bytes, mon
     assert (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000008.log").exists()
 
 
-# ---- _delete_job_files helper ---------------------------------------------
+# ---- delete_job_files helper ---------------------------------------------
 
 
 def test_delete_job_files_rmtrees_raw_dir(tmp_path: Path) -> None:
@@ -344,7 +345,7 @@ def test_delete_job_files_rmtrees_raw_dir(tmp_path: Path) -> None:
     (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002" / "title00.mkv").write_bytes(b"x")
     (raw_root / "job_01JZXR7K3M5Q8N4VWA00000002" / "manifest.json").write_text("{}")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [], raw_root=raw_root, media_root=media_root
     )
     assert counters == {"raw_dir_removed": 1, "media_files_removed": 0, "media_dirs_pruned": 0}
@@ -365,7 +366,7 @@ def test_delete_job_files_unlinks_media_files_individually(tmp_path: Path) -> No
     job_a_file.write_bytes(b"a")
     sibling_file.write_bytes(b"b")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [job_a_file], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 1
@@ -387,7 +388,7 @@ def test_delete_job_files_prunes_empty_title_dir(tmp_path: Path) -> None:
     only_file = title_dir / "Sintel (2010) - Track 01 - plex-1080p.mkv"
     only_file.write_bytes(b"a")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [only_file], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_dirs_pruned"] >= 1
@@ -407,7 +408,7 @@ def test_delete_job_files_prunes_nested_dirs(tmp_path: Path) -> None:
     ep = season_dir / "S01E01.mkv"
     ep.write_bytes(b"a")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [ep], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_dirs_pruned"] == 2
@@ -423,7 +424,7 @@ def test_delete_job_files_is_idempotent_over_missing_files(tmp_path: Path) -> No
     raw_root.mkdir()
     media_root.mkdir()
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA0000000N",
         [media_root / "Ghost (1990)" / "Ghost (1990) - Track 01.mkv"],
         raw_root=raw_root,
@@ -440,7 +441,7 @@ def test_prune_empty_dirs_refuses_path_outside_root(tmp_path: Path) -> None:
     outside = tmp_path / "elsewhere" / "stuff"
     outside.mkdir(parents=True)
 
-    pruned = jobs_router._prune_empty_dirs(outside, media_root)
+    pruned = job_files._prune_empty_dirs(outside, media_root)
     assert pruned == 0
     assert outside.exists()
 
@@ -546,13 +547,13 @@ def test_bulk_delete_invalid_status_returns_400(signing_key: bytes) -> None:
     assert [j.id for j in db.rows["jobs"]] == ["job_01JZXR7K3M5Q8N4VWA00000007"]
 
 
-# ---- _delete_job_files OSError exception paths -----------------------------
+# ---- delete_job_files OSError exception paths -----------------------------
 
 
 def test_delete_job_files_logs_rmtree_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When shutil.rmtree raises OSError (e.g. permission denied), the
     exception is caught, logged, and the function returns with raw_dir_removed=0.
-    Lines 342-343 in the router."""
+    That is the `OSError` branch of `_remove_raw_dir`."""
     raw_root = tmp_path / "raw"
     media_root = tmp_path / "media"
     raw_root.mkdir()
@@ -565,7 +566,7 @@ def test_delete_job_files_logs_rmtree_oserror(tmp_path: Path, monkeypatch: pytes
 
     monkeypatch.setattr("shutil.rmtree", _boom)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [], raw_root=raw_root, media_root=media_root
     )
     assert counters["raw_dir_removed"] == 0
@@ -576,7 +577,7 @@ def test_delete_job_files_logs_rmtree_oserror(tmp_path: Path, monkeypatch: pytes
 def test_delete_job_files_logs_unlink_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When path.unlink() raises OSError, the exception is caught and logged,
     the file is counted as not removed, and processing continues.
-    Lines 354-355 in the router."""
+    That is the `OSError` branch of `_remove_media_output`."""
     raw_root = tmp_path / "raw"
     media_root = tmp_path / "media"
     raw_root.mkdir()
@@ -590,7 +591,7 @@ def test_delete_job_files_logs_unlink_oserror(tmp_path: Path, monkeypatch: pytes
 
     monkeypatch.setattr(Path, "unlink", _boom)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [output_file], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 0
@@ -622,7 +623,7 @@ def test_delete_job_files_removes_a_disc_backup_folder(tmp_path: Path) -> None:
     (backup / "BDMV").mkdir(parents=True)
     (backup / "BDMV" / "index.bdmv").write_bytes(b"i")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 1
@@ -645,7 +646,7 @@ def test_delete_job_files_keeps_a_sibling_jobs_file_in_the_backup_folder(tmp_pat
     sibling = backup / "Iron Man (2008).mkv"
     sibling.write_bytes(b"m")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 1
@@ -666,7 +667,7 @@ def test_delete_job_files_does_not_follow_a_symlinked_bdmv(tmp_path: Path) -> No
     (elsewhere / "index.bdmv").write_bytes(b"i")
     (backup / "BDMV").symlink_to(elsewhere, target_is_directory=True)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [backup], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 0
@@ -685,7 +686,7 @@ def test_delete_job_files_does_not_follow_a_symlinked_folder(tmp_path: Path) -> 
     link = media_root / "Iron Man (2008)"
     link.symlink_to(elsewhere, target_is_directory=True)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 0
@@ -700,7 +701,7 @@ def test_delete_job_files_refuses_a_folder_outside_media_root(tmp_path: Path) ->
     outside = tmp_path / "other" / "Iron Man (2008)"
     (outside / "BDMV").mkdir(parents=True)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002",
         [media_root / ".." / "other" / "Iron Man (2008)"],
         raw_root=raw_root,
@@ -720,7 +721,7 @@ def test_delete_job_files_never_removes_media_root_itself(tmp_path: Path, spelli
     keep.write_bytes(b"k")
     target = media_root if spelling == "root" else media_root / "sub" / ".."
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [target], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 0
@@ -735,7 +736,7 @@ def test_delete_job_files_skips_a_dangling_symlink(tmp_path: Path) -> None:
     link = media_root / "gone.mkv"
     link.symlink_to(tmp_path / "missing.mkv")
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 0
@@ -752,7 +753,7 @@ def test_delete_job_files_unlinks_a_symlinked_file_but_keeps_its_target(tmp_path
     link = media_root / "link.mkv"
     link.symlink_to(target)
 
-    counters = jobs_router._delete_job_files(
+    counters = job_files.delete_job_files(
         "job_01JZXR7K3M5Q8N4VWA00000002", [link], raw_root=raw_root, media_root=media_root
     )
     assert counters["media_files_removed"] == 1

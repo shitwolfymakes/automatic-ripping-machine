@@ -8,7 +8,7 @@ validation a crafted id like `../../etc/passwd` traverses out of those roots
 Two layers are asserted here:
   1. Route boundary — endpoints pin `{job_id}` to the exact `job_<ULID>`
      shape, so a malformed id is rejected with 422 before any handler runs.
-  2. Defence-in-depth — `per_job_log_path` / `_delete_job_files` re-validate
+  2. Defence-in-depth — `per_job_log_path` / `delete_job_files` re-validate
      and raise `ValueError`, so the sinks stay safe even if called directly.
 """
 
@@ -22,6 +22,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend import job_files
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
@@ -96,7 +97,7 @@ def test_delete_job_files_rejects_bad_id_without_touching_fs(tmp_path: Path) -> 
     sentinel = tmp_path / "secret"  # lives OUTSIDE raw_root
     sentinel.write_text("keep me")
     with pytest.raises(ValueError):
-        jobs_router._delete_job_files("../secret", [], raw_root=raw_root, media_root=tmp_path / "media")
+        job_files.delete_job_files("../secret", [], raw_root=raw_root, media_root=tmp_path / "media")
     assert sentinel.exists()  # guard fired before any rmtree
 
 
