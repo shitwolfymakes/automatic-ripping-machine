@@ -172,6 +172,21 @@ def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -
     )
 
 
+def _done_fields(result: RipResult) -> dict[str, object]:
+    """The track patch for a finished title: DONE, plus each of its output path, size, checksum and duration that the
+    rip reported."""
+    fields: dict[str, object] = {"status": TrackStatus.DONE}
+    if result.output_path is not None:
+        fields["output_path"] = str(result.output_path)
+    if result.size_bytes is not None:
+        fields["size_bytes"] = result.size_bytes
+    if result.sha256 is not None:
+        fields["sha256"] = result.sha256
+    if result.duration_seconds is not None:
+        fields["duration_seconds"] = result.duration_seconds
+    return fields
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -1178,16 +1193,7 @@ class _DiscRip:
             if result.ok:
                 if result.output_path is not None:
                     self._kept.add(Path(result.output_path))
-                fields: dict[str, object] = {"status": TrackStatus.DONE}
-                if result.output_path is not None:
-                    fields["output_path"] = str(result.output_path)
-                if result.size_bytes is not None:
-                    fields["size_bytes"] = result.size_bytes
-                if result.sha256 is not None:
-                    fields["sha256"] = result.sha256
-                if result.duration_seconds is not None:
-                    fields["duration_seconds"] = result.duration_seconds
-                await self._controller._patch_track_with_retry(track.id, **fields)
+                await self._controller._patch_track_with_retry(track.id, **_done_fields(result))
                 logger.info(
                     "track %s done size=%s duration=%s",
                     track.id,

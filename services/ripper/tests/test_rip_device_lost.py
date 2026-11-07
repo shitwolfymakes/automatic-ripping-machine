@@ -447,3 +447,22 @@ def test_resumable_is_false_for_an_iso_source(tmp_path: Path) -> None:
     iso = tmp_path / "disc.iso"
     iso.write_bytes(b"x")
     assert jc_module._resumable(DiscType.DVD, str(iso), [_track(0)]) is False
+
+
+def test_done_fields_carries_every_reported_field_in_order() -> None:
+    """A result with every field becomes a DONE patch holding all of them, in a fixed key order."""
+    result = RipResult(ok=True, output_path=Path("/x/a.mkv"), size_bytes=5, sha256="abc", duration_seconds=7)
+    fields = jc_module._done_fields(result)
+    assert list(fields) == ["status", "output_path", "size_bytes", "sha256", "duration_seconds"]
+    assert fields == {
+        "status": TrackStatus.DONE,
+        "output_path": "/x/a.mkv",
+        "size_bytes": 5,
+        "sha256": "abc",
+        "duration_seconds": 7,
+    }
+
+
+def test_done_fields_without_reported_fields_is_only_done() -> None:
+    """A result that reported nothing becomes a patch holding just the DONE status."""
+    assert jc_module._done_fields(RipResult(ok=True)) == {"status": TrackStatus.DONE}
