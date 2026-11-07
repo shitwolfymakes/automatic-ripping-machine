@@ -462,28 +462,7 @@ class JobController:
                     logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                     return
 
-                try:
-                    await self._run_rip(job, device_path)
-                except httpx.HTTPStatusError as e:
-                    # Backend rejected a state transition (e.g. rip-start
-                    # 422 because identify produced an empty scan_result).
-                    # Retrying won't fix it — log clearly and let the
-                    # pipeline exit so the operator can abandon the job.
-                    logger.error(
-                        "rip pipeline aborted: backend returned %s for %s — abandon job_id=%s manually",
-                        e.response.status_code,
-                        e.request.url,
-                        job.id,
-                    )
-                    return
-                except asyncio.CancelledError:
-                    # Backend abandon → WS `job.abandoned` → task cancel.
-                    # makemkvcon (or the abcde/dd subprocess) gets killed
-                    # by its own finally-block subprocess cleanup; we just
-                    # log and let the cancellation propagate so the lock
-                    # releases without calling rip-complete.
-                    logger.info("rip cancelled job_id=%s", job.id)
-                    raise
+                await self._run_rip_guarded(job, device_path)
 
     async def _pass_gate(self, job: Job, spec: _WaitSpec) -> bool:
         """Wait a job parked at `spec`'s gate until it leaves, recording the status it left in; True unless it left
@@ -495,6 +474,32 @@ class JobController:
             return False
         job.status = resolved.status
         return True
+
+    async def _run_rip_guarded(self, job: Job, device_path: str) -> None:
+        """Run the rip. A backend rejection of a state transition is logged and ends the pipeline; a cancel (abandon)
+        is logged and propagates."""
+        try:
+            await self._run_rip(job, device_path)
+        except httpx.HTTPStatusError as e:
+            # Backend rejected a state transition (e.g. rip-start
+            # 422 because identify produced an empty scan_result).
+            # Retrying won't fix it — log clearly and let the
+            # pipeline exit so the operator can abandon the job.
+            logger.error(
+                "rip pipeline aborted: backend returned %s for %s — abandon job_id=%s manually",
+                e.response.status_code,
+                e.request.url,
+                job.id,
+            )
+            return
+        except asyncio.CancelledError:
+            # Backend abandon → WS `job.abandoned` → task cancel.
+            # makemkvcon (or the abcde/dd subprocess) gets killed
+            # by its own finally-block subprocess cleanup; we just
+            # log and let the cancellation propagate so the lock
+            # releases without calling rip-complete.
+            logger.info("rip cancelled job_id=%s", job.id)
+            raise
 
     async def _scan_or_none(self, device_path: str) -> ScanResult | None:
         """Scan the disc, or None after a log line when the scan fails or the drive goes absent mid-scan (which ends
