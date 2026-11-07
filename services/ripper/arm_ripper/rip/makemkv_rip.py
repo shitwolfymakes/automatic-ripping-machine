@@ -513,6 +513,27 @@ async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
         pass
 
 
+async def _exit_error(proc: asyncio.subprocess.Process, state: _ParserState) -> str | None:
+    """The error text for a makemkvcon run that wasn't stopped: the expired-binary refusal, or the end of stderr on a
+    non-zero exit; None for a clean exit.
+    """
+    if state.binary_expired:
+        return _compose_error(
+            "makemkvcon refused: binary is past its hard-coded expiry "
+            "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
+            "rebuild the ripper image after upstream ships a fresher tarball. "
+            "See docs/user/MakeMKV-Ripper.md § Failure modes.",
+            state.diagnostics,
+        )
+    if proc.returncode != 0:
+        stderr = b""
+        if proc.stderr is not None:
+            stderr = await proc.stderr.read()
+        msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
+        return _compose_error(f"makemkvcon failed: {msg}", state.diagnostics)
+    return None
+
+
 async def _run_makemkvcon(
     cmd: list[str],
     state: _ParserState,
@@ -572,22 +593,7 @@ async def _run_makemkvcon(
     if stopped:
         return STOPPED_ERROR
 
-    if state.binary_expired:
-        return _compose_error(
-            "makemkvcon refused: binary is past its hard-coded expiry "
-            "(MSG:5021). MakeMKV beta binaries carry a 60-day kill-switch; "
-            "rebuild the ripper image after upstream ships a fresher tarball. "
-            "See docs/user/MakeMKV-Ripper.md § Failure modes.",
-            state.diagnostics,
-        )
-
-    if proc.returncode != 0:
-        stderr = b""
-        if proc.stderr is not None:
-            stderr = await proc.stderr.read()
-        msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
-        return _compose_error(f"makemkvcon failed: {msg}", state.diagnostics)
-    return None
+    return await _exit_error(proc, state)
 
 
 async def rip_disc(

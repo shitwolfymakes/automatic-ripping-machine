@@ -966,3 +966,47 @@ async def test_kill_if_running_swallows_a_wait_that_raises(error):
     proc = _Proc([])
     await makemkv_rip._kill_if_running(_as_process(proc))
     assert proc.returncode == -9
+
+
+class _StderrStream:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def read(self) -> bytes:
+        return self._data
+
+
+def _exited_proc(returncode: int, stderr: bytes | None) -> Any:
+    proc = _FakeProc([], returncode=returncode)
+    proc.returncode = returncode
+    proc.stderr = None if stderr is None else _StderrStream(stderr)  # type: ignore[assignment]
+    return proc
+
+
+async def test_exit_error_binary_expired_wins_over_a_nonzero_exit():
+    state = makemkv_rip._ParserState()
+    state.binary_expired = True
+    state.diagnostics.append("diag line")
+    error = await makemkv_rip._exit_error(_exited_proc(1, b"boom"), state)
+    assert error is not None
+    assert error.startswith("makemkvcon refused: binary is past its hard-coded expiry (MSG:5021).")
+    assert error.endswith(": diag line")
+    assert "boom" not in error
+
+
+async def test_exit_error_clean_exit_is_none():
+    assert await makemkv_rip._exit_error(_exited_proc(0, b"ignored"), makemkv_rip._ParserState()) is None
+
+
+async def test_exit_error_nonzero_reports_the_stripped_last_400_chars_of_stderr():
+    stderr = b"HEAD" + b"x" * 500 + b"TAIL  \n"
+    state = makemkv_rip._ParserState()
+    error = await makemkv_rip._exit_error(_exited_proc(1, stderr), state)
+    assert error == makemkv_rip._compose_error("makemkvcon failed: " + "x" * 396 + "TAIL", state.diagnostics)
+
+
+@pytest.mark.parametrize("stderr", [b"", None], ids=["empty_stderr", "no_stderr"])
+async def test_exit_error_nonzero_without_stderr_reports_the_exit_code(stderr):
+    state = makemkv_rip._ParserState()
+    error = await makemkv_rip._exit_error(_exited_proc(3, stderr), state)
+    assert error == makemkv_rip._compose_error("makemkvcon failed: exit=3", state.diagnostics)
