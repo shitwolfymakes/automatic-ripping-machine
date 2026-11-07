@@ -18,7 +18,7 @@ from arm_common.schemas import DiscFingerprintInput  # noqa: E402
 
 import arm_ripper.scan.makemkv as makemkv_mod  # noqa: E402
 from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
-from arm_ripper.scan.makemkv import ScanError, scan_disc  # noqa: E402
+from arm_ripper.scan.makemkv import ScanError, _fingerprints, scan_disc  # noqa: E402
 
 
 class _Stream:
@@ -203,3 +203,24 @@ async def test_missing_cinfo_and_no_titles_is_unknown_and_not_bluray(monkeypatch
 
     assert result.disc_type == DiscType.UNKNOWN
     assert flags == [False]
+
+
+def test_fingerprints_all_present_in_fixed_order() -> None:
+    probe = DiscProbe(crc64="c64", thediscdb="tdb", matrix256="m256")
+
+    assert _fingerprints(probe) == [
+        DiscFingerprintInput(algo="crc64", value="c64"),
+        DiscFingerprintInput(algo="thediscdb", value="tdb"),
+        DiscFingerprintInput(algo="matrix256", value="m256"),
+    ]
+
+
+@pytest.mark.parametrize("empty", ["", None])
+def test_fingerprints_none_present_is_empty(empty: str | None) -> None:
+    assert _fingerprints(DiscProbe(crc64=empty, thediscdb=empty, matrix256=empty)) == []
+
+
+def test_fingerprints_only_thediscdb() -> None:
+    probe = DiscProbe(crc64=None, thediscdb="tdb", matrix256="")
+
+    assert _fingerprints(probe) == [DiscFingerprintInput(algo="thediscdb", value="tdb")]

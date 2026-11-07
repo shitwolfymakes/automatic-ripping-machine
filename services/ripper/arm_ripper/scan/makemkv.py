@@ -5,7 +5,7 @@ from typing import Callable, Iterable
 
 from arm_common import DiscType, MakemkvKeyState
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.scan.disc_probe import probe_disc
+from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
@@ -323,6 +323,18 @@ async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | Non
     return _probe_outcome(state, proc.returncode)
 
 
+def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
+    """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
+    fingerprints: list[DiscFingerprintInput] = []
+    if probe.crc64:
+        fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
+    if probe.thediscdb:
+        fingerprints.append(DiscFingerprintInput(algo="thediscdb", value=probe.thediscdb))
+    if probe.matrix256:
+        fingerprints.append(DiscFingerprintInput(algo="matrix256", value=probe.matrix256))
+    return fingerprints
+
+
 async def scan_disc(device_path: str) -> ScanResult:
     cmd = ["makemkvcon", "-r", "--cache=1", "info", makemkv_source_url(device_path)]
     logger.info("makemkvcon info device=%s", device_path)
@@ -373,18 +385,10 @@ async def scan_disc(device_path: str) -> ScanResult:
         disc_type = _classify_from_titles(titles)
     probe = await probe_disc(device_path, bluray=disc_type == DiscType.BLURAY)
 
-    fingerprints: list[DiscFingerprintInput] = []
-    if probe.crc64:
-        fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
-    if probe.thediscdb:
-        fingerprints.append(DiscFingerprintInput(algo="thediscdb", value=probe.thediscdb))
-    if probe.matrix256:
-        fingerprints.append(DiscFingerprintInput(algo="matrix256", value=probe.matrix256))
-
     return ScanResult(
         disc_type=disc_type,
         volume_label=volume_label,
         titles=titles,
-        fingerprints=fingerprints,
+        fingerprints=_fingerprints(probe),
         bd_meta=probe.bd_meta,
     )
