@@ -3,7 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -113,6 +113,14 @@ SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3
 # attribute afterward, which is how every existing wait test already
 # configures the timeout.
 _RESOLUTION_TIMEOUT_UNSET = object()
+
+
+def _spawn_tracked(coro: Coroutine[Any, Any, None], tasks: set[asyncio.Task[None]]) -> None:
+    """Run `coro` as a fire-and-forget task, held in `tasks` until it finishes so it is not garbage-collected
+    mid-run."""
+    task = asyncio.create_task(coro)
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
 
 
 def _command_payload(envelope: WSEnvelope) -> dict[str, Any]:
@@ -322,9 +330,7 @@ class JobController:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
             active.cancel()
         if delete_raw:
-            task = asyncio.create_task(self._wipe_raw(job_id))
-            self._wipe_tasks.add(task)
-            task.add_done_callback(self._wipe_tasks.discard)
+            _spawn_tracked(self._wipe_raw(job_id), self._wipe_tasks)
         # Abandon means "done with this disc — give it back". The lifecycle's
         # post-rip eject (end of _run_rip) never runs on an abandon exit, so
         # eject here: when this job owns the drive's pipeline (ripping or
@@ -739,9 +745,7 @@ class JobController:
         """Fire-and-forget community-keydb refresh. The rip proceeds immediately
         with the on-disk keydb; a fresh keydb benefits the next rip. Errors are
         swallowed — a keydb hiccup must never abort a rip."""
-        task = asyncio.create_task(self._keydb_refresh_and_report(enabled=enabled))
-        self._keydb_tasks.add(task)
-        task.add_done_callback(self._keydb_tasks.discard)
+        _spawn_tracked(self._keydb_refresh_and_report(enabled=enabled), self._keydb_tasks)
 
     async def _keydb_refresh_and_report(self, *, enabled: bool) -> None:
         try:
@@ -772,9 +776,7 @@ class JobController:
         """Fire-and-forget MakeMKV SDF refresh. The rip proceeds immediately
         with the on-disk SDF; a fresh SDF benefits the next rip. Errors are
         swallowed — an SDF hiccup must never abort a rip."""
-        task = asyncio.create_task(self._sdf_refresh_and_report(enabled=enabled))
-        self._sdf_tasks.add(task)
-        task.add_done_callback(self._sdf_tasks.discard)
+        _spawn_tracked(self._sdf_refresh_and_report(enabled=enabled), self._sdf_tasks)
 
     async def _sdf_refresh_and_report(self, *, enabled: bool) -> None:
         try:
