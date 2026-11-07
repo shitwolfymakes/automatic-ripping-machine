@@ -15,7 +15,7 @@ import arm_ripper.recovery as recovery_module
 from arm_common import DiscType, JobStatus
 from arm_common.schemas import HeldJobView, JobView, RipStartResponse
 from arm_ripper.drive_poll import DriveState
-from arm_ripper.recovery import _disc_present, boot_probe, wipe_raw_dir
+from arm_ripper.recovery import _disc_present, _resume_in_flight_job, boot_probe, wipe_raw_dir
 
 
 def _make_view(status: JobStatus = JobStatus.RIPPING, *, job_id: str = "job_resume") -> JobView:
@@ -327,3 +327,29 @@ def test_disc_present_false_and_warns_on_oserror(
     assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
         (logging.WARNING, "boot probe: ioctl failed: no ioctl")
     ]
+
+
+async def test_resume_in_flight_job_wipes_raw_dir_and_resumes(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    raw = tmp_path / "job_resume"
+    raw.mkdir()
+    (raw / "t00.mkv").write_bytes(b"x")
+    controller = FakeController()
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _resume_in_flight_job(controller, _make_view(), "/dev/sr0", "drv_x")  # type: ignore[arg-type]
+    assert not raw.exists()
+    assert controller.resume_calls == [("job_resume", "/dev/sr0")]
+    assert "boot probe: resuming in-flight job_id=job_resume on drive_id=drv_x" in [
+        r.getMessage() for r in caplog.records
+    ]
+
+
+async def test_resume_in_flight_job_logs_controller_failure_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    controller = FakeController()
+    controller.raises = RuntimeError("boom")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _resume_in_flight_job(controller, _make_view(), "/dev/sr0", "drv_x")  # type: ignore[arg-type]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert [r.getMessage() for r in errors] == ["boot probe: resume failed for job_id=job_resume: boom"]
+    assert errors[0].exc_info is not None

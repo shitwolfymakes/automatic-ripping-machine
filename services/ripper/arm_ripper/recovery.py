@@ -18,6 +18,7 @@ from pathlib import Path
 
 import httpx
 
+from arm_common.schemas import JobView
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.job_controller import JobController
@@ -73,12 +74,7 @@ async def boot_probe(
     if not _disc_present(device_path, job.id):
         return
 
-    logger.info("boot probe: resuming in-flight job_id=%s on drive_id=%s", job.id, drive_id)
-    try:
-        await wipe_raw_dir(job.id)
-        await controller.resume_inflight_job(job, device_path)
-    except Exception as exc:  # noqa: BLE001 — boot must continue
-        logger.exception("boot probe: resume failed for job_id=%s: %s", job.id, exc)
+    await _resume_in_flight_job(controller, job, device_path, drive_id)
 
 
 def _disc_present(device_path: str, job_id: str) -> bool:
@@ -99,6 +95,18 @@ def _disc_present(device_path: str, job_id: str) -> bool:
         )
         return False
     return True
+
+
+async def _resume_in_flight_job(controller: JobController, job: JobView, device_path: str, drive_id: str) -> None:
+    """Wipe the crashed rip's `/raw/<job_id>/` and hand the job to the controller to re-rip; a failure is logged,
+    never raised, so boot continues.
+    """
+    logger.info("boot probe: resuming in-flight job_id=%s on drive_id=%s", job.id, drive_id)
+    try:
+        await wipe_raw_dir(job.id)
+        await controller.resume_inflight_job(job, device_path)
+    except Exception as exc:  # noqa: BLE001 — boot must continue
+        logger.exception("boot probe: resume failed for job_id=%s: %s", job.id, exc)
 
 
 async def _recover_held_job(
