@@ -498,9 +498,8 @@ def test_progress_payload_with_no_rate_or_phase_leaves_the_rate_none_and_omits_p
 
 
 def _disc_rip(controller: JobController) -> jc_module._DiscRip:
-    """A disc rip on `/dev/sr0` reaching the drive handle through `controller`."""
+    """A disc rip on `/dev/sr0` built from `controller`'s parts."""
     return jc_module._DiscRip(
-        controller,
         backend=controller._backend,
         ws=controller._ws,
         ejector=controller._ejector,

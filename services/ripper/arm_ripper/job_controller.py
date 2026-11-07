@@ -538,7 +538,6 @@ class JobController:
     ) -> None:
         """Rip every title of the disc, report rip-complete and eject."""
         await _DiscRip(
-            self,
             backend=self._backend,
             ws=self._ws,
             ejector=self._ejector,
@@ -558,7 +557,6 @@ class _DiscRip:
 
     def __init__(
         self,
-        controller: "JobController",
         *,
         backend: BackendRetry,
         ws: WSClient | None,
@@ -571,7 +569,6 @@ class _DiscRip:
         device_path: str,
         rip_start: RipStartResponse,
     ) -> None:
-        self._controller = controller
         self._backend = backend
         self._ws = ws
         self._ejector = ejector

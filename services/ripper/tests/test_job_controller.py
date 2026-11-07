@@ -1774,7 +1774,6 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
     controller._backend.patch_track = _record  # type: ignore[method-assign]
     tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
     rip = jc_module._DiscRip(
-        controller,
         backend=controller._backend,
         ws=controller._ws,
         ejector=controller._ejector,
