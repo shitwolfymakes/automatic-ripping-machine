@@ -751,6 +751,82 @@ async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_s
     assert client.rip_complete_calls == ["job_test"]
 
 
+async def test_long_wait_returns_none_when_the_job_leaves_the_gate_another_way():
+    """In the long-wait loop, a job that left the gate by a non-success status (here ABANDONED)
+    ends the wait with None instead of waiting out the deadline."""
+    calls = 0
+
+    async def fn(job_id: str) -> JobView:
+        nonlocal calls
+        calls += 1
+        # Call 1 is the first-wait REST read (still parked); call 2 is long-wait cycle 1.
+        return _view(JobStatus.AWAITING_USER_ID if calls == 1 else JobStatus.ABANDONED)
+
+    client = FakeClient()
+    client.get_job = fn  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test")
+
+    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+
+    assert result is None
+    assert calls >= 2
+
+
+async def test_wake_while_still_parked_rearms_the_event():
+    """A WS wake that finds the job still parked clears the Event so the next cycle waits again
+    instead of spinning on an already-set Event."""
+    calls = 0
+    set_when_checked: list[bool] = []
+    controller = JobController(FakeClient(), "drv_test")
+
+    async def fn(job_id: str) -> JobView:
+        nonlocal calls
+        calls += 1
+        event = controller._resolution_events["job_test"]
+        if calls == 2:
+            # Long-wait cycle 1 (timed out, no wake yet): still parked, fire the WS wake.
+            event.set()
+        elif calls == 4:
+            # Long-wait cycle 3, after the woken cycle 2 cleared the Event: record its state.
+            set_when_checked.append(event.is_set())
+            return _view(JobStatus.IDENTIFIED, title="Resolved")
+        # Call 1 is the first-wait read; call 3 is the woken cycle 2 (still parked, then cleared).
+        return _view(JobStatus.AWAITING_USER_ID)
+
+    controller._client.get_job = fn  # type: ignore[method-assign]
+
+    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+
+    assert set_when_checked == [False]
+    assert result is not None
+    assert result.status == JobStatus.IDENTIFIED
+
+
+async def test_long_wait_keeps_waiting_through_a_failed_job_read():
+    """A REST failure during the long wait is read as 'keep waiting' (not abandon); the next
+    successful read still resolves the wait."""
+    calls = 0
+
+    async def fn(job_id: str) -> JobView:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _view(JobStatus.AWAITING_USER_ID)  # first-wait read
+        if calls == 2:
+            raise httpx.ConnectError("backend down")  # long-wait cycle 1: _safe_get_job -> None
+        return _view(JobStatus.IDENTIFIED, title="Resolved")  # long-wait cycle 2
+
+    client = FakeClient()
+    client.get_job = fn  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test")
+
+    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+
+    assert result is not None
+    assert result.status == JobStatus.IDENTIFIED
+    assert calls == 3
+
+
 async def test_disc_inserted_skipped_when_auto_rip_disabled(stub_scan, stub_eject):
     """auto_rip_on_insert=False short-circuits the pipeline before scan."""
     client = FakeClient()
