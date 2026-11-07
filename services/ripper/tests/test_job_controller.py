@@ -712,6 +712,54 @@ async def test_abandon_stale_job_during_other_rip_does_not_eject(eject_spy):
     other.cancel()
 
 
+async def test_spawn_eject_creates_task_that_ejects_the_device(eject_spy):
+    """With a device path and no running task, _spawn_eject runs _eject_with_retry(device_path) in a new task."""
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._spawn_eject()
+
+    assert controller._eject_task is not None
+    await controller._eject_task
+    assert eject_spy == ["/dev/sr0"]
+
+
+async def test_spawn_eject_without_device_path_does_nothing(eject_spy):
+    """A controller built without a device path never creates an eject task."""
+    controller = JobController(FakeClient(), "drv_test")
+
+    controller._spawn_eject()
+    await asyncio.sleep(0)
+
+    assert controller._eject_task is None
+    assert eject_spy == []
+
+
+async def test_spawn_eject_is_deduped_while_a_task_is_running(monkeypatch):
+    """A second _spawn_eject while the first eject task is pending keeps the same task and ejects only once."""
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def _blocked(self, device_path: str) -> None:
+        calls.append(device_path)
+        await release.wait()
+
+    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _blocked)
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+
+    controller._spawn_eject()
+    first = controller._eject_task
+    await asyncio.sleep(0)
+    controller._spawn_eject()
+    await asyncio.sleep(0)
+
+    assert first is not None and not first.done()
+    assert controller._eject_task is first
+    assert calls == ["/dev/sr0"]
+
+    release.set()
+    await first
+
+
 async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_scan, stub_eject):
     """An identify.resolved WS event makes _await_resolution return immediately.
 
@@ -1240,6 +1288,96 @@ async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
     rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
     assert rc is None
     assert msg == "timeout"
+
+
+class _FakeProc:
+    """Stand-in subprocess: `communicate` returns canned output or raises; kill/wait are recorded."""
+
+    def __init__(self, *, stderr: bytes = b"", returncode: int | None = 0, timeout: bool = False) -> None:
+        self._stderr = stderr
+        self.returncode = returncode
+        self._timeout = timeout
+        self.calls: list[str] = []
+
+    async def communicate(self):
+        if self._timeout:
+            raise asyncio.TimeoutError
+        return b"", self._stderr
+
+    def kill(self) -> None:
+        self.calls.append("kill")
+
+    async def wait(self) -> None:
+        self.calls.append("wait")
+
+
+def _patch_exec(monkeypatch, proc: _FakeProc) -> None:
+    async def _fake_exec(*_a, **_k):
+        return proc
+
+    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+
+
+def _patch_exec_raising(monkeypatch, exc: OSError) -> None:
+    async def _fake_exec(*_a, **_k):
+        raise exc
+
+    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+
+
+async def test_run_command_spawn_failure_logs_warning_and_returns_error(monkeypatch, caplog):
+    """A spawn failure with log_failure=True warns '<argv0> errored: <err>' and returns (None, str(err))."""
+    _patch_exec_raising(monkeypatch, FileNotFoundError("no such eject"))
+
+    with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
+        result = await JobController._run_command("eject", "-sv", "/dev/sr0")
+
+    assert result == (None, "no such eject")
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [(logging.WARNING, "eject errored: no such eject")]
+
+
+async def test_run_command_spawn_failure_is_silent_without_log_failure(monkeypatch, caplog):
+    """A spawn failure (generic OSError) with log_failure=False logs nothing but returns (None, str(err))."""
+    _patch_exec_raising(monkeypatch, OSError("boom"))
+
+    with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
+        result = await JobController._run_command("umount", "/dev/sr0", log_failure=False)
+
+    assert result == (None, "boom")
+    assert caplog.records == []
+
+
+async def test_run_command_timeout_logs_warning_kills_and_waits(monkeypatch, caplog):
+    """A communicate() timeout with log_failure=True kills and reaps the child, warns, and returns (None, 'timeout')."""
+    proc = _FakeProc(timeout=True, returncode=None)
+    _patch_exec(monkeypatch, proc)
+
+    with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
+        result = await JobController._run_command("eject", "/dev/sr0")
+
+    assert result == (None, "timeout")
+    assert proc.calls == ["kill", "wait"]
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [(logging.WARNING, "eject timed out")]
+
+
+async def test_run_command_success_returns_returncode_and_stripped_stderr(monkeypatch, caplog):
+    """On success it returns (returncode, stderr decoded and stripped) without logging or killing."""
+    proc = _FakeProc(stderr=b"  some stderr \n", returncode=0)
+    _patch_exec(monkeypatch, proc)
+
+    with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
+        result = await JobController._run_command("eject", "/dev/sr0")
+
+    assert result == (0, "some stderr")
+    assert proc.calls == []
+    assert caplog.records == []
+
+
+async def test_run_command_replaces_invalid_utf8_in_stderr(monkeypatch):
+    """Undecodable stderr bytes become U+FFFD instead of raising, and a non-zero returncode is passed through."""
+    _patch_exec(monkeypatch, _FakeProc(stderr=b"bad \xff byte\n", returncode=1))
+
+    assert await JobController._run_command("eject", "/dev/sr0") == (1, "bad \ufffd byte")
 
 
 async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
