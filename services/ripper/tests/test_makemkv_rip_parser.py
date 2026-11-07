@@ -1,8 +1,8 @@
 """Parse robot-mode `makemkvcon mkv --robot --progress=-stdout` output."""
 
-from arm_ripper.rip.makemkv_rip import (
-    _compose_error,
-    _extract_title_index_from_msg5003,
+from arm_ripper.rip.makemkv_rip import _compose_error
+from arm_ripper.rip.makemkv_robot import (
+    extract_title_index_from_msg5003,
     parse_diagnostic_msg,
     parse_msg_args,
     parse_prgc_save_position,
@@ -160,7 +160,7 @@ def test_msg_args_extracts_5003_title_index():
     assert parsed is not None
     code, args = parsed
     assert code == 5003
-    assert _extract_title_index_from_msg5003(args) == 2
+    assert extract_title_index_from_msg5003(args) == 2
 
 
 def test_msg_args_returns_none_for_non_msg_lines():
@@ -187,7 +187,7 @@ def test_msg_args_handles_escaped_quotes_in_args():
 def test_extract_title_index_returns_none_for_no_int_args():
     # Defensive — if MakeMKV ever changes 5003's arg order so no int
     # appears, the parser must not crash; the dispatcher logs a warn.
-    assert _extract_title_index_from_msg5003(["foo", "bar.mkv"]) is None
+    assert extract_title_index_from_msg5003(["foo", "bar.mkv"]) is None
 
 
 # --- PRGC:5017 — primary per-title signal in `mkv all` mode ------------------
