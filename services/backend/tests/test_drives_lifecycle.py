@@ -264,7 +264,7 @@ def test_enroll_503_when_host_paths_are_unset(signing_key: bytes) -> None:
 
 
 def test_enroll_unknown_drive_is_404_even_without_a_manager(signing_key: bytes) -> None:
-    """A4: _load_drive runs before _manager, so an unknown drive_id is 404
+    """A4: _load_drive runs before require_ripper_manager, so an unknown drive_id is 404
     regardless of docker's state — no manager to consult means nothing to
     say about docker either."""
     db = FakeSession()

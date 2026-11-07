@@ -21,8 +21,7 @@ from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.iso_library import library_configured, library_host_path
 from arm_backend.iso_rips import IsoRipError, cancel_iso_rip, create_iso_rip
-from arm_backend.routers._deps import get_hub
-from arm_backend.routers.drives import _manager
+from arm_backend.routers._deps import get_hub, require_ripper_manager
 from arm_common import Drive, DriveKind, DriveLifecycle, User
 from arm_common.schemas import (
     IsoFolderEntry,
@@ -145,7 +144,7 @@ async def create_rip(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> IsoRipCreated:
-    manager = _manager(request)
+    manager = require_ripper_manager(request)
     hub = get_hub(request)
     try:
         drive = await create_iso_rip(db, manager, hub, req.path, req.session_id)
@@ -161,7 +160,7 @@ async def cancel_rip(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> Response:
-    manager = _manager(request)
+    manager = require_ripper_manager(request)
     hub = get_hub(request)
     try:
         await cancel_iso_rip(db, manager, hub, drive_id)

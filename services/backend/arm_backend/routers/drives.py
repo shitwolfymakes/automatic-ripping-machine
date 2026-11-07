@@ -18,7 +18,8 @@ from arm_backend.drive_health import (
     scanner_findings,
 )
 from arm_backend.drive_scanner import PruneUnavailable
-from arm_backend.ripper_manager import RipperManager, RipperManagerError
+from arm_backend.routers._deps import require_ripper_manager
+from arm_backend.ripper_manager import RipperManagerError
 from arm_common import Drive, DriveKind, DriveLifecycle, DriveStatus, Job, Session, User
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.models._columns import enum_value_str
@@ -280,21 +281,6 @@ async def _view_for(db: AsyncSession, drive: Drive) -> DriveView:
     return _to_view(drive, jobs)
 
 
-def _manager(request: Request) -> RipperManager:
-    manager: RipperManager | None = getattr(request.app.state, "ripper_manager", None)
-    if manager is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ripper manager unavailable: docker socket not available",
-        )
-    if not manager.host_paths_set():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ripper manager disabled: ARM_HOST_*_PATH not set",
-        )
-    return manager
-
-
 def _drive_lock(request: Request, drive_id: str) -> asyncio.Lock:
     """One `asyncio.Lock` per drive, lazily created and cached on
     `app.state` for the process lifetime. Guards enroll/unenroll against a
@@ -323,7 +309,7 @@ async def enroll_drive(
     async with _drive_lock(request, drive_id):
         drive = await _load_drive(db, drive_id)
         _require_optical(drive, "enroll")
-        manager = _manager(request)
+        manager = require_ripper_manager(request)
         _require_lifecycle(drive, "enroll", DriveLifecycle.DETECTED, DriveLifecycle.IGNORED)
         if not drive.present:
             raise HTTPException(
@@ -403,7 +389,7 @@ async def unenroll_drive(
     async with _drive_lock(request, drive_id):
         drive = await _load_drive(db, drive_id)
         _require_optical(drive, "unenroll")
-        manager = _manager(request)
+        manager = require_ripper_manager(request)
         _require_lifecycle(drive, "unenroll", DriveLifecycle.ENROLLED)
         # Removing the ripper kills its pipeline, so any job it still owns
         # (scan, identify, the review countdown, the rip) would be orphaned.

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.ripper_manager import RipperManager
 from arm_backend.ws import WSHub
 
 
@@ -17,3 +18,19 @@ def get_stage_runner(request: Request) -> EpisodeStageRunner | None:
     """None when `app.state` carries no runner (e.g. an existing router test
     that never set one up) — callers then just skip scheduling."""
     return getattr(request.app.state, "episode_stage", None)
+
+
+def require_ripper_manager(request: Request) -> RipperManager:
+    """The app's ripper manager, or a 503 when it is missing or disabled."""
+    manager: RipperManager | None = getattr(request.app.state, "ripper_manager", None)
+    if manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ripper manager unavailable: docker socket not available",
+        )
+    if not manager.host_paths_set():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ripper manager disabled: ARM_HOST_*_PATH not set",
+        )
+    return manager
