@@ -435,6 +435,62 @@ async def _run_keycheck(monkeypatch, items, *, probe_exc_on=None):
     return client, refreshed, probed
 
 
+def _record_key_pass(monkeypatch):
+    events: list[tuple] = []
+
+    async def refresh(*, key):
+        events.append(("refresh", key))
+
+    async def probe(key):
+        events.append(("probe", key))
+        return ("valid", "detail")
+
+    monkeypatch.setattr(main, "refresh_makemkv_key", refresh)
+    monkeypatch.setattr(main, "probe_makemkv_key", probe)
+    return events
+
+
+class _RecordingKeyClient(_KeyClient):
+    def __init__(self, items, events) -> None:
+        super().__init__(items)
+        self.events = events
+
+    async def report_makemkv_key_status(self, *, state, detail) -> None:
+        self.events.append(("report", state, detail))
+
+
+async def test_check_makemkv_key_first_pass_refreshes_then_probes_and_reports(monkeypatch) -> None:
+    events = _record_key_pass(monkeypatch)
+    client = _RecordingKeyClient(["K"], events)
+    returned = await main._check_makemkv_key(client, last_key=None, first=True)  # type: ignore[arg-type]
+    assert returned == "K"
+    assert events == [("refresh", "K"), ("probe", "K"), ("report", "valid", "detail")]
+
+
+async def test_check_makemkv_key_unchanged_key_skips_refresh_but_probes_and_reports(monkeypatch) -> None:
+    events = _record_key_pass(monkeypatch)
+    client = _RecordingKeyClient(["K"], events)
+    returned = await main._check_makemkv_key(client, last_key="K", first=False)  # type: ignore[arg-type]
+    assert returned == "K"
+    assert events == [("probe", "K"), ("report", "valid", "detail")]
+
+
+async def test_check_makemkv_key_changed_key_refreshes(monkeypatch) -> None:
+    events = _record_key_pass(monkeypatch)
+    client = _RecordingKeyClient(["K2"], events)
+    returned = await main._check_makemkv_key(client, last_key="K1", first=False)  # type: ignore[arg-type]
+    assert returned == "K2"
+    assert events[0] == ("refresh", "K2")
+
+
+async def test_check_makemkv_key_config_error_propagates_before_any_step(monkeypatch) -> None:
+    events = _record_key_pass(monkeypatch)
+    client = _RecordingKeyClient([httpx.ConnectError("down")], events)
+    with pytest.raises(httpx.ConnectError):
+        await main._check_makemkv_key(client, last_key=None, first=True)  # type: ignore[arg-type]
+    assert events == []
+
+
 async def test_keycheck_first_pass_refreshes_and_unchanged_key_does_not(monkeypatch) -> None:
     client, refreshed, probed = await _run_keycheck(monkeypatch, ["K", "K", "K"])
     assert refreshed == ["K"]

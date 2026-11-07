@@ -190,6 +190,22 @@ def makemkv_key_changed(*, prev: str | None, current: str | None) -> bool:
     return _norm(prev) != _norm(current)
 
 
+async def _check_makemkv_key(client: BackendClient, *, last_key: str | None, first: bool) -> str | None:
+    """One key-validity pass: fetch the configured makemkv key, write it to settings.conf on the first pass or when it
+    changed, probe it and report the result. Returns the key it checked.
+    """
+    cfg = await client.get_ripper_config()
+    key = cfg.makemkv_key
+    if first or makemkv_key_changed(prev=last_key, current=key):
+        # Write settings.conf with the current key BEFORE probing, so the
+        # probe checks the key actually on disk. (Single call — do not
+        # double-invoke refresh_makemkv_key.)
+        await refresh_makemkv_key(key=key)
+    state, detail = await probe_makemkv_key(key)
+    await client.report_makemkv_key_status(state=state, detail=detail)
+    return key
+
+
 async def makemkv_keycheck_loop(client: BackendClient) -> None:
     """Probe makemkv key-validity on key-change + daily, report to the backend.
     Best-effort: errors are logged + swallowed (mirrors heartbeat_loop)."""
@@ -197,16 +213,7 @@ async def makemkv_keycheck_loop(client: BackendClient) -> None:
     first = True
     while True:
         try:
-            cfg = await client.get_ripper_config()
-            key = cfg.makemkv_key
-            if first or makemkv_key_changed(prev=last_key, current=key):
-                # Write settings.conf with the current key BEFORE probing, so the
-                # probe checks the key actually on disk. (Single call — do not
-                # double-invoke refresh_makemkv_key.)
-                await refresh_makemkv_key(key=key)
-            state, detail = await probe_makemkv_key(key)
-            await client.report_makemkv_key_status(state=state, detail=detail)
-            last_key = key
+            last_key = await _check_makemkv_key(client, last_key=last_key, first=first)
             first = False
         except (httpx.HTTPError, OSError) as exc:
             logger.warning("makemkv keycheck failed: %s", exc)
