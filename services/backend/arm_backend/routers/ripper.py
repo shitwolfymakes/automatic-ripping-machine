@@ -37,7 +37,7 @@ from arm_backend.identity.sources.thediscdb import (
     release_kind,
     release_result,
 )
-from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch, SnapshotStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
@@ -550,12 +550,32 @@ PREVIOUSLY_RIPPED_REASON = "previously_ripped"
 MAX_IDENTIFY_ATTEMPTS = 20
 
 
-async def _reject_previously_ripped(
+class UnknownDriveError(Exception):
+    """The request names no enrolled drive."""
+
+    def __init__(self, drive_id: str) -> None:
+        super().__init__(drive_id)
+        self.drive_id = drive_id
+
+
+class RippingPausedError(Exception):
+    """Ripping is paused and the review gate is off, so no new job is accepted."""
+
+
+class DiscAlreadyRippedError(Exception):
+    """on_previously_ripped=reject refused a disc that an earlier job already ripped."""
+
+    def __init__(self, previous_job_id: str) -> None:
+        super().__init__(previous_job_id)
+        self.previous_job_id = previous_job_id
+
+
+async def _record_duplicate_rejection(
     session: AsyncSession, hub: WSHub, drive: Drive, previous: Job, scan: ScanResult
-) -> HTTPException:
+) -> None:
     """on_previously_ripped=reject: create no job, record the refusal against
-    the earlier rip (event + inbox) and leave a note on the drive. Returns the
-    409 for the caller to raise once this is committed."""
+    the earlier rip (event + inbox) and leave a note on the drive. The caller
+    raises the refusal once this is committed."""
     title = previous.title or scan.volume_label or "an untitled disc"
     when = f" on {previous.ripped_at.date().isoformat()}" if previous.ripped_at else ""
     drive.notice = f"Ejected a disc already ripped as {title}{when}."
@@ -574,27 +594,23 @@ async def _reject_previously_ripped(
     )
     await session.commit()
     logger.info("identify drive_id=%s: disc already ripped as job_id=%s; rejecting it", drive.id, previous.id)
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"reason": PREVIOUSLY_RIPPED_REASON, "job_id": previous.id},
-    )
 
 
 class _IdentifyFlow:
-    """One identify request: the handler body held as a method object so later steps can split it."""
+    """One identify request, from scan to a saved job: finds or creates the job, identifies the disc and holds it."""
 
     def __init__(
         self,
         *,
         req: IdentifyRequest,
-        request: Request,
+        thediscdb_store: SnapshotStore | None,
         session: AsyncSession,
         dispatcher: MetadataDispatcher,
         hub: WSHub,
         stage_runner: EpisodeStageRunner | None,
     ) -> None:
         self.req = req
-        self.request = request
+        self.thediscdb_store = thediscdb_store
         self.session = session
         self.dispatcher = dispatcher
         self.hub = hub
@@ -619,7 +635,7 @@ class _IdentifyFlow:
             await self.session.execute(select(Drive).where(col(Drive.id) == self.req.drive_id))
         ).scalar_one_or_none()
         if drive is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {self.req.drive_id}")
+            raise UnknownDriveError(self.req.drive_id)
         return drive
 
     def _mark_new_disc(self, drive: Drive) -> None:
@@ -637,10 +653,7 @@ class _IdentifyFlow:
         # below); it does not reject the job. With the gate off, pause keeps its
         # original meaning: reject new jobs outright. (timed-review-gate spec §3)
         if cfg.ripping_paused and not cfg.hold_for_review:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="ripping is paused; no new jobs accepted",
-            )
+            raise RippingPausedError()
 
     async def _apply_previously_ripped_policy(self, drive: Drive, cfg: Config, scan: ScanResult) -> Job | None:
         """Returns the earlier rip to hold the disc against, or None; raises the 409 on reject."""
@@ -661,7 +674,8 @@ class _IdentifyFlow:
             elif earlier:
                 previous = earlier[0]
             if previous is not None and action == PreviouslyRippedAction.REJECT:
-                raise await _reject_previously_ripped(self.session, self.hub, drive, previous, scan)
+                await _record_duplicate_rejection(self.session, self.hub, drive, previous, scan)
+                raise DiscAlreadyRippedError(previous.id)
         return previous
 
     async def _reuse_or_create_job(self, drive: Drive, scan: ScanResult) -> Job:
@@ -713,7 +727,7 @@ class _IdentifyFlow:
         await self.session.flush()
 
     async def _lookup_thediscdb(self, job: Job, scan: ScanResult) -> DiscMatch | None:
-        store = getattr(self.request.app.state, "thediscdb", None)
+        store = self.thediscdb_store
         content_hash = next(
             (fp.value for fp in scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
             None,
@@ -1059,9 +1073,28 @@ async def identify(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> Job:
-    return await _IdentifyFlow(
-        req=req, request=request, session=session, dispatcher=dispatcher, hub=hub, stage_runner=stage_runner
-    ).run()
+    flow = _IdentifyFlow(
+        req=req,
+        thediscdb_store=getattr(request.app.state, "thediscdb", None),
+        session=session,
+        dispatcher=dispatcher,
+        hub=hub,
+        stage_runner=stage_runner,
+    )
+    try:
+        return await flow.run()
+    except UnknownDriveError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {exc.drive_id}") from exc
+    except RippingPausedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ripping is paused; no new jobs accepted",
+        ) from exc
+    except DiscAlreadyRippedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"reason": PREVIOUSLY_RIPPED_REASON, "job_id": exc.previous_job_id},
+        ) from exc
 
 
 @router.get("/jobs/{job_id}", response_model=JobView, dependencies=[Depends(require_service_token)])
