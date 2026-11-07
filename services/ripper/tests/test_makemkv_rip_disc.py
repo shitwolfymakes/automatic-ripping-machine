@@ -764,3 +764,149 @@ async def test_rip_disc_with_an_unset_stop_runs_to_completion(monkeypatch, tmp_p
     )
     assert result.overall_error is None
     assert result.titles[0].ok
+
+
+_DIAG_LINE = 'MSG:1002,32,1,"LIBMKV_TRACE: Exception","LIBMKV_TRACE: %1","Exception"'
+
+
+class _ScriptedHangingProc(_FakeProc):
+    """Streams `lines`, then never exits until killed. Counts wait() calls;
+    with `wait_raises_after_kill`, a wait() after the kill raises instead of returning."""
+
+    def __init__(self, lines: list[str], *, wait_raises_after_kill: bool = False) -> None:
+        super().__init__([(line + "\n").encode() for line in lines])
+        self._killed = asyncio.Event()
+        self.killed = False
+        self.kill_count = 0
+        self.waits_after_kill = 0
+        self._raise_after_kill = wait_raises_after_kill
+
+    async def wait(self) -> int:
+        if self.killed:
+            self.waits_after_kill += 1
+            if self._raise_after_kill:
+                raise RuntimeError("reap failed")
+            return -9
+        await self._killed.wait()
+        self.waits_after_kill += 1
+        return -9
+
+    def kill(self) -> None:
+        self.killed = True
+        self.kill_count += 1
+        self.returncode = -9
+        self._killed.set()
+
+
+def _spawn(monkeypatch, proc: _FakeProc) -> None:
+    async def fake_create_subprocess_exec(*_args: Any, **_kwargs: Any) -> _FakeProc:
+        return proc
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+
+@pytest.mark.parametrize("with_stop", [False, True], ids=["no_stop", "stop_never_set"])
+async def test_run_makemkvcon_timeout_kills_reaps_and_composes_the_error(monkeypatch, with_stop):
+    """No `stop` goes through wait_for; an unset `stop` goes through asyncio.wait.
+    Both end in the same kill, reap and composed timeout error."""
+    monkeypatch.setattr(makemkv_rip, "RIP_TIMEOUT_SECONDS", 0.02)
+    proc = _ScriptedHangingProc([_DIAG_LINE])
+    _spawn(monkeypatch, proc)
+    state = makemkv_rip._ParserState()
+
+    error = await makemkv_rip._run_makemkvcon(["makemkvcon"], state, stop=asyncio.Event() if with_stop else None)
+
+    assert state.diagnostics == ["LIBMKV_TRACE: Exception"]
+    assert proc.killed
+    assert proc.kill_count == 1
+    assert proc.waits_after_kill >= 1
+    assert error == makemkv_rip._compose_error(
+        f"makemkvcon timed out after {makemkv_rip.RIP_TIMEOUT_SECONDS}s", state.diagnostics
+    )
+    assert error.endswith(": LIBMKV_TRACE: Exception")
+
+
+async def test_run_makemkvcon_cancelled_swallows_a_reap_error_and_still_cancels(monkeypatch):
+    proc = _ScriptedHangingProc([], wait_raises_after_kill=True)
+    _spawn(monkeypatch, proc)
+    task = asyncio.create_task(makemkv_rip._run_makemkvcon(["makemkvcon"], makemkv_rip._ParserState()))
+    await asyncio.sleep(0.01)
+    assert not task.done()
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert proc.killed
+    assert proc.waits_after_kill == 1  # the reap ran, raised, and was swallowed
+
+
+async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropped(monkeypatch):
+    # Current behaviour, pinned for the guidelines refactor (#435): the cleanup cancels the streamer before
+    # the drain. Filed as a defect.
+    proc = _FakeProc(
+        [
+            (line + "\n").encode()
+            for line in (
+                _DIAG_LINE,
+                'PRGT:5024,0,"Saving all titles to MKV files"',
+                'PRGC:5017,0,"Saving to MKV file"',
+                "PRGV:5000,1000,10000",  # on_title_progress suspends here
+                'MSG:1002,32,1,"LIBMKV_TRACE: Late","LIBMKV_TRACE: %1","Late"',
+                'PRGC:5017,1,"Saving to MKV file"',
+            )
+        ]
+    )
+    _spawn(monkeypatch, proc)
+    state = makemkv_rip._ParserState()
+    entered = asyncio.Event()
+    never = asyncio.Event()
+
+    async def on_title_progress(_idx: int, _frac: float) -> None:
+        entered.set()
+        await never.wait()
+
+    error = await asyncio.wait_for(
+        makemkv_rip._run_makemkvcon(
+            ["makemkvcon"], state, on_title_progress=on_title_progress, eligible_source_indexes=[3, 7]
+        ),
+        timeout=2.0,
+    )
+
+    assert error is None
+    assert entered.is_set()
+    # Applied before the suspension.
+    assert state.diagnostics == ["LIBMKV_TRACE: Exception"]
+    assert state.current_title == 3
+    # Dropped after it: the late diagnostic and the move to title 7.
+    assert 7 not in state.titles
+
+
+async def test_run_makemkvcon_nonzero_exit_without_stderr_reports_the_exit_code(monkeypatch):
+    proc = _FakeProc([(_DIAG_LINE + "\n").encode()], returncode=3)
+    proc.stderr = None  # type: ignore[assignment]
+    _spawn(monkeypatch, proc)
+    state = makemkv_rip._ParserState()
+
+    error = await makemkv_rip._run_makemkvcon(["makemkvcon"], state)
+
+    assert state.diagnostics == ["LIBMKV_TRACE: Exception"]
+    assert error == makemkv_rip._compose_error("makemkvcon failed: exit=3", state.diagnostics)
+
+
+async def test_rip_disc_captured_title_without_fail_reason_gets_the_generic_error_only_if_eligible(
+    monkeypatch, tmp_path
+):
+    """A captured title (PRGT) with no file and no fail_reason adds nothing in the fail-reason loop:
+    eligible -> the generic "no .mkv" error; not eligible -> absent."""
+    _stub_subprocess(
+        monkeypatch, ['PRGT:5018,0,"Saving title #4 to MKV file"', 'PRGT:5018,0,"Saving title #9 to MKV file"']
+    )
+
+    result = await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, eligible_source_indexes=[4])
+
+    assert result.overall_error is None
+    assert set(result.titles) == {4}
+    assert result.titles[4].ok is False
+    assert result.titles[4].error == "makemkvcon exited 0 but produced no .mkv for this title"
+    assert 9 not in result.titles
