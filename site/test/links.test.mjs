@@ -278,3 +278,27 @@ test('createResolver without repoAliases maps only the manifest repo', () => {
 	const alias = `https://github.com/${repoAliases[0]}/blob/main/LICENSE`;
 	assert.deepEqual(r.resolve(alias, 'CONTRIBUTING.md'), { kind: 'external', url: alias });
 });
+
+test('a relative link that climbs above the repo root is an escape error', () => {
+	assert.deepEqual(setup().resolve('../outside.md', 'CONTRIBUTING.md'), { kind: 'error', message: 'link escapes the repo: ../outside.md' });
+});
+
+test('an upstream blob URL with an encoded leading slash is an absolute-path escape error', () => {
+	assert.deepEqual(setup().resolve(`${UP}/blob/main/%2Fetc/passwd`, 'CONTRIBUTING.md'), { kind: 'error', message: 'link escapes the repo: /etc/passwd' });
+});
+
+test('an image with a malformed percent-encoding is an error', () => {
+	assert.deepEqual(setup().resolveAsset('bad%E0%A4%A.png', 'CONTRIBUTING.md'), { kind: 'error', message: 'malformed image path: bad%E0%A4%A.png' });
+});
+
+test('an image path that climbs above the repo root is an escape error', () => {
+	assert.deepEqual(setup().resolveAsset('../pic.png', 'CONTRIBUTING.md'), { kind: 'error', message: 'image escapes the repo: ../pic.png' });
+});
+
+test('an upstream blob path that normalises to a bare slash falls back to the repo root', () => {
+	assert.deepEqual(setup().resolve(`${UP}/blob/main/%2F/%2F`, 'CONTRIBUTING.md'), { kind: 'repo', path: '.', fragment: '' });
+});
+
+test('a link to the repo root resolves to the root README when it has one', () => {
+	assert.deepEqual(setup({ 'README.md': '# ARM\n' }).resolve('./', 'CONTRIBUTING.md'), { kind: 'repo', path: 'README.md', fragment: '' });
+});
