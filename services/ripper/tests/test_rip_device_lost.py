@@ -9,6 +9,7 @@ the drive stays away does the job finish partial, saying why.
 from __future__ import annotations
 
 import asyncio
+import errno
 from pathlib import Path
 from typing import Any
 
@@ -494,3 +495,51 @@ def test_progress_payload_with_no_rate_or_phase_leaves_the_rate_none_and_omits_p
         "bytes_total": 4,
         "rate_bps": None,
     }
+
+
+def _drive_gone_controller(monkeypatch: pytest.MonkeyPatch, handle: DriveHandle, outcome: BaseException | None):
+    """A controller on `handle` whose drive-status read records its calls and raises `outcome` if given."""
+    calls: list[str] = []
+
+    def fake_read(path: str) -> None:
+        calls.append(path)
+        if outcome is not None:
+            raise outcome
+
+    monkeypatch.setattr(jc_module, "read_drive_status", fake_read)
+    return JobController(_Client(), "drv_x", device_path=handle), calls  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("new_path", ["/dev/sr1", None])
+def test_drive_gone_is_true_without_a_read_when_the_handle_moved_or_emptied(
+    monkeypatch: pytest.MonkeyPatch, new_path: str | None
+) -> None:
+    """A handle naming another node, or none, means the drive left; the node is not read."""
+    handle = DriveHandle("/dev/sr0")
+    controller, calls = _drive_gone_controller(monkeypatch, handle, None)
+    handle.set(new_path)
+    assert controller._drive_gone("/dev/sr0") is True
+    assert calls == []
+
+
+@pytest.mark.parametrize("code", [errno.ENOENT, errno.ENXIO, errno.ENODEV])
+def test_drive_gone_is_true_when_the_node_reads_as_absent(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
+    """An OSError with an absent errno on the still-current node means the drive is gone."""
+    controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), OSError(code, "absent"))
+    assert controller._drive_gone("/dev/sr0") is True
+    assert calls == ["/dev/sr0"]
+
+
+@pytest.mark.parametrize("code", [errno.EIO, errno.EACCES])
+def test_drive_gone_is_false_when_the_read_fails_for_another_reason(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
+    """An OSError with a non-absent errno on the current node does not count as the drive leaving."""
+    controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), OSError(code, "other"))
+    assert controller._drive_gone("/dev/sr0") is False
+    assert calls == ["/dev/sr0"]
+
+
+def test_drive_gone_is_false_when_the_current_node_reads_fine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A readable drive on the node the rip started on has not gone."""
+    controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), None)
+    assert controller._drive_gone("/dev/sr0") is False
+    assert calls == ["/dev/sr0"]
