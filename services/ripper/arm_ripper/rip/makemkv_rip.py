@@ -622,6 +622,35 @@ async def _finish_pending_titles(state: _ParserState, on_title_done: OnTitleDone
             await _emit_title_done(state, source_idx, on_title_done)
 
 
+async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs: bool) -> dict[int, RipResult]:
+    """Pair each eligible source index with the output file in its rip position.
+
+    Files past the eligible list stay unclaimed.
+    """
+    # Attribute output files to source title indexes.
+    #
+    # MakeMKV's `mkv all` mode is opaque per-title — the stream emits
+    # only overall PRGT/MSG (5014 start, 5005/5036 summary). We get
+    # back to per-title outcomes by pairing the eligible-source list
+    # we were given with the output files in rip order. Files past
+    # the eligible list are stragglers (e.g. user lowered minlength
+    # mid-disc, MakeMKV picked up extras we didn't expect) and we
+    # simply don't claim them — they remain on disk for inspection.
+    titles_out: dict[int, RipResult] = {}
+    output_files = _output_files_in_rip_order(output_dir)
+
+    for source_idx, file_path in zip(eligible, output_files):
+        size = file_path.stat().st_size
+        digest = await sha256_file(file_path) if hash_outputs else None
+        titles_out[source_idx] = RipResult(
+            ok=True,
+            output_path=file_path,
+            size_bytes=size,
+            sha256=digest,
+        )
+    return titles_out
+
+
 async def rip_disc(
     device_path: str,
     output_dir: Path,
@@ -689,28 +718,8 @@ async def rip_disc(
 
     await _finish_pending_titles(state, on_title_done)
 
-    # Attribute output files to source title indexes.
-    #
-    # MakeMKV's `mkv all` mode is opaque per-title — the stream emits
-    # only overall PRGT/MSG (5014 start, 5005/5036 summary). We get
-    # back to per-title outcomes by pairing the eligible-source list
-    # we were given with the output files in rip order. Files past
-    # the eligible list are stragglers (e.g. user lowered minlength
-    # mid-disc, MakeMKV picked up extras we didn't expect) and we
-    # simply don't claim them — they remain on disk for inspection.
-    titles_out: dict[int, RipResult] = {}
-    output_files = _output_files_in_rip_order(output_dir)
     eligible = eligible_source_indexes or []
-
-    for source_idx, file_path in zip(eligible, output_files):
-        size = file_path.stat().st_size
-        digest = await sha256_file(file_path) if hash_outputs else None
-        titles_out[source_idx] = RipResult(
-            ok=True,
-            output_path=file_path,
-            size_bytes=size,
-            sha256=digest,
-        )
+    titles_out = await _attribute_outputs(output_dir, eligible, hash_outputs)
 
     # If MSG:5003 captured a per-title failure reason and we didn't
     # produce a file for it (because the eligible list and files

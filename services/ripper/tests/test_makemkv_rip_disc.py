@@ -1093,3 +1093,43 @@ async def test_finish_pending_titles_without_a_callback_still_marks_done():
     state = _pending_state(t1=(True, False))
     await makemkv_rip._finish_pending_titles(state, None)
     assert state.titles[1].done_emitted
+
+
+async def test_attribute_outputs_pairs_eligible_indexes_with_files_in_rip_order(tmp_path):
+    first = _write_title_file(tmp_path, 0, b"a" * 10)
+    second = _write_title_file(tmp_path, 1, b"b" * 20)
+    out = await makemkv_rip._attribute_outputs(tmp_path, [4, 7], hash_outputs=False)
+    assert set(out) == {4, 7}
+    assert out[4].ok and out[4].output_path == first and out[4].size_bytes == 10
+    assert out[7].ok and out[7].output_path == second and out[7].size_bytes == 20
+
+
+async def test_attribute_outputs_leaves_extra_files_unclaimed(tmp_path):
+    _write_title_file(tmp_path, 0)
+    _write_title_file(tmp_path, 1)
+    out = await makemkv_rip._attribute_outputs(tmp_path, [3], hash_outputs=False)
+    assert list(out) == [3]
+
+
+async def test_attribute_outputs_omits_eligible_indexes_without_a_file(tmp_path):
+    _write_title_file(tmp_path, 0)
+    out = await makemkv_rip._attribute_outputs(tmp_path, [3, 5], hash_outputs=False)
+    assert list(out) == [3]
+
+
+async def test_attribute_outputs_hashes_when_asked(tmp_path):
+    path = _write_title_file(tmp_path, 0, b"hash me")
+    out = await makemkv_rip._attribute_outputs(tmp_path, [0], hash_outputs=True)
+    assert out[0].sha256 == await makemkv_rip.sha256_file(path)
+    assert out[0].sha256 is not None
+
+
+async def test_attribute_outputs_leaves_sha256_unset_without_hashing(tmp_path):
+    _write_title_file(tmp_path, 0)
+    out = await makemkv_rip._attribute_outputs(tmp_path, [0], hash_outputs=False)
+    assert out[0].sha256 is None
+
+
+async def test_attribute_outputs_with_no_eligible_indexes_is_empty(tmp_path):
+    _write_title_file(tmp_path, 0)
+    assert await makemkv_rip._attribute_outputs(tmp_path, [], hash_outputs=True) == {}
