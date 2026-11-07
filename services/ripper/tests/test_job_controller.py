@@ -12,6 +12,7 @@ import pytest
 import arm_ripper.backend_retry as backend_retry_module
 import arm_ripper.eject as eject_module
 import arm_ripper.job_controller as jc_module
+import arm_ripper.makemkv_prep as makemkv_prep_module
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
     JobView,
@@ -25,6 +26,7 @@ from arm_common.schemas import (
 from arm_ripper.drive_poll import DriveState
 from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
+from arm_ripper.makemkv_prep import MakeMKVPrep
 
 
 def _job(status: JobStatus, *, title: str | None = None) -> Job:
@@ -917,7 +919,7 @@ async def test_pipeline_refreshes_makemkv_key_before_scan(monkeypatch, stub_scan
     async def _record(key: str | None = None) -> None:
         keys.append(key)
 
-    monkeypatch.setattr(jc_module, "refresh_makemkv_key", _record)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_makemkv_key", _record)
 
     client = FakeClient()
     client.makemkv_key = "T-configured"
@@ -939,7 +941,7 @@ async def test_makemkv_key_lookup_failure_falls_back_to_none(monkeypatch, stub_s
     async def _record(key: str | None = None) -> None:
         keys.append(key)
 
-    monkeypatch.setattr(jc_module, "refresh_makemkv_key", _record)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_makemkv_key", _record)
 
     client = FakeClient()
     client.get_ripper_config_error = httpx.ConnectError("backend down")
@@ -961,13 +963,13 @@ async def test_pipeline_spawns_keydb_refresh_nonfatal(monkeypatch, stub_scan, st
         calls.append(enabled)
         raise RuntimeError("keydb boom")
 
-    monkeypatch.setattr(jc_module, "refresh_community_keydb", _boom)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_community_keydb", _boom)
 
     client = FakeClient()
     client.community_keydb_enabled = True
-    controller = JobController(client, "drv_test")
-    controller._spawn_keydb_refresh(enabled=True)
-    await controller._drain_keydb_tasks()
+    prep = MakeMKVPrep(client)
+    prep._spawn_keydb_refresh(enabled=True)
+    await prep._drain_keydb_tasks()
     assert calls == [True]  # ran once; the RuntimeError was swallowed (this line proves no propagation)
 
 
@@ -979,11 +981,11 @@ async def test_keydb_refresh_reports_result(monkeypatch):
     async def _ok(*, script_path="/usr/local/bin/update_keydb.sh", enabled=True):
         return KeydbResult(state=KeydbState.OK, vuk_count=42, age_days=None)
 
-    monkeypatch.setattr(jc_module, "refresh_community_keydb", _ok)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_community_keydb", _ok)
     client = FakeClient()
-    controller = JobController(client, "drv_test")
-    controller._spawn_keydb_refresh(enabled=True)
-    await controller._drain_keydb_tasks()
+    prep = MakeMKVPrep(client)
+    prep._spawn_keydb_refresh(enabled=True)
+    await prep._drain_keydb_tasks()
     assert client.keydb_reports == [(KeydbState.OK, 42, None)]
 
 
@@ -993,10 +995,10 @@ async def test_drain_keydb_tasks_with_no_tasks_does_not_gather(monkeypatch):
     def _fail_gather(*args, **kwargs):
         pytest.fail("asyncio.gather must not be called when there are no keydb tasks")
 
-    monkeypatch.setattr(jc_module.asyncio, "gather", _fail_gather)
-    controller = JobController(FakeClient(), "drv_test")
-    assert await controller._drain_keydb_tasks() is None
-    assert not controller._keydb_tasks
+    monkeypatch.setattr(makemkv_prep_module.asyncio, "gather", _fail_gather)
+    prep = MakeMKVPrep(FakeClient())
+    assert await prep._drain_keydb_tasks() is None
+    assert not prep._keydb_tasks
 
 
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
@@ -1107,13 +1109,13 @@ async def test_pipeline_spawns_sdf_refresh_nonfatal(monkeypatch, stub_scan, stub
         calls.append(enabled)
         raise RuntimeError("sdf boom")
 
-    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _boom)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_makemkv_sdf", _boom)
 
     client = FakeClient()
     client.makemkv_sdf_enabled = True
-    controller = JobController(client, "drv_test")
-    controller._spawn_sdf_refresh(enabled=True)
-    await controller._drain_sdf_tasks()
+    prep = MakeMKVPrep(client)
+    prep._spawn_sdf_refresh(enabled=True)
+    await prep._drain_sdf_tasks()
     assert calls == [True]  # ran once; RuntimeError swallowed (no propagation)
 
 
@@ -1125,11 +1127,11 @@ async def test_sdf_refresh_reports_result(monkeypatch):
     async def _ok(*, script_path="/usr/local/bin/update_sdf.sh", enabled=True):
         return SdfResult(state=MakemkvSdfState.UPDATED, age_days=None)
 
-    monkeypatch.setattr(jc_module, "refresh_makemkv_sdf", _ok)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_makemkv_sdf", _ok)
     client = FakeClient()
-    controller = JobController(client, "drv_test")
-    controller._spawn_sdf_refresh(enabled=True)
-    await controller._drain_sdf_tasks()
+    prep = MakeMKVPrep(client)
+    prep._spawn_sdf_refresh(enabled=True)
+    await prep._drain_sdf_tasks()
     assert client.sdf_reports == [(MakemkvSdfState.UPDATED, None)]
 
 

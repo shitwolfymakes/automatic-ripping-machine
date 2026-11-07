@@ -11,8 +11,9 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
 from arm_common import DiscType, JobStatus  # noqa: E402
 from arm_common.schemas import JobView, RipStartResponse  # noqa: E402
-from arm_ripper import job_controller as jc_module  # noqa: E402
+from arm_ripper import makemkv_prep as makemkv_prep_module  # noqa: E402
 from arm_ripper.job_controller import JobController  # noqa: E402
+from arm_ripper.makemkv_prep import MakeMKVPrep  # noqa: E402
 
 
 class _Client:
@@ -46,12 +47,12 @@ def _quiet(monkeypatch) -> None:
     async def _false(*a, **k):
         return False
 
-    monkeypatch.setattr(jc_module, "refresh_makemkv_key", _none)
-    monkeypatch.setattr(JobController, "_configured_makemkv_key", _none)
-    monkeypatch.setattr(JobController, "_community_keydb_enabled", _false)
-    monkeypatch.setattr(JobController, "_makemkv_sdf_enabled", _false)
-    monkeypatch.setattr(JobController, "_spawn_keydb_refresh", lambda self, *, enabled: None)
-    monkeypatch.setattr(JobController, "_spawn_sdf_refresh", lambda self, *, enabled: None)
+    monkeypatch.setattr(makemkv_prep_module, "refresh_makemkv_key", _none)
+    monkeypatch.setattr(MakeMKVPrep, "_configured_makemkv_key", _none)
+    monkeypatch.setattr(MakeMKVPrep, "_community_keydb_enabled", _false)
+    monkeypatch.setattr(MakeMKVPrep, "_makemkv_sdf_enabled", _false)
+    monkeypatch.setattr(MakeMKVPrep, "_spawn_keydb_refresh", lambda self, *, enabled: None)
+    monkeypatch.setattr(MakeMKVPrep, "_spawn_sdf_refresh", lambda self, *, enabled: None)
 
 
 async def test_resume_holds_the_single_flight_gate_while_ripping(monkeypatch) -> None:

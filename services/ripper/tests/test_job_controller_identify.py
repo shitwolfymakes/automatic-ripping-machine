@@ -31,7 +31,7 @@ class _StubClient:
         self.calls += 1
         raise self._error
 
-    # Satisfy _configured_makemkv_key path (not called in these tests, but
+    # Satisfy MakeMKVPrep._configured_makemkv_key path (not called in these tests, but
     # type-checker-friendly to have):
     async def get_ripper_config(self):  # pragma: no cover
         raise AssertionError("get_ripper_config should not be called in identify tests")
