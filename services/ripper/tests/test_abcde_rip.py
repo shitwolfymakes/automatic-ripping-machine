@@ -637,3 +637,72 @@ async def test_read_until_exit_feeds_every_stdout_line_to_tracks_then_returns_th
 
     assert seen == ["first", "second", "third"]
     assert rc == 3
+
+
+def _stop_abcde_setup(monkeypatch, tmp_path, *, returncode: int | None):
+    killpg_calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(abcde_rip.os, "killpg", lambda pgid, sig: killpg_calls.append((pgid, sig)))
+    proc = _FakeProc([])
+    proc.returncode = returncode
+    conf_path = tmp_path / "x.abcde.conf"
+    conf_path.write_text("conf")
+    return proc, conf_path, killpg_calls
+
+
+async def _finished_task() -> asyncio.Task[None]:
+    async def done() -> None:
+        return None
+
+    task = asyncio.ensure_future(done())
+    await task
+    return task
+
+
+async def test_stop_abcde_kills_and_reaps_a_running_process_and_deletes_the_config(monkeypatch, tmp_path):
+    proc, conf_path, killpg_calls = _stop_abcde_setup(monkeypatch, tmp_path, returncode=None)
+
+    await abcde_rip._stop_abcde(proc, await _finished_task(), conf_path)  # type: ignore[arg-type]
+
+    assert killpg_calls == [(_FAKE_PID, abcde_rip.signal.SIGKILL)]
+    assert proc.returncode == -9
+    assert not conf_path.exists()
+
+
+async def test_stop_abcde_leaves_an_exited_process_alone_and_deletes_the_config(monkeypatch, tmp_path):
+    proc, conf_path, killpg_calls = _stop_abcde_setup(monkeypatch, tmp_path, returncode=0)
+
+    await abcde_rip._stop_abcde(proc, await _finished_task(), conf_path)  # type: ignore[arg-type]
+
+    assert killpg_calls == []
+    assert not conf_path.exists()
+
+
+async def test_stop_abcde_swallows_a_failing_reap(monkeypatch, tmp_path):
+    proc, conf_path, killpg_calls = _stop_abcde_setup(monkeypatch, tmp_path, returncode=None)
+
+    async def failing_wait() -> int:
+        raise RuntimeError("reap failed")
+
+    monkeypatch.setattr(proc, "wait", failing_wait)
+
+    await abcde_rip._stop_abcde(proc, await _finished_task(), conf_path)  # type: ignore[arg-type]
+
+    assert len(killpg_calls) == 1
+    assert not conf_path.exists()
+
+
+async def test_stop_abcde_swallows_a_cancelled_stderr_task_and_tolerates_a_missing_config(monkeypatch, tmp_path):
+    proc, conf_path, _ = _stop_abcde_setup(monkeypatch, tmp_path, returncode=0)
+    conf_path.unlink()
+
+    async def forever() -> None:
+        await asyncio.sleep(3600)
+
+    task = asyncio.ensure_future(forever())
+    await asyncio.sleep(0)
+    task.cancel()
+
+    await abcde_rip._stop_abcde(proc, task, conf_path)  # type: ignore[arg-type]
+
+    assert task.cancelled()
+    assert not conf_path.exists()

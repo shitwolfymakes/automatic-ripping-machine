@@ -172,6 +172,19 @@ async def _read_until_exit(proc: asyncio.subprocess.Process, tracks: _CdTracks) 
     return await proc.wait()
 
 
+async def _stop_abcde(proc: asyncio.subprocess.Process, stderr_task: asyncio.Task[None], conf_path: Path) -> None:
+    """Clean up after one abcde run: kill and reap its process group if still running, let the stderr drain finish,
+    and delete the config file.
+    """
+    if proc.returncode is None:
+        _kill_group(proc)
+        with contextlib.suppress(BaseException):
+            await proc.wait()
+    with contextlib.suppress(asyncio.CancelledError):
+        await stderr_task
+    conf_path.unlink(missing_ok=True)
+
+
 async def rip_cd(
     device_path: str,
     output_dir: Path,
@@ -222,13 +235,7 @@ async def rip_cd(
         # we timed out above, abcde is still running and writing to the raw
         # dir. Kill it and its children before letting CancelledError
         # propagate / before returning a timeout result.
-        if proc.returncode is None:
-            _kill_group(proc)
-            with contextlib.suppress(BaseException):
-                await proc.wait()
-        with contextlib.suppress(asyncio.CancelledError):
-            await stderr_task
-        conf_path.unlink(missing_ok=True)
+        await _stop_abcde(proc, stderr_task, conf_path)
 
     if timed_out:
         await tracks.fail_remaining(f"abcde timed out after {CD_RIP_TIMEOUT_SECONDS}s")
