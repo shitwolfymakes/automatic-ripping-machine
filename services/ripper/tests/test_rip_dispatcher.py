@@ -1115,7 +1115,7 @@ async def test_rip_all_stopped_pass_reports_the_rest_without_touching_settled_tr
     """A pass stopped by the lost drive reports its unfinished tracks with
     the stop error (the controller holds them for the resume), never the
     ones an earlier pass settled."""
-    from arm_ripper.rip.makemkv_rip import STOPPED_ERROR
+    from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 
     _stub_rip_disc(monkeypatch, RipDiscResult(overall_error=STOPPED_ERROR, titles={}), fire_per_title_start=False)
     done: list[tuple[str, str | None]] = []
@@ -1144,7 +1144,7 @@ async def test_rip_all_does_not_finalise_a_title_the_drive_dropped_under(monkeyp
     PRGC transition) before the poll loop notices. That title's file is cut
     short, so it and the rest are reported stopped, never DONE, and `stop` is
     set to kill makemkvcon."""
-    from arm_ripper.rip.makemkv_rip import STOPPED_ERROR
+    from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 
     for pos in range(3):
         (tmp_path / f"Disc_t{pos:02d}.mkv").write_bytes(b"x" * (10 + pos))

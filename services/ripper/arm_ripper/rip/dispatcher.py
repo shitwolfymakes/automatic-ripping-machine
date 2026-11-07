@@ -12,9 +12,9 @@ from arm_common.schemas import TrackView
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
+from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import (
     _OUTPUT_FILE_RE,
-    STOPPED_ERROR,
     RipDiscResult,
     _output_files_in_rip_order,
     rip_disc,

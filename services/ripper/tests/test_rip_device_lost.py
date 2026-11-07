@@ -23,7 +23,8 @@ from arm_ripper.drive_poll import DriveState
 from arm_ripper.job_controller import JobController
 from arm_ripper.rip import RipResult
 from arm_ripper.rip import dispatcher as dispatcher_module
-from arm_ripper.rip.makemkv_rip import STOPPED_ERROR, RipDiscResult
+from arm_ripper.rip.makemkv_process import STOPPED_ERROR
+from arm_ripper.rip.makemkv_rip import RipDiscResult
 
 _JOB = "job_01M4R7157QDCVQ3MX6M2VK0XX0"
 

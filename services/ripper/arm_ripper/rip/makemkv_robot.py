@@ -87,7 +87,7 @@ def parse_diagnostic_msg(line: str) -> tuple[int, str] | None:
     """If `line` is a MSG: line whose code is in _DIAGNOSTIC_MSG_CODES,
     return (code, rendered_text). Otherwise None.
 
-    Used by `_compose_error` to surface MakeMKV-side reasons when the
+    Used by `compose_error` to surface MakeMKV-side reasons when the
     overall rip exits non-zero (or exits 0 but produces no files).
     """
     header = _MSG_HEADER_RE.match(line.strip())

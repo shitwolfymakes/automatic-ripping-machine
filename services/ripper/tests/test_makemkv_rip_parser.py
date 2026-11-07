@@ -1,6 +1,6 @@
 """Parse robot-mode `makemkvcon mkv --robot --progress=-stdout` output."""
 
-from arm_ripper.rip.makemkv_rip import _compose_error
+from arm_ripper.rip.makemkv_process import compose_error
 from arm_ripper.rip.makemkv_robot import (
     extract_title_index_from_msg5003,
     parse_diagnostic_msg,
@@ -85,27 +85,27 @@ def test_diagnostic_msg_skips_non_msg_lines():
     assert parse_diagnostic_msg("nonsense") is None
 
 
-def test_compose_error_no_diagnostics_passthrough():
-    assert _compose_error("makemkvcon failed: exit=1", []) == "makemkvcon failed: exit=1"
+def testcompose_error_no_diagnostics_passthrough():
+    assert compose_error("makemkvcon failed: exit=1", []) == "makemkvcon failed: exit=1"
 
 
-def test_compose_error_joins_diagnostics():
+def testcompose_error_joins_diagnostics():
     diagnostics = [
         "Region setting of drive does not match disc",
         "LIBMKV_TRACE: Exception: Error while reading input",
         "Failed to save title 2 to file /raw/x.mkv",
     ]
-    composed = _compose_error("makemkvcon exited 0 but produced no .mkv", diagnostics)
+    composed = compose_error("makemkvcon exited 0 but produced no .mkv", diagnostics)
     assert composed.startswith("makemkvcon exited 0 but produced no .mkv: ")
     assert "Error while reading input" in composed
     assert "Failed to save title 2" in composed
 
 
-def test_compose_error_dedups_adjacent_repeats():
+def testcompose_error_dedups_adjacent_repeats():
     # MSG:3032 (region mismatch) is emitted twice during makemkvcon's
     # workaround attempts; the error string shouldn't repeat it.
     diagnostics = ["region mismatch", "region mismatch", "save failed"]
-    composed = _compose_error("makemkvcon failed", diagnostics)
+    composed = compose_error("makemkvcon failed", diagnostics)
     assert composed.count("region mismatch") == 1
     assert "save failed" in composed
 

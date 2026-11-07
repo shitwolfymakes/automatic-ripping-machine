@@ -3,7 +3,7 @@
 MakeMKV writes the disc's `BDMV/` and `CERTIFICATE/` tree, decrypted, under
 `<output_dir>/backup`. There are no titles and no `.mkv` files, so only the
 mode-independent half of the `mkv all` stream handling is shared
-(`makemkv_rip._run_makemkvcon`): PRGV progress, MSG diagnostics, the MSG:5021
+(`makemkv_process.run_makemkvcon`): PRGV progress, MSG diagnostics, the MSG:5021
 kill switch, the timeout and cancel-safe cleanup. Progress is the disc-level
 PRGV `total/max` from the first line, since backup mode's phase markers are
 not the `mkv all` save marker (PRGT:5024).
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from arm_common.fileops import tree_size
 
-from arm_ripper.rip.makemkv_rip import _compose_error, _run_makemkvcon
+from arm_ripper.rip.makemkv_process import compose_error, run_makemkvcon
 from arm_ripper.rip.makemkv_stream import OnDiscProgress, ParserState, RipCallbacks
 from arm_ripper.rip.result import RipResult
 from arm_ripper.source import makemkv_source_url
@@ -50,12 +50,12 @@ async def rip_backup(device_path: str, output_dir: Path, on_progress: OnDiscProg
     logger.info("makemkvcon backup device=%s outdir=%s", device_path, target)
 
     state = ParserState()
-    error = await _run_makemkvcon(
+    error = await run_makemkvcon(
         cmd, state, callbacks=RipCallbacks(on_disc_progress=on_progress), gate_disc_progress=False
     )
     if error is not None:
         return RipResult(ok=False, error=error)
     if not (target / "BDMV" / "index.bdmv").is_file():
-        return RipResult(ok=False, error=_compose_error("makemkvcon backup produced no BDMV", state.diagnostics))
+        return RipResult(ok=False, error=compose_error("makemkvcon backup produced no BDMV", state.diagnostics))
     size = await asyncio.to_thread(tree_size, target)
     return RipResult(ok=True, output_path=target, size_bytes=size)
