@@ -2,7 +2,7 @@ from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanTitle
-from arm_ripper.scan.makemkv import (
+from arm_ripper.scan.makemkv_info import (
     _TINFO_FIELDS,
     _InfoParser,
     _split_robot_line,
