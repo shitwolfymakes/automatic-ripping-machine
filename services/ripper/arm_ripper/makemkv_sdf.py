@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from arm_common import MakemkvSdfState
 
-from arm_ripper.refresh_script import ScriptOutcome, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, last_status, run_refresh_script
 
 logger = logging.getLogger("arm_ripper.makemkv_sdf")
 
@@ -41,16 +41,10 @@ class SdfResult:
 
 def _parse(text: str) -> SdfResult:
     """Parse the last `sdf-status:` line. Unknown/absent → PROBE_FAILED."""
-    last = None
-    for line in text.splitlines():
-        if _STATE_RE.search(line):
-            last = line
-    if last is None:
+    found = last_status(text, _STATE_RE, MakemkvSdfState)
+    if found is None:
         return SdfResult(state=MakemkvSdfState.PROBE_FAILED)
-    try:
-        state = MakemkvSdfState(_STATE_RE.search(last).group("state"))  # type: ignore[union-attr]
-    except ValueError:
-        return SdfResult(state=MakemkvSdfState.PROBE_FAILED)
+    state, last = found
     age = _AGE_RE.search(last)
     return SdfResult(state=state, age_days=int(age.group("age")) if age else None)
 

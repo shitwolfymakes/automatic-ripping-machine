@@ -7,8 +7,9 @@ log label, and maps the ScriptRun to its own result.
 import asyncio
 import logging
 import os
+import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class ScriptOutcome(Enum):
@@ -23,6 +24,24 @@ class ScriptOutcome(Enum):
 class ScriptRun:
     outcome: ScriptOutcome
     text: str = ""  # the script's stripped stdout+stderr; empty unless it exited
+
+
+def last_status[S: StrEnum](text: str, state_re: re.Pattern[str], states: type[S]) -> tuple[S, str] | None:
+    """The state and the whole line of the last line in `text` that `state_re` matches.
+
+    None when no line matches, or when that last line's `state` group is not one of `states`.
+    """
+    last: re.Match[str] | None = None
+    for line in text.splitlines():
+        found = state_re.search(line)
+        if found:
+            last = found
+    if last is None:
+        return None
+    try:
+        return states(last.group("state")), last.string
+    except ValueError:
+        return None
 
 
 async def run_refresh_script(

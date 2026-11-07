@@ -1,7 +1,9 @@
 import logging
+import re
 import stat
+from enum import StrEnum
 
-from arm_ripper.refresh_script import ScriptOutcome, ScriptRun, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, ScriptRun, last_status, run_refresh_script
 
 _LOG = logging.getLogger("test.refresh_script")
 _LABEL = "demo refresh"
@@ -124,3 +126,33 @@ async def test_succeeded_without_output_logs_nothing(tmp_path, monkeypatch, capl
     assert await _run(script) == ScriptRun(ScriptOutcome.SUCCEEDED, "")
     assert seen["kwargs"]["env"] == _ENV
     assert _records(caplog) == []
+
+
+class _State(StrEnum):
+    OK = "ok"
+    STALE = "stale"
+
+
+_STATUS_RE = re.compile(r"x-status:\s*(?P<state>\S+)")
+
+
+def test_last_status_no_matching_line_is_none():
+    assert last_status("hello\nworld", _STATUS_RE, _State) is None
+
+
+def test_last_status_empty_text_is_none():
+    assert last_status("", _STATUS_RE, _State) is None
+
+
+def test_last_status_returns_last_matching_line():
+    text = "x-status: ok a=1\nx-status: stale b=2"
+    assert last_status(text, _STATUS_RE, _State) == (_State.STALE, "x-status: stale b=2")
+
+
+def test_last_status_invalid_last_state_is_none_even_if_earlier_valid():
+    assert last_status("x-status: ok\nx-status: bogus", _STATUS_RE, _State) is None
+
+
+def test_last_status_matching_line_among_others():
+    text = "noise\nx-status: ok n=3\nmore noise"
+    assert last_status(text, _STATUS_RE, _State) == (_State.OK, "x-status: ok n=3")

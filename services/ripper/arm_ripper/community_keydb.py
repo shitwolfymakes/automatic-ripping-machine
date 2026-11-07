@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from arm_common import KeydbState
 
-from arm_ripper.refresh_script import ScriptOutcome, run_refresh_script
+from arm_ripper.refresh_script import ScriptOutcome, last_status, run_refresh_script
 
 logger = logging.getLogger("arm_ripper.community_keydb")
 
@@ -48,16 +48,10 @@ class KeydbResult:
 
 def _parse(text: str) -> KeydbResult:
     """Parse the last `keydb-status:` line. Unknown/absent → PROBE_FAILED."""
-    last = None
-    for line in text.splitlines():
-        if _STATE_RE.search(line):
-            last = line
-    if last is None:
+    found = last_status(text, _STATE_RE, KeydbState)
+    if found is None:
         return KeydbResult(state=KeydbState.PROBE_FAILED)
-    try:
-        state = KeydbState(_STATE_RE.search(last).group("state"))  # type: ignore[union-attr]
-    except ValueError:
-        return KeydbResult(state=KeydbState.PROBE_FAILED)
+    state, last = found
     vuk = _VUK_RE.search(last)
     age = _AGE_RE.search(last)
     return KeydbResult(
