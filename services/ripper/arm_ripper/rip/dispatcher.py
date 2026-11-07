@@ -113,11 +113,7 @@ async def rip_all(
         await _rip_data_dump(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
-    for track in tracks:
-        await on_track_done(
-            track,
-            RipResult(ok=False, error=f"no rip path for disc_type={rip_as.value}"),
-        )
+    await _fail_unsupported(rip_as, tracks, on_track_done)
 
 
 def _effective_disc_type(disc_type: DiscType, tracks: list[TrackView]) -> DiscType:
@@ -214,6 +210,15 @@ async def _rip_data_dump(
 
     result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
     await on_track_done(first, result)
+
+
+async def _fail_unsupported(rip_as: DiscType, tracks: list[TrackView], on_track_done: OnTrackDone) -> None:
+    """Fail every track of a disc type no ripper handles."""
+    for track in tracks:
+        await on_track_done(
+            track,
+            RipResult(ok=False, error=f"no rip path for disc_type={rip_as.value}"),
+        )
 
 
 async def _rip_optical(
