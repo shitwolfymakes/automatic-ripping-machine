@@ -12,6 +12,7 @@ import pytest
 import arm_ripper.backend_retry as backend_retry_module
 import arm_ripper.eject as eject_module
 import arm_ripper.disc_scan as disc_scan_module
+import arm_ripper.disc_rip as disc_rip_module
 import arm_ripper.job_controller as jc_module
 import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
@@ -159,7 +160,7 @@ class FakeClient:
 def fast_polls(monkeypatch, tmp_path):
     """Don't wait 5+ seconds between polls; write under tmp_path, not /raw."""
     monkeypatch.setattr(resolution_wait_module, "POLL_MAX_SECONDS", 0.01)
-    monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
     # WS-driven resolution path: collapse the boot-race grace window so
     # tests fall straight through to the REST fallback path that the
@@ -1756,8 +1757,8 @@ def _unfinished_track(idx: int):
     [
         (0, "the drive disconnected mid-rip and did not come back within 180s"),
         (
-            jc_module.MAX_DEVICE_RESUMES,
-            f"the drive disconnected mid-rip {jc_module.MAX_DEVICE_RESUMES + 1} times; giving up",
+            disc_rip_module.MAX_DEVICE_RESUMES,
+            f"the drive disconnected mid-rip {disc_rip_module.MAX_DEVICE_RESUMES + 1} times; giving up",
         ),
     ],
 )
@@ -1773,7 +1774,7 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
 
     controller._backend.patch_track = _record  # type: ignore[method-assign]
     tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
-    rip = jc_module._DiscRip(
+    rip = disc_rip_module.DiscRip(
         backend=controller._backend,
         ws=controller._ws,
         ejector=controller._ejector,

@@ -8,6 +8,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 from arm_common import DiscType, JobStatus  # noqa: E402
 from arm_common.schemas import JobView, RipStartResponse  # noqa: E402
 from arm_ripper import eject as eject_module  # noqa: E402
+from arm_ripper import disc_rip as disc_rip_module  # noqa: E402
 from arm_ripper import job_controller as jc_module  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 from arm_ripper.job_controller import JobController  # noqa: E402
@@ -58,7 +59,7 @@ async def test_eject_skipped_when_drive_is_absent(monkeypatch, caplog) -> None:
     don't bother retrying against a dead node — skip straight to a clear log
     line and never touch the subprocess layer."""
     monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", ())
-    monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
     subprocess_calls: list[tuple[str, ...]] = []
 
     async def _create_subprocess_exec(*argv, **kwargs):  # pragma: no cover - must not be called
@@ -82,7 +83,7 @@ async def test_post_rip_eject_uses_the_handles_current_node(monkeypatch, tmp_pat
     """The node captured at rip start is stale after a mid-rip renumbering;
     eject must follow the handle (followups: Plan 1 drill finding)."""
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
-    monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
     ejected: list[str] = []
 
     async def _rip_all(**kw):  # the rip itself is not under test
@@ -91,7 +92,7 @@ async def test_post_rip_eject_uses_the_handles_current_node(monkeypatch, tmp_pat
     async def _eject(self, device_path: str) -> None:
         ejected.append(device_path)
 
-    monkeypatch.setattr(jc_module, "rip_all", _rip_all)
+    monkeypatch.setattr(disc_rip_module, "rip_all", _rip_all)
     monkeypatch.setattr(eject_module.Ejector, "eject", _eject)
     handle = DriveHandle("/dev/sr0")
     c = JobController(_RipClient(), "drv_1", device_path=handle)  # type: ignore[arg-type]
