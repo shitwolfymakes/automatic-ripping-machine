@@ -15,3 +15,10 @@ export async function buildDocs(armRoot, manifest) {
 	const resolvedNav = resolveNav(nav, resolver, errors, headingIdsById);
 	return { pages, rendered, nav: resolvedNav, errors };
 }
+
+// One "<srcPath>:<line>: <raw>" line per link to a repo file the docs don't publish (it links to GitHub).
+export function repoLinkLines(rendered) {
+	return rendered.flatMap((r) =>
+		r.links.filter((l) => l.resolved.kind === 'repo').map((l) => `${r.page.srcPath}:${l.line}: ${l.raw}`)
+	);
+}

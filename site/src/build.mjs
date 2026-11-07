@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadManifest } from './collect.mjs';
 import { parseOptions } from './options.mjs';
-import { buildDocs } from './pipeline.mjs';
+import { buildDocs, repoLinkLines } from './pipeline.mjs';
 import { buildSearchIndex } from './search.mjs';
 import { writeApp } from './write-app.mjs';
 import { writeSite } from './write-site.mjs';
@@ -43,7 +43,7 @@ async function main() {
 		process.exit(1);
 	}
 
-	const repoLinks = rendered.flatMap((r) => r.links.filter((l) => l.resolved.kind === 'repo').map((l) => `${r.page.srcPath}:${l.line}: ${l.raw}`));
+	const repoLinks = repoLinkLines(rendered);
 	console.log(`info: ${pages.length} pages; ${repoLinks.length} links point at unpublished repo files (GitHub)${options.verbose ? '' : ', --verbose to list'}`);
 	if (options.verbose) repoLinks.forEach((l) => console.log(`info:   ${l}`));
 

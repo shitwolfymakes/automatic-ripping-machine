@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDocs } from '../src/pipeline.mjs';
+import { buildDocs, repoLinkLines } from '../src/pipeline.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 test('buildDocs: a clean fixture yields no errors, pages in manifest order, one render per page', async () => {
@@ -40,4 +40,27 @@ test('buildDocs: errors come from collect, then render, then fragment check, the
 		'docs/user/Home.md:3: missing anchor #nope in guide/configuring-arm',
 		'manifest.json (Using ARM): link target not found: missing/target.md'
 	]);
+});
+
+const entry = (srcPath, links) => ({
+	page: { srcPath },
+	links: links.map(([line, raw, kind]) => ({ line, raw, resolved: { kind } }))
+});
+
+test('repoLinkLines: lists only repo links, not page or external ones', () => {
+	const rendered = [entry('a.md', [[1, 'x.md', 'page'], [2, 'src/y.py', 'repo'], [3, 'https://e.com', 'external']])];
+	assert.deepEqual(repoLinkLines(rendered), ['a.md:2: src/y.py']);
+});
+
+test('repoLinkLines: follows page order, then link order within a page, as <srcPath>:<line>: <raw>', () => {
+	const rendered = [
+		entry('b.md', [[9, '../one', 'repo'], [4, '../two', 'repo']]),
+		entry('a.md', [[7, '../three', 'repo']])
+	];
+	assert.deepEqual(repoLinkLines(rendered), ['b.md:9: ../one', 'b.md:4: ../two', 'a.md:7: ../three']);
+});
+
+test('repoLinkLines: pages without links, or no pages at all, give an empty list', () => {
+	assert.deepEqual(repoLinkLines([entry('a.md', []), entry('b.md', [])]), []);
+	assert.deepEqual(repoLinkLines([]), []);
 });
