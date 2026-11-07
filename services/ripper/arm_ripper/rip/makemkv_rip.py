@@ -51,10 +51,10 @@ from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.rip.makemkv")
 
-_OUTPUT_FILE_RE = re.compile(r"_t(\d+)\.mkv$", re.IGNORECASE)
+OUTPUT_FILE_RE = re.compile(r"_t(\d+)\.mkv$", re.IGNORECASE)
 
 
-def _output_files_in_rip_order(output_dir: Path) -> list[Path]:
+def output_files_in_rip_order(output_dir: Path) -> list[Path]:
     """Return the `.mkv` files MakeMKV produced, sorted by their `_tNN`
     suffix (the per-rip output index, ascending).
 
@@ -71,7 +71,7 @@ def _output_files_in_rip_order(output_dir: Path) -> list[Path]:
     """
     pairs: list[tuple[int, Path]] = []
     for f in output_dir.glob("*.mkv"):
-        m = _OUTPUT_FILE_RE.search(f.name)
+        m = OUTPUT_FILE_RE.search(f.name)
         if not m:
             continue
         pairs.append((int(m.group(1)), f))
@@ -122,7 +122,7 @@ async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs
     # mid-disc, MakeMKV picked up extras we didn't expect) and we
     # simply don't claim them — they remain on disk for inspection.
     titles_out: dict[int, RipResult] = {}
-    output_files = _output_files_in_rip_order(output_dir)
+    output_files = output_files_in_rip_order(output_dir)
 
     for source_idx, file_path in zip(eligible, output_files):
         size = file_path.stat().st_size

@@ -14,9 +14,9 @@ from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import (
-    _OUTPUT_FILE_RE,
+    OUTPUT_FILE_RE,
     RipDiscResult,
-    _output_files_in_rip_order,
+    output_files_in_rip_order,
     rip_disc,
 )
 from arm_ripper.rip.result import RipResult
@@ -364,7 +364,7 @@ async def _rip_optical(
             # MakeMKV announced a title we didn't list as eligible —
             # nothing to attribute live; the post-rip loop handles it.
             return
-        files = _output_files_in_rip_order(output_dir)
+        files = output_files_in_rip_order(output_dir)
         if position >= len(files):
             # File not on disk yet — defer to the post-rip loop. Should
             # be rare: MakeMKV finalises before emitting the next PRGC.
@@ -507,6 +507,6 @@ def _delete_skipped_outputs(output_dir: Path, eligible_source_indexes: list[int]
         return
     positions = {pos for pos, idx in enumerate(eligible_source_indexes) if idx in skipped}
     for f in output_dir.glob("*.mkv"):
-        m = _OUTPUT_FILE_RE.search(f.name)
+        m = OUTPUT_FILE_RE.search(f.name)
         if m and int(m.group(1)) in positions:
             f.unlink(missing_ok=True)

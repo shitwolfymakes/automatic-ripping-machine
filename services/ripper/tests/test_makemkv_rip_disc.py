@@ -1144,7 +1144,7 @@ async def test_attribute_outputs_with_no_eligible_indexes_is_empty(tmp_path):
 def test_output_files_in_rip_order_skips_files_without_a_title_suffix(tmp_path):
     for name in ("disc_t01.mkv", "disc_t00.mkv", "stray.mkv", "notes.txt"):
         (tmp_path / name).write_bytes(b"x")
-    assert makemkv_rip._output_files_in_rip_order(tmp_path) == [tmp_path / "disc_t00.mkv", tmp_path / "disc_t01.mkv"]
+    assert makemkv_rip.output_files_in_rip_order(tmp_path) == [tmp_path / "disc_t00.mkv", tmp_path / "disc_t01.mkv"]
 
 
 def _state_with_reasons(**reasons: str | None) -> makemkv_stream.ParserState:
