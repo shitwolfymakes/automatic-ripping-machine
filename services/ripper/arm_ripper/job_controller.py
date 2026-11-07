@@ -17,7 +17,8 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.rip import RipResult, rip_all
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, TransferStats
+from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
+from arm_ripper.rip.track_callbacks import TransferStats
 from arm_ripper.drive_poll import _ABSENT_ERRNOS, DriveState, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
 from arm_ripper.source import is_file_source

@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable, Collection
+from collections.abc import Callable, Collection
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict
 
 from arm_common import DiscType
 from arm_common.enums import TrackKind
@@ -21,26 +20,9 @@ from arm_ripper.rip.makemkv_rip import (
 )
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
-
-OnTrackStart = Callable[[TrackView], Awaitable[None]]
-OnTrackDone = Callable[[TrackView, RipResult], Awaitable[None]]
-
-
-class TransferStats(TypedDict):
-    """Byte-level detail for a copy whose size is known (the full-disc dump)."""
-
-    bytes_done: int
-    bytes_total: int | None
-    rate_bps: float | None
-    # "verifying" while the ripped files are hashed after makemkvcon exits.
-    phase: NotRequired[str]
-
-
-class OnTrackProgress(Protocol):
-    def __call__(self, track: TrackView, fraction: float, stats: TransferStats | None = None, /) -> Awaitable[None]: ...
-
 
 # v3 default. 120s drops menu loops and vendor bumpers without cutting
 # the 2–5 minute extras users typically care about. Sessions can
