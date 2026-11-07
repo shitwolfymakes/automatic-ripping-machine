@@ -145,8 +145,7 @@ class WSClient:
             self._conn = conn
             self._connected.set()
 
-            for topic in self._handlers:
-                await conn.send(WSSubscribeRequest(topic=topic).model_dump_json())
+            await self._replay_subscriptions(conn)
 
             async for raw in conn:
                 if self._stopping.is_set():
@@ -164,6 +163,11 @@ class WSClient:
         if ack.get("op") != "ack":
             raise WSAuthFailed(f"unexpected first frame: {ack!r}")
         WSAck.model_validate(ack)
+
+    async def _replay_subscriptions(self, conn: ClientConnection) -> None:
+        """Send a subscribe op for every recorded topic, in the order they were first subscribed."""
+        for topic in self._handlers:
+            await conn.send(WSSubscribeRequest(topic=topic).model_dump_json())
 
     async def _handle_frame(self, raw: str | bytes) -> None:
         """Decode one inbound frame: dispatch an event to its topic handler, log a backend error, ignore the rest."""

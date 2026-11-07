@@ -306,6 +306,35 @@ async def test_dispatch_event_handler_exception_is_logged_not_raised(caplog: pyt
     assert [r.exc_info is not None for r in caplog.records if r.name == LOGGER] == [True]
 
 
+async def _noop(env: WSEnvelope) -> None:  # pragma: no cover - never dispatched
+    pass
+
+
+async def test_replay_subscriptions_with_no_handlers_sends_nothing() -> None:
+    conn = FakeConn(ACK, [])
+    await _client()._replay_subscriptions(conn)  # type: ignore[arg-type]
+    assert conn.sent == []
+
+
+async def test_replay_subscriptions_sends_one_frame_per_topic_in_insertion_order() -> None:
+    client = _client()
+    for topic in ("t.c", "t.a", "t.b"):
+        await client.subscribe(topic, _noop)
+    conn = FakeConn(ACK, [])
+    await client._replay_subscriptions(conn)  # type: ignore[arg-type]
+    assert conn.sent == [WSSubscribeRequest(topic=t).model_dump_json() for t in ("t.c", "t.a", "t.b")]
+
+
+async def test_replay_subscriptions_keeps_original_position_after_resubscribe() -> None:
+    client = _client()
+    for topic in ("t.a", "t.b", "t.c"):
+        await client.subscribe(topic, _noop)
+    await client.subscribe("t.a", _noop)
+    conn = FakeConn(ACK, [])
+    await client._replay_subscriptions(conn)  # type: ignore[arg-type]
+    assert conn.sent == [WSSubscribeRequest(topic=t).model_dump_json() for t in ("t.a", "t.b", "t.c")]
+
+
 class LoopHarness:
     """Scripted `_run_once` outcomes plus a fake `asyncio.wait_for` that records delays and never sleeps."""
 
