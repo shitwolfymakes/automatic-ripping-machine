@@ -1263,7 +1263,7 @@ class _DiscRip:
                 )
 
     async def run(self) -> None:
-        """Rip the disc through its resumes, report rip-complete, then eject."""
+        """Rip the disc through its resumes, then finish it."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
         while True:
             await self._run_pass()
@@ -1284,13 +1284,7 @@ class _DiscRip:
                 break
             self._prepare_resume(returned)
 
-        completed = await self._controller._rip_complete_with_retry(self._job_id)
-        logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
-
-        # Eject the node the drive is at NOW — it may have renumbered during
-        # the rip (USB replug); the path captured at rip start is a hint only.
-        await self._controller._eject_with_retry(self._controller._device_path or self._start_path)
-        await asyncio.sleep(EJECT_GRACE_SECONDS)
+        await self._finish()
 
     async def _run_pass(self) -> None:
         """One `mkv all` pass over the disc on its current node, with a watcher that stops makemkvcon if the drive
@@ -1334,6 +1328,16 @@ class _DiscRip:
             len(self._tracks) - len(self._skip),
             self._resumes,
         )
+
+    async def _finish(self) -> None:
+        """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
+        completed = await self._controller._rip_complete_with_retry(self._job_id)
+        logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
+
+        # Eject the node the drive is at NOW — it may have renumbered during
+        # the rip (USB replug); the path captured at rip start is a hint only.
+        await self._controller._eject_with_retry(self._controller._device_path or self._start_path)
+        await asyncio.sleep(EJECT_GRACE_SECONDS)
 
 
 def _remove_partial_outputs(output_dir: Path, kept: set[Path]) -> None:
