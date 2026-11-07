@@ -31,7 +31,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
+from arm_ripper.rip.dispatcher import _effective_disc_type, _index_tracks, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.result import RipResult
 
@@ -1686,6 +1686,21 @@ async def test_rip_all_disc_backup_progress_is_dropped_without_a_progress_callba
     )
 
     assert events == [("start", "trk_0"), ("done", "trk_0", True, None, 7)]
+
+
+def test_index_tracks_maps_a_valid_source_ref_to_its_track() -> None:
+    track = _track(1, source_ref="7")
+    assert _index_tracks([track], set()) == ({7: track}, [])
+
+
+def test_index_tracks_skips_an_invalid_source_ref_in_skip_track_ids() -> None:
+    bad = _track(1, source_ref="x")
+    assert _index_tracks([bad], {bad.id}) == ({}, [])
+
+
+def test_index_tracks_returns_invalid_source_refs_in_input_order() -> None:
+    first, good, second = _track(1, source_ref="x"), _track(2), _track(3, source_ref="y")
+    assert _index_tracks([first, good, second], set()) == ({2: good}, [first, second])
 
 
 def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:
