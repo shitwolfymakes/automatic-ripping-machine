@@ -31,7 +31,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, _index_tracks, rip_all
+from arm_ripper.rip.dispatcher import _effective_disc_type, _eligible_source_indexes, _index_tracks, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.result import RipResult
 
@@ -1701,6 +1701,24 @@ def test_index_tracks_skips_an_invalid_source_ref_in_skip_track_ids() -> None:
 def test_index_tracks_returns_invalid_source_refs_in_input_order() -> None:
     first, good, second = _track(1, source_ref="x"), _track(2), _track(3, source_ref="y")
     assert _index_tracks([first, good, second], set()) == ({2: good}, [first, second])
+
+
+def test_eligible_source_indexes_leave_out_a_track_shorter_than_the_minimum() -> None:
+    assert _eligible_source_indexes({1: _track(1, duration_seconds=59)}, 60) == []
+
+
+def test_eligible_source_indexes_keep_tracks_at_or_above_the_minimum() -> None:
+    by_index = {1: _track(1, duration_seconds=60), 2: _track(2, duration_seconds=61)}
+    assert _eligible_source_indexes(by_index, 60) == [1, 2]
+
+
+def test_eligible_source_indexes_keep_a_track_of_unknown_length() -> None:
+    assert _eligible_source_indexes({1: _track(1, duration_seconds=None)}, 60) == [1]
+
+
+def test_eligible_source_indexes_are_sorted_whatever_the_insertion_order() -> None:
+    by_index = {5: _track(5), 2: _track(2), 9: _track(9)}
+    assert _eligible_source_indexes(by_index, 60) == [2, 5, 9]
 
 
 def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:

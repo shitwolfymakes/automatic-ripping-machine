@@ -241,6 +241,24 @@ def _index_tracks(
     return track_by_index, invalid
 
 
+def _eligible_source_indexes(track_by_index: dict[int, TrackView], min_length_seconds: int) -> list[int]:
+    """The source indexes MakeMKV will rip, ascending: each track at least `min_length_seconds` long, or of unknown
+    length."""
+    # Eligible source indexes — those whose duration meets `--minlength`,
+    # sorted ascending. MakeMKV's `mkv all` output files carry an
+    # output-position suffix (`_t00`, `_t01`, ...) rather than the
+    # source title index, so we pair this list positionally with the
+    # files post-rip to get attribution back. Tracks with no
+    # `duration_seconds` (rare — scan didn't find one) are treated as
+    # eligible to avoid dropping them silently; if MakeMKV skips them,
+    # they fall through to "produced no .mkv" downstream.
+    return sorted(
+        idx
+        for idx, t in track_by_index.items()
+        if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
+    )
+
+
 async def _rip_optical(
     *,
     device_path: str,
@@ -285,19 +303,7 @@ async def _rip_optical(
     if not track_by_index:
         return
 
-    # Eligible source indexes — those whose duration meets `--minlength`,
-    # sorted ascending. MakeMKV's `mkv all` output files carry an
-    # output-position suffix (`_t00`, `_t01`, ...) rather than the
-    # source title index, so we pair this list positionally with the
-    # files post-rip to get attribution back. Tracks with no
-    # `duration_seconds` (rare — scan didn't find one) are treated as
-    # eligible to avoid dropping them silently; if MakeMKV skips them,
-    # they fall through to "produced no .mkv" downstream.
-    eligible_source_indexes = sorted(
-        idx
-        for idx, t in track_by_index.items()
-        if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
-    )
+    eligible_source_indexes = _eligible_source_indexes(track_by_index, min_length_seconds)
 
     # Titles an earlier pass of this job already settled (a resume after the
     # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
