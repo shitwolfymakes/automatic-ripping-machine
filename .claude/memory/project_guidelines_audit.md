@@ -40,6 +40,13 @@ git-ignored paths all return HTTP 500.
 SonarJS doesn't analyse `.svelte`, so Svelte script blocks are out of scope
 for the complexity rule (owner decision).
 
+**A touched symbol's coverage includes its closures.** coverage.py reports a
+nested function as its own region (`outer.inner`), and V8 reports every
+function separately. A per-symbol check that reads only the named region
+calls a closure-heavy function fully covered when its closures aren't. That
+hid real gaps in the ripper's `_execute_rip` (#453). Fold nested regions into
+the named symbol before judging it.
+
 **Why:** the owner wants the guidelines applied to existing code, with SonarQube
 for IDE as the complexity authority.
 
