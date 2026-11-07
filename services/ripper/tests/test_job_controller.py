@@ -1773,16 +1773,25 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
 
     controller._backend.patch_track = _record  # type: ignore[method-assign]
     tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
-    started = {"trk_1"}
+    rip = jc_module._DiscRip(
+        controller,
+        job_id="job_x",
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id="job_x", rip_preset_id="rpr", tracks=tracks),
+    )
+    rip._unfinished = {"trk_1", "trk_2"}
+    rip._started = {"trk_1"}
+    rip._resumes = resumes
 
-    await controller._fail_unfinished(tracks, {"trk_1", "trk_2"}, started, resumes)
+    await rip._fail_unfinished()
 
     assert patches == [
         ("trk_1", {"status": TrackStatus.FAILED, "last_error": reason}),
         ("trk_2", {"status": TrackStatus.IN_PROGRESS}),
         ("trk_2", {"status": TrackStatus.FAILED, "last_error": reason}),
     ]
-    assert started == {"trk_1", "trk_2"}
+    assert rip._started == {"trk_1", "trk_2"}
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
     assert errors == [f"{reason}; 2 title(s) not ripped"]
 

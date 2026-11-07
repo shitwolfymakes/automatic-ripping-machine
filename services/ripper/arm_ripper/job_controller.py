@@ -539,59 +539,6 @@ class JobController:
         """Rip every title of the disc, report rip-complete and eject."""
         await _DiscRip(self, job_id=job_id, disc_type=disc_type, device_path=device_path, rip_start=rip_start).run()
 
-    def _drive_gone(self, path: str) -> bool:
-        """The drive this rip runs on has left `path`: the poll loop moved the
-        handle (absent, or a new node), or the node no longer answers."""
-        if self._device.current != path:
-            return True
-        try:
-            read_drive_status(path)
-        except OSError as exc:
-            return classify_drive_error(exc) is DriveErrorKind.ABSENT
-        return False
-
-    async def _watch_drive(self, path: str, lost: asyncio.Event) -> None:
-        """Set `lost` (which stops makemkvcon) once the drive leaves `path`.
-        The poll loop keeps the handle current; this only reads it."""
-        while not lost.is_set():
-            if self._device.current != path:
-                logger.warning("drive left %s mid-rip; stopping makemkvcon", path)
-                lost.set()
-                return
-            await asyncio.sleep(DEVICE_WATCH_INTERVAL_SECONDS)
-
-    async def _await_drive_return(self) -> str | None:
-        """The node the drive came back on once it reports a readable disc,
-        or None when it does not within DEVICE_RETURN_WAIT_SECONDS."""
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + DEVICE_RETURN_WAIT_SECONDS
-        while True:
-            path = self._device.current
-            if path is not None:
-                try:
-                    if read_drive_status(path) == DriveState.DISC_OK:
-                        return path
-                except OSError:
-                    pass
-            if loop.time() >= deadline:
-                return None
-            await asyncio.sleep(DEVICE_WATCH_INTERVAL_SECONDS)
-
-    async def _fail_unfinished(
-        self, tracks: list[TrackView], unfinished: set[str], started: set[str], resumes: int
-    ) -> None:
-        """The drive did not come back: fail what it left, saying why."""
-        reason = _disconnect_reason(resumes)
-        logger.error("%s; %d title(s) not ripped", reason, len(unfinished))
-        for track in tracks:
-            if track.id not in unfinished:
-                continue
-            with with_log_context(track_id=track.id):
-                if track.id not in started:
-                    started.add(track.id)
-                    await self._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
-                await self._backend.patch_track(track.id, status=TrackStatus.FAILED, last_error=reason)
-
 
 class _DiscRip:
     """One disc's rip across its resumes: rip every title, leave the titles a lost drive cut short for one more pass
@@ -652,7 +599,7 @@ class _DiscRip:
     def _drive_left_under_it(self) -> bool:
         """Whether a failed title's drive went away under it (so it is left for a resume): only a resumable rip whose
         drive is already marked lost, or has left its node."""
-        return self._resumable and (self._lost.is_set() or self._controller._drive_gone(self._rip_path))
+        return self._resumable and (self._lost.is_set() or self._drive_gone(self._rip_path))
 
     async def _record_ripped(self, track: TrackView, result: RipResult) -> None:
         """Keep a ripped title's file and patch the track DONE."""
@@ -696,6 +643,57 @@ class _DiscRip:
                     payload=_progress_payload(track.id, fraction, stats),
                 )
 
+    def _drive_gone(self, path: str) -> bool:
+        """The drive this rip runs on has left `path`: the poll loop moved the
+        handle (absent, or a new node), or the node no longer answers."""
+        if self._controller._device.current != path:
+            return True
+        try:
+            read_drive_status(path)
+        except OSError as exc:
+            return classify_drive_error(exc) is DriveErrorKind.ABSENT
+        return False
+
+    async def _watch_drive(self, path: str) -> None:
+        """Set the lost event (which stops makemkvcon) once the drive leaves `path`.
+        The poll loop keeps the handle current; this only reads it."""
+        while not self._lost.is_set():
+            if self._controller._device.current != path:
+                logger.warning("drive left %s mid-rip; stopping makemkvcon", path)
+                self._lost.set()
+                return
+            await asyncio.sleep(DEVICE_WATCH_INTERVAL_SECONDS)
+
+    async def _await_drive_return(self) -> str | None:
+        """The node the drive came back on once it reports a readable disc,
+        or None when it does not within DEVICE_RETURN_WAIT_SECONDS."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + DEVICE_RETURN_WAIT_SECONDS
+        while True:
+            path = self._controller._device.current
+            if path is not None:
+                try:
+                    if read_drive_status(path) == DriveState.DISC_OK:
+                        return path
+                except OSError:
+                    pass
+            if loop.time() >= deadline:
+                return None
+            await asyncio.sleep(DEVICE_WATCH_INTERVAL_SECONDS)
+
+    async def _fail_unfinished(self) -> None:
+        """The drive did not come back: fail what it left, saying why."""
+        reason = _disconnect_reason(self._resumes)
+        logger.error("%s; %d title(s) not ripped", reason, len(self._unfinished))
+        for track in self._tracks:
+            if track.id not in self._unfinished:
+                continue
+            with with_log_context(track_id=track.id):
+                if track.id not in self._started:
+                    self._started.add(track.id)
+                    await self._controller._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
+                await self._controller._backend.patch_track(track.id, status=TrackStatus.FAILED, last_error=reason)
+
     async def run(self) -> None:
         """Rip the disc through its resumes, then finish it."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -712,9 +710,9 @@ class _DiscRip:
                 len(self._unfinished),
                 DEVICE_RETURN_WAIT_SECONDS,
             )
-            returned = await self._controller._await_drive_return() if self._resumes < MAX_DEVICE_RESUMES else None
+            returned = await self._await_drive_return() if self._resumes < MAX_DEVICE_RESUMES else None
             if returned is None:
-                await self._controller._fail_unfinished(self._tracks, self._unfinished, self._started, self._resumes)
+                await self._fail_unfinished()
                 break
             self._prepare_resume(returned)
 
@@ -723,9 +721,7 @@ class _DiscRip:
     async def _run_pass(self) -> None:
         """One `mkv all` pass over the disc on its current node, with a watcher that stops makemkvcon if the drive
         leaves that node (resumable rips only)."""
-        watcher = (
-            asyncio.create_task(self._controller._watch_drive(self._rip_path, self._lost)) if self._resumable else None
-        )
+        watcher = asyncio.create_task(self._watch_drive(self._rip_path)) if self._resumable else None
         try:
             await rip_all(
                 disc_type=self._disc_type,
@@ -738,9 +734,7 @@ class _DiscRip:
                 min_length_seconds=self._min_length_seconds,
                 stop=self._lost if self._resumable else None,
                 skip_track_ids=self._skip,
-                drive_lost=(
-                    functools.partial(self._controller._drive_gone, self._rip_path) if self._resumable else None
-                ),
+                drive_lost=(functools.partial(self._drive_gone, self._rip_path) if self._resumable else None),
             )
         finally:
             if watcher is not None:

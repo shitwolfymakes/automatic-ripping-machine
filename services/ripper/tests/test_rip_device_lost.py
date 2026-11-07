@@ -497,6 +497,17 @@ def test_progress_payload_with_no_rate_or_phase_leaves_the_rate_none_and_omits_p
     }
 
 
+def _disc_rip(controller: JobController) -> jc_module._DiscRip:
+    """A disc rip on `/dev/sr0` reaching the drive handle through `controller`."""
+    return jc_module._DiscRip(
+        controller,
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=[]),
+    )
+
+
 def _drive_gone_controller(monkeypatch: pytest.MonkeyPatch, handle: DriveHandle, outcome: BaseException | None):
     """A controller on `handle` whose drive-status read records its calls and raises `outcome` if given."""
     calls: list[str] = []
@@ -518,7 +529,7 @@ def test_drive_gone_is_true_without_a_read_when_the_handle_moved_or_emptied(
     handle = DriveHandle("/dev/sr0")
     controller, calls = _drive_gone_controller(monkeypatch, handle, None)
     handle.set(new_path)
-    assert controller._drive_gone("/dev/sr0") is True
+    assert _disc_rip(controller)._drive_gone("/dev/sr0") is True
     assert calls == []
 
 
@@ -526,7 +537,7 @@ def test_drive_gone_is_true_without_a_read_when_the_handle_moved_or_emptied(
 def test_drive_gone_is_true_when_the_node_reads_as_absent(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
     """An OSError with an absent errno on the still-current node means the drive is gone."""
     controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), OSError(code, "absent"))
-    assert controller._drive_gone("/dev/sr0") is True
+    assert _disc_rip(controller)._drive_gone("/dev/sr0") is True
     assert calls == ["/dev/sr0"]
 
 
@@ -534,14 +545,14 @@ def test_drive_gone_is_true_when_the_node_reads_as_absent(monkeypatch: pytest.Mo
 def test_drive_gone_is_false_when_the_read_fails_for_another_reason(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
     """An OSError with a non-absent errno on the current node does not count as the drive leaving."""
     controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), OSError(code, "other"))
-    assert controller._drive_gone("/dev/sr0") is False
+    assert _disc_rip(controller)._drive_gone("/dev/sr0") is False
     assert calls == ["/dev/sr0"]
 
 
 def test_drive_gone_is_false_when_the_current_node_reads_fine(monkeypatch: pytest.MonkeyPatch) -> None:
     """A readable drive on the node the rip started on has not gone."""
     controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), None)
-    assert controller._drive_gone("/dev/sr0") is False
+    assert _disc_rip(controller)._drive_gone("/dev/sr0") is False
     assert calls == ["/dev/sr0"]
 
 
@@ -553,7 +564,7 @@ async def test_await_drive_return_gives_up_without_a_read_when_the_handle_stays_
     controller, calls = _drive_gone_controller(monkeypatch, handle, None)
     handle.set(None)
     monkeypatch.setattr(jc_module, "DEVICE_RETURN_WAIT_SECONDS", 0.0)
-    assert await controller._await_drive_return() is None
+    assert await _disc_rip(controller)._await_drive_return() is None
     assert calls == []
 
 
@@ -577,7 +588,7 @@ async def test_await_drive_return_returns_the_node_the_handle_fills_in_once_it_r
     monkeypatch.setattr(jc_module, "DEVICE_WATCH_INTERVAL_SECONDS", 0.001)
     monkeypatch.setattr(jc_module.asyncio, "sleep", fake_sleep)
     controller = JobController(_Client(), "drv_x", device_path=handle)  # type: ignore[arg-type]
-    assert await controller._await_drive_return() == "/dev/sr1"
+    assert await _disc_rip(controller)._await_drive_return() == "/dev/sr1"
     assert reads == ["/dev/sr1"]
 
 
@@ -594,5 +605,5 @@ async def test_await_drive_return_keeps_waiting_while_the_node_reads_a_state_oth
     monkeypatch.setattr(jc_module, "read_drive_status", fake_read)
     monkeypatch.setattr(jc_module, "DEVICE_RETURN_WAIT_SECONDS", 0.0)
     controller = JobController(_Client(), "drv_x", device_path=DriveHandle("/dev/sr0"))  # type: ignore[arg-type]
-    assert await controller._await_drive_return() is None
+    assert await _disc_rip(controller)._await_drive_return() is None
     assert reads == ["/dev/sr0"]
