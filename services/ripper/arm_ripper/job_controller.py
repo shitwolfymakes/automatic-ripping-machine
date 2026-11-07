@@ -703,15 +703,19 @@ class JobController:
             logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
             return None
 
+    async def _ripper_config_or_none(self, what: str, fallback: str) -> RipperConfigView | None:
+        """The ripper config, or None after a warning when the backend can't be reached."""
+        try:
+            return await self._client.get_ripper_config()
+        except httpx.HTTPError as e:
+            logger.warning("%s failed (%s); %s", what, e, fallback)
+            return None
+
     async def _safe_get_ripper_config(self) -> RipperConfigView | None:
         """Ripper config (ripping_paused + manual_wait_seconds) for the review
         countdown. None on transport error → the caller treats it as 'can't tell;
         keep waiting' (fail-safe: never auto-rip on a config blip)."""
-        try:
-            return await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("get_ripper_config failed (%s); keeping countdown suspended", e)
-            return None
+        return await self._ripper_config_or_none("get_ripper_config", "keeping countdown suspended")
 
     async def _configured_makemkv_key(self) -> str | None:
         """The operator's UI-set MakeMKV key, or None to fall back to the
@@ -721,23 +725,15 @@ class JobController:
         error we return None, which leaves the legacy env/scrape behaviour
         intact rather than wiping a key the operator already configured.
         """
-        try:
-            cfg = await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("makemkv key lookup failed (%s); using env/scrape fallback", e)
-            return None
-        return cfg.makemkv_key
+        cfg = await self._ripper_config_or_none("makemkv key lookup", "using env/scrape fallback")
+        return None if cfg is None else cfg.makemkv_key
 
     async def _community_keydb_enabled(self) -> bool:
         """Whether the operator has the community-keydb auto-fetch enabled.
         Fail-open to True (the default) so a flapping backend doesn't silently
         disable the feature."""
-        try:
-            cfg = await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("community keydb toggle lookup failed (%s); defaulting enabled", e)
-            return True
-        return cfg.community_keydb_enabled
+        cfg = await self._ripper_config_or_none("community keydb toggle lookup", "defaulting enabled")
+        return True if cfg is None else cfg.community_keydb_enabled
 
     def _spawn_keydb_refresh(self, *, enabled: bool) -> None:
         """Fire-and-forget community-keydb refresh. The rip proceeds immediately
@@ -769,12 +765,8 @@ class JobController:
     async def _makemkv_sdf_enabled(self) -> bool:
         """Whether the operator has the MakeMKV SDF auto-refresh enabled.
         Fail-open to True so a flapping backend doesn't silently disable it."""
-        try:
-            cfg = await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("makemkv sdf toggle lookup failed (%s); defaulting enabled", e)
-            return True
-        return cfg.makemkv_sdf_enabled
+        cfg = await self._ripper_config_or_none("makemkv sdf toggle lookup", "defaulting enabled")
+        return True if cfg is None else cfg.makemkv_sdf_enabled
 
     def _spawn_sdf_refresh(self, *, enabled: bool) -> None:
         """Fire-and-forget MakeMKV SDF refresh. The rip proceeds immediately
