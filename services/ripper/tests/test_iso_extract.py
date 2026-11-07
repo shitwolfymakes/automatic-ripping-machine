@@ -665,3 +665,22 @@ async def test_extract_after_a_failed_7z_returns_none_without_checking_the_folde
 
     assert not [r for r in caplog.records if "not a video disc" in r.getMessage()]
     assert not any(_scratch.rglob("*"))
+
+
+def test_existing_ancestor_of_an_existing_dir_is_itself(tmp_path: Path) -> None:
+    assert iso_extract._existing_ancestor(tmp_path) == tmp_path
+
+
+def test_existing_ancestor_of_a_missing_path_is_its_nearest_existing_parent(tmp_path: Path) -> None:
+    assert iso_extract._existing_ancestor(tmp_path / "a" / "b" / "c") == tmp_path
+
+
+def test_existing_ancestor_of_an_existing_file_is_itself(tmp_path: Path) -> None:
+    f = tmp_path / "m.iso"
+    f.write_bytes(b"\0")
+
+    assert iso_extract._existing_ancestor(f) == f
+
+
+def test_existing_ancestor_of_a_missing_relative_path_walks_up_to_the_current_dir() -> None:
+    assert iso_extract._existing_ancestor(Path("no-such-dir-xyz") / "sub") == Path(".")

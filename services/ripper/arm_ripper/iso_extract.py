@@ -65,12 +65,18 @@ def _drive_dir() -> Path:
     return EXTRACT_ROOT / settings.ARM_DRIVE_ID
 
 
-def _has_space(image: Path, scratch: Path) -> bool:
-    need = image.stat().st_size
-    probe = scratch
+def _existing_ancestor(path: Path) -> Path:
+    """`path` itself when it exists, else its nearest existing parent; the filesystem root when nothing above exists."""
+    probe = path
     while not probe.exists() and probe != probe.parent:
         probe = probe.parent
-    free = shutil.disk_usage(probe).free
+    return probe
+
+
+def _has_space(image: Path, scratch: Path) -> bool:
+    """Whether the scratch volume has room for the whole image; logs an error when it does not."""
+    need = image.stat().st_size
+    free = shutil.disk_usage(_existing_ancestor(scratch)).free
     if free < need:
         logger.error(
             "iso extract: not enough scratch space under %s for %s (need %d bytes, %d free)", scratch, image, need, free
