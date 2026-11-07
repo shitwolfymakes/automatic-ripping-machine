@@ -16,6 +16,7 @@ manager yields a disc-id + per-track tuple. Covers:
 
 from __future__ import annotations
 
+import logging
 import sys
 import types
 from typing import Any
@@ -23,7 +24,7 @@ from typing import Any
 import pytest
 
 from arm_common import DiscType
-from arm_ripper.scan.musicbrainz_disc import scan_cd
+from arm_ripper.scan.musicbrainz_disc import _read_disc, scan_cd
 
 
 class _FakeTrack:
@@ -145,3 +146,45 @@ async def test_scan_cd_toc_is_none_without_toc_string(monkeypatch):
     result = await scan_cd("/dev/sr0")
     assert result is not None
     assert result.cd_toc is None
+
+
+def _fake_discid_module(disc: Any = None, raise_on_read: Exception | None = None) -> types.ModuleType:
+    fake = types.ModuleType("discid")
+
+    def fake_read(_device_path: str) -> Any:
+        if raise_on_read is not None:
+            raise raise_on_read
+        return disc
+
+    fake.read = fake_read  # type: ignore[attr-defined]
+    return fake
+
+
+def test_read_disc_returns_id_tracks_with_int_seconds_and_toc() -> None:
+    tracks = [_FakeTrack(1, 180.9), _FakeTrack(2, 240)]  # type: ignore[arg-type]
+    disc = _FakeDisc("abc-", tracks, toc_string="1 2 150 200")
+    result = _read_disc(_fake_discid_module(disc), "/dev/sr0")
+    assert result == ("abc-", [(1, 180), (2, 240)], "1 2 150 200")
+
+
+def test_read_disc_toc_none_without_toc_string_attribute() -> None:
+    disc = _FakeDisc("abc-", [_FakeTrack(1, 10)])
+    assert _read_disc(_fake_discid_module(disc), "/dev/sr0") == ("abc-", [(1, 10)], None)
+
+
+def test_read_disc_toc_none_for_empty_string() -> None:
+    disc = _FakeDisc("abc-", [_FakeTrack(1, 10)], toc_string="")
+    assert _read_disc(_fake_discid_module(disc), "/dev/sr0") == ("abc-", [(1, 10)], None)
+
+
+def test_read_disc_toc_none_for_non_str() -> None:
+    disc = _FakeDisc("abc-", [_FakeTrack(1, 10)])
+    disc.toc_string = 42  # type: ignore[assignment]
+    assert _read_disc(_fake_discid_module(disc), "/dev/sr0") == ("abc-", [(1, 10)], None)
+
+
+def test_read_disc_none_and_logged_when_read_raises(caplog: pytest.LogCaptureFixture) -> None:
+    fake = _fake_discid_module(raise_on_read=OSError("no disc"))
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.musicbrainz_disc"):
+        assert _read_disc(fake, "/dev/sr0") is None
+    assert [r.getMessage() for r in caplog.records] == ["discid read failed device=/dev/sr0 err=no disc"]

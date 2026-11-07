@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any
 
 from arm_common import DiscType
 from arm_common.schemas import ScanResult, ScanTitle
@@ -20,17 +21,7 @@ async def scan_cd(device_path: str) -> ScanResult | None:
         logger.warning("python-discid not installed; CD identification skipped")
         return None
 
-    def _read() -> tuple[str, list[tuple[int, int]], str | None] | None:
-        try:
-            with discid.read(device_path) as disc:
-                tracks = [(t.number, int(t.seconds)) for t in disc.tracks]
-                toc = getattr(disc, "toc_string", None)
-                return disc.id, tracks, toc if isinstance(toc, str) and toc else None
-        except Exception as e:  # libdiscid raises a bare DiscError
-            logger.info("discid read failed device=%s err=%s", device_path, e)
-            return None
-
-    result = await asyncio.to_thread(_read)
+    result = await asyncio.to_thread(_read_disc, discid, device_path)
     if result is None:
         return None
     disc_id, tracks, cd_toc = result
@@ -45,3 +36,17 @@ async def scan_cd(device_path: str) -> ScanResult | None:
         titles=titles,
         raw={"track_count": len(tracks)},
     )
+
+
+def _read_disc(discid: Any, device_path: str) -> tuple[str, list[tuple[int, int]], str | None] | None:
+    """Read the CD's MusicBrainz disc id, (track number, whole seconds) per track, and TOC string with libdiscid;
+    None when libdiscid fails to read the disc (logged).
+    """
+    try:
+        with discid.read(device_path) as disc:
+            tracks = [(t.number, int(t.seconds)) for t in disc.tracks]
+            toc = getattr(disc, "toc_string", None)
+            return disc.id, tracks, toc if isinstance(toc, str) and toc else None
+    except Exception as e:  # libdiscid raises a bare DiscError
+        logger.info("discid read failed device=%s err=%s", device_path, e)
+        return None
