@@ -27,6 +27,7 @@ from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
+from arm_backend.identity.sources.base import Source
 from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import (
     SOURCE_ID as THEDISCDB,
@@ -36,6 +37,7 @@ from arm_backend.identity.sources.thediscdb import (
     release_kind,
     release_result,
 )
+from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
@@ -578,6 +580,425 @@ async def _reject_previously_ripped(
     )
 
 
+class _IdentifyFlow:
+    """One identify request: the handler body held as a method object so later steps can split it."""
+
+    def __init__(
+        self,
+        *,
+        req: IdentifyRequest,
+        request: Request,
+        session: AsyncSession,
+        dispatcher: MetadataDispatcher,
+        hub: WSHub,
+        stage_runner: EpisodeStageRunner | None,
+    ) -> None:
+        self.req = req
+        self.request = request
+        self.session = session
+        self.dispatcher = dispatcher
+        self.hub = hub
+        self.stage_runner = stage_runner
+        self.drive: Drive | None = None
+        self.cfg: Config | None = None
+        self.scan: ScanResult | None = None
+        self.fps: list[tuple[str, str]] = []
+        self.reuse_job: Job | None = None
+        self.previous: Job | None = None
+        self.job: Job | None = None
+        self.already_identified = False
+        self.prior_status: JobStatus | None = None
+        self.hints: tuple[Source, ...] = ()
+        self.thediscdb_match: DiscMatch | None = None
+        self.result: MetadataResult | None = None
+        self.timed_out = False
+        self.attempts: list[dict[str, Any]] = []
+
+    async def run(self) -> Job:
+        self.drive = (
+            await self.session.execute(select(Drive).where(col(Drive.id) == self.req.drive_id))
+        ).scalar_one_or_none()
+        if self.drive is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {self.req.drive_id}")
+        # An ISO rip's job exists from here on; its "preparing" status is done.
+        iso_prepare.clear(self.drive.id)
+        # A new disc: the note about the last one no longer applies.
+        self.drive.notice = None
+
+        self.cfg = (
+            await self.session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
+        ).scalar_one()
+
+        # When the timed review gate is on, a paused machine still scans + identifies
+        # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
+        # below); it does not reject the job. With the gate off, pause keeps its
+        # original meaning: reject new jobs outright. (timed-review-gate spec §3)
+        if self.cfg.ripping_paused and not self.cfg.hold_for_review:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="ripping is paused; no new jobs accepted",
+            )
+
+        self.scan = self.req.scan_result
+        self.fps = [(fp.algo.lower(), fp.value) for fp in self.scan.fingerprints if fp.algo and fp.value]
+        # A virtual drive holds one source for its whole life: its parked job is this disc's.
+        decision = await find_reusable_job_for_disc(
+            self.session,
+            drive_id=self.req.drive_id,
+            fingerprints=self.fps,
+            same_source=self.drive.kind == DriveKind.VIRTUAL,
+        )
+        if decision is not None and decision.action == "in_flight":
+            # Disc re-scanned while its rip is in flight (restart race) — return the
+            # live job; in-flight recovery owns it. No new job, no re-identify.
+            return decision.job
+        self.reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
+
+        # A disc ARM already ripped (on any drive) is held, rejected or ripped
+        # again per on_previously_ripped. A reused job was already through this.
+        self.previous = None
+        action = self.cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
+        if self.reuse_job is None and action != PreviouslyRippedAction.RIP:
+            earlier = await find_previous_rips(self.session, fingerprints=self.fps)
+            armed = [j for j in earlier if flag_is_set(j.metadata_json, "rerip_allowed")]
+            if armed:
+                # The operator chose "Rip again" on an earlier rip of this disc
+                # (any of them, not only the newest): let this one through, once.
+                for j in armed:
+                    j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
+                    self.session.add(j)
+                logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", self.drive.id, armed[0].id)
+            elif earlier:
+                self.previous = earlier[0]
+            if self.previous is not None and action == PreviouslyRippedAction.REJECT:
+                raise await _reject_previously_ripped(self.session, self.hub, self.drive, self.previous, self.scan)
+
+        if self.reuse_job is not None:
+            self.job = self.reuse_job
+            # Guard 1 (no identity clobber): never re-run the dispatcher or overwrite
+            # title/year/poster/metadata on a reused job. The operator may have manually
+            # set or corrected the identity (e.g. AWAITING_USER_ID title); a re-scan
+            # must not clobber it. Only refresh scan_result in metadata_json (below).
+            self.already_identified = True
+            self.prior_status = self.job.status
+        else:
+            self.job = Job(
+                drive_id=self.req.drive_id,
+                drive_serial=self.drive.serial,
+                disc_type=self.scan.disc_type,
+                status=JobStatus.CREATED,
+            )
+            self.session.add(self.job)
+            await self.session.flush()
+            self.already_identified = False
+            self.prior_status = None
+
+        # Persist every fingerprint the ripper computed. The (job_id, algo)
+        # unique constraint plus per-scan dedup means re-runs of identify on
+        # the same disc are idempotent.
+        # Guard 2 (no fingerprint re-insert): on reuse, pre-load existing algos so we
+        # skip any (job_id, algo) pair already stored — avoids uq_disc_fingerprints_job_algo
+        # IntegrityError without switching to pg_insert.
+        existing_algos: set[str] = set()
+        if self.reuse_job is not None:
+            existing_fp_rows = (
+                (await self.session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == self.job.id)))
+                .scalars()
+                .all()
+            )
+            existing_algos = {r.algo for r in existing_fp_rows}
+        seen_algos: set[str] = set()
+        for fp in self.scan.fingerprints:
+            if not fp.algo or not fp.value:
+                continue
+            algo = fp.algo.lower()
+            if algo in seen_algos or algo in existing_algos:
+                continue
+            seen_algos.add(algo)
+            self.session.add(DiscFingerprint(job_id=self.job.id, algo=algo, value=fp.value))
+        await self.session.flush()
+
+        self.hints = enabled_hint_sources(self.cfg)
+        if not self.already_identified:
+            # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
+            # total proposals plus a cleaner search title for the dispatcher, in
+            # the operator's configured source order (PR 4).
+            run_disc_hints(self.job, self.scan, now=datetime.now(timezone.utc), sources=self.hints)
+
+        self.thediscdb_match = None
+        if not self.already_identified and self.cfg.thediscdb_enabled:
+            store = getattr(self.request.app.state, "thediscdb", None)
+            content_hash = next(
+                (fp.value for fp in self.scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
+                None,
+            )
+            if store is not None and content_hash:
+                try:
+                    self.thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
+                    if self.thediscdb_match is not None:
+                        put_source(
+                            self.job,
+                            THEDISCDB,
+                            build_claims(self.thediscdb_match, self.scan, now=datetime.now(timezone.utc)),
+                        )
+                        logger.info(
+                            "thediscdb: matched job_id=%s release=%s", self.job.id, self.thediscdb_match.release_slug
+                        )
+                except Exception as e:
+                    logger.warning("thediscdb: lookup failed job_id=%s: %s", self.job.id, e)
+                    self.thediscdb_match = None
+
+        # Fix 75-1: pending_session_id must land BEFORE anything below that resolves
+        # the job's rip preset — _persist_review_tracks (hold_for_review branch)
+        # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
+        # reads this column. Assigning it after (as before) meant a manual-trigger
+        # rip with an explicit session and hold_for_review on would persist review
+        # tracks chosen by the drive/disc-type default preset instead of the routed
+        # session's preset — the exact held-vs-unattended divergence
+        # resolve_rip_preset_id_for_job's docstring promises never happens.
+        if self.req.pending_session_id is not None:
+            # The ripper echoes the session chosen at manual trigger; it can have
+            # been deleted since. Writing a dangling id into the FK column would
+            # turn this identify into a 500 the ripper retries forever, so drop
+            # it and let routing fall back to the routes / drive default.
+            chosen = (
+                await self.session.execute(select(Session).where(col(Session.id) == self.req.pending_session_id))
+            ).scalar_one_or_none()
+            if chosen is None:
+                logger.warning(
+                    "identify job_id=%s: pending session %s no longer exists; ignoring it",
+                    self.job.id,
+                    self.req.pending_session_id,
+                )
+            else:
+                self.job.pending_session_id = self.req.pending_session_id
+
+        if self.already_identified:
+            # Guard 1: preserve existing identity — do not re-run the dispatcher or
+            # overwrite title/year/poster/metadata set by the previous identify run.
+            self.result = None
+            self.timed_out = False
+        else:
+            # Every source the exact and the fuzzy walks tried, kept on a miss so
+            # the review card can say why the automatic match missed. The
+            # dispatcher keeps each call's attempts in the calling task's context,
+            # so they are read here, inside the task that ran the call: after it
+            # returns, or as wait_for cancels it when the whole dispatch times out.
+            self.attempts = []
+
+            async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
+                try:
+                    return await call
+                finally:
+                    self.attempts.extend(self.dispatcher.last_attempts)
+
+            try:
+
+                async def _identify() -> MetadataResult | None:
+                    # Narrowing for mypy: set before run() reaches here, so these cannot fail.
+                    assert self.cfg is not None and self.scan is not None and self.job is not None
+                    release: MetadataResult | None = None
+                    if self.thediscdb_match is not None:
+                        imdb = external_imdb_id(self.thediscdb_match)
+                        if imdb:
+                            kind = release_kind(self.thediscdb_match)
+                            if not self.dispatcher.has_imdb_lookup(self.cfg, kind):
+                                # D-1: no enabled source can resolve the id, so no
+                                # online TITLE call; the release names the disc.
+                                # Held, not returned yet: the fingerprint database
+                                # below needs no key either, so a keyless install
+                                # would otherwise never reach the one source it can
+                                # use. The fuzzy title search IS skipped — it would
+                                # outrank this exact content-hash match.
+                                release = release_result(self.thediscdb_match, imdb)
+                            else:
+                                exact = await _collected(self.dispatcher.identify_from_imdb(imdb, self.cfg, kind=kind))
+                                if exact is not None:
+                                    return exact
+                    if release is not None:
+                        return (
+                            await _collected(self.dispatcher.identify_from_fingerprint(self.scan, self.cfg)) or release
+                        )
+                    return await _collected(
+                        self.dispatcher.identify(
+                            self.scan,
+                            self.cfg,
+                            title_hint=hint_title(self.job, self.hints),
+                            title_hint_is_tv=hint_is_tv(self.job, self.hints),
+                            # Several same-length episode titles and no feature: a TV
+                            # disc, whatever the label says (arm_common.disc_shape).
+                            prefer_tv=looks_episodic(self.scan.titles),
+                        )
+                    )
+
+                self.result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
+                self.timed_out = False
+            except asyncio.TimeoutError:
+                logger.info("identify dispatch_timeout job_id=%s", self.job.id)
+                self.result = None
+                self.timed_out = True
+                self.attempts.append(
+                    {
+                        "source": None,
+                        "step": "title",
+                        "kind": None,
+                        "outcome": "timeout",
+                        "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
+                    }
+                )
+
+            release_title = release_identity(self.thediscdb_match)[0] if self.thediscdb_match is not None else None
+            # The cleaned hint titles are search inputs only: a miss (or a held
+            # hit) is named by the disc's own BDMT name as written, else the
+            # release, else the label.
+            bdmt_name = (
+                self.scan.bd_meta.name.strip()
+                if self.scan.bd_meta is not None and any(h.id == "bd_title" for h in self.hints)
+                else ""
+            )
+            miss_title = bdmt_name or release_title or self.scan.volume_label
+
+            # The miss reasons belong to a miss only; any hit (applied or held)
+            # leaves no list behind.
+            metadata = {k: v for k, v in (self.job.metadata_json or {}).items() if k != "identify_attempts"}
+            if self.result is None:
+                # The most recent ones; a whole-dispatch timeout entry is last.
+                metadata["identify_attempts"] = self.attempts[-MAX_IDENTIFY_ATTEMPTS:]
+            self.job.metadata_json = metadata
+
+            # A CD matched only by track layout where several releases fit is a
+            # guess between pressings: hold it for the operator whatever the
+            # music auto-apply switch says.
+            ambiguous_toc = (
+                self.result is not None
+                and self.result.provider == "musicbrainz"
+                and len(self.result.payload.get("toc_candidates") or []) > 1
+            )
+            if self.result is not None and not ambiguous_toc and auto_apply_for(self.cfg, self.result.kind):
+                apply_identity_result(self.job, self.result, now=datetime.now(timezone.utc))
+                # Timed review gate: a GENUINELY identified disc (result is not None — not
+                # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
+                # for operator review when hold_for_review is on, stamping the countdown
+                # anchor and persisting the scan's titles as Track rows so the review UI
+                # shows the full title list. Otherwise it proceeds straight to rip as
+                # today (tracks created at rip-start). (spec §5.1, §4.3)
+                if self.cfg.hold_for_review:
+                    self.job.status = JobStatus.AWAITING_REVIEW
+                    self.job.wait_start_time = datetime.now(timezone.utc)
+                    await _persist_review_tracks(self.session, self.job, self.scan)
+                else:
+                    self.job.status = JobStatus.IDENTIFIED
+            elif self.result is not None:
+                # D-10: this kind's "Apply confident matches" switch is off. Keep
+                # the hit for the operator to confirm; the disc waits with no
+                # countdown (the ripper treats a null wait_start_time as "no
+                # countdown") and stays unidentified until they accept or
+                # resolve it. The review gate's own countdown never starts here.
+                self.job.title = miss_title
+                self.job.metadata_json = suggest_identity(
+                    self.job.metadata_json, self.result, now=datetime.now(timezone.utc)
+                )
+                self.job.status = JobStatus.AWAITING_REVIEW
+                self.job.wait_start_time = None
+                # The kind is the ROUTING input, not an identity claim: it is what
+                # resolve_routed_session_id keys `session_routes` on, so the review
+                # tracks below get the keep/drop defaults and preset provenance of
+                # the session this disc will actually rip into. Left unset, the
+                # disc routes as a never-identified one and accept never re-persists
+                # the tracks, so the operator would rip the wrong set. The hit's
+                # title/year/poster still reach nothing but the suggestion.
+                # result.kind is a subset of MediaType's values by construction.
+                self.job.media_type = MediaType(self.result.kind)
+                await _persist_review_tracks(self.session, self.job, self.scan)
+                logger.info(
+                    "identify job_id=%s: %s hit %r held for confirmation (%s)",
+                    self.job.id,
+                    self.result.kind,
+                    self.result.title,
+                    "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
+                )
+            else:
+                diagnostic: dict[str, bool] = {}
+                if self.timed_out:
+                    diagnostic["dispatch_timeout"] = True
+                if self.cfg.block_on_miss:
+                    self.job.status = JobStatus.AWAITING_USER_ID
+                    self.job.title = miss_title
+                    if diagnostic:
+                        self.job.metadata_json = with_flags(self.job.metadata_json, **diagnostic)
+                else:
+                    self.job.status = JobStatus.IDENTIFIED
+                    self.job.title = miss_title
+                    self.job.metadata_json = with_flags(self.job.metadata_json, unidentified=True, **diagnostic)
+
+            if self.previous is not None:
+                # on_previously_ripped=hold: whatever identify concluded, the disc
+                # waits for Rip again or Discard. No countdown (wait_start_time
+                # stays unset), so the ripper never auto-starts it.
+                if self.job.status != JobStatus.AWAITING_REVIEW:
+                    await _persist_review_tracks(self.session, self.job, self.scan)
+                self.job.status = JobStatus.AWAITING_REVIEW
+                self.job.wait_start_time = None
+                self.job.metadata_json = {
+                    **(self.job.metadata_json or {}),
+                    "previously_ripped": {"job_id": self.previous.id},
+                }
+                logger.info(
+                    "identify job_id=%s: disc already ripped as job_id=%s; holding it", self.job.id, self.previous.id
+                )
+
+            # Apply every stored proposal: hint job fields for all outcomes, plus
+            # disc-map / preset track fields when review tracks were persisted.
+            await resolve_job(self.session, self.job)
+
+        self.job.metadata_json = {
+            **(self.job.metadata_json or {}),
+            "scan_result": self.scan.model_dump(mode="json"),
+        }
+
+        await self.session.commit()
+        await self.session.refresh(self.job)
+        logger.info("identify job_id=%s status=%s title=%s", self.job.id, self.job.status.value, self.job.title)
+
+        if self.job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
+            # awaiting_user_id -> needs identification; awaiting_review -> held for the
+            # timed review gate. Distinct event types so the dashboard can label them.
+            # WS-transition guard: only emit if this is a real status transition — do
+            # not re-emit for a reused job already sitting in the target held status.
+            if self.reuse_job is None or self.prior_status != self.job.status:
+                event_type = (
+                    "rip.needs_user_input" if self.job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
+                )
+                payload: dict[str, object] = {
+                    "job_id": self.job.id,
+                    "drive_id": self.job.drive_id,
+                    "volume_label": self.scan.volume_label,
+                    "disc_type": self.job.disc_type.value,
+                }
+                if self.previous is not None:
+                    payload["previous_job_id"] = self.previous.id
+                await self.hub.emit(
+                    topic="ripper.events",
+                    event_type=event_type,
+                    payload=payload,
+                    job_id=self.job.id,
+                    session=self.session,
+                )
+                await self.session.commit()
+
+        # Background episode stage trigger (Task 8): only after the final commit
+        # above (whichever branch made it), and only when it's worth the async
+        # DB round-trip — the runner itself re-checks is_tv_candidate against
+        # freshly loaded tracks before doing any work.
+        if self.stage_runner is not None:
+            stage_tracks = (
+                (await self.session.execute(select(Track).where(col(Track.job_id) == self.job.id))).scalars().all()
+            )
+            if is_tv_candidate(self.job, stage_tracks):
+                self.stage_runner.schedule(self.job.id)
+        return self.job
+
+
 @router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
 async def identify(
     req: IdentifyRequest,
@@ -587,358 +1008,9 @@ async def identify(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> Job:
-    drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
-    if drive is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
-    # An ISO rip's job exists from here on; its "preparing" status is done.
-    iso_prepare.clear(drive.id)
-    # A new disc: the note about the last one no longer applies.
-    drive.notice = None
-
-    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
-
-    # When the timed review gate is on, a paused machine still scans + identifies
-    # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
-    # below); it does not reject the job. With the gate off, pause keeps its
-    # original meaning: reject new jobs outright. (timed-review-gate spec §3)
-    if cfg.ripping_paused and not cfg.hold_for_review:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="ripping is paused; no new jobs accepted",
-        )
-
-    scan = req.scan_result
-    fps = [(fp.algo.lower(), fp.value) for fp in scan.fingerprints if fp.algo and fp.value]
-    # A virtual drive holds one source for its whole life: its parked job is this disc's.
-    decision = await find_reusable_job_for_disc(
-        session, drive_id=req.drive_id, fingerprints=fps, same_source=drive.kind == DriveKind.VIRTUAL
-    )
-    if decision is not None and decision.action == "in_flight":
-        # Disc re-scanned while its rip is in flight (restart race) — return the
-        # live job; in-flight recovery owns it. No new job, no re-identify.
-        return decision.job
-    reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
-
-    # A disc ARM already ripped (on any drive) is held, rejected or ripped
-    # again per on_previously_ripped. A reused job was already through this.
-    previous: Job | None = None
-    action = cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
-    if reuse_job is None and action != PreviouslyRippedAction.RIP:
-        earlier = await find_previous_rips(session, fingerprints=fps)
-        armed = [j for j in earlier if flag_is_set(j.metadata_json, "rerip_allowed")]
-        if armed:
-            # The operator chose "Rip again" on an earlier rip of this disc
-            # (any of them, not only the newest): let this one through, once.
-            for j in armed:
-                j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
-                session.add(j)
-            logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, armed[0].id)
-        elif earlier:
-            previous = earlier[0]
-        if previous is not None and action == PreviouslyRippedAction.REJECT:
-            raise await _reject_previously_ripped(session, hub, drive, previous, scan)
-
-    if reuse_job is not None:
-        job = reuse_job
-        # Guard 1 (no identity clobber): never re-run the dispatcher or overwrite
-        # title/year/poster/metadata on a reused job. The operator may have manually
-        # set or corrected the identity (e.g. AWAITING_USER_ID title); a re-scan
-        # must not clobber it. Only refresh scan_result in metadata_json (below).
-        already_identified = True
-        prior_status = job.status
-    else:
-        job = Job(
-            drive_id=req.drive_id,
-            drive_serial=drive.serial,
-            disc_type=scan.disc_type,
-            status=JobStatus.CREATED,
-        )
-        session.add(job)
-        await session.flush()
-        already_identified = False
-        prior_status = None
-
-    # Persist every fingerprint the ripper computed. The (job_id, algo)
-    # unique constraint plus per-scan dedup means re-runs of identify on
-    # the same disc are idempotent.
-    # Guard 2 (no fingerprint re-insert): on reuse, pre-load existing algos so we
-    # skip any (job_id, algo) pair already stored — avoids uq_disc_fingerprints_job_algo
-    # IntegrityError without switching to pg_insert.
-    existing_algos: set[str] = set()
-    if reuse_job is not None:
-        existing_fp_rows = (
-            (await session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id)))
-            .scalars()
-            .all()
-        )
-        existing_algos = {r.algo for r in existing_fp_rows}
-    seen_algos: set[str] = set()
-    for fp in scan.fingerprints:
-        if not fp.algo or not fp.value:
-            continue
-        algo = fp.algo.lower()
-        if algo in seen_algos or algo in existing_algos:
-            continue
-        seen_algos.add(algo)
-        session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
-    await session.flush()
-
-    hints = enabled_hint_sources(cfg)
-    if not already_identified:
-        # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
-        # total proposals plus a cleaner search title for the dispatcher, in
-        # the operator's configured source order (PR 4).
-        run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=hints)
-
-    thediscdb_match = None
-    if not already_identified and cfg.thediscdb_enabled:
-        store = getattr(request.app.state, "thediscdb", None)
-        content_hash = next(
-            (fp.value for fp in scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
-            None,
-        )
-        if store is not None and content_hash:
-            try:
-                thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
-                if thediscdb_match is not None:
-                    put_source(job, THEDISCDB, build_claims(thediscdb_match, scan, now=datetime.now(timezone.utc)))
-                    logger.info("thediscdb: matched job_id=%s release=%s", job.id, thediscdb_match.release_slug)
-            except Exception as e:
-                logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
-                thediscdb_match = None
-
-    # Fix 75-1: pending_session_id must land BEFORE anything below that resolves
-    # the job's rip preset — _persist_review_tracks (hold_for_review branch)
-    # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
-    # reads this column. Assigning it after (as before) meant a manual-trigger
-    # rip with an explicit session and hold_for_review on would persist review
-    # tracks chosen by the drive/disc-type default preset instead of the routed
-    # session's preset — the exact held-vs-unattended divergence
-    # resolve_rip_preset_id_for_job's docstring promises never happens.
-    if req.pending_session_id is not None:
-        # The ripper echoes the session chosen at manual trigger; it can have
-        # been deleted since. Writing a dangling id into the FK column would
-        # turn this identify into a 500 the ripper retries forever, so drop
-        # it and let routing fall back to the routes / drive default.
-        chosen = (
-            await session.execute(select(Session).where(col(Session.id) == req.pending_session_id))
-        ).scalar_one_or_none()
-        if chosen is None:
-            logger.warning(
-                "identify job_id=%s: pending session %s no longer exists; ignoring it",
-                job.id,
-                req.pending_session_id,
-            )
-        else:
-            job.pending_session_id = req.pending_session_id
-
-    if already_identified:
-        # Guard 1: preserve existing identity — do not re-run the dispatcher or
-        # overwrite title/year/poster/metadata set by the previous identify run.
-        result = None
-        timed_out = False
-    else:
-        # Every source the exact and the fuzzy walks tried, kept on a miss so
-        # the review card can say why the automatic match missed. The
-        # dispatcher keeps each call's attempts in the calling task's context,
-        # so they are read here, inside the task that ran the call: after it
-        # returns, or as wait_for cancels it when the whole dispatch times out.
-        attempts: list[dict[str, Any]] = []
-
-        async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
-            try:
-                return await call
-            finally:
-                attempts.extend(dispatcher.last_attempts)
-
-        try:
-
-            async def _identify() -> MetadataResult | None:
-                release: MetadataResult | None = None
-                if thediscdb_match is not None:
-                    imdb = external_imdb_id(thediscdb_match)
-                    if imdb:
-                        kind = release_kind(thediscdb_match)
-                        if not dispatcher.has_imdb_lookup(cfg, kind):
-                            # D-1: no enabled source can resolve the id, so no
-                            # online TITLE call; the release names the disc.
-                            # Held, not returned yet: the fingerprint database
-                            # below needs no key either, so a keyless install
-                            # would otherwise never reach the one source it can
-                            # use. The fuzzy title search IS skipped — it would
-                            # outrank this exact content-hash match.
-                            release = release_result(thediscdb_match, imdb)
-                        else:
-                            exact = await _collected(dispatcher.identify_from_imdb(imdb, cfg, kind=kind))
-                            if exact is not None:
-                                return exact
-                if release is not None:
-                    return await _collected(dispatcher.identify_from_fingerprint(scan, cfg)) or release
-                return await _collected(
-                    dispatcher.identify(
-                        scan,
-                        cfg,
-                        title_hint=hint_title(job, hints),
-                        title_hint_is_tv=hint_is_tv(job, hints),
-                        # Several same-length episode titles and no feature: a TV
-                        # disc, whatever the label says (arm_common.disc_shape).
-                        prefer_tv=looks_episodic(scan.titles),
-                    )
-                )
-
-            result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
-            timed_out = False
-        except asyncio.TimeoutError:
-            logger.info("identify dispatch_timeout job_id=%s", job.id)
-            result = None
-            timed_out = True
-            attempts.append(
-                {
-                    "source": None,
-                    "step": "title",
-                    "kind": None,
-                    "outcome": "timeout",
-                    "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
-                }
-            )
-
-        release_title = release_identity(thediscdb_match)[0] if thediscdb_match is not None else None
-        # The cleaned hint titles are search inputs only: a miss (or a held
-        # hit) is named by the disc's own BDMT name as written, else the
-        # release, else the label.
-        bdmt_name = (
-            scan.bd_meta.name.strip() if scan.bd_meta is not None and any(h.id == "bd_title" for h in hints) else ""
-        )
-        miss_title = bdmt_name or release_title or scan.volume_label
-
-        # The miss reasons belong to a miss only; any hit (applied or held)
-        # leaves no list behind.
-        metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
-        if result is None:
-            # The most recent ones; a whole-dispatch timeout entry is last.
-            metadata["identify_attempts"] = attempts[-MAX_IDENTIFY_ATTEMPTS:]
-        job.metadata_json = metadata
-
-        # A CD matched only by track layout where several releases fit is a
-        # guess between pressings: hold it for the operator whatever the
-        # music auto-apply switch says.
-        ambiguous_toc = (
-            result is not None
-            and result.provider == "musicbrainz"
-            and len(result.payload.get("toc_candidates") or []) > 1
-        )
-        if result is not None and not ambiguous_toc and auto_apply_for(cfg, result.kind):
-            apply_identity_result(job, result, now=datetime.now(timezone.utc))
-            # Timed review gate: a GENUINELY identified disc (result is not None — not
-            # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
-            # for operator review when hold_for_review is on, stamping the countdown
-            # anchor and persisting the scan's titles as Track rows so the review UI
-            # shows the full title list. Otherwise it proceeds straight to rip as
-            # today (tracks created at rip-start). (spec §5.1, §4.3)
-            if cfg.hold_for_review:
-                job.status = JobStatus.AWAITING_REVIEW
-                job.wait_start_time = datetime.now(timezone.utc)
-                await _persist_review_tracks(session, job, scan)
-            else:
-                job.status = JobStatus.IDENTIFIED
-        elif result is not None:
-            # D-10: this kind's "Apply confident matches" switch is off. Keep
-            # the hit for the operator to confirm; the disc waits with no
-            # countdown (the ripper treats a null wait_start_time as "no
-            # countdown") and stays unidentified until they accept or
-            # resolve it. The review gate's own countdown never starts here.
-            job.title = miss_title
-            job.metadata_json = suggest_identity(job.metadata_json, result, now=datetime.now(timezone.utc))
-            job.status = JobStatus.AWAITING_REVIEW
-            job.wait_start_time = None
-            # The kind is the ROUTING input, not an identity claim: it is what
-            # resolve_routed_session_id keys `session_routes` on, so the review
-            # tracks below get the keep/drop defaults and preset provenance of
-            # the session this disc will actually rip into. Left unset, the
-            # disc routes as a never-identified one and accept never re-persists
-            # the tracks, so the operator would rip the wrong set. The hit's
-            # title/year/poster still reach nothing but the suggestion.
-            # result.kind is a subset of MediaType's values by construction.
-            job.media_type = MediaType(result.kind)
-            await _persist_review_tracks(session, job, scan)
-            logger.info(
-                "identify job_id=%s: %s hit %r held for confirmation (%s)",
-                job.id,
-                result.kind,
-                result.title,
-                "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
-            )
-        else:
-            diagnostic: dict[str, bool] = {}
-            if timed_out:
-                diagnostic["dispatch_timeout"] = True
-            if cfg.block_on_miss:
-                job.status = JobStatus.AWAITING_USER_ID
-                job.title = miss_title
-                if diagnostic:
-                    job.metadata_json = with_flags(job.metadata_json, **diagnostic)
-            else:
-                job.status = JobStatus.IDENTIFIED
-                job.title = miss_title
-                job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
-
-        if previous is not None:
-            # on_previously_ripped=hold: whatever identify concluded, the disc
-            # waits for Rip again or Discard. No countdown (wait_start_time
-            # stays unset), so the ripper never auto-starts it.
-            if job.status != JobStatus.AWAITING_REVIEW:
-                await _persist_review_tracks(session, job, scan)
-            job.status = JobStatus.AWAITING_REVIEW
-            job.wait_start_time = None
-            job.metadata_json = {**(job.metadata_json or {}), "previously_ripped": {"job_id": previous.id}}
-            logger.info("identify job_id=%s: disc already ripped as job_id=%s; holding it", job.id, previous.id)
-
-        # Apply every stored proposal: hint job fields for all outcomes, plus
-        # disc-map / preset track fields when review tracks were persisted.
-        await resolve_job(session, job)
-
-    job.metadata_json = {
-        **(job.metadata_json or {}),
-        "scan_result": scan.model_dump(mode="json"),
-    }
-
-    await session.commit()
-    await session.refresh(job)
-    logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
-
-    if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
-        # awaiting_user_id -> needs identification; awaiting_review -> held for the
-        # timed review gate. Distinct event types so the dashboard can label them.
-        # WS-transition guard: only emit if this is a real status transition — do
-        # not re-emit for a reused job already sitting in the target held status.
-        if reuse_job is None or prior_status != job.status:
-            event_type = "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
-            payload: dict[str, object] = {
-                "job_id": job.id,
-                "drive_id": job.drive_id,
-                "volume_label": scan.volume_label,
-                "disc_type": job.disc_type.value,
-            }
-            if previous is not None:
-                payload["previous_job_id"] = previous.id
-            await hub.emit(
-                topic="ripper.events",
-                event_type=event_type,
-                payload=payload,
-                job_id=job.id,
-                session=session,
-            )
-            await session.commit()
-
-    # Background episode stage trigger (Task 8): only after the final commit
-    # above (whichever branch made it), and only when it's worth the async
-    # DB round-trip — the runner itself re-checks is_tv_candidate against
-    # freshly loaded tracks before doing any work.
-    if stage_runner is not None:
-        stage_tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-        if is_tv_candidate(job, stage_tracks):
-            stage_runner.schedule(job.id)
-    return job
+    return await _IdentifyFlow(
+        req=req, request=request, session=session, dispatcher=dispatcher, hub=hub, stage_runner=stage_runner
+    ).run()
 
 
 @router.get("/jobs/{job_id}", response_model=JobView, dependencies=[Depends(require_service_token)])
