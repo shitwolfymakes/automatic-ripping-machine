@@ -73,6 +73,23 @@ async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
         pass
 
 
+async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[None] | None) -> RipResult | None:
+    """Wait for dd to exit; return the timeout failure, or None if it exits in time.
+
+    Either way, the progress reporter is stopped and dd is reaped before this returns.
+    """
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=DATA_RIP_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
+    finally:
+        await _stop_reporter(reporter)
+        await _kill_if_running(proc)
+    return None
+
+
 async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
@@ -101,15 +118,9 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     reporter = (
         asyncio.create_task(_report_progress(output_path, total, on_progress)) if on_progress is not None else None
     )
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=DATA_RIP_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
-    finally:
-        await _stop_reporter(reporter)
-        await _kill_if_running(proc)
+    timed_out = await _wait_for_dd(proc, reporter)
+    if timed_out is not None:
+        return timed_out
 
     if proc.returncode != 0:
         stderr = b""

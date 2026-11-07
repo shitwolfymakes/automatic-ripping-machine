@@ -274,3 +274,39 @@ async def test_kill_if_running_swallows_reap_error(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o", reap_error=RuntimeError("boom"))
     await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
     assert proc.kills == 1 and not proc.reaped
+
+
+async def test_wait_for_dd_exit_in_time_returns_none_and_stops_reporter(tmp_path: Path) -> None:
+    proc = _FakeProc(tmp_path / "o", [b"x"])
+    reporter = asyncio.create_task(asyncio.sleep(60))
+    assert await data_rip._wait_for_dd(proc, reporter) is None  # type: ignore[arg-type]
+    assert reporter.cancelled()
+
+
+async def test_wait_for_dd_without_reporter(tmp_path: Path) -> None:
+    proc = _FakeProc(tmp_path / "o", [b"x"])
+    assert await data_rip._wait_for_dd(proc, None) is None  # type: ignore[arg-type]
+
+
+async def test_wait_for_dd_timeout_returns_failure_and_kills_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(data_rip, "DATA_RIP_TIMEOUT_SECONDS", 0.05)
+    proc = _HangProc(tmp_path / "o")
+    reporter = asyncio.create_task(asyncio.sleep(60))
+    result = await data_rip._wait_for_dd(proc, reporter)  # type: ignore[arg-type]
+    assert result is not None
+    assert not result.ok
+    assert result.error == "dd timed out after 0.05s"
+    assert proc.kills == 1 and proc.reaped
+    assert reporter.cancelled()
+
+
+async def test_wait_for_dd_cancelled_propagates_and_kills(tmp_path: Path) -> None:
+    proc = _HangProc(tmp_path / "o")
+    task = asyncio.create_task(data_rip._wait_for_dd(proc, None))  # type: ignore[arg-type]
+    await asyncio.sleep(0.03)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert proc.kills == 1
