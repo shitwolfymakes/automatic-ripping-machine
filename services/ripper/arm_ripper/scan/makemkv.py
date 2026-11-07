@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Callable, Iterable
+from typing import Callable, Iterable, NamedTuple
 
 from arm_common import DiscType, MakemkvKeyState
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
@@ -323,19 +323,20 @@ async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | Non
     return _probe_outcome(state, proc.returncode)
 
 
-def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
-    """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
-    fingerprints: list[DiscFingerprintInput] = []
-    if probe.crc64:
-        fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
-    if probe.thediscdb:
-        fingerprints.append(DiscFingerprintInput(algo="thediscdb", value=probe.thediscdb))
-    if probe.matrix256:
-        fingerprints.append(DiscFingerprintInput(algo="matrix256", value=probe.matrix256))
-    return fingerprints
+class _InfoRun(NamedTuple):
+    """What one `makemkvcon info` run printed, and how it exited."""
+
+    stdout: bytes
+    stderr: bytes
+    expired: bool
+    returncode: int | None
 
 
-async def scan_disc(device_path: str) -> ScanResult:
+async def _run_info(device_path: str) -> _InfoRun:
+    """Run `makemkvcon info` on the device under the scan timeout.
+
+    Raises ScanError when makemkvcon is not on PATH or times out.
+    """
     cmd = ["makemkvcon", "-r", "--cache=1", "info", makemkv_source_url(device_path)]
     logger.info("makemkvcon info device=%s", device_path)
 
@@ -356,8 +357,25 @@ async def scan_disc(device_path: str) -> ScanResult:
         raise ScanError(f"makemkvcon timed out after {SCAN_TIMEOUT_SECONDS}s") from None
 
     await proc.wait()
+    return _InfoRun(stdout, stderr, expired, proc.returncode)
 
-    if expired:
+
+def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
+    """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
+    fingerprints: list[DiscFingerprintInput] = []
+    if probe.crc64:
+        fingerprints.append(DiscFingerprintInput(algo="crc64", value=probe.crc64))
+    if probe.thediscdb:
+        fingerprints.append(DiscFingerprintInput(algo="thediscdb", value=probe.thediscdb))
+    if probe.matrix256:
+        fingerprints.append(DiscFingerprintInput(algo="matrix256", value=probe.matrix256))
+    return fingerprints
+
+
+async def scan_disc(device_path: str) -> ScanResult:
+    run = await _run_info(device_path)
+
+    if run.expired:
         raise MakemkvBinaryExpiredError(
             "makemkvcon refused: binary is past its hard-coded expiry "
             "(MSG:5021 'application version is too old'). MakeMKV beta "
@@ -367,11 +385,11 @@ async def scan_disc(device_path: str) -> ScanResult:
             "docs/user/MakeMKV-Ripper.md § Failure modes."
         )
 
-    if proc.returncode != 0:
-        msg = stderr.decode(errors="replace").strip() or stdout.decode(errors="replace")[:200]
-        raise ScanError(f"makemkvcon exited {proc.returncode}: {msg}")
+    if run.returncode != 0:
+        msg = run.stderr.decode(errors="replace").strip() or run.stdout.decode(errors="replace")[:200]
+        raise ScanError(f"makemkvcon exited {run.returncode}: {msg}")
 
-    lines = stdout.decode(errors="replace").splitlines()
+    lines = run.stdout.decode(errors="replace").splitlines()
     volume_label, titles, mkv_disc_type = parse_makemkvcon_info(lines)
 
     # MakeMKV's CINFO:1 is the authoritative disc-type signal — works on
