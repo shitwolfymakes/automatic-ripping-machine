@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -1105,13 +1105,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
     return job
 
 
-@router.post("/jobs/{job_id}/rip-start", response_model=RipStartResponse)
-async def rip_start(
-    job: Job = Depends(require_drive_owner_by_job),
-    session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(get_hub),
-    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
-) -> RipStartResponse:
+async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int | None]:
     # Fix 75-8: resolve the routed session ONCE for this request — the preset
     # choice and the min-length override both derive from the same `sess`
     # (previously each of resolve_rip_preset_id_for_job,
@@ -1125,32 +1119,44 @@ async def rip_start(
     except RipPresetUnavailable as exc:
         raise _rip_preset_or_http(exc) from exc
     min_length_seconds = _min_length_override_from_session(sess)
+    return preset_id, min_length_seconds
 
-    existing = (
-        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
+
+async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
+    return (
+        (await session.execute(select(Track).where(col(Track.job_id) == job_id).order_by(col(Track.index))))
         .scalars()
         .all()
     )
-    if existing:
-        # Tracks already exist (crash-resume, or the timed review gate persisted
-        # them at identify and the operator's Start already moved the job to
-        # RIPPING). Ensure the RIPPING transition happened — previously this
-        # branch returned early WITHOUT setting RIPPING/started_at, so a
-        # pre-persisted-tracks job never transitioned and the rip never completed
-        # (audit B2). Tolerate already-RIPPING (Start did it); transition if not.
-        if job.status != JobStatus.RIPPING:
-            job.status = JobStatus.RIPPING
-            if job.started_at is None:
-                job.started_at = datetime.now(timezone.utc)
-            await session.commit()
-            await session.refresh(job)
-        return RipStartResponse(
-            job_id=job.id,
-            rip_preset_id=preset_id,
-            tracks=[TrackView.model_validate(t) for t in existing],
-            min_length_seconds=min_length_seconds,
-        )
 
+
+def _rip_start_response(
+    job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+) -> RipStartResponse:
+    return RipStartResponse(
+        job_id=job.id,
+        rip_preset_id=preset_id,
+        tracks=[TrackView.model_validate(t) for t in tracks],
+        min_length_seconds=min_length_seconds,
+    )
+
+
+async def _ensure_ripping(session: AsyncSession, job: Job) -> None:
+    # Tracks already exist (crash-resume, or the timed review gate persisted
+    # them at identify and the operator's Start already moved the job to
+    # RIPPING). Ensure the RIPPING transition happened — previously this
+    # branch returned early WITHOUT setting RIPPING/started_at, so a
+    # pre-persisted-tracks job never transitioned and the rip never completed
+    # (audit B2). Tolerate already-RIPPING (Start did it); transition if not.
+    if job.status != JobStatus.RIPPING:
+        job.status = JobStatus.RIPPING
+        if job.started_at is None:
+            job.started_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(job)
+
+
+def _require_startable(job: Job) -> None:
     # IDENTIFIED is the normal pre-rip state; AWAITING_REVIEW reaches here only
     # when the timed review gate auto-started (countdown elapsed) a held disc
     # whose scan yielded NO persistable titles — _persist_review_tracks then
@@ -1163,18 +1169,27 @@ async def rip_start(
             detail=f"job not in identified state: status={enum_value_str(job.status)}",
         )
 
+
+def _scan_of(job: Job) -> ScanResult:
     scan_dict = (job.metadata_json or {}).get("scan_result")
     if not scan_dict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="job missing scan_result in metadata_json",
         )
-    scan = ScanResult.model_validate(scan_dict)
+    return ScanResult.model_validate(scan_dict)
 
+
+async def _load_rip_preset(session: AsyncSession, preset_id: str) -> RipPreset:
     preset = (await session.execute(select(RipPreset).where(col(RipPreset.id) == preset_id))).scalar_one_or_none()
     if preset is None:
         raise _rip_preset_or_http(RipPresetUnavailable("not_seeded", f"built-in rip preset {preset_id} not seeded"))
+    return preset
 
+
+async def _select_or_fail(
+    session: AsyncSession, hub: WSHub, job: Job, scan: ScanResult, preset: RipPreset
+) -> list[Track]:
     # A whole-disc preset (ISO dump, FOLDER backup) gives its one track
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
@@ -1200,7 +1215,10 @@ async def rip_start(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
         )
+    return new_tracks
 
+
+async def _begin_rip(session: AsyncSession, job: Job, new_tracks: list[Track]) -> None:
     session.add_all(new_tracks)
     await session.flush()
     record_preset(job, new_tracks, now=datetime.now(timezone.utc))
@@ -1209,18 +1227,8 @@ async def rip_start(
     job.started_at = datetime.now(timezone.utc)
     await session.commit()
 
-    refreshed = (
-        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
-        .scalars()
-        .all()
-    )
-    logger.info(
-        "rip-start job_id=%s preset=%s tracks=%d",
-        job.id,
-        preset_id,
-        len(refreshed),
-    )
 
+async def _emit_rip_started(session: AsyncSession, hub: WSHub, job: Job, preset_id: str, track_count: int) -> None:
     await hub.emit(
         topic="ripper.events",
         event_type="rip.started",
@@ -1228,24 +1236,50 @@ async def rip_start(
             "job_id": job.id,
             "drive_id": job.drive_id,
             "rip_preset_id": preset_id,
-            "track_count": len(refreshed),
+            "track_count": track_count,
         },
         job_id=job.id,
         session=session,
     )
     await session.commit()
 
+
+@router.post("/jobs/{job_id}/rip-start", response_model=RipStartResponse)
+async def rip_start(
+    job: Job = Depends(require_drive_owner_by_job),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
+) -> RipStartResponse:
+    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
+
+    existing = await _job_tracks(session, job.id)
+    if existing:
+        await _ensure_ripping(session, job)
+        return _rip_start_response(job, preset_id, existing, min_length_seconds)
+
+    _require_startable(job)
+    scan = _scan_of(job)
+    preset = await _load_rip_preset(session, preset_id)
+    new_tracks = await _select_or_fail(session, hub, job, scan, preset)
+    await _begin_rip(session, job, new_tracks)
+
+    refreshed = await _job_tracks(session, job.id)
+    logger.info(
+        "rip-start job_id=%s preset=%s tracks=%d",
+        job.id,
+        preset_id,
+        len(refreshed),
+    )
+
+    await _emit_rip_started(session, hub, job, preset_id, len(refreshed))
+
     # C1: without the review hold, identify creates no Track rows, so the
     # stage it scheduled saw nothing to match. The tracks appear here.
     if stage_runner is not None and is_tv_candidate(job, new_tracks):
         stage_runner.schedule(job.id)
 
-    return RipStartResponse(
-        job_id=job.id,
-        rip_preset_id=preset_id,
-        tracks=[TrackView.model_validate(t) for t in refreshed],
-        min_length_seconds=min_length_seconds,
-    )
+    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
@@ -1265,22 +1299,13 @@ async def resume(
             detail=f"job not in ripping state: status={job.status.value}",
         )
 
-    # Fix 75-8: one routed-session resolution for this request (see rip_start).
-    sess = await _load_routed_session(session, job)
-    try:
-        preset_id = _rip_preset_id_from_session(sess, job.disc_type)
-    except RipPresetUnavailable as exc:
-        raise _rip_preset_or_http(exc) from exc
-    min_length_seconds = _min_length_override_from_session(sess)
+    # Fix 75-8: one routed-session resolution for this request (see _routed_rip_choice).
+    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
 
     await reset_job_for_recovery(session, job)
     await session.commit()
 
-    refreshed = (
-        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
-        .scalars()
-        .all()
-    )
+    refreshed = await _job_tracks(session, job.id)
     logger.info("rip-resume job_id=%s tracks=%d", job.id, len(refreshed))
 
     await hub.emit(
@@ -1297,12 +1322,7 @@ async def resume(
     )
     await session.commit()
 
-    return RipStartResponse(
-        job_id=job.id,
-        rip_preset_id=preset_id,
-        tracks=[TrackView.model_validate(t) for t in refreshed],
-        min_length_seconds=min_length_seconds,
-    )
+    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
 
 
 @router.get(
