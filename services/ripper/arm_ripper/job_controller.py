@@ -3,7 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -214,6 +214,19 @@ class JobController:
         """
         return self._active_task is None
 
+    @contextlib.asynccontextmanager
+    async def _claim(self, job_id: str) -> AsyncIterator[None]:
+        """Hold the single-flight gate for this task and job: is_idle() is False, and job.abandoned can cancel the
+        task, until the block exits."""
+        async with self._active_lock:
+            self._active_task = asyncio.current_task()
+            self._active_job_id = job_id
+            try:
+                yield
+            finally:
+                self._active_task = None
+                self._active_job_id = None
+
     async def pickup(self, job: JobView, device_path: str) -> None:
         """Re-acquire a rip-ready job from a heartbeat reprobe.
 
@@ -226,16 +239,10 @@ class JobController:
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
             return
-        async with self._active_lock:
-            self._active_task = asyncio.current_task()
-            self._active_job_id = job.id
-            try:
-                with with_log_context(job_id=job.id):
-                    logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                    await self._run_rip(job, device_path)
-            finally:
-                self._active_task = None
-                self._active_job_id = None
+        async with self._claim(job.id):
+            with with_log_context(job_id=job.id):
+                logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
+                await self._run_rip(job, device_path)
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -813,23 +820,17 @@ class JobController:
         the disc never ripped. A re-parked disc waits for an explicit Start; it
         does not auto-rip on boot even if its countdown had expired.
         """
-        async with self._active_lock:
-            self._active_task = asyncio.current_task()
-            self._active_job_id = job.id
-            try:
-                with with_log_context(job_id=job.id):
-                    logger.info("reboot recovery: re-parking held job %s", job.id)
-                    resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
-                    if resolved is None:
-                        return
-                    job = resolved
-                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
-                        logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
-                        return
-                    await self._run_rip(job, device_path)
-            finally:
-                self._active_task = None
-                self._active_job_id = None
+        async with self._claim(job.id):
+            with with_log_context(job_id=job.id):
+                logger.info("reboot recovery: re-parking held job %s", job.id)
+                resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                if resolved is None:
+                    return
+                job = resolved
+                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                    logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
+                    return
+                await self._run_rip(job, device_path)
 
     async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
         """Phase 9 — drive a crash-recovered rip from the boot probe.
@@ -843,27 +844,21 @@ class JobController:
         `is_idle()` False (no double-rip from the heartbeat re-probe or from
         a reattach boot probe).
         """
-        async with self._active_lock:
-            self._active_task = asyncio.current_task()
-            self._active_job_id = job.id
-            try:
-                with with_log_context(job_id=job.id):
-                    # Crash-resume skips the scan path, so refresh the key here too —
-                    # a rip resumed days after a crash must not run on a stale key.
-                    await refresh_makemkv_key(key=await self._configured_makemkv_key())
-                    self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-                    self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
-                    rip_start = await self._client.resume(job.id)
-                    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-                    await self._execute_rip(
-                        job_id=job.id,
-                        disc_type=job.disc_type,
-                        device_path=device_path,
-                        rip_start=rip_start,
-                    )
-            finally:
-                self._active_task = None
-                self._active_job_id = None
+        async with self._claim(job.id):
+            with with_log_context(job_id=job.id):
+                # Crash-resume skips the scan path, so refresh the key here too —
+                # a rip resumed days after a crash must not run on a stale key.
+                await refresh_makemkv_key(key=await self._configured_makemkv_key())
+                self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+                self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                rip_start = await self._client.resume(job.id)
+                logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+                await self._execute_rip(
+                    job_id=job.id,
+                    disc_type=job.disc_type,
+                    device_path=device_path,
+                    rip_start=rip_start,
+                )
 
     async def _execute_rip(
         self,
