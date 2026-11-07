@@ -37,6 +37,7 @@ from arm_backend.identity.sources.thediscdb import (
     release_result,
 )
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks, select_tracks_for_review
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -293,17 +294,6 @@ def _get_dispatcher(request: Request) -> MetadataDispatcher:
     return dispatcher
 
 
-def _get_hub(request: Request) -> WSHub:
-    hub: WSHub = request.app.state.ws_hub
-    return hub
-
-
-def _get_stage_runner(request: Request) -> EpisodeStageRunner | None:
-    """None when `app.state` carries no runner (e.g. an existing router test
-    that never set one up) — callers then just skip scheduling."""
-    return getattr(request.app.state, "episode_stage", None)
-
-
 @router.get("/config", response_model=RipperConfigView, dependencies=[Depends(require_service_token)])
 async def get_ripper_config(
     drive_id: str | None = None,
@@ -389,7 +379,7 @@ async def iso_prepare_report(
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
     view = iso_prepare.record(req)
-    await _get_hub(request).emit(
+    await get_hub(request).emit(
         topic="ripper.events", event_type="iso.preparing", payload=view.model_dump(mode="json"), persist=False
     )
 
@@ -594,8 +584,8 @@ async def identify(
     request: Request,
     session: AsyncSession = Depends(get_session),
     dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
-    hub: WSHub = Depends(_get_hub),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    hub: WSHub = Depends(get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> Job:
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
@@ -963,8 +953,8 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
 async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    hub: WSHub = Depends(get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> RipStartResponse:
     # Fix 75-8: resolve the routed session ONCE for this request — the preset
     # choice and the min-length override both derive from the same `sess`
@@ -1106,7 +1096,7 @@ async def rip_start(
 async def resume(
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> RipStartResponse:
     """Phase 9 — per-job crash-recovery reset for the 'only ripper crashed'
     case. Idempotent: re-running on an already-reset job is a no-op.
@@ -1282,7 +1272,7 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
 async def recovery_abandon(
     job_id: str,
     session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> Job:
     """Service-token abandon for ripper reboot recovery (timed review gate §6.3).
 
@@ -1320,7 +1310,7 @@ async def update_track(
     req: TrackUpdateRequest,
     track: Track = Depends(require_drive_owner_by_track),
     session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> TrackView:
     new_status = req.status
     current = track.status
@@ -1403,7 +1393,7 @@ async def rip_complete(
     _: JobCompleteRequest,
     job: Job = Depends(require_drive_owner_by_job),
     session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> JobView:
     if job.status != JobStatus.RIPPING:
         raise HTTPException(

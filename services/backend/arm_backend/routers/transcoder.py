@@ -25,6 +25,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
+from arm_backend.routers._deps import get_hub
 from arm_backend.transcode_apply import aggregate_session_application
 from arm_backend.transcode_dispatcher import release_gpu_for_task
 from arm_backend.ws import WSHub
@@ -53,11 +54,6 @@ from arm_common.schemas import (
 logger = logging.getLogger("arm_backend.routers.transcoder")
 
 router = APIRouter(prefix="/api/transcoder", tags=["transcoder"], dependencies=[Depends(require_service_token)])
-
-
-def _get_hub(request: Request) -> WSHub:
-    hub: WSHub = request.app.state.ws_hub
-    return hub
 
 
 async def _load_task(db: AsyncSession, task_id: str) -> TranscodeTask:
@@ -139,7 +135,7 @@ async def claim(
     request: Request,
     db: AsyncSession = Depends(get_session),
     x_arm_hostname: str | None = Header(default=None),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> ClaimTaskResponse:
     if not x_arm_hostname:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing X-ARM-Hostname header")
@@ -239,7 +235,7 @@ async def complete(
     req: CompleteTaskRequest,
     db: AsyncSession = Depends(get_session),
     x_arm_hostname: str | None = Header(default=None),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> TranscodeTask:
     task = await _load_task(db, task_id)
     _require_owner(task, x_arm_hostname)
@@ -302,7 +298,7 @@ async def fail(
     req: FailTaskRequest,
     db: AsyncSession = Depends(get_session),
     x_arm_hostname: str | None = Header(default=None),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> TranscodeTask:
     task = await _load_task(db, task_id)
     _require_owner(task, x_arm_hostname)

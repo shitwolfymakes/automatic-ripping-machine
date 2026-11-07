@@ -39,8 +39,8 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import claims_of, clear_pin, forget_episode_sources, record_manual_job, set_pin
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
+from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.routers._params import JobIdParam
-from arm_backend.routers.jobs import _get_hub, _get_stage_runner
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, User
@@ -174,8 +174,8 @@ async def match_identity(
     req: MatchRequest,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    hub: WSHub = Depends(get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> MatchPreview:
     # M4 (spec 5): the manual match works on any job; only the background
     # stage is gated on a TV candidate.
@@ -291,8 +291,8 @@ async def clear_episode_match(
     job_id: JobIdParam,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    hub: WSHub = Depends(get_hub),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> IdentityView:
     """Clear episodes: forget every episode source's result and the operator's
     source choice, then re-resolve so the placements come off the tracks.
@@ -326,7 +326,7 @@ async def clear_identity_pin(
     job_id: JobIdParam,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(_get_hub),
+    hub: WSHub = Depends(get_hub),
 ) -> IdentityView:
     # M2: lock the job row before the identity write (lock order: job, then tracks).
     job = await _get_job(db, job_id, for_update=True)
@@ -407,7 +407,7 @@ async def browse_episodes(
     season: int = Query(..., ge=0),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> EpisodeListView:
     job = await _get_job(db, job_id)
     if stage_runner is None:
@@ -447,7 +447,7 @@ async def browse_seasons(
     source: EpisodeSourceSetting,
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
-    stage_runner: EpisodeStageRunner | None = Depends(_get_stage_runner),
+    stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> SeasonListView:
     job = await _get_job(db, job_id)
     if stage_runner is None:
