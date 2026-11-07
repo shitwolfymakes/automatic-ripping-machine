@@ -332,3 +332,82 @@ async def test_feed_prgc_position_maps_through_eligible_to_current_title() -> No
     state = _ParserState()
     await _parser(state, eligible=[4, 9]).feed('PRGC:5017,1,"Saving to MKV file"')
     assert state.current_title == 9
+
+
+# --- _LineParser handlers: True when the line was their kind, else False --------------------------------------------
+
+
+async def test_apply_expiry_true_on_first_5021_false_once_expired_or_other_line() -> None:
+    state, proc = _ParserState(), _KillProc()
+    parser = _parser(state, proc)
+    assert await parser._apply_expiry("PRGV:1,2,3") is False
+    assert await parser._apply_expiry(_EXPIRED) is True
+    assert await parser._apply_expiry(_EXPIRED) is False
+    assert proc.kills == 1
+
+
+async def test_apply_progress_true_for_prgv_false_otherwise() -> None:
+    parser = _parser(_ParserState())
+    assert await parser._apply_progress(PRGV.decode()) is True
+    assert await parser._apply_progress('PRGC:5017,0,"x"') is False
+
+
+async def test_apply_save_position_true_in_range_and_out_of_range_false_otherwise(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    state = _ParserState()
+    parser = _parser(state, eligible=[4])
+    assert await parser._apply_save_position("PRGV:1,2,3") is False
+    assert await parser._apply_save_position('PRGC:5017,0,"Saving to MKV file"') is True
+    assert state.current_title == 4
+    assert await parser._apply_save_position('PRGC:5017,5,"Saving to MKV file"') is True
+    _assert_one(caplog, logging.WARNING, "PRGC:5017 output position 5 out of range (eligible has 1 entries)")
+    assert state.current_title == 4
+
+
+async def test_apply_title_line_true_for_saving_title_false_otherwise() -> None:
+    state = _ParserState()
+    parser = _parser(state)
+    assert await parser._apply_title_line("PRGV:1,2,3") is False
+    assert await parser._apply_title_line('PRGT:5011,0,"Saving title #5 to MKV file"') is True
+    assert state.current_title == 5
+
+
+async def test_apply_milestone_true_for_other_prgt_and_marks_save_phase(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    state = _ParserState()
+    parser = _parser(state)
+    assert await parser._apply_milestone("PRGV:1,2,3") is False
+    assert await parser._apply_milestone('PRGT:5024,0,"Saving all titles"') is True
+    assert state.save_phase_started is True
+    _assert_one(caplog, logging.INFO, "makemkvcon milestone: Saving all titles")
+
+
+async def test_apply_msg_true_for_msg_false_for_non_msg(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    state = _ParserState()
+    parser = _parser(state)
+    assert await parser._apply_msg("PRGV:1,2,3") is False
+    assert caplog.records == []
+    line = 'MSG:5003,0,2,"Failed to save title 2 to file x","Failed to save title %1 to file %2","2","x"'
+    assert await parser._apply_msg(line) is True
+    assert state.diagnostics == ["Failed to save title 2 to file x"]
+    assert state.titles[2].fail_reason == "Failed to save title 2 to file x"
+    _assert_one(caplog, logging.DEBUG, f"makemkvcon: {line}")
+
+
+def test_record_title_failure_with_index_stores_unescaped_reason() -> None:
+    state = _ParserState()
+    line = r'MSG:5003,0,2,"Failed \"x\" to save","fmt","3","y"'
+    _parser(state)._record_title_failure(line, ["3", "y"])
+    assert state.titles[3].fail_reason == 'Failed "x" to save'
+
+
+def test_record_title_failure_without_index_warns_and_leaves_state(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    state = _ParserState()
+    line = 'MSG:5003,0,2,"nope","fmt"'
+    _parser(state)._record_title_failure(line, [])
+    assert state == _ParserState()
+    _assert_one(caplog, logging.WARNING, f"MSG:5003 without parseable title index: {line}")

@@ -330,6 +330,20 @@ class _LineParser:
 
     async def feed(self, line: str) -> None:
         """Apply one non-blank robot line."""
+        if await self._apply_expiry(line):
+            return
+        if await self._apply_progress(line):
+            return
+        if await self._apply_save_position(line):
+            return
+        if await self._apply_title_line(line):
+            return
+        if await self._apply_milestone(line):
+            return
+        await self._apply_msg(line)
+
+    async def _apply_expiry(self, line: str) -> bool:
+        """MSG:5021 (the binary's kill switch), the first time it appears: record it and kill makemkvcon."""
         # Hard-coded 60-day kill-switch in the makemkv-bin blob. Kill the
         # subprocess so the 6-hour RIP_TIMEOUT_SECONDS doesn't fire — the
         # caller checks state.binary_expired to surface a distinct error.
@@ -338,8 +352,11 @@ class _LineParser:
             self._state.binary_expired = True
             self._state.diagnostics.append(line)
             self._proc.kill()
-            return
+            return True
+        return False
 
+    async def _apply_progress(self, line: str) -> bool:
+        """PRGV: per-title progress once a title is current, else the disc-overall fallback."""
         # PRGV — two channels in one line:
         #   `current/max` advances per-operation (resets per title)
         #   `total/max`   advances disc-overall (monotonic *within
@@ -365,8 +382,11 @@ class _LineParser:
                 self._state.save_phase_started or not self._gate_disc_progress
             ) and self._callbacks.on_disc_progress is not None:
                 await _call_safely("disc progress", self._callbacks.on_disc_progress, tot_frac)
-            return
+            return True
+        return False
 
+    async def _apply_save_position(self, line: str) -> bool:
+        """PRGC:5017: map the output position to its source title and start it, ending the previous one."""
         # PRGC:5017 — primary per-title signal in `mkv all` mode. The
         # second field is the output position (0-based) which we map
         # back to a source title index via the eligible list.
@@ -388,8 +408,11 @@ class _LineParser:
                     out_pos,
                     len(self._eligible),
                 )
-            return
+            return True
+        return False
 
+    async def _apply_title_line(self, line: str) -> bool:
+        """A PRGT "Saving title N" line: start that title."""
         # PRGT — defensive fallback for older MakeMKV / per-title mode
         # which sometimes emits "Saving title N" instead of (or in
         # addition to) PRGC:5017. Guarded by `started_emitted` so a
@@ -398,8 +421,11 @@ class _LineParser:
         title_idx = parse_prgt_title(line)
         if title_idx is not None:
             await _emit_title_start(self._state, title_idx, self._callbacks.on_title_start)
-            return
+            return True
+        return False
 
+    async def _apply_milestone(self, line: str) -> bool:
+        """Any other PRGT: log the milestone, noting the save phase start (5024)."""
         # Generic PRGT (other milestones) — log; also detect the save
         # phase boundary (PRGT:5024 "Saving all titles to MKV files")
         # which gates the disc-overall PRGV fallback.
@@ -408,8 +434,11 @@ class _LineParser:
             if prgt.group(1) == "5024":
                 self._state.save_phase_started = True
             logger.info("makemkvcon milestone: %s", prgt.group(3))
-            return
+            return True
+        return False
 
+    async def _apply_msg(self, line: str) -> bool:
+        """A MSG line: keep diagnostics, capture a MSG:5003 title failure, and log it at debug."""
         if line.startswith("MSG:"):
             diag = parse_diagnostic_msg(line)
             if diag is not None:
@@ -418,17 +447,23 @@ class _LineParser:
             if parsed is not None:
                 code, args = parsed
                 if code == _TITLE_FAIL_CODE:
-                    fail_idx = _extract_title_index_from_msg5003(args)
-                    rendered = next(iter(_QUOTED_ARG_RE.finditer(line)), None)
-                    reason = rendered.group(1).replace('\\"', '"') if rendered else "save failed"
-                    if fail_idx is not None:
-                        ts = self._state.titles.setdefault(fail_idx, _TitleState())
-                        ts.fail_reason = reason
-                    else:
-                        # Unattributable fail — append to overall diagnostics
-                        # so the disc-level error captures it.
-                        logger.warning("MSG:5003 without parseable title index: %s", line)
+                    self._record_title_failure(line, args)
             logger.debug("makemkvcon: %s", line)
+            return True
+        return False
+
+    def _record_title_failure(self, line: str, args: list[str]) -> None:
+        """Store a MSG:5003 failure reason on its title, or warn when the title index can't be found."""
+        fail_idx = _extract_title_index_from_msg5003(args)
+        rendered = next(iter(_QUOTED_ARG_RE.finditer(line)), None)
+        reason = rendered.group(1).replace('\\"', '"') if rendered else "save failed"
+        if fail_idx is not None:
+            ts = self._state.titles.setdefault(fail_idx, _TitleState())
+            ts.fail_reason = reason
+        else:
+            # Unattributable fail — append to overall diagnostics
+            # so the disc-level error captures it.
+            logger.warning("MSG:5003 without parseable title index: %s", line)
 
 
 async def _stream_output(
