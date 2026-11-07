@@ -103,6 +103,23 @@ def _split_robot_line(raw: str) -> tuple[str, list[str]] | None:
     return msg_type, [f.strip() for f in rest.split(",")]
 
 
+def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
+    """The ScanTitle for one title's collected TINFO fields; None when it has no duration."""
+    duration_obj = entry.get("duration_seconds")
+    if not isinstance(duration_obj, int):
+        return None
+    chapter_obj = entry.get("chapter_count")
+    size_obj = entry.get("size_bytes")
+    source_obj = entry.get("source_file")
+    return ScanTitle(
+        index=idx,
+        duration_seconds=duration_obj,
+        chapter_count=chapter_obj if isinstance(chapter_obj, int) else None,
+        size_bytes=size_obj if isinstance(size_obj, int) else None,
+        source_file=source_obj if isinstance(source_obj, str) else None,
+    )
+
+
 def parse_makemkvcon_info(
     lines: Iterable[str],
 ) -> tuple[str | None, list[ScanTitle], DiscType | None]:
@@ -158,25 +175,7 @@ def parse_makemkvcon_info(
                 if field_value is not None:
                     entry[name] = field_value
 
-    parsed: list[ScanTitle] = []
-    for idx in sorted(titles):
-        entry = titles[idx]
-        duration_obj = entry.get("duration_seconds")
-        if not isinstance(duration_obj, int):
-            continue
-        chapter_obj = entry.get("chapter_count")
-        size_obj = entry.get("size_bytes")
-        source_obj = entry.get("source_file")
-        parsed.append(
-            ScanTitle(
-                index=idx,
-                duration_seconds=duration_obj,
-                chapter_count=chapter_obj if isinstance(chapter_obj, int) else None,
-                size_bytes=size_obj if isinstance(size_obj, int) else None,
-                source_file=source_obj if isinstance(source_obj, str) else None,
-            )
-        )
-
+    parsed = [title for idx in sorted(titles) if (title := _scan_title(idx, titles[idx])) is not None]
     return volume_label, parsed, mkv_disc_type
 
 

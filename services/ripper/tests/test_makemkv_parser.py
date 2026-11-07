@@ -2,7 +2,7 @@ from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanTitle
-from arm_ripper.scan.makemkv import _TINFO_FIELDS, _split_robot_line, _to_int, parse_makemkvcon_info
+from arm_ripper.scan.makemkv import _TINFO_FIELDS, _split_robot_line, _scan_title, _to_int, parse_makemkvcon_info
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -211,3 +211,28 @@ def test_later_unparseable_chapter_count_keeps_the_earlier_valid_one():
     lines = ['TINFO:0,9,0,"0:01:00"', 'TINFO:0,8,0,"4"', 'TINFO:0,8,0,"many"']
     _, titles, _ = parse_makemkvcon_info(lines)
     assert titles[0].chapter_count == 4
+
+
+def test_scan_title_without_a_duration_is_none():
+    assert _scan_title(0, {"chapter_count": 4}) is None
+
+
+def test_scan_title_with_a_non_int_duration_is_none():
+    assert _scan_title(0, {"duration_seconds": "60"}) is None
+
+
+def test_scan_title_builds_the_exact_scan_title_from_a_full_entry():
+    entry: dict[str, object] = {
+        "duration_seconds": 60,
+        "chapter_count": 4,
+        "size_bytes": 2048,
+        "source_file": "title02.mkv",
+    }
+    assert _scan_title(2, entry) == ScanTitle(
+        index=2, duration_seconds=60, chapter_count=4, size_bytes=2048, source_file="title02.mkv"
+    )
+
+
+def test_scan_title_maps_wrongly_typed_optional_values_to_none():
+    entry: dict[str, object] = {"duration_seconds": 60, "chapter_count": "4", "size_bytes": "2048", "source_file": 7}
+    assert _scan_title(1, entry) == ScanTitle(index=1, duration_seconds=60)
