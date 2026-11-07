@@ -698,7 +698,7 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
     job, so resolve must run it (auto-apply of the pending/default session as
     well as the drain), not only the parked-application fan-out. An
     identified partial rip already had after_rip at rip-complete."""
-    import arm_backend.routers.jobs as jobs_router
+    import arm_backend.identity.resolve_service as resolve_service
 
     db = FakeSession()
     hub = _CapturingHub()
@@ -714,8 +714,8 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
         calls.append("fan_out")
         return []
 
-    monkeypatch.setattr(jobs_router, "after_rip", fake_after_rip)
-    monkeypatch.setattr(jobs_router, "fan_out_waiting_identify_applications", fake_fan_out)
+    monkeypatch.setattr(resolve_service, "after_rip", fake_after_rip)
+    monkeypatch.setattr(resolve_service, "fan_out_waiting_identify_applications", fake_fan_out)
     app, token = _make_app(signing_key, db, tmp_path, hub)
     with TestClient(app) as client:
         r = client.post(

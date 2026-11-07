@@ -102,20 +102,20 @@ def test_match_without_facts_leaves_snapshot_empty(signing_key: bytes) -> None:
 
 
 def test_match_show_change_forgets_episode_show_ids(signing_key: bytes, monkeypatch) -> None:
-    from arm_backend.routers import jobs as jobs_router
+    from arm_backend.identity import resolve_service
 
     forgotten: list[str] = []
-    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    monkeypatch.setattr(resolve_service, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
     job = _identified({"tmdb": "999", "tmdb_kind": "tv"})
     _post(signing_key, job, _match_body())
     assert forgotten == [job.id]
 
 
 def test_same_show_match_does_not_forget_episode_ids(signing_key: bytes, monkeypatch) -> None:
-    from arm_backend.routers import jobs as jobs_router
+    from arm_backend.identity import resolve_service
 
     forgotten: list[str] = []
-    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    monkeypatch.setattr(resolve_service, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
     job = _identified({"imdb": "tt0071003", "tvdb": "77170", "tvmaze": "1"})
     _post(signing_key, job, _match_body())
     assert forgotten == []
@@ -139,10 +139,10 @@ def test_resolve_without_match_still_merges(signing_key: bytes) -> None:
 def test_same_show_from_a_provider_lacking_ids_keeps_them(signing_key: bytes, monkeypatch) -> None:
     """Re-picking the show from TMDb (no TVmaze id) or OMDb (IMDb only) is
     not a show change: the ids that provider lacks are kept."""
-    from arm_backend.routers import jobs as jobs_router
+    from arm_backend.identity import resolve_service
 
     forgotten: list[str] = []
-    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    monkeypatch.setattr(resolve_service, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
     job = _identified({"imdb": "tt0071003", "tvdb": "77170", "tvmaze": "1"})
     body = _match_body(provider="tmdb")
     body["external_ids"] = {"imdb": "tt0071003", "tmdb": "55", "tmdb_kind": "tv", "tvdb": None, "tvmaze": None}
@@ -156,10 +156,10 @@ def test_same_show_from_a_provider_lacking_ids_keeps_them(signing_key: bytes, mo
 
 def test_match_with_a_conflicting_id_is_a_show_change(signing_key: bytes, monkeypatch) -> None:
     """One agreeing id does not make it the same show when another disagrees."""
-    from arm_backend.routers import jobs as jobs_router
+    from arm_backend.identity import resolve_service
 
     forgotten: list[str] = []
-    monkeypatch.setattr(jobs_router, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
+    monkeypatch.setattr(resolve_service, "forget_episode_show_ids", lambda job: forgotten.append(job.id))
     job = _identified({"imdb": "tt0071003", "tvmaze": "2", "tmdb": "999"})
     out, _, _ = _post(signing_key, job, _match_body())
     ids = out["metadata_json"]["identity"]["external_ids"]
