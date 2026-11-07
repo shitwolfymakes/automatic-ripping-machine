@@ -77,6 +77,15 @@ def _classify_from_cinfo(disc_type_text: str) -> DiscType | None:
     return None
 
 
+def _split_robot_line(raw: str) -> tuple[str, list[str]] | None:
+    """A robot-mode line as (message type, stripped comma fields); None for a blank or colonless line."""
+    line = raw.strip()
+    if not line or ":" not in line:
+        return None
+    msg_type, _, rest = line.partition(":")
+    return msg_type, [f.strip() for f in rest.split(",")]
+
+
 def parse_makemkvcon_info(
     lines: Iterable[str],
 ) -> tuple[str | None, list[ScanTitle], DiscType | None]:
@@ -102,11 +111,10 @@ def parse_makemkvcon_info(
     titles: dict[int, dict[str, object]] = {}
 
     for raw in lines:
-        line = raw.strip()
-        if not line or ":" not in line:
+        split = _split_robot_line(raw)
+        if split is None:
             continue
-        msg_type, _, rest = line.partition(":")
-        fields = [f.strip() for f in rest.split(",")]
+        msg_type, fields = split
 
         if msg_type == "CINFO" and len(fields) >= 3:
             try:

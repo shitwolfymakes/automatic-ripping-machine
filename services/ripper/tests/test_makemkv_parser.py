@@ -2,7 +2,7 @@ from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanTitle
-from arm_ripper.scan.makemkv import parse_makemkvcon_info
+from arm_ripper.scan.makemkv import _split_robot_line, parse_makemkvcon_info
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -176,3 +176,21 @@ def test_titles_are_sorted_by_index_even_when_lines_arrive_out_of_order():
         ScanTitle(index=1, duration_seconds=20),
         ScanTitle(index=2, duration_seconds=30),
     ]
+
+
+def test_split_robot_line_skips_blank_whitespace_and_colonless_lines():
+    assert _split_robot_line("") is None
+    assert _split_robot_line("   \t") is None
+    assert _split_robot_line("no colon here") is None
+
+
+def test_split_robot_line_splits_only_on_the_first_colon():
+    assert _split_robot_line('TINFO:0,9,0,"1:02:03"') == ("TINFO", ["0", "9", "0", '"1:02:03"'])
+
+
+def test_split_robot_line_strips_the_line_and_each_field():
+    assert _split_robot_line("  CINFO: 1 ,  2 , x  \n") == ("CINFO", ["1", "2", "x"])
+
+
+def test_split_robot_line_with_nothing_after_the_colon_gives_one_empty_field():
+    assert _split_robot_line("MSG:") == ("MSG", [""])
