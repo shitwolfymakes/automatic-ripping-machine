@@ -1,4 +1,10 @@
 import asyncio
+import os
+
+os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
+os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
+os.environ.setdefault("ARM_BACKEND_URL", "https://backend")
+os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
 import httpx
 import pytest
@@ -87,6 +93,66 @@ async def test_probe_never_raises_on_timeout(fake_exec, monkeypatch):
     monkeypatch.setattr(mk.asyncio, "wait_for", _timeout)
     state, _ = await mk.probe_makemkv_key("M-validkey")
     assert state == MakemkvKeyState.PROBE_FAILED
+
+
+class _KillCountingProc(_FakeProc):
+    def __init__(self, lines: list[bytes], returncode: int = 0):
+        super().__init__(lines, returncode)
+        self.kills = 0
+
+    def kill(self):
+        self.kills += 1
+        super().kill()
+
+
+_EXPIRED_LINE = b'MSG:5021,131332,1,"too old"\n'
+_EVAL_LINE = b'MSG:5052,0,1,"eval expired"\n'
+
+
+async def test_probe_spawn_oserror_is_probe_failed(monkeypatch):
+    async def _raise(*a, **k):
+        raise OSError("boom")
+
+    monkeypatch.setattr(mk.asyncio, "create_subprocess_exec", _raise)
+    result = await mk.probe_makemkv_key("M-validkey")
+    assert result == (MakemkvKeyState.PROBE_FAILED, "could not start makemkvcon: boom")
+
+
+async def test_probe_nonzero_exit_without_key_message_is_probe_failed(fake_exec):
+    fake_exec["proc"] = _FakeProc([b'MSG:1005,0,1,"MakeMKV started"\n'], returncode=3)
+    result = await mk.probe_makemkv_key("M-validkey")
+    assert result == (MakemkvKeyState.PROBE_FAILED, "makemkvcon exited 3 with no key message")
+
+
+async def test_probe_valid_detail(fake_exec):
+    fake_exec["proc"] = _FakeProc([b'MSG:1005,0,1,"MakeMKV started"\n'], returncode=0)
+    result = await mk.probe_makemkv_key("M-validkey")
+    assert result == (MakemkvKeyState.VALID, "makemkv key accepted")
+
+
+@pytest.mark.parametrize("lines", [[_EXPIRED_LINE, _EVAL_LINE], [_EVAL_LINE, _EXPIRED_LINE]])
+async def test_probe_5021_wins_over_eval_in_either_order(fake_exec, lines):
+    fake_exec["proc"] = _KillCountingProc(lines, returncode=0)
+    state, _ = await mk.probe_makemkv_key("M-validkey")
+    assert state == MakemkvKeyState.BINARY_EXPIRED
+
+
+@pytest.mark.parametrize(
+    ("lines", "kills"),
+    [
+        ([_EXPIRED_LINE], 1),
+        ([_EXPIRED_LINE, _EXPIRED_LINE], 2),
+        ([_EVAL_LINE], 1),
+        ([_EVAL_LINE, _EVAL_LINE], 2),
+        ([_EXPIRED_LINE, _EVAL_LINE], 1),
+        ([_EVAL_LINE, _EXPIRED_LINE], 2),
+    ],
+)
+async def test_probe_kills_once_per_qualifying_line(fake_exec, lines, kills):
+    proc = _KillCountingProc(lines, returncode=0)
+    fake_exec["proc"] = proc
+    await mk.probe_makemkv_key("M-validkey")
+    assert proc.kills == kills
 
 
 @respx.mock
