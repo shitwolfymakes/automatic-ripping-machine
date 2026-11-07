@@ -670,23 +670,28 @@ class JobController:
         return ("abandon", None)
 
     async def _wait_for_resolution(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> JobView | None:
+        """Wait out the first window, then run long-wait cycles until one settles or the deadline passes; None on
+        abandon or timeout."""
         outcome, view = await self._first_wait(job_id, event, spec)
         if outcome != "wait":
             return view
 
         # Long wait: WS-driven, with periodic REST sanity polls so we
-        # don't hang forever on a torn WS connection. `deadline is None`
-        # means wait indefinitely (source mode): the periodic POLL_MAX_SECONDS
-        # sanity poll below still runs unchanged, just with no ceiling on it.
-        timeout = self._resolution_timeout
-        deadline = None if timeout is None else asyncio.get_event_loop().time() + timeout
+        # don't hang forever on a torn WS connection.
+        deadline = self._resolution_deadline()
         while deadline is None or asyncio.get_event_loop().time() < deadline:
             outcome, view = await self._wait_cycle(job_id, event, spec)
             if outcome != "wait":
                 return view
 
-        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, timeout)
+        logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, self._resolution_timeout)
         return None
+
+    def _resolution_deadline(self) -> float | None:
+        """The event-loop time at which a resolution wait gives up, or None to wait indefinitely (source mode). With
+        no deadline the periodic POLL_MAX_SECONDS sanity poll still runs, just with no ceiling on it."""
+        timeout = self._resolution_timeout
+        return None if timeout is None else asyncio.get_event_loop().time() + timeout
 
     async def _first_wait(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> tuple[str, JobView | None]:
         """The short first wait for a WS wake. On a timeout, one REST read covers a gate-leaving broadcast that went
