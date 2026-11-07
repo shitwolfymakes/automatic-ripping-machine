@@ -351,3 +351,38 @@ async def test_redrain_one_failing_job_does_not_stop_the_rest(monkeypatch: pytes
 
     assert drained == ["job_a", "job_b"]
     assert db.call_log.count("rollback") == 1
+
+
+async def test_redrain_skips_a_job_deleted_after_the_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A job deleted after the listing is skipped: no drain, no rollback."""
+    from types import SimpleNamespace
+
+    from arm_common import DiscType, Job
+
+    db = FakeSession()
+    db.rows["jobs"] = [Job(id="job_a", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.RIPPED)]
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_a", session_id="ses_x", job_id="job_a", status=SessionApplicationStatus.WAITING_IDENTIFY
+        )
+    ]
+    real_execute = db.execute
+
+    async def _execute_then_delete_job(stmt: Any) -> Any:
+        result = await real_execute(stmt)
+        if "jobs.status IN" in str(stmt):  # the parked-job listing; the job goes before its fresh load
+            db.rows["jobs"] = []
+        return result
+
+    drained: list[str] = []
+
+    async def _drain(_session: Any, job: Any, _hub: Any, *, trigger: str) -> None:
+        drained.append(job.id)
+
+    monkeypatch.setattr(db, "execute", _execute_then_delete_job)
+    monkeypatch.setattr(config_router, "drain_parked_applications_after_rip", _drain)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    await config_router._redrain_parked_applications(db, request)  # type: ignore[arg-type]
+
+    assert drained == []
+    assert "rollback" not in db.call_log
