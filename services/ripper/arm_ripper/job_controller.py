@@ -247,9 +247,7 @@ class JobController:
             if not isinstance(job_id, str):
                 logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
                 return
-            event = self._resolution_events.get(job_id)
-            if event is not None:
-                event.set()
+            if self._wake_waiter(job_id):
                 logger.info("ws %s received for job_id=%s", envelope.event_type, job_id)
             else:
                 logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
@@ -271,11 +269,17 @@ class JobController:
             # Also wake any `_await_resolution` waiter — abandoning a parked
             # job needs to unstick the pipeline the same way `identify.resolved`
             # does. The waiter polls and decides based on the new job status.
-            event = self._resolution_events.get(job_id)
-            if event is not None:
-                event.set()
+            self._wake_waiter(job_id)
         else:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
+
+    def _wake_waiter(self, job_id: str) -> bool:
+        """Set the wait event of the pipeline parked on this job, if one is; True when there was one."""
+        event = self._resolution_events.get(job_id)
+        if event is None:
+            return False
+        event.set()
+        return True
 
     def _handle_abandon(self, job_id: str, *, delete_raw: bool) -> None:
         """Cancel the active pipeline if it owns this job, optionally wipe
