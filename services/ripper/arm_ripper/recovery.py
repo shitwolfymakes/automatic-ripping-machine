@@ -18,7 +18,7 @@ from pathlib import Path
 
 import httpx
 
-from arm_common.schemas import JobView
+from arm_common.schemas import HeldJobView, JobView
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.job_controller import JobController
@@ -133,13 +133,24 @@ async def _recover_held_job(
         return
 
     if held.paused:
-        logger.info("boot probe: re-parking paused held job_id=%s on drive_id=%s", held.job.id, drive_id)
-        try:
-            await controller.recover_held_job(held.job, device_path)
-        except Exception as exc:  # noqa: BLE001 — boot must continue
-            logger.exception("boot probe: re-park failed for job_id=%s: %s", held.job.id, exc)
-        return
+        await _repark_held_job(controller, held, device_path, drive_id)
+    else:
+        await _abandon_held_job(client, held, drive_id)
 
+
+async def _repark_held_job(controller: JobController, held: HeldJobView, device_path: str, drive_id: str) -> None:
+    """Re-park the review wait for a paused hold (the operator meant to keep it); a failure is logged, never raised."""
+    logger.info("boot probe: re-parking paused held job_id=%s on drive_id=%s", held.job.id, drive_id)
+    try:
+        await controller.recover_held_job(held.job, device_path)
+    except Exception as exc:  # noqa: BLE001 — boot must continue
+        logger.exception("boot probe: re-park failed for job_id=%s: %s", held.job.id, exc)
+
+
+async def _abandon_held_job(client: BackendClient, held: HeldJobView, drive_id: str) -> None:
+    """Abandon a counting-down hold so the seated disc re-enters review with a fresh countdown; a failed call is
+    logged, never raised.
+    """
     # Counting-down (not paused): abandon so the disc re-enters review fresh.
     logger.info("boot probe: abandoning counting-down held job_id=%s on drive_id=%s", held.job.id, drive_id)
     try:

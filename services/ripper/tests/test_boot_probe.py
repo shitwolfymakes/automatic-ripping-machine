@@ -15,7 +15,14 @@ import arm_ripper.recovery as recovery_module
 from arm_common import DiscType, JobStatus
 from arm_common.schemas import HeldJobView, JobView, RipStartResponse
 from arm_ripper.drive_poll import DriveState
-from arm_ripper.recovery import _disc_present, _resume_in_flight_job, boot_probe, wipe_raw_dir
+from arm_ripper.recovery import (
+    _abandon_held_job,
+    _disc_present,
+    _repark_held_job,
+    _resume_in_flight_job,
+    boot_probe,
+    wipe_raw_dir,
+)
 
 
 def _make_view(status: JobStatus = JobStatus.RIPPING, *, job_id: str = "job_resume") -> JobView:
@@ -353,3 +360,43 @@ async def test_resume_in_flight_job_logs_controller_failure_without_raising(
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert [r.getMessage() for r in errors] == ["boot probe: resume failed for job_id=job_resume: boom"]
     assert errors[0].exc_info is not None
+
+
+async def test_repark_held_job_recovers_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    controller = FakeController()
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _repark_held_job(controller, _held(paused=True), "/dev/sr0", "drv_x")  # type: ignore[arg-type]
+    assert controller.recover_held_calls == [("job_x", "/dev/sr0")]
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.INFO, "boot probe: re-parking paused held job_id=job_x on drive_id=drv_x")
+    ]
+
+
+async def test_repark_held_job_logs_controller_failure_without_raising(caplog: pytest.LogCaptureFixture) -> None:
+    controller = FakeController()
+    controller.raises = RuntimeError("boom")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _repark_held_job(controller, _held(paused=True), "/dev/sr0", "drv_x")  # type: ignore[arg-type]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert [r.getMessage() for r in errors] == ["boot probe: re-park failed for job_id=job_x: boom"]
+    assert errors[0].exc_info is not None
+
+
+async def test_abandon_held_job_abandons_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    held = _held(paused=False)
+    client = FakeBackendClient(held=held)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _abandon_held_job(client, held, "drv_x")  # type: ignore[arg-type]
+    assert client.recovery_abandon_calls == ["job_x"]
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.INFO, "boot probe: abandoning counting-down held job_id=job_x on drive_id=drv_x")
+    ]
+
+
+async def test_abandon_held_job_warns_on_http_error_without_raising(caplog: pytest.LogCaptureFixture) -> None:
+    held = _held(paused=False)
+    client = FakeBackendClient(held=held, abandon_raises=httpx.ConnectError("down"))
+    with caplog.at_level(logging.INFO, logger="arm_ripper.recovery"):
+        await _abandon_held_job(client, held, "drv_x")  # type: ignore[arg-type]
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [r.getMessage() for r in warnings] == ["boot probe: recovery-abandon failed for job_id=job_x: down"]
