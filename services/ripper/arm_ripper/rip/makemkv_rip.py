@@ -610,6 +610,18 @@ def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int)
     ]
 
 
+async def _finish_pending_titles(state: _ParserState, on_title_done: OnTitleDone | None) -> None:
+    """Emit on_title_done for every title that started but never got its done, in source-index order."""
+    # Final title's on_title_done — the streamer fires done at PRGC
+    # transitions, but the last title in the rip never gets a follow-up
+    # PRGC:5017,N+1. Catch any started-but-not-yet-done title here so
+    # the dispatcher PATCHes it DONE before rip_disc returns.
+    for source_idx in sorted(state.titles):
+        ts = state.titles[source_idx]
+        if ts.started_emitted and not ts.done_emitted:
+            await _emit_title_done(state, source_idx, on_title_done)
+
+
 async def rip_disc(
     device_path: str,
     output_dir: Path,
@@ -675,14 +687,7 @@ async def rip_disc(
     if error is not None:
         return RipDiscResult(overall_error=error, titles={})
 
-    # Final title's on_title_done — the streamer fires done at PRGC
-    # transitions, but the last title in the rip never gets a follow-up
-    # PRGC:5017,N+1. Catch any started-but-not-yet-done title here so
-    # the dispatcher PATCHes it DONE before rip_disc returns.
-    for source_idx in sorted(state.titles):
-        ts = state.titles[source_idx]
-        if ts.started_emitted and not ts.done_emitted:
-            await _emit_title_done(state, source_idx, on_title_done)
+    await _finish_pending_titles(state, on_title_done)
 
     # Attribute output files to source title indexes.
     #

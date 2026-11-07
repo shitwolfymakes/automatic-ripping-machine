@@ -1044,3 +1044,52 @@ def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_pa
     cmd = makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120)
     assert cmd.count("all") == 1
     assert cmd[-2:] == ["all", str(tmp_path)]
+
+
+def _pending_state(**titles: tuple[bool, bool]) -> makemkv_rip._ParserState:
+    """Titles keyed `t<idx>` -> (started_emitted, done_emitted)."""
+    state = makemkv_rip._ParserState()
+    for name, (started, done) in titles.items():
+        state.titles[int(name[1:])] = makemkv_rip._TitleState(started_emitted=started, done_emitted=done)
+    return state
+
+
+async def test_finish_pending_titles_emits_done_once_for_a_started_title():
+    state = _pending_state(t3=(True, False))
+    seen: list[int] = []
+
+    async def on_done(idx: int) -> None:
+        seen.append(idx)
+
+    await makemkv_rip._finish_pending_titles(state, on_done)
+    assert seen == [3]
+    assert state.titles[3].done_emitted
+
+
+async def test_finish_pending_titles_skips_done_and_never_started_titles():
+    state = _pending_state(t1=(True, True), t2=(False, False))
+    seen: list[int] = []
+
+    async def on_done(idx: int) -> None:
+        seen.append(idx)
+
+    await makemkv_rip._finish_pending_titles(state, on_done)
+    assert seen == []
+    assert not state.titles[2].done_emitted
+
+
+async def test_finish_pending_titles_emits_in_ascending_source_index_order():
+    state = _pending_state(t5=(True, False), t0=(True, False), t2=(True, False))
+    seen: list[int] = []
+
+    async def on_done(idx: int) -> None:
+        seen.append(idx)
+
+    await makemkv_rip._finish_pending_titles(state, on_done)
+    assert seen == [0, 2, 5]
+
+
+async def test_finish_pending_titles_without_a_callback_still_marks_done():
+    state = _pending_state(t1=(True, False))
+    await makemkv_rip._finish_pending_titles(state, None)
+    assert state.titles[1].done_emitted
