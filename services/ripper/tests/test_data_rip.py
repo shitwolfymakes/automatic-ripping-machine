@@ -310,3 +310,45 @@ async def test_wait_for_dd_cancelled_propagates_and_kills(tmp_path: Path) -> Non
     with pytest.raises(asyncio.CancelledError):
         await task
     assert proc.kills == 1
+
+
+class _StderrProc:
+    """A finished dd with a canned return code and stderr."""
+
+    def __init__(self, returncode: int, stderr: bytes | None) -> None:
+        self.returncode = returncode
+        self.stderr = _Reader(stderr) if stderr is not None else None
+
+
+class _Reader:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+        self.reads = 0
+
+    async def read(self) -> bytes:
+        self.reads += 1
+        return self._data
+
+
+async def test_dd_failure_exit_zero_is_none_and_skips_stderr() -> None:
+    proc = _StderrProc(0, b"noise")
+    assert await data_rip._dd_failure(proc) is None  # type: ignore[arg-type]
+    assert proc.stderr is not None and proc.stderr.reads == 0
+
+
+async def test_dd_failure_keeps_last_400_stripped_chars() -> None:
+    proc = _StderrProc(1, b"A" * 500 + b"B" * 399 + b"  \n")
+    result = await data_rip._dd_failure(proc)  # type: ignore[arg-type]
+    assert result is not None and not result.ok
+    assert result.error == "dd failed: " + "A" * 1 + "B" * 399
+
+
+async def test_dd_failure_without_stderr_reports_exit_code() -> None:
+    result = await data_rip._dd_failure(_StderrProc(3, None))  # type: ignore[arg-type]
+    assert result is not None and result.error == "dd failed: exit=3"
+
+
+@pytest.mark.parametrize("stderr", [b"", b"  \n\t "])
+async def test_dd_failure_blank_stderr_reports_exit_code(stderr: bytes) -> None:
+    result = await data_rip._dd_failure(_StderrProc(2, stderr))  # type: ignore[arg-type]
+    assert result is not None and result.error == "dd failed: exit=2"

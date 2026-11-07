@@ -90,6 +90,17 @@ async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[
     return None
 
 
+async def _dd_failure(proc: asyncio.subprocess.Process) -> RipResult | None:
+    """The failure for a dd that exited non-zero, keeping the end of its stderr; None when it exited 0."""
+    if proc.returncode == 0:
+        return None
+    stderr = b""
+    if proc.stderr is not None:
+        stderr = await proc.stderr.read()
+    msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
+    return RipResult(ok=False, error=f"dd failed: {msg}")
+
+
 async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
@@ -122,12 +133,9 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     if timed_out is not None:
         return timed_out
 
-    if proc.returncode != 0:
-        stderr = b""
-        if proc.stderr is not None:
-            stderr = await proc.stderr.read()
-        msg = stderr.decode(errors="replace").strip()[-400:] or f"exit={proc.returncode}"
-        return RipResult(ok=False, error=f"dd failed: {msg}")
+    failed = await _dd_failure(proc)
+    if failed is not None:
+        return failed
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         return RipResult(ok=False, error="dd exited 0 but produced empty output")
