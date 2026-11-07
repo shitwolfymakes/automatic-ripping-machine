@@ -439,22 +439,8 @@ class JobController:
             if scan_result is None:
                 return
 
-            try:
-                job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
-            except httpx.HTTPStatusError as e:
-                if _previously_ripped(e.response):
-                    # on_previously_ripped=reject: the backend made no job
-                    # and told the operator; give the disc back.
-                    logger.info("disc already ripped (on_previously_ripped=reject); ejecting %s", device_path)
-                    await self._eject_with_retry(device_path)
-                    return
-                # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
-                # the pipeline quietly — the lock releases via the context manager.
-                logger.info(
-                    "rip pipeline not started: identify rejected (%s) for drive %s",
-                    e.response.status_code,
-                    self._drive_id,
-                )
+            job = await self._identify_or_none(scan_result, device_path, pending_session_id=pending_session_id)
+            if job is None:
                 return
             self._active_job_id = job.id
 
@@ -600,6 +586,29 @@ class JobController:
             )
             return False
         return True
+
+    async def _identify_or_none(
+        self, scan_result: ScanResult, device_path: str, *, pending_session_id: str | None
+    ) -> Job | None:
+        """Identify the scanned disc, or None when the backend refuses it: a disc ripped before is ejected, and any
+        other rejection parks the pipeline."""
+        try:
+            return await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+        except httpx.HTTPStatusError as e:
+            if _previously_ripped(e.response):
+                # on_previously_ripped=reject: the backend made no job
+                # and told the operator; give the disc back.
+                logger.info("disc already ripped (on_previously_ripped=reject); ejecting %s", device_path)
+                await self._eject_with_retry(device_path)
+                return None
+            # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
+            # the pipeline quietly; the caller's claim releases the drive.
+            logger.info(
+                "rip pipeline not started: identify rejected (%s) for drive %s",
+                e.response.status_code,
+                self._drive_id,
+            )
+            return None
 
     async def _identify_with_retry(
         self,
