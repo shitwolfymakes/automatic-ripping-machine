@@ -466,3 +466,30 @@ def test_done_fields_carries_every_reported_field_in_order() -> None:
 def test_done_fields_without_reported_fields_is_only_done() -> None:
     """A result that reported nothing becomes a patch holding just the DONE status."""
     assert jc_module._done_fields(RipResult(ok=True)) == {"status": TrackStatus.DONE}
+
+
+def test_progress_payload_without_stats_is_the_percentage_only() -> None:
+    """A rip with no transfer stats reports just the track id and the rounded percentage."""
+    assert jc_module._progress_payload("trk_0", 0.256, None) == {"track_id": "trk_0", "progress_pct": 25.6}
+
+
+def test_progress_payload_with_stats_adds_bytes_rounded_rate_and_phase() -> None:
+    """A copy's stats add its byte counts, the rate rounded to whole bytes, and the phase, in a fixed order."""
+    stats = {"bytes_done": 1, "bytes_total": 4, "rate_bps": 2.6, "phase": "copy"}
+    payload = jc_module._progress_payload("trk_0", 0.5, stats)  # type: ignore[arg-type]
+    assert list(payload) == ["track_id", "progress_pct", "bytes_done", "bytes_total", "rate_bps", "phase"]
+    assert payload["rate_bps"] == 3
+    assert payload["phase"] == "copy"
+
+
+def test_progress_payload_with_no_rate_or_phase_leaves_the_rate_none_and_omits_phase() -> None:
+    """Stats with an unknown rate and no phase give a None rate and no phase key."""
+    stats = {"bytes_done": 2, "bytes_total": 4, "rate_bps": None}
+    payload = jc_module._progress_payload("trk_0", 0.75, stats)  # type: ignore[arg-type]
+    assert payload == {
+        "track_id": "trk_0",
+        "progress_pct": 75.0,
+        "bytes_done": 2,
+        "bytes_total": 4,
+        "rate_bps": None,
+    }

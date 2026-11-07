@@ -187,6 +187,24 @@ def _done_fields(result: RipResult) -> dict[str, object]:
     return fields
 
 
+def _progress_payload(track_id: str, fraction: float, stats: TransferStats | None) -> dict[str, object]:
+    """The WS progress payload for a track: its percentage, plus the byte detail, rounded rate and phase of a copy
+    when the rip reports them."""
+    payload: dict[str, object] = {
+        "track_id": track_id,
+        "progress_pct": round(fraction * 100, 1),
+    }
+    if stats is not None:
+        # Byte detail for a copy (the full-disc dump): the UI shows
+        # "X of Y GB at R MB/s" and derives the ETA from the rate.
+        payload["bytes_done"] = stats["bytes_done"]
+        payload["bytes_total"] = stats["bytes_total"]
+        payload["rate_bps"] = round(stats["rate_bps"]) if stats["rate_bps"] is not None else None
+        if "phase" in stats:
+            payload["phase"] = stats["phase"]
+    return payload
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -1221,22 +1239,10 @@ class _DiscRip:
         with with_log_context(track_id=track.id):
             logger.debug("track %s progress=%.2f", track.id, fraction)
             if self._controller._ws is not None:
-                payload: dict[str, object] = {
-                    "track_id": track.id,
-                    "progress_pct": round(fraction * 100, 1),
-                }
-                if stats is not None:
-                    # Byte detail for a copy (the full-disc dump): the UI shows
-                    # "X of Y GB at R MB/s" and derives the ETA from the rate.
-                    payload["bytes_done"] = stats["bytes_done"]
-                    payload["bytes_total"] = stats["bytes_total"]
-                    payload["rate_bps"] = round(stats["rate_bps"]) if stats["rate_bps"] is not None else None
-                    if "phase" in stats:
-                        payload["phase"] = stats["phase"]
                 await self._controller._ws.publish(
                     topic=f"ripper.progress.{self._job_id}",
                     event_type="ripper.progress",
-                    payload=payload,
+                    payload=_progress_payload(track.id, fraction, stats),
                 )
 
     async def run(self) -> None:
