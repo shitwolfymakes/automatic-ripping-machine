@@ -15,6 +15,7 @@ master toggle. New URLs should be added as channels via /api/notifications.
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -268,7 +269,10 @@ _IDENTITY_SOURCE_KEYS = ("episode_sources", "disc_hint_sources", "movie_sources"
 _KEY_ATTR = {"tmdb": "tmdb_api_key", "omdb": "omdb_api_key", "tvdb": "tvdb_api_key", "makemkv": "makemkv_key"}
 
 
-async def _check_tmdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", "invalid", "error"], str | None]:
+KeyCheckOutcome = tuple[Literal["ok", "invalid", "error"], str | None]
+
+
+async def _check_tmdb(http: httpx.AsyncClient, key: str) -> KeyCheckOutcome:
     headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
     try:
         r = await http.get(
@@ -283,7 +287,7 @@ async def _check_tmdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", 
     return "error", f"tmdb status={r.status_code}"
 
 
-async def _check_omdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", "invalid", "error"], str | None]:
+async def _check_omdb(http: httpx.AsyncClient, key: str) -> KeyCheckOutcome:
     try:
         r = await http.get(
             settings.ARM_OMDB_BASE_URL,
@@ -307,7 +311,7 @@ async def _check_omdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", 
     return "error", "omdb returned an unexpected response"
 
 
-async def _check_tvdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", "invalid", "error"], str | None]:
+async def _check_tvdb(http: httpx.AsyncClient, key: str) -> KeyCheckOutcome:
     try:
         r = await http.post(
             f"{settings.ARM_TVDB_BASE_URL}/login",
@@ -355,14 +359,16 @@ def _makemkv_key_status(cfg: Config, stored_key: str, unsaved_value: str | None)
     return KeyCheckResponse(name="makemkv", status="unknown", detail=detail, checked_at=cfg.makemkv_key_checked_at)
 
 
-async def _check_online_key(
-    http: httpx.AsyncClient, name: str, key: str
-) -> tuple[Literal["ok", "invalid", "error"], str | None]:
-    if name == "tmdb":
-        return await _check_tmdb(http, key)
-    if name == "omdb":
-        return await _check_omdb(http, key)
-    return await _check_tvdb(http, key)
+# check_key only passes "tmdb", "omdb" or "tvdb" here (the Literal validates name; "makemkv" returns earlier).
+_ONLINE_KEY_CHECKS: dict[str, Callable[[httpx.AsyncClient, str], Awaitable[KeyCheckOutcome]]] = {
+    "tmdb": _check_tmdb,
+    "omdb": _check_omdb,
+    "tvdb": _check_tvdb,
+}
+
+
+async def _check_online_key(http: httpx.AsyncClient, name: str, key: str) -> KeyCheckOutcome:
+    return await _ONLINE_KEY_CHECKS[name](http, key)
 
 
 @router.post("/keys/{name}/check", response_model=KeyCheckResponse)
