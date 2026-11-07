@@ -360,6 +360,26 @@ async def _run_info(device_path: str) -> _InfoRun:
     return _InfoRun(stdout, stderr, expired, proc.returncode)
 
 
+def _raise_for_failure(run: _InfoRun) -> None:
+    """Raise when the info run failed.
+
+    MakemkvBinaryExpiredError for an expired binary, else ScanError on a non-zero exit.
+    """
+    if run.expired:
+        raise MakemkvBinaryExpiredError(
+            "makemkvcon refused: binary is past its hard-coded expiry "
+            "(MSG:5021 'application version is too old'). MakeMKV beta "
+            "binaries carry a 60-day kill-switch from release date that "
+            "no registration key overrides; the only fix is rebuilding the "
+            "ripper image after upstream ships a fresher tarball. See "
+            "docs/user/MakeMKV-Ripper.md § Failure modes."
+        )
+
+    if run.returncode != 0:
+        msg = run.stderr.decode(errors="replace").strip() or run.stdout.decode(errors="replace")[:200]
+        raise ScanError(f"makemkvcon exited {run.returncode}: {msg}")
+
+
 def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
     fingerprints: list[DiscFingerprintInput] = []
@@ -375,19 +395,7 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
 async def scan_disc(device_path: str) -> ScanResult:
     run = await _run_info(device_path)
 
-    if run.expired:
-        raise MakemkvBinaryExpiredError(
-            "makemkvcon refused: binary is past its hard-coded expiry "
-            "(MSG:5021 'application version is too old'). MakeMKV beta "
-            "binaries carry a 60-day kill-switch from release date that "
-            "no registration key overrides; the only fix is rebuilding the "
-            "ripper image after upstream ships a fresher tarball. See "
-            "docs/user/MakeMKV-Ripper.md § Failure modes."
-        )
-
-    if run.returncode != 0:
-        msg = run.stderr.decode(errors="replace").strip() or run.stdout.decode(errors="replace")[:200]
-        raise ScanError(f"makemkvcon exited {run.returncode}: {msg}")
+    _raise_for_failure(run)
 
     lines = run.stdout.decode(errors="replace").splitlines()
     volume_label, titles, mkv_disc_type = parse_makemkvcon_info(lines)

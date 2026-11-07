@@ -18,7 +18,14 @@ from arm_common.schemas import DiscFingerprintInput  # noqa: E402
 
 import arm_ripper.scan.makemkv as makemkv_mod  # noqa: E402
 from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
-from arm_ripper.scan.makemkv import ScanError, _fingerprints, scan_disc  # noqa: E402
+from arm_ripper.scan.makemkv import (
+    MakemkvBinaryExpiredError,
+    ScanError,
+    _fingerprints,
+    _InfoRun,
+    _raise_for_failure,
+    scan_disc,
+)  # noqa: E402
 
 
 class _Stream:
@@ -224,3 +231,32 @@ def test_fingerprints_only_thediscdb() -> None:
     probe = DiscProbe(crc64=None, thediscdb="tdb", matrix256="")
 
     assert _fingerprints(probe) == [DiscFingerprintInput(algo="thediscdb", value="tdb")]
+
+
+def test_raise_for_failure_expired_wins_over_nonzero_exit() -> None:
+    run = _InfoRun(stdout=b"out", stderr=b"err", expired=True, returncode=1)
+
+    with pytest.raises(MakemkvBinaryExpiredError):
+        _raise_for_failure(run)
+
+
+def test_raise_for_failure_returns_none_on_clean_exit() -> None:
+    assert _raise_for_failure(_InfoRun(stdout=b"out", stderr=b"", expired=False, returncode=0)) is None
+
+
+def test_raise_for_failure_nonzero_exit_reports_stripped_stderr() -> None:
+    run = _InfoRun(stdout=b"out", stderr=b"  boom \n", expired=False, returncode=3)
+
+    with pytest.raises(ScanError) as excinfo:
+        _raise_for_failure(run)
+
+    assert str(excinfo.value) == "makemkvcon exited 3: boom"
+
+
+def test_raise_for_failure_nonzero_exit_without_stderr_reports_first_200_stdout_chars() -> None:
+    run = _InfoRun(stdout=b"x" * 250, stderr=b"", expired=False, returncode=2)
+
+    with pytest.raises(ScanError) as excinfo:
+        _raise_for_failure(run)
+
+    assert str(excinfo.value) == "makemkvcon exited 2: " + "x" * 200
