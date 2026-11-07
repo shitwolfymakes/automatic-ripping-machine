@@ -452,6 +452,31 @@ def _initial_handle(source_path: str | None) -> DriveHandle:
     return handle
 
 
+def _build_controller(
+    client: BackendClient, drive_id: str, ws: WSClient, handle: DriveHandle, *, source_mode: bool
+) -> JobController:
+    """The job controller for this drive. In source mode it never times out a wait for the operator: the backend's
+    watchdog retires the drive once this container exits, so it must not exit FAILED while the operator is still
+    parked at AWAITING_USER_ID / AWAITING_REVIEW.
+    """
+    if source_mode:
+        return JobController(
+            client,
+            drive_id,
+            ws=ws,
+            device_path=handle,
+            default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
+            resolution_timeout=None,
+        )
+    return JobController(
+        client,
+        drive_id,
+        ws=ws,
+        device_path=handle,
+        default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
+    )
+
+
 async def amain() -> None:
     client = _build_client()
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
@@ -481,25 +506,7 @@ async def amain() -> None:
                 # Until identify creates the job, the dashboard shows this rip
                 # through its "preparing" reports (scanning / extracting).
                 prepare.configure(client, drive_id)
-                # The backend watchdog retires the drive once this container
-                # exits; it must not time out and exit FAILED while the
-                # operator is still parked at AWAITING_USER_ID / AWAITING_REVIEW.
-                controller = JobController(
-                    client,
-                    drive_id,
-                    ws=ws,
-                    device_path=handle,
-                    default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
-                    resolution_timeout=None,
-                )
-            else:
-                controller = JobController(
-                    client,
-                    drive_id,
-                    ws=ws,
-                    device_path=handle,
-                    default_min_length_seconds=settings.ARM_MIN_LENGTH_SECONDS,
-                )
+            controller = _build_controller(client, drive_id, ws, handle, source_mode=source_mode)
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
             if not source_mode and not handle.absent:
                 # Phase 9 — recover a crashed in-flight rip on this drive, if any.

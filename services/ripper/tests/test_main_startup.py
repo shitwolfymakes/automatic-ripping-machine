@@ -210,6 +210,39 @@ def test_initial_handle_passes_settings_and_paths_with_empty_dev_fallback(monkey
     assert calls[1] == ("by-id-x", "/dev/sr0", {"sysfs_root": "/sys-x"})
 
 
+def _record_controller(monkeypatch):
+    calls = []
+    built = object()
+
+    def recorder(*args, **kwargs):
+        calls.append((args, kwargs))
+        return built
+
+    monkeypatch.setattr(main, "JobController", recorder)
+    monkeypatch.setattr(main.settings, "ARM_MIN_LENGTH_SECONDS", 77)
+    return calls, built
+
+
+def test_build_controller_source_mode_never_times_out_resolution(monkeypatch) -> None:
+    calls, built = _record_controller(monkeypatch)
+    handle, ws, client = DriveHandle.fixed("/data/x.iso"), object(), object()
+    assert main._build_controller(client, "drv_1", ws, handle, source_mode=True) is built
+    assert calls == [
+        (
+            (client, "drv_1"),
+            {"ws": ws, "device_path": handle, "default_min_length_seconds": 77, "resolution_timeout": None},
+        )
+    ]
+
+
+def test_build_controller_drive_mode_leaves_resolution_timeout_to_the_default(monkeypatch) -> None:
+    calls, built = _record_controller(monkeypatch)
+    handle, ws, client = DriveHandle("/dev/sr0"), object(), object()
+    assert main._build_controller(client, "drv_1", ws, handle, source_mode=False) is built
+    assert calls == [((client, "drv_1"), {"ws": ws, "device_path": handle, "default_min_length_seconds": 77})]
+    assert "resolution_timeout" not in calls[0][1]
+
+
 async def test_amain_exits_2_when_nothing_to_rip_and_never_closes_client(monkeypatch, caplog) -> None:
     rig = _install(monkeypatch, source=None, drive_dev=None)
     with caplog.at_level(logging.ERROR, logger="arm_ripper"), pytest.raises(SystemExit) as ei:
