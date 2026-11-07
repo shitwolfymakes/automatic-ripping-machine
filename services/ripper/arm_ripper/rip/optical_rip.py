@@ -285,20 +285,7 @@ class _OpticalRip:
                 disc_result = RipDiscResult(overall_error=STOPPED_ERROR, titles={})
 
             if disc_result.overall_error is not None:
-                # Rip-level failure — mark every selected track FAILED with the
-                # disc-level error so the operator knows what happened. Each
-                # track must transit IN_PROGRESS first per the backend's state
-                # machine. Tracks already handed to the hasher via the live
-                # path (titles that finalised before the rip aborted) are
-                # PATCHed DONE once hashed — partial success is still success
-                # for those files.
-                logger.warning("rip_disc failed: %s", disc_result.overall_error)
-                await self._hasher.finish(self._on_verify_progress)
-                for title_idx, track in self._track_by_index.items():
-                    if title_idx in self._done_emitted:
-                        continue
-                    await self._ensure_started(title_idx, track)
-                    await self._on_track_done(track, RipResult(ok=False, error=disc_result.overall_error))
+                await self._fail_unfinished(disc_result.overall_error)
                 return
 
             await self._attribute(disc_result)
@@ -355,6 +342,24 @@ class _OpticalRip:
                 )
             self._done_emitted.add(title_idx)
             self._hasher.submit(output_path, result.size_bytes or 0, self._finalise_after_hash(track, result))
+
+    async def _fail_unfinished(self, error: str) -> None:
+        """Fail every selected track the live path didn't finish with the rip-level error, once the files already handed
+        to the hasher are hashed."""
+        # Rip-level failure — mark every selected track FAILED with the
+        # disc-level error so the operator knows what happened. Each
+        # track must transit IN_PROGRESS first per the backend's state
+        # machine. Tracks already handed to the hasher via the live
+        # path (titles that finalised before the rip aborted) are
+        # PATCHed DONE once hashed — partial success is still success
+        # for those files.
+        logger.warning("rip_disc failed: %s", error)
+        await self._hasher.finish(self._on_verify_progress)
+        for title_idx, track in self._track_by_index.items():
+            if title_idx in self._done_emitted:
+                continue
+            await self._ensure_started(title_idx, track)
+            await self._on_track_done(track, RipResult(ok=False, error=error))
 
 
 async def rip_optical(
