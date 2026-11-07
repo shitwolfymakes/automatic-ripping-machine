@@ -8,7 +8,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 import pytest
 from arm_common.enums import JobStatus
 from arm_common.schemas.jobs import JobView
-from arm_ripper.main import maybe_reacquire_current_job
+from arm_ripper.heartbeat import maybe_reacquire_current_job
 
 
 class _Ctrl:

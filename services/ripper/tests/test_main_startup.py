@@ -15,6 +15,7 @@ from types import SimpleNamespace  # noqa: E402
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from arm_ripper import main  # noqa: E402
+from arm_ripper import heartbeat  # noqa: E402
 from arm_ripper import makemkv_keycheck  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 
@@ -561,10 +562,10 @@ async def test_heartbeat_error_warns_and_keeps_beating(monkeypatch, caplog, exc)
         if calls["n"] >= 2:
             raise _Stop
 
-    monkeypatch.setattr(main.asyncio, "sleep", sleep)
-    monkeypatch.setattr(main, "probe_drive_media", lambda p: (main.DriveMediaStatus.NO_DISC, "f"))
+    monkeypatch.setattr(heartbeat.asyncio, "sleep", sleep)
+    monkeypatch.setattr(heartbeat, "probe_drive_media", lambda p: (heartbeat.DriveMediaStatus.NO_DISC, "f"))
     with caplog.at_level(logging.WARNING, logger="arm_ripper"), pytest.raises(_Stop):
-        await main.heartbeat_loop(Client(), "drv", DriveHandle("/dev/sr0"), Ctl())  # type: ignore[arg-type]
+        await heartbeat.heartbeat_loop(Client(), "drv", DriveHandle("/dev/sr0"), Ctl())  # type: ignore[arg-type]
     assert f"heartbeat failed: {exc}" in caplog.messages
     assert calls["n"] == 2
 
