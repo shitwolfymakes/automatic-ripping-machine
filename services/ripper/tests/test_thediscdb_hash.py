@@ -9,6 +9,7 @@ import pytest
 
 from arm_ripper.scan.thediscdb_hash import (
     _clean_iso_name,
+    _file_entry,
     _hash_from_listing,
     collect_hash_files,
     compute_content_hash,
@@ -205,3 +206,27 @@ def test_collect_always_closes_the_image(fake_cdlib: type[_FakeCdlib], case: str
         fake_cdlib.listings[_UDF_VTS] = OSError("x")
     collect_hash_files("/dev/sr0")
     assert [inst.closed for inst in fake_cdlib.instances] == [1]
+
+
+class _RawChild:
+    def __init__(self, raw_name: bytes, size: int) -> None:
+        self._raw_name = raw_name
+        self._size = size
+
+    def file_identifier(self) -> bytes:
+        return self._raw_name
+
+    def get_data_length(self) -> int:
+        return self._size
+
+
+def test_file_entry_strips_iso_version_suffix() -> None:
+    assert _file_entry(_RawChild(b"00001.M2TS;1", 42)) == ("00001.M2TS", 42)
+
+
+def test_file_entry_passes_udf_name_through() -> None:
+    assert _file_entry(_RawChild(b"00001.m2ts", 7)) == ("00001.m2ts", 7)
+
+
+def test_file_entry_replaces_undecodable_byte() -> None:
+    assert _file_entry(_RawChild(b"bad\xffname", 1)) == ("bad\ufffdname", 1)

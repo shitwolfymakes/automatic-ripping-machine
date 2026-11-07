@@ -17,6 +17,7 @@ import hashlib
 import logging
 import struct
 from collections.abc import Sequence
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,11 @@ def compute_content_hash(sizes: Sequence[int]) -> str | None:
 def _clean_iso_name(name: str) -> str:
     """Strip ISO9660 `;1` version suffixes; UDF names pass through."""
     return name.split(";", 1)[0]
+
+
+def _file_entry(child: Any) -> tuple[str, int]:
+    """(name, size) of one pycdlib directory entry, its name decoded and stripped of any ISO `;1` version suffix."""
+    return _clean_iso_name(child.file_identifier().decode("utf-8", "replace")), child.get_data_length()
 
 
 def _hash_from_listing(files: list[tuple[str, int]]) -> str | None:
@@ -86,7 +92,7 @@ def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
         # Blu-ray first: UDF filesystem, STREAM directory.
         try:
             listing = [
-                (_clean_iso_name(child.file_identifier().decode("utf-8", "replace")), child.get_data_length())
+                _file_entry(child)
                 for child in iso.list_children(udf_path="/BDMV/STREAM")
                 if child is not None and not child.is_dir()
             ]
@@ -99,7 +105,7 @@ def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
         for kwargs in ({"iso_path": "/VIDEO_TS"}, {"udf_path": "/VIDEO_TS"}):
             try:
                 return [
-                    (_clean_iso_name(child.file_identifier().decode("utf-8", "replace")), child.get_data_length())
+                    _file_entry(child)
                     for child in iso.list_children(**kwargs)
                     if child is not None and not child.is_dir() and not child.is_dot() and not child.is_dotdot()
                 ]
