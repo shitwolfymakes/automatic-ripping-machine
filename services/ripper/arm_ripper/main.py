@@ -12,7 +12,7 @@ from arm_ripper.backend_client import BackendClient, JobView, RegisterRefused
 from arm_ripper.config import settings
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, InsertDetector, classify_drive_error, read_drive_status
-from arm_ripper.drive_resolve import node_port, resolve_drive_device
+from arm_ripper.drive_resolve import ResolvedDevice, node_port, resolve_drive_device
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
@@ -339,24 +339,7 @@ class DrivePoller:
     async def run(self) -> None:
         """Poll until cancelled."""
         while True:
-            # Re-resolve every poll: the node behind this drive can change while we
-            # run (replug under a new srN). One readlink; cheap.
-            was_absent = self._last_state is DriveState.ABSENT
-            hint = await _current_hint(
-                self._client,
-                self._drive_id,
-                absent=was_absent,
-                absent_ticks=self._absent_ticks,
-                last_resolved=self._last_resolved,
-                last_port=self._last_port,
-            )
-            self._absent_ticks = self._absent_ticks + 1 if was_absent else 0
-            resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
-            if resolved is not None and not settings.ARM_DRIVE_BY_ID:
-                if resolved.path != self._last_resolved or self._last_port is None:
-                    # The port is this drive's identity when it has no by-id link.
-                    self._last_port = node_port(resolved.path, sysfs_root=_resolve_paths()["sysfs_root"])
-                self._last_resolved = resolved.path
+            resolved = await self._resolve()
             moved = self._handle.set(resolved.path if resolved else None)
 
             if self._handle.absent:
@@ -420,6 +403,29 @@ class DrivePoller:
                 self._active_task = asyncio.create_task(self._controller.handle_disc_inserted(self._handle.current))
 
             await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+
+    async def _resolve(self) -> ResolvedDevice | None:
+        """Resolve this tick's node from the current hint, counting absent ticks and remembering a port-identity
+        drive's node."""
+        # Re-resolve every poll: the node behind this drive can change while we
+        # run (replug under a new srN). One readlink; cheap.
+        was_absent = self._last_state is DriveState.ABSENT
+        hint = await _current_hint(
+            self._client,
+            self._drive_id,
+            absent=was_absent,
+            absent_ticks=self._absent_ticks,
+            last_resolved=self._last_resolved,
+            last_port=self._last_port,
+        )
+        self._absent_ticks = self._absent_ticks + 1 if was_absent else 0
+        resolved = resolve_drive_device(settings.ARM_DRIVE_BY_ID, hint, **_resolve_paths())
+        if resolved is not None and not settings.ARM_DRIVE_BY_ID:
+            if resolved.path != self._last_resolved or self._last_port is None:
+                # The port is this drive's identity when it has no by-id link.
+                self._last_port = node_port(resolved.path, sysfs_root=_resolve_paths()["sysfs_root"])
+            self._last_resolved = resolved.path
+        return resolved
 
 
 async def poll_loop(controller: JobController, handle: DriveHandle, *, client: BackendClient, drive_id: str) -> None:
