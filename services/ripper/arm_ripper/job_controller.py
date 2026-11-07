@@ -1282,19 +1282,7 @@ class _DiscRip:
             if returned is None:
                 await self._controller._fail_unfinished(self._tracks, self._unfinished, self._started, self._resumes)
                 break
-            self._resumes += 1
-            _remove_partial_outputs(self._output_dir, self._kept)
-            self._skip = {t.id for t in self._tracks} - self._unfinished
-            self._unfinished.clear()
-            self._lost.clear()
-            self._rip_path = returned
-            self._rip_dir = self._output_dir / f"resume-{self._resumes}"
-            logger.info(
-                "drive back at %s; resuming %d title(s) with one more mkv all (resume %d)",
-                self._rip_path,
-                len(self._tracks) - len(self._skip),
-                self._resumes,
-            )
+            self._prepare_resume(returned)
 
         completed = await self._controller._rip_complete_with_retry(self._job_id)
         logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
@@ -1329,6 +1317,23 @@ class _DiscRip:
         finally:
             if watcher is not None:
                 watcher.cancel()
+
+    def _prepare_resume(self, returned: str) -> None:
+        """Set up the next pass on the node the drive came back on: drop the partial files, skip every title already
+        settled, and rip into a fresh resume folder."""
+        self._resumes += 1
+        _remove_partial_outputs(self._output_dir, self._kept)
+        self._skip = {t.id for t in self._tracks} - self._unfinished
+        self._unfinished.clear()
+        self._lost.clear()
+        self._rip_path = returned
+        self._rip_dir = self._output_dir / f"resume-{self._resumes}"
+        logger.info(
+            "drive back at %s; resuming %d title(s) with one more mkv all (resume %d)",
+            self._rip_path,
+            len(self._tracks) - len(self._skip),
+            self._resumes,
+        )
 
 
 def _remove_partial_outputs(output_dir: Path, kept: set[Path]) -> None:
