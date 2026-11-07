@@ -29,6 +29,7 @@ import pytest
 import arm_ripper.rip.makemkv_process as makemkv_process
 import arm_ripper.rip.makemkv_rip as makemkv_rip
 import arm_ripper.rip.makemkv_stream as makemkv_stream
+import arm_ripper.rip.subprocess_cleanup as subprocess_cleanup
 from arm_ripper.rip.makemkv_rip import rip_disc
 from arm_ripper.rip.result import RipResult
 
@@ -951,14 +952,14 @@ async def test_wait_for_exit_with_stop_times_out_when_neither_happens(monkeypatc
 async def test_kill_if_running_leaves_a_finished_proc_alone():
     proc = _ScriptedHangingProc([])
     proc.returncode = 0
-    await makemkv_process._kill_if_running(_as_process(proc))
+    await subprocess_cleanup.kill_if_running(_as_process(proc))
     assert proc.kill_count == 0
     assert proc.waits_after_kill == 0
 
 
 async def test_kill_if_running_kills_then_waits_for_a_running_proc():
     proc = _ScriptedHangingProc([])
-    await makemkv_process._kill_if_running(_as_process(proc))
+    await subprocess_cleanup.kill_if_running(_as_process(proc))
     assert proc.kill_count == 1
     assert proc.waits_after_kill == 1
 
@@ -970,7 +971,7 @@ async def test_kill_if_running_swallows_a_wait_that_raises(error):
             raise error
 
     proc = _Proc([])
-    await makemkv_process._kill_if_running(_as_process(proc))
+    await subprocess_cleanup.kill_if_running(_as_process(proc))
     assert proc.returncode == -9
 
 

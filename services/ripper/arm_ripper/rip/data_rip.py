@@ -7,6 +7,7 @@ from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.result import RipResult
+from arm_ripper.rip.subprocess_cleanup import kill_if_running
 from arm_ripper.source import is_iso_source
 
 logger = logging.getLogger("arm_ripper.rip.data")
@@ -59,20 +60,6 @@ async def _stop_reporter(reporter: asyncio.Task[None] | None) -> None:
         await reporter
 
 
-async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
-    """Kill dd and reap it if it is still running."""
-    # Cancel-safe: if the parent task was cancelled (abandon flow),
-    # dd is still running. Kill it before letting CancelledError
-    # propagate so /raw/<id>/ rmtree finishes clean.
-    if proc.returncode is not None:
-        return
-    proc.kill()
-    try:
-        await proc.wait()
-    except BaseException:
-        pass
-
-
 async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[None] | None) -> RipResult | None:
     """Wait for dd to exit; return the timeout failure, or None if it exits in time.
 
@@ -86,7 +73,7 @@ async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[
         return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
     finally:
         await _stop_reporter(reporter)
-        await _kill_if_running(proc)
+        await kill_if_running(proc)
     return None
 
 

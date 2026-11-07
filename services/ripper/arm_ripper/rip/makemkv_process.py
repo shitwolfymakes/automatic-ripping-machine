@@ -6,6 +6,7 @@ Spawn it, stream its output, wait with a timeout or a stop signal, and map the e
 import asyncio
 
 from arm_ripper.rip.makemkv_stream import ParserState, RipCallbacks, stream_output
+from arm_ripper.rip.subprocess_cleanup import kill_if_running
 
 RIP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours: worst-case BD
 # The error a rip reports when its caller set `stop` (the drive dropped off the
@@ -49,19 +50,6 @@ async def _wait_for_exit(proc: asyncio.subprocess.Process, stop: asyncio.Event |
     if not done:
         raise asyncio.TimeoutError
     return exited not in done
-
-
-async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
-    """Kill makemkvcon and reap it if it is still running."""
-    # Cancel-safe cleanup: parent abandon → CancelledError. Kill the
-    # subprocess so /raw can be wiped without orphan fds.
-    if proc.returncode is not None:
-        return
-    proc.kill()
-    try:
-        await proc.wait()
-    except BaseException:
-        pass
 
 
 async def _exit_error(proc: asyncio.subprocess.Process, state: ParserState) -> str | None:
@@ -126,7 +114,7 @@ async def run_makemkvcon(
         streamer.cancel()
         return compose_error(f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s", state.diagnostics)
     finally:
-        await _kill_if_running(proc)
+        await kill_if_running(proc)
         streamer.cancel()
 
     # Drain the streamer so every line after EOF is processed before callers read `state`.

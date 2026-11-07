@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from arm_ripper.rip import data_rip
+from arm_ripper.rip import data_rip, subprocess_cleanup
 
 
 class _FakeProc:
@@ -260,19 +260,19 @@ async def test_stop_reporter_accepts_finished_task() -> None:
 async def test_kill_if_running_leaves_finished_proc_alone(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o")
     proc.returncode = 0
-    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    await subprocess_cleanup.kill_if_running(proc)  # type: ignore[arg-type]
     assert proc.kills == 0
 
 
 async def test_kill_if_running_kills_and_reaps(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o")
-    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    await subprocess_cleanup.kill_if_running(proc)  # type: ignore[arg-type]
     assert proc.kills == 1 and proc.reaped
 
 
 async def test_kill_if_running_swallows_reap_error(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o", reap_error=RuntimeError("boom"))
-    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    await subprocess_cleanup.kill_if_running(proc)  # type: ignore[arg-type]
     assert proc.kills == 1 and not proc.reaped
 
 
