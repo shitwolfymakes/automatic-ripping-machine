@@ -30,7 +30,8 @@ from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.rip.dispatcher import rip_all
-from arm_ripper.rip.makemkv_rip import RipDiscResult, RipResult
+from arm_ripper.rip.makemkv_rip import RipDiscResult
+from arm_ripper.rip.result import RipResult
 
 
 def _track(idx: int, source_ref: str | None = None, duration_seconds: int | None = 1800) -> TrackView:

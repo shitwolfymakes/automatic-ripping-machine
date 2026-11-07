@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from arm_ripper.rip.hashing import sha256_file
+from arm_ripper.rip.result import RipResult
 from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.rip.makemkv")
@@ -103,16 +104,6 @@ _DIAGNOSTIC_MSG_CODES = frozenset({1002, 3032, 5003, 5037})
 # failure reason; we don't need a success code because file existence
 # in the output dir is the source of truth for "title saved ok".
 _TITLE_FAIL_CODE = 5003
-
-
-@dataclass
-class RipResult:
-    ok: bool
-    output_path: Path | None = None
-    size_bytes: int | None = None
-    duration_seconds: int | None = None
-    sha256: str | None = None
-    error: str | None = None
 
 
 @dataclass

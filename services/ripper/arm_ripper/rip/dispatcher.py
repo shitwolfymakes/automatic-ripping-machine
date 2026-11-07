@@ -16,10 +16,10 @@ from arm_ripper.rip.makemkv_rip import (
     _OUTPUT_FILE_RE,
     STOPPED_ERROR,
     RipDiscResult,
-    RipResult,
     _output_files_in_rip_order,
     rip_disc,
 )
+from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
 
 logger = logging.getLogger("arm_ripper.rip.dispatcher")

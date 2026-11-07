@@ -28,6 +28,7 @@ import pytest
 
 import arm_ripper.rip.makemkv_rip as makemkv_rip
 from arm_ripper.rip.makemkv_rip import rip_disc
+from arm_ripper.rip.result import RipResult
 
 
 class _FakeStream:
@@ -1157,11 +1158,11 @@ _NO_MKV = "makemkvcon exited 0 but produced no .mkv for this title"
 
 def test_failed_titles_reports_a_captured_reason_for_an_unripped_title():
     out = makemkv_rip._failed_titles(_state_with_reasons(t2="read error"), [], {})
-    assert out == {2: makemkv_rip.RipResult(ok=False, error="read error")}
+    assert out == {2: RipResult(ok=False, error="read error")}
 
 
 def test_failed_titles_ignores_a_captured_reason_for_a_ripped_title():
-    ripped = {2: makemkv_rip.RipResult(ok=True)}
+    ripped = {2: RipResult(ok=True)}
     assert makemkv_rip._failed_titles(_state_with_reasons(t2="read error"), [], ripped) == {}
 
 
@@ -1171,22 +1172,22 @@ def test_failed_titles_without_a_reason_or_eligibility_gives_nothing():
 
 def test_failed_titles_gives_the_generic_error_for_an_eligible_title_without_a_reason():
     out = makemkv_rip._failed_titles(makemkv_rip._ParserState(), [4], {})
-    assert out == {4: makemkv_rip.RipResult(ok=False, error=_NO_MKV)}
+    assert out == {4: RipResult(ok=False, error=_NO_MKV)}
 
 
 def test_failed_titles_prefers_the_captured_reason_over_the_generic_error():
     out = makemkv_rip._failed_titles(_state_with_reasons(t4="read error"), [4], {})
-    assert out == {4: makemkv_rip.RipResult(ok=False, error="read error")}
+    assert out == {4: RipResult(ok=False, error="read error")}
 
 
 def test_failed_titles_orders_captured_reasons_before_generic_failures():
-    ripped = {1: makemkv_rip.RipResult(ok=True)}
+    ripped = {1: RipResult(ok=True)}
     state = _state_with_reasons(t9="bad", t3="worse")
     out = makemkv_rip._failed_titles(state, [8, 1, 3, 5], ripped)
     assert list(out) == [9, 3, 8, 5]
 
 
 def test_failed_titles_does_not_mutate_ripped():
-    ripped = {1: makemkv_rip.RipResult(ok=True)}
+    ripped = {1: RipResult(ok=True)}
     makemkv_rip._failed_titles(_state_with_reasons(t2="bad"), [3], ripped)
     assert list(ripped) == [1]

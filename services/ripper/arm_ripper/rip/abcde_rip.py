@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from arm_ripper.rip.hashing import sha256_file
-from arm_ripper.rip.makemkv_rip import RipResult
+from arm_ripper.rip.result import RipResult
 
 logger = logging.getLogger("arm_ripper.rip.abcde")
 

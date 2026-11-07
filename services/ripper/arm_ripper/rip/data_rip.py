@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
-from arm_ripper.rip.makemkv_rip import RipResult
+from arm_ripper.rip.result import RipResult
 from arm_ripper.source import is_iso_source
 
 logger = logging.getLogger("arm_ripper.rip.data")

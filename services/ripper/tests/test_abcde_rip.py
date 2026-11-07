@@ -33,7 +33,7 @@ import pytest
 
 import arm_ripper.rip.abcde_rip as abcde_rip
 from arm_ripper.rip.abcde_rip import rip_cd
-from arm_ripper.rip.makemkv_rip import RipResult
+from arm_ripper.rip.result import RipResult
 
 
 _FAKE_PID = 424242
