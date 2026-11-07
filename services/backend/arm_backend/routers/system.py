@@ -30,7 +30,8 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.constants import CONFIG_SINGLETON_ID
-from arm_backend.transcode_dispatcher import count_queued_encode_tasks
+from arm_backend.ripper_manager import RipperManager
+from arm_backend.transcode_dispatcher import TranscodeDispatcher, count_queued_encode_tasks
 from arm_backend.identity.sources.thediscdb_snapshot import RefreshBusy, refresh as thediscdb_refresh
 from arm_backend.identity.sources.thediscdb_snapshot import refresh_running as thediscdb_refresh_running
 from arm_backend.utils import default_roots
@@ -115,29 +116,17 @@ async def diagnostics(
     return await collect_diagnostics(request, db)
 
 
-async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagnosticsResponse:
-    """The diagnostics report, reusable by the setup router's system-step reconciliation."""
-    roots = _roots(request)
-    # Heal-on-read: the report never shows a problem the backend could
-    # have fixed itself.
-    # ensure_roots(roots)
-    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing
-    # then that is an error we want to surface when this endpoint is hit.
-    # TODO: implement a check for missing roots (low priority, most processes will
-    # surface this error)
-
-    checks: list[SystemDiagnosticCheck] = []
-
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    checks.append(
-        SystemDiagnosticCheck(
-            name="config",
-            status="ok" if cfg is not None else "error",
-            detail=None if cfg is not None else "config singleton missing",
-        )
+def _config_check(cfg: Config | None) -> SystemDiagnosticCheck:
+    return SystemDiagnosticCheck(
+        name="config",
+        status="ok" if cfg is not None else "error",
+        detail=None if cfg is not None else "config singleton missing",
     )
 
+
+def _path_checks(roots: dict[str, str]) -> tuple[list[PathStatus], list[SystemDiagnosticCheck]]:
     paths: list[PathStatus] = []
+    checks: list[SystemDiagnosticCheck] = []
     for name, path in roots.items():
         ps = _path_status(name, path)
         paths.append(ps)
@@ -150,16 +139,18 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
                     name=name, status=sev, detail=f"{path}: exists={ps.exists} writable={ps.writable}"
                 )
             )
+    return paths, checks
 
-    drives = await _online_enrolled_drives(db)
-    checks.append(
-        SystemDiagnosticCheck(
-            name="drives",
-            status="ok" if drives else "warning",
-            detail=None if drives else "no online drives registered",
-        )
+
+def _drives_check(drives: list[Drive]) -> SystemDiagnosticCheck:
+    return SystemDiagnosticCheck(
+        name="drives",
+        status="ok" if drives else "warning",
+        detail=None if drives else "no online drives registered",
     )
 
+
+def _makemkv_key_check(cfg: Config | None) -> SystemDiagnosticCheck:
     mk_valid = cfg.makemkv_key_valid if cfg is not None else None
     mk_state = cfg.makemkv_key_state if cfg is not None else None
     if mk_valid is True:
@@ -168,8 +159,10 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
         mk_status, mk_detail = "error", (makemkv_state_detail(mk_state) or "MakeMKV key invalid")
     else:
         mk_status, mk_detail = "warning", "MakeMKV key not yet validated by a ripper"
-    checks.append(SystemDiagnosticCheck(name="makemkv_key", status=mk_status, detail=mk_detail))
+    return SystemDiagnosticCheck(name="makemkv_key", status=mk_status, detail=mk_detail)
 
+
+def _keydb_check(cfg: Config | None) -> SystemDiagnosticCheck:
     kdb_state = cfg.community_keydb_state if cfg is not None else None
     kdb_count = cfg.community_keydb_vuk_count if cfg is not None else None
     # Compare against KeydbState members (StrEnum, so they equal the stored
@@ -184,8 +177,10 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
         kdb_status, kdb_detail = "warning", "community keydb unavailable; using last keydb if any"
     else:  # None — never reported by a ripper yet
         kdb_status, kdb_detail = "warning", "community keydb not yet checked by a ripper"
-    checks.append(SystemDiagnosticCheck(name="community_keydb", status=kdb_status, detail=kdb_detail))
+    return SystemDiagnosticCheck(name="community_keydb", status=kdb_status, detail=kdb_detail)
 
+
+def _sdf_check(cfg: Config | None) -> SystemDiagnosticCheck:
     sdf_state = cfg.makemkv_sdf_state if cfg is not None else None
     if sdf_state in (MakemkvSdfState.UPDATED, MakemkvSdfState.FRESH_KEPT):
         sdf_status_v, sdf_detail = "ok", "SDF present"
@@ -195,61 +190,81 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
         sdf_status_v, sdf_detail = "warning", "SDF refresh failed; using baked/last SDF"
     else:  # None — never reported by a ripper yet
         sdf_status_v, sdf_detail = "warning", "SDF not yet checked by a ripper"
-    checks.append(SystemDiagnosticCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail))
+    return SystemDiagnosticCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail)
 
-    dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
-    tc_details: list[DiagnosticDetail] = []
+
+async def _ripper_only_status(db: AsyncSession) -> tuple[str, str | None]:
+    # Ripper-only is a supported deployment, not a degraded one: the
+    # dispatcher runs without a docker client by design, so reporting its
+    # (absent) container path as a warning would be permanent noise.
+    tc_status, tc_detail = "ok", "ripper-only deployment (transcoding not installed)"
+    held = await count_queued_encode_tasks(db)
+    if held:
+        # Queued before the box went ripper-only (or swept back to
+        # QUEUED): spawn_pending holds them with nothing to run them.
+        tc_status = "warning"
+        tc_detail = (
+            f"ripper-only deployment: {held} queued encode task(s) are held; "
+            "re-run setup without --ripper-only to resume them, or delete them"
+        )
+    return tc_status, tc_detail
+
+
+async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[str, str | None, list[DiagnosticDetail]]:
+    # probe() pings a possibly-remote ssh docker host; run it off the
+    # event loop so a slow/unreachable host doesn't block the server.
+    ok, detail = await asyncio.to_thread(dispatcher.probe)
+    tc_details = _docker_details("Transcode image", ok, detail)
+    if not ok:
+        return "warning", detail, tc_details
+    if dispatcher.last_spawn_error:
+        return "warning", f"last spawn failed: {dispatcher.last_spawn_error}", tc_details
+    if dispatcher.backend_url_warning:
+        return (
+            "warning",
+            f"{dispatcher.backend_url_warning} (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)",
+            tc_details,
+        )
+    return "ok", None, tc_details
+
+
+async def _transcoder_status(
+    dispatcher: TranscodeDispatcher | None, db: AsyncSession
+) -> tuple[str, str | None, list[DiagnosticDetail]]:
     if not effective_transcode_capable(settings):
-        # Ripper-only is a supported deployment, not a degraded one: the
-        # dispatcher runs without a docker client by design, so reporting its
-        # (absent) container path as a warning would be permanent noise.
-        tc_status, tc_detail = "ok", "ripper-only deployment (transcoding not installed)"
-        held = await count_queued_encode_tasks(db)
-        if held:
-            # Queued before the box went ripper-only (or swept back to
-            # QUEUED): spawn_pending holds them with nothing to run them.
-            tc_status = "warning"
-            tc_detail = (
-                f"ripper-only deployment: {held} queued encode task(s) are held; "
-                "re-run setup without --ripper-only to resume them, or delete them"
-            )
-    elif dispatcher is None:
-        tc_status, tc_detail = "warning", "transcoder dispatcher not running"
-    elif not dispatcher.host_paths_set():
-        tc_status, tc_detail = "warning", "transcoder disabled: ARM_HOST_*_PATH not set"
-    else:
-        # probe() pings a possibly-remote ssh docker host; run it off the
-        # event loop so a slow/unreachable host doesn't block the server.
-        ok, detail = await asyncio.to_thread(dispatcher.probe)
-        tc_details = _docker_details("Transcode image", ok, detail)
-        if not ok:
-            tc_status, tc_detail = "warning", detail
-        elif dispatcher.last_spawn_error:
-            tc_status, tc_detail = "warning", f"last spawn failed: {dispatcher.last_spawn_error}"
-        elif dispatcher.backend_url_warning:
-            tc_status = "warning"
-            tc_detail = f"{dispatcher.backend_url_warning} (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)"
-        else:
-            tc_status, tc_detail = "ok", None
+        tc_status, tc_detail = await _ripper_only_status(db)
+        return tc_status, tc_detail, []
+    if dispatcher is None:
+        return "warning", "transcoder dispatcher not running", []
+    if not dispatcher.host_paths_set():
+        return "warning", "transcoder disabled: ARM_HOST_*_PATH not set", []
+    return await _probed_transcoder_status(dispatcher)
+
+
+def _transcoder_location() -> tuple[str, str | None]:
     remote = settings.ARM_TRANSCODE_DOCKER_HOST or ""
     if not effective_transcode_capable(settings):
-        location, remote_host = "none", None
-    elif remote:
-        location, remote_host = "remote", remote.removeprefix("ssh://").split("/", 1)[0] or None
-    else:
-        location, remote_host = "local", None
-    checks.append(
-        SystemDiagnosticCheck(
-            name="transcoder",
-            status=tc_status,
-            detail=tc_detail,
-            details=tc_details,
-            location=location,
-            remote_host=remote_host,
-        )
+        return "none", None
+    if remote:
+        return "remote", remote.removeprefix("ssh://").split("/", 1)[0] or None
+    return "local", None
+
+
+async def _transcoder_check(dispatcher: TranscodeDispatcher | None, db: AsyncSession) -> SystemDiagnosticCheck:
+    tc_status, tc_detail, tc_details = await _transcoder_status(dispatcher, db)
+    location, remote_host = _transcoder_location()
+    return SystemDiagnosticCheck(
+        name="transcoder",
+        status=tc_status,
+        detail=tc_detail,
+        details=tc_details,
+        location=location,
+        remote_host=remote_host,
     )
 
-    manager = getattr(request.app.state, "ripper_manager", None)
+
+async def _ripper_manager_check(manager: RipperManager | None) -> SystemDiagnosticCheck:
+    rm_detail: str | None
     if manager is None:
         rm_status, rm_detail = "warning", "ripper manager disabled: docker socket unavailable"
         rm_details = [DiagnosticDetail(label="Docker socket", ok=False, message="docker socket unavailable")]
@@ -263,13 +278,49 @@ async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagn
             rm_status, rm_detail = "warning", detail
         else:
             rm_status, rm_detail = "ok", None
-    checks.append(SystemDiagnosticCheck(name="ripper_manager", status=rm_status, detail=rm_detail, details=rm_details))
+    return SystemDiagnosticCheck(name="ripper_manager", status=rm_status, detail=rm_detail, details=rm_details)
 
+
+def _worst_status(checks: list[SystemDiagnosticCheck]) -> str:
     overall = "ok"
     for ch in checks:
         if _WORST[ch.status] > _WORST[overall]:
             overall = ch.status
-    return SystemDiagnosticsResponse(status=overall, checks=checks, paths=paths)
+    return overall
+
+
+async def collect_diagnostics(request: Request, db: AsyncSession) -> SystemDiagnosticsResponse:
+    """The diagnostics report, reusable by the setup router's system-step reconciliation."""
+    roots = _roots(request)
+    # Heal-on-read: the report never shows a problem the backend could
+    # have fixed itself.
+    # ensure_roots(roots)
+    # DO NOT heal-on-read. These should be guaranteed at launch so if any are missing
+    # then that is an error we want to surface when this endpoint is hit.
+    # TODO: implement a check for missing roots (low priority, most processes will
+    # surface this error)
+
+    checks: list[SystemDiagnosticCheck] = []
+
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    checks.append(_config_check(cfg))
+
+    paths, path_checks = _path_checks(roots)
+    checks.extend(path_checks)
+
+    drives = await _online_enrolled_drives(db)
+    checks.append(_drives_check(drives))
+    checks.append(_makemkv_key_check(cfg))
+    checks.append(_keydb_check(cfg))
+    checks.append(_sdf_check(cfg))
+
+    dispatcher = getattr(request.app.state, "transcode_dispatcher", None)
+    checks.append(await _transcoder_check(dispatcher, db))
+
+    manager = getattr(request.app.state, "ripper_manager", None)
+    checks.append(await _ripper_manager_check(manager))
+
+    return SystemDiagnosticsResponse(status=_worst_status(checks), checks=checks, paths=paths)
 
 
 async def _online_enrolled_drives(db: AsyncSession) -> list[Drive]:
