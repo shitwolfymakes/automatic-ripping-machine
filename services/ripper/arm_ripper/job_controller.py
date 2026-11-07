@@ -239,39 +239,50 @@ class JobController:
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic."""
         if envelope.event_type in ("identify.resolved", "rip.start", "review.pause"):
-            # All wake the per-job wait Event; the waiter re-fetches the job and
-            # re-evaluates (identify.resolved -> identified; rip.start -> ripping;
-            # review.pause -> re-read manual_pause/wait_start_time so a per-job
-            # pause/resume applies promptly instead of on the next periodic poll).
-            job_id = _command_payload(envelope).get("job_id")
-            if not isinstance(job_id, str):
-                logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
-                return
-            if self._wake_waiter(job_id):
-                logger.info("ws %s received for job_id=%s", envelope.event_type, job_id)
-            else:
-                logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
+            self._on_wake_command(envelope)
         elif envelope.event_type == "manual.trigger":
-            payload = _command_payload(envelope)
-            session_id = payload.get("session_id")
-            if session_id is not None and not isinstance(session_id, str):
-                logger.warning("manual.trigger with non-string session_id: %r", session_id)
-                session_id = None
-            asyncio.create_task(self.handle_manual_trigger(session_id))
+            self._on_manual_trigger(envelope)
         elif envelope.event_type == "job.abandoned":
-            payload = _command_payload(envelope)
-            job_id = payload.get("job_id")
-            delete_raw = bool(payload.get("delete_raw"))
-            if not isinstance(job_id, str):
-                logger.warning("job.abandoned without job_id payload: %s", payload)
-                return
-            self._handle_abandon(job_id, delete_raw=delete_raw)
-            # Also wake any `_await_resolution` waiter — abandoning a parked
-            # job needs to unstick the pipeline the same way `identify.resolved`
-            # does. The waiter polls and decides based on the new job status.
-            self._wake_waiter(job_id)
+            self._on_job_abandoned(envelope)
         else:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
+
+    def _on_wake_command(self, envelope: WSEnvelope) -> None:
+        """Wake the pipeline parked on the payload's job so it re-fetches the job and re-evaluates:
+        identify.resolved -> identified, rip.start -> ripping, review.pause -> re-read
+        manual_pause / wait_start_time so a per-job pause or resume applies promptly instead of
+        on the next periodic poll."""
+        job_id = _command_payload(envelope).get("job_id")
+        if not isinstance(job_id, str):
+            logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
+            return
+        if self._wake_waiter(job_id):
+            logger.info("ws %s received for job_id=%s", envelope.event_type, job_id)
+        else:
+            logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
+
+    def _on_manual_trigger(self, envelope: WSEnvelope) -> None:
+        """Start a manual rip for the payload's session, or with no session when it doesn't name one as a string."""
+        payload = _command_payload(envelope)
+        session_id = payload.get("session_id")
+        if session_id is not None and not isinstance(session_id, str):
+            logger.warning("manual.trigger with non-string session_id: %r", session_id)
+            session_id = None
+        asyncio.create_task(self.handle_manual_trigger(session_id))
+
+    def _on_job_abandoned(self, envelope: WSEnvelope) -> None:
+        """Abandon the payload's job, then wake a pipeline parked on it so it sees the new status."""
+        payload = _command_payload(envelope)
+        job_id = payload.get("job_id")
+        delete_raw = bool(payload.get("delete_raw"))
+        if not isinstance(job_id, str):
+            logger.warning("job.abandoned without job_id payload: %s", payload)
+            return
+        self._handle_abandon(job_id, delete_raw=delete_raw)
+        # Also wake any `_await_resolution` waiter — abandoning a parked
+        # job needs to unstick the pipeline the same way `identify.resolved`
+        # does. The waiter polls and decides based on the new job status.
+        self._wake_waiter(job_id)
 
     def _wake_waiter(self, job_id: str) -> bool:
         """Set the wait event of the pipeline parked on this job, if one is; True when there was one."""
