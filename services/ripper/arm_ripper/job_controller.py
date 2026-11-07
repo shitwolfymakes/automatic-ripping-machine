@@ -3,7 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1167,45 +1167,32 @@ class JobController:
             return False
         return True
 
-    async def _rip_start_with_retry(self, job_id: str) -> RipStartResponse:
+    async def _retry_backend_call[T](self, call: Callable[[], Awaitable[T]], what: str) -> T:
+        """Run one backend call, retrying a transient failure with doubling backoff up to PATCH_RETRY_MAX_SECONDS and
+        re-raising a rejection."""
         delay = PATCH_RETRY_INITIAL_SECONDS
         while True:
             try:
-                return await self._client.rip_start(job_id)
+                return await call()
             except httpx.HTTPError as e:
                 if not self._is_retryable(e):
-                    logger.error("rip-start %s rejected by backend (%s); giving up", job_id, e)
+                    logger.error("%s rejected by backend (%s); giving up", what, e)
                     raise
-                logger.warning("rip-start %s failed (%s); retrying in %.1fs", job_id, e, delay)
+                logger.warning("%s failed (%s); retrying in %.1fs", what, e, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
+
+    async def _rip_start_with_retry(self, job_id: str) -> RipStartResponse:
+        """Mark the job ripping on the backend, retrying a transient failure."""
+        return await self._retry_backend_call(lambda: self._client.rip_start(job_id), f"rip-start {job_id}")
 
     async def _rip_complete_with_retry(self, job_id: str) -> JobView:
-        delay = PATCH_RETRY_INITIAL_SECONDS
-        while True:
-            try:
-                return await self._client.rip_complete(job_id)
-            except httpx.HTTPError as e:
-                if not self._is_retryable(e):
-                    logger.error("rip-complete %s rejected by backend (%s); giving up", job_id, e)
-                    raise
-                logger.warning("rip-complete %s failed (%s); retrying in %.1fs", job_id, e, delay)
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
+        """Mark the job's rip complete on the backend, retrying a transient failure."""
+        return await self._retry_backend_call(lambda: self._client.rip_complete(job_id), f"rip-complete {job_id}")
 
     async def _patch_track_with_retry(self, track_id: str, **fields: object) -> None:
-        delay = PATCH_RETRY_INITIAL_SECONDS
-        while True:
-            try:
-                await self._client.update_track(track_id, **fields)
-                return
-            except httpx.HTTPError as e:
-                if not self._is_retryable(e):
-                    logger.error("PATCH track %s rejected by backend (%s); giving up", track_id, e)
-                    raise
-                logger.warning("PATCH track %s failed (%s); retrying in %.1fs", track_id, e, delay)
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
+        """PATCH one track's fields on the backend, retrying a transient failure."""
+        await self._retry_backend_call(lambda: self._client.update_track(track_id, **fields), f"PATCH track {track_id}")
 
 
 def _remove_partial_outputs(output_dir: Path, kept: set[Path]) -> None:
