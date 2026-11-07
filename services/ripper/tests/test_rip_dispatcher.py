@@ -228,7 +228,7 @@ def _stub_rip_disc(
         # `mkv all` mode (fire_per_title_start=False) emits no
         # per-title PRGT and therefore no per-title progress; skipping
         # it here keeps the fake's behaviour aligned with the real
-        # streamer in [makemkv_rip.py].
+        # streamer in [makemkv_stream.py].
         if fire_per_title_start and on_title_progress is not None:
             for idx in fake_result.titles:
                 await on_title_progress(idx, 0.5)
