@@ -323,6 +323,48 @@ async def _check_tvdb(http: httpx.AsyncClient, key: str) -> tuple[Literal["ok", 
     return "error", f"tvdb status={r.status_code}"
 
 
+def _makemkv_key_status(cfg: Config, stored_key: str, unsaved_value: str | None) -> KeyCheckResponse:
+    if unsaved_value is not None and unsaved_value != stored_key:
+        return KeyCheckResponse(
+            name="makemkv",
+            status="unknown",
+            detail="save the key; the ripper verifies it before the next rip",
+            checked_at=None,
+        )
+    # The ripper's verdict wins: with no purchased key stored it fetches the
+    # monthly beta key itself, so "valid" is real even when Config holds
+    # nothing. "no key set" only applies when there is no verdict either.
+    if cfg.makemkv_key_valid is True:
+        detail = None if stored_key else "using the monthly beta key"
+        return KeyCheckResponse(name="makemkv", status="ok", detail=detail, checked_at=cfg.makemkv_key_checked_at)
+    if cfg.makemkv_key_valid is False:
+        return KeyCheckResponse(
+            name="makemkv",
+            status="invalid",
+            detail=makemkv_state_detail(cfg.makemkv_key_state),
+            checked_at=cfg.makemkv_key_checked_at,
+        )
+    if not stored_key and cfg.makemkv_key_checked_at is None:
+        return KeyCheckResponse(
+            name="makemkv",
+            status="missing",
+            detail="no key set; the ripper fetches the monthly beta key when it starts",
+            checked_at=None,
+        )
+    detail = "probe failed" if cfg.makemkv_key_state == "probe_failed" else "not checked yet"
+    return KeyCheckResponse(name="makemkv", status="unknown", detail=detail, checked_at=cfg.makemkv_key_checked_at)
+
+
+async def _check_online_key(
+    http: httpx.AsyncClient, name: str, key: str
+) -> tuple[Literal["ok", "invalid", "error"], str | None]:
+    if name == "tmdb":
+        return await _check_tmdb(http, key)
+    if name == "omdb":
+        return await _check_omdb(http, key)
+    return await _check_tvdb(http, key)
+
+
 @router.post("/keys/{name}/check", response_model=KeyCheckResponse)
 async def check_key(
     name: Literal["tmdb", "omdb", "tvdb", "makemkv"],
@@ -331,53 +373,18 @@ async def check_key(
     _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
 ) -> KeyCheckResponse:
-    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
+    cfg = await _load_config(session)
 
     stored_key = getattr(cfg, _KEY_ATTR[name]) or ""
     unsaved_value = body.value if isinstance(body.value, str) and body.value else None
 
     if name == "makemkv":
-        if unsaved_value is not None and unsaved_value != stored_key:
-            return KeyCheckResponse(
-                name=name,
-                status="unknown",
-                detail="save the key; the ripper verifies it before the next rip",
-                checked_at=None,
-            )
-        # The ripper's verdict wins: with no purchased key stored it fetches the
-        # monthly beta key itself, so "valid" is real even when Config holds
-        # nothing. "no key set" only applies when there is no verdict either.
-        if cfg.makemkv_key_valid is True:
-            detail = None if stored_key else "using the monthly beta key"
-            return KeyCheckResponse(name=name, status="ok", detail=detail, checked_at=cfg.makemkv_key_checked_at)
-        if cfg.makemkv_key_valid is False:
-            return KeyCheckResponse(
-                name=name,
-                status="invalid",
-                detail=makemkv_state_detail(cfg.makemkv_key_state),
-                checked_at=cfg.makemkv_key_checked_at,
-            )
-        if not stored_key and cfg.makemkv_key_checked_at is None:
-            return KeyCheckResponse(
-                name=name,
-                status="missing",
-                detail="no key set; the ripper fetches the monthly beta key when it starts",
-                checked_at=None,
-            )
-        detail = "probe failed" if cfg.makemkv_key_state == "probe_failed" else "not checked yet"
-        return KeyCheckResponse(name=name, status="unknown", detail=detail, checked_at=cfg.makemkv_key_checked_at)
+        return _makemkv_key_status(cfg, stored_key, unsaved_value)
 
     key = unsaved_value or stored_key
     if not key:
         return KeyCheckResponse(name=name, status="missing", detail="no key set", checked_at=None)
 
     http: httpx.AsyncClient = request.app.state.http
-    if name == "tmdb":
-        check_status, check_detail = await _check_tmdb(http, key)
-    elif name == "omdb":
-        check_status, check_detail = await _check_omdb(http, key)
-    else:
-        check_status, check_detail = await _check_tvdb(http, key)
+    check_status, check_detail = await _check_online_key(http, name, key)
     return KeyCheckResponse(name=name, status=check_status, detail=check_detail, checked_at=datetime.now(timezone.utc))
