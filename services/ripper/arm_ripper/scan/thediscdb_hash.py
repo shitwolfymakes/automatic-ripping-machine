@@ -78,6 +78,21 @@ def collect_hash_files_udf(source_path: str) -> list[tuple[str, int]] | None:
     return _files_in(listing, "VIDEO_TS") or None
 
 
+def _bd_stream_files(iso: Any) -> list[tuple[str, int]]:
+    """(name, size) of the `.m2ts` files in the UDF `/BDMV/STREAM` directory; empty when the disc has no UDF tree,
+    no STREAM directory, or no `.m2ts` in it.
+    """
+    try:
+        listing = [
+            _file_entry(child)
+            for child in iso.list_children(udf_path="/BDMV/STREAM")
+            if child is not None and not child.is_dir()
+        ]
+        return [(n, s) for n, s in listing if n.lower().endswith(".m2ts")]
+    except Exception:  # noqa: BLE001 — no UDF / no BDMV: fall through to DVD
+        return []
+
+
 def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
     """Read the hashable file set from a device or ISO path via pycdlib.
 
@@ -90,17 +105,9 @@ def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
     iso.open(source_path)
     try:
         # Blu-ray first: UDF filesystem, STREAM directory.
-        try:
-            listing = [
-                _file_entry(child)
-                for child in iso.list_children(udf_path="/BDMV/STREAM")
-                if child is not None and not child.is_dir()
-            ]
-            m2ts = [(n, s) for n, s in listing if n.lower().endswith(".m2ts")]
-            if m2ts:
-                return m2ts
-        except Exception:  # noqa: BLE001 — no UDF / no BDMV: fall through to DVD
-            pass
+        m2ts = _bd_stream_files(iso)
+        if m2ts:
+            return m2ts
 
         for kwargs in ({"iso_path": "/VIDEO_TS"}, {"udf_path": "/VIDEO_TS"}):
             try:

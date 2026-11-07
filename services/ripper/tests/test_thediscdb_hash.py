@@ -8,6 +8,7 @@ import pycdlib
 import pytest
 
 from arm_ripper.scan.thediscdb_hash import (
+    _bd_stream_files,
     _clean_iso_name,
     _file_entry,
     _hash_from_listing,
@@ -230,3 +231,24 @@ def test_file_entry_passes_udf_name_through() -> None:
 
 def test_file_entry_replaces_undecodable_byte() -> None:
     assert _file_entry(_RawChild(b"bad\xffname", 1)) == ("bad\ufffdname", 1)
+
+
+def test_bd_stream_files_keeps_only_m2ts_files(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_BDMV] = [
+        None,
+        _Child("00002.M2TS;1", 222),
+        _Child("00001.m2ts;1", 111),
+        _Child("notes.txt", 5),
+        _Child("SUB.m2ts", 9, is_dir=True),
+    ]
+    assert _bd_stream_files(fake_cdlib()) == [("00002.M2TS", 222), ("00001.m2ts", 111)]
+
+
+def test_bd_stream_files_empty_without_m2ts(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_BDMV] = [_Child("notes.txt", 5)]
+    assert _bd_stream_files(fake_cdlib()) == []
+
+
+def test_bd_stream_files_empty_when_listing_raises(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_BDMV] = RuntimeError("no UDF")
+    assert _bd_stream_files(fake_cdlib()) == []
