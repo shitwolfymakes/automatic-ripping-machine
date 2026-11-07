@@ -209,6 +209,103 @@ async def test_authenticate_non_json_frame_raises_decode_error() -> None:
         await _client()._authenticate(conn)  # type: ignore[arg-type]
 
 
+def _records(caplog: pytest.LogCaptureFixture) -> list[tuple[int, str]]:
+    return [(r.levelno, r.getMessage()) for r in caplog.records if r.name == LOGGER]
+
+
+async def test_handle_frame_non_json_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    client = _client()
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._handle_frame("not json{")
+    assert _records(caplog) == [(logging.WARNING, "ws non-json frame discarded")]
+
+
+async def test_handle_frame_event_dispatches_to_handler(caplog: pytest.LogCaptureFixture) -> None:
+    seen: list[WSEnvelope] = []
+
+    async def h(env: WSEnvelope) -> None:
+        seen.append(env)
+
+    client = _client()
+    await client.subscribe("t.x", h)
+    raw = _event("t.x", "evt")
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._handle_frame(raw)
+    assert seen == [WSEnvelope.model_validate_json(raw)]
+    assert _records(caplog) == []
+
+
+async def test_handle_frame_error_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    client = _client()
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._handle_frame(WSError(code=7, reason="slow down").model_dump_json().encode())
+    assert _records(caplog) == [(logging.WARNING, "ws error from backend: code=7 reason=slow down")]
+
+
+@pytest.mark.parametrize("op", ["ack", "mystery"])
+async def test_handle_frame_ack_and_unknown_ops_are_ignored(op: str, caplog: pytest.LogCaptureFixture) -> None:
+    called: list[WSEnvelope] = []
+
+    async def h(env: WSEnvelope) -> None:  # pragma: no cover - never dispatched
+        called.append(env)
+
+    client = _client()
+    await client.subscribe("t.x", h)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._handle_frame(json.dumps({"op": op}))
+    assert called == []
+    assert _records(caplog) == []
+
+
+async def test_dispatch_event_bad_envelope_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    client = _client()
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._dispatch_event({"op": "event", "topic": "t.x"})
+    records = _records(caplog)
+    assert len(records) == 1
+    assert records[0][0] == logging.WARNING
+    assert records[0][1].startswith("ws envelope validation failed: ")
+
+
+async def test_dispatch_event_calls_subscribed_handler() -> None:
+    seen: list[WSEnvelope] = []
+
+    async def h(env: WSEnvelope) -> None:
+        seen.append(env)
+
+    client = _client()
+    await client.subscribe("t.x", h)
+    msg = json.loads(_event("t.x", "evt"))
+    await client._dispatch_event(msg)
+    assert seen == [WSEnvelope.model_validate(msg)]
+
+
+async def test_dispatch_event_unsubscribed_topic_does_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    called: list[WSEnvelope] = []
+
+    async def h(env: WSEnvelope) -> None:  # pragma: no cover - never dispatched
+        called.append(env)
+
+    client = _client()
+    await client.subscribe("t.x", h)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._dispatch_event(json.loads(_event("t.other")))
+    assert called == []
+    assert _records(caplog) == []
+
+
+async def test_dispatch_event_handler_exception_is_logged_not_raised(caplog: pytest.LogCaptureFixture) -> None:
+    async def bad(env: WSEnvelope) -> None:
+        raise RuntimeError("boom")
+
+    client = _client()
+    await client.subscribe("t.x", bad)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        await client._dispatch_event(json.loads(_event("t.x")))
+    assert _records(caplog) == [(logging.ERROR, "ws handler raised on topic=t.x: boom")]
+    assert [r.exc_info is not None for r in caplog.records if r.name == LOGGER] == [True]
+
+
 class LoopHarness:
     """Scripted `_run_once` outcomes plus a fake `asyncio.wait_for` that records delays and never sleeps."""
 
