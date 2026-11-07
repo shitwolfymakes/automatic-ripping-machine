@@ -1118,13 +1118,23 @@ class JobController:
             logger.info("eject skipped: source is ISO file %s", device_path)
             return
         await self._run_command("umount", device_path, log_failure=False)
+        if not await self._try_eject(device_path):
+            logger.error(
+                "eject %s failed after %d attempts; check host auto-mount config",
+                device_path,
+                len(EJECT_RETRY_DELAYS),
+            )
+
+    async def _try_eject(self, device_path: str) -> bool:
+        """Run eject once per EJECT_RETRY_DELAYS entry, waiting that long first, until one succeeds; True if one
+        did."""
         for attempt, delay in enumerate(EJECT_RETRY_DELAYS, start=1):
             if delay > 0:
                 await asyncio.sleep(delay)
             rc, stderr = await self._run_command("eject", "-sv", device_path)
             if rc == 0:
                 logger.info("ejected %s on attempt %d", device_path, attempt)
-                return
+                return True
             logger.warning(
                 "eject %s attempt %d failed (rc=%s): %s",
                 device_path,
@@ -1132,12 +1142,7 @@ class JobController:
                 rc,
                 stderr or "<no stderr>",
             )
-
-        logger.error(
-            "eject %s failed after %d attempts; check host auto-mount config",
-            device_path,
-            len(EJECT_RETRY_DELAYS),
-        )
+        return False
 
     @staticmethod
     async def _run_command(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
