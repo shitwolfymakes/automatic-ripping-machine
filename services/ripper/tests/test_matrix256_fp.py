@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import pycdlib
 import pytest
 
 from arm_ripper.scan import matrix256_fp
@@ -17,6 +18,7 @@ from arm_ripper.scan.matrix256_fp import (
     UnsafeRecordError,
     _choose_view,
     _collect_from_iso,
+    collect_tree_records,
     fingerprint_records,
     probe_matrix256,
 )
@@ -304,3 +306,50 @@ def test_choose_view_falls_back_to_plain_iso9660_when_no_extension_is_present() 
 
 def test_choose_view_falls_back_to_iso9660_when_every_extended_check_raises() -> None:
     assert _choose_view(_RaisingIso("udf", "rock_ridge", "joliet")) == ("iso9660", "iso_path")
+
+
+def test_choose_view_prefers_udf_over_every_other_view() -> None:
+    iso = _StubIso("udf_path", [], {}, udf=True, rock_ridge=True, joliet=True)
+    assert _choose_view(iso) == ("udf", "udf_path")
+
+
+def test_choose_view_prefers_rock_ridge_over_joliet() -> None:
+    iso = _StubIso("rr_path", [], {}, rock_ridge=True, joliet=True)
+    assert _choose_view(iso) == ("rock_ridge", "rr_path")
+
+
+def test_choose_view_treats_a_falsy_non_bool_check_as_absent() -> None:
+    class _FalsyIso:
+        def has_udf(self) -> int:
+            return 0
+
+        def has_rock_ridge(self) -> None:
+            return None
+
+        def has_joliet(self) -> str:
+            return ""
+
+    assert _choose_view(_FalsyIso()) == ("iso9660", "iso_path")
+
+
+def test_collect_tree_records_opens_walks_and_closes_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _OpenableIso(_StubIso):
+        instances: list["_OpenableIso"] = []
+
+        def __init__(self) -> None:
+            super().__init__("iso_path", [("/", [], ["A.TXT;1"])], {"/A.TXT;1": _Rec(7)})
+            self.opened: str | None = None
+            self.closed = 0
+            _OpenableIso.instances.append(self)
+
+        def open(self, path: str) -> None:
+            self.opened = path
+
+        def close(self) -> None:
+            self.closed += 1
+
+    monkeypatch.setattr(pycdlib, "PyCdlib", _OpenableIso)
+    assert collect_tree_records("/dev/sr0") == ([("A.TXT", 7)], "iso9660")
+    [iso] = _OpenableIso.instances
+    assert iso.opened == "/dev/sr0"
+    assert iso.closed == 1
