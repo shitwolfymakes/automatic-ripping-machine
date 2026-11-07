@@ -30,7 +30,6 @@ from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
 
-POLL_INITIAL_SECONDS = 5.0
 POLL_MAX_SECONDS = 30.0
 EJECT_GRACE_SECONDS = 3.0
 # Hard ceiling on awaiting_user_id wait; if no WS event arrives by then,

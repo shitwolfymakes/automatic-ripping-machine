@@ -155,7 +155,6 @@ class FakeClient:
 @pytest.fixture(autouse=True)
 def fast_polls(monkeypatch, tmp_path):
     """Don't wait 5+ seconds between polls; write under tmp_path, not /raw."""
-    monkeypatch.setattr(jc_module, "POLL_INITIAL_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "POLL_MAX_SECONDS", 0.01)
     monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
