@@ -123,6 +123,16 @@ def _spawn_tracked(coro: Coroutine[Any, Any, None], tasks: set[asyncio.Task[None
     task.add_done_callback(tasks.discard)
 
 
+def _disconnect_reason(resumes: int) -> str:
+    """Why the titles a lost drive left are failed: it did not come back in time, or it dropped more often than a
+    rip may resume."""
+    return (
+        f"the drive disconnected mid-rip and did not come back within {DEVICE_RETURN_WAIT_SECONDS:.0f}s"
+        if resumes < MAX_DEVICE_RESUMES
+        else f"the drive disconnected mid-rip {resumes + 1} times; giving up"
+    )
+
+
 def _command_payload(envelope: WSEnvelope) -> dict[str, Any]:
     """A WS command's payload, or an empty dict when it isn't one."""
     return envelope.payload if isinstance(envelope.payload, dict) else {}
@@ -1072,11 +1082,7 @@ class JobController:
         self, tracks: list[TrackView], unfinished: set[str], started: set[str], resumes: int
     ) -> None:
         """The drive did not come back: fail what it left, saying why."""
-        reason = (
-            f"the drive disconnected mid-rip and did not come back within {DEVICE_RETURN_WAIT_SECONDS:.0f}s"
-            if resumes < MAX_DEVICE_RESUMES
-            else f"the drive disconnected mid-rip {resumes + 1} times; giving up"
-        )
+        reason = _disconnect_reason(resumes)
         logger.error("%s; %d title(s) not ripped", reason, len(unfinished))
         for track in tracks:
             if track.id not in unfinished:
