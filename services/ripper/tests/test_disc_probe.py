@@ -10,6 +10,7 @@ format alone.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import types
@@ -351,3 +352,22 @@ async def test_probe_disc_bluray_without_bd_meta_leaves_it_none(
         probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
     assert probe.bd_meta is None
     assert "bdmt" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_probe_value_returns_and_logs_found_value(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.disc_probe"):
+        value = await disc_probe._probe_value("dvd crc64", lambda path: f"fp-{path}", "/dev/sr0")
+    assert value == "fp-/dev/sr0"
+    assert [r.getMessage() for r in caplog.records] == ["dvd crc64 device=/dev/sr0 value=fp-/dev/sr0"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("found", [None, ""])
+async def test_probe_value_returns_empty_result_without_logging(
+    found: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.disc_probe"):
+        value = await disc_probe._probe_value("matrix256", lambda path: found, "/dev/sr0")
+    assert value == found
+    assert caplog.records == []
