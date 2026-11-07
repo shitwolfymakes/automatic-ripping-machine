@@ -3,6 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -237,15 +238,20 @@ class JobController:
                 self._active_job_id = None
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
-        """Handler registered for `ripper.commands.{drive_id}` topic."""
-        if envelope.event_type in ("identify.resolved", "rip.start", "review.pause"):
-            self._on_wake_command(envelope)
-        elif envelope.event_type == "manual.trigger":
-            self._on_manual_trigger(envelope)
-        elif envelope.event_type == "job.abandoned":
-            self._on_job_abandoned(envelope)
-        else:
+        """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
+        type and ignores any other type."""
+        handlers: dict[str, Callable[[WSEnvelope], None]] = {
+            "identify.resolved": self._on_wake_command,
+            "rip.start": self._on_wake_command,
+            "review.pause": self._on_wake_command,
+            "manual.trigger": self._on_manual_trigger,
+            "job.abandoned": self._on_job_abandoned,
+        }
+        handler = handlers.get(envelope.event_type)
+        if handler is None:
             logger.debug("ws command ignored: type=%s", envelope.event_type)
+            return
+        handler(envelope)
 
     def _on_wake_command(self, envelope: WSEnvelope) -> None:
         """Wake the pipeline parked on the payload's job so it re-fetches the job and re-evaluates:
