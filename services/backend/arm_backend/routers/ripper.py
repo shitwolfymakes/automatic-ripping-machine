@@ -614,50 +614,40 @@ class _IdentifyFlow:
         self.timed_out = False
         self.attempts: list[dict[str, Any]] = []
 
-    async def run(self) -> Job:
-        self.drive = (
+    async def _load_drive(self) -> Drive:
+        drive = (
             await self.session.execute(select(Drive).where(col(Drive.id) == self.req.drive_id))
         ).scalar_one_or_none()
-        if self.drive is None:
+        if drive is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {self.req.drive_id}")
+        return drive
+
+    def _mark_new_disc(self, drive: Drive) -> None:
         # An ISO rip's job exists from here on; its "preparing" status is done.
-        iso_prepare.clear(self.drive.id)
+        iso_prepare.clear(drive.id)
         # A new disc: the note about the last one no longer applies.
-        self.drive.notice = None
+        drive.notice = None
 
-        self.cfg = (
-            await self.session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))
-        ).scalar_one()
+    async def _load_config(self) -> Config:
+        return (await self.session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
+    def _reject_if_paused(self, cfg: Config) -> None:
         # When the timed review gate is on, a paused machine still scans + identifies
         # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
         # below); it does not reject the job. With the gate off, pause keeps its
         # original meaning: reject new jobs outright. (timed-review-gate spec §3)
-        if self.cfg.ripping_paused and not self.cfg.hold_for_review:
+        if cfg.ripping_paused and not cfg.hold_for_review:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="ripping is paused; no new jobs accepted",
             )
 
-        self.scan = self.req.scan_result
-        self.fps = [(fp.algo.lower(), fp.value) for fp in self.scan.fingerprints if fp.algo and fp.value]
-        # A virtual drive holds one source for its whole life: its parked job is this disc's.
-        decision = await find_reusable_job_for_disc(
-            self.session,
-            drive_id=self.req.drive_id,
-            fingerprints=self.fps,
-            same_source=self.drive.kind == DriveKind.VIRTUAL,
-        )
-        if decision is not None and decision.action == "in_flight":
-            # Disc re-scanned while its rip is in flight (restart race) — return the
-            # live job; in-flight recovery owns it. No new job, no re-identify.
-            return decision.job
-        self.reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
-
+    async def _apply_previously_ripped_policy(self, drive: Drive, cfg: Config, scan: ScanResult) -> Job | None:
+        """Returns the earlier rip to hold the disc against, or None; raises the 409 on reject."""
         # A disc ARM already ripped (on any drive) is held, rejected or ripped
         # again per on_previously_ripped. A reused job was already through this.
-        self.previous = None
-        action = self.cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
+        previous: Job | None = None
+        action = cfg.on_previously_ripped or PreviouslyRippedAction.HOLD
         if self.reuse_job is None and action != PreviouslyRippedAction.RIP:
             earlier = await find_previous_rips(self.session, fingerprints=self.fps)
             armed = [j for j in earlier if flag_is_set(j.metadata_json, "rerip_allowed")]
@@ -667,32 +657,36 @@ class _IdentifyFlow:
                 for j in armed:
                     j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
                     self.session.add(j)
-                logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", self.drive.id, armed[0].id)
+                logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, armed[0].id)
             elif earlier:
-                self.previous = earlier[0]
-            if self.previous is not None and action == PreviouslyRippedAction.REJECT:
-                raise await _reject_previously_ripped(self.session, self.hub, self.drive, self.previous, self.scan)
+                previous = earlier[0]
+            if previous is not None and action == PreviouslyRippedAction.REJECT:
+                raise await _reject_previously_ripped(self.session, self.hub, drive, previous, scan)
+        return previous
 
+    async def _reuse_or_create_job(self, drive: Drive, scan: ScanResult) -> Job:
         if self.reuse_job is not None:
-            self.job = self.reuse_job
+            job = self.reuse_job
             # Guard 1 (no identity clobber): never re-run the dispatcher or overwrite
             # title/year/poster/metadata on a reused job. The operator may have manually
             # set or corrected the identity (e.g. AWAITING_USER_ID title); a re-scan
             # must not clobber it. Only refresh scan_result in metadata_json (below).
             self.already_identified = True
-            self.prior_status = self.job.status
+            self.prior_status = job.status
         else:
-            self.job = Job(
+            job = Job(
                 drive_id=self.req.drive_id,
-                drive_serial=self.drive.serial,
-                disc_type=self.scan.disc_type,
+                drive_serial=drive.serial,
+                disc_type=scan.disc_type,
                 status=JobStatus.CREATED,
             )
-            self.session.add(self.job)
+            self.session.add(job)
             await self.session.flush()
             self.already_identified = False
             self.prior_status = None
+        return job
 
+    async def _persist_fingerprints(self, job: Job, scan: ScanResult) -> None:
         # Persist every fingerprint the ripper computed. The (job_id, algo)
         # unique constraint plus per-scan dedup means re-runs of identify on
         # the same disc are idempotent.
@@ -702,52 +696,41 @@ class _IdentifyFlow:
         existing_algos: set[str] = set()
         if self.reuse_job is not None:
             existing_fp_rows = (
-                (await self.session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == self.job.id)))
+                (await self.session.execute(select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id)))
                 .scalars()
                 .all()
             )
             existing_algos = {r.algo for r in existing_fp_rows}
         seen_algos: set[str] = set()
-        for fp in self.scan.fingerprints:
+        for fp in scan.fingerprints:
             if not fp.algo or not fp.value:
                 continue
             algo = fp.algo.lower()
             if algo in seen_algos or algo in existing_algos:
                 continue
             seen_algos.add(algo)
-            self.session.add(DiscFingerprint(job_id=self.job.id, algo=algo, value=fp.value))
+            self.session.add(DiscFingerprint(job_id=job.id, algo=algo, value=fp.value))
         await self.session.flush()
 
-        self.hints = enabled_hint_sources(self.cfg)
-        if not self.already_identified:
-            # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
-            # total proposals plus a cleaner search title for the dispatcher, in
-            # the operator's configured source order (PR 4).
-            run_disc_hints(self.job, self.scan, now=datetime.now(timezone.utc), sources=self.hints)
+    async def _lookup_thediscdb(self, job: Job, scan: ScanResult) -> DiscMatch | None:
+        store = getattr(self.request.app.state, "thediscdb", None)
+        content_hash = next(
+            (fp.value for fp in scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
+            None,
+        )
+        match: DiscMatch | None = None
+        if store is not None and content_hash:
+            try:
+                match = await asyncio.to_thread(store.lookup, content_hash)
+                if match is not None:
+                    put_source(job, THEDISCDB, build_claims(match, scan, now=datetime.now(timezone.utc)))
+                    logger.info("thediscdb: matched job_id=%s release=%s", job.id, match.release_slug)
+            except Exception as e:
+                logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
+                match = None
+        return match
 
-        self.thediscdb_match = None
-        if not self.already_identified and self.cfg.thediscdb_enabled:
-            store = getattr(self.request.app.state, "thediscdb", None)
-            content_hash = next(
-                (fp.value for fp in self.scan.fingerprints if fp.algo.lower() == "thediscdb" and fp.value),
-                None,
-            )
-            if store is not None and content_hash:
-                try:
-                    self.thediscdb_match = await asyncio.to_thread(store.lookup, content_hash)
-                    if self.thediscdb_match is not None:
-                        put_source(
-                            self.job,
-                            THEDISCDB,
-                            build_claims(self.thediscdb_match, self.scan, now=datetime.now(timezone.utc)),
-                        )
-                        logger.info(
-                            "thediscdb: matched job_id=%s release=%s", self.job.id, self.thediscdb_match.release_slug
-                        )
-                except Exception as e:
-                    logger.warning("thediscdb: lookup failed job_id=%s: %s", self.job.id, e)
-                    self.thediscdb_match = None
-
+    async def _adopt_pending_session(self, job: Job) -> None:
         # Fix 75-1: pending_session_id must land BEFORE anything below that resolves
         # the job's rip preset — _persist_review_tracks (hold_for_review branch)
         # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
@@ -767,11 +750,53 @@ class _IdentifyFlow:
             if chosen is None:
                 logger.warning(
                     "identify job_id=%s: pending session %s no longer exists; ignoring it",
-                    self.job.id,
+                    job.id,
                     self.req.pending_session_id,
                 )
             else:
-                self.job.pending_session_id = self.req.pending_session_id
+                job.pending_session_id = self.req.pending_session_id
+
+    async def run(self) -> Job:
+        self.drive = drive = await self._load_drive()
+        self._mark_new_disc(drive)
+
+        self.cfg = cfg = await self._load_config()
+
+        self._reject_if_paused(cfg)
+
+        self.scan = scan = self.req.scan_result
+        self.fps = [(fp.algo.lower(), fp.value) for fp in scan.fingerprints if fp.algo and fp.value]
+        # A virtual drive holds one source for its whole life: its parked job is this disc's.
+        decision = await find_reusable_job_for_disc(
+            self.session,
+            drive_id=self.req.drive_id,
+            fingerprints=self.fps,
+            same_source=drive.kind == DriveKind.VIRTUAL,
+        )
+        if decision is not None and decision.action == "in_flight":
+            # Disc re-scanned while its rip is in flight (restart race) — return the
+            # live job; in-flight recovery owns it. No new job, no re-identify.
+            return decision.job
+        self.reuse_job = decision.job if decision is not None and decision.action == "reuse" else None
+
+        self.previous = await self._apply_previously_ripped_policy(drive, cfg, scan)
+
+        self.job = job = await self._reuse_or_create_job(drive, scan)
+
+        await self._persist_fingerprints(job, scan)
+
+        self.hints = enabled_hint_sources(cfg)
+        if not self.already_identified:
+            # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
+            # total proposals plus a cleaner search title for the dispatcher, in
+            # the operator's configured source order (PR 4).
+            run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=self.hints)
+
+        self.thediscdb_match = None
+        if not self.already_identified and cfg.thediscdb_enabled:
+            self.thediscdb_match = await self._lookup_thediscdb(job, scan)
+
+        await self._adopt_pending_session(job)
 
         if self.already_identified:
             # Guard 1: preserve existing identity — do not re-run the dispatcher or
