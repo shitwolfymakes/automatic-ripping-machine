@@ -284,3 +284,51 @@ def test_rip_callbacks_default_to_none_and_are_frozen() -> None:
     assert (cbs.on_title_start, cbs.on_title_progress, cbs.on_disc_progress, cbs.on_title_done) == (None,) * 4
     with pytest.raises(dataclasses.FrozenInstanceError):
         cbs.on_title_start = _Recorder()  # type: ignore[misc]
+
+
+class _KillProc:
+    def __init__(self) -> None:
+        self.kills = 0
+
+    def kill(self) -> None:
+        self.kills += 1
+
+
+def _parser(
+    state: _ParserState, proc: _KillProc | None = None, eligible: list[int] | None = None
+) -> makemkv_rip._LineParser:
+    return makemkv_rip._LineParser(
+        cast(Any, proc or _KillProc()), state, makemkv_rip.RipCallbacks(), eligible or [], True
+    )
+
+
+_EXPIRED = 'MSG:5021,0,1,"evaluation period has expired","%1","x"'
+
+
+async def test_feed_first_binary_expired_msg_flags_records_and_kills_once() -> None:
+    state, proc = _ParserState(), _KillProc()
+    await _parser(state, proc).feed(_EXPIRED)
+    assert state.binary_expired is True
+    assert state.diagnostics == [_EXPIRED]
+    assert proc.kills == 1
+
+
+async def test_feed_second_binary_expired_msg_does_not_kill_again_and_falls_through(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    state, proc = _ParserState(), _KillProc()
+    parser = _parser(state, proc)
+    await parser.feed(_EXPIRED)
+    assert _records(caplog, "makemkvcon: ") == []
+    await parser.feed(_EXPIRED)
+    assert proc.kills == 1
+    assert state.diagnostics == [_EXPIRED]
+    # Fell through to the generic MSG branch, which logs the line.
+    _assert_one(caplog, logging.DEBUG, f"makemkvcon: {_EXPIRED}")
+
+
+async def test_feed_prgc_position_maps_through_eligible_to_current_title() -> None:
+    state = _ParserState()
+    await _parser(state, eligible=[4, 9]).feed('PRGC:5017,1,"Saving to MKV file"')
+    assert state.current_title == 9

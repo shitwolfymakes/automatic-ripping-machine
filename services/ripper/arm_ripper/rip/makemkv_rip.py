@@ -311,36 +311,34 @@ async def _emit_title_done(
         await _call_safely("title done", on_title_done, title_idx)
 
 
-async def _stream_output(
-    proc: asyncio.subprocess.Process,
-    state: _ParserState,
-    callbacks: RipCallbacks,
-    eligible_source_indexes: list[int] | None = None,
-    gate_disc_progress: bool = True,
-) -> None:
-    assert proc.stdout is not None
-    eligible = eligible_source_indexes or []
-    while True:
-        raw = await proc.stdout.readline()
-        if not raw:
-            return
-        line = raw.decode(errors="replace").rstrip()
-        if not line:
-            continue
-        # Raw makemkvcon line → DEBUG service log, then per-job log via
-        # the backend's tailer. ~30 k lines per BD rip; gated on
-        # ARM_LOG_LEVEL=debug so it's free in INFO-mode operation.
-        logger.debug("makemkv-raw: %s", line)
+class _LineParser:
+    """Applies makemkvcon robot lines one at a time to the parser state, firing the rip callbacks."""
 
+    def __init__(
+        self,
+        proc: asyncio.subprocess.Process,
+        state: _ParserState,
+        callbacks: RipCallbacks,
+        eligible: list[int],
+        gate_disc_progress: bool,
+    ) -> None:
+        self._proc = proc
+        self._state = state
+        self._callbacks = callbacks
+        self._eligible = eligible
+        self._gate_disc_progress = gate_disc_progress
+
+    async def feed(self, line: str) -> None:
+        """Apply one non-blank robot line."""
         # Hard-coded 60-day kill-switch in the makemkv-bin blob. Kill the
         # subprocess so the 6-hour RIP_TIMEOUT_SECONDS doesn't fire — the
         # caller checks state.binary_expired to surface a distinct error.
         # See docs/user/MakeMKV-Ripper.md § Failure modes.
-        if not state.binary_expired and line.startswith("MSG:5021,"):
-            state.binary_expired = True
-            state.diagnostics.append(line)
-            proc.kill()
-            continue
+        if not self._state.binary_expired and line.startswith("MSG:5021,"):
+            self._state.binary_expired = True
+            self._state.diagnostics.append(line)
+            self._proc.kill()
+            return
 
         # PRGV — two channels in one line:
         #   `current/max` advances per-operation (resets per title)
@@ -359,34 +357,38 @@ async def _stream_output(
         totals = parse_progress_totals(line)
         if totals is not None:
             cur_frac, tot_frac = totals
-            if state.current_title is not None and callbacks.on_title_progress is not None:
-                await _call_safely("title progress", callbacks.on_title_progress, state.current_title, cur_frac)
-            elif (state.save_phase_started or not gate_disc_progress) and callbacks.on_disc_progress is not None:
-                await _call_safely("disc progress", callbacks.on_disc_progress, tot_frac)
-            continue
+            if self._state.current_title is not None and self._callbacks.on_title_progress is not None:
+                await _call_safely(
+                    "title progress", self._callbacks.on_title_progress, self._state.current_title, cur_frac
+                )
+            elif (
+                self._state.save_phase_started or not self._gate_disc_progress
+            ) and self._callbacks.on_disc_progress is not None:
+                await _call_safely("disc progress", self._callbacks.on_disc_progress, tot_frac)
+            return
 
         # PRGC:5017 — primary per-title signal in `mkv all` mode. The
         # second field is the output position (0-based) which we map
         # back to a source title index via the eligible list.
         out_pos = parse_prgc_save_position(line)
         if out_pos is not None:
-            if 0 <= out_pos < len(eligible):
-                source_idx = eligible[out_pos]
+            if 0 <= out_pos < len(self._eligible):
+                source_idx = self._eligible[out_pos]
                 # Transition signal: the previous title (if any) is now
                 # finalised on disk — MakeMKV has closed its file and
                 # moved on. Fire on_title_done before the next start so
                 # the dispatcher can PATCH N=DONE before N+1 goes
                 # IN_PROGRESS, keeping the lifecycle ordering clean.
-                if state.current_title is not None and state.current_title != source_idx:
-                    await _emit_title_done(state, state.current_title, callbacks.on_title_done)
-                await _emit_title_start(state, source_idx, callbacks.on_title_start)
+                if self._state.current_title is not None and self._state.current_title != source_idx:
+                    await _emit_title_done(self._state, self._state.current_title, self._callbacks.on_title_done)
+                await _emit_title_start(self._state, source_idx, self._callbacks.on_title_start)
             else:
                 logger.warning(
                     "PRGC:5017 output position %d out of range (eligible has %d entries)",
                     out_pos,
-                    len(eligible),
+                    len(self._eligible),
                 )
-            continue
+            return
 
         # PRGT — defensive fallback for older MakeMKV / per-title mode
         # which sometimes emits "Saving title N" instead of (or in
@@ -395,8 +397,8 @@ async def _stream_output(
         # opened.
         title_idx = parse_prgt_title(line)
         if title_idx is not None:
-            await _emit_title_start(state, title_idx, callbacks.on_title_start)
-            continue
+            await _emit_title_start(self._state, title_idx, self._callbacks.on_title_start)
+            return
 
         # Generic PRGT (other milestones) — log; also detect the save
         # phase boundary (PRGT:5024 "Saving all titles to MKV files")
@@ -404,14 +406,14 @@ async def _stream_output(
         prgt = _PRGT_RE.match(line.strip())
         if prgt:
             if prgt.group(1) == "5024":
-                state.save_phase_started = True
+                self._state.save_phase_started = True
             logger.info("makemkvcon milestone: %s", prgt.group(3))
-            continue
+            return
 
         if line.startswith("MSG:"):
             diag = parse_diagnostic_msg(line)
             if diag is not None:
-                state.diagnostics.append(diag[1])
+                self._state.diagnostics.append(diag[1])
             parsed = parse_msg_args(line)
             if parsed is not None:
                 code, args = parsed
@@ -420,13 +422,36 @@ async def _stream_output(
                     rendered = next(iter(_QUOTED_ARG_RE.finditer(line)), None)
                     reason = rendered.group(1).replace('\\"', '"') if rendered else "save failed"
                     if fail_idx is not None:
-                        ts = state.titles.setdefault(fail_idx, _TitleState())
+                        ts = self._state.titles.setdefault(fail_idx, _TitleState())
                         ts.fail_reason = reason
                     else:
                         # Unattributable fail — append to overall diagnostics
                         # so the disc-level error captures it.
                         logger.warning("MSG:5003 without parseable title index: %s", line)
             logger.debug("makemkvcon: %s", line)
+
+
+async def _stream_output(
+    proc: asyncio.subprocess.Process,
+    state: _ParserState,
+    callbacks: RipCallbacks,
+    eligible_source_indexes: list[int] | None = None,
+    gate_disc_progress: bool = True,
+) -> None:
+    assert proc.stdout is not None
+    parser = _LineParser(proc, state, callbacks, eligible_source_indexes or [], gate_disc_progress)
+    while True:
+        raw = await proc.stdout.readline()
+        if not raw:
+            return
+        line = raw.decode(errors="replace").rstrip()
+        if not line:
+            continue
+        # Raw makemkvcon line → DEBUG service log, then per-job log via
+        # the backend's tailer. ~30 k lines per BD rip; gated on
+        # ARM_LOG_LEVEL=debug so it's free in INFO-mode operation.
+        logger.debug("makemkv-raw: %s", line)
+        await parser.feed(line)
 
 
 def _compose_error(prefix: str, diagnostics: list[str]) -> str:
