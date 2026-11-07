@@ -526,28 +526,8 @@ class JobController:
             if self._zero_titles_are_final(device_path):
                 return result
 
-            if attempt < SCAN_NOT_READY_MAX_ATTEMPTS:
-                backoff = SCAN_NOT_READY_BACKOFFS[attempt - 1]
-                logger.warning(
-                    "scan returned 0 titles while drive=DISC_OK (data not ready?) "
-                    "device=%s titles=0 retry=%d/%d backoff=%.0fs",
-                    device_path,
-                    attempt,
-                    SCAN_NOT_READY_MAX_ATTEMPTS,
-                    backoff,
-                )
-                await asyncio.sleep(backoff)
-                # Re-check status after the sleep — disc may have been pulled
-                # while we were waiting; stop before wasting another scan probe.
-                post_sleep_state = read_drive_status(device_path)
-                if post_sleep_state != DriveState.DISC_OK:
-                    logger.info(
-                        "scan: drive left DISC_OK during backoff (state=%s) device=%s — stopping",
-                        post_sleep_state.name,
-                        device_path,
-                    )
-                    assert last is not None
-                    return result
+            if attempt < SCAN_NOT_READY_MAX_ATTEMPTS and not await self._back_off_before_rescan(device_path, attempt):
+                return result
 
         logger.error(
             "DISC_UNREADABLE_AFTER_RETRIES device=%s drive_state=DISC_OK attempts=%d — "
@@ -575,6 +555,31 @@ class JobController:
             )
             return True
         return False
+
+    @staticmethod
+    async def _back_off_before_rescan(device_path: str, attempt: int) -> bool:
+        """Wait out this attempt's back-off, then report whether the drive still holds its disc and is worth
+        scanning again."""
+        backoff = SCAN_NOT_READY_BACKOFFS[attempt - 1]
+        logger.warning(
+            "scan returned 0 titles while drive=DISC_OK (data not ready?) device=%s titles=0 retry=%d/%d backoff=%.0fs",
+            device_path,
+            attempt,
+            SCAN_NOT_READY_MAX_ATTEMPTS,
+            backoff,
+        )
+        await asyncio.sleep(backoff)
+        # Re-check status after the sleep — disc may have been pulled
+        # while we were waiting; stop before wasting another scan probe.
+        post_sleep_state = read_drive_status(device_path)
+        if post_sleep_state != DriveState.DISC_OK:
+            logger.info(
+                "scan: drive left DISC_OK during backoff (state=%s) device=%s — stopping",
+                post_sleep_state.name,
+                device_path,
+            )
+            return False
+        return True
 
     async def _identify_with_retry(
         self,
