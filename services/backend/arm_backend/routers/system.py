@@ -162,34 +162,44 @@ def _makemkv_key_check(cfg: Config | None) -> SystemDiagnosticCheck:
     return SystemDiagnosticCheck(name="makemkv_key", status=mk_status, detail=mk_detail)
 
 
+# Table keys are KeydbState members. A StrEnum member hashes and compares equal
+# to its value, so a lookup with the stored VARCHAR finds them, and a renamed
+# member fails at import instead of silently falling through to the default.
+_KEYDB_STATUS: dict[str | None, tuple[str, str]] = {
+    KeydbState.DISABLED: ("ok", "community keydb disabled"),
+    KeydbState.DOWNLOAD_FAILED: ("warning", "community keydb unavailable; using last keydb if any"),
+    KeydbState.EMPTY: ("warning", "community keydb unavailable; using last keydb if any"),
+    KeydbState.PROBE_FAILED: ("warning", "community keydb unavailable; using last keydb if any"),
+}
+# None, or any state not in the table: never reported by a ripper yet.
+_KEYDB_DEFAULT = ("warning", "community keydb not yet checked by a ripper")
+
+_SDF_STATUS: dict[str | None, tuple[str, str]] = {
+    MakemkvSdfState.UPDATED: ("ok", "SDF present"),
+    MakemkvSdfState.FRESH_KEPT: ("ok", "SDF present"),
+    MakemkvSdfState.DISABLED: ("ok", "SDF refresh disabled (baked SDF in use)"),
+    MakemkvSdfState.DOWNLOAD_FAILED: ("warning", "SDF refresh failed; using baked/last SDF"),
+    MakemkvSdfState.PROBE_FAILED: ("warning", "SDF refresh failed; using baked/last SDF"),
+}
+# None, or any state not in the table: never reported by a ripper yet.
+_SDF_DEFAULT = ("warning", "SDF not yet checked by a ripper")
+
+
 def _keydb_check(cfg: Config | None) -> SystemDiagnosticCheck:
     kdb_state = cfg.community_keydb_state if cfg is not None else None
     kdb_count = cfg.community_keydb_vuk_count if cfg is not None else None
-    # Compare against KeydbState members (StrEnum, so they equal the stored
-    # VARCHAR) rather than bare strings — a renamed member then fails at import
-    # instead of silently falling through to the "not yet checked" branch.
     if kdb_state in (KeydbState.OK, KeydbState.FRESH_KEPT):
+        # The detail depends on the VUK count, so these two stay out of the table.
         kdb_status = "ok"
         kdb_detail = f"{kdb_count} VUK keys installed" if kdb_count else "keydb present"
-    elif kdb_state == KeydbState.DISABLED:
-        kdb_status, kdb_detail = "ok", "community keydb disabled"
-    elif kdb_state in (KeydbState.DOWNLOAD_FAILED, KeydbState.EMPTY, KeydbState.PROBE_FAILED):
-        kdb_status, kdb_detail = "warning", "community keydb unavailable; using last keydb if any"
-    else:  # None — never reported by a ripper yet
-        kdb_status, kdb_detail = "warning", "community keydb not yet checked by a ripper"
+    else:
+        kdb_status, kdb_detail = _KEYDB_STATUS.get(kdb_state, _KEYDB_DEFAULT)
     return SystemDiagnosticCheck(name="community_keydb", status=kdb_status, detail=kdb_detail)
 
 
 def _sdf_check(cfg: Config | None) -> SystemDiagnosticCheck:
     sdf_state = cfg.makemkv_sdf_state if cfg is not None else None
-    if sdf_state in (MakemkvSdfState.UPDATED, MakemkvSdfState.FRESH_KEPT):
-        sdf_status_v, sdf_detail = "ok", "SDF present"
-    elif sdf_state == MakemkvSdfState.DISABLED:
-        sdf_status_v, sdf_detail = "ok", "SDF refresh disabled (baked SDF in use)"
-    elif sdf_state in (MakemkvSdfState.DOWNLOAD_FAILED, MakemkvSdfState.PROBE_FAILED):
-        sdf_status_v, sdf_detail = "warning", "SDF refresh failed; using baked/last SDF"
-    else:  # None — never reported by a ripper yet
-        sdf_status_v, sdf_detail = "warning", "SDF not yet checked by a ripper"
+    sdf_status_v, sdf_detail = _SDF_STATUS.get(sdf_state, _SDF_DEFAULT)
     return SystemDiagnosticCheck(name="makemkv_sdf", status=sdf_status_v, detail=sdf_detail)
 
 
