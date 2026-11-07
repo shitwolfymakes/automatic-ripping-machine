@@ -6,6 +6,7 @@ being dumped whole.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import shutil
@@ -313,3 +314,133 @@ def test_a_rejected_extraction_logs_every_damaged_file(caplog: pytest.LogCapture
     assert "110 unreadable file(s)" in text
     assert "BDMV/STREAM/00011.m2ts" in text and "BDMV/STREAM/00119.m2ts" in text
     assert "Headers Error" in text and "Unexpected end of archive" in text
+
+
+# --- _run_7z: no binary, timeout, cancellation -----------------------------
+
+
+class _HangingStream:
+    """A pipe that yields nothing until the process is killed, then hits EOF."""
+
+    def __init__(self, killed: asyncio.Event) -> None:
+        self._killed = killed
+
+    async def read(self, _n: int = -1) -> bytes:
+        await self._killed.wait()
+        return b""
+
+
+class _HangingProc:
+    """A 7z that never finishes by itself: its stdout hangs until `kill`."""
+
+    def __init__(self, *, kill_raises: bool = False) -> None:
+        self._killed = asyncio.Event()
+        self._kill_raises = kill_raises
+        self.returncode = -9
+        self.stdout = _HangingStream(self._killed)
+        self.stderr = _Stream(b"")
+        self.kill_calls = 0
+        self.wait_calls = 0
+
+    def kill(self) -> None:
+        self.kill_calls += 1
+        self._killed.set()
+        if self._kill_raises:
+            raise ProcessLookupError
+
+    async def wait(self) -> int:
+        self.wait_calls += 1
+        return self.returncode
+
+
+def _spawn_returns(monkeypatch: pytest.MonkeyPatch, proc: _HangingProc) -> None:
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7z" if name == "7z" else None)
+
+    async def _exec(*_a: object, **_k: object) -> _HangingProc:
+        return proc
+
+    monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
+
+
+async def test_run_7z_without_any_7zip_binary_logs_an_error_and_spawns_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda _name: None)
+
+    async def _boom(*_a: object, **_k: object) -> None:
+        raise AssertionError("nothing may be spawned without a 7-Zip binary")
+
+    monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _boom)
+
+    with caplog.at_level("ERROR", logger="arm_ripper.iso_extract"):
+        assert await iso_extract._run_7z(tmp_path / "m.iso", tmp_path / "out") is False
+
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        ("ERROR", "iso extract: 7-Zip (7z / 7zz) is not installed")
+    ]
+
+
+async def test_run_7z_timeout_kills_the_process_and_reraises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = _HangingProc()
+    _spawn_returns(monkeypatch, proc)
+    monkeypatch.setattr(iso_extract, "_EXTRACT_TIMEOUT_SECONDS", 0.05)
+
+    with pytest.raises(TimeoutError):
+        await iso_extract._run_7z(tmp_path / "m.iso", tmp_path / "out")
+
+    assert proc.kill_calls == 1
+    assert proc.wait_calls == 1
+
+
+async def test_run_7z_suppresses_a_kill_on_an_already_exited_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    proc = _HangingProc(kill_raises=True)
+    _spawn_returns(monkeypatch, proc)
+    monkeypatch.setattr(iso_extract, "_EXTRACT_TIMEOUT_SECONDS", 0.05)
+
+    # The ProcessLookupError from kill() is swallowed; the timeout still surfaces.
+    with pytest.raises(TimeoutError):
+        await iso_extract._run_7z(tmp_path / "m.iso", tmp_path / "out")
+
+    assert proc.kill_calls == 1
+    assert proc.wait_calls == 1
+
+
+async def test_run_7z_cancellation_kills_the_process_and_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    proc = _HangingProc()
+    _spawn_returns(monkeypatch, proc)
+    task = asyncio.create_task(iso_extract._run_7z(tmp_path / "m.iso", tmp_path / "out"))
+    await asyncio.sleep(0.01)  # let it spawn and block on the hanging pipe
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert proc.kill_calls == 1
+    assert proc.wait_calls == 1
+
+
+# --- extract: _run_7z raising ----------------------------------------------
+
+
+@pytest.mark.parametrize("error", [asyncio.CancelledError(), RuntimeError("7z blew up")])
+async def test_extract_removes_the_scratch_dir_when_run_7z_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scratch: Path, error: BaseException
+) -> None:
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0" * 16)
+
+    async def _raises(_image: Path, dest: Path) -> bool:
+        (dest / "BDMV").mkdir()
+        raise error
+
+    monkeypatch.setattr(iso_extract, "_run_7z", _raises)
+
+    with pytest.raises(type(error)):
+        await iso_extract.extract(str(iso))
+
+    assert not (_scratch / "drv_test").exists()
+    assert iso_extract.extracted_dir(str(iso)) is None
