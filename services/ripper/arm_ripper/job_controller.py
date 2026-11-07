@@ -681,23 +681,9 @@ class JobController:
         timeout = self._resolution_timeout
         deadline = None if timeout is None else asyncio.get_event_loop().time() + timeout
         while deadline is None or asyncio.get_event_loop().time() < deadline:
-            # A timeout is the periodic sanity poll that handles torn WS connections.
-            woke_via_ws = await _woken_within(event, POLL_MAX_SECONDS)
-            view = await self._safe_get_job(job_id)
-            outcome, proceed_view = self._classify_wait(view, job_id, spec)
-            if outcome == "proceed":
-                return proceed_view
-            if outcome == "abandon":
-                return None
-            # Still parked. Timed review gate: if the countdown has elapsed and the
-            # disc is not paused, auto-start — return the parked view so the
-            # pipeline proceeds to _run_rip (rip-start transitions the status).
-            if spec.timed and view is not None and await self._review_countdown_expired(view):
-                logger.info("job %s review countdown elapsed; auto-starting rip", job_id)
+            outcome, view = await self._wait_cycle(job_id, event, spec)
+            if outcome != "wait":
                 return view
-            # If a WS wake was spurious, clear+re-arm the Event.
-            if woke_via_ws:
-                event.clear()
 
         logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, timeout)
         return None
@@ -708,6 +694,26 @@ class JobController:
         if await _woken_within(event, RESOLUTION_WS_FIRST_WAIT_SECONDS):
             return ("wait", None)
         return self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
+
+    async def _wait_cycle(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> tuple[str, JobView | None]:
+        """One long-wait cycle: wait up to POLL_MAX_SECONDS for a wake, re-read the job and decide. Returns ("proceed",
+        view), ("abandon", None) or ("wait", None); a wake that finds the job still parked re-arms the Event."""
+        # A timeout is the periodic sanity poll that handles torn WS connections.
+        woke_via_ws = await _woken_within(event, POLL_MAX_SECONDS)
+        view = await self._safe_get_job(job_id)
+        outcome, proceed_view = self._classify_wait(view, job_id, spec)
+        if outcome != "wait":
+            return (outcome, proceed_view)
+        # Still parked. Timed review gate: if the countdown has elapsed and the
+        # disc is not paused, auto-start — return the parked view so the
+        # pipeline proceeds to _run_rip (rip-start transitions the status).
+        if spec.timed and view is not None and await self._review_countdown_expired(view):
+            logger.info("job %s review countdown elapsed; auto-starting rip", job_id)
+            return ("proceed", view)
+        # If a WS wake was spurious, clear+re-arm the Event.
+        if woke_via_ws:
+            event.clear()
+        return ("wait", None)
 
     async def _review_countdown_expired(self, view: JobView) -> bool:
         """True when a held disc's auto-start countdown has elapsed AND it is not
