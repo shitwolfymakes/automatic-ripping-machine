@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDocs, repoLinkLines } from '../src/pipeline.mjs';
+import { buildDocs, repoLinkLines, userDocs } from '../src/pipeline.mjs';
 import { fixtureTree, MANIFEST } from './helpers.mjs';
 
 test('buildDocs: a clean fixture yields no errors, pages in manifest order, one render per page', async () => {
@@ -63,4 +63,45 @@ test('repoLinkLines: follows page order, then link order within a page, as <srcP
 test('repoLinkLines: pages without links, or no pages at all, give an empty list', () => {
 	assert.deepEqual(repoLinkLines([entry('a.md', []), entry('b.md', [])]), []);
 	assert.deepEqual(repoLinkLines([]), []);
+});
+
+const docEntry = (id, audience) => ({ page: { id, audience } });
+const section = (id, audience) => ({ id, audience });
+
+test('userDocs: keeps only user pages and sections, in their original order', () => {
+	const rendered = [docEntry('a', 'user'), docEntry('b', 'dev'), docEntry('c', 'user')];
+	const nav = [section('s1', 'user'), section('s2', 'dev'), section('s3', 'user')];
+	const result = userDocs(rendered, nav);
+	assert.deepEqual(result.rendered.map((r) => r.page.id), ['a', 'c']);
+	assert.deepEqual(result.nav.map((s) => s.id), ['s1', 's3']);
+});
+
+test('userDocs: dev and any other audience are dropped', () => {
+	const result = userDocs(
+		[docEntry('a', 'dev'), docEntry('b', 'admin'), docEntry('c', undefined)],
+		[section('s1', 'dev'), section('s2', 'admin'), section('s3', undefined)]
+	);
+	assert.deepEqual(result, { rendered: [], nav: [] });
+});
+
+test('userDocs: the kept objects are the same references, not copies', () => {
+	const page = docEntry('a', 'user');
+	const sect = section('s1', 'user');
+	const result = userDocs([page], [sect]);
+	assert.equal(result.rendered[0], page);
+	assert.equal(result.nav[0], sect);
+});
+
+test('userDocs: the inputs are not mutated', () => {
+	const rendered = [docEntry('a', 'user'), docEntry('b', 'dev')];
+	const nav = [section('s1', 'dev'), section('s2', 'user')];
+	const renderedBefore = structuredClone(rendered);
+	const navBefore = structuredClone(nav);
+	userDocs(rendered, nav);
+	assert.deepEqual(rendered, renderedBefore);
+	assert.deepEqual(nav, navBefore);
+});
+
+test('userDocs: empty inputs give empty arrays', () => {
+	assert.deepEqual(userDocs([], []), { rendered: [], nav: [] });
 });

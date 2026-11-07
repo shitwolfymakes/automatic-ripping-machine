@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadManifest } from './collect.mjs';
 import { parseOptions } from './options.mjs';
-import { buildDocs, repoLinkLines } from './pipeline.mjs';
+import { buildDocs, repoLinkLines, userDocs } from './pipeline.mjs';
 import { buildSearchIndex } from './search.mjs';
 import { writeApp } from './write-app.mjs';
 import { writeSite } from './write-site.mjs';
@@ -54,8 +54,7 @@ async function main() {
 		console.log(`site: ${join(options.out, 'site')}`);
 	}
 	if (options.target !== 'site') {
-		const appRendered = rendered.filter((r) => r.page.audience === 'user');
-		const appNav = resolvedNav.filter((s) => s.audience === 'user');
+		const { rendered: appRendered, nav: appNav } = userDocs(rendered, resolvedNav);
 		writeApp({ armRoot, rendered: appRendered, nav: appNav, meta, manifest, search: buildSearchIndex(appRendered), outDir: options.appOut });
 		console.log(`app: ${options.appOut}`);
 	}

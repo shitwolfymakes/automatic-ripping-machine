@@ -22,3 +22,11 @@ export function repoLinkLines(rendered) {
 		r.links.filter((l) => l.resolved.kind === 'repo').map((l) => `${r.page.srcPath}:${l.line}: ${l.raw}`)
 	);
 }
+
+// The in-app help's share of the docs: user-audience pages and nav sections only.
+export function userDocs(rendered, nav) {
+	return {
+		rendered: rendered.filter((r) => r.page.audience === 'user'),
+		nav: nav.filter((s) => s.audience === 'user')
+	};
+}
