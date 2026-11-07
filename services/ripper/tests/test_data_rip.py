@@ -219,3 +219,21 @@ async def test_missing_output_file_is_an_error(monkeypatch: pytest.MonkeyPatch, 
     result = await data_rip.rip_data("/dev/sr0", tmp_path / "out")
     assert not result.ok
     assert result.error == "dd exited 0 but produced empty output"
+
+
+def test_dd_command_image_uses_4m_blocks(tmp_path: Path) -> None:
+    image = tmp_path / "disc.iso"
+    image.write_bytes(b"")
+    out = tmp_path / "dump.iso"
+    assert data_rip._dd_command(str(image), out) == ["dd", f"if={image}", f"of={out}", "bs=4M"]
+
+
+def test_dd_command_device_uses_2k_blocks_with_noerror_sync(tmp_path: Path) -> None:
+    out = tmp_path / "dump.iso"
+    assert data_rip._dd_command("/dev/sr0", out) == [
+        "dd",
+        "if=/dev/sr0",
+        f"of={out}",
+        "bs=2048",
+        "conv=noerror,sync",
+    ]

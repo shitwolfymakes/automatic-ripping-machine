@@ -43,6 +43,13 @@ async def _report_progress(output_path: Path, total: int | None, on_progress: On
             logger.debug("data progress callback failed", exc_info=True)
 
 
+def _dd_command(device_path: str, output_path: Path) -> list[str]:
+    """The dd argv: 4 MB blocks for an image file; 2 KB blocks with noerror,sync for a disc."""
+    if is_iso_source(device_path):
+        return ["dd", f"if={device_path}", f"of={output_path}", "bs=4M"]
+    return ["dd", f"if={device_path}", f"of={output_path}", "bs=2048", "conv=noerror,sync"]
+
+
 async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
@@ -55,10 +62,7 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "dump.iso"
 
-    if is_iso_source(device_path):
-        cmd = ["dd", f"if={device_path}", f"of={output_path}", "bs=4M"]
-    else:
-        cmd = ["dd", f"if={device_path}", f"of={output_path}", "bs=2048", "conv=noerror,sync"]
+    cmd = _dd_command(device_path, output_path)
     total = await asyncio.to_thread(source_size, device_path)
     logger.info("dd if=%s of=%s size=%s", device_path, output_path, total)
 
