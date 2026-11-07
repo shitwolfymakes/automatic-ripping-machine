@@ -86,15 +86,7 @@ async def rip_all(
     - DATA: a single dd dump assigned to the first (only) track.
     """
     if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
-        backup = tracks[0]
-        await on_track_start(backup)
-
-        async def _on_backup_progress(fraction: float) -> None:
-            if on_track_progress is not None:
-                await on_track_progress(backup, fraction)
-
-        result = await rip_backup(device_path=device_path, output_dir=output_dir, on_progress=_on_backup_progress)
-        await on_track_done(backup, result)
+        await _rip_disc_backup(device_path, tracks[0], output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
     if tracks and all(t.kind == TrackKind.DATA_DUMP for t in tracks):
@@ -174,6 +166,25 @@ async def rip_all(
             track,
             RipResult(ok=False, error=f"no rip path for disc_type={disc_type.value}"),
         )
+
+
+async def _rip_disc_backup(
+    device_path: str,
+    backup: TrackView,
+    output_dir: Path,
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+    on_track_progress: OnTrackProgress | None,
+) -> None:
+    """Back up the whole disc with one decrypting `makemkvcon backup`, reported as the single `backup` track."""
+    await on_track_start(backup)
+
+    async def _on_backup_progress(fraction: float) -> None:
+        if on_track_progress is not None:
+            await on_track_progress(backup, fraction)
+
+    result = await rip_backup(device_path=device_path, output_dir=output_dir, on_progress=_on_backup_progress)
+    await on_track_done(backup, result)
 
 
 async def _rip_optical(
