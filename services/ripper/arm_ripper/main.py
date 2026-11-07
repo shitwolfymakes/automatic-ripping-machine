@@ -489,6 +489,20 @@ async def _recover_crashed_rip(
         logger.exception("boot probe failed: %s", exc)
 
 
+async def _run_mode(
+    controller: JobController, handle: DriveHandle, *, client: BackendClient, drive_id: str, source_mode: bool
+) -> None:
+    """Run this container's job until it ends: the one-shot pipeline for the bound ISO in source mode, otherwise the
+    drive poll loop (which runs until cancelled).
+    """
+    if source_mode:
+        logger.info("ARM_SOURCE_PATH=%s; running one-shot pipeline", handle.current)
+        await run_source_mode(controller, settings.ARM_SOURCE_SESSION_ID)
+        logger.info("source pipeline complete; exiting")
+    else:
+        await poll_loop(controller, handle, client=client, drive_id=drive_id)
+
+
 async def amain() -> None:
     client = _build_client()
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
@@ -526,12 +540,7 @@ async def amain() -> None:
             heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, handle, controller))
             keycheck_task = asyncio.create_task(makemkv_keycheck_loop(client))
             try:
-                if source_mode:
-                    logger.info("ARM_SOURCE_PATH=%s; running one-shot pipeline", handle.current)
-                    await run_source_mode(controller, settings.ARM_SOURCE_SESSION_ID)
-                    logger.info("source pipeline complete; exiting")
-                else:
-                    await poll_loop(controller, handle, client=client, drive_id=drive_id)
+                await _run_mode(controller, handle, client=client, drive_id=drive_id, source_mode=source_mode)
             finally:
                 heartbeat_task.cancel()
                 keycheck_task.cancel()

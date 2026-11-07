@@ -265,6 +265,44 @@ async def test_recover_crashed_rip_swallows_and_logs_probe_errors(monkeypatch, c
     assert "boot probe failed: probe broke" in caplog.messages
 
 
+def _record_modes(monkeypatch):
+    calls = []
+
+    async def run_source(*args):
+        calls.append(("run_source_mode", args))
+
+    async def poll(*args, **kwargs):
+        calls.append(("poll_loop", args, kwargs))
+
+    monkeypatch.setattr(main, "run_source_mode", run_source)
+    monkeypatch.setattr(main, "poll_loop", poll)
+    return calls
+
+
+async def test_run_mode_source_mode_runs_the_one_shot_pipeline(monkeypatch, caplog) -> None:
+    calls = _record_modes(monkeypatch)
+    monkeypatch.setattr(main.settings, "ARM_SOURCE_SESSION_ID", "sess_9")
+    controller, client = object(), object()
+    with caplog.at_level(logging.INFO, logger="arm_ripper"):
+        await main._run_mode(
+            controller, DriveHandle.fixed("/data/x.iso"), client=client, drive_id="d", source_mode=True
+        )
+    assert calls == [("run_source_mode", (controller, "sess_9"))]
+    assert caplog.messages == [
+        "ARM_SOURCE_PATH=/data/x.iso; running one-shot pipeline",
+        "source pipeline complete; exiting",
+    ]
+
+
+async def test_run_mode_drive_mode_polls_the_drive(monkeypatch, caplog) -> None:
+    calls = _record_modes(monkeypatch)
+    controller, client, handle = object(), object(), DriveHandle("/dev/sr0")
+    with caplog.at_level(logging.INFO, logger="arm_ripper"):
+        await main._run_mode(controller, handle, client=client, drive_id="d", source_mode=False)
+    assert calls == [("poll_loop", (controller, handle), {"client": client, "drive_id": "d"})]
+    assert caplog.messages == []
+
+
 async def test_amain_exits_2_when_nothing_to_rip_and_never_closes_client(monkeypatch, caplog) -> None:
     rig = _install(monkeypatch, source=None, drive_dev=None)
     with caplog.at_level(logging.ERROR, logger="arm_ripper"), pytest.raises(SystemExit) as ei:
