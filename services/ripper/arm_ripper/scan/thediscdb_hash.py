@@ -93,6 +93,22 @@ def _bd_stream_files(iso: Any) -> list[tuple[str, int]]:
         return []
 
 
+def _dvd_files(iso: Any) -> list[tuple[str, int]] | None:
+    """(name, size) of every file in `/VIDEO_TS`, read from the ISO 9660 tree and else the UDF one; None when
+    neither namespace has the directory (CD, data disc).
+    """
+    for kwargs in ({"iso_path": "/VIDEO_TS"}, {"udf_path": "/VIDEO_TS"}):
+        try:
+            return [
+                _file_entry(child)
+                for child in iso.list_children(**kwargs)
+                if child is not None and not child.is_dir() and not child.is_dot() and not child.is_dotdot()
+            ]
+        except Exception:  # noqa: BLE001 — try next namespace
+            continue
+    return None
+
+
 def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
     """Read the hashable file set from a device or ISO path via pycdlib.
 
@@ -108,17 +124,7 @@ def collect_hash_files(source_path: str) -> list[tuple[str, int]] | None:
         m2ts = _bd_stream_files(iso)
         if m2ts:
             return m2ts
-
-        for kwargs in ({"iso_path": "/VIDEO_TS"}, {"udf_path": "/VIDEO_TS"}):
-            try:
-                return [
-                    _file_entry(child)
-                    for child in iso.list_children(**kwargs)
-                    if child is not None and not child.is_dir() and not child.is_dot() and not child.is_dotdot()
-                ]
-            except Exception:  # noqa: BLE001 — try next namespace
-                continue
-        return None
+        return _dvd_files(iso)
     finally:
         iso.close()
 

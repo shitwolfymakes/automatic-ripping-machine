@@ -10,6 +10,7 @@ import pytest
 from arm_ripper.scan.thediscdb_hash import (
     _bd_stream_files,
     _clean_iso_name,
+    _dvd_files,
     _file_entry,
     _hash_from_listing,
     collect_hash_files,
@@ -252,3 +253,25 @@ def test_bd_stream_files_empty_without_m2ts(fake_cdlib: type[_FakeCdlib]) -> Non
 def test_bd_stream_files_empty_when_listing_raises(fake_cdlib: type[_FakeCdlib]) -> None:
     fake_cdlib.listings[_BDMV] = RuntimeError("no UDF")
     assert _bd_stream_files(fake_cdlib()) == []
+
+
+def test_dvd_files_lists_iso_namespace_without_dirs_or_dots(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_ISO_VTS] = _dvd_children()
+    assert _dvd_files(fake_cdlib()) == [("VTS_01_1.VOB", 300), ("VIDEO_TS.IFO", 40)]
+
+
+def test_dvd_files_falls_back_to_udf_namespace(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_ISO_VTS] = RuntimeError("no ISO tree")
+    fake_cdlib.listings[_UDF_VTS] = [_Child("VTS_01_1.VOB", 5)]
+    assert _dvd_files(fake_cdlib()) == [("VTS_01_1.VOB", 5)]
+
+
+def test_dvd_files_none_when_both_namespaces_raise(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_ISO_VTS] = RuntimeError("no ISO tree")
+    fake_cdlib.listings[_UDF_VTS] = RuntimeError("no UDF tree")
+    assert _dvd_files(fake_cdlib()) is None
+
+
+def test_dvd_files_empty_list_for_namespace_without_files(fake_cdlib: type[_FakeCdlib]) -> None:
+    fake_cdlib.listings[_ISO_VTS] = [_Child(".", dot=True, is_dir=True)]
+    assert _dvd_files(fake_cdlib()) == []
