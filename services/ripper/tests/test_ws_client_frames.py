@@ -183,6 +183,32 @@ async def test_stopping_breaks_before_next_frame(monkeypatch: pytest.MonkeyPatch
     assert seen == ["one"]
 
 
+async def test_authenticate_valid_ack_returns_none_after_sending_auth_frame() -> None:
+    conn = FakeConn(ACK, [])
+    assert await _client()._authenticate(conn) is None  # type: ignore[arg-type]
+    assert conn.sent == [WSAuthRequest(token=TOKEN).model_dump_json()]
+
+
+async def test_authenticate_error_ack_raises_with_code_and_reason() -> None:
+    conn = FakeConn(WSError(code=4401, reason="bad token").model_dump_json(), [])
+    with pytest.raises(WSAuthFailed) as info:
+        await _client()._authenticate(conn)  # type: ignore[arg-type]
+    assert str(info.value) == "backend rejected auth: code=4401 reason=bad token"
+
+
+async def test_authenticate_unexpected_op_raises_with_repr() -> None:
+    conn = FakeConn(json.dumps({"op": "event"}), [])
+    with pytest.raises(WSAuthFailed) as info:
+        await _client()._authenticate(conn)  # type: ignore[arg-type]
+    assert str(info.value) == "unexpected first frame: {'op': 'event'}"
+
+
+async def test_authenticate_non_json_frame_raises_decode_error() -> None:
+    conn = FakeConn("not json{", [])
+    with pytest.raises(json.JSONDecodeError):
+        await _client()._authenticate(conn)  # type: ignore[arg-type]
+
+
 class LoopHarness:
     """Scripted `_run_once` outcomes plus a fake `asyncio.wait_for` that records delays and never sleeps."""
 
