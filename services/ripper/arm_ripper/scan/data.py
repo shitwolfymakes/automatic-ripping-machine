@@ -48,11 +48,7 @@ async def scan_data(device_path: str) -> ScanResult:
     titles) rather than a data disc.
     """
     if is_folder_source(device_path):
-        # A disc folder MakeMKV listed nothing in: still a Blu-ray / DVD by its
-        # tree (blkid has no volume to read), named after the folder.
-        folder = Path(device_path)
-        folder_type = DiscType.BLURAY if (folder / "BDMV").is_dir() else DiscType.DVD
-        return ScanResult(disc_type=folder_type, volume_label=folder.name)
+        return _classify_folder(device_path)
     proc = await asyncio.create_subprocess_exec(
         "blkid",
         "-o",
@@ -79,3 +75,13 @@ async def scan_data(device_path: str) -> ScanResult:
             )
             return ScanResult(disc_type=kind, volume_label=label)
     return ScanResult(disc_type=DiscType.DATA, volume_label=label)
+
+
+def _classify_folder(device_path: str) -> ScanResult:
+    """A disc folder MakeMKV listed nothing in: a Blu-ray when it holds BDMV, else a DVD, named after the folder.
+
+    blkid has no volume to read in a folder, so the tree alone decides.
+    """
+    folder = Path(device_path)
+    folder_type = DiscType.BLURAY if (folder / "BDMV").is_dir() else DiscType.DVD
+    return ScanResult(disc_type=folder_type, volume_label=folder.name)

@@ -116,3 +116,26 @@ def test_scan_data_blkid_timeout_kills_reaps_and_returns_unknown(monkeypatch: py
     assert out.volume_label is None
     assert proc.killed
     assert proc.waited
+
+
+def test_classify_folder_with_bdmv_dir_is_bluray(tmp_path: Path) -> None:
+    folder = tmp_path / "MY_DISC"
+    (folder / "BDMV").mkdir(parents=True)
+    result = data_module._classify_folder(str(folder))
+    assert result.disc_type == DiscType.BLURAY
+    assert result.volume_label == "MY_DISC"
+
+
+def test_classify_folder_without_bdmv_is_dvd(tmp_path: Path) -> None:
+    folder = tmp_path / "MY_DVD"
+    folder.mkdir()
+    result = data_module._classify_folder(str(folder))
+    assert result.disc_type == DiscType.DVD
+    assert result.volume_label == "MY_DVD"
+
+
+def test_classify_folder_with_bdmv_file_is_dvd(tmp_path: Path) -> None:
+    folder = tmp_path / "ODD_DISC"
+    folder.mkdir()
+    (folder / "BDMV").write_bytes(b"not a dir")
+    assert data_module._classify_folder(str(folder)).disc_type == DiscType.DVD
