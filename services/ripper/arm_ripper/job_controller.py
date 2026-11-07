@@ -1266,30 +1266,7 @@ class _DiscRip:
         """Rip the disc through its resumes, report rip-complete, then eject."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
         while True:
-            watcher = (
-                asyncio.create_task(self._controller._watch_drive(self._rip_path, self._lost))
-                if self._resumable
-                else None
-            )
-            try:
-                await rip_all(
-                    disc_type=self._disc_type,
-                    device_path=self._rip_path,
-                    tracks=self._tracks,
-                    output_dir=self._rip_dir,
-                    on_track_start=self._on_track_start,
-                    on_track_done=self._on_track_done,
-                    on_track_progress=self._on_track_progress,
-                    min_length_seconds=self._min_length_seconds,
-                    stop=self._lost if self._resumable else None,
-                    skip_track_ids=self._skip,
-                    drive_lost=(
-                        functools.partial(self._controller._drive_gone, self._rip_path) if self._resumable else None
-                    ),
-                )
-            finally:
-                if watcher is not None:
-                    watcher.cancel()
+            await self._run_pass()
             if not (self._lost.is_set() and self._unfinished):
                 break
             # The drive dropped off the bus mid-rip. Keep the disc's finished
@@ -1326,6 +1303,32 @@ class _DiscRip:
         # the rip (USB replug); the path captured at rip start is a hint only.
         await self._controller._eject_with_retry(self._controller._device_path or self._start_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)
+
+    async def _run_pass(self) -> None:
+        """One `mkv all` pass over the disc on its current node, with a watcher that stops makemkvcon if the drive
+        leaves that node (resumable rips only)."""
+        watcher = (
+            asyncio.create_task(self._controller._watch_drive(self._rip_path, self._lost)) if self._resumable else None
+        )
+        try:
+            await rip_all(
+                disc_type=self._disc_type,
+                device_path=self._rip_path,
+                tracks=self._tracks,
+                output_dir=self._rip_dir,
+                on_track_start=self._on_track_start,
+                on_track_done=self._on_track_done,
+                on_track_progress=self._on_track_progress,
+                min_length_seconds=self._min_length_seconds,
+                stop=self._lost if self._resumable else None,
+                skip_track_ids=self._skip,
+                drive_lost=(
+                    functools.partial(self._controller._drive_gone, self._rip_path) if self._resumable else None
+                ),
+            )
+        finally:
+            if watcher is not None:
+                watcher.cancel()
 
 
 def _remove_partial_outputs(output_dir: Path, kept: set[Path]) -> None:
