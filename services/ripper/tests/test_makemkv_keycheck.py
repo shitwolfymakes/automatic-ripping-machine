@@ -236,3 +236,33 @@ async def test_discard_stderr_reads_stream_to_eof():
     proc.stderr = gen()
     assert await mk._discard_stderr(proc) is None
     assert consumed == [b"a\n", b"b\n"]
+
+
+@pytest.mark.parametrize("returncode", [0, None])
+def test_probe_outcome_valid_with_clean_exit_is_accepted(returncode):
+    assert mk._probe_outcome(MakemkvKeyState.VALID, returncode) == (MakemkvKeyState.VALID, "makemkv key accepted")
+
+
+def test_probe_outcome_valid_with_nonzero_exit_is_probe_failed():
+    assert mk._probe_outcome(MakemkvKeyState.VALID, 3) == (
+        MakemkvKeyState.PROBE_FAILED,
+        "makemkvcon exited 3 with no key message",
+    )
+
+
+def test_probe_outcome_binary_expired_ignores_exit_code():
+    assert mk._probe_outcome(MakemkvKeyState.BINARY_EXPIRED, 253) == (
+        MakemkvKeyState.BINARY_EXPIRED,
+        "makemkvcon binary expired (MSG:5021); no key overrides — rebuild the ripper image",
+    )
+
+
+def test_probe_outcome_unregistered_ignores_exit_code():
+    assert mk._probe_outcome(MakemkvKeyState.UNREGISTERED_OR_EXPIRED, 1) == (
+        MakemkvKeyState.UNREGISTERED_OR_EXPIRED,
+        "no valid makemkv key in effect (MSG:5052/5055)",
+    )
+
+
+def test_probe_outcome_state_without_detail_gives_none():
+    assert mk._probe_outcome(MakemkvKeyState.FORMAT_INVALID, 0) == (MakemkvKeyState.FORMAT_INVALID, None)

@@ -24,6 +24,13 @@ _QUOTED_RE = re.compile(r'^"(.*)"$')
 _MAKEMKV_EVAL_PREFIXES = (b"MSG:5052,", b"MSG:5055,")
 _MAKEMKV_SERIAL_RE = re.compile(r"^[A-Z]-.+$")
 PROBE_TIMEOUT_SECONDS = 30.0
+_PROBE_DETAILS: dict[MakemkvKeyState, str] = {
+    MakemkvKeyState.VALID: "makemkv key accepted",
+    MakemkvKeyState.BINARY_EXPIRED: (
+        "makemkvcon binary expired (MSG:5021); no key overrides — rebuild the ripper image"
+    ),
+    MakemkvKeyState.UNREGISTERED_OR_EXPIRED: "no valid makemkv key in effect (MSG:5052/5055)",
+}
 
 
 class ScanError(Exception):
@@ -248,6 +255,13 @@ async def _discard_stderr(proc: asyncio.subprocess.Process) -> None:
         pass
 
 
+def _probe_outcome(state: MakemkvKeyState, returncode: int | None) -> tuple[MakemkvKeyState, str | None]:
+    """The probe's result from the state stdout reported and makemkvcon's exit code."""
+    if state == MakemkvKeyState.VALID and returncode not in (0, None):
+        return MakemkvKeyState.PROBE_FAILED, f"makemkvcon exited {returncode} with no key message"
+    return state, _PROBE_DETAILS.get(state)
+
+
 async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
     """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
     (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
@@ -276,15 +290,7 @@ async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | Non
 
     await proc.wait()
 
-    if state == MakemkvKeyState.VALID and proc.returncode not in (0, None):
-        return MakemkvKeyState.PROBE_FAILED, f"makemkvcon exited {proc.returncode} with no key message"
-
-    details = {
-        MakemkvKeyState.VALID: "makemkv key accepted",
-        MakemkvKeyState.BINARY_EXPIRED: "makemkvcon binary expired (MSG:5021); no key overrides — rebuild the ripper image",
-        MakemkvKeyState.UNREGISTERED_OR_EXPIRED: "no valid makemkv key in effect (MSG:5052/5055)",
-    }
-    return state, details.get(state)
+    return _probe_outcome(state, proc.returncode)
 
 
 async def scan_disc(device_path: str) -> ScanResult:
