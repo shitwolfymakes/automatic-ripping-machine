@@ -4,11 +4,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectPages, loadManifest } from './collect.mjs';
-import { createResolver, checkFragments } from './links.mjs';
-import { resolveNav } from './nav.mjs';
+import { loadManifest } from './collect.mjs';
 import { parseOptions } from './options.mjs';
-import { createRenderer } from './render.mjs';
+import { buildDocs } from './pipeline.mjs';
 import { buildSearchIndex } from './search.mjs';
 import { writeApp } from './write-app.mjs';
 import { writeSite } from './write-site.mjs';
@@ -38,13 +36,7 @@ async function main() {
 		process.exit(1);
 	}
 
-	const { pages, nav, errors } = collectPages(armRoot, manifest);
-	const resolver = createResolver({ armRoot, pages, manifest });
-	const renderer = await createRenderer();
-	const rendered = pages.map((p) => renderer.render(p, resolver));
-	errors.push(...rendered.flatMap((r) => r.errors), ...checkFragments(rendered));
-	const headingIdsById = new Map(rendered.map((r) => [r.page.id, r.headingIds]));
-	const resolvedNav = resolveNav(nav, resolver, errors, headingIdsById);
+	const { pages, rendered, nav: resolvedNav, errors } = await buildDocs(armRoot, manifest);
 	if (errors.length) {
 		for (const e of errors) console.error(`error: ${e}`);
 		console.error(`${errors.length} error(s); nothing written`);
