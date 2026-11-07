@@ -62,3 +62,33 @@ async def test_register_refused_retries_slowly_and_logs_once(monkeypatch, caplog
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR and "identity mismatch" in r.getMessage()]
     assert len(error_records) == 1
     assert "left running for diagnosis" in error_records[0].getMessage()
+
+
+def _refusal_records(caplog):
+    return [(r.levelno, r.getMessage()) for r in caplog.records if r.name == "arm_ripper"]
+
+
+def test_log_refusal_first_refusal_logs_error_and_returns_the_text(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_ID", "drv_test")
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper"):
+        returned = ripper_main._log_refusal(RegisterRefused("not enrolled"), None)
+    assert returned == "not enrolled"
+    expected = (
+        "register refused for drive_id=drv_test: not enrolled — container left running for diagnosis; "
+        f"fix the enrollment in the UI; retrying in {ripper_main.REGISTER_REFUSED_RETRY_SECONDS:.0f}s"
+    )
+    assert _refusal_records(caplog) == [(logging.ERROR, expected)]
+
+
+def test_log_refusal_unchanged_repeat_logs_debug(caplog) -> None:
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper"):
+        returned = ripper_main._log_refusal(RegisterRefused("not enrolled"), "not enrolled")
+    assert returned == "not enrolled"
+    assert [level for level, _ in _refusal_records(caplog)] == [logging.DEBUG]
+
+
+def test_log_refusal_changed_text_logs_error_again(caplog) -> None:
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper"):
+        returned = ripper_main._log_refusal(RegisterRefused("identity mismatch"), "not enrolled")
+    assert returned == "identity mismatch"
+    assert [level for level, _ in _refusal_records(caplog)] == [logging.ERROR]
