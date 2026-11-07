@@ -17,7 +17,7 @@ from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_key import refresh_makemkv_key
 from arm_ripper.recovery import boot_probe
-from arm_ripper.scan.makemkv import probe_makemkv_key
+from arm_ripper.scan.makemkv_key_probe import probe_makemkv_key
 from arm_ripper import iso_extract, prepare
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient

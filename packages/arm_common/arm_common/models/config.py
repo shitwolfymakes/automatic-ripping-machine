@@ -31,7 +31,7 @@ class Config(SQLModel, table=True):
     # services/ripper/arm_ripper/makemkv_key.py.
     makemkv_key: str | None = Field(default=None)
     # Disc-free makemkv key-validity, reported by the ripper's probe (see
-    # services/ripper/arm_ripper/scan/makemkv.py probe_makemkv_key + the
+    # services/ripper/arm_ripper/scan/makemkv_key_probe.py probe_makemkv_key + the
     # /api/ripper/makemkv-key-status endpoint). All null until a ripper reports.
     makemkv_key_valid: bool | None = Field(sa_column=Column(Boolean, nullable=True))
     makemkv_key_state: str | None = Field(sa_column=Column(String, nullable=True))
