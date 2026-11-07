@@ -162,6 +162,54 @@ def test_build_client_passes_url_token_hostname_and_drive_id(monkeypatch) -> Non
     assert calls == [(("https://backend.test", "tok"), {"hostname": "host-1", "drive_id": "drive-1"})]
 
 
+def _stub_resolve(monkeypatch, result):
+    calls = []
+
+    def resolve(by_id, dev, **kw):
+        calls.append((by_id, dev, kw))
+        return result
+
+    monkeypatch.setattr(main, "resolve_drive_device", resolve)
+    monkeypatch.setattr(main, "_resolve_paths", lambda: {"sysfs_root": "/sys-x"})
+    return calls
+
+
+def test_initial_handle_source_path_is_fixed_and_never_resolves(monkeypatch) -> None:
+    calls = _stub_resolve(monkeypatch, None)
+    handle = main._initial_handle("/data/x.iso")
+    assert handle.current == "/data/x.iso"
+    assert calls == []
+
+
+def test_initial_handle_resolved_drive_logs_presence(monkeypatch, caplog) -> None:
+    _stub_resolve(monkeypatch, SimpleNamespace(path="/dev/sr3", via="by-id"))
+    with caplog.at_level(logging.INFO, logger="arm_ripper"):
+        handle = main._initial_handle(None)
+    assert handle.current == "/dev/sr3"
+    assert "drive present at /dev/sr3 via by-id" in caplog.messages
+    assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+
+def test_initial_handle_unresolved_drive_is_absent_and_warns(monkeypatch, caplog) -> None:
+    _stub_resolve(monkeypatch, None)
+    monkeypatch.setattr(main.settings, "ARM_DRIVE_BY_ID", "by-id-x")
+    with caplog.at_level(logging.INFO, logger="arm_ripper"):
+        handle = main._initial_handle(None)
+    assert handle.absent
+    assert "starting with the drive absent (by_id=by-id-x); will poll for it" in caplog.messages
+
+
+def test_initial_handle_passes_settings_and_paths_with_empty_dev_fallback(monkeypatch) -> None:
+    calls = _stub_resolve(monkeypatch, None)
+    monkeypatch.setattr(main.settings, "ARM_DRIVE_BY_ID", "by-id-x")
+    monkeypatch.setattr(main.settings, "ARM_DRIVE_DEV", None)
+    main._initial_handle(None)
+    assert calls == [("by-id-x", "", {"sysfs_root": "/sys-x"})]
+    monkeypatch.setattr(main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    main._initial_handle(None)
+    assert calls[1] == ("by-id-x", "/dev/sr0", {"sysfs_root": "/sys-x"})
+
+
 async def test_amain_exits_2_when_nothing_to_rip_and_never_closes_client(monkeypatch, caplog) -> None:
     rig = _install(monkeypatch, source=None, drive_dev=None)
     with caplog.at_level(logging.ERROR, logger="arm_ripper"), pytest.raises(SystemExit) as ei:

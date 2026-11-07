@@ -434,6 +434,24 @@ def _build_client() -> BackendClient:
     )
 
 
+def _initial_handle(source_path: str | None) -> DriveHandle:
+    """The drive handle to start with: fixed on the bound ISO in source mode, otherwise the drive's current node
+    (absent when it isn't plugged in yet; the poll loop keeps looking).
+    """
+    # Narrow on `source_path` itself rather than the `source_mode` alias, so
+    # mypy can see the str inside the branch without an ignore.
+    if source_path is not None:
+        handle = DriveHandle.fixed(source_path)
+    else:
+        first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV or "", **_resolve_paths())
+        handle = DriveHandle(first.path if first else None)
+        if first is not None:
+            logger.info("drive present at %s via %s", first.path, first.via)
+        if handle.absent:
+            logger.warning("starting with the drive absent (by_id=%s); will poll for it", settings.ARM_DRIVE_BY_ID)
+    return handle
+
+
 async def amain() -> None:
     client = _build_client()
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
@@ -447,17 +465,7 @@ async def amain() -> None:
     if source_path is None and settings.ARM_DRIVE_DEV is None:
         logger.error("neither ARM_SOURCE_PATH nor ARM_DRIVE_DEV is set; nothing to rip")
         sys.exit(2)
-    # Narrow on `source_path` itself rather than the `source_mode` alias, so
-    # mypy can see the str inside the branch without an ignore.
-    if source_path is not None:
-        handle = DriveHandle.fixed(source_path)
-    else:
-        first = resolve_drive_device(settings.ARM_DRIVE_BY_ID, settings.ARM_DRIVE_DEV or "", **_resolve_paths())
-        handle = DriveHandle(first.path if first else None)
-        if first is not None:
-            logger.info("drive present at %s via %s", first.path, first.via)
-        if handle.absent:
-            logger.warning("starting with the drive absent (by_id=%s); will poll for it", settings.ARM_DRIVE_BY_ID)
+    handle = _initial_handle(source_path)
     # The backend's register payload needs a device path; the configured
     # node is the honest answer until the poll loop reports the real one.
     device_path: str = handle.current or settings.ARM_DRIVE_DEV or ""
