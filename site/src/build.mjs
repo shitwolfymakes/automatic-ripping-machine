@@ -4,10 +4,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
 import { collectPages, loadManifest } from './collect.mjs';
 import { createResolver, checkFragments } from './links.mjs';
 import { resolveNav } from './nav.mjs';
+import { parseOptions } from './options.mjs';
 import { createRenderer } from './render.mjs';
 import { buildSearchIndex } from './search.mjs';
 import { writeApp } from './write-app.mjs';
@@ -30,16 +30,7 @@ function readMeta(armRoot) {
 }
 
 async function main() {
-	const { values } = parseArgs({
-		options: {
-			target: { type: 'string', default: 'all' },
-			out: { type: 'string', default: join(siteDir, 'build') },
-			'app-out': { type: 'string' },
-			verbose: { type: 'boolean', default: false }
-		}
-	});
-	const target = values.target;
-	if (!['all', 'site', 'app'].includes(target)) throw new Error(`--target must be all, site or app (got ${target})`);
+	const options = parseOptions(process.argv.slice(2), siteDir);
 	const armRoot = resolve(process.env.ARM_ROOT ?? join(siteDir, '..'));
 	const manifest = process.env.DOCS_MANIFEST ? JSON.parse(readFileSync(process.env.DOCS_MANIFEST, 'utf8')) : loadManifest(siteDir);
 	if (!existsSync(join(armRoot, manifest.wiki))) {
@@ -61,22 +52,20 @@ async function main() {
 	}
 
 	const repoLinks = rendered.flatMap((r) => r.links.filter((l) => l.resolved.kind === 'repo').map((l) => `${r.page.srcPath}:${l.line}: ${l.raw}`));
-	console.log(`info: ${pages.length} pages; ${repoLinks.length} links point at unpublished repo files (GitHub)${values.verbose ? '' : ', --verbose to list'}`);
-	if (values.verbose) repoLinks.forEach((l) => console.log(`info:   ${l}`));
+	console.log(`info: ${pages.length} pages; ${repoLinks.length} links point at unpublished repo files (GitHub)${options.verbose ? '' : ', --verbose to list'}`);
+	if (options.verbose) repoLinks.forEach((l) => console.log(`info:   ${l}`));
 
 	const meta = readMeta(armRoot);
-	const out = resolve(values.out);
 	// The site carries every page; the in-app help carries user docs only.
-	if (target !== 'app') {
-		writeSite({ armRoot, rendered, nav: resolvedNav, meta, manifest, search: buildSearchIndex(rendered), siteDir, outDir: join(out, 'site') });
-		console.log(`site: ${join(out, 'site')}`);
+	if (options.target !== 'app') {
+		writeSite({ armRoot, rendered, nav: resolvedNav, meta, manifest, search: buildSearchIndex(rendered), siteDir, outDir: join(options.out, 'site') });
+		console.log(`site: ${join(options.out, 'site')}`);
 	}
-	if (target !== 'site') {
+	if (options.target !== 'site') {
 		const appRendered = rendered.filter((r) => r.page.audience === 'user');
 		const appNav = resolvedNav.filter((s) => s.audience === 'user');
-		const appOut = resolve(values['app-out'] ?? join(out, 'app'));
-		writeApp({ armRoot, rendered: appRendered, nav: appNav, meta, manifest, search: buildSearchIndex(appRendered), outDir: appOut });
-		console.log(`app: ${appOut}`);
+		writeApp({ armRoot, rendered: appRendered, nav: appNav, meta, manifest, search: buildSearchIndex(appRendered), outDir: options.appOut });
+		console.log(`app: ${options.appOut}`);
 	}
 }
 
