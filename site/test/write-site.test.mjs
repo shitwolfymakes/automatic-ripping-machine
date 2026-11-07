@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cssEntry, pageHtml, relativeFontUrls, searchIndexScript } from '../src/write-site.mjs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { makeTree } from './helpers.mjs';
+import { copyStaticFiles, cssEntry, pageHtml, relativeFontUrls, searchIndexScript } from '../src/write-site.mjs';
 
 const ALL = ['root', 'title', 'repo', 'nav', 'toc', 'content', 'editUrl', 'version', 'commit'];
 const TEMPLATE = ALL.map((k) => `{{${k}}}`).join('|');
@@ -167,4 +172,30 @@ test('searchIndexScript replaces a pages key already in the search object', () =
 
 test('searchIndexScript gives empty pages for no rendered pages', () => {
 	assert.deepEqual(parseScript(searchIndexScript({ docs: [] }, [])), { docs: [], pages: {} });
+});
+
+const REAL_SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+const STATIC = 'services/ui-neu/frontend/static';
+const staticRoot = () =>
+	makeTree({
+		[`${STATIC}/fonts/a.woff2`]: 'font-a',
+		[`${STATIC}/fonts/sub/b.woff2`]: 'font-b',
+		[`${STATIC}/favicon.ico`]: 'icon'
+	});
+const read = (...p) => readFileSync(join(...p), 'utf8');
+
+test('copyStaticFiles copies fonts, favicon, client scripts and minisearch', () => {
+	const outDir = mkdtempSync(join(tmpdir(), 'arm-out-'));
+	mkdirSync(join(outDir, 'js'));
+	copyStaticFiles(staticRoot(), REAL_SITE_DIR, outDir);
+	assert.equal(read(outDir, 'fonts/a.woff2'), 'font-a');
+	assert.equal(read(outDir, 'fonts/sub/b.woff2'), 'font-b');
+	assert.equal(read(outDir, 'favicon.ico'), 'icon');
+	for (const f of ['theme.js', 'site.js']) assert.equal(read(outDir, 'js', f), read(REAL_SITE_DIR, 'src/client', f));
+	assert.match(read(outDir, 'js/minisearch.js'), /MiniSearch/);
+});
+
+test('copyStaticFiles throws ENOENT when outDir/js is missing', () => {
+	const outDir = mkdtempSync(join(tmpdir(), 'arm-out-'));
+	assert.throws(() => copyStaticFiles(staticRoot(), REAL_SITE_DIR, outDir), { code: 'ENOENT' });
 });

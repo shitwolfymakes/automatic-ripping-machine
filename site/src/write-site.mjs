@@ -107,6 +107,15 @@ export function searchIndexScript(search, rendered) {
 	return `window.ARM_DOCS_SEARCH = ${JSON.stringify({ ...search, pages })};\n`;
 }
 
+// Copies the files the site ships as they are: ui-neu's fonts and favicon, the client scripts and minisearch.
+// outDir/js must exist.
+export function copyStaticFiles(armRoot, siteDir, outDir) {
+	cpSync(join(armRoot, 'services/ui-neu/frontend/static/fonts'), join(outDir, 'fonts'), { recursive: true });
+	copyFileSync(join(armRoot, 'services/ui-neu/frontend/static/favicon.ico'), join(outDir, 'favicon.ico'));
+	for (const f of ['theme.js', 'site.js']) copyFileSync(join(siteDir, 'src/client', f), join(outDir, 'js', f));
+	copyFileSync(join(minisearchRoot(), 'dist/umd/index.js'), join(outDir, 'js/minisearch.js'));
+}
+
 export function writeSite({ outDir, armRoot, siteDir, rendered, nav, meta, manifest, search }) {
 	rmSync(outDir, { recursive: true, force: true });
 	mkdirSync(join(outDir, 'js'), { recursive: true });
@@ -120,9 +129,6 @@ export function writeSite({ outDir, armRoot, siteDir, rendered, nav, meta, manif
 
 	copyAssets(rendered, armRoot, join(outDir, 'assets'));
 	compileCss(armRoot, siteDir, join(outDir, 'site.css'));
-	cpSync(join(armRoot, 'services/ui-neu/frontend/static/fonts'), join(outDir, 'fonts'), { recursive: true });
-	copyFileSync(join(armRoot, 'services/ui-neu/frontend/static/favicon.ico'), join(outDir, 'favicon.ico'));
-	for (const f of ['theme.js', 'site.js']) copyFileSync(join(siteDir, 'src/client', f), join(outDir, 'js', f));
-	copyFileSync(join(minisearchRoot(), 'dist/umd/index.js'), join(outDir, 'js/minisearch.js'));
+	copyStaticFiles(armRoot, siteDir, outDir);
 	writeFileSync(join(outDir, 'js/search-index.js'), searchIndexScript(search, rendered));
 }
