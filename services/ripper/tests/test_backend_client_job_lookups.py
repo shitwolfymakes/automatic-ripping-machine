@@ -69,3 +69,32 @@ async def test_lookup_returns_none_on_404(method, suffix, make) -> None:
 async def test_lookup_raises_on_server_error(method, suffix, make) -> None:
     with pytest.raises(httpx.HTTPStatusError):
         await getattr(_client(lambda req: httpx.Response(500)), method)("drv_1")
+
+
+async def test_get_or_none_parses_the_body_into_the_given_model() -> None:
+    served = _job_view()
+    c = _client(lambda req: httpx.Response(200, json=served.model_dump(mode="json")))
+    result = await c._get_or_none("/some/path", JobView)
+    assert result == served
+    assert type(result) is JobView
+
+
+async def test_get_or_none_returns_none_on_404() -> None:
+    assert await _client(lambda req: httpx.Response(404))._get_or_none("/some/path", JobView) is None
+
+
+async def test_get_or_none_raises_on_server_error() -> None:
+    with pytest.raises(httpx.HTTPStatusError):
+        await _client(lambda req: httpx.Response(500))._get_or_none("/some/path", JobView)
+
+
+async def test_get_or_none_gets_exactly_the_given_path() -> None:
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"] = req.method
+        seen["path"] = req.url.path
+        return httpx.Response(404)
+
+    await _client(handler)._get_or_none("/api/x/y", JobView)
+    assert seen == {"method": "GET", "path": "/api/x/y"}

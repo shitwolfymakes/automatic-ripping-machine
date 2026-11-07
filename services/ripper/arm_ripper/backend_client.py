@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from arm_common import Drive, DriveMediaStatus, IsoPreparePhase, Job, KeydbState, MakemkvKeyState, MakemkvSdfState
 from arm_common.schemas import (
@@ -98,15 +99,21 @@ class BackendClient:
             return
         r.raise_for_status()
 
+    async def _get_or_none[M: BaseModel](self, path: str, model: type[M]) -> M | None:
+        """GET `path` and parse the body as `model`; None on 404, raising on any other error status."""
+        r = await self._client.get(path)
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return model.model_validate(r.json())
+
     async def get_drive(self, drive_id: str) -> Drive | None:
         """This ripper's Drive row, or None on 404. Used by port-identity
         drives to pick up a refreshed device_path while absent."""
-        r = await self._client.get(f"/api/ripper/drives/{drive_id}")
-        if r.status_code == 404:
+        drive = await self._get_or_none(f"/api/ripper/drives/{drive_id}", Drive)
+        if drive is None:
             logger.debug("drive %s not found (404); keeping the configured hint", drive_id)
-            return None
-        r.raise_for_status()
-        return Drive.model_validate(r.json())
+        return drive
 
     async def identify(
         self,
@@ -154,28 +161,16 @@ class BackendClient:
 
     async def get_in_flight_job(self, drive_id: str) -> JobView | None:
         """Phase 9 — boot-probe lookup. Returns None on 404."""
-        r = await self._client.get(f"/api/ripper/drives/{drive_id}/in-flight-job")
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        return JobView.model_validate(r.json())
+        return await self._get_or_none(f"/api/ripper/drives/{drive_id}/in-flight-job", JobView)
 
     async def get_current_job(self, drive_id: str) -> JobView | None:
         """The drive's current non-terminal job (idle re-probe). None on 404."""
-        r = await self._client.get(f"/api/ripper/drives/{drive_id}/current-job")
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        return JobView.model_validate(r.json())
+        return await self._get_or_none(f"/api/ripper/drives/{drive_id}/current-job", JobView)
 
     async def get_held_job(self, drive_id: str) -> HeldJobView | None:
         """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review
         gate). Returns the held job + its paused flag, or None on 404."""
-        r = await self._client.get(f"/api/ripper/drives/{drive_id}/held-job")
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        return HeldJobView.model_validate(r.json())
+        return await self._get_or_none(f"/api/ripper/drives/{drive_id}/held-job", HeldJobView)
 
     async def recovery_abandon(self, job_id: str) -> JobView:
         """Abandon a counting-down held job on reboot recovery (review gate §6.3)."""
