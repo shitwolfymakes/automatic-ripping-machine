@@ -33,6 +33,11 @@ class HashCancelled(Exception):
     """Raised in the hashing thread to stop it reading once `cancel` ran."""
 
 
+def _transfer_rate(moved: int, elapsed: float) -> float | None:
+    """Bytes per second over `elapsed` seconds; None until both time has passed and bytes have moved."""
+    return moved / elapsed if elapsed > 0 and moved > 0 else None
+
+
 class TitleHasher:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
@@ -77,9 +82,7 @@ class TitleHasher:
             started = time.monotonic()
             while not gathered.done():
                 if on_progress is not None:
-                    elapsed = time.monotonic() - started
-                    moved = self._bytes_done - done_at_start
-                    rate = moved / elapsed if elapsed > 0 and moved > 0 else None
+                    rate = _transfer_rate(self._bytes_done - done_at_start, time.monotonic() - started)
                     await on_progress(self._bytes_done, self._bytes_total, rate)
                 await asyncio.wait({gathered}, timeout=VERIFY_PROGRESS_INTERVAL_SECONDS)
         # Re-raise anything a `then` callback raised (a PATCH that gave up).

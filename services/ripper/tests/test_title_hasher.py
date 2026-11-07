@@ -7,7 +7,23 @@ import threading
 from pathlib import Path
 
 from arm_ripper.rip import hashing
-from arm_ripper.rip.title_hasher import TitleHasher
+from arm_ripper.rip.title_hasher import TitleHasher, _transfer_rate
+
+
+def test_transfer_rate_is_bytes_per_second() -> None:
+    assert _transfer_rate(100, 2.0) == 50.0
+
+
+def test_transfer_rate_is_none_when_no_bytes_moved() -> None:
+    assert _transfer_rate(0, 2.0) is None
+
+
+def test_transfer_rate_is_none_when_no_time_has_passed() -> None:
+    assert _transfer_rate(100, 0.0) is None
+
+
+def test_transfer_rate_is_none_for_a_negative_elapsed() -> None:
+    assert _transfer_rate(100, -1.0) is None
 
 
 async def test_cancel_stops_the_hashing_thread_mid_file(tmp_path: Path, monkeypatch) -> None:
