@@ -6,6 +6,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -111,6 +112,11 @@ SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3
 # attribute afterward, which is how every existing wait test already
 # configures the timeout.
 _RESOLUTION_TIMEOUT_UNSET = object()
+
+
+def _command_payload(envelope: WSEnvelope) -> dict[str, Any]:
+    """A WS command's payload, or an empty dict when it isn't one."""
+    return envelope.payload if isinstance(envelope.payload, dict) else {}
 
 
 def _previously_ripped(response: httpx.Response) -> bool:
@@ -237,7 +243,7 @@ class JobController:
             # re-evaluates (identify.resolved -> identified; rip.start -> ripping;
             # review.pause -> re-read manual_pause/wait_start_time so a per-job
             # pause/resume applies promptly instead of on the next periodic poll).
-            job_id = envelope.payload.get("job_id") if isinstance(envelope.payload, dict) else None
+            job_id = _command_payload(envelope).get("job_id")
             if not isinstance(job_id, str):
                 logger.warning("%s without job_id payload: %s", envelope.event_type, envelope.payload)
                 return
@@ -248,14 +254,14 @@ class JobController:
             else:
                 logger.debug("%s for job_id=%s but no waiter registered", envelope.event_type, job_id)
         elif envelope.event_type == "manual.trigger":
-            payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+            payload = _command_payload(envelope)
             session_id = payload.get("session_id")
             if session_id is not None and not isinstance(session_id, str):
                 logger.warning("manual.trigger with non-string session_id: %r", session_id)
                 session_id = None
             asyncio.create_task(self.handle_manual_trigger(session_id))
         elif envelope.event_type == "job.abandoned":
-            payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+            payload = _command_payload(envelope)
             job_id = payload.get("job_id")
             delete_raw = bool(payload.get("delete_raw"))
             if not isinstance(job_id, str):
