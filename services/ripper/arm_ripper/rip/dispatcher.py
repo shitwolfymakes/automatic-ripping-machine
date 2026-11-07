@@ -110,33 +110,7 @@ async def rip_all(
         return
 
     if disc_type == DiscType.CD:
-        for track in tracks:
-            await on_track_start(track)
-        track_by_index = {t.index: t for t in tracks}
-
-        async def _cd_on_track_done(idx: int, result: RipResult) -> None:
-            track = track_by_index.get(idx)
-            if track is None:
-                return
-            await on_track_done(track, result)
-
-        results = await rip_cd(
-            device_path=device_path,
-            output_dir=output_dir,
-            track_indexes=[t.index for t in tracks],
-            on_track_done=_cd_on_track_done,
-        )
-        # Defensive: rip_cd's contract is to fire on_track_done for every
-        # track index it's given, so this loop is a no-op on the happy
-        # path. It only catches a track that fell through (e.g. a code
-        # path inside rip_cd that returned without firing the callback)
-        # so the row doesn't stay IN_PROGRESS forever.
-        for track in tracks:
-            if track.index not in results:
-                await on_track_done(
-                    track,
-                    RipResult(ok=False, error=f"abcde produced no entry for track {track.index}"),
-                )
+        await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done)
         return
 
     if disc_type == DiscType.DATA:
@@ -185,6 +159,43 @@ async def _rip_disc_backup(
 
     result = await rip_backup(device_path=device_path, output_dir=output_dir, on_progress=_on_backup_progress)
     await on_track_done(backup, result)
+
+
+async def _rip_audio_cd(
+    device_path: str,
+    tracks: list[TrackView],
+    output_dir: Path,
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+) -> None:
+    """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it."""
+    for track in tracks:
+        await on_track_start(track)
+    track_by_index = {t.index: t for t in tracks}
+
+    async def _cd_on_track_done(idx: int, result: RipResult) -> None:
+        track = track_by_index.get(idx)
+        if track is None:
+            return
+        await on_track_done(track, result)
+
+    results = await rip_cd(
+        device_path=device_path,
+        output_dir=output_dir,
+        track_indexes=[t.index for t in tracks],
+        on_track_done=_cd_on_track_done,
+    )
+    # Defensive: rip_cd's contract is to fire on_track_done for every
+    # track index it's given, so this loop is a no-op on the happy
+    # path. It only catches a track that fell through (e.g. a code
+    # path inside rip_cd that returned without firing the callback)
+    # so the row doesn't stay IN_PROGRESS forever.
+    for track in tracks:
+        if track.index not in results:
+            await on_track_done(
+                track,
+                RipResult(ok=False, error=f"abcde produced no entry for track {track.index}"),
+            )
 
 
 async def _rip_optical(
