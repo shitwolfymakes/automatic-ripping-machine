@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cssEntry, pageHtml, relativeFontUrls } from '../src/write-site.mjs';
+import { cssEntry, pageHtml, relativeFontUrls, searchIndexScript } from '../src/write-site.mjs';
 
 const ALL = ['root', 'title', 'repo', 'nav', 'toc', 'content', 'editUrl', 'version', 'commit'];
 const TEMPLATE = ALL.map((k) => `{{${k}}}`).join('|');
@@ -133,4 +133,38 @@ test('relativeFontUrls leaves other urls as they are', () => {
 
 test('relativeFontUrls leaves a sheet without urls unchanged', () => {
 	assert.equal(relativeFontUrls('a{color:red}'), 'a{color:red}');
+});
+
+const PREFIX = 'window.ARM_DOCS_SEARCH = ';
+const entry = (id, title) => ({ page: { id, title } });
+const parseScript = (script) => JSON.parse(script.slice(PREFIX.length, -2));
+
+test('searchIndexScript assigns the index and page paths to window.ARM_DOCS_SEARCH', () => {
+	const script = searchIndexScript({ docs: [1] }, [entry('guide/home', 'Home'), entry('guide/setup', 'Setup')]);
+	assert.equal(
+		script,
+		`${PREFIX}{"docs":[1],"pages":{"guide/home":{"title":"Home","path":"index.html"},` +
+			'"guide/setup":{"title":"Setup","path":"guide/setup.html"}}};\n'
+	);
+	assert.ok(script.startsWith(PREFIX));
+	assert.ok(script.endsWith(';\n'));
+});
+
+test('searchIndexScript JSON parses back to the search object plus pages in input order', () => {
+	const search = { docs: ['a'], n: 2 };
+	const parsed = parseScript(searchIndexScript(search, [entry('b/z', 'Z'), entry('a/y', 'Y')]));
+	assert.deepEqual(parsed, {
+		...search,
+		pages: { 'b/z': { title: 'Z', path: 'b/z.html' }, 'a/y': { title: 'Y', path: 'a/y.html' } }
+	});
+	assert.deepEqual(Object.keys(parsed.pages), ['b/z', 'a/y']);
+});
+
+test('searchIndexScript replaces a pages key already in the search object', () => {
+	const parsed = parseScript(searchIndexScript({ pages: { old: 1 } }, [entry('a/y', 'Y')]));
+	assert.deepEqual(parsed.pages, { 'a/y': { title: 'Y', path: 'a/y.html' } });
+});
+
+test('searchIndexScript gives empty pages for no rendered pages', () => {
+	assert.deepEqual(parseScript(searchIndexScript({ docs: [] }, [])), { docs: [], pages: {} });
 });

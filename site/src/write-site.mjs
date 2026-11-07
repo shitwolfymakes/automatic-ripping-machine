@@ -100,6 +100,13 @@ export function pageHtml(template, r, { nav, manifest, meta }) {
 	});
 }
 
+// The search-index script: the search index plus each page's title and output path, assigned to
+// window.ARM_DOCS_SEARCH.
+export function searchIndexScript(search, rendered) {
+	const pages = Object.fromEntries(rendered.map((r) => [r.page.id, { title: r.page.title, path: outPath(r.page.id) }]));
+	return `window.ARM_DOCS_SEARCH = ${JSON.stringify({ ...search, pages })};\n`;
+}
+
 export function writeSite({ outDir, armRoot, siteDir, rendered, nav, meta, manifest, search }) {
 	rmSync(outDir, { recursive: true, force: true });
 	mkdirSync(join(outDir, 'js'), { recursive: true });
@@ -117,6 +124,5 @@ export function writeSite({ outDir, armRoot, siteDir, rendered, nav, meta, manif
 	copyFileSync(join(armRoot, 'services/ui-neu/frontend/static/favicon.ico'), join(outDir, 'favicon.ico'));
 	for (const f of ['theme.js', 'site.js']) copyFileSync(join(siteDir, 'src/client', f), join(outDir, 'js', f));
 	copyFileSync(join(minisearchRoot(), 'dist/umd/index.js'), join(outDir, 'js/minisearch.js'));
-	const pages = Object.fromEntries(rendered.map((r) => [r.page.id, { title: r.page.title, path: outPath(r.page.id) }]));
-	writeFileSync(join(outDir, 'js/search-index.js'), `window.ARM_DOCS_SEARCH = ${JSON.stringify({ ...search, pages })};\n`);
+	writeFileSync(join(outDir, 'js/search-index.js'), searchIndexScript(search, rendered));
 }
