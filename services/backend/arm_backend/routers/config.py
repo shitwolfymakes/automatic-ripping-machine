@@ -16,7 +16,7 @@ master toggle. New URLs should be added as channels via /api/notifications.
 
 import logging
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -45,7 +45,7 @@ from arm_backend.identity.sources.registry import (
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
-from arm_common.config_metadata import CONFIG_FIELD_META
+from arm_common.config_metadata import CONFIG_FIELD_META, ConfigFieldMeta
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES, PreviouslyRippedAction
 from arm_common.schemas import (
     ConfigUpdateRequest,
@@ -139,29 +139,22 @@ def _to_view(cfg: Config) -> ConfigView:
     return view
 
 
+async def _load_config(session: AsyncSession) -> Config:
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
+    return cfg
+
+
 @router.get("", response_model=ConfigView)
 async def get_config(
     _: User = Depends(require_jwt),
     session: AsyncSession = Depends(get_session),
 ) -> ConfigView:
-    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
-    return _to_view(cfg)
+    return _to_view(await _load_config(session))
 
 
-@router.patch("", response_model=ConfigView)
-async def update_config(
-    req: ConfigUpdateRequest,
-    request: Request,
-    user: User = Depends(require_writer),
-    session: AsyncSession = Depends(get_session),
-) -> ConfigView:
-    # FastAPI has already validated the body into `req` (a ConfigUpdateRequest),
-    # so a non-object body is rejected with 422 before we get here — `raw` is
-    # always a dict. We re-read the raw body because `req` silently drops unknown
-    # keys, so model_dump() would never reveal a forbidden (infra/non-editable) key.
-    raw = await request.json()
+def _reject_non_editable_keys(raw: dict[str, Any]) -> None:
     forbidden = _NON_EDITABLE_KEYS & set(raw.keys())
     if forbidden:
         raise HTTPException(
@@ -169,33 +162,40 @@ async def update_config(
             detail=f"non-editable settings cannot be patched: {sorted(forbidden)}",
         )
 
-    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
 
-    fields = req.model_dump(exclude_unset=True)
+def _drop_masked_secrets(fields: dict[str, Any]) -> None:
     # A secret field whose submitted value is the masked sentinel means "keep the
     # stored secret" — drop it from the update set so it isn't overwritten with the
     # literal "<hidden>". Real values update; "" / None clears (normal setattr below).
     for key in _SECRET_KEYS:
         if fields.get(key) == HIDDEN_SECRET:
             del fields[key]
+
+
+def _validate_enum_field(key: str, meta: ConfigFieldMeta, fields: dict[str, Any], cfg: Config) -> None:
+    if key not in fields:
+        return
+    value = fields[key]
+    allowed = meta.enum_values or []
+    if value is None or value not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be one of {', '.join(allowed)}"
+        )
+    required = (meta.enum_requires or {}).get(value)
+    if required:
+        # The key sent in this body counts; otherwise the stored one.
+        present = fields[required] if required in fields else getattr(cfg, required, None)
+        if not (present or "").strip():
+            label = (meta.enum_labels or {}).get(value, value)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
+
+
+def _validate_enum_fields(fields: dict[str, Any], cfg: Config) -> None:
     for key, meta in _ENUM_META.items():
-        if key not in fields:
-            continue
-        value = fields[key]
-        allowed = meta.enum_values or []
-        if value is None or value not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be one of {', '.join(allowed)}"
-            )
-        required = (meta.enum_requires or {}).get(value)
-        if required:
-            # The key sent in this body counts; otherwise the stored one.
-            present = fields[required] if required in fields else getattr(cfg, required, None)
-            if not (present or "").strip():
-                label = (meta.enum_labels or {}).get(value, value)
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: {label} needs its API key")
+        _validate_enum_field(key, meta, fields, cfg)
+
+
+def _validate_positive_ints(fields: dict[str, Any]) -> None:
     # The number inputs send null for an emptied box; these columns are NOT
     # NULL, so refuse it here rather than 500 on the commit (D-096).
     for key in (
@@ -206,21 +206,36 @@ async def update_config(
     ):
         if key in fields and (fields[key] is None or fields[key] < 1):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be a positive integer")
+
+
+def _validate_manual_wait(fields: dict[str, Any]) -> None:
     if "manual_wait_seconds" in fields and (fields["manual_wait_seconds"] is None or fields["manual_wait_seconds"] < 0):
         # 0 is a real choice: no countdown, the held disc starts at once.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="manual_wait_seconds must be 0 or a positive integer"
         )
+
+
+def _validate_on_previously_ripped(fields: dict[str, Any]) -> None:
     if "on_previously_ripped" in fields and fields["on_previously_ripped"] is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="on_previously_ripped must be hold, reject or rip"
         )
+
+
+def _validate_iso_rip_cap(fields: dict[str, Any]) -> None:
     if "max_parallel_iso_rips" in fields:
         cap = fields["max_parallel_iso_rips"]
         if cap is None or isinstance(cap, bool) or not 1 <= cap <= 8:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_parallel_iso_rips must be 1 to 8")
+
+
+def _validate_transcode_enabled_not_null(fields: dict[str, Any]) -> None:
     if "transcode_enabled" in fields and fields["transcode_enabled"] is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="transcode_enabled must be a boolean")
+
+
+def _validate_ranked_fields(fields: dict[str, Any]) -> None:
     for key, meta in _RANKED_META.items():
         if key not in fields:
             continue
@@ -235,6 +250,9 @@ async def update_config(
             )
         if len(set(values)) != len(values):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key}: duplicate values")
+
+
+def _validate_episode_tolerance(fields: dict[str, Any], raw: dict[str, Any]) -> None:
     if "episode_match_tolerance_seconds" in fields:
         tol = fields["episode_match_tolerance_seconds"]
         # Pydantic's lax int validator accepts a JSON bool (bool is an int
@@ -245,11 +263,17 @@ async def update_config(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="episode_match_tolerance_seconds must be 1 to 1800"
             )
+
+
+def _validate_auto_apply_flags(fields: dict[str, Any]) -> None:
     # The checkbox inputs send null for a cleared tri-state; these columns are
     # NOT NULL, so refuse it here rather than 500 on the commit.
     for key in ("episode_auto_apply", "movie_auto_apply", "music_auto_apply", "crc64service_enabled"):
         if key in fields and fields[key] is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must be true or false")
+
+
+def _validate_not_null_columns(fields: dict[str, Any]) -> None:
     # Catch-all for the rest of the NOT NULL columns: a JSON null would
     # otherwise reach the commit and 500 (D-164). The checks above keep their
     # field-specific messages.
@@ -257,31 +281,60 @@ async def update_config(
     for key, value in fields.items():
         if value is None and key in columns and not columns[key].nullable:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} must not be null")
+
+
+def _validate_config_update(fields: dict[str, Any], raw: dict[str, Any], cfg: Config) -> None:
+    _validate_enum_fields(fields, cfg)
+    _validate_positive_ints(fields)
+    _validate_manual_wait(fields)
+    _validate_on_previously_ripped(fields)
+    _validate_iso_rip_cap(fields)
+    _validate_transcode_enabled_not_null(fields)
+    _validate_ranked_fields(fields)
+    _validate_episode_tolerance(fields, raw)
+    _validate_auto_apply_flags(fields)
+    _validate_not_null_columns(fields)
+
+
+def _require_transcode_capable(fields: dict[str, Any]) -> None:
     if fields.get("transcode_enabled") is True and not effective_transcode_capable(settings):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="cannot enable transcoding: this deployment is ripper-only "
             "(ARM_TRANSCODE_CAPABLE=false and no ARM_TRANSCODE_DOCKER_HOST)",
         )
+
+
+def _is_unpausing(cfg: Config, fields: dict[str, Any]) -> bool:
     # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give
     # held review-gate discs a FRESH countdown rather than resuming an already-
     # expired one (which would auto-rip the instant ripping resumes — surprising
     # to an operator who paused to deal with it later). timed-review-gate spec §6.3.
-    unpausing = bool(cfg.ripping_paused) and fields.get("ripping_paused") is False
+    return bool(cfg.ripping_paused) and fields.get("ripping_paused") is False
+
+
+def _is_reenabling_transcode(cfg: Config, fields: dict[str, Any]) -> bool:
     # Detect transcoding re-enable (OFF -> ON). A NULL column reads as enabled,
     # so only an explicit False counts as "was off". Encode applications that
     # reached the parked-application drain while the toggle was off stayed
-    # WAITING_IDENTIFY; they're re-drained after the commit below.
-    reenabling_transcode = cfg.transcode_enabled is False and fields.get("transcode_enabled") is True
+    # WAITING_IDENTIFY; they're re-drained after the commit.
+    return cfg.transcode_enabled is False and fields.get("transcode_enabled") is True
+
+
+def _identity_sources_changed(cfg: Config, fields: dict[str, Any]) -> bool:
     # Which sources may contribute to a job's identity changed: the resolver
     # only consults the setting when it runs, so re-run it for live jobs
     # after the commit or a disabled source's fields stay on them (D-097).
-    identity_sources_changed = any(key in fields and fields[key] != getattr(cfg, key) for key in _IDENTITY_SOURCE_KEYS)
+    return any(key in fields and fields[key] != getattr(cfg, key) for key in _IDENTITY_SOURCE_KEYS)
 
+
+def _makemkv_key_changed(cfg: Config, fields: dict[str, Any]) -> bool:
     # A ripper's verdict belongs to the key it checked. A new key has none
     # until a ripper checks it, so the old one must not be read as its own.
-    makemkv_key_changed = "makemkv_key" in fields and fields["makemkv_key"] != cfg.makemkv_key
+    return "makemkv_key" in fields and fields["makemkv_key"] != cfg.makemkv_key
 
+
+def _apply_update(cfg: Config, fields: dict[str, Any], user: User, makemkv_key_changed: bool) -> None:
     for key, value in fields.items():
         setattr(cfg, key, value)
     if makemkv_key_changed:
@@ -292,18 +345,48 @@ async def update_config(
     cfg.updated_by_user_id = user.id
     cfg.updated_at = datetime.now(timezone.utc)
 
+
+async def _restart_held_countdowns(session: AsyncSession) -> None:
+    now = datetime.now(timezone.utc)
+    held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
+    for job in held:
+        # A previously-ripped hold and a held suggestion have no countdown to restart.
+        if (
+            previously_ripped_job_id(job.metadata_json) is not None
+            or identity_suggestion_of(job.metadata_json) is not None
+        ):
+            continue
+        job.wait_start_time = now
+        session.add(job)
+
+
+@router.patch("", response_model=ConfigView)
+async def update_config(
+    req: ConfigUpdateRequest,
+    request: Request,
+    user: User = Depends(require_writer),
+    session: AsyncSession = Depends(get_session),
+) -> ConfigView:
+    # FastAPI has already validated the body into `req` (a ConfigUpdateRequest),
+    # so a non-object body is rejected with 422 before we get here — `raw` is
+    # always a dict. We re-read the raw body because `req` silently drops unknown
+    # keys, so model_dump() would never reveal a forbidden (infra/non-editable) key.
+    raw = await request.json()
+    _reject_non_editable_keys(raw)
+    cfg = await _load_config(session)
+    fields = req.model_dump(exclude_unset=True)
+    _drop_masked_secrets(fields)
+    _validate_config_update(fields, raw, cfg)
+    _require_transcode_capable(fields)
+
+    unpausing = _is_unpausing(cfg, fields)
+    reenabling_transcode = _is_reenabling_transcode(cfg, fields)
+    identity_sources_changed = _identity_sources_changed(cfg, fields)
+    makemkv_key_changed = _makemkv_key_changed(cfg, fields)
+
+    _apply_update(cfg, fields, user, makemkv_key_changed)
     if unpausing:
-        now = datetime.now(timezone.utc)
-        held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
-        for job in held:
-            # A previously-ripped hold and a held suggestion have no countdown to restart.
-            if (
-                previously_ripped_job_id(job.metadata_json) is not None
-                or identity_suggestion_of(job.metadata_json) is not None
-            ):
-                continue
-            job.wait_start_time = now
-            session.add(job)
+        await _restart_held_countdowns(session)
 
     await session.commit()
     await session.refresh(cfg)
