@@ -477,6 +477,18 @@ def _build_controller(
     )
 
 
+async def _recover_crashed_rip(
+    client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController
+) -> None:
+    """Recover a rip that crashed in flight on this drive, if any (Phase 9); logs and swallows every error so a
+    misbehaving probe never blocks boot.
+    """
+    try:
+        await boot_probe(client, drive_id, handle.current or "", controller)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("boot probe failed: %s", exc)
+
+
 async def amain() -> None:
     client = _build_client()
     ssl_ctx = ssl.create_default_context(cafile=CA_BUNDLE_PATH)
@@ -509,13 +521,8 @@ async def amain() -> None:
             controller = _build_controller(client, drive_id, ws, handle, source_mode=source_mode)
             await ws.subscribe(f"ripper.commands.{drive_id}", controller.on_ws_command)
             if not source_mode and not handle.absent:
-                # Phase 9 — recover a crashed in-flight rip on this drive, if any.
-                # Logs + swallows all errors so a misbehaving probe never blocks boot.
                 # (If the drive is absent now, the poll loop re-runs this on reattach.)
-                try:
-                    await boot_probe(client, drive_id, handle.current or "", controller)
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("boot probe failed: %s", exc)
+                await _recover_crashed_rip(client, drive_id, handle, controller)
             heartbeat_task = asyncio.create_task(heartbeat_loop(client, drive_id, handle, controller))
             keycheck_task = asyncio.create_task(makemkv_keycheck_loop(client))
             try:

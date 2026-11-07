@@ -243,6 +243,28 @@ def test_build_controller_drive_mode_leaves_resolution_timeout_to_the_default(mo
     assert "resolution_timeout" not in calls[0][1]
 
 
+async def test_recover_crashed_rip_probes_the_current_node(monkeypatch) -> None:
+    calls = []
+
+    async def probe(*args):
+        calls.append(args)
+
+    monkeypatch.setattr(main, "boot_probe", probe)
+    client, controller = object(), object()
+    await main._recover_crashed_rip(client, "drv_1", DriveHandle("/dev/sr0"), controller)
+    assert calls == [(client, "drv_1", "/dev/sr0", controller)]
+
+
+async def test_recover_crashed_rip_swallows_and_logs_probe_errors(monkeypatch, caplog) -> None:
+    async def probe(*args):
+        raise RuntimeError("probe broke")
+
+    monkeypatch.setattr(main, "boot_probe", probe)
+    with caplog.at_level(logging.ERROR, logger="arm_ripper"):
+        await main._recover_crashed_rip(object(), "drv_1", DriveHandle("/dev/sr0"), object())
+    assert "boot probe failed: probe broke" in caplog.messages
+
+
 async def test_amain_exits_2_when_nothing_to_rip_and_never_closes_client(monkeypatch, caplog) -> None:
     rig = _install(monkeypatch, source=None, drive_dev=None)
     with caplog.at_level(logging.ERROR, logger="arm_ripper"), pytest.raises(SystemExit) as ei:
