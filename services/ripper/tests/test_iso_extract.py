@@ -599,3 +599,19 @@ def test_archive_errors_keeps_only_archive_level_lines_stripped_and_in_order() -
 
 def test_archive_errors_of_empty_stderr_is_empty() -> None:
     assert iso_extract._archive_errors("") == []
+
+
+@pytest.mark.parametrize(
+    ("damaged", "expected"),
+    [
+        ([], False),
+        (["CERTIFICATE/id.bdmv", "PS3_UPDATE/PS3UPDAT.PUP"], True),
+        (["BDMV/STREAM/00001.m2ts"], False),
+        (["bdmv/STREAM/00001.m2ts"], False),
+        (["VIDEO_TS/VTS_01_1.VOB"], False),
+        (["id.bdmv"], True),
+        (["CERTIFICATE/id.bdmv", "BDMV/STREAM/00001.m2ts"], False),
+    ],
+)
+def test_damage_outside_video_tree(damaged: list[str], expected: bool) -> None:
+    assert iso_extract._damage_outside_video_tree(damaged) is expected

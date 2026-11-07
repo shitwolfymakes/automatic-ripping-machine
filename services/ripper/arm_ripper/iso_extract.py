@@ -156,6 +156,13 @@ def _archive_errors(stderr: str) -> list[str]:
     ]
 
 
+def _damage_outside_video_tree(damaged: list[str]) -> bool:
+    """True when 7-Zip named at least one damaged file and none of them is under BDMV / VIDEO_TS (by top-level
+    folder, ignoring case).
+    """
+    return bool(damaged) and not any(p.split("/", 1)[0].upper() in _VIDEO_DIRS for p in damaged)
+
+
 def _usable(image: Path, rc: int | None, stderr: str) -> bool:
     """Whether 7z's result can be read as a disc folder.
 
@@ -168,7 +175,7 @@ def _usable(image: Path, rc: int | None, stderr: str) -> bool:
     if rc in (0, 1):
         return True
     damaged = _FILE_ERROR.findall(stderr)
-    if rc == 2 and damaged and not any(p.split("/", 1)[0].upper() in _VIDEO_DIRS for p in damaged):
+    if rc == 2 and _damage_outside_video_tree(damaged):
         logger.warning(
             "iso extract: %s: %d unreadable file(s) outside the video tree, ignored: %s",
             image,
