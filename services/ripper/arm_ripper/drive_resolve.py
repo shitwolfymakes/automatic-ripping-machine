@@ -57,22 +57,31 @@ def _is_optical(name: str, sysfs_root: Path) -> bool:
     return major == str(SCSI_CDROM_MAJOR)
 
 
+def _warn_missing_once(name: str, dev_root: Path) -> None:
+    """Warn that udev's node `name` is missing under `dev_root`, once until it next shows up (the poll loop resolves
+    every few seconds).
+    """
+    key = (str(dev_root), name)
+    if key in _warned_missing:
+        return
+    _warned_missing.add(key)
+    # udev says the drive is at <name>, but the entrypoint never
+    # pre-created that node — so nothing in this container can open it.
+    # Almost always a too-low ARM_OPTICAL_SR_MAX / ARM_OPTICAL_SG_MAX.
+    logger.warning(
+        "drive node %s is not present under %s — is it outside ARM_OPTICAL_SR_MAX/ARM_OPTICAL_SG_MAX?",
+        name,
+        dev_root,
+    )
+
+
 def _optical_node(name: str, *, dev_root: Path, sysfs_root: Path, warn_if_missing: bool = False) -> str | None:
     node = dev_root / name
-    key = (str(dev_root), name)
     if not node.exists():
-        if warn_if_missing and key not in _warned_missing:
-            _warned_missing.add(key)
-            # udev says the drive is at <name>, but the entrypoint never
-            # pre-created that node — so nothing in this container can open it.
-            # Almost always a too-low ARM_OPTICAL_SR_MAX / ARM_OPTICAL_SG_MAX.
-            logger.warning(
-                "drive node %s is not present under %s — is it outside ARM_OPTICAL_SR_MAX/ARM_OPTICAL_SG_MAX?",
-                name,
-                dev_root,
-            )
+        if warn_if_missing:
+            _warn_missing_once(name, dev_root)
         return None
-    _warned_missing.discard(key)
+    _warned_missing.discard((str(dev_root), name))
     if not _is_optical(name, sysfs_root):
         return None
     return str(node)

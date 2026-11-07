@@ -1,9 +1,20 @@
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
+from arm_ripper import drive_resolve
 from arm_ripper.drive_resolve import ResolvedDevice, resolve_drive_device
 
 BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
+
+
+@pytest.fixture(autouse=True)
+def _clear_warned_missing() -> Iterator[None]:
+    drive_resolve._warned_missing.clear()
+    yield
+    drive_resolve._warned_missing.clear()
 
 
 class Tree:
@@ -29,6 +40,30 @@ class Tree:
 
     def resolve(self, by_id: str | None, hint: str = "/dev/sr0") -> ResolvedDevice | None:
         return resolve_drive_device(by_id, hint, disk_root=self.disk, dev_root=self.dev, sysfs_root=self.sysfs)
+
+
+def test_warn_missing_once_logs_the_warning_and_records_the_key(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    drive_resolve._warn_missing_once("sr9", tmp_path)
+    assert [r.getMessage() for r in caplog.records] == [
+        f"drive node sr9 is not present under {tmp_path} — is it outside ARM_OPTICAL_SR_MAX/ARM_OPTICAL_SG_MAX?"
+    ]
+    assert (str(tmp_path), "sr9") in drive_resolve._warned_missing
+
+
+def test_warn_missing_once_is_silent_for_a_pair_already_warned(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    drive_resolve._warn_missing_once("sr9", tmp_path)
+    caplog.clear()
+    drive_resolve._warn_missing_once("sr9", tmp_path)
+    assert not caplog.records
+
+
+def test_warn_missing_once_logs_again_for_another_dev_root(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="arm_ripper.drive_resolve")
+    drive_resolve._warn_missing_once("sr9", tmp_path / "a")
+    drive_resolve._warn_missing_once("sr9", tmp_path / "b")
+    assert len(caplog.records) == 2
 
 
 def test_by_id_resolves_to_the_linked_optical_node(tmp_path: Path) -> None:
