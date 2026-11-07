@@ -545,3 +545,32 @@ async def test_report_progress_parses_a_line_split_across_chunks_once_complete(m
 
 async def test_report_progress_on_an_empty_stream_reports_only_the_start(monkeypatch):
     assert await _reports_for(monkeypatch) == [(IsoPreparePhase.EXTRACTING, 0, None)]
+
+
+async def test_collect_7z_returns_stderr_of_a_finished_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _report(*_a: object) -> None:
+        return None
+
+    monkeypatch.setattr(iso_extract.prepare, "report", _report)
+    proc = _HangingProc()
+    proc.stdout = _Stream(b"")
+    proc.stderr = _Stream(b"some warning")
+
+    assert await iso_extract._collect_7z(proc) == b"some warning"  # type: ignore[arg-type]
+    assert proc.wait_calls == 1
+    assert proc.kill_calls == 0
+
+
+async def test_collect_7z_timeout_kills_reaps_and_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _report(*_a: object) -> None:
+        return None
+
+    monkeypatch.setattr(iso_extract.prepare, "report", _report)
+    monkeypatch.setattr(iso_extract, "_EXTRACT_TIMEOUT_SECONDS", 0.05)
+    proc = _HangingProc()
+
+    with pytest.raises(TimeoutError):
+        await iso_extract._collect_7z(proc)  # type: ignore[arg-type]
+
+    assert proc.kill_calls == 1
+    assert proc.wait_calls == 1

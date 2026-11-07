@@ -117,11 +117,10 @@ async def _report_progress(stdout: asyncio.StreamReader) -> None:
             await prepare.report(IsoPreparePhase.EXTRACTING, *parsed)
 
 
-async def _run_7z(image: Path, dest: Path) -> bool:
-    exe = _find_7z()
-    if exe is None:
-        return False
-    proc = await _spawn_7z(exe, image, dest)
+async def _collect_7z(proc: asyncio.subprocess.Process) -> bytes:
+    """Stream 7-Zip's progress and read its stderr until it exits; kill and reap it on a timeout or cancellation,
+    which propagates. Returns its stderr.
+    """
     assert proc.stdout is not None and proc.stderr is not None
     stdout, stderr_stream = proc.stdout, proc.stderr
 
@@ -136,6 +135,15 @@ async def _run_7z(image: Path, dest: Path) -> bool:
             proc.kill()
         await proc.wait()
         raise
+    return stderr
+
+
+async def _run_7z(image: Path, dest: Path) -> bool:
+    exe = _find_7z()
+    if exe is None:
+        return False
+    proc = await _spawn_7z(exe, image, dest)
+    stderr = await _collect_7z(proc)
     return _usable(image, proc.returncode, stderr.decode(errors="replace"))
 
 
