@@ -706,9 +706,7 @@ class JobController:
             # The episode placement is a guess: never auto-start on it. Start
             # rip by hand still works; the hold lifts when a Fix match or a
             # re-run leaves a confident placement.
-            if view.id not in self._held_for_guess:
-                self._held_for_guess.add(view.id)
-                logger.info("job %s: countdown held, its episode placement is a guess", view.id)
+            self._note_guess_hold(view.id)
             return False
         cfg = await self._safe_get_ripper_config()
         if cfg is None or cfg.ripping_paused:
@@ -717,6 +715,12 @@ class JobController:
             return False
         elapsed = (datetime.now(timezone.utc) - view.wait_start_time).total_seconds()
         return elapsed >= cfg.manual_wait_seconds
+
+    def _note_guess_hold(self, job_id: str) -> None:
+        """Log, once per job, that its countdown is held because its episode placement is a guess."""
+        if job_id not in self._held_for_guess:
+            self._held_for_guess.add(job_id)
+            logger.info("job %s: countdown held, its episode placement is a guess", job_id)
 
     async def _safe_get_job(self, job_id: str) -> JobView | None:
         try:
