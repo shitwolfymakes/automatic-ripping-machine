@@ -101,6 +101,65 @@ async def _spawn_abcde(device_path: str, conf_path: Path, output_dir: Path) -> a
     )
 
 
+class _CdTracks:
+    """The track bookkeeping of one abcde rip: the result each track has so far, and the tracks abcde logged as read."""
+
+    def __init__(self, output_dir: Path, track_indexes: list[int], on_track_done: OnAbcdeTrackDone | None) -> None:
+        self._output_dir = output_dir
+        self._track_indexes = track_indexes
+        self._on_track_done = on_track_done
+        self.results: dict[int, RipResult] = {}
+        self._seen_done: set[int] = set()
+
+    async def finalize(self, idx: int) -> None:
+        """Stat + hash the produced WAV; fire callback once."""
+        if idx in self.results:
+            return
+        wav_path = self._output_dir / f"track{idx:02d}.wav"
+        if not wav_path.exists():
+            return
+        try:
+            size = wav_path.stat().st_size
+        except OSError as exc:  # pragma: no cover — race window after exists() returned True
+            logger.warning("stat failed track=%d path=%s err=%s", idx, wav_path, exc)
+            return
+        digest = await sha256_file(wav_path)
+        result = RipResult(ok=True, output_path=wav_path, size_bytes=size, sha256=digest)
+        self.results[idx] = result
+        if self._on_track_done is not None:
+            await self._on_track_done(idx, result)
+
+    async def fail_remaining(self, error: str) -> None:
+        """Build + fire RipResult(ok=False) for every track not yet finalized."""
+        for idx in self._track_indexes:
+            if idx in self.results:
+                continue
+            result = RipResult(ok=False, error=error)
+            self.results[idx] = result
+            if self._on_track_done is not None:
+                await self._on_track_done(idx, result)
+
+    async def note_line(self, line: str) -> None:
+        """Note a track abcde logged as read, then finalize every logged track whose WAV has landed."""
+        m = _TRACK_DONE_RE.search(line)
+        if m:
+            self._seen_done.add(int(m.group(1)))
+            logger.info("abcde finished track %s", m.group(1))
+        # Sweep any track whose log signaled done but whose file
+        # wasn't yet on disk when we last looked. The `move` action
+        # runs after `read`; the WAV may land a few hundred ms after
+        # the "Reading...done" line.
+        for idx in list(self._seen_done):
+            if idx not in self.results:
+                await self.finalize(idx)
+
+    async def finalize_pending(self) -> None:
+        """Give every requested track still without a result one more try at finalizing."""
+        for idx in self._track_indexes:
+            if idx not in self.results:
+                await self.finalize(idx)
+
+
 async def rip_cd(
     device_path: str,
     output_dir: Path,
@@ -127,47 +186,17 @@ async def rip_cd(
 
     logger.info("abcde rip device=%s output_dir=%s", device_path, output_dir)
 
-    results: dict[int, RipResult] = {}
-
-    async def _finalize_track(idx: int) -> None:
-        """Stat + hash the produced WAV; fire callback once."""
-        if idx in results:
-            return
-        wav_path = output_dir / f"track{idx:02d}.wav"
-        if not wav_path.exists():
-            return
-        try:
-            size = wav_path.stat().st_size
-        except OSError as exc:  # pragma: no cover — race window after exists() returned True
-            logger.warning("stat failed track=%d path=%s err=%s", idx, wav_path, exc)
-            return
-        digest = await sha256_file(wav_path)
-        result = RipResult(ok=True, output_path=wav_path, size_bytes=size, sha256=digest)
-        results[idx] = result
-        if on_track_done is not None:
-            await on_track_done(idx, result)
-
-    async def _fail_remaining(error: str) -> None:
-        """Build + fire RipResult(ok=False) for every track not yet finalized."""
-        for idx in track_indexes:
-            if idx in results:
-                continue
-            result = RipResult(ok=False, error=error)
-            results[idx] = result
-            if on_track_done is not None:
-                await on_track_done(idx, result)
+    tracks = _CdTracks(output_dir, track_indexes, on_track_done)
 
     try:
         proc = await _spawn_abcde(device_path, conf_path, output_dir)
     except FileNotFoundError as e:
         conf_path.unlink(missing_ok=True)
-        await _fail_remaining(f"abcde not on PATH: {e}")
-        return results
+        await tracks.fail_remaining(f"abcde not on PATH: {e}")
+        return tracks.results
 
     stderr_buf: list[str] = []
     stderr_task = asyncio.create_task(_drain_stderr(proc.stderr, stderr_buf))
-
-    seen_done_in_log: set[int] = set()
 
     async def _stream_and_wait() -> int:
         """Stream abcde's stdout line-by-line; sweep finished tracks per line."""
@@ -177,17 +206,7 @@ async def rip_cd(
             if not line_b:
                 break
             line = line_b.decode(errors="replace").rstrip()
-            m = _TRACK_DONE_RE.search(line)
-            if m:
-                seen_done_in_log.add(int(m.group(1)))
-                logger.info("abcde finished track %s", m.group(1))
-            # Sweep any track whose log signaled done but whose file
-            # wasn't yet on disk when we last looked. The `move` action
-            # runs after `read`; the WAV may land a few hundred ms after
-            # the "Reading...done" line.
-            for idx in list(seen_done_in_log):
-                if idx not in results:
-                    await _finalize_track(idx)
+            await tracks.note_line(line)
         return await proc.wait()
 
     rc: int
@@ -211,27 +230,25 @@ async def rip_cd(
         conf_path.unlink(missing_ok=True)
 
     if timed_out:
-        await _fail_remaining(f"abcde timed out after {CD_RIP_TIMEOUT_SECONDS}s")
-        return results
+        await tracks.fail_remaining(f"abcde timed out after {CD_RIP_TIMEOUT_SECONDS}s")
+        return tracks.results
 
     # Post-wait sweep: tracks whose "Reading...done" appeared in the
     # final batch of output (or whose WAV landed only after the last
     # line was read) get one more chance to finalize before we fail
     # them.
-    for idx in track_indexes:
-        if idx not in results:
-            await _finalize_track(idx)
+    await tracks.finalize_pending()
 
     if rc != 0:
         stderr = "\n".join(stderr_buf).strip()
         msg = stderr[-400:] if stderr else f"exit={rc}"
-        await _fail_remaining(f"abcde failed: {msg}")
-        return results
+        await tracks.fail_remaining(f"abcde failed: {msg}")
+        return tracks.results
 
     # Successful exit but a particular WAV never landed — likely a per-track
     # read failure abcde gave up on quietly. Fail just that track.
-    await _fail_remaining("abcde did not produce the expected wav file")
-    return results
+    await tracks.fail_remaining("abcde did not produce the expected wav file")
+    return tracks.results
 
 
 async def _drain_stderr(stream: asyncio.StreamReader | None, buf: list[str]) -> None:

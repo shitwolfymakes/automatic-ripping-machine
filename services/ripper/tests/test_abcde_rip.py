@@ -522,3 +522,102 @@ async def test_spawn_abcde_runs_abcde_in_its_own_session_from_the_output_dir(mon
         "start_new_session": True,
     }
     assert proc is fake
+
+
+def _recording_tracks(tmp_path: Path, indexes: list[int], *, with_callback: bool = True):
+    calls: list[tuple[int, RipResult]] = []
+
+    async def on_done(idx: int, result: RipResult) -> None:
+        calls.append((idx, result))
+
+    tracks = abcde_rip._CdTracks(tmp_path, indexes, on_done if with_callback else None)
+    return tracks, calls
+
+
+async def test_cd_tracks_finalize_records_the_wav_and_fires_the_callback_once(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    tracks, calls = _recording_tracks(tmp_path, [1])
+
+    await tracks.finalize(1)
+    first = tracks.results[1]
+    await tracks.finalize(1)
+
+    assert first.ok is True
+    assert first.size_bytes == 3
+    assert first.sha256 == hashlib.sha256(b"abc").hexdigest()
+    assert tracks.results[1] is first
+    assert calls == [(1, first)]
+
+
+async def test_cd_tracks_finalize_without_a_wav_leaves_no_result(tmp_path):
+    tracks, calls = _recording_tracks(tmp_path, [1])
+
+    await tracks.finalize(1)
+
+    assert tracks.results == {}
+    assert calls == []
+
+
+async def test_cd_tracks_finalize_without_a_callback_still_records_the_result(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    tracks, _ = _recording_tracks(tmp_path, [1], with_callback=False)
+
+    await tracks.finalize(1)
+
+    assert tracks.results[1].ok is True
+
+
+async def test_cd_tracks_note_line_ignores_lines_that_are_not_track_done(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    tracks, calls = _recording_tracks(tmp_path, [1])
+
+    await tracks.note_line("Grabbing entire CD...")
+
+    assert tracks.results == {}
+    assert calls == []
+
+
+async def test_cd_tracks_note_line_finalizes_a_logged_track_once_its_wav_lands(tmp_path):
+    tracks, calls = _recording_tracks(tmp_path, [1])
+
+    await tracks.note_line(_done_line(1))
+    assert tracks.results == {}
+
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    await tracks.note_line("some later line")
+
+    assert list(tracks.results) == [1]
+    assert [idx for idx, _ in calls] == [1]
+
+
+async def test_cd_tracks_fail_remaining_skips_finalized_tracks(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    tracks, calls = _recording_tracks(tmp_path, [1, 2])
+    await tracks.finalize(1)
+
+    await tracks.fail_remaining("boom")
+
+    assert tracks.results[1].ok is True
+    assert tracks.results[2].ok is False
+    assert tracks.results[2].error == "boom"
+    assert [idx for idx, _ in calls] == [1, 2]
+
+
+async def test_cd_tracks_fail_remaining_without_a_callback_records_failures(tmp_path):
+    tracks, _ = _recording_tracks(tmp_path, [1], with_callback=False)
+
+    await tracks.fail_remaining("boom")
+
+    assert tracks.results[1].ok is False
+
+
+async def test_cd_tracks_finalize_pending_finalizes_only_tracks_without_a_result(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    (tmp_path / "track02.wav").write_bytes(b"abcd")
+    tracks, calls = _recording_tracks(tmp_path, [1, 2, 3])
+    await tracks.finalize(1)
+
+    await tracks.finalize_pending()
+
+    assert sorted(tracks.results) == [1, 2]
+    assert [idx for idx, _ in calls] == [1, 2]
