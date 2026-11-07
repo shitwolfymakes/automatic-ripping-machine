@@ -34,7 +34,13 @@ from arm_common.schemas import TrackView
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
-from arm_ripper.rip.optical_rip import _eligible_source_indexes, _first_eligible_track, _index_tracks, _no_output_error
+from arm_ripper.rip.optical_rip import (
+    _eligible_source_indexes,
+    _finished_file,
+    _first_eligible_track,
+    _index_tracks,
+    _no_output_error,
+)
 from arm_ripper.rip.result import RipResult
 
 
@@ -1750,6 +1756,36 @@ def test_no_output_error_treats_a_track_of_unknown_length_as_producing_nothing()
 def test_no_output_error_reports_an_ineligible_title_as_not_eligible() -> None:
     track = _track(3, duration_seconds=None)
     assert _no_output_error(3, track, 60, [1]) == "makemkvcon produced no output for title 3 (eligible=False)"
+
+
+def test_finished_file_returns_the_file_at_the_position_and_its_size(tmp_path) -> None:
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"abc")
+    assert _finished_file(tmp_path, 0, 0) == (tmp_path / "Disc_t00.mkv", 3)
+
+
+def test_finished_file_indexes_the_files_in_their_tnn_order(tmp_path) -> None:
+    (tmp_path / "Disc_t01.mkv").write_bytes(b"second")
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"1st")
+    assert _finished_file(tmp_path, 7, 1) == (tmp_path / "Disc_t01.mkv", 6)
+
+
+def test_finished_file_is_none_and_logs_when_the_position_is_past_the_end(tmp_path, caplog) -> None:
+    (tmp_path / "Disc_t00.mkv").write_bytes(b"abc")
+    with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
+        assert _finished_file(tmp_path, 4, 1) is None
+    assert [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG] == [
+        "on_title_done: file for source_idx=4 position=1 not on disk yet; deferring"
+    ]
+
+
+def test_finished_file_is_none_and_warns_when_the_file_cannot_be_stat_ed(tmp_path, caplog) -> None:
+    dangling = tmp_path / "Disc_t00.mkv"
+    dangling.symlink_to(tmp_path / "missing_target.mkv")
+    with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
+        assert _finished_file(tmp_path, 0, 0) is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert warnings[0].getMessage().startswith(f"on_title_done: stat failed source_idx=0 path={dangling} err=")
 
 
 def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:

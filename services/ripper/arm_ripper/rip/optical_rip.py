@@ -73,6 +73,33 @@ def _no_output_error(title_idx: int, track: TrackView, min_length_seconds: int, 
     return f"makemkvcon produced no output for title {title_idx} (eligible={title_idx in eligible})"
 
 
+def _finished_file(output_dir: Path, title_idx: int, position: int) -> tuple[Path, int] | None:
+    """The file MakeMKV wrote at this output position and its size; None, after logging why, when it isn't on disk
+    yet or can't be stat'ed."""
+    files = output_files_in_rip_order(output_dir)
+    if position >= len(files):
+        # File not on disk yet — defer to the post-rip loop. Should
+        # be rare: MakeMKV finalises before emitting the next PRGC.
+        logger.debug(
+            "on_title_done: file for source_idx=%d position=%d not on disk yet; deferring",
+            title_idx,
+            position,
+        )
+        return None
+    file_path = files[position]
+    try:
+        size = file_path.stat().st_size
+    except OSError as exc:
+        logger.warning(
+            "on_title_done: stat failed source_idx=%d path=%s err=%s",
+            title_idx,
+            file_path,
+            exc,
+        )
+        return None
+    return file_path, size
+
+
 class _OpticalRip:
     """One single-invocation DVD/BD rip: the per-title callbacks makemkvcon's stream fires, and the attribution after it
     exits."""
@@ -212,27 +239,10 @@ class _OpticalRip:
             # MakeMKV announced a title we didn't list as eligible —
             # nothing to attribute live; the post-rip loop handles it.
             return
-        files = output_files_in_rip_order(self._output_dir)
-        if position >= len(files):
-            # File not on disk yet — defer to the post-rip loop. Should
-            # be rare: MakeMKV finalises before emitting the next PRGC.
-            logger.debug(
-                "on_title_done: file for source_idx=%d position=%d not on disk yet; deferring",
-                title_idx,
-                position,
-            )
+        found = _finished_file(self._output_dir, title_idx, position)
+        if found is None:
             return
-        file_path = files[position]
-        try:
-            size = file_path.stat().st_size
-        except OSError as exc:
-            logger.warning(
-                "on_title_done: stat failed source_idx=%d path=%s err=%s",
-                title_idx,
-                file_path,
-                exc,
-            )
-            return
+        file_path, size = found
         await self._ensure_started(title_idx, track)
         result = RipResult(
             ok=True,
