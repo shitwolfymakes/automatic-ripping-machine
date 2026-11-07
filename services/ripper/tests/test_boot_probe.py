@@ -5,6 +5,7 @@ probe makes the right control-flow decisions before handing off.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import httpx
@@ -37,10 +38,14 @@ class FakeBackendClient:
         in_flight: JobView | None = None,
         in_flight_raises: Exception | None = None,
         held: HeldJobView | None = None,
+        held_raises: Exception | None = None,
+        abandon_raises: Exception | None = None,
     ) -> None:
         self._in_flight = in_flight
         self._in_flight_raises = in_flight_raises
         self._held = held
+        self._held_raises = held_raises
+        self._abandon_raises = abandon_raises
         self.in_flight_calls: list[str] = []
         self.held_calls: list[str] = []
         self.recovery_abandon_calls: list[str] = []
@@ -55,10 +60,14 @@ class FakeBackendClient:
 
     async def get_held_job(self, drive_id: str) -> HeldJobView | None:
         self.held_calls.append(drive_id)
+        if self._held_raises is not None:
+            raise self._held_raises
         return self._held
 
     async def recovery_abandon(self, job_id: str) -> JobView:
         self.recovery_abandon_calls.append(job_id)
+        if self._abandon_raises is not None:
+            raise self._abandon_raises
         assert self._held is not None
         return self._held.job
 
@@ -194,6 +203,87 @@ async def test_in_flight_lookup_http_error_swallowed() -> None:
     await boot_probe(client, "drv_x", "/dev/sr0", controller)  # type: ignore[arg-type]
 
     assert controller.resume_calls == []
+
+
+def _records(caplog: pytest.LogCaptureFixture) -> list[tuple[str, int, str]]:
+    return [(r.name, r.levelno, r.getMessage()) for r in caplog.records if r.name == "arm_ripper.recovery"]
+
+
+async def test_ioctl_oserror_logs_warning_and_leaves_raw_dir(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    def _boom(_path: str) -> DriveState:
+        raise OSError("no such device")
+
+    monkeypatch.setattr(recovery_module, "read_drive_status", _boom)
+    raw_dir = tmp_path / "job_resume"
+    raw_dir.mkdir()
+    client = FakeBackendClient(in_flight=_make_view())
+    controller = FakeController()
+
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.recovery"):
+        await boot_probe(client, "drv_x", "/dev/sr0", controller)  # type: ignore[arg-type]
+
+    assert raw_dir.exists()
+    assert controller.resume_calls == []
+    assert client.resume_calls == []
+    assert client.held_calls == []
+    assert _records(caplog) == [("arm_ripper.recovery", logging.WARNING, "boot probe: ioctl failed: no such device")]
+
+
+async def test_held_lookup_http_error_logs_warning_and_stops(caplog: pytest.LogCaptureFixture) -> None:
+    client = FakeBackendClient(held_raises=httpx.ConnectError("backend down"))
+    controller = FakeController()
+
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.recovery"):
+        await boot_probe(client, "drv_x", "/dev/sr0", controller)  # type: ignore[arg-type]
+
+    assert client.held_calls == ["drv_x"]
+    assert client.recovery_abandon_calls == []
+    assert controller.recover_held_calls == []
+    assert controller.resume_calls == []
+    assert _records(caplog) == [
+        ("arm_ripper.recovery", logging.DEBUG, "boot probe: no in-flight RIPPING job for drive_id=drv_x"),
+        ("arm_ripper.recovery", logging.WARNING, "boot probe: held-job lookup failed: backend down"),
+    ]
+
+
+async def test_re_park_failure_logged_with_traceback_not_propagated(caplog: pytest.LogCaptureFixture) -> None:
+    client = FakeBackendClient(held=_held(paused=True))
+    controller = FakeController()
+    controller.raises = RuntimeError("kaboom")
+
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.recovery"):
+        await boot_probe(client, "drv_x", "/dev/sr0", controller)  # type: ignore[arg-type]
+
+    assert controller.recover_held_calls == [("job_x", "/dev/sr0")]
+    assert client.recovery_abandon_calls == []
+    assert controller.resume_calls == []
+    assert _records(caplog)[-1] == (
+        "arm_ripper.recovery",
+        logging.ERROR,
+        "boot probe: re-park failed for job_id=job_x: kaboom",
+    )
+    failure = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(failure) == 1
+    assert failure[0].exc_info is not None
+
+
+async def test_recovery_abandon_http_error_logs_warning_not_propagated(caplog: pytest.LogCaptureFixture) -> None:
+    client = FakeBackendClient(held=_held(paused=False), abandon_raises=httpx.ConnectError("backend down"))
+    controller = FakeController()
+
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.recovery"):
+        await boot_probe(client, "drv_x", "/dev/sr0", controller)  # type: ignore[arg-type]
+
+    assert client.recovery_abandon_calls == ["job_x"]
+    assert controller.recover_held_calls == []
+    assert controller.resume_calls == []
+    assert _records(caplog)[-1] == (
+        "arm_ripper.recovery",
+        logging.WARNING,
+        "boot probe: recovery-abandon failed for job_id=job_x: backend down",
+    )
 
 
 async def test_wipe_raw_dir_idempotent_when_missing(tmp_path: Path) -> None:
