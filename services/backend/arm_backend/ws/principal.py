@@ -15,7 +15,7 @@ import jwt
 
 from arm_backend.auth import check_service_token, looks_like_jwt
 from arm_backend.jwt_utils import verify_access_token
-from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.constants import GUEST_USERNAME
 
 PrincipalKind = Literal["ripper", "transcoder"]
 

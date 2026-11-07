@@ -941,7 +941,7 @@ async def test_env_for_preset_encoder_has_no_encoder_var() -> None:
 
 
 async def test_max_parallel_read_from_config_row() -> None:
-    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config
 
     db = _build_db(gpus=[])
@@ -955,7 +955,7 @@ async def test_max_parallel_read_from_config_row() -> None:
 
 
 async def test_max_parallel_falls_back_to_env_when_unseeded() -> None:
-    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config
 
     db = _build_db(gpus=[])

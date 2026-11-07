@@ -8,8 +8,8 @@ config signing-key back-fill, `_insert_missing` idempotency) and
 from __future__ import annotations
 
 
+from arm_backend.constants import GUEST_USERNAME
 from arm_backend.seeders import (
-    GUEST_USERNAME,
     _seed_admin_user,
     _seed_guest_user,
 )

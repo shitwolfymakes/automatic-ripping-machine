@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, settings
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.container_logging import log_config
 from arm_backend.docker_client import HealingDockerClient
 from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
@@ -119,7 +120,6 @@ async def max_parallel_transcodes(db: AsyncSession, *, default: int | None = Non
     Transcoding). Falls back to `default` (the caller's env-derived value)
     only while the config row predates the column (the seeder backfills it
     on the next boot)."""
-    from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: PLC0415 — avoid module cycle
 
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None or cfg.max_parallel_transcodes is None:

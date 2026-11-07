@@ -21,6 +21,7 @@ from typing import Any, Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import (
     NEVER_OPTIONAL,
@@ -377,7 +378,6 @@ async def transcode_enabled_now(db: AsyncSession) -> bool:
     migration 0037, before the seeder's backfill) reads as enabled so
     upgrades change nothing."""
     from arm_backend.config import effective_transcode_capable, settings  # noqa: PLC0415 - avoid module cycle
-    from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: PLC0415 - avoid module cycle
 
     if not effective_transcode_capable(settings):
         return False

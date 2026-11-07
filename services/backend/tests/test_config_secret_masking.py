@@ -17,7 +17,7 @@ import pytest
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import config as config_router
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, DiscType, Job, JobStatus, RetentionPolicy, User
 from arm_common.secrets import HIDDEN_SECRET
 

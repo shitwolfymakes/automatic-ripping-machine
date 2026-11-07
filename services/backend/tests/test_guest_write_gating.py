@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.routers import (
     auth as auth_router,
     config as config_router,

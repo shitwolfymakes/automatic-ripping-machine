@@ -34,7 +34,7 @@ from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured
 from arm_backend.job_abandon import abandon_job_transition
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import (
     Config,
     Drive,

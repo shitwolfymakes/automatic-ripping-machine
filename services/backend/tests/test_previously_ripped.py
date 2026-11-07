@@ -25,7 +25,7 @@ from arm_backend.metadata.base import MetadataResult
 from arm_backend.routers import config as config_router
 from arm_backend.routers import jobs as jobs_router
 from arm_backend.routers import ripper as ripper_router
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import (
     Config,
     DiscFingerprint,

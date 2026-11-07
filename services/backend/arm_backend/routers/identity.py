@@ -41,7 +41,7 @@ from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
 from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.jobs import _get_hub, _get_stage_runner
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, User
 from arm_common.models import Track

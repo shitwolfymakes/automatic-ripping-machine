@@ -4,7 +4,7 @@ import pytest
 
 
 from arm_backend.config import settings
-from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.constants import GUEST_USERNAME
 from arm_backend.ws.principal import (
     AuthError,
     ServicePrincipal,

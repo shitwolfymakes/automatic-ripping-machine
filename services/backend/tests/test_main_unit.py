@@ -242,7 +242,7 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
     from fastapi import FastAPI
 
     from arm_backend.identity.sources import thediscdb_snapshot as snap
-    from arm_backend.seeders import CONFIG_SINGLETON_ID
+    from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config, RetentionPolicy
 
     from tests._fakes import FakeSession

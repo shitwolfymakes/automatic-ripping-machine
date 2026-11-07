@@ -21,7 +21,7 @@ from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common.disc_shape import looks_episodic
 from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate

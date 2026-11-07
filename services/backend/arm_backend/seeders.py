@@ -35,6 +35,10 @@ from arm_common import (
     TranscodeTool,
 )
 
+from arm_backend.constants import ADMIN_USERNAME, CONFIG_SINGLETON_ID, GUEST_USERNAME
+from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
+from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
+
 logger = logging.getLogger("arm_backend.seeders")
 
 FIRST_BOOT_LOG = Path("/logs/first-boot.log")
@@ -42,9 +46,7 @@ FIRST_BOOT_LOG = Path("/logs/first-boot.log")
 
 # --- Admin user ---------------------------------------------------------------
 
-ADMIN_USERNAME = "admin"
 ADMIN_DEFAULT_PASSWORD = "admin"
-GUEST_USERNAME = "guest"
 
 
 async def _seed_admin_user(session: AsyncSession) -> None:
@@ -100,8 +102,6 @@ async def _seed_guest_user(session: AsyncSession) -> None:
 
 # --- Config singleton ---------------------------------------------------------
 
-CONFIG_SINGLETON_ID = 1
-
 
 async def _seed_config_singleton(session: AsyncSession) -> None:
     from arm_backend.config import settings  # noqa: PLC0415 — avoid import cycle at module load
@@ -154,12 +154,6 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
 
 
 async def _seed_inapp_channel(session: AsyncSession) -> None:
-    # Local imports to avoid the seeders ↔ notification_dispatcher cycle
-    # (notification_dispatcher imports CONFIG_SINGLETON_ID from seeders at
-    # module level; a top-level import here would be circular).
-    from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES  # noqa: PLC0415
-    from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID  # noqa: PLC0415
-
     existing = (
         await session.execute(select(NotificationChannel).where(col(NotificationChannel.id) == INBOX_CHANNEL_ID))
     ).scalar_one_or_none()

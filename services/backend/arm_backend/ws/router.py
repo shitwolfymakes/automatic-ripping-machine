@@ -23,7 +23,7 @@ from sqlmodel import col, select
 
 from arm_backend.config import settings
 from arm_backend.db import SessionLocal
-from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.constants import GUEST_USERNAME
 from arm_backend.ws.authz import can_publish, can_subscribe
 from arm_backend.ws.hub import WSHub
 from arm_backend.ws.principal import (

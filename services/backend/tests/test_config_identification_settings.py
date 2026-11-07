@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from arm_backend.db import get_session  # noqa: E402
 from arm_backend.jwt_utils import issue_access_token  # noqa: E402
 from arm_backend.routers import config as config_router  # noqa: E402
-from arm_backend.seeders import CONFIG_SINGLETON_ID  # noqa: E402
+from arm_backend.constants import CONFIG_SINGLETON_ID  # noqa: E402
 from arm_common import Config, RetentionPolicy, User  # noqa: E402
 
 from tests._fakes import FakeSession  # noqa: E402

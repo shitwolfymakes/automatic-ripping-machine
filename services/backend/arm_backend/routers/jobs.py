@@ -35,7 +35,7 @@ from arm_backend.metadata.base import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._params import JobIdParam
 from arm_backend.routers.logs import per_job_log_path
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,

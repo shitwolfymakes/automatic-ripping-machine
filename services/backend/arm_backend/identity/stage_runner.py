@@ -62,7 +62,7 @@ from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import ResolveOutcome
 from arm_backend.identity.proposals import claims_of
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, JobStatus, Track
 from arm_common.schemas import ExternalIds

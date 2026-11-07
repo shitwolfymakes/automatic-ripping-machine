@@ -27,7 +27,7 @@ from arm_backend.metadata.details_cache import TtlCache
 from arm_backend.metadata.facts import facts_for
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.sources import MUSICBRAINZ_USER_AGENT, OnlineSource, capability
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, User
 from arm_common.schemas import (
     MetadataCandidate,

@@ -21,7 +21,7 @@ import pytest
 
 from arm_backend.config import settings
 from arm_backend.jwt_utils import issue_access_token
-from arm_backend.seeders import GUEST_USERNAME
+from arm_backend.constants import GUEST_USERNAME
 from arm_backend.ws import router as ws_router
 from arm_common import (
     Drive,

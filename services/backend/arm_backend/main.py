@@ -64,7 +64,8 @@ from arm_backend.routers import (
     transcodes,
     users as users_router,
 )
-from arm_backend.seeders import CONFIG_SINGLETON_ID, run_seeders
+from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend.seeders import run_seeders
 from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub

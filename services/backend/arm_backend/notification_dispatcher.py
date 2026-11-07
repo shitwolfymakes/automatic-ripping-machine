@@ -48,7 +48,7 @@ from sqlmodel import col, select
 from arm_backend.config import Settings
 from arm_backend.notification_format import format_event
 from arm_backend.notifications.message import Message, NotificationListener
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Event, Job, with_log_context
 
 if TYPE_CHECKING:

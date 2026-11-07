@@ -43,7 +43,7 @@ from arm_backend.identity.sources.registry import (
     search_provider_setting,
 )
 from arm_backend.makemkv_status import makemkv_state_detail
-from arm_backend.seeders import CONFIG_SINGLETON_ID
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, SessionApplication, SessionApplicationStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES, PreviouslyRippedAction
