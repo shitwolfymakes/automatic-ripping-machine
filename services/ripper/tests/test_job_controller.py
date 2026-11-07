@@ -1453,3 +1453,109 @@ async def test_patch_track_rejected_4xx_gives_up(monkeypatch, caplog):
     assert errors[0].getMessage().startswith("PATCH track trk_1 rejected by backend (")
     assert errors[0].getMessage().endswith("); giving up")
     assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
+
+# --- config lookup failure, eject back-off, unfinished tracks ---
+
+
+async def test_safe_get_ripper_config_returns_config_on_success():
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+
+    config = await controller._safe_get_ripper_config()
+
+    assert isinstance(config, RipperConfigView)
+    assert client.get_ripper_config_calls == 1
+
+
+async def test_safe_get_ripper_config_returns_none_and_warns_on_http_error(caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    client = FakeClient()
+    client.get_ripper_config_error = httpx.ConnectError("boom")
+    controller = JobController(client, "drv_test")
+
+    assert await controller._safe_get_ripper_config() is None
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [r.getMessage() for r in warnings] == ["get_ripper_config failed (boom); keeping countdown suspended"]
+
+
+async def test_eject_sleeps_for_positive_delay_before_retrying(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.5))
+    sleeps: list[float] = []
+
+    async def _record_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr(jc_module.asyncio, "sleep", _record_sleep)
+    results = iter([(0, ""), (1, "busy"), (0, "")])  # umount, eject 1 fails, eject 2 succeeds
+    calls: list[tuple[str, ...]] = []
+
+    async def _fake_run(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
+        calls.append(argv)
+        return next(results)
+
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    controller._run_command = _fake_run  # type: ignore[method-assign]
+    await controller._eject_with_retry("/dev/sr0")
+
+    assert sleeps == [0.5]
+    assert [c[0] for c in calls] == ["umount", "eject", "eject"]
+    messages = [(r.levelno, r.getMessage()) for r in caplog.records]
+    assert (logging.WARNING, "eject /dev/sr0 attempt 1 failed (rc=1): busy") in messages
+    assert (logging.INFO, "ejected /dev/sr0 on attempt 2") in messages
+
+
+def _unfinished_track(idx: int):
+    from arm_common.enums import TrackKind, TrackStatus
+
+    return TrackView(
+        id=f"trk_{idx}",
+        job_id="job_test",
+        kind=TrackKind.VIDEO_TITLE,
+        index=idx,
+        source_ref=str(idx),
+        status=TrackStatus.QUEUED,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=1800,
+        attempts=0,
+        last_error=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("resumes", "reason"),
+    [
+        (0, "the drive disconnected mid-rip and did not come back within 180s"),
+        (
+            jc_module.MAX_DEVICE_RESUMES,
+            f"the drive disconnected mid-rip {jc_module.MAX_DEVICE_RESUMES + 1} times; giving up",
+        ),
+    ],
+)
+async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, resumes, reason):
+    from arm_common.enums import TrackStatus
+
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    controller = JobController(FakeClient(), "drv_test")
+    patches: list[tuple[str, dict[str, object]]] = []
+
+    async def _record(track_id: str, **fields: object) -> None:
+        patches.append((track_id, fields))
+
+    controller._patch_track_with_retry = _record  # type: ignore[method-assign]
+    tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
+    started = {"trk_1"}
+
+    await controller._fail_unfinished(tracks, {"trk_1", "trk_2"}, started, resumes)
+
+    assert patches == [
+        ("trk_1", {"status": TrackStatus.FAILED, "last_error": reason}),
+        ("trk_2", {"status": TrackStatus.IN_PROGRESS}),
+        ("trk_2", {"status": TrackStatus.FAILED, "last_error": reason}),
+    ]
+    assert started == {"trk_1", "trk_2"}
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors == [f"{reason}; 2 title(s) not ripped"]
