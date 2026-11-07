@@ -347,22 +347,15 @@ class DrivePoller:
             # Transitions are keyed on state so a node that resolves but answers
             # ENXIO cannot flap between "present" and "absent" every poll. They run
             # BEFORE detector.update so a reset re-arms for this very reading.
-            if state is DriveState.ABSENT and self._last_state is not DriveState.ABSENT:
+            if self._went_absent(state):
                 logger.warning("drive absent (by_id=%s) — polling until it returns", settings.ARM_DRIVE_BY_ID)
-            elif self._last_state is DriveState.ABSENT and state is not DriveState.ABSENT:
+            elif self._came_back(state):
                 # A None resolution empties the handle, which reads as ABSENT, so a present drive has a resolution.
                 assert resolved is not None
-                logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
-                self._detector.reset()
-                # Report the node BEFORE the probe: _on_reattached can run a whole
-                # resumed rip, and the UI must not sit on the stale node for its
-                # entire duration.
-                await _report_node(self._client, self._drive_id, self._handle.current or "")
-                await _on_reattached(self._client, self._drive_id, self._handle, self._controller)
+                await self._reattach(resolved)
             elif moved and not self._handle.absent:
                 assert resolved is not None  # same invariant as the reattach arm above
-                logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
-                await _report_node(self._client, self._drive_id, self._handle.current or "")
+                await self._report_move(resolved)
 
             if state != self._last_state:
                 logger.info("drive state %s -> %s", self._last_state, state)
@@ -377,6 +370,30 @@ class DrivePoller:
                 self._active_task = asyncio.create_task(self._controller.handle_disc_inserted(self._handle.current))
 
             await asyncio.sleep(settings.POLL_INTERVAL_SECONDS)
+
+    def _went_absent(self, state: DriveState) -> bool:
+        """True on the first tick the drive reads ABSENT."""
+        return state is DriveState.ABSENT and self._last_state is not DriveState.ABSENT
+
+    def _came_back(self, state: DriveState) -> bool:
+        """True on the first tick the drive reads present after an ABSENT run."""
+        return self._last_state is DriveState.ABSENT and state is not DriveState.ABSENT
+
+    async def _reattach(self, resolved: ResolvedDevice) -> None:
+        """The drive is back: log where it was found, re-arm insert detection, report its node, then run the reattach
+        recovery."""
+        logger.info("drive present at %s via %s (reattached)", resolved.path, resolved.via)
+        self._detector.reset()
+        # Report the node BEFORE the probe: _on_reattached can run a whole
+        # resumed rip, and the UI must not sit on the stale node for its
+        # entire duration.
+        await _report_node(self._client, self._drive_id, self._handle.current or "")
+        await _on_reattached(self._client, self._drive_id, self._handle, self._controller)
+
+    async def _report_move(self, resolved: ResolvedDevice) -> None:
+        """The drive turned up on a new node: log it and report it to the backend."""
+        logger.info("drive node moved to %s via %s", resolved.path, resolved.via)
+        await _report_node(self._client, self._drive_id, self._handle.current or "")
 
     async def _resolve(self) -> ResolvedDevice | None:
         """Resolve this tick's node from the current hint, counting the ticks the drive has been absent."""
