@@ -34,7 +34,7 @@ from arm_common.schemas import TrackView
 from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
-from arm_ripper.rip.optical_rip import _eligible_source_indexes, _first_eligible_track, _index_tracks
+from arm_ripper.rip.optical_rip import _eligible_source_indexes, _first_eligible_track, _index_tracks, _no_output_error
 from arm_ripper.rip.result import RipResult
 
 
@@ -1730,6 +1730,26 @@ def test_first_eligible_track_is_none_when_nothing_is_eligible() -> None:
 def test_first_eligible_track_is_the_track_of_the_first_eligible_index() -> None:
     by_index = {1: _track(1), 4: _track(4), 7: _track(7)}
     assert _first_eligible_track(by_index, [4, 7]) is by_index[4]
+
+
+def test_no_output_error_says_a_too_short_track_was_skipped() -> None:
+    track = _track(3, duration_seconds=59)
+    assert _no_output_error(3, track, 60, [3]) == "track duration 59s below minlength=60s; makemkvcon skipped it"
+
+
+def test_no_output_error_treats_a_track_at_the_minimum_as_producing_nothing() -> None:
+    track = _track(3, duration_seconds=60)
+    assert _no_output_error(3, track, 60, [3]) == "makemkvcon produced no output for title 3 (eligible=True)"
+
+
+def test_no_output_error_treats_a_track_of_unknown_length_as_producing_nothing() -> None:
+    track = _track(3, duration_seconds=None)
+    assert _no_output_error(3, track, 60, [3]) == "makemkvcon produced no output for title 3 (eligible=True)"
+
+
+def test_no_output_error_reports_an_ineligible_title_as_not_eligible() -> None:
+    track = _track(3, duration_seconds=None)
+    assert _no_output_error(3, track, 60, [1]) == "makemkvcon produced no output for title 3 (eligible=False)"
 
 
 def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:

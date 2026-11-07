@@ -65,6 +65,14 @@ def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[i
     return track_by_index[eligible[0]] if eligible else None
 
 
+def _no_output_error(title_idx: int, track: TrackView, min_length_seconds: int, eligible: list[int]) -> str:
+    """Why a selected title has no result: MakeMKV skipped it as too short, or it produced nothing for it."""
+    duration = track.duration_seconds
+    if duration is not None and duration < min_length_seconds:
+        return f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
+    return f"makemkvcon produced no output for title {title_idx} (eligible={title_idx in eligible})"
+
+
 class _OpticalRip:
     """One single-invocation DVD/BD rip: the per-title callbacks makemkvcon's stream fires, and the attribution after it
     exits."""
@@ -302,17 +310,7 @@ class _OpticalRip:
                 await self._ensure_started(title_idx, track)
                 result = disc_result.titles.get(title_idx)
                 if result is None:
-                    duration = track.duration_seconds
-                    if duration is not None and duration < self._min_length_seconds:
-                        err = (
-                            f"track duration {duration}s below minlength={self._min_length_seconds}s; "
-                            "makemkvcon skipped it"
-                        )
-                    else:
-                        err = (
-                            f"makemkvcon produced no output for title {title_idx} "
-                            f"(eligible={title_idx in self._eligible})"
-                        )
+                    err = _no_output_error(title_idx, track, self._min_length_seconds, self._eligible)
                     await self._on_track_done(track, RipResult(ok=False, error=err))
                     continue
                 output_path = result.output_path
