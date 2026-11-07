@@ -160,6 +160,18 @@ class _CdTracks:
                 await self.finalize(idx)
 
 
+async def _read_until_exit(proc: asyncio.subprocess.Process, tracks: _CdTracks) -> int:
+    """Feed each line of abcde's stdout to `tracks`, then wait for abcde to exit and return its exit code."""
+    assert proc.stdout is not None
+    while True:
+        line_b = await proc.stdout.readline()
+        if not line_b:
+            break
+        line = line_b.decode(errors="replace").rstrip()
+        await tracks.note_line(line)
+    return await proc.wait()
+
+
 async def rip_cd(
     device_path: str,
     output_dir: Path,
@@ -198,21 +210,10 @@ async def rip_cd(
     stderr_buf: list[str] = []
     stderr_task = asyncio.create_task(_drain_stderr(proc.stderr, stderr_buf))
 
-    async def _stream_and_wait() -> int:
-        """Stream abcde's stdout line-by-line; sweep finished tracks per line."""
-        assert proc.stdout is not None
-        while True:
-            line_b = await proc.stdout.readline()
-            if not line_b:
-                break
-            line = line_b.decode(errors="replace").rstrip()
-            await tracks.note_line(line)
-        return await proc.wait()
-
     rc: int
     timed_out = False
     try:
-        rc = await asyncio.wait_for(_stream_and_wait(), timeout=CD_RIP_TIMEOUT_SECONDS)
+        rc = await asyncio.wait_for(_read_until_exit(proc, tracks), timeout=CD_RIP_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         timed_out = True
         rc = -1

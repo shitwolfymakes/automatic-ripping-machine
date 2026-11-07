@@ -621,3 +621,19 @@ async def test_cd_tracks_finalize_pending_finalizes_only_tracks_without_a_result
 
     assert sorted(tracks.results) == [1, 2]
     assert [idx for idx, _ in calls] == [1, 2]
+
+
+async def test_read_until_exit_feeds_every_stdout_line_to_tracks_then_returns_the_exit_code(tmp_path):
+    seen: list[str] = []
+
+    class _RecordingTracks(abcde_rip._CdTracks):
+        async def note_line(self, line: str) -> None:
+            seen.append(line)
+
+    tracks = _RecordingTracks(tmp_path, [1], None)
+    proc = _FakeProc([b"first\n", b"second\n", b"third\n"], returncode=3)
+
+    rc = await abcde_rip._read_until_exit(proc, tracks)  # type: ignore[arg-type]
+
+    assert seen == ["first", "second", "third"]
+    assert rc == 3
