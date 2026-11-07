@@ -596,6 +596,20 @@ async def _run_makemkvcon(
     return await _exit_error(proc, state)
 
 
+def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int) -> list[str]:
+    """The single `makemkvcon mkv … all` argv that rips every title of the disc in one invocation."""
+    return [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        f"--minlength={minlength_seconds}",
+        makemkv_source_url(device_path),
+        "all",
+        str(output_dir),
+    ]
+
+
 async def rip_disc(
     device_path: str,
     output_dir: Path,
@@ -639,16 +653,7 @@ async def rip_disc(
     and are FAILED.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        "makemkvcon",
-        "mkv",
-        "--robot",
-        "--progress=-stdout",
-        f"--minlength={minlength_seconds}",
-        makemkv_source_url(device_path),
-        "all",
-        str(output_dir),
-    ]
+    cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
     logger.info(
         "makemkvcon mkv all device=%s outdir=%s minlength=%ds",
         device_path,

@@ -1010,3 +1010,37 @@ async def test_exit_error_nonzero_without_stderr_reports_the_exit_code(stderr):
     state = makemkv_rip._ParserState()
     error = await makemkv_rip._exit_error(_exited_proc(3, stderr), state)
     assert error == makemkv_rip._compose_error("makemkvcon failed: exit=3", state.diagnostics)
+
+
+def test_mkv_all_command_for_a_device(tmp_path):
+    assert makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120) == [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        "--minlength=120",
+        "dev:/dev/sr0",
+        "all",
+        str(tmp_path),
+    ]
+
+
+def test_mkv_all_command_for_an_iso_file(tmp_path):
+    iso = tmp_path / "movie.iso"
+    iso.write_bytes(b"")
+    assert makemkv_rip._mkv_all_command(str(iso), tmp_path, 300) == [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        "--minlength=300",
+        f"iso:{iso}",
+        "all",
+        str(tmp_path),
+    ]
+
+
+def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_path):
+    cmd = makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120)
+    assert cmd.count("all") == 1
+    assert cmd[-2:] == ["all", str(tmp_path)]
