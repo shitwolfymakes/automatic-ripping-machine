@@ -301,48 +301,7 @@ class _OpticalRip:
                     await self._on_track_done(track, RipResult(ok=False, error=disc_result.overall_error))
                 return
 
-            # Per-title attribution for tracks the live path didn't already
-            # finalise (e.g. below-minlength tracks MakeMKV skipped, or
-            # eligible tracks that didn't produce a file). Tracks already in
-            # `done_emitted` were handed to the hasher by `_on_title_done`
-            # mid-rip and are skipped here to avoid double-PATCHing.
-            # - If rip_disc reports a result for it: use that. (Includes
-            #   ok=False for eligible titles that didn't render — the live
-            #   path can't report failures since it's only triggered by PRGC
-            #   transitions on successful saves.) A successful file goes to
-            #   the hasher like a live one.
-            # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
-            #   never attempted it. FAILED with a clear reason so the operator
-            #   can lower minlength and retry.
-            for title_idx, track in self._track_by_index.items():
-                if title_idx in self._done_emitted:
-                    continue
-                await self._ensure_started(title_idx, track)
-                result = disc_result.titles.get(title_idx)
-                if result is None:
-                    err = _no_output_error(title_idx, track, self._min_length_seconds, self._eligible)
-                    await self._on_track_done(track, RipResult(ok=False, error=err))
-                    continue
-                output_path = result.output_path
-                if not result.ok or output_path is None:
-                    await self._on_track_done(track, result)
-                    continue
-                # Carry duration_seconds through from the scan when MakeMKV
-                # produced the file successfully. rip_disc doesn't measure
-                # durations from the .mkv files, so we forward the scan-time
-                # estimate. `track.duration_seconds` is the post-rip actual
-                # (null until a previous rip set it — usually null here);
-                # `track.expected_duration_seconds` is the scan-time estimate
-                # populated by `select_tracks` at rip-start.
-                if result.duration_seconds is None:
-                    result = RipResult(
-                        ok=True,
-                        output_path=result.output_path,
-                        size_bytes=result.size_bytes,
-                        duration_seconds=track.duration_seconds or track.expected_duration_seconds,
-                    )
-                self._done_emitted.add(title_idx)
-                self._hasher.submit(output_path, result.size_bytes or 0, self._finalise_after_hash(track, result))
+            await self._attribute(disc_result)
 
             await self._hasher.finish(self._on_verify_progress)
         except BaseException:
@@ -350,6 +309,52 @@ class _OpticalRip:
             # hashing files that are about to be wiped.
             self._hasher.cancel()
             raise
+
+    async def _attribute(self, disc_result: RipDiscResult) -> None:
+        """Report each selected track the live path didn't finish, from rip_disc's per-title results; hand each good
+        file to the hasher."""
+        # Per-title attribution for tracks the live path didn't already
+        # finalise (e.g. below-minlength tracks MakeMKV skipped, or
+        # eligible tracks that didn't produce a file). Tracks already in
+        # `done_emitted` were handed to the hasher by `_on_title_done`
+        # mid-rip and are skipped here to avoid double-PATCHing.
+        # - If rip_disc reports a result for it: use that. (Includes
+        #   ok=False for eligible titles that didn't render — the live
+        #   path can't report failures since it's only triggered by PRGC
+        #   transitions on successful saves.) A successful file goes to
+        #   the hasher like a live one.
+        # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
+        #   never attempted it. FAILED with a clear reason so the operator
+        #   can lower minlength and retry.
+        for title_idx, track in self._track_by_index.items():
+            if title_idx in self._done_emitted:
+                continue
+            await self._ensure_started(title_idx, track)
+            result = disc_result.titles.get(title_idx)
+            if result is None:
+                err = _no_output_error(title_idx, track, self._min_length_seconds, self._eligible)
+                await self._on_track_done(track, RipResult(ok=False, error=err))
+                continue
+            output_path = result.output_path
+            if not result.ok or output_path is None:
+                await self._on_track_done(track, result)
+                continue
+            # Carry duration_seconds through from the scan when MakeMKV
+            # produced the file successfully. rip_disc doesn't measure
+            # durations from the .mkv files, so we forward the scan-time
+            # estimate. `track.duration_seconds` is the post-rip actual
+            # (null until a previous rip set it — usually null here);
+            # `track.expected_duration_seconds` is the scan-time estimate
+            # populated by `select_tracks` at rip-start.
+            if result.duration_seconds is None:
+                result = RipResult(
+                    ok=True,
+                    output_path=result.output_path,
+                    size_bytes=result.size_bytes,
+                    duration_seconds=track.duration_seconds or track.expected_duration_seconds,
+                )
+            self._done_emitted.add(title_idx)
+            self._hasher.submit(output_path, result.size_bytes or 0, self._finalise_after_hash(track, result))
 
 
 async def rip_optical(
