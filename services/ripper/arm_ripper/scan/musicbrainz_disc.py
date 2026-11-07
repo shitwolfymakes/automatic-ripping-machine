@@ -28,14 +28,7 @@ async def scan_cd(device_path: str) -> ScanResult | None:
     if not tracks:
         return None
 
-    titles = [ScanTitle(index=number, duration_seconds=seconds) for number, seconds in tracks]
-    return ScanResult(
-        disc_type=DiscType.CD,
-        musicbrainz_disc_id=disc_id,
-        cd_toc=cd_toc,
-        titles=titles,
-        raw={"track_count": len(tracks)},
-    )
+    return _cd_scan_result(disc_id, tracks, cd_toc)
 
 
 def _read_disc(discid: Any, device_path: str) -> tuple[str, list[tuple[int, int]], str | None] | None:
@@ -50,3 +43,15 @@ def _read_disc(discid: Any, device_path: str) -> tuple[str, list[tuple[int, int]
     except Exception as e:  # libdiscid raises a bare DiscError
         logger.info("discid read failed device=%s err=%s", device_path, e)
         return None
+
+
+def _cd_scan_result(disc_id: str, tracks: list[tuple[int, int]], cd_toc: str | None) -> ScanResult:
+    """The scan result for an audio CD: one title per track, the MusicBrainz disc id and TOC, and the track count."""
+    titles = [ScanTitle(index=number, duration_seconds=seconds) for number, seconds in tracks]
+    return ScanResult(
+        disc_type=DiscType.CD,
+        musicbrainz_disc_id=disc_id,
+        cd_toc=cd_toc,
+        titles=titles,
+        raw={"track_count": len(tracks)},
+    )

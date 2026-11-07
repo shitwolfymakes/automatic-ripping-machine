@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 from arm_common import DiscType
-from arm_ripper.scan.musicbrainz_disc import _read_disc, scan_cd
+from arm_ripper.scan.musicbrainz_disc import _cd_scan_result, _read_disc, scan_cd
 
 
 class _FakeTrack:
@@ -188,3 +188,16 @@ def test_read_disc_none_and_logged_when_read_raises(caplog: pytest.LogCaptureFix
     with caplog.at_level(logging.INFO, logger="arm_ripper.scan.musicbrainz_disc"):
         assert _read_disc(fake, "/dev/sr0") is None
     assert [r.getMessage() for r in caplog.records] == ["discid read failed device=/dev/sr0 err=no disc"]
+
+
+def test_cd_scan_result_builds_cd_result_with_titles_in_track_order() -> None:
+    result = _cd_scan_result("abc-", [(1, 180), (2, 240), (3, 300)], "1 3 150 200")
+    assert result.disc_type == DiscType.CD
+    assert result.musicbrainz_disc_id == "abc-"
+    assert result.cd_toc == "1 3 150 200"
+    assert [(t.index, t.duration_seconds) for t in result.titles] == [(1, 180), (2, 240), (3, 300)]
+    assert result.raw == {"track_count": 3}
+
+
+def test_cd_scan_result_keeps_a_none_toc() -> None:
+    assert _cd_scan_result("abc-", [(1, 10)], None).cd_toc is None
