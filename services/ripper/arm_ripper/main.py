@@ -131,6 +131,18 @@ async def maybe_reacquire_current_job(
     await controller.pickup(job, device_path)
 
 
+def _media_status(device_path: str | None) -> DriveMediaStatus:
+    """The media status a heartbeat reports: DETACHED while the drive is absent, LOADED for a file source (an ISO
+    is always present), otherwise what the drive's ioctl probe says.
+    """
+    if device_path is None:
+        return DriveMediaStatus.DETACHED
+    if is_file_source(device_path):
+        return DriveMediaStatus.LOADED
+    status, _ = probe_drive_media(device_path)
+    return status
+
+
 async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
     """Post the current media status to the backend every
     HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
@@ -154,12 +166,7 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHand
     while True:
         try:
             device_path = handle.current
-            if device_path is None:
-                status = DriveMediaStatus.DETACHED
-            elif is_file_source(device_path):
-                status = DriveMediaStatus.LOADED
-            else:
-                status, _ = probe_drive_media(device_path)
+            status = _media_status(device_path)
             await client.heartbeat(drive_id=drive_id, media_status=status)
             if device_path is not None:
                 await maybe_reacquire_current_job(

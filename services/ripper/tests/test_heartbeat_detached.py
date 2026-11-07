@@ -77,3 +77,43 @@ async def test_heartbeat_sees_the_move_without_restart(monkeypatch) -> None:
     with pytest.raises(asyncio.CancelledError):
         await ripper_main.heartbeat_loop(client, "drv_1", h, _Controller())  # type: ignore[arg-type]
     assert probed == ["/dev/sr0", "/dev/sr2"]
+
+
+def _stub_probe(monkeypatch, result=None, exc=None):
+    calls = []
+
+    def probe(path):
+        calls.append(path)
+        if exc is not None:
+            raise exc
+        return result
+
+    monkeypatch.setattr(ripper_main, "probe_drive_media", probe)
+    return calls
+
+
+def test_media_status_absent_drive_is_detached_without_probing(monkeypatch) -> None:
+    calls = _stub_probe(monkeypatch)
+    assert ripper_main._media_status(None) == DriveMediaStatus.DETACHED
+    assert calls == []
+
+
+def test_media_status_file_source_is_loaded_without_probing(monkeypatch) -> None:
+    calls = _stub_probe(monkeypatch)
+    monkeypatch.setattr(ripper_main, "is_file_source", lambda p: p == "/data/x.iso")
+    assert ripper_main._media_status("/data/x.iso") == DriveMediaStatus.LOADED
+    assert calls == []
+
+
+def test_media_status_device_reports_the_probe_status(monkeypatch) -> None:
+    calls = _stub_probe(monkeypatch, result=(DriveMediaStatus.NO_DISC, "detail"))
+    monkeypatch.setattr(ripper_main, "is_file_source", lambda p: False)
+    assert ripper_main._media_status("/dev/sr0") == DriveMediaStatus.NO_DISC
+    assert calls == ["/dev/sr0"]
+
+
+def test_media_status_probe_oserror_propagates(monkeypatch) -> None:
+    _stub_probe(monkeypatch, exc=OSError("gone"))
+    monkeypatch.setattr(ripper_main, "is_file_source", lambda p: False)
+    with pytest.raises(OSError, match="gone"):
+        ripper_main._media_status("/dev/sr0")
