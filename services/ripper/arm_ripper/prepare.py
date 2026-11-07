@@ -49,14 +49,21 @@ class _Reporter:
 
     async def report(self, phase: IsoPreparePhase, progress_pct: int | None, current_file: str | None) -> None:
         now = self._clock()
-        phase_changed = self._last is None or self._last[0] != phase
+        due = self._due(phase, now)
         self._last = (phase, progress_pct, current_file)
-        if not phase_changed and now - self._last_sent_at < self._min_interval:
+        if not due:
             return
         self._last_sent_at = now
         await self._send()
         if self._keepalive_task is None:
             self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+
+    def _due(self, phase: IsoPreparePhase, now: float) -> bool:
+        """Whether a report for `phase` at `now` goes out: always on a phase change (or the first report), otherwise
+        only once `min_interval` has passed since the last send.
+        """
+        phase_changed = self._last is None or self._last[0] != phase
+        return phase_changed or now - self._last_sent_at >= self._min_interval
 
     async def _send(self) -> None:
         assert self._last is not None

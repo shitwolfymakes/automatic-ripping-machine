@@ -101,6 +101,56 @@ async def test_phase_changes_are_sent_and_progress_is_throttled() -> None:
     ]
 
 
+def _reporter(clock: _Clock) -> prepare._Reporter:
+    client: Any = _Client()
+    return prepare._Reporter(client, "drv_iso", min_interval=3.0, keepalive=3600, clock=clock)
+
+
+async def test_due_the_first_report_is_due() -> None:
+    reporter = _reporter(_Clock())
+    assert reporter._due(SCANNING, 1000.0) is True
+
+
+async def test_due_the_same_phase_within_the_interval_is_not_due() -> None:
+    clock = _Clock()
+    reporter = _reporter(clock)
+    await reporter.report(SCANNING, 0, None)  # sent at t=1000
+    try:
+        assert reporter._due(SCANNING, 1002.9) is False
+    finally:
+        await reporter.finish()
+
+
+async def test_due_the_same_phase_exactly_at_the_interval_is_due() -> None:
+    clock = _Clock()
+    reporter = _reporter(clock)
+    await reporter.report(SCANNING, 0, None)
+    try:
+        assert reporter._due(SCANNING, 1003.0) is True
+    finally:
+        await reporter.finish()
+
+
+async def test_due_the_same_phase_after_the_interval_is_due() -> None:
+    clock = _Clock()
+    reporter = _reporter(clock)
+    await reporter.report(SCANNING, 0, None)
+    try:
+        assert reporter._due(SCANNING, 1003.1) is True
+    finally:
+        await reporter.finish()
+
+
+async def test_due_a_phase_change_inside_the_interval_is_due() -> None:
+    clock = _Clock()
+    reporter = _reporter(clock)
+    await reporter.report(SCANNING, 0, None)
+    try:
+        assert reporter._due(EXTRACTING, 1000.1) is True
+    finally:
+        await reporter.finish()
+
+
 async def test_the_current_phase_is_resent_as_a_keepalive_until_finish() -> None:
     """A MakeMKV scan reports nothing for minutes; the keepalive keeps the
     backend's status from ageing out meanwhile."""
