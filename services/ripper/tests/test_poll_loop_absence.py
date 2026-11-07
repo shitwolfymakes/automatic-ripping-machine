@@ -17,7 +17,7 @@ from typing import Any  # noqa: E402
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
-from arm_ripper import main as ripper_main  # noqa: E402
+from arm_ripper import drive_poller  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 from arm_ripper.drive_poll import DriveState  # noqa: E402
 from arm_ripper.drive_resolve import ResolvedDevice  # noqa: E402
@@ -94,19 +94,19 @@ class Script:
             self.i += 1
             await real_sleep(0)  # yield so create_task()'d pipelines actually run
 
-        monkeypatch.setattr(ripper_main, "resolve_drive_device", fake_resolve)
+        monkeypatch.setattr(drive_poller, "resolve_drive_device", fake_resolve)
         # Every node is on this drive's port unless a test says otherwise; the
         # real /sys of the test host must not decide.
-        monkeypatch.setattr(ripper_main, "node_port", lambda node, *, sysfs_root: "pci0/usb1/1-2")
-        monkeypatch.setattr(ripper_main, "read_drive_status", fake_status)
-        monkeypatch.setattr(ripper_main, "boot_probe", fake_boot_probe)
-        monkeypatch.setattr(ripper_main.asyncio, "sleep", tick_sleep)
+        monkeypatch.setattr(drive_poller, "node_port", lambda node, *, sysfs_root: "pci0/usb1/1-2")
+        monkeypatch.setattr(drive_poller, "read_drive_status", fake_status)
+        monkeypatch.setattr(drive_poller, "boot_probe", fake_boot_probe)
+        monkeypatch.setattr(drive_poller.asyncio, "sleep", tick_sleep)
 
     async def run(self) -> None:
         controller: Any = self.controller
         client: Any = self.client
         with pytest.raises(asyncio.CancelledError):
-            await ripper_main.poll_loop(controller, self.handle, client=client, drive_id="drv_1")
+            await drive_poller.poll_loop(controller, self.handle, client=client, drive_id="drv_1")
 
 
 SR0 = ResolvedDevice(path="/dev/sr0", via="by_id")
@@ -215,18 +215,18 @@ async def test_other_errors_still_log_every_poll(monkeypatch, caplog) -> None:
 async def test_port_identity_refreshes_hint_from_backend_while_absent(monkeypatch) -> None:
     """No by-id link: the only way to follow a renumbering is the backend's
     scanner, which keeps device_path current by port. The loop must ask."""
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
     seen_hints: list[str] = []
 
     s = Script(monkeypatch, [(None, None), (None, None), (SR2, DriveState.NO_DISC)])
     s.client.drive_device_path = "/dev/sr2"
-    real = ripper_main.resolve_drive_device
+    real = drive_poller.resolve_drive_device
 
     def spy(by_id, hint, **kw):
         seen_hints.append(hint)
         return real(by_id, hint, **kw)
 
-    monkeypatch.setattr(ripper_main, "resolve_drive_device", spy)
+    monkeypatch.setattr(drive_poller, "resolve_drive_device", spy)
     await s.run()
     assert "/dev/sr2" in seen_hints  # backend-supplied hint was used
 
@@ -236,8 +236,8 @@ async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatc
     ticks must keep using it, not go back to ARM_DRIVE_DEV (gone) and flap
     absent/present every other poll."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_DEV", "/dev/sr0")
     # Present on sr0, then sr0 disappears; the drive now lives at sr2 only.
     s = Script(monkeypatch, [(None, DriveState.NO_DISC)] + [(None, DriveState.DISC_OK)] * 12)
     s.client.drive_device_path = "/dev/sr2"
@@ -249,7 +249,7 @@ async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatc
             return ResolvedDevice(path="/dev/sr0", via="hint")
         return ResolvedDevice(path="/dev/sr2", via="hint") if hint == "/dev/sr2" else None
 
-    monkeypatch.setattr(ripper_main, "resolve_drive_device", hint_aware)
+    monkeypatch.setattr(drive_poller, "resolve_drive_device", hint_aware)
     await s.run()
     absent = [r for r in caplog.records if "drive absent" in r.message]
     reattached = [r for r in caplog.records if "reattached" in r.message]
@@ -265,8 +265,8 @@ async def test_absent_drive_back_on_its_configured_node_is_found_without_the_bac
     back as sr0 while the backend is unreachable. The kept sr2 hint must not
     be the only node tried; ARM_DRIVE_DEV is tried too while absent."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_DEV", "/dev/sr0")
     s = Script(monkeypatch, [(None, DriveState.NO_DISC)] * 12)
     s.client.drive_device_path = "/dev/sr2"
     real_get_drive = s.client.get_drive
@@ -287,7 +287,7 @@ async def test_absent_drive_back_on_its_configured_node_is_found_without_the_bac
             node = None
         return ResolvedDevice(path=hint, via="hint") if hint == node else None
 
-    monkeypatch.setattr(ripper_main, "resolve_drive_device", hint_aware)
+    monkeypatch.setattr(drive_poller, "resolve_drive_device", hint_aware)
     await s.run()
     reattached = [r for r in caplog.records if "reattached" in r.message]
     assert len(reattached) == 2
@@ -299,8 +299,8 @@ async def test_absent_drive_never_takes_its_configured_node_from_another_port(mo
     another drive's. While this drive is absent and the backend is down,
     sr0 on a different port must not be adopted (two rippers, one drive)."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_DEV", "/dev/sr0")
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_DEV", "/dev/sr0")
     s = Script(monkeypatch, [(None, DriveState.NO_DISC)] * 12)
     s.client.drive_device_path = "/dev/sr2"
     real_get_drive = s.client.get_drive
@@ -313,7 +313,7 @@ async def test_absent_drive_never_takes_its_configured_node_from_another_port(mo
     s.client.get_drive = get_drive  # type: ignore[method-assign]
     # This drive is on 1-2 (as sr0, then sr2); from tick 4 sr0 is drive B on 1-3.
     monkeypatch.setattr(
-        ripper_main,
+        drive_poller,
         "node_port",
         lambda node, *, sysfs_root: "pci0/usb1/1-3" if node == "/dev/sr0" and s.i >= 4 else "pci0/usb1/1-2",
     )
@@ -324,7 +324,7 @@ async def test_absent_drive_never_takes_its_configured_node_from_another_port(mo
         node = "/dev/sr2" if 1 < s.i < 4 else "/dev/sr0"
         return ResolvedDevice(path=hint, via="hint") if hint == node else None
 
-    monkeypatch.setattr(ripper_main, "resolve_drive_device", hint_aware)
+    monkeypatch.setattr(drive_poller, "resolve_drive_device", hint_aware)
     await s.run()
     assert s.handle.absent  # sr0 (drive B) was never adopted
 
@@ -333,8 +333,8 @@ async def test_hint_refresh_is_throttled_while_the_drive_stays_absent(monkeypatc
     """The backend's scanner republishes on its own cadence; asking it every
     POLL_INTERVAL adds nothing. Refresh on the first absent tick, then once per
     HEARTBEAT_INTERVAL's worth of ticks."""
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
-    every = ripper_main._hint_refresh_every_n_ticks()
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
+    every = drive_poller._hint_refresh_every_n_ticks()
     assert every > 1  # otherwise this test proves nothing
     # tick 0 present, then 2*every absent ticks.
     s = Script(monkeypatch, [(SR0, DriveState.NO_DISC)] + [(None, None)] * (2 * every))
@@ -348,7 +348,7 @@ async def test_a_node_that_answers_enxio_still_refreshes_the_hint(monkeypatch) -
     """Ruling C: the node resolves but open() says ENXIO. That is absence too,
     and the handle stays populated — so gating on handle.absent would never
     refresh here. Gate on the previous tick's state instead."""
-    monkeypatch.setattr(ripper_main.settings, "ARM_DRIVE_BY_ID", None)
+    monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)
     s = Script(monkeypatch, [(SR0, errno.ENXIO), (SR0, errno.ENXIO)])
     await s.run()
     assert not s.handle.absent  # the handle kept the node
@@ -361,9 +361,9 @@ async def test_a_failing_boot_probe_after_reattach_is_logged_and_swallowed(monke
     async def _boom(*_args, **_kwargs) -> None:
         raise RuntimeError("probe exploded")
 
-    monkeypatch.setattr(ripper_main, "boot_probe", _boom)
+    monkeypatch.setattr(drive_poller, "boot_probe", _boom)
     with caplog.at_level(logging.ERROR):
-        await ripper_main._on_reattached(_Client(), "drv_1", DriveHandle("/dev/sr0"), _Controller())
+        await drive_poller._on_reattached(_Client(), "drv_1", DriveHandle("/dev/sr0"), _Controller())
     records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert [r.getMessage() for r in records] == ["boot probe after reattach failed: probe exploded"]
 
@@ -380,6 +380,6 @@ class _FailingNodeClient:
 async def test_a_failed_device_path_update_is_logged_and_swallowed(exc, caplog) -> None:
     """An HTTP or OS error reporting the node is a WARNING, not a crash."""
     with caplog.at_level(logging.WARNING):
-        await ripper_main._report_node(_FailingNodeClient(exc), "drv_1", "/dev/sr0")  # type: ignore[arg-type]
+        await drive_poller._report_node(_FailingNodeClient(exc), "drv_1", "/dev/sr0")  # type: ignore[arg-type]
     records = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert [r.getMessage() for r in records] == [f"device-path update failed: {exc}"]

@@ -172,7 +172,7 @@ def _stub_resolve(monkeypatch, result):
         return result
 
     monkeypatch.setattr(main, "resolve_drive_device", resolve)
-    monkeypatch.setattr(main, "_resolve_paths", lambda: {"sysfs_root": "/sys-x"})
+    monkeypatch.setattr(main, "resolve_paths", lambda: {"sysfs_root": "/sys-x"})
     return calls
 
 
