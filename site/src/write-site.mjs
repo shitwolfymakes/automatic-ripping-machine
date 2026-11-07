@@ -53,6 +53,18 @@ function renderToc(toc) {
 	return `<nav class="docs-toc" aria-label="On this page"><p class="eyebrow">On this page</p>${links}</nav>`;
 }
 
+// The tailwind entry sheet: tailwind, ui-neu's base sheets and component blocks, then the site's own sheet, each
+// imported by a path relative to cacheDir.
+export function cssEntry(styles, siteDir, cacheDir) {
+	const rel = (p) => relative(cacheDir, p).split(sep).join('/');
+	return [
+		'@import "tailwindcss" source(none);',
+		...['tokens', 'base', 'layout', 'utilities'].map((n) => `@import "${rel(join(styles, `${n}.css`))}";`),
+		...BLOCKS.map((b) => `@import "${rel(join(styles, 'components', `${b}.css`))}";`),
+		`@import "${rel(join(siteDir, 'src/styles/site.css'))}";`
+	].join('\n');
+}
+
 function compileCss(armRoot, siteDir, outFile) {
 	const styles = join(armRoot, STYLES);
 	if (!existsSync(join(styles, 'tokens.css'))) throw new Error(`ui-neu tokens not found at ${join(styles, 'tokens.css')} (set ARM_ROOT)`);
@@ -60,14 +72,7 @@ function compileCss(armRoot, siteDir, outFile) {
 	// site/node_modules; ui-neu sheets are imported by relative path.
 	const cacheDir = join(siteDir, '.cache');
 	mkdirSync(cacheDir, { recursive: true });
-	const rel = (p) => relative(cacheDir, p).split(sep).join('/');
-	const entry = [
-		'@import "tailwindcss" source(none);',
-		...['tokens', 'base', 'layout', 'utilities'].map((n) => `@import "${rel(join(styles, `${n}.css`))}";`),
-		...BLOCKS.map((b) => `@import "${rel(join(styles, 'components', `${b}.css`))}";`),
-		`@import "${rel(join(siteDir, 'src/styles/site.css'))}";`
-	].join('\n');
-	writeFileSync(join(cacheDir, 'entry.css'), entry);
+	writeFileSync(join(cacheDir, 'entry.css'), cssEntry(styles, siteDir, cacheDir));
 	execFileSync(join(siteDir, 'node_modules/.bin/tailwindcss'), ['-i', join(cacheDir, 'entry.css'), '-o', outFile, '--minify'], { cwd: siteDir, stdio: ['ignore', 'ignore', 'inherit'] });
 	// ui-neu's base.css declares Rajdhani with root-absolute /fonts/ URLs;
 	// site.css sits at the site root, so relative fonts/ resolves the same.

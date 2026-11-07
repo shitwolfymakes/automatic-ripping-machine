@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pageHtml } from '../src/write-site.mjs';
+import { cssEntry, pageHtml } from '../src/write-site.mjs';
 
 const ALL = ['root', 'title', 'repo', 'nav', 'toc', 'content', 'editUrl', 'version', 'commit'];
 const TEMPLATE = ALL.map((k) => `{{${k}}}`).join('|');
@@ -85,4 +85,27 @@ test('the toc renders only with two or more entries', () => {
 
 test('an unknown placeholder throws', () => {
 	assert.throws(() => build(page('x'), [], '{{nope}}'), { message: 'template: unknown placeholder {{nope}}' });
+});
+
+const STYLES = '/arm/services/ui-neu/frontend/src/lib/styles';
+
+test('cssEntry imports tailwind, the base sheets, every block, then the site sheet', () => {
+	const up = '../../services/ui-neu/frontend/src/lib/styles';
+	const blocks = ['panel', 'button', 'alert', 'badge', 'code-block', 'table', 'nav', 'field', 'text', 'docs-prose'];
+	assert.deepEqual(cssEntry(STYLES, '/arm/site', '/arm/site/.cache').split('\n'), [
+		'@import "tailwindcss" source(none);',
+		...['tokens', 'base', 'layout', 'utilities'].map((n) => `@import "${up}/${n}.css";`),
+		...blocks.map((b) => `@import "${up}/components/${b}.css";`),
+		'@import "../src/styles/site.css";'
+	]);
+});
+
+test('cssEntry paths are relative to cacheDir', () => {
+	const lines = cssEntry(STYLES, '/arm/site', '/arm/site/.cache/deep').split('\n');
+	assert.equal(lines[1], '@import "../../../services/ui-neu/frontend/src/lib/styles/tokens.css";');
+	assert.equal(lines.at(-1), '@import "../../src/styles/site.css";');
+});
+
+test('cssEntry has no trailing newline', () => {
+	assert.equal(cssEntry(STYLES, '/arm/site', '/arm/site/.cache').endsWith('\n'), false);
 });
