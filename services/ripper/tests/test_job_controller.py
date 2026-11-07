@@ -480,6 +480,97 @@ async def test_rip_start_ws_command_wakes_review_waiter():
     assert event.is_set()
 
 
+def _command(event_type: str, payload: dict) -> WSEnvelope:
+    return WSEnvelope(
+        event_id="evt_1",
+        event_type=event_type,
+        emitted_at=datetime.now(timezone.utc),
+        topic="ripper.commands.drv_test",
+        payload=payload,
+    )
+
+
+@pytest.mark.parametrize("event_type", ["identify.resolved", "rip.start", "review.pause"])
+async def test_wake_command_without_job_id_logs_warning(event_type, caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    event = asyncio.Event()
+    controller._resolution_events["job_test"] = event
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+
+    await controller.on_ws_command(_command(event_type, {"job_id": 5}))
+
+    records = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert [r.getMessage() for r in records] == [f"{event_type} without job_id payload: {{'job_id': 5}}"]
+    assert not event.is_set()
+
+
+async def test_wake_command_without_waiter_logs_debug(caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+
+    await controller.on_ws_command(_command("rip.start", {"job_id": "job_x"}))
+
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.DEBUG, "rip.start for job_id=job_x but no waiter registered")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected", "warns"),
+    [
+        ({"session_id": "sess_1"}, "sess_1", False),
+        ({}, None, False),
+        ({"session_id": 5}, None, True),
+    ],
+)
+async def test_manual_trigger_ws_command_schedules_handler(payload, expected, warns, caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    seen: list[str | None] = []
+
+    async def fake(session_id: str | None) -> None:
+        seen.append(session_id)
+
+    controller.handle_manual_trigger = fake  # type: ignore[method-assign]
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+
+    await controller.on_ws_command(_command("manual.trigger", payload))
+    await asyncio.sleep(0)
+
+    assert seen == [expected]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == (["manual.trigger with non-string session_id: 5"] if warns else [])
+
+
+async def test_job_abandoned_without_job_id_is_ignored(caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    calls: list[str] = []
+    controller._handle_abandon = lambda *a, **k: calls.append("x")  # type: ignore[method-assign]
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+
+    await controller.on_ws_command(_command("job.abandoned", {"delete_raw": True}))
+
+    assert calls == []
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.WARNING, "job.abandoned without job_id payload: {'delete_raw': True}")
+    ]
+
+
+async def test_unknown_ws_command_is_ignored(caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    event = asyncio.Event()
+    controller._resolution_events["job_test"] = event
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    tasks_before = len(asyncio.all_tasks())
+
+    await controller.on_ws_command(_command("something.else", {"job_id": "job_test"}))
+
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.DEBUG, "ws command ignored: type=something.else")
+    ]
+    assert not event.is_set()
+    assert len(asyncio.all_tasks()) == tasks_before
+
+
 # --- abandon gives the disc back (user report: abandon left the disc seated) ----
 
 
