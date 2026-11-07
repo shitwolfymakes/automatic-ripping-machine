@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -1481,55 +1481,43 @@ async def recovery_abandon(
     return job
 
 
-@router.patch("/tracks/{track_id}", response_model=TrackView)
-async def update_track(
-    req: TrackUpdateRequest,
-    track: Track = Depends(require_drive_owner_by_track),
-    session: AsyncSession = Depends(get_session),
-    hub: WSHub = Depends(get_hub),
-) -> TrackView:
-    new_status = req.status
-    current = track.status
+def _start_track(track: Track, req: TrackUpdateRequest) -> None:
+    track.attempts += 1
 
-    if new_status == TrackStatus.IN_PROGRESS:
-        if current != TrackStatus.QUEUED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"cannot move {current.value} -> in_progress",
-            )
-        track.attempts += 1
-    elif new_status == TrackStatus.DONE:
-        if current != TrackStatus.IN_PROGRESS:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"cannot move {current.value} -> done",
-            )
-        if req.output_path is not None:
-            track.output_path = req.output_path
-        if req.size_bytes is not None:
-            track.size_bytes = req.size_bytes
-        if req.sha256 is not None:
-            track.sha256 = req.sha256
-        if req.duration_seconds is not None:
-            track.duration_seconds = req.duration_seconds
-    elif new_status == TrackStatus.FAILED:
-        if current != TrackStatus.IN_PROGRESS:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"cannot move {current.value} -> failed",
-            )
-        if req.last_error is not None:
-            track.last_error = req.last_error
-    else:
+
+def _finish_track(track: Track, req: TrackUpdateRequest) -> None:
+    if req.output_path is not None:
+        track.output_path = req.output_path
+    if req.size_bytes is not None:
+        track.size_bytes = req.size_bytes
+    if req.sha256 is not None:
+        track.sha256 = req.sha256
+    if req.duration_seconds is not None:
+        track.duration_seconds = req.duration_seconds
+
+
+def _fail_track(track: Track, req: TrackUpdateRequest) -> None:
+    if req.last_error is not None:
+        track.last_error = req.last_error
+
+
+# Target status -> (the one status it may be reached from, how to apply the request to the track).
+_TRACK_TRANSITIONS: dict[TrackStatus, tuple[TrackStatus, Callable[[Track, TrackUpdateRequest], None]]] = {
+    TrackStatus.IN_PROGRESS: (TrackStatus.QUEUED, _start_track),
+    TrackStatus.DONE: (TrackStatus.IN_PROGRESS, _finish_track),
+    TrackStatus.FAILED: (TrackStatus.IN_PROGRESS, _fail_track),
+}
+
+
+def _require_transition(current: TrackStatus, allowed_from: TrackStatus, target: TrackStatus) -> None:
+    if current != allowed_from:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"target status {new_status.value} not allowed via PATCH",
+            detail=f"cannot move {current.value} -> {target.value}",
         )
 
-    track.status = new_status
-    await session.commit()
-    await session.refresh(track)
 
+async def _emit_track_event(session: AsyncSession, hub: WSHub, track: Track, new_status: TrackStatus) -> None:
     if new_status == TrackStatus.DONE:
         await hub.emit(
             topic="ripper.events",
@@ -1560,6 +1548,30 @@ async def update_track(
             session=session,
         )
         await session.commit()
+
+
+@router.patch("/tracks/{track_id}", response_model=TrackView)
+async def update_track(
+    req: TrackUpdateRequest,
+    track: Track = Depends(require_drive_owner_by_track),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(get_hub),
+) -> TrackView:
+    new_status = req.status
+    rule = _TRACK_TRANSITIONS.get(new_status)
+    if rule is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"target status {new_status.value} not allowed via PATCH",
+        )
+    allowed_from, apply = rule
+    _require_transition(track.status, allowed_from, new_status)
+    apply(track, req)
+
+    track.status = new_status
+    await session.commit()
+    await session.refresh(track)
+    await _emit_track_event(session, hub, track, new_status)
 
     return TrackView.model_validate(track)
 
