@@ -24,7 +24,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 import arm_ripper.extraction_routes as extraction_routes  # noqa: E402
 import arm_ripper.iso_extract as iso_extract  # noqa: E402
 import arm_ripper.scan.dispatcher as scan_dispatcher  # noqa: E402
-from arm_common import DiscType  # noqa: E402
+from arm_common import DiscType, IsoPreparePhase  # noqa: E402
 from arm_common.schemas import ScanResult  # noqa: E402
 from arm_ripper.scan.makemkv import ScanError  # noqa: E402
 from arm_ripper.source import makemkv_source_url  # noqa: E402
@@ -495,3 +495,53 @@ async def test_spawn_7z_starts_7zip_with_progress_and_errors_piped(monkeypatch, 
             {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE},
         )
     ]
+
+
+class _ChunkStream:
+    """Stands in for 7-Zip's stdout: each `read` hands back the next chunk, then b"" at the end."""
+
+    def __init__(self, *chunks: bytes) -> None:
+        self._chunks = list(chunks)
+
+    async def read(self, _n: int) -> bytes:
+        return self._chunks.pop(0) if self._chunks else b""
+
+
+async def _reports_for(monkeypatch: pytest.MonkeyPatch, *chunks: bytes) -> list[tuple[object, ...]]:
+    reports: list[tuple[object, ...]] = []
+
+    async def _report(*args: object) -> None:
+        reports.append(args)
+
+    monkeypatch.setattr(iso_extract.prepare, "report", _report)
+    await iso_extract._report_progress(_ChunkStream(*chunks))  # type: ignore[arg-type]
+    return reports
+
+
+async def test_report_progress_reports_the_start_then_each_parsed_update(monkeypatch):
+    reports = await _reports_for(monkeypatch, b" 12%\b\b\b", b" 75% 3 - BDMV/STREAM/00002.m2ts")
+
+    assert reports == [
+        (IsoPreparePhase.EXTRACTING, 0, None),
+        (IsoPreparePhase.EXTRACTING, 12, None),
+        (IsoPreparePhase.EXTRACTING, 75, "BDMV/STREAM/00002.m2ts"),
+    ]
+
+
+async def test_report_progress_reports_nothing_extra_for_a_chunk_without_progress(monkeypatch):
+    reports = await _reports_for(monkeypatch, b"  0M Scan /source/\b\b\b")
+
+    assert reports == [(IsoPreparePhase.EXTRACTING, 0, None)]
+
+
+async def test_report_progress_parses_a_line_split_across_chunks_once_complete(monkeypatch):
+    reports = await _reports_for(monkeypatch, b" 5", b"0% 1 - a.m2ts")
+
+    assert reports == [
+        (IsoPreparePhase.EXTRACTING, 0, None),
+        (IsoPreparePhase.EXTRACTING, 50, "a.m2ts"),
+    ]
+
+
+async def test_report_progress_on_an_empty_stream_reports_only_the_start(monkeypatch):
+    assert await _reports_for(monkeypatch) == [(IsoPreparePhase.EXTRACTING, 0, None)]

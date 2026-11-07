@@ -106,6 +106,17 @@ async def _spawn_7z(exe: str, image: Path, dest: Path) -> asyncio.subprocess.Pro
     )
 
 
+async def _report_progress(stdout: asyncio.StreamReader) -> None:
+    """Report the extracting phase, then each progress update 7-Zip writes to `stdout` until it closes."""
+    await prepare.report(IsoPreparePhase.EXTRACTING, 0, None)
+    tail = ""
+    while chunk := await stdout.read(4096):
+        tail = (tail + chunk.decode(errors="replace"))[-1024:]
+        parsed = parse_progress(tail)
+        if parsed is not None:
+            await prepare.report(IsoPreparePhase.EXTRACTING, *parsed)
+
+
 async def _run_7z(image: Path, dest: Path) -> bool:
     exe = _find_7z()
     if exe is None:
@@ -114,18 +125,9 @@ async def _run_7z(image: Path, dest: Path) -> bool:
     assert proc.stdout is not None and proc.stderr is not None
     stdout, stderr_stream = proc.stdout, proc.stderr
 
-    async def _progress() -> None:
-        await prepare.report(IsoPreparePhase.EXTRACTING, 0, None)
-        tail = ""
-        while chunk := await stdout.read(4096):
-            tail = (tail + chunk.decode(errors="replace"))[-1024:]
-            parsed = parse_progress(tail)
-            if parsed is not None:
-                await prepare.report(IsoPreparePhase.EXTRACTING, *parsed)
-
     try:
         _, stderr = await asyncio.wait_for(
-            asyncio.gather(_progress(), stderr_stream.read()), timeout=_EXTRACT_TIMEOUT_SECONDS
+            asyncio.gather(_report_progress(stdout), stderr_stream.read()), timeout=_EXTRACT_TIMEOUT_SECONDS
         )
         await proc.wait()
     except BaseException:
