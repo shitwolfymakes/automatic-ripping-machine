@@ -333,3 +333,21 @@ async def test_probe_disc_runs_bd_meta_when_bluray(monkeypatch: pytest.MonkeyPat
     probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
     assert calls == ["/dev/sr0"]
     assert probe.bd_meta == meta
+
+
+@pytest.mark.asyncio
+async def test_probe_disc_bluray_without_bd_meta_leaves_it_none(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def _ready(_dev: str) -> bool:
+        return True
+
+    monkeypatch.setattr(disc_probe, "await_device_ready", _ready)
+    monkeypatch.setattr(disc_probe, "_compute_crc", lambda _dev: None)
+    monkeypatch.setattr(disc_probe, "probe_thediscdb_hash", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_matrix256", lambda _p: None)
+    monkeypatch.setattr(disc_probe, "probe_bd_meta", lambda _p: None)
+    with caplog.at_level("INFO", logger="arm_ripper.scan.disc_probe"):
+        probe = await disc_probe.probe_disc("/dev/sr0", bluray=True)
+    assert probe.bd_meta is None
+    assert "bdmt" not in caplog.text

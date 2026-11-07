@@ -15,6 +15,7 @@ import pytest
 from arm_ripper.scan import matrix256_fp
 from arm_ripper.scan.matrix256_fp import (
     UnsafeRecordError,
+    _choose_view,
     _collect_from_iso,
     fingerprint_records,
     probe_matrix256,
@@ -260,3 +261,46 @@ def test_probe_soft_fails_on_escaping_record(tmp_path: Path, caplog: pytest.LogC
     assert victim.read_bytes() == b"x" * 1000
     [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert "hostile disc tree" in warning.getMessage()
+
+
+# --- _choose_view ------------------------------------------------------------
+
+
+class _RaisingIso(_StubIso):
+    """A stub whose named `has_*` checks raise, as a broken descriptor would."""
+
+    def __init__(self, *broken: str, **flags: bool) -> None:
+        super().__init__("iso_path", [], {}, **flags)
+        self._broken = broken
+
+    def has_udf(self) -> bool:
+        if "udf" in self._broken:
+            raise OSError("bad udf descriptor")
+        return super().has_udf()
+
+    def has_rock_ridge(self) -> bool:
+        if "rock_ridge" in self._broken:
+            raise OSError("bad rr descriptor")
+        return super().has_rock_ridge()
+
+    def has_joliet(self) -> bool:
+        if "joliet" in self._broken:
+            raise OSError("bad joliet descriptor")
+        return super().has_joliet()
+
+
+def test_choose_view_picks_joliet_when_it_is_the_only_extended_view() -> None:
+    assert _choose_view(_StubIso("joliet_path", [], {}, joliet=True)) == ("joliet", "joliet_path")
+
+
+def test_choose_view_skips_a_raising_check_and_tries_the_next_view() -> None:
+    iso = _RaisingIso("udf", rock_ridge=True)
+    assert _choose_view(iso) == ("rock_ridge", "rr_path")
+
+
+def test_choose_view_falls_back_to_plain_iso9660_when_no_extension_is_present() -> None:
+    assert _choose_view(_StubIso("iso_path", [], {})) == ("iso9660", "iso_path")
+
+
+def test_choose_view_falls_back_to_iso9660_when_every_extended_check_raises() -> None:
+    assert _choose_view(_RaisingIso("udf", "rock_ridge", "joliet")) == ("iso9660", "iso_path")

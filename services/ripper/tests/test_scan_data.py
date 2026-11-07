@@ -80,3 +80,39 @@ def test_scan_data_device_node_is_never_sniffed(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr(data_module, "sniff_video_image", _boom)
     out = asyncio.run(data_module.scan_data("/dev/sr0"))
     assert out.disc_type is DiscType.DATA
+
+
+class _HangingProc:
+    def __init__(self) -> None:
+        self.killed = False
+        self.waited = False
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        await asyncio.sleep(3600)
+        return b"", b""  # pragma: no cover - never reached
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> None:
+        self.waited = True
+
+
+def test_scan_data_blkid_timeout_kills_reaps_and_returns_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = _HangingProc()
+
+    async def _exec(*_args: object, **_kwargs: object) -> _HangingProc:
+        return proc
+
+    real_wait_for = asyncio.wait_for
+
+    async def _fast_wait_for(awaitable: object, timeout: float) -> object:
+        return await real_wait_for(awaitable, timeout=0.01)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(data_module.asyncio, "create_subprocess_exec", _exec)
+    monkeypatch.setattr(data_module.asyncio, "wait_for", _fast_wait_for)
+    out = asyncio.run(data_module.scan_data("/dev/sr0"))
+    assert out.disc_type is DiscType.UNKNOWN
+    assert out.volume_label is None
+    assert proc.killed
+    assert proc.waited
