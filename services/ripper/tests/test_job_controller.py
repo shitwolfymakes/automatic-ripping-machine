@@ -1206,3 +1206,250 @@ async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, 
     monkeypatch.setattr(jc_module.shutil, "rmtree", denied)
     await controller._wipe_raw("job_x")
     assert "raw-dir cleanup failed" in caplog.text
+
+
+# --- pickup / recover_held_job / backend retries ---
+
+
+def _spy_run_rip(controller: JobController) -> list[tuple[str, str, bool, str | None]]:
+    calls: list[tuple[str, str, bool, str | None]] = []
+
+    async def fake(job: JobView, device_path: str) -> None:
+        calls.append((job.id, device_path, controller.is_idle(), controller._active_job_id))
+
+    controller._run_rip = fake  # type: ignore[method-assign]
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_pickup_busy_is_ignored(caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+    controller._active_task = object()  # type: ignore[assignment]
+
+    await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+
+    assert calls == []
+    assert any(
+        r.levelno == logging.DEBUG and r.getMessage() == "pickup ignored: controller already busy"
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_pickup_claims_gate_and_runs_rip(caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+
+    await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+
+    assert calls == [("job_test", "/dev/sr0", False, "job_test")]
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+    assert any(
+        r.levelno == logging.INFO and r.getMessage() == "pickup: re-acquiring job job_test status=identified"
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_pickup_releases_gate_when_run_rip_raises():
+    controller = JobController(FakeClient(), "drv_test")
+
+    async def boom(job: JobView, device_path: str) -> None:
+        raise RuntimeError("boom")
+
+    controller._run_rip = boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+
+
+def _fake_resolution(controller: JobController, result: JobView | None) -> list[tuple[str, object]]:
+    waits: list[tuple[str, object]] = []
+
+    async def fake(job_id: str, spec: object) -> JobView | None:
+        waits.append((job_id, spec))
+        return result
+
+    controller._await_resolution = fake  # type: ignore[method-assign]
+    return waits
+
+
+@pytest.mark.asyncio
+async def test_recover_held_job_unresolved_returns(caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+    waits = _fake_resolution(controller, None)
+
+    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+
+    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert calls == []
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+    assert any(
+        r.levelno == logging.INFO and r.getMessage() == "reboot recovery: re-parking held job job_test"
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_recover_held_job_other_status_not_ripped(caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+    waits = _fake_resolution(controller, _view(JobStatus.ABANDONED))
+
+    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+
+    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert calls == []
+    assert controller.is_idle()
+    assert any(
+        r.levelno == logging.INFO and r.getMessage() == "recovered job job_test in status abandoned; not ripping"
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [JobStatus.IDENTIFIED, JobStatus.RIPPING])
+async def test_recover_held_job_runs_rip_with_resolved_job(status):
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+    waits = _fake_resolution(controller, _view(status, title="Resolved"))
+
+    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+
+    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert calls == [("job_test", "/dev/sr0", False, "job_test")]
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+
+
+@pytest.mark.asyncio
+async def test_recover_held_job_releases_gate_when_run_rip_raises():
+    controller = JobController(FakeClient(), "drv_test")
+    _fake_resolution(controller, _view(JobStatus.IDENTIFIED))
+
+    async def boom(job: JobView, device_path: str) -> None:
+        raise RuntimeError("boom")
+
+    controller._run_rip = boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("make_error", [lambda: _http_status_error(503), lambda: httpx.ConnectError("down")])
+async def test_rip_complete_retries_transient_error(monkeypatch, caplog, make_error):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    calls: list[str] = []
+    done = _view(JobStatus.RIPPED)
+
+    async def flaky(job_id: str) -> JobView:
+        calls.append(job_id)
+        if len(calls) < 3:
+            raise make_error()
+        return done
+
+    client.rip_complete = flaky  # type: ignore[method-assign]
+
+    assert await controller._rip_complete_with_retry("job_test") is done
+    assert calls == ["job_test"] * 3
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2
+    assert all(r.getMessage().startswith("rip-complete job_test failed (") for r in warnings)
+    assert all(r.getMessage().endswith("); retrying in 0.0s") for r in warnings)
+
+
+@pytest.mark.asyncio
+async def test_rip_complete_rejected_4xx_gives_up(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    calls: list[str] = []
+
+    async def reject(job_id: str) -> JobView:
+        calls.append(job_id)
+        raise _http_status_error(409)
+
+    client.rip_complete = reject  # type: ignore[method-assign]
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await controller._rip_complete_with_retry("job_test")
+
+    assert calls == ["job_test"]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert errors[0].getMessage().startswith("rip-complete job_test rejected by backend (")
+    assert errors[0].getMessage().endswith("); giving up")
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("make_error", [lambda: _http_status_error(502), lambda: httpx.ConnectError("down")])
+async def test_patch_track_retries_transient_error(monkeypatch, caplog, make_error):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def flaky(track_id: str, **fields: object) -> None:
+        calls.append((track_id, fields))
+        if len(calls) < 3:
+            raise make_error()
+
+    client.update_track = flaky  # type: ignore[method-assign]
+
+    await controller._patch_track_with_retry("trk_1", status="ripped", progress=100)
+
+    assert calls == [("trk_1", {"status": "ripped", "progress": 100})] * 3
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2
+    assert all(r.getMessage().startswith("PATCH track trk_1 failed (") for r in warnings)
+    assert all(r.getMessage().endswith("); retrying in 0.0s") for r in warnings)
+
+
+@pytest.mark.asyncio
+async def test_patch_track_rejected_4xx_gives_up(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    client = FakeClient()
+    controller = JobController(client, "drv_test")
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def reject(track_id: str, **fields: object) -> None:
+        calls.append((track_id, fields))
+        raise _http_status_error(422)
+
+    client.update_track = reject  # type: ignore[method-assign]
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await controller._patch_track_with_retry("trk_1", status="ripped")
+
+    assert calls == [("trk_1", {"status": "ripped"})]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert errors[0].getMessage().startswith("PATCH track trk_1 rejected by backend (")
+    assert errors[0].getMessage().endswith("); giving up")
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
