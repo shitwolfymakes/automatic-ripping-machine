@@ -415,24 +415,30 @@ class DrivePoller:
                 state = read_drive_status(self._handle.current or "")
                 self._last_error_kind = None
             except OSError as exc:
-                kind = classify_drive_error(exc)
-                if kind is DriveErrorKind.ABSENT:
-                    # The node resolved but the hardware said no (ENXIO/ENODEV,
-                    # or it vanished between resolve and open). Keep the handle —
-                    # the node is still the right one — and report absence.
-                    state = DriveState.ABSENT
-                elif kind is DriveErrorKind.MISCONFIGURED:
-                    if self._last_error_kind is not kind:
-                        logger.warning(
-                            "drive %s is present but misconfigured: %s — check the device cgroup rule and CDROM_GID",
-                            self._handle.current,
-                            exc.strerror or exc,
-                        )
-                    state = DriveState.NO_INFO
-                else:
-                    logger.warning("ioctl failed: %s", exc)
-                    state = DriveState.NO_INFO
-                self._last_error_kind = kind
+                state = self._state_from_error(exc)
+        return state
+
+    def _state_from_error(self, exc: OSError) -> DriveState:
+        """The state an ioctl failure stands for, logging a misconfiguration once per run of them and any other error
+        on every poll."""
+        kind = classify_drive_error(exc)
+        if kind is DriveErrorKind.ABSENT:
+            # The node resolved but the hardware said no (ENXIO/ENODEV,
+            # or it vanished between resolve and open). Keep the handle —
+            # the node is still the right one — and report absence.
+            state = DriveState.ABSENT
+        elif kind is DriveErrorKind.MISCONFIGURED:
+            if self._last_error_kind is not kind:
+                logger.warning(
+                    "drive %s is present but misconfigured: %s — check the device cgroup rule and CDROM_GID",
+                    self._handle.current,
+                    exc.strerror or exc,
+                )
+            state = DriveState.NO_INFO
+        else:
+            logger.warning("ioctl failed: %s", exc)
+            state = DriveState.NO_INFO
+        self._last_error_kind = kind
         return state
 
 
