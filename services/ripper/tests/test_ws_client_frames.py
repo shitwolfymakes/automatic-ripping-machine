@@ -14,7 +14,13 @@ import pytest
 
 from arm_common.schemas import WSAck, WSAuthRequest, WSEnvelope, WSError, WSSubscribeRequest
 from arm_ripper import ws_client as ws_module
-from arm_ripper.ws_client import RECONNECT_DELAYS, SERVICE_TOKEN_SUBPROTOCOL, WSAuthFailed, WSClient
+from arm_ripper.ws_client import (
+    RECONNECT_DELAYS,
+    SERVICE_TOKEN_SUBPROTOCOL,
+    WSAuthFailed,
+    WSClient,
+    reconnect_delay,
+)
 
 URL = "wss://backend.test/ws"
 TOKEN = "tok-123"
@@ -333,6 +339,22 @@ async def test_replay_subscriptions_keeps_original_position_after_resubscribe() 
     conn = FakeConn(ACK, [])
     await client._replay_subscriptions(conn)  # type: ignore[arg-type]
     assert conn.sent == [WSSubscribeRequest(topic=t).model_dump_json() for t in ("t.a", "t.b", "t.c")]
+
+
+@pytest.mark.parametrize(("attempt", "expected"), [(0, 1.0), (1, 2.0), (2, 4.0), (3, 8.0), (4, 30.0)])
+def test_reconnect_delay_follows_schedule(attempt: int, expected: float) -> None:
+    assert reconnect_delay(attempt) == expected
+
+
+@pytest.mark.parametrize("attempt", [5, 100])
+def test_reconnect_delay_holds_last_value_past_schedule(attempt: int) -> None:
+    assert reconnect_delay(attempt) == 30.0
+
+
+@pytest.mark.parametrize("attempt", [0, 1, 7])
+def test_reconnect_delay_reads_schedule_at_call_time(monkeypatch: pytest.MonkeyPatch, attempt: int) -> None:
+    monkeypatch.setattr(ws_module, "RECONNECT_DELAYS", (0.5,))
+    assert reconnect_delay(attempt) == 0.5
 
 
 class LoopHarness:

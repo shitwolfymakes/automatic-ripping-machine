@@ -40,6 +40,14 @@ SERVICE_TOKEN_SUBPROTOCOL = "arm-service-token"
 EnvelopeHandler = Callable[[WSEnvelope], Awaitable[None]]
 
 
+def reconnect_delay(attempt: int) -> float:
+    """Seconds to wait before reconnect attempt `attempt` (0-based).
+
+    RECONNECT_DELAYS in turn, then its last value.
+    """
+    return RECONNECT_DELAYS[min(attempt, len(RECONNECT_DELAYS) - 1)]
+
+
 class WSClient:
     def __init__(
         self,
@@ -121,7 +129,7 @@ class WSClient:
 
             if self._stopping.is_set():
                 return
-            delay = RECONNECT_DELAYS[min(delay_idx, len(RECONNECT_DELAYS) - 1)]
+            delay = reconnect_delay(delay_idx)
             delay_idx += 1
             try:
                 await asyncio.wait_for(self._stopping.wait(), timeout=delay)
