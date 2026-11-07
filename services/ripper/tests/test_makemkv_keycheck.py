@@ -187,3 +187,23 @@ def test_is_malformed_key_false_for_serial(key):
 @pytest.mark.parametrize("key", ["junk", "  not-a-key ", "m-lowercase", "M"])
 def test_is_malformed_key_true_for_junk(key):
     assert mk._is_malformed_key(key) is True
+
+
+@pytest.mark.parametrize("state", list(MakemkvKeyState))
+def test_probe_line_state_expired_line_wins_from_any_state(state):
+    assert mk._probe_line_state(b"MSG:5021,0,0,expired\n", state) == MakemkvKeyState.BINARY_EXPIRED
+
+
+@pytest.mark.parametrize("prefix", mk._MAKEMKV_EVAL_PREFIXES)
+@pytest.mark.parametrize("state", [MakemkvKeyState.VALID, MakemkvKeyState.UNREGISTERED_OR_EXPIRED])
+def test_probe_line_state_eval_line_reports_unregistered(prefix, state):
+    assert mk._probe_line_state(prefix + b"0,0,eval\n", state) == MakemkvKeyState.UNREGISTERED_OR_EXPIRED
+
+
+@pytest.mark.parametrize("prefix", mk._MAKEMKV_EVAL_PREFIXES)
+def test_probe_line_state_eval_line_does_not_downgrade_expired(prefix):
+    assert mk._probe_line_state(prefix + b"0,0,eval\n", MakemkvKeyState.BINARY_EXPIRED) is None
+
+
+def test_probe_line_state_unrelated_line_is_none():
+    assert mk._probe_line_state(b"MSG:1005,0,0,hello\n", MakemkvKeyState.VALID) is None

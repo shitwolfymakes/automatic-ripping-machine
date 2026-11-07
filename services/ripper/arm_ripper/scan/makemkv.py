@@ -218,6 +218,17 @@ def _is_malformed_key(key: str | None) -> bool:
     return bool(key and key.strip() and not _MAKEMKV_SERIAL_RE.match(key.strip()))
 
 
+def _probe_line_state(raw: bytes, state: MakemkvKeyState) -> MakemkvKeyState | None:
+    """The key state a makemkvcon stdout line reports, or None when the line says nothing about the key."""
+    if raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
+        return MakemkvKeyState.BINARY_EXPIRED
+    # BINARY_EXPIRED wins: real MakeMKV never emits both, but guard
+    # the assignment so a pathological stream can't downgrade it.
+    if any(raw.startswith(p) for p in _MAKEMKV_EVAL_PREFIXES) and state != MakemkvKeyState.BINARY_EXPIRED:
+        return MakemkvKeyState.UNREGISTERED_OR_EXPIRED
+    return None
+
+
 async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
     """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
     (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
@@ -241,16 +252,10 @@ async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | Non
         nonlocal state
         assert proc.stdout is not None
         async for raw in proc.stdout:
-            if raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
-                state = MakemkvKeyState.BINARY_EXPIRED
+            line_state = _probe_line_state(raw, state)
+            if line_state is not None:
+                state = line_state
                 proc.kill()
-                continue
-            # BINARY_EXPIRED wins: real MakeMKV never emits both, but guard
-            # the assignment so a pathological stream can't downgrade it.
-            if any(raw.startswith(p) for p in _MAKEMKV_EVAL_PREFIXES) and state != MakemkvKeyState.BINARY_EXPIRED:
-                state = MakemkvKeyState.UNREGISTERED_OR_EXPIRED
-                proc.kill()
-                continue
 
     async def _drain_stderr() -> None:
         assert proc.stderr is not None
