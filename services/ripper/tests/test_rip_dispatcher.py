@@ -26,19 +26,15 @@ import pytest
 
 import arm_ripper.drive_status as drive_status_module
 import arm_ripper.rip.dispatcher as dispatcher_module
+import arm_ripper.rip.optical_rip as optical_rip_module
 from arm_common import DiscType, DriveMediaStatus
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import (
-    _effective_disc_type,
-    _eligible_source_indexes,
-    _first_eligible_track,
-    _index_tracks,
-    rip_all,
-)
+from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
+from arm_ripper.rip.optical_rip import _eligible_source_indexes, _first_eligible_track, _index_tracks
 from arm_ripper.rip.result import RipResult
 
 
@@ -249,7 +245,7 @@ def _stub_rip_disc(
                 await on_title_done(idx)
         return fake_result
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
 
 
 async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
@@ -864,7 +860,7 @@ async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatc
         raise AssertionError("makemkvcon must not be invoked for a dump track")
 
     monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
-    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
     dump = _track(0, source_ref="full")
     dump = dump.model_copy(update={"kind": TrackKind.DATA_DUMP})
     done: list[tuple[str, bool]] = []
@@ -932,7 +928,7 @@ async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
         raise AssertionError("a disc backup must not reach rip_disc or rip_data")
 
     monkeypatch.setattr(dispatcher_module, "rip_backup", fake_rip_backup)
-    monkeypatch.setattr(dispatcher_module, "rip_disc", must_not_run)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", must_not_run)
     monkeypatch.setattr(dispatcher_module, "rip_data", must_not_run)
     backup = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DISC_BACKUP})
     events: list[tuple[str, Any]] = []
@@ -984,13 +980,13 @@ async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkey
     _stub_rip_disc(monkeypatch, fake_result, captured=captured, fire_per_title_start=False)
 
     # Title 0 finalises live (mid-rip); title 1 is attributed post-rip.
-    real_stub = dispatcher_module.rip_disc
+    real_stub = optical_rip_module.rip_disc
 
     async def live_then_post(**kwargs: Any) -> RipDiscResult:
         await kwargs["on_title_done"](0)
         return await real_stub(**kwargs)
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", live_then_post)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", live_then_post)
 
     done: dict[str, str | None] = {}
     phases: list[str] = []
@@ -1233,13 +1229,13 @@ async def _fire_on_title_done_once(monkeypatch, tmp_path, tracks: list[TrackView
     once and snapshots, right after the closure returns, what it handed to
     the hasher and which lifecycle callbacks had fired by then."""
     seen: dict[str, Any] = {"submitted": [], "events": []}
-    real_submit = dispatcher_module.TitleHasher.submit
+    real_submit = optical_rip_module.TitleHasher.submit
 
     def recording_submit(self: Any, path: Path, size: int, on_hashed: Any) -> None:
         seen["submitted"].append(path)
         real_submit(self, path, size, on_hashed)
 
-    monkeypatch.setattr(dispatcher_module.TitleHasher, "submit", recording_submit)
+    monkeypatch.setattr(optical_rip_module.TitleHasher, "submit", recording_submit)
 
     async def fake_rip_disc(**kwargs: Any) -> RipDiscResult:
         await kwargs["on_title_done"](title_idx)
@@ -1247,7 +1243,7 @@ async def _fire_on_title_done_once(monkeypatch, tmp_path, tracks: list[TrackView
         seen["events_in_closure"] = list(seen["events"])
         return RipDiscResult(overall_error=None, titles={})
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
 
     async def on_start(track: TrackView) -> None:
         seen["events"].append(("start", track.id))
@@ -1277,23 +1273,23 @@ async def test_on_title_done_ignores_a_title_missing_from_the_eligible_list(monk
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 10)
     tracks = [_track(0), _track(5, duration_seconds=60)]
 
-    with caplog.at_level(logging.DEBUG, logger=dispatcher_module.logger.name):
+    with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, tracks, 5)
 
     assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
-    assert not [r for r in caplog.records if r.name == dispatcher_module.logger.name and "on_title_done" in r.message]
+    assert not [r for r in caplog.records if r.name == optical_rip_module.logger.name and "on_title_done" in r.message]
 
 
 async def test_on_title_done_defers_a_title_whose_file_is_not_on_disk_yet(monkeypatch, tmp_path, caplog):
     """No `_tNN.mkv` exists for the title's position: the closure logs at
     debug and returns without hashing or PATCHing anything."""
-    with caplog.at_level(logging.DEBUG, logger=dispatcher_module.logger.name):
+    with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, [_track(0)], 0)
 
     assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
-    records = [r for r in caplog.records if r.name == dispatcher_module.logger.name and "deferring" in r.message]
+    records = [r for r in caplog.records if r.name == optical_rip_module.logger.name and "deferring" in r.message]
     assert len(records) == 1
     assert records[0].levelno == logging.DEBUG
     assert records[0].getMessage() == "on_title_done: file for source_idx=0 position=0 not on disk yet; deferring"
@@ -1305,18 +1301,18 @@ async def test_on_title_done_warns_and_skips_a_title_whose_file_cannot_be_stat_e
     dangling = tmp_path / "Disc_t00.mkv"
     dangling.symlink_to(tmp_path / "missing_target.mkv")
 
-    with caplog.at_level(logging.DEBUG, logger=dispatcher_module.logger.name):
+    with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, [_track(0)], 0)
 
     assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
-    records = [r for r in caplog.records if r.name == dispatcher_module.logger.name and "stat failed" in r.message]
+    records = [r for r in caplog.records if r.name == optical_rip_module.logger.name and "stat failed" in r.message]
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
     assert records[0].getMessage().startswith(f"on_title_done: stat failed source_idx=0 path={dangling} err=")
 
 
-# --- _rip_optical post-rip attribution, failures and progress ----------------
+# --- rip_optical post-rip attribution, failures and progress ----------------
 
 
 async def _run_rip_all_recording_events(tmp_path, tracks: list[TrackView]) -> list[tuple[Any, ...]]:
@@ -1383,13 +1379,13 @@ async def test_rip_all_keeps_the_duration_a_title_result_already_has(monkeypatch
         fire_per_title_start=False,
     )
     submitted: list[tuple[Path, int]] = []
-    real_submit = dispatcher_module.TitleHasher.submit
+    real_submit = optical_rip_module.TitleHasher.submit
 
     def recording_submit(self: Any, path: Path, size: int, on_hashed: Any) -> None:
         submitted.append((path, size))
         real_submit(self, path, size, on_hashed)
 
-    monkeypatch.setattr(dispatcher_module.TitleHasher, "submit", recording_submit)
+    monkeypatch.setattr(optical_rip_module.TitleHasher, "submit", recording_submit)
 
     events = await _run_rip_all_recording_events(tmp_path, [_track(0, duration_seconds=1800)])
 
@@ -1410,18 +1406,18 @@ async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid
     """Anything raised inside the rip cancels the background hasher and
     reaches the caller of rip_all as the same exception object."""
     cancelled: list[Any] = []
-    real_cancel = dispatcher_module.TitleHasher.cancel
+    real_cancel = optical_rip_module.TitleHasher.cancel
 
     def recording_cancel(self: Any) -> None:
         cancelled.append(self)
         real_cancel(self)
 
-    monkeypatch.setattr(dispatcher_module.TitleHasher, "cancel", recording_cancel)
+    monkeypatch.setattr(optical_rip_module.TitleHasher, "cancel", recording_cancel)
 
     async def raising_rip_disc(**kwargs: Any) -> RipDiscResult:
         raise exc
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", raising_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", raising_rip_disc)
 
     with pytest.raises(type(exc)) as caught:
         await _run_rip_all_recording_events(tmp_path, [_track(0)])
@@ -1439,7 +1435,7 @@ async def test_rip_all_drops_per_title_progress_for_a_title_that_was_not_selecte
         await kwargs["on_title_progress"](0, 0.5)
         return RipDiscResult(overall_error=None, titles={})
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
 
     events = await _run_rip_all_recording_events(tmp_path, [_track(0)])
 

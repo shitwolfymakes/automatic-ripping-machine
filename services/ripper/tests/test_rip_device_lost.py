@@ -22,7 +22,7 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveState
 from arm_ripper.job_controller import JobController
 from arm_ripper.rip import RipResult
-from arm_ripper.rip import dispatcher as dispatcher_module
+from arm_ripper.rip import optical_rip as optical_rip_module
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 
@@ -289,7 +289,7 @@ async def test_a_title_makemkvcon_moved_on_from_is_resumed_not_kept(monkeypatch,
             await on_title_done(pos)
         return RipDiscResult(overall_error=None, titles={})
 
-    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
     await env["controller"]._execute_rip(
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
