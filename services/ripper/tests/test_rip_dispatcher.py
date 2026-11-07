@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import pytest
 
 import arm_ripper.drive_status as drive_status_module
 import arm_ripper.rip.dispatcher as dispatcher_module
@@ -1307,6 +1308,136 @@ async def test_on_title_done_warns_and_skips_a_title_whose_file_cannot_be_stat_e
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
     assert records[0].getMessage().startswith(f"on_title_done: stat failed source_idx=0 path={dangling} err=")
+
+
+# --- _rip_optical post-rip attribution, failures and progress ----------------
+
+
+async def _run_rip_all_recording_events(tmp_path, tracks: list[TrackView]) -> list[tuple[Any, ...]]:
+    """Run rip_all over DVD/BD tracks and return every lifecycle callback in order."""
+    events: list[tuple[Any, ...]] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(("start", track.id))
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        events.append(("done", track.id, result))
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        events.append(("progress", track.id, fraction))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=tracks,
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+        min_length_seconds=600,
+    )
+    return events
+
+
+async def test_rip_all_reports_a_failed_title_result_as_is_after_starting_the_track(monkeypatch, tmp_path):
+    """A title rip_disc reports as not ok, or ok without an output path, gets
+    on_track_start then on_track_done with that very RipResult object."""
+    failed = RipResult(ok=False, error="title 0 write error")
+    no_path = RipResult(ok=True, output_path=None, size_bytes=5)
+    _stub_rip_disc(
+        monkeypatch,
+        RipDiscResult(overall_error=None, titles={0: failed, 1: no_path}),
+        fire_per_title_start=False,
+    )
+
+    events = await _run_rip_all_recording_events(tmp_path, [_track(0), _track(1)])
+
+    assert events == [
+        ("start", "trk_0"),
+        ("done", "trk_0", failed),
+        ("start", "trk_1"),
+        ("done", "trk_1", no_path),
+    ]
+    assert events[1][2] is failed
+    assert events[3][2] is no_path
+
+
+async def test_rip_all_keeps_the_duration_a_title_result_already_has(monkeypatch, tmp_path):
+    """A successful title result that carries its own duration is not rebuilt
+    with the track's duration: the hasher gets it and on_track_done reports the
+    same duration, output path and size plus the file's sha256."""
+    import hashlib
+
+    mkv = tmp_path / "title_t00.mkv"
+    mkv.write_bytes(b"main feature")
+    result = RipResult(ok=True, output_path=mkv, size_bytes=12, duration_seconds=42)
+    _stub_rip_disc(
+        monkeypatch,
+        RipDiscResult(overall_error=None, titles={0: result}),
+        fire_per_title_start=False,
+    )
+    submitted: list[tuple[Path, int]] = []
+    real_submit = dispatcher_module.TitleHasher.submit
+
+    def recording_submit(self: Any, path: Path, size: int, on_hashed: Any) -> None:
+        submitted.append((path, size))
+        real_submit(self, path, size, on_hashed)
+
+    monkeypatch.setattr(dispatcher_module.TitleHasher, "submit", recording_submit)
+
+    events = await _run_rip_all_recording_events(tmp_path, [_track(0, duration_seconds=1800)])
+
+    assert submitted == [(mkv, 12)]
+    # The hasher's own "verifying" progress may interleave; only lifecycle order matters.
+    lifecycle = [e for e in events if e[0] != "progress"]
+    assert [e[:2] for e in lifecycle] == [("start", "trk_0"), ("done", "trk_0")]
+    reported = lifecycle[1][2]
+    assert reported.ok is True
+    assert reported.output_path == mkv
+    assert reported.size_bytes == 12
+    assert reported.duration_seconds == 42
+    assert reported.sha256 == hashlib.sha256(b"main feature").hexdigest()
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("rip blew up"), asyncio.CancelledError()], ids=["error", "cancel"])
+async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid_rip(monkeypatch, tmp_path, exc):
+    """Anything raised inside the rip cancels the background hasher and
+    reaches the caller of rip_all as the same exception object."""
+    cancelled: list[Any] = []
+    real_cancel = dispatcher_module.TitleHasher.cancel
+
+    def recording_cancel(self: Any) -> None:
+        cancelled.append(self)
+        real_cancel(self)
+
+    monkeypatch.setattr(dispatcher_module.TitleHasher, "cancel", recording_cancel)
+
+    async def raising_rip_disc(**kwargs: Any) -> RipDiscResult:
+        raise exc
+
+    monkeypatch.setattr(dispatcher_module, "rip_disc", raising_rip_disc)
+
+    with pytest.raises(type(exc)) as caught:
+        await _run_rip_all_recording_events(tmp_path, [_track(0)])
+
+    assert caught.value is exc
+    assert len(cancelled) == 1
+
+
+async def test_rip_all_drops_per_title_progress_for_a_title_that_was_not_selected(monkeypatch, tmp_path):
+    """Progress for a title index with no selected track fires no
+    on_track_progress; progress for a selected title does."""
+
+    async def fake_rip_disc(**kwargs: Any) -> RipDiscResult:
+        await kwargs["on_title_progress"](9, 0.25)
+        await kwargs["on_title_progress"](0, 0.5)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(dispatcher_module, "rip_disc", fake_rip_disc)
+
+    events = await _run_rip_all_recording_events(tmp_path, [_track(0)])
+
+    assert [e for e in events if e[0] == "progress"] == [("progress", "trk_0", 0.5)]
 
 
 # --- rip_all (CD, DATA, fallback, backup progress) ---------------------------
