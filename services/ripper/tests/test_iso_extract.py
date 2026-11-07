@@ -615,3 +615,53 @@ def test_archive_errors_of_empty_stderr_is_empty() -> None:
 )
 def test_damage_outside_video_tree(damaged: list[str], expected: bool) -> None:
     assert iso_extract._damage_outside_video_tree(damaged) is expected
+
+
+def test_is_video_folder_accepts_a_bdmv_folder(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    (tmp_path / "BDMV").mkdir()
+
+    with caplog.at_level("WARNING", logger="arm_ripper.iso_extract"):
+        assert iso_extract._is_video_folder(Path("m.iso"), tmp_path) is True
+
+    assert caplog.records == []
+
+
+def test_is_video_folder_accepts_a_video_ts_folder(tmp_path: Path) -> None:
+    (tmp_path / "VIDEO_TS").mkdir()
+
+    assert iso_extract._is_video_folder(Path("m.iso"), tmp_path) is True
+
+
+def test_is_video_folder_rejects_and_warns_when_neither_folder_exists(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("WARNING", logger="arm_ripper.iso_extract"):
+        assert iso_extract._is_video_folder(Path("m.iso"), tmp_path) is False
+
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        ("WARNING", "iso extract: m.iso has no BDMV or VIDEO_TS folder; not a video disc")
+    ]
+
+
+def test_is_video_folder_rejects_a_regular_file_named_bdmv(tmp_path: Path) -> None:
+    (tmp_path / "BDMV").write_text("not a folder")
+
+    assert iso_extract._is_video_folder(Path("m.iso"), tmp_path) is False
+
+
+async def test_extract_after_a_failed_7z_returns_none_without_checking_the_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, _scratch: Path
+) -> None:
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0")
+
+    async def _failed(_image: Path, _dest: Path) -> bool:
+        return False
+
+    monkeypatch.setattr(iso_extract, "_run_7z", _failed)
+
+    with caplog.at_level("WARNING", logger="arm_ripper.iso_extract"):
+        assert await iso_extract.extract(str(iso)) is None
+
+    assert not [r for r in caplog.records if "not a video disc" in r.getMessage()]
+    assert not any(_scratch.rglob("*"))

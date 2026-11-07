@@ -197,6 +197,16 @@ def _usable(image: Path, rc: int | None, stderr: str) -> bool:
     return False
 
 
+def _is_video_folder(image: Path, root: Path) -> bool:
+    """Whether the extraction at `root` holds a BDMV or VIDEO_TS folder; logs a warning that `image` is not a
+    video disc when it holds neither.
+    """
+    if any((root / d).is_dir() for d in _VIDEO_DIRS):
+        return True
+    logger.warning("iso extract: %s has no BDMV or VIDEO_TS folder; not a video disc", image)
+    return False
+
+
 async def extract(image_path: str) -> Path | None:
     """Unpack the image into scratch space and route MakeMKV to the result.
 
@@ -218,9 +228,7 @@ async def extract(image_path: str) -> Path | None:
     except BaseException:
         await asyncio.to_thread(shutil.rmtree, base, True)
         raise
-    if not ok or not any((root / d).is_dir() for d in _VIDEO_DIRS):
-        if ok:
-            logger.warning("iso extract: %s has no BDMV or VIDEO_TS folder; not a video disc", image)
+    if not ok or not _is_video_folder(image, root):
         await asyncio.to_thread(shutil.rmtree, base, True)
         return None
     extraction_routes.route(image_path, root)
