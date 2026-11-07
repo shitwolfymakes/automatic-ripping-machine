@@ -670,14 +670,9 @@ class JobController:
         return ("abandon", None)
 
     async def _wait_for_resolution(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> JobView | None:
-        # First-wait window: covers the boot race where we missed the
-        # gate-leaving broadcast before subscribing.
-        if not await _woken_within(event, RESOLUTION_WS_FIRST_WAIT_SECONDS):
-            outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
-            if outcome == "proceed":
-                return view
-            if outcome == "abandon":
-                return None
+        outcome, view = await self._first_wait(job_id, event, spec)
+        if outcome != "wait":
+            return view
 
         # Long wait: WS-driven, with periodic REST sanity polls so we
         # don't hang forever on a torn WS connection. `deadline is None`
@@ -706,6 +701,13 @@ class JobController:
 
         logger.warning("job %s %s wait timed out after %.0fs", job_id, spec.label, timeout)
         return None
+
+    async def _first_wait(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> tuple[str, JobView | None]:
+        """The short first wait for a WS wake. On a timeout, one REST read covers a gate-leaving broadcast that went
+        out before the subscription was up. Returns the `_classify_wait` outcome, or ("wait", None) after a wake."""
+        if await _woken_within(event, RESOLUTION_WS_FIRST_WAIT_SECONDS):
+            return ("wait", None)
+        return self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
 
     async def _review_countdown_expired(self, view: JobView) -> bool:
         """True when a held disc's auto-start countdown has elapsed AND it is not
