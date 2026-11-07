@@ -154,7 +154,7 @@ The ripper's `ARM_MANUAL_TRIGGER_ISO` test hook is gone. In its place:
   `handle_manual_trigger(session_id=...)`, the same `_run_pipeline` a disc
   insert runs, except it does **not** check `auto_rip_on_insert`: the operator
   starting an ISO rip from the picker already is the explicit trigger
-  (`services/ripper/arm_ripper/main.py::run_source_mode`).
+  (`services/ripper/arm_ripper/source_mode.py::run_source_mode`).
 - `JobController`'s review/identify wait (`resolution_timeout`) is `None` in
   source mode, so the ripper waits indefinitely at a review or identify gate
   instead of timing out after the usual 30 minutes. A parked ISO rip holds
@@ -379,5 +379,5 @@ migration's upgrade/downgrade, at 100% statement coverage.
 - [09-testing.md](09-testing.md): the tier-1/e2e test split this feature's suite follows.
 - `services/backend/arm_backend/iso_library.py`, `iso_rips.py`, `job_abandon.py`, `routers/iso.py`: the backend implementation.
 - `services/backend/migrations/versions/0041_virtual_drives.py`: the schema change.
-- `services/ripper/arm_ripper/main.py` (`run_source_mode`, `amain`): the ripper's source mode.
+- `services/ripper/arm_ripper/source_mode.py` (`run_source_mode`) and `main.py` (`amain`): the ripper's source mode.
 - [devtools/iso-smoke.sh](../../../devtools/iso-smoke.sh): the end-to-end smoke test.

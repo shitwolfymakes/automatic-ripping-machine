@@ -21,7 +21,7 @@ os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
 from arm_ripper.config import Settings  # noqa: E402
-from arm_ripper.main import run_source_mode  # noqa: E402
+from arm_ripper.source_mode import run_source_mode  # noqa: E402
 
 
 class FakeController:

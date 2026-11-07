@@ -14,7 +14,8 @@ from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_keycheck import makemkv_keycheck_loop
 from arm_ripper.recovery import boot_probe
 from arm_ripper.registration import register_with_retry
-from arm_ripper import iso_extract, prepare
+from arm_ripper.source_mode import run_source_mode
+from arm_ripper import prepare
 from arm_ripper.ws_client import WSClient
 
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
@@ -33,33 +34,6 @@ def _ws_url_from_backend_url(base: str) -> str:
     if base.startswith("http://"):
         return "ws://" + base[len("http://") :].rstrip("/") + "/ws"
     return base.rstrip("/") + "/ws"
-
-
-async def run_source_mode(controller: JobController, session_id: str | None) -> None:
-    """One ISO, one pipeline run, then return so the container exits.
-
-    Runs the pipeline through `handle_manual_trigger` (not `handle_disc_inserted`):
-    the operator starting an ISO rip IS the explicit trigger, so it must not be
-    gated by `auto_rip_on_insert` the way a disc-insert event would be.
-
-    Cancellation (the job abandoned via `DELETE /api/iso/rips/{id}`, or the
-    operator otherwise walking away) stays inside the task and we return
-    normally so the container exits 0 — the backend's virtual-drive watchdog
-    owns the drive-retire + container-removal cleanup either way. A
-    CancelledError delivered to OUR OWN task (e.g. amain shutting down) is a
-    different thing and must keep propagating, which is why we only swallow
-    it when the inner task itself ended up cancelled.
-    """
-    task = asyncio.create_task(controller.handle_manual_trigger(session_id=session_id))
-    try:
-        await task
-    except asyncio.CancelledError:
-        if not task.cancelled():
-            raise
-        logger.info("source pipeline cancelled; exiting")
-    finally:
-        # The scratch copy of an image MakeMKV could only read once unpacked.
-        await iso_extract.discard_all()
 
 
 def _build_client() -> BackendClient:

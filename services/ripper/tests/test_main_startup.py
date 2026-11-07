@@ -15,6 +15,7 @@ from types import SimpleNamespace  # noqa: E402
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from arm_ripper import main  # noqa: E402
+from arm_ripper import source_mode  # noqa: E402
 from arm_ripper import heartbeat  # noqa: E402
 from arm_ripper import makemkv_keycheck  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
@@ -594,9 +595,9 @@ async def test_cancelling_outer_while_inner_blocked_cancels_inner_and_returns(mo
     async def discard() -> None:
         discarded.append(True)
 
-    monkeypatch.setattr(main.iso_extract, "discard_all", discard)
+    monkeypatch.setattr(source_mode.iso_extract, "discard_all", discard)
     ctl = _BlockedController()
-    outer = asyncio.create_task(main.run_source_mode(ctl, None))  # type: ignore[arg-type]
+    outer = asyncio.create_task(source_mode.run_source_mode(ctl, None))  # type: ignore[arg-type]
     await _spin()
     outer.cancel()
     await asyncio.wait([outer], timeout=0.1)
@@ -613,9 +614,9 @@ async def test_cancel_landing_after_inner_finished_propagates(monkeypatch) -> No
     async def discard() -> None:
         discarded.append(True)
 
-    monkeypatch.setattr(main.iso_extract, "discard_all", discard)
+    monkeypatch.setattr(source_mode.iso_extract, "discard_all", discard)
     ctl = _BlockedController()
-    outer = asyncio.create_task(main.run_source_mode(ctl, None))  # type: ignore[arg-type]
+    outer = asyncio.create_task(source_mode.run_source_mode(ctl, None))  # type: ignore[arg-type]
     await _spin()
     ctl.release.set()
     await asyncio.sleep(0)  # inner finishes; the outer wake-up is queued but not yet run
