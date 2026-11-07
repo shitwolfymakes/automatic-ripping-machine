@@ -351,7 +351,7 @@ def test_diagnostics_makemkv_key_error_when_invalid(signing_key: bytes, tmp_path
 
 
 def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    """When system_paths is absent from app.state, _roots falls back to
+    """When system_paths is absent from app.state, system_roots falls back to
     settings-derived defaults."""
     from arm_backend.config import settings
 

@@ -80,7 +80,7 @@ def test_resources_shape(signing_key: bytes, monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(system_mod.psutil, "sensors_temperatures", lambda: {})
-    monkeypatch.setattr(system_mod, "_roots", lambda request: {"Raw": "/raw"})
+    monkeypatch.setattr(system_mod, "system_roots", lambda request: {"Raw": "/raw"})
     monkeypatch.setattr(
         system_mod,
         "get_disk_usage",
@@ -114,7 +114,7 @@ def test_resources_omits_uncached_root(signing_key: bytes, monkeypatch) -> None:
         lambda: SimpleNamespace(total=1073741824, used=0, available=1073741824, percent=0.0),
     )
     monkeypatch.setattr(system_mod.psutil, "sensors_temperatures", lambda: {})
-    monkeypatch.setattr(system_mod, "_roots", lambda request: {"Raw": "/raw", "Iso": "/iso"})
+    monkeypatch.setattr(system_mod, "system_roots", lambda request: {"Raw": "/raw", "Iso": "/iso"})
     monkeypatch.setattr(system_mod, "get_disk_usage", lambda path: None)  # nothing cached
 
     app, token = _make_app(signing_key)

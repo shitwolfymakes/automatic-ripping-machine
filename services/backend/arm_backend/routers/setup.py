@@ -18,7 +18,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_writer
 from arm_backend.auto_session import route_session_id_for
 from arm_backend.db import get_session
-from arm_backend.routers.system import collect_diagnostics
+from arm_backend.system_diagnostics import collect_diagnostics
 from arm_backend.constants import ADMIN_USERNAME, CONFIG_SINGLETON_ID
 from arm_common import Config, MediaType, RipPreset, Session, TranscodePreset, User
 from arm_common.enums import SETUP_STEP_ORDER, SetupStep, SetupStepState
