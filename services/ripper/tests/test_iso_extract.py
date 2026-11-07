@@ -473,3 +473,25 @@ def test_find_7z_logs_an_error_and_returns_none_when_neither_is_installed(monkey
         assert iso_extract._find_7z() is None
 
     assert [r.getMessage() for r in caplog.records] == ["iso extract: 7-Zip (7z / 7zz) is not installed"]
+
+
+async def test_spawn_7z_starts_7zip_with_progress_and_errors_piped(monkeypatch, tmp_path):
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    sentinel = object()
+
+    async def _exec(*args: object, **kwargs: object) -> object:
+        calls.append((args, kwargs))
+        return sentinel
+
+    monkeypatch.setattr(iso_extract.asyncio, "create_subprocess_exec", _exec)
+    image, dest = tmp_path / "m.iso", tmp_path / "out"
+
+    proc = await iso_extract._spawn_7z("/usr/bin/7z", image, dest)
+
+    assert proc is sentinel
+    assert calls == [
+        (
+            ("/usr/bin/7z", "x", "-tudf", "-y", "-bsp1", "-bso0", f"-o{dest}", "--", str(image)),
+            {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE},
+        )
+    ]

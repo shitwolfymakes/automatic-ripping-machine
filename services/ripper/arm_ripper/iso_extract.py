@@ -89,16 +89,14 @@ def _find_7z() -> str | None:
     return exe
 
 
-async def _run_7z(image: Path, dest: Path) -> bool:
-    exe = _find_7z()
-    if exe is None:
-        return False
-    proc = await asyncio.create_subprocess_exec(
+async def _spawn_7z(exe: str, image: Path, dest: Path) -> asyncio.subprocess.Process:
+    """Start 7-Zip unpacking the UDF image into `dest`, with progress on stdout and errors on stderr."""
+    return await asyncio.create_subprocess_exec(
         exe,
         "x",
         "-tudf",
         "-y",
-        "-bsp1",  # progress to stdout, read below for the "preparing" report
+        "-bsp1",  # progress to stdout, which feeds the "preparing" report
         "-bso0",  # no file listing on stdout
         f"-o{dest}",
         "--",
@@ -106,6 +104,13 @@ async def _run_7z(image: Path, dest: Path) -> bool:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
+
+async def _run_7z(image: Path, dest: Path) -> bool:
+    exe = _find_7z()
+    if exe is None:
+        return False
+    proc = await _spawn_7z(exe, image, dest)
     assert proc.stdout is not None and proc.stderr is not None
     stdout, stderr_stream = proc.stdout, proc.stderr
 
