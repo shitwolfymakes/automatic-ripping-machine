@@ -558,6 +558,7 @@ class JobController:
         *,
         pending_session_id: str | None = None,
     ) -> Job:
+        """Identify the scanned disc, retrying a transient failure and re-raising a 4xx other than 429."""
         delay = IDENTIFY_RETRY_INITIAL_SECONDS
         while True:
             try:
@@ -566,9 +567,9 @@ class JobController:
                     scan_result=scan_result,
                     pending_session_id=pending_session_id,
                 )
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                if 400 <= status_code < 500 and status_code != 429:
+            except httpx.HTTPError as e:
+                status_code = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
+                if status_code is not None and 400 <= status_code < 500 and status_code != 429:
                     # Non-retriable client error (e.g. 409 ripping-paused). Retrying
                     # spins forever holding _active_lock and deadlocks the drive —
                     # re-raise so the pipeline exits and the lock releases.
@@ -578,10 +579,6 @@ class JobController:
                         self._drive_id,
                     )
                     raise
-                logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
-            except httpx.HTTPError as e:
                 logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
