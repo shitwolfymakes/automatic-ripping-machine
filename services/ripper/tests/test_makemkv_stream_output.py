@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 from typing import Any, cast
 
@@ -43,10 +44,9 @@ class _Recorder:
 
 async def _run(lines: list[bytes], state: _ParserState | None = None, **kwargs: Any) -> _ParserState:
     state = state or _ParserState()
-    kwargs.setdefault("on_title_start", None)
-    kwargs.setdefault("on_title_progress", None)
-    kwargs.setdefault("on_disc_progress", None)
-    await makemkv_rip._stream_output(cast(Any, _Proc(lines)), state, **kwargs)
+    names = ("on_title_start", "on_title_progress", "on_disc_progress", "on_title_done")
+    callbacks = makemkv_rip.RipCallbacks(**{n: kwargs.pop(n) for n in names if n in kwargs})
+    await makemkv_rip._stream_output(cast(Any, _Proc(lines)), state, callbacks, **kwargs)
     return state
 
 
@@ -277,3 +277,10 @@ async def test_call_safely_propagates_base_exception() -> None:
     cb = cast(Any, _Recorder(cast(Any, asyncio.CancelledError())))
     with pytest.raises(asyncio.CancelledError):
         await makemkv_rip._call_safely("lbl", cb)
+
+
+def test_rip_callbacks_default_to_none_and_are_frozen() -> None:
+    cbs = makemkv_rip.RipCallbacks()
+    assert (cbs.on_title_start, cbs.on_title_progress, cbs.on_disc_progress, cbs.on_title_done) == (None,) * 4
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        cbs.on_title_start = _Recorder()  # type: ignore[misc]

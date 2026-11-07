@@ -64,6 +64,19 @@ OnTitleDone = Callable[[int], Awaitable[None]]
 # `_on_disc_progress` for attribution to a track id.
 OnDiscProgress = Callable[[float], Awaitable[None]]
 
+
+@dataclass(frozen=True)
+class RipCallbacks:
+    """The progress callbacks a makemkvcon run reports through; each is optional."""
+
+    on_title_start: OnTitleStart | None = None
+    on_title_progress: OnTitleProgress | None = None
+    on_disc_progress: OnDiscProgress | None = None
+    on_title_done: OnTitleDone | None = None
+
+
+_NO_CALLBACKS = RipCallbacks()
+
 _PRGV_RE = re.compile(r"^PRGV:(\d+),(\d+),(\d+)$")
 _PRGT_RE = re.compile(r'^PRGT:(\d+),(\d+),"(.*)"$')
 # PRGC:5017,N,"Saving to MKV file" fires once per title save start in
@@ -301,10 +314,7 @@ async def _emit_title_done(
 async def _stream_output(
     proc: asyncio.subprocess.Process,
     state: _ParserState,
-    on_title_start: OnTitleStart | None,
-    on_title_progress: OnTitleProgress | None,
-    on_disc_progress: OnDiscProgress | None,
-    on_title_done: OnTitleDone | None = None,
+    callbacks: RipCallbacks,
     eligible_source_indexes: list[int] | None = None,
     gate_disc_progress: bool = True,
 ) -> None:
@@ -349,10 +359,10 @@ async def _stream_output(
         totals = parse_progress_totals(line)
         if totals is not None:
             cur_frac, tot_frac = totals
-            if state.current_title is not None and on_title_progress is not None:
-                await _call_safely("title progress", on_title_progress, state.current_title, cur_frac)
-            elif (state.save_phase_started or not gate_disc_progress) and on_disc_progress is not None:
-                await _call_safely("disc progress", on_disc_progress, tot_frac)
+            if state.current_title is not None and callbacks.on_title_progress is not None:
+                await _call_safely("title progress", callbacks.on_title_progress, state.current_title, cur_frac)
+            elif (state.save_phase_started or not gate_disc_progress) and callbacks.on_disc_progress is not None:
+                await _call_safely("disc progress", callbacks.on_disc_progress, tot_frac)
             continue
 
         # PRGC:5017 — primary per-title signal in `mkv all` mode. The
@@ -368,8 +378,8 @@ async def _stream_output(
                 # the dispatcher can PATCH N=DONE before N+1 goes
                 # IN_PROGRESS, keeping the lifecycle ordering clean.
                 if state.current_title is not None and state.current_title != source_idx:
-                    await _emit_title_done(state, state.current_title, on_title_done)
-                await _emit_title_start(state, source_idx, on_title_start)
+                    await _emit_title_done(state, state.current_title, callbacks.on_title_done)
+                await _emit_title_start(state, source_idx, callbacks.on_title_start)
             else:
                 logger.warning(
                     "PRGC:5017 output position %d out of range (eligible has %d entries)",
@@ -385,7 +395,7 @@ async def _stream_output(
         # opened.
         title_idx = parse_prgt_title(line)
         if title_idx is not None:
-            await _emit_title_start(state, title_idx, on_title_start)
+            await _emit_title_start(state, title_idx, callbacks.on_title_start)
             continue
 
         # Generic PRGT (other milestones) — log; also detect the save
@@ -535,10 +545,7 @@ async def _run_makemkvcon(
     cmd: list[str],
     state: _ParserState,
     *,
-    on_title_start: OnTitleStart | None = None,
-    on_title_progress: OnTitleProgress | None = None,
-    on_disc_progress: OnDiscProgress | None = None,
-    on_title_done: OnTitleDone | None = None,
+    callbacks: RipCallbacks = _NO_CALLBACKS,
     eligible_source_indexes: list[int] | None = None,
     gate_disc_progress: bool = True,
     stop: asyncio.Event | None = None,
@@ -562,10 +569,7 @@ async def _run_makemkvcon(
         _stream_output(
             proc,
             state,
-            on_title_start,
-            on_title_progress,
-            on_disc_progress,
-            on_title_done=on_title_done,
+            callbacks,
             eligible_source_indexes=eligible_source_indexes,
             gate_disc_progress=gate_disc_progress,
         )
@@ -734,10 +738,12 @@ async def rip_disc(
     error = await _run_makemkvcon(
         cmd,
         state,
-        on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
-        on_disc_progress=on_disc_progress,
-        on_title_done=on_title_done,
+        callbacks=RipCallbacks(
+            on_title_start=on_title_start,
+            on_title_progress=on_title_progress,
+            on_disc_progress=on_disc_progress,
+            on_title_done=on_title_done,
+        ),
         eligible_source_indexes=eligible_source_indexes,
         stop=stop,
     )

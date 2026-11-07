@@ -868,7 +868,10 @@ async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropp
 
     error = await asyncio.wait_for(
         makemkv_rip._run_makemkvcon(
-            ["makemkvcon"], state, on_title_progress=on_title_progress, eligible_source_indexes=[3, 7]
+            ["makemkvcon"],
+            state,
+            callbacks=makemkv_rip.RipCallbacks(on_title_progress=on_title_progress),
+            eligible_source_indexes=[3, 7],
         ),
         timeout=2.0,
     )

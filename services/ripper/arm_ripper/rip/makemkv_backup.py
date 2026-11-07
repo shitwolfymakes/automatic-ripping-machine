@@ -16,7 +16,14 @@ from pathlib import Path
 
 from arm_common.fileops import tree_size
 
-from arm_ripper.rip.makemkv_rip import OnDiscProgress, RipResult, _compose_error, _ParserState, _run_makemkvcon
+from arm_ripper.rip.makemkv_rip import (
+    OnDiscProgress,
+    RipCallbacks,
+    RipResult,
+    _compose_error,
+    _ParserState,
+    _run_makemkvcon,
+)
 from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.rip.makemkv_backup")
@@ -48,7 +55,9 @@ async def rip_backup(device_path: str, output_dir: Path, on_progress: OnDiscProg
     logger.info("makemkvcon backup device=%s outdir=%s", device_path, target)
 
     state = _ParserState()
-    error = await _run_makemkvcon(cmd, state, on_disc_progress=on_progress, gate_disc_progress=False)
+    error = await _run_makemkvcon(
+        cmd, state, callbacks=RipCallbacks(on_disc_progress=on_progress), gate_disc_progress=False
+    )
     if error is not None:
         return RipResult(ok=False, error=error)
     if not (target / "BDMV" / "index.bdmv").is_file():
