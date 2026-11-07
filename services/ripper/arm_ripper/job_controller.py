@@ -435,9 +435,7 @@ class JobController:
                 # the disc (the scan probe runs it for every disc), so a
                 # container up across a beta-key rotation doesn't scan/rip
                 # protected discs with a stale key.
-                await refresh_makemkv_key(key=await self._configured_makemkv_key())
-                self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-                self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                await self._prepare_makemkv()
                 try:
                     scan_result = await self._scan_with_ready_retry(device_path)
                 except ScanError as e:
@@ -791,6 +789,13 @@ class JobController:
         cfg = await self._ripper_config_or_none("community keydb toggle lookup", "defaulting enabled")
         return True if cfg is None else cfg.community_keydb_enabled
 
+    async def _prepare_makemkv(self) -> None:
+        """Get MakeMKV ready for a disc: refresh its key now, and start the KEYDB and SDF
+        refreshes in the background."""
+        await refresh_makemkv_key(key=await self._configured_makemkv_key())
+        self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
+        self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+
     def _spawn_keydb_refresh(self, *, enabled: bool) -> None:
         """Fire-and-forget community-keydb refresh. The rip proceeds immediately
         with the on-disk keydb; a fresh keydb benefits the next rip. Errors are
@@ -892,9 +897,7 @@ class JobController:
             with with_log_context(job_id=job.id):
                 # Crash-resume skips the scan path, so refresh the key here too —
                 # a rip resumed days after a crash must not run on a stale key.
-                await refresh_makemkv_key(key=await self._configured_makemkv_key())
-                self._spawn_keydb_refresh(enabled=await self._community_keydb_enabled())
-                self._spawn_sdf_refresh(enabled=await self._makemkv_sdf_enabled())
+                await self._prepare_makemkv()
                 rip_start = await self._client.resume(job.id)
                 logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
                 await self._execute_rip(
