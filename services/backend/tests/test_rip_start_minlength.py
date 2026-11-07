@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from arm_backend.routers.ripper import _resolve_min_length_override
+from arm_backend.rip_preset_resolution import resolve_min_length_override
 from arm_common import (
     DiscType,
     Job,
@@ -56,7 +56,7 @@ def _make_session(overrides_json: dict | None) -> Session:
 async def test_no_pending_session_returns_none() -> None:
     db = FakeSession()
     job = _make_job()
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -65,7 +65,7 @@ async def test_pending_session_without_overrides_returns_none() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json=None)]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -74,7 +74,7 @@ async def test_session_overrides_min_length() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 1200})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result == 1200
 
 
@@ -83,7 +83,7 @@ async def test_session_overrides_with_unrelated_keys_only_returns_none() -> None
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"some_other_key": "x"})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -92,7 +92,7 @@ async def test_string_value_rejected() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": "600"})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -103,7 +103,7 @@ async def test_bool_value_rejected() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": True})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -112,7 +112,7 @@ async def test_negative_value_rejected() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": -1})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -122,7 +122,7 @@ async def test_zero_is_valid() -> None:
     db = FakeSession()
     db.rows["sessions"] = [_make_session(overrides_json={"min_length_seconds": 0})]
     job = _make_job(pending_session_id="ses_x")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result == 0
 
 
@@ -134,7 +134,7 @@ async def test_missing_session_returns_none() -> None:
     db = FakeSession()
     db.rows["sessions"] = []
     job = _make_job(pending_session_id="ses_gone")
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result is None
 
 
@@ -158,5 +158,5 @@ async def test_drive_default_session_override_applies_without_flag() -> None:
     ]
     db.rows["config"] = [Config(id=1, auto_transcode_on_idle=False, auto_rip_on_insert=True, block_on_miss=True)]
     job = _make_job()
-    result = await _resolve_min_length_override(db, job)  # type: ignore[arg-type]
+    result = await resolve_min_length_override(db, job)  # type: ignore[arg-type]
     assert result == 900
