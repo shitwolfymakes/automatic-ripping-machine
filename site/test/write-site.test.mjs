@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cssEntry, pageHtml } from '../src/write-site.mjs';
+import { cssEntry, pageHtml, relativeFontUrls } from '../src/write-site.mjs';
 
 const ALL = ['root', 'title', 'repo', 'nav', 'toc', 'content', 'editUrl', 'version', 'commit'];
 const TEMPLATE = ALL.map((k) => `{{${k}}}`).join('|');
@@ -108,4 +108,29 @@ test('cssEntry paths are relative to cacheDir', () => {
 
 test('cssEntry has no trailing newline', () => {
 	assert.equal(cssEntry(STYLES, '/arm/site', '/arm/site/.cache').endsWith('\n'), false);
+});
+
+test('relativeFontUrls rewrites unquoted and quoted font urls, keeping the quote', () => {
+	assert.equal(relativeFontUrls('src:url(/fonts/a.woff2)'), 'src:url(fonts/a.woff2)');
+	assert.equal(relativeFontUrls("src:url('/fonts/a.woff2')"), "src:url('fonts/a.woff2')");
+	assert.equal(relativeFontUrls('src:url("/fonts/a.woff2")'), 'src:url("fonts/a.woff2")');
+});
+
+test('relativeFontUrls rewrites every occurrence in a minified sheet', () => {
+	const css =
+		'@font-face{src:url(/fonts/a.woff2)}@font-face{src:url("/fonts/b.woff2")}@font-face{src:url(/fonts/c.woff2)}';
+	assert.equal(
+		relativeFontUrls(css),
+		'@font-face{src:url(fonts/a.woff2)}@font-face{src:url("fonts/b.woff2")}@font-face{src:url(fonts/c.woff2)}'
+	);
+});
+
+test('relativeFontUrls leaves other urls as they are', () => {
+	for (const css of ['a{background:url(/img/x.png)}', 'a{src:url(fonts/x.woff2)}', 'a{src:url(/fontsx/a.woff2)}']) {
+		assert.equal(relativeFontUrls(css), css);
+	}
+});
+
+test('relativeFontUrls leaves a sheet without urls unchanged', () => {
+	assert.equal(relativeFontUrls('a{color:red}'), 'a{color:red}');
 });

@@ -65,6 +65,12 @@ export function cssEntry(styles, siteDir, cacheDir) {
 	].join('\n');
 }
 
+// ui-neu's base.css declares Rajdhani with root-absolute /fonts/ URLs;
+// site.css sits at the site root, so relative fonts/ resolves the same.
+export function relativeFontUrls(css) {
+	return css.replace(/url\((['"]?)\/fonts\//g, 'url($1fonts/');
+}
+
 function compileCss(armRoot, siteDir, outFile) {
 	const styles = join(armRoot, STYLES);
 	if (!existsSync(join(styles, 'tokens.css'))) throw new Error(`ui-neu tokens not found at ${join(styles, 'tokens.css')} (set ARM_ROOT)`);
@@ -74,9 +80,7 @@ function compileCss(armRoot, siteDir, outFile) {
 	mkdirSync(cacheDir, { recursive: true });
 	writeFileSync(join(cacheDir, 'entry.css'), cssEntry(styles, siteDir, cacheDir));
 	execFileSync(join(siteDir, 'node_modules/.bin/tailwindcss'), ['-i', join(cacheDir, 'entry.css'), '-o', outFile, '--minify'], { cwd: siteDir, stdio: ['ignore', 'ignore', 'inherit'] });
-	// ui-neu's base.css declares Rajdhani with root-absolute /fonts/ URLs;
-	// site.css sits at the site root, so relative fonts/ resolves the same.
-	writeFileSync(outFile, readFileSync(outFile, 'utf8').replace(/url\((['"]?)\/fonts\//g, 'url($1fonts/'));
+	writeFileSync(outFile, relativeFontUrls(readFileSync(outFile, 'utf8')));
 }
 
 // One page's HTML: the site template filled with its nav, table of contents, content and footer.
