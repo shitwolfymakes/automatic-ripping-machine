@@ -2,7 +2,7 @@ from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanTitle
-from arm_ripper.scan.makemkv import _split_robot_line, parse_makemkvcon_info
+from arm_ripper.scan.makemkv import _TINFO_FIELDS, _split_robot_line, _to_int, parse_makemkvcon_info
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -194,3 +194,20 @@ def test_split_robot_line_strips_the_line_and_each_field():
 
 def test_split_robot_line_with_nothing_after_the_colon_gives_one_empty_field():
     assert _split_robot_line("MSG:") == ("MSG", [""])
+
+
+def test_to_int_parses_ints_and_returns_none_otherwise():
+    assert _to_int("12") == 12
+    assert _to_int(" 7 ") == 7
+    assert _to_int("x") is None
+    assert _to_int("") is None
+
+
+def test_tinfo_fields_covers_exactly_the_known_codes():
+    assert set(_TINFO_FIELDS) == {8, 9, 11, 27}
+
+
+def test_later_unparseable_chapter_count_keeps_the_earlier_valid_one():
+    lines = ['TINFO:0,9,0,"0:01:00"', 'TINFO:0,8,0,"4"', 'TINFO:0,8,0,"many"']
+    _, titles, _ = parse_makemkvcon_info(lines)
+    assert titles[0].chapter_count == 4

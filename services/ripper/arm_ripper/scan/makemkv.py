@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Iterable
+from typing import Callable, Iterable
 
 from arm_common import DiscType, MakemkvKeyState
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
@@ -53,6 +53,23 @@ def _parse_duration(value: str) -> int | None:
         return None
     h, mn, s = (int(g) for g in m.groups())
     return h * 3600 + mn * 60 + s
+
+
+def _to_int(value: str) -> int | None:
+    """The value as an int, or None when it isn't one."""
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+# TINFO attribute code -> (title field, parser). A field is set only when its parser returns a value.
+_TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | None]]] = {
+    8: ("chapter_count", _to_int),
+    9: ("duration_seconds", _parse_duration),
+    11: ("size_bytes", _to_int),
+    27: ("source_file", str),
+}
 
 
 def _classify_from_cinfo(disc_type_text: str) -> DiscType | None:
@@ -134,22 +151,12 @@ def parse_makemkvcon_info(
                 continue
             value = _strip_quotes(",".join(fields[3:]))
             entry = titles.setdefault(track_idx, {})
-            if code == 8:
-                try:
-                    entry["chapter_count"] = int(value)
-                except ValueError:
-                    pass
-            elif code == 9:
-                duration = _parse_duration(value)
-                if duration is not None:
-                    entry["duration_seconds"] = duration
-            elif code == 11:
-                try:
-                    entry["size_bytes"] = int(value)
-                except ValueError:
-                    pass
-            elif code == 27:
-                entry["source_file"] = value
+            field = _TINFO_FIELDS.get(code)
+            if field is not None:
+                name, parse = field
+                field_value = parse(value)
+                if field_value is not None:
+                    entry[name] = field_value
 
     parsed: list[ScanTitle] = []
     for idx in sorted(titles):
