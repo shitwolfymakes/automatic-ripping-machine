@@ -12,6 +12,7 @@ import pytest
 import arm_ripper.backend_retry as backend_retry_module
 import arm_ripper.eject as eject_module
 import arm_ripper.job_controller as jc_module
+import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
@@ -26,6 +27,7 @@ from arm_common.schemas import (
 from arm_ripper.drive_poll import DriveState
 from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
+from arm_ripper.resolution_wait import ResolutionWaiter
 from arm_ripper.makemkv_prep import MakeMKVPrep
 
 
@@ -155,14 +157,14 @@ class FakeClient:
 @pytest.fixture(autouse=True)
 def fast_polls(monkeypatch, tmp_path):
     """Don't wait 5+ seconds between polls; write under tmp_path, not /raw."""
-    monkeypatch.setattr(jc_module, "POLL_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(resolution_wait_module, "POLL_MAX_SECONDS", 0.01)
     monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
     monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
     # WS-driven resolution path: collapse the boot-race grace window so
     # tests fall straight through to the REST fallback path that the
     # FakeClient feeds.
-    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 0.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 1.0)
 
 
 @pytest.fixture
@@ -335,7 +337,7 @@ async def test_review_gate_auto_starts_when_countdown_elapsed(stub_scan, stub_ej
 async def test_review_gate_paused_does_not_auto_start(stub_scan, stub_eject, monkeypatch):
     """Countdown elapsed BUT globally paused -> no auto-start; the ripper keeps
     waiting (the wait times out in the test harness without ripping)."""
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
     client = FakeClient()
     client.manual_wait_seconds = 1
     client.ripping_paused = True
@@ -354,7 +356,7 @@ async def test_review_gate_paused_does_not_auto_start(stub_scan, stub_eject, mon
 async def test_review_gate_per_job_pause_does_not_auto_start(stub_scan, stub_eject, monkeypatch):
     """Per-job manual_pause freezes THIS disc's countdown even when the machine is
     not globally paused — countdown elapsed but no auto-start."""
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
     client = FakeClient()
     client.manual_wait_seconds = 1
     client.ripping_paused = False  # global NOT paused
@@ -376,7 +378,7 @@ async def test_review_gate_guessed_episodes_do_not_auto_start(stub_scan, stub_ej
     """A placement that is a guess holds the countdown like a per-job pause:
     elapsed, not paused, but `episodes_unsure` on every view -> no auto-start,
     logged once."""
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
     client = FakeClient()
     client.manual_wait_seconds = 1
     client.ripping_paused = False
@@ -439,7 +441,7 @@ async def test_resolution_timeout_none_waits_past_old_deadline_then_proceeds(stu
     """`resolution_timeout=None` (source mode) keeps waiting well past the
     point where the default RESOLUTION_WAIT_TIMEOUT_SECONDS would have given
     up, and still proceeds with the rip once the job resolves."""
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 0.05)
     poll_count = 0
 
     async def _resolves_after_old_deadline(job_id: str) -> JobView:
@@ -469,7 +471,7 @@ async def test_rip_start_ws_command_wakes_review_waiter():
     client = FakeClient()
     controller = JobController(client, "drv_test")
     event = asyncio.Event()
-    controller._resolution_events["job_test"] = event
+    controller._waiter._resolution_events["job_test"] = event
 
     await controller.on_ws_command(
         WSEnvelope(
@@ -498,7 +500,7 @@ def _command(event_type: str, payload: dict) -> WSEnvelope:
 async def test_wake_command_without_job_id_logs_warning(event_type, caplog):
     controller = JobController(FakeClient(), "drv_test")
     event = asyncio.Event()
-    controller._resolution_events["job_test"] = event
+    controller._waiter._resolution_events["job_test"] = event
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
 
     await controller.on_ws_command(_command(event_type, {"job_id": 5}))
@@ -562,7 +564,7 @@ async def test_job_abandoned_without_job_id_is_ignored(caplog):
 async def test_unknown_ws_command_is_ignored(caplog):
     controller = JobController(FakeClient(), "drv_test")
     event = asyncio.Event()
-    controller._resolution_events["job_test"] = event
+    controller._waiter._resolution_events["job_test"] = event
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
     tasks_before = len(asyncio.all_tasks())
 
@@ -632,8 +634,8 @@ async def test_other_identify_refusals_leave_the_disc_in(stub_scan, eject_spy):
 async def test_abandon_while_parked_cancels_and_ejects(stub_scan, eject_spy, monkeypatch):
     """Abandoning a job parked in AWAITING_USER_ID cancels the parked pipeline
     AND pops the tray — the post-rip eject never runs on an abandon exit."""
-    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
     client = FakeClient()
     client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
     controller = JobController(client, "drv_test", device_path="/dev/sr0")
@@ -769,8 +771,8 @@ async def test_ws_event_unblocks_resolution_faster_than_rest(monkeypatch, stub_s
     Confirms the new WS-driven path: registering the handler is enough; we
     don't need the slow REST fallback to do the work.
     """
-    monkeypatch.setattr(jc_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
-    monkeypatch.setattr(jc_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
 
     client = FakeClient()
     client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
@@ -818,7 +820,7 @@ async def test_long_wait_returns_none_when_the_job_leaves_the_gate_another_way()
     client.get_job = fn  # type: ignore[method-assign]
     controller = JobController(client, "drv_test")
 
-    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+    result = await asyncio.wait_for(controller._waiter.await_resolution("job_test"), timeout=2.0)
 
     assert result is None
     assert calls >= 2
@@ -834,7 +836,7 @@ async def test_wake_while_still_parked_rearms_the_event():
     async def fn(job_id: str) -> JobView:
         nonlocal calls
         calls += 1
-        event = controller._resolution_events["job_test"]
+        event = controller._waiter._resolution_events["job_test"]
         if calls == 2:
             # Long-wait cycle 1 (timed out, no wake yet): still parked, fire the WS wake.
             event.set()
@@ -847,7 +849,7 @@ async def test_wake_while_still_parked_rearms_the_event():
 
     controller._client.get_job = fn  # type: ignore[method-assign]
 
-    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+    result = await asyncio.wait_for(controller._waiter.await_resolution("job_test"), timeout=2.0)
 
     assert set_when_checked == [False]
     assert result is not None
@@ -872,7 +874,7 @@ async def test_long_wait_keeps_waiting_through_a_failed_job_read():
     client.get_job = fn  # type: ignore[method-assign]
     controller = JobController(client, "drv_test")
 
-    result = await asyncio.wait_for(controller._await_resolution("job_test"), timeout=2.0)
+    result = await asyncio.wait_for(controller._waiter.await_resolution("job_test"), timeout=2.0)
 
     assert result is not None
     assert result.status == JobStatus.IDENTIFIED
@@ -1507,7 +1509,7 @@ def _fake_resolution(controller: JobController, result: JobView | None) -> list[
         waits.append((job_id, spec))
         return result
 
-    controller._await_resolution = fake  # type: ignore[method-assign]
+    controller._waiter.await_resolution = fake  # type: ignore[method-assign]
     return waits
 
 
@@ -1520,7 +1522,7 @@ async def test_recover_held_job_unresolved_returns(caplog):
 
     await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
 
-    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == []
     assert controller.is_idle()
     assert controller._active_job_id is None
@@ -1539,7 +1541,7 @@ async def test_recover_held_job_other_status_not_ripped(caplog):
 
     await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
 
-    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == []
     assert controller.is_idle()
     assert any(
@@ -1557,7 +1559,7 @@ async def test_recover_held_job_runs_rip_with_resolved_job(status):
 
     await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
 
-    assert waits == [("job_test", jc_module._REVIEW_WAIT)]
+    assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == [("job_test", "/dev/sr0", False, "job_test")]
     assert controller.is_idle()
     assert controller._active_job_id is None
@@ -1690,9 +1692,9 @@ async def test_patch_track_rejected_4xx_gives_up(monkeypatch, caplog):
 
 async def test_safe_get_ripper_config_returns_config_on_success():
     client = FakeClient()
-    controller = JobController(client, "drv_test")
+    waiter = ResolutionWaiter(client)
 
-    config = await controller._safe_get_ripper_config()
+    config = await waiter._safe_get_ripper_config()
 
     assert isinstance(config, RipperConfigView)
     assert client.get_ripper_config_calls == 1
@@ -1702,9 +1704,9 @@ async def test_safe_get_ripper_config_returns_none_and_warns_on_http_error(caplo
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
     client = FakeClient()
     client.get_ripper_config_error = httpx.ConnectError("boom")
-    controller = JobController(client, "drv_test")
+    waiter = ResolutionWaiter(client)
 
-    assert await controller._safe_get_ripper_config() is None
+    assert await waiter._safe_get_ripper_config() is None
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert [r.getMessage() for r in warnings] == ["get_ripper_config failed (boom); keeping countdown suspended"]
@@ -1793,14 +1795,14 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
 
 async def test_auto_start_due_is_false_for_a_timed_gate_with_no_job_view():
     """A timed review gate with no job view (a failed read) never auto-starts, and never checks the countdown."""
-    controller = JobController(FakeClient(), "drv_test")
+    waiter = ResolutionWaiter(FakeClient())
 
     async def _never(view: JobView) -> bool:
         raise AssertionError("the countdown must not be checked without a job view")
 
-    controller._review_countdown_expired = _never  # type: ignore[method-assign]
+    waiter._review_countdown_expired = _never  # type: ignore[method-assign]
 
-    assert await controller._auto_start_due(None, jc_module._REVIEW_WAIT) is False
+    assert await waiter._auto_start_due(None, resolution_wait_module.REVIEW_WAIT) is False
 
 
 async def test_scan_failure_ends_the_pipeline_before_identify(monkeypatch, caplog, stub_eject):

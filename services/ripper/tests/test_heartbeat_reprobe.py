@@ -120,7 +120,7 @@ async def test_reacquire_when_status_ripping():
 async def test_no_reacquire_when_status_awaiting_review():
     """AWAITING_REVIEW must NOT trigger pickup via the heartbeat reprobe.
 
-    Review-gated discs go through _review_countdown_expired / _await_resolution,
+    Review-gated discs go through ResolutionWaiter,
     which honour the countdown, manual_pause, and global ripping_paused.  Picking
     up here would call controller.pickup → _run_rip → rip_start and bypass all
     three guards — so AWAITING_REVIEW is excluded from _RIP_READY.
