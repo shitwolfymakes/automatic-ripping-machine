@@ -242,9 +242,10 @@ class JobController:
         return self._active_task is None
 
     @contextlib.asynccontextmanager
-    async def _claim(self, job_id: str) -> AsyncIterator[None]:
+    async def _claim(self, job_id: str | None) -> AsyncIterator[None]:
         """Hold the single-flight gate for this task and job: is_idle() is False, and job.abandoned can cancel the
-        task, until the block exits."""
+        task, until the block exits. A pipeline claims with None, before identify has made the job, and records the
+        id itself once it has one."""
         async with self._active_lock:
             self._active_task = asyncio.current_task()
             self._active_job_id = job_id
@@ -428,93 +429,88 @@ class JobController:
         await self._run_pipeline(device_path, pending_session_id=None)
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
-        async with self._active_lock:
-            self._active_task = asyncio.current_task()
+        async with self._claim(None):
+            # Refresh the MakeMKV key before makemkvcon first touches
+            # the disc (the scan probe runs it for every disc), so a
+            # container up across a beta-key rotation doesn't scan/rip
+            # protected discs with a stale key.
+            await self._prepare_makemkv()
             try:
-                # Refresh the MakeMKV key before makemkvcon first touches
-                # the disc (the scan probe runs it for every disc), so a
-                # container up across a beta-key rotation doesn't scan/rip
-                # protected discs with a stale key.
-                await self._prepare_makemkv()
-                try:
-                    scan_result = await self._scan_with_ready_retry(device_path)
-                except ScanError as e:
-                    logger.error("scan failed device=%s err=%s", device_path, e)
+                scan_result = await self._scan_with_ready_retry(device_path)
+            except ScanError as e:
+                logger.error("scan failed device=%s err=%s", device_path, e)
+                return
+            except OSError as e:
+                if e.errno not in _ABSENT_ERRNOS:
+                    raise
+                logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
+                return
+
+            try:
+                job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+            except httpx.HTTPStatusError as e:
+                if _previously_ripped(e.response):
+                    # on_previously_ripped=reject: the backend made no job
+                    # and told the operator; give the disc back.
+                    logger.info("disc already ripped (on_previously_ripped=reject); ejecting %s", device_path)
+                    await self._eject_with_retry(device_path)
                     return
-                except OSError as e:
-                    if e.errno not in _ABSENT_ERRNOS:
-                        raise
-                    logger.warning("drive went absent during scan device=%s — pipeline abandoned", device_path)
+                # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
+                # the pipeline quietly — the lock releases via the context manager.
+                logger.info(
+                    "rip pipeline not started: identify rejected (%s) for drive %s",
+                    e.response.status_code,
+                    self._drive_id,
+                )
+                return
+            self._active_job_id = job.id
+
+            # Phase 12 — every log line below carries job_id once identify lands.
+            with with_log_context(job_id=job.id):
+                if job.status == JobStatus.AWAITING_USER_ID:
+                    resolved = await self._await_resolution(job.id, _IDENTIFY_WAIT)
+                    if resolved is None:
+                        return
+                    job.status = resolved.status
+
+                # Timed review gate: the backend parks an identified disc here
+                # when hold_for_review is on. Wait for Start (-> ripping) or the
+                # auto-start path (-> identified); either proceeds to the rip.
+                if job.status == JobStatus.AWAITING_REVIEW:
+                    resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
+                    if resolved is None:
+                        return
+                    job.status = resolved.status
+
+                # Proceed for: identified (normal / operator Start landed),
+                # ripping (operator Start already transitioned), or
+                # awaiting_review (timed auto-start — rip-start transitions it).
+                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
+                    logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
                     return
 
                 try:
-                    job = await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+                    await self._run_rip(job, device_path)
                 except httpx.HTTPStatusError as e:
-                    if _previously_ripped(e.response):
-                        # on_previously_ripped=reject: the backend made no job
-                        # and told the operator; give the disc back.
-                        logger.info("disc already ripped (on_previously_ripped=reject); ejecting %s", device_path)
-                        await self._eject_with_retry(device_path)
-                        return
-                    # Non-retriable identify rejection (e.g. 409 ripping-paused). Park
-                    # the pipeline quietly — the lock releases via the context manager.
-                    logger.info(
-                        "rip pipeline not started: identify rejected (%s) for drive %s",
+                    # Backend rejected a state transition (e.g. rip-start
+                    # 422 because identify produced an empty scan_result).
+                    # Retrying won't fix it — log clearly and let the
+                    # pipeline exit so the operator can abandon the job.
+                    logger.error(
+                        "rip pipeline aborted: backend returned %s for %s — abandon job_id=%s manually",
                         e.response.status_code,
-                        self._drive_id,
+                        e.request.url,
+                        job.id,
                     )
                     return
-                self._active_job_id = job.id
-
-                # Phase 12 — every log line below carries job_id once identify lands.
-                with with_log_context(job_id=job.id):
-                    if job.status == JobStatus.AWAITING_USER_ID:
-                        resolved = await self._await_resolution(job.id, _IDENTIFY_WAIT)
-                        if resolved is None:
-                            return
-                        job.status = resolved.status
-
-                    # Timed review gate: the backend parks an identified disc here
-                    # when hold_for_review is on. Wait for Start (-> ripping) or the
-                    # auto-start path (-> identified); either proceeds to the rip.
-                    if job.status == JobStatus.AWAITING_REVIEW:
-                        resolved = await self._await_resolution(job.id, _REVIEW_WAIT)
-                        if resolved is None:
-                            return
-                        job.status = resolved.status
-
-                    # Proceed for: identified (normal / operator Start landed),
-                    # ripping (operator Start already transitioned), or
-                    # awaiting_review (timed auto-start — rip-start transitions it).
-                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
-                        logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
-                        return
-
-                    try:
-                        await self._run_rip(job, device_path)
-                    except httpx.HTTPStatusError as e:
-                        # Backend rejected a state transition (e.g. rip-start
-                        # 422 because identify produced an empty scan_result).
-                        # Retrying won't fix it — log clearly and let the
-                        # pipeline exit so the operator can abandon the job.
-                        logger.error(
-                            "rip pipeline aborted: backend returned %s for %s — abandon job_id=%s manually",
-                            e.response.status_code,
-                            e.request.url,
-                            job.id,
-                        )
-                        return
-                    except asyncio.CancelledError:
-                        # Backend abandon → WS `job.abandoned` → task cancel.
-                        # makemkvcon (or the abcde/dd subprocess) gets killed
-                        # by its own finally-block subprocess cleanup; we just
-                        # log and let the cancellation propagate so the lock
-                        # releases without calling rip-complete.
-                        logger.info("rip cancelled job_id=%s", job.id)
-                        raise
-            finally:
-                self._active_task = None
-                self._active_job_id = None
+                except asyncio.CancelledError:
+                    # Backend abandon → WS `job.abandoned` → task cancel.
+                    # makemkvcon (or the abcde/dd subprocess) gets killed
+                    # by its own finally-block subprocess cleanup; we just
+                    # log and let the cancellation propagate so the lock
+                    # releases without calling rip-complete.
+                    logger.info("rip cancelled job_id=%s", job.id)
+                    raise
 
     async def _scan_with_ready_retry(self, device_path: str) -> ScanResult:
         """Scan the disc, retrying when a DISC_OK drive yields zero titles.
