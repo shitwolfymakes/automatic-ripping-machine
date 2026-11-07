@@ -3,7 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +14,7 @@ import httpx
 from arm_common import DiscType, Job, JobStatus, TrackKind, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
+from arm_ripper.background_tasks import spawn_tracked
 from arm_ripper.backend_retry import BackendRetry
 from arm_ripper.community_keydb import refresh_community_keydb
 from arm_ripper.drive_handle import DriveHandle
@@ -106,14 +107,6 @@ SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3
 # attribute afterward, which is how every existing wait test already
 # configures the timeout.
 _RESOLUTION_TIMEOUT_UNSET = object()
-
-
-def _spawn_tracked(coro: Coroutine[Any, Any, None], tasks: set[asyncio.Task[None]]) -> None:
-    """Run `coro` as a fire-and-forget task, held in `tasks` until it finishes so it is not garbage-collected
-    mid-run."""
-    task = asyncio.create_task(coro)
-    tasks.add(task)
-    task.add_done_callback(tasks.discard)
 
 
 def _disconnect_reason(resumes: int) -> str:
@@ -393,7 +386,7 @@ class JobController:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
             active.cancel()
         if delete_raw:
-            _spawn_tracked(self._wipe_raw(job_id), self._wipe_tasks)
+            spawn_tracked(self._wipe_raw(job_id), self._wipe_tasks)
         if self._abandon_ejects(owns):
             self._spawn_eject()
 
@@ -827,7 +820,7 @@ class JobController:
         """Fire-and-forget community-keydb refresh. The rip proceeds immediately
         with the on-disk keydb; a fresh keydb benefits the next rip. Errors are
         swallowed — a keydb hiccup must never abort a rip."""
-        _spawn_tracked(self._keydb_refresh_and_report(enabled=enabled), self._keydb_tasks)
+        spawn_tracked(self._keydb_refresh_and_report(enabled=enabled), self._keydb_tasks)
 
     async def _keydb_refresh_and_report(self, *, enabled: bool) -> None:
         try:
@@ -858,7 +851,7 @@ class JobController:
         """Fire-and-forget MakeMKV SDF refresh. The rip proceeds immediately
         with the on-disk SDF; a fresh SDF benefits the next rip. Errors are
         swallowed — an SDF hiccup must never abort a rip."""
-        _spawn_tracked(self._sdf_refresh_and_report(enabled=enabled), self._sdf_tasks)
+        spawn_tracked(self._sdf_refresh_and_report(enabled=enabled), self._sdf_tasks)
 
     async def _sdf_refresh_and_report(self, *, enabled: bool) -> None:
         try:
