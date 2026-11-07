@@ -1209,28 +1209,45 @@ class _DiscRip:
         """Record a finished title as done, left for a resume, or failed."""
         with with_log_context(track_id=track.id):
             if result.ok:
-                if result.output_path is not None:
-                    self._kept.add(Path(result.output_path))
-                await self._controller._patch_track_with_retry(track.id, **_done_fields(result))
-                logger.info(
-                    "track %s done size=%s duration=%s",
-                    track.id,
-                    result.size_bytes,
-                    result.duration_seconds,
-                )
-            elif self._resumable and (self._lost.is_set() or self._controller._drive_gone(self._rip_path)):
-                # Not this title's fault: the drive went away under it.
-                # Leave it for the resume rather than failing it.
-                self._lost.set()
-                self._unfinished.add(track.id)
-                logger.info("track %s left for a resume: the drive disconnected (%s)", track.id, result.error)
+                await self._record_ripped(track, result)
+            elif self._drive_left_under_it():
+                self._leave_for_resume(track, result)
             else:
-                await self._controller._patch_track_with_retry(
-                    track.id,
-                    status=TrackStatus.FAILED,
-                    last_error=result.error or "unknown error",
-                )
-                logger.warning("track %s failed err=%s", track.id, result.error)
+                await self._record_failed(track, result)
+
+    def _drive_left_under_it(self) -> bool:
+        """Whether a failed title's drive went away under it (so it is left for a resume): only a resumable rip whose
+        drive is already marked lost, or has left its node."""
+        return self._resumable and (self._lost.is_set() or self._controller._drive_gone(self._rip_path))
+
+    async def _record_ripped(self, track: TrackView, result: RipResult) -> None:
+        """Keep a ripped title's file and patch the track DONE."""
+        if result.output_path is not None:
+            self._kept.add(Path(result.output_path))
+        await self._controller._patch_track_with_retry(track.id, **_done_fields(result))
+        logger.info(
+            "track %s done size=%s duration=%s",
+            track.id,
+            result.size_bytes,
+            result.duration_seconds,
+        )
+
+    def _leave_for_resume(self, track: TrackView, result: RipResult) -> None:
+        """Mark the drive lost and leave the title unfinished for the resume pass."""
+        # Not this title's fault: the drive went away under it.
+        # Leave it for the resume rather than failing it.
+        self._lost.set()
+        self._unfinished.add(track.id)
+        logger.info("track %s left for a resume: the drive disconnected (%s)", track.id, result.error)
+
+    async def _record_failed(self, track: TrackView, result: RipResult) -> None:
+        """Patch the track FAILED with the rip's error."""
+        await self._controller._patch_track_with_retry(
+            track.id,
+            status=TrackStatus.FAILED,
+            last_error=result.error or "unknown error",
+        )
+        logger.warning("track %s failed err=%s", track.id, result.error)
 
     async def _on_track_progress(
         self, track: TrackView, fraction: float, stats: TransferStats | None = None, /
