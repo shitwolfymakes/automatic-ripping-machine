@@ -3,7 +3,7 @@ import os
 import shutil
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable, Literal, Sequence
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
@@ -876,6 +876,63 @@ def _delete_per_job_log(job_id: str) -> None:
         logger.warning("per-job log delete failed job_id=%s path=%s err=%s", job_id, path, exc)
 
 
+def _bulk_delete_status(req: BulkDeleteJobsRequest) -> JobStatus | None:
+    """The status filter of a bulk delete; 400 when it is not a JobStatus."""
+    if not req.status:
+        return None
+    try:
+        return JobStatus(req.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+
+
+def _bulk_delete_candidates(
+    rows: Sequence[Job], req: BulkDeleteJobsRequest, target_status: JobStatus | None
+) -> list[Job]:
+    """The jobs a bulk delete targets: `job_ids` wins over `status`, else all."""
+    if req.job_ids:
+        wanted = set(req.job_ids)
+        return [j for j in rows if j.id in wanted]
+    if target_status is not None:
+        return [j for j in rows if j.status == target_status]
+    return list(rows)
+
+
+async def _clean_up_job_files(db: AsyncSession, job_id: str, *, raw_root: Path, media_root: Path) -> dict[str, int]:
+    """Delete a job's raw dir and recorded media outputs. Returns the counters."""
+    media_outputs = await _resolve_media_outputs(db, job_id)
+    return _delete_job_files(job_id, media_outputs, raw_root=raw_root, media_root=media_root)
+
+
+def _log_delete_summary(job_id: str, counters: dict[str, int] | None) -> None:
+    """Log the one-line summary of a single job delete."""
+    if counters is None:
+        logger.info("delete job_id=%s delete_raw=False", job_id)
+        return
+    logger.info(
+        "delete job_id=%s delete_raw=True raw_dir_removed=%d media_files_removed=%d media_dirs_pruned=%d",
+        job_id,
+        counters["raw_dir_removed"],
+        counters["media_files_removed"],
+        counters["media_dirs_pruned"],
+    )
+
+
+def _log_bulk_delete_summary(deleted: int, skipped: int, totals: dict[str, int] | None) -> None:
+    """Log the one-line summary of a bulk delete."""
+    if totals is None:
+        logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=False", deleted, skipped)
+        return
+    logger.info(
+        "delete-all jobs deleted=%d skipped=%d delete_raw=True raw_dirs=%d media_files=%d media_dirs_pruned=%d",
+        deleted,
+        skipped,
+        totals["raw_dir_removed"],
+        totals["media_files_removed"],
+        totals["media_dirs_pruned"],
+    )
+
+
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
     job_id: JobIdParam,
@@ -908,27 +965,14 @@ async def delete_job(
 
     counters: dict[str, int] | None = None
     if delete_raw:
-        media_outputs = await _resolve_media_outputs(db, job.id)
-        counters = _delete_job_files(
-            job.id,
-            media_outputs,
-            raw_root=Path(settings.RAW_ROOT),
-            media_root=Path(settings.MEDIA_ROOT),
+        counters = await _clean_up_job_files(
+            db, job.id, raw_root=Path(settings.RAW_ROOT), media_root=Path(settings.MEDIA_ROOT)
         )
 
     await db.delete(job)
     await db.commit()
     _delete_per_job_log(job_id)
-    if counters is not None:
-        logger.info(
-            "delete job_id=%s delete_raw=True raw_dir_removed=%d media_files_removed=%d media_dirs_pruned=%d",
-            job_id,
-            counters["raw_dir_removed"],
-            counters["media_files_removed"],
-            counters["media_dirs_pruned"],
-        )
-    else:
-        logger.info("delete job_id=%s delete_raw=False", job_id)
+    _log_delete_summary(job_id, counters)
 
 
 @router.delete("", response_model=BulkDeleteJobsResponse)
@@ -949,22 +993,10 @@ async def delete_all_jobs(
     """
     req = req or BulkDeleteJobsRequest()
 
-    target_status: JobStatus | None = None
-    if req.status:
-        try:
-            target_status = JobStatus(req.status)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"invalid status: {req.status}") from exc
+    target_status = _bulk_delete_status(req)
 
     rows = (await db.execute(select(Job))).scalars().all()
-
-    if req.job_ids:
-        wanted = set(req.job_ids)
-        candidates = [j for j in rows if j.id in wanted]
-    elif target_status is not None:
-        candidates = [j for j in rows if j.status == target_status]
-    else:
-        candidates = list(rows)
+    candidates = _bulk_delete_candidates(rows, req, target_status)
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
@@ -976,13 +1008,7 @@ async def delete_all_jobs(
             skipped.append(job.id)
             continue
         if delete_raw:
-            media_outputs = await _resolve_media_outputs(db, job.id)
-            counters = _delete_job_files(
-                job.id,
-                media_outputs,
-                raw_root=raw_root,
-                media_root=media_root,
-            )
+            counters = await _clean_up_job_files(db, job.id, raw_root=raw_root, media_root=media_root)
             for k, v in counters.items():
                 totals[k] += v
         await db.delete(job)
@@ -991,17 +1017,7 @@ async def delete_all_jobs(
     await db.commit()
     for jid in deleted_ids:
         _delete_per_job_log(jid)
-    if delete_raw:
-        logger.info(
-            "delete-all jobs deleted=%d skipped=%d delete_raw=True raw_dirs=%d media_files=%d media_dirs_pruned=%d",
-            len(deleted_ids),
-            len(skipped),
-            totals["raw_dir_removed"],
-            totals["media_files_removed"],
-            totals["media_dirs_pruned"],
-        )
-    else:
-        logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=False", len(deleted_ids), len(skipped))
+    _log_bulk_delete_summary(len(deleted_ids), len(skipped), totals if delete_raw else None)
     return BulkDeleteJobsResponse(deleted_ids=deleted_ids, skipped_non_terminal=skipped)
 
 
