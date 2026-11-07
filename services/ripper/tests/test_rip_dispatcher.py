@@ -1307,3 +1307,251 @@ async def test_on_title_done_warns_and_skips_a_title_whose_file_cannot_be_stat_e
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
     assert records[0].getMessage().startswith(f"on_title_done: stat failed source_idx=0 path={dangling} err=")
+
+
+# --- rip_all (CD, DATA, fallback, backup progress) ---------------------------
+
+
+def _stub_rip_cd(
+    monkeypatch,
+    *,
+    fire_done: list[int] | None = None,
+    returned: dict[int, RipResult] | None = None,
+) -> dict[str, Any]:
+    """Replace dispatcher's rip_cd with a fake that records its kwargs, fires
+    `on_track_done` for each index in `fire_done` (known to the dispatcher or
+    not) with an ok result, and returns `returned`."""
+    captured: dict[str, Any] = {}
+
+    async def fake_rip_cd(**kwargs: Any) -> dict[int, RipResult]:
+        captured.update(kwargs)
+        for idx in fire_done or []:
+            await kwargs["on_track_done"](idx, RipResult(ok=True, size_bytes=idx))
+        return returned or {}
+
+    monkeypatch.setattr(dispatcher_module, "rip_cd", fake_rip_cd)
+    return captured
+
+
+def _recorders() -> tuple[list[tuple[Any, ...]], Any, Any]:
+    events: list[tuple[Any, ...]] = []
+
+    async def on_start(track: TrackView) -> None:
+        events.append(("start", track.id))
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        events.append(("done", track.id, result.ok, result.error, result.size_bytes))
+
+    return events, on_start, on_done
+
+
+async def test_rip_all_cd_starts_every_track_then_reports_what_rip_cd_fires(monkeypatch, tmp_path):
+    captured = _stub_rip_cd(
+        monkeypatch,
+        fire_done=[1, 2],
+        returned={1: RipResult(ok=True, size_bytes=1), 2: RipResult(ok=True, size_bytes=2)},
+    )
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [
+        ("start", "trk_1"),
+        ("start", "trk_2"),
+        ("done", "trk_1", True, None, 1),
+        ("done", "trk_2", True, None, 2),
+    ]
+    assert set(captured) == {"device_path", "output_dir", "track_indexes", "on_track_done"}
+    assert captured["device_path"] == "/dev/sr0"
+    assert captured["output_dir"] == tmp_path
+    assert captured["track_indexes"] == [1, 2]
+
+
+async def test_rip_all_cd_ignores_a_done_index_that_is_not_a_requested_track(monkeypatch, tmp_path):
+    _stub_rip_cd(monkeypatch, fire_done=[9, 1], returned={1: RipResult(ok=True, size_bytes=1)})
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [("start", "trk_1"), ("done", "trk_1", True, None, 1)]
+
+
+async def test_rip_all_cd_fails_a_track_rip_cd_left_out(monkeypatch, tmp_path):
+    _stub_rip_cd(monkeypatch, fire_done=[1], returned={1: RipResult(ok=True, size_bytes=1)})
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [
+        ("start", "trk_1"),
+        ("start", "trk_2"),
+        ("done", "trk_1", True, None, 1),
+        ("done", "trk_2", False, "abcde produced no entry for track 2", None),
+    ]
+
+
+async def test_rip_all_cd_with_no_tracks_still_calls_rip_cd_and_fires_nothing(monkeypatch, tmp_path):
+    captured = _stub_rip_cd(monkeypatch)
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == []
+    assert captured["track_indexes"] == []
+
+
+async def test_rip_all_data_with_no_tracks_returns_without_a_callback(monkeypatch, tmp_path):
+    async def must_not_run(**_kwargs: Any) -> RipResult:
+        raise AssertionError("rip_data must not run without a track")
+
+    monkeypatch.setattr(dispatcher_module, "rip_data", must_not_run)
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.DATA,
+        device_path="/dev/sr0",
+        tracks=[],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == []
+
+
+async def test_rip_all_data_progress_is_dropped_without_a_progress_callback(monkeypatch, tmp_path):
+    async def fake_rip_data(*, device_path, output_dir, on_progress=None):
+        await on_progress(10, 100)
+        return RipResult(ok=True, size_bytes=10)
+
+    monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.DATA,
+        device_path="/dev/sr0",
+        tracks=[_track(0)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [("start", "trk_0"), ("done", "trk_0", True, None, 10)]
+
+
+async def test_rip_all_data_progress_has_zero_fraction_and_no_rate_for_unknown_total_and_no_elapsed(
+    monkeypatch, tmp_path
+):
+    """With an unknown total the fraction is 0.0, and with no time elapsed the
+    rate is None."""
+
+    async def fake_rip_data(*, device_path, output_dir, on_progress=None):
+        await on_progress(10, None)
+        return RipResult(ok=True)
+
+    class _FrozenTime:
+        @staticmethod
+        def monotonic() -> float:
+            return 5.0
+
+    monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
+    monkeypatch.setattr(dispatcher_module, "time", _FrozenTime)
+    ticks: list[tuple[str, float, Any]] = []
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        ticks.append((track.id, fraction, stats))
+
+    _events, on_start, on_done = _recorders()
+    await rip_all(
+        disc_type=DiscType.DATA,
+        device_path="/dev/sr0",
+        tracks=[_track(0)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert ticks == [("trk_0", 0.0, {"bytes_done": 10, "bytes_total": None, "rate_bps": None})]
+
+
+async def test_rip_all_unknown_disc_type_fails_every_track_with_no_rip_path(monkeypatch, tmp_path):
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.UNKNOWN,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(1)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [
+        ("done", "trk_0", False, "no rip path for disc_type=unknown", None),
+        ("done", "trk_1", False, "no rip path for disc_type=unknown", None),
+    ]
+
+
+async def test_rip_all_unknown_disc_type_with_no_tracks_fires_nothing(monkeypatch, tmp_path):
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.UNKNOWN,
+        device_path="/dev/sr0",
+        tracks=[],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == []
+
+
+async def test_rip_all_disc_backup_progress_is_dropped_without_a_progress_callback(monkeypatch, tmp_path):
+    async def fake_rip_backup(*, device_path, output_dir, on_progress=None):
+        await on_progress(0.5)
+        return RipResult(ok=True, size_bytes=7)
+
+    monkeypatch.setattr(dispatcher_module, "rip_backup", fake_rip_backup)
+    backup = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DISC_BACKUP})
+    events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[backup],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert events == [("start", "trk_0"), ("done", "trk_0", True, None, 7)]
