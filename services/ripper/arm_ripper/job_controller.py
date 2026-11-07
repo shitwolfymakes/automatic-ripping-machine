@@ -331,17 +331,21 @@ class JobController:
             active.cancel()
         if delete_raw:
             _spawn_tracked(self._wipe_raw(job_id), self._wipe_tasks)
-        # Abandon means "done with this disc — give it back". The lifecycle's
-        # post-rip eject (end of _run_rip) never runs on an abandon exit, so
-        # eject here: when this job owns the drive's pipeline (ripping or
-        # parked — _eject_with_retry's EBUSY retries absorb the cancelled
-        # makemkvcon's teardown), or when the drive is idle with a disc still
-        # seated (pipeline already exited, e.g. after a rip-start abort). A
-        # stale abandon while a DIFFERENT job's rip owns the drive must not
-        # pop the tray mid-rip.
-        idle = active is None or active.done()
-        if owns or (idle and self._disc_seated()):
+        if self._abandon_ejects(owns):
             self._spawn_eject()
+
+    def _abandon_ejects(self, owns: bool) -> bool:
+        """Whether an abandon gives the disc back: "done with this disc, give it back".
+
+        The lifecycle's post-rip eject (end of _run_rip) never runs on an abandon exit, so eject here: when this
+        job owns the drive's pipeline (ripping or parked; _eject_with_retry's EBUSY retries absorb the cancelled
+        makemkvcon's teardown), or when the drive is idle with a disc still seated (pipeline already exited, e.g.
+        after a rip-start abort). A stale abandon while a DIFFERENT job's rip owns the drive must not pop the
+        tray mid-rip.
+        """
+        active = self._active_task
+        idle = active is None or active.done()
+        return owns or (idle and self._disc_seated())
 
     async def _wipe_raw(self, job_id: str) -> None:
         """Delete `/raw/<job_id>/` off the event loop."""
