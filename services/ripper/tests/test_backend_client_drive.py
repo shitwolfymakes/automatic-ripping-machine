@@ -185,3 +185,35 @@ async def test_report_makemkv_key_status_names_this_drive() -> None:
 
     await _client(handler, drive_id="drv_9").report_makemkv_key_status(state=MakemkvKeyState.VALID, detail=None)
     assert seen["body"]["drive_id"] == "drv_9"
+
+
+def test_refusal_detail_returns_a_string_detail_as_is() -> None:
+    from arm_ripper.backend_client import _refusal_detail
+
+    assert _refusal_detail(httpx.Response(409, json={"detail": "identity mismatch"})) == "identity mismatch"
+
+
+@pytest.mark.parametrize("detail", [{"a": 1}, ["x", "y"]])
+def test_refusal_detail_stringifies_a_structured_detail(detail) -> None:
+    from arm_ripper.backend_client import _refusal_detail
+
+    assert _refusal_detail(httpx.Response(409, json={"detail": detail})) == str(detail)
+
+
+def test_refusal_detail_falls_back_to_body_text_without_a_detail_key() -> None:
+    from arm_ripper.backend_client import _refusal_detail
+
+    assert _refusal_detail(httpx.Response(404, json={"other": 1})) == '{"other":1}'
+
+
+def test_refusal_detail_falls_back_to_body_text_when_not_json() -> None:
+    from arm_ripper.backend_client import _refusal_detail
+
+    assert _refusal_detail(httpx.Response(404, text="<html>")) == "<html>"
+
+
+def test_refusal_detail_raises_attribute_error_for_a_json_list_body() -> None:
+    from arm_ripper.backend_client import _refusal_detail
+
+    with pytest.raises(AttributeError):
+        _refusal_detail(httpx.Response(404, json=["x"]))

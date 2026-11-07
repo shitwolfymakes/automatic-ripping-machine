@@ -31,6 +31,15 @@ class RegisterRefused(RuntimeError):
     drive, 409 not enrolled / identity mismatch). Carries the backend's detail."""
 
 
+def _refusal_detail(response: httpx.Response) -> str:
+    """The backend's `detail` from a refusal body, or the raw body text when it has none or isn't JSON."""
+    try:
+        detail = response.json().get("detail", response.text)
+    except ValueError:
+        detail = response.text
+    return str(detail)
+
+
 class BackendClient:
     def __init__(
         self,
@@ -67,11 +76,7 @@ class BackendClient:
         )
         r = await self._client.post("/api/ripper/register", json=req.model_dump())
         if r.status_code in (404, 409):
-            try:
-                detail = r.json().get("detail", r.text)
-            except ValueError:
-                detail = r.text
-            raise RegisterRefused(str(detail))
+            raise RegisterRefused(_refusal_detail(r))
         r.raise_for_status()
         return Drive.model_validate(r.json())
 
