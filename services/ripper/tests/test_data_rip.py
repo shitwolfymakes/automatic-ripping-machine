@@ -119,3 +119,103 @@ async def test_dd_failure_keeps_the_stderr_tail(monkeypatch: pytest.MonkeyPatch,
     result = await data_rip.rip_data(str(src), tmp_path / "out")
     assert not result.ok
     assert (result.error or "").endswith("Input/output error")
+
+
+class _HangProc:
+    """dd that never finishes by itself: wait() blocks until kill() is called."""
+
+    def __init__(self, out: Path, reap_error: Exception | None = None) -> None:
+        out.touch()
+        self._reap_error = reap_error
+        self._killed = asyncio.Event()
+        self.returncode: int | None = None
+        self.stderr = None
+        self.kills = 0
+        self.reaped = False
+
+    async def wait(self) -> int:
+        if self.kills and self._reap_error is not None:
+            raise self._reap_error
+        await self._killed.wait()
+        self.reaped = True
+        return -9
+
+    def kill(self) -> None:
+        self.kills += 1
+        self.returncode = -9
+        self._killed.set()
+
+
+def _patch_hang(monkeypatch: pytest.MonkeyPatch, procs: list[_HangProc], reap_error: Exception | None = None) -> None:
+    async def fake_exec(*cmd: str, **_kw: object) -> _HangProc:
+        proc = _HangProc(Path(next(a for a in cmd if a.startswith("of="))[3:]), reap_error)
+        procs.append(proc)
+        return proc
+
+    monkeypatch.setattr(data_rip.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(data_rip, "PROGRESS_INTERVAL_SECONDS", 0.01)
+
+
+async def test_dd_missing_from_path_is_reported(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    async def fake_exec(*_cmd: str, **_kw: object) -> _FakeProc:
+        raise FileNotFoundError("dd")
+
+    monkeypatch.setattr(data_rip.asyncio, "create_subprocess_exec", fake_exec)
+    result = await data_rip.rip_data("/dev/sr0", tmp_path / "out")
+    assert not result.ok
+    assert result.error == "dd not on PATH: dd"
+
+
+async def test_timeout_kills_dd_and_stops_progress(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    procs: list[_HangProc] = []
+    _patch_hang(monkeypatch, procs)
+    monkeypatch.setattr(data_rip, "DATA_RIP_TIMEOUT_SECONDS", 0.05)
+    seen: list[int] = []
+
+    async def on_progress(done: int, _total: int | None) -> None:
+        seen.append(done)
+
+    result = await data_rip.rip_data("/dev/sr0", tmp_path / "out", on_progress=on_progress)
+    assert not result.ok
+    assert result.error == "dd timed out after 0.05s"
+    assert procs[0].kills == 1 and procs[0].reaped
+    assert seen
+    count = len(seen)
+    await asyncio.sleep(0.05)
+    assert len(seen) == count
+
+
+async def _cancel_mid_copy(tmp_path: Path) -> None:
+    task = asyncio.create_task(data_rip.rip_data("/dev/sr0", tmp_path / "out"))
+    await asyncio.sleep(0.03)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_cancel_mid_copy_kills_dd(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    procs: list[_HangProc] = []
+    _patch_hang(monkeypatch, procs)
+    await _cancel_mid_copy(tmp_path)
+    assert procs[0].kills == 1 and procs[0].reaped
+
+
+async def test_cancel_mid_copy_swallows_a_failing_reap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    procs: list[_HangProc] = []
+    _patch_hang(monkeypatch, procs, reap_error=RuntimeError("reap failed"))
+    await _cancel_mid_copy(tmp_path)
+    assert procs[0].kills == 1 and not procs[0].reaped
+
+
+async def test_empty_output_file_is_an_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_dd(monkeypatch, [b""], [])
+    result = await data_rip.rip_data("/dev/sr0", tmp_path / "out")
+    assert not result.ok
+    assert result.error == "dd exited 0 but produced empty output"
+
+
+async def test_missing_output_file_is_an_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_dd(monkeypatch, [], [])
+    result = await data_rip.rip_data("/dev/sr0", tmp_path / "out")
+    assert not result.ok
+    assert result.error == "dd exited 0 but produced empty output"
