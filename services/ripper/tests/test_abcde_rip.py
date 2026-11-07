@@ -487,3 +487,13 @@ def test_kill_group_tolerates_an_already_empty_group(monkeypatch):
     fake = _FakeProc([])
     abcde_rip._kill_group(fake)  # type: ignore[arg-type]
     assert fake.returncode == -9
+
+
+def test_write_config_writes_the_abcde_config_to_a_temp_file(tmp_path):
+    conf_path = abcde_rip._write_config(tmp_path)
+    try:
+        assert conf_path.exists()
+        assert conf_path.name.endswith(".abcde.conf")
+        assert conf_path.read_text() == abcde_rip._abcde_config(tmp_path)
+    finally:
+        conf_path.unlink()
