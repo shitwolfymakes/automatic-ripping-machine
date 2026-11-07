@@ -30,6 +30,8 @@ async def run_refresh_script(
 ) -> ScriptRun:
     """Run the script and log how it ended under `label` on the caller's logger. Never raises."""
     if not os.access(script_path, os.X_OK):
+        # Mirrors the entrypoint's `[[ -x … ]]` guard: no script present
+        # (non-makemkv image, unit-test host) means nothing to refresh.
         logger.debug("%s skipped: %s not executable", label, script_path)
         return ScriptRun(ScriptOutcome.SKIPPED)
 

@@ -22,9 +22,10 @@ Key precedence (highest first):
 3. The monthly free beta key scraped from the MakeMKV forum.
 """
 
-import asyncio
 import logging
 import os
+
+from arm_ripper.refresh_script import run_refresh_script
 
 logger = logging.getLogger("arm_ripper.makemkv_key")
 
@@ -61,12 +62,6 @@ async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT, key: str | N
       key-refresh hiccup would be strictly worse than letting makemkvcon
       try the key that's already on disk.
     """
-    if not os.access(script_path, os.X_OK):
-        # Mirrors the entrypoint's `[[ -x … ]]` guard: no scraper present
-        # (non-makemkv image, unit-test host) means nothing to refresh.
-        logger.debug("makemkv key refresh skipped: %s not executable", script_path)
-        return
-
     # Inject the configured key (if any) so update_key.sh's MAKEMKV_KEY branch
     # picks it up ahead of any host-set value. A blank/whitespace key is
     # treated as unset so it doesn't shadow the env/scrape fallbacks.
@@ -74,31 +69,9 @@ async def refresh_makemkv_key(script_path: str = UPDATE_KEY_SCRIPT, key: str | N
     if key and key.strip():
         env = {**os.environ, "MAKEMKV_KEY": key}
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            script_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env=env,
-        )
-    except OSError as exc:
-        logger.warning("makemkv key refresh could not start (%s): %s", script_path, exc)
-        return
-
-    try:
-        stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=REFRESH_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        logger.warning("makemkv key refresh timed out after %.0fs", REFRESH_TIMEOUT_SECONDS)
-        return
-
     # update_key.sh narrates which branch it took ("using MAKEMKV_KEY from
-    # env" vs "scraping monthly beta key from forum"); surface it so
-    # operators can confirm the per-rip refresh ran.
-    text = stdout_b.decode(errors="replace").strip()
-    if proc.returncode == 0:
-        if text:
-            logger.info("makemkv key refresh: %s", text.replace("\n", " | "))
-    else:
-        logger.warning("makemkv key refresh exited %s: %s", proc.returncode, text or "<no output>")
+    # env" vs "scraping monthly beta key from forum"); the runner logs that
+    # output so operators can confirm the per-rip refresh ran.
+    await run_refresh_script(
+        script_path, env=env, timeout=REFRESH_TIMEOUT_SECONDS, label="makemkv key refresh", logger=logger
+    )

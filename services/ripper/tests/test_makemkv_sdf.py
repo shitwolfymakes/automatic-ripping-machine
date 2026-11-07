@@ -88,7 +88,7 @@ def _patch_spawn(monkeypatch, proc: _FakeProc) -> None:
     async def _spawn(*_a, **_k):
         return proc
 
-    monkeypatch.setattr("arm_ripper.makemkv_sdf.asyncio.create_subprocess_exec", _spawn)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.create_subprocess_exec", _spawn)
 
 
 def _patch_timeout(monkeypatch) -> None:
@@ -96,7 +96,7 @@ def _patch_timeout(monkeypatch) -> None:
         coro.close()
         raise TimeoutError
 
-    monkeypatch.setattr("arm_ripper.makemkv_sdf.asyncio.wait_for", _timeout)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.wait_for", _timeout)
 
 
 def _records(caplog):
@@ -118,7 +118,7 @@ async def test_sdf_oserror_logs_warning(tmp_path, monkeypatch, caplog):
     async def _boom(*_a, **_k):
         raise OSError("no fork")
 
-    monkeypatch.setattr("arm_ripper.makemkv_sdf.asyncio.create_subprocess_exec", _boom)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.create_subprocess_exec", _boom)
     assert await refresh_makemkv_sdf(script) is None
     assert _records(caplog) == [
         ("arm_ripper.makemkv_sdf", logging.WARNING, f"SDF refresh could not start ({script}): no fork")
