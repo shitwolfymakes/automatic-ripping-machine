@@ -120,6 +120,55 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
     )
 
 
+class _InfoParser:
+    """Accumulates the disc label, the disc type and each title's TINFO fields from robot-mode lines."""
+
+    def __init__(self) -> None:
+        self.volume_label: str | None = None
+        self.mkv_disc_type: DiscType | None = None
+        self.titles: dict[int, dict[str, object]] = {}
+
+    def feed(self, raw: str) -> None:
+        """Route one line to its handler; other lines are ignored."""
+        split = _split_robot_line(raw)
+        if split is None:
+            return
+        msg_type, fields = split
+        if msg_type == "CINFO" and len(fields) >= 3:
+            self.on_cinfo(fields)
+        elif msg_type == "TINFO" and len(fields) >= 4:
+            self.on_tinfo(fields)
+
+    def on_cinfo(self, fields: list[str]) -> None:
+        try:
+            code = int(fields[0])
+        except ValueError:
+            return
+        if code == 1 and self.mkv_disc_type is None:
+            self.mkv_disc_type = _classify_from_cinfo(_strip_quotes(",".join(fields[2:])))
+        elif code in (2, 30) and not self.volume_label:
+            self.volume_label = _strip_quotes(",".join(fields[2:]))
+
+    def on_tinfo(self, fields: list[str]) -> None:
+        try:
+            track_idx = int(fields[0])
+            code = int(fields[1])
+        except ValueError:
+            return
+        value = _strip_quotes(",".join(fields[3:]))
+        entry = self.titles.setdefault(track_idx, {})
+        field = _TINFO_FIELDS.get(code)
+        if field is not None:
+            name, parse = field
+            field_value = parse(value)
+            if field_value is not None:
+                entry[name] = field_value
+
+    def scan_titles(self) -> list[ScanTitle]:
+        """The titles with a duration, in index order."""
+        return [title for idx in sorted(self.titles) if (title := _scan_title(idx, self.titles[idx])) is not None]
+
+
 def parse_makemkvcon_info(
     lines: Iterable[str],
 ) -> tuple[str | None, list[ScanTitle], DiscType | None]:
@@ -140,43 +189,10 @@ def parse_makemkvcon_info(
 
     Reference: https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/MakeMKV-Codes
     """
-    volume_label: str | None = None
-    mkv_disc_type: DiscType | None = None
-    titles: dict[int, dict[str, object]] = {}
-
+    parser = _InfoParser()
     for raw in lines:
-        split = _split_robot_line(raw)
-        if split is None:
-            continue
-        msg_type, fields = split
-
-        if msg_type == "CINFO" and len(fields) >= 3:
-            try:
-                code = int(fields[0])
-            except ValueError:
-                continue
-            if code == 1 and mkv_disc_type is None:
-                mkv_disc_type = _classify_from_cinfo(_strip_quotes(",".join(fields[2:])))
-            elif code in (2, 30) and not volume_label:
-                volume_label = _strip_quotes(",".join(fields[2:]))
-
-        elif msg_type == "TINFO" and len(fields) >= 4:
-            try:
-                track_idx = int(fields[0])
-                code = int(fields[1])
-            except ValueError:
-                continue
-            value = _strip_quotes(",".join(fields[3:]))
-            entry = titles.setdefault(track_idx, {})
-            field = _TINFO_FIELDS.get(code)
-            if field is not None:
-                name, parse = field
-                field_value = parse(value)
-                if field_value is not None:
-                    entry[name] = field_value
-
-    parsed = [title for idx in sorted(titles) if (title := _scan_title(idx, titles[idx])) is not None]
-    return volume_label, parsed, mkv_disc_type
+        parser.feed(raw)
+    return parser.volume_label, parser.scan_titles(), parser.mkv_disc_type
 
 
 def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
