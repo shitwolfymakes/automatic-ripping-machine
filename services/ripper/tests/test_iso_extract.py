@@ -445,3 +445,31 @@ async def test_extract_removes_the_scratch_dir_when_run_7z_raises(
 
     assert not (_scratch / "drv_test").exists()
     assert extraction_routes.extracted_dir(str(iso)) is None
+
+
+def test_find_7z_prefers_7z_and_never_asks_for_7zz(monkeypatch):
+    asked: list[str] = []
+
+    def _which(name: str) -> str | None:
+        asked.append(name)
+        return "/usr/bin/7z"
+
+    monkeypatch.setattr(iso_extract.shutil, "which", _which)
+
+    assert iso_extract._find_7z() == "/usr/bin/7z"
+    assert asked == ["7z"]
+
+
+def test_find_7z_falls_back_to_7zz(monkeypatch):
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda name: "/usr/bin/7zz" if name == "7zz" else None)
+
+    assert iso_extract._find_7z() == "/usr/bin/7zz"
+
+
+def test_find_7z_logs_an_error_and_returns_none_when_neither_is_installed(monkeypatch, caplog):
+    monkeypatch.setattr(iso_extract.shutil, "which", lambda _name: None)
+
+    with caplog.at_level("ERROR", logger="arm_ripper.iso_extract"):
+        assert iso_extract._find_7z() is None
+
+    assert [r.getMessage() for r in caplog.records] == ["iso extract: 7-Zip (7z / 7zz) is not installed"]

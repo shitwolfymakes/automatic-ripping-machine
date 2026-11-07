@@ -79,12 +79,19 @@ def _has_space(image: Path, scratch: Path) -> bool:
     return True
 
 
-async def _run_7z(image: Path, dest: Path) -> bool:
+def _find_7z() -> str | None:
+    """The 7-Zip executable on PATH (`7z`, else `7zz`); None, logged as an error, when neither is installed."""
     # Debian 12's `7zip` package (the ripper image) ships only `7zz`; p7zip
     # and newer Debian install `7z`.
     exe = shutil.which("7z") or shutil.which("7zz")
     if exe is None:
         logger.error("iso extract: 7-Zip (7z / 7zz) is not installed")
+    return exe
+
+
+async def _run_7z(image: Path, dest: Path) -> bool:
+    exe = _find_7z()
+    if exe is None:
         return False
     proc = await asyncio.create_subprocess_exec(
         exe,
