@@ -890,6 +890,110 @@ class _IdentifyFlow:
             if is_tv_candidate(job, stage_tracks):
                 self.stage_runner.schedule(job.id)
 
+    def _is_ambiguous_toc(self, result: MetadataResult | None) -> bool:
+        # A CD matched only by track layout where several releases fit is a
+        # guess between pressings: hold it for the operator whatever the
+        # music auto-apply switch says.
+        return (
+            result is not None
+            and result.provider == "musicbrainz"
+            and len(result.payload.get("toc_candidates") or []) > 1
+        )
+
+    async def _apply_hit(self, job: Job, cfg: Config, scan: ScanResult, result: MetadataResult) -> None:
+        apply_identity_result(job, result, now=datetime.now(timezone.utc))
+        # Timed review gate: a GENUINELY identified disc (result is not None — not
+        # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
+        # for operator review when hold_for_review is on, stamping the countdown
+        # anchor and persisting the scan's titles as Track rows so the review UI
+        # shows the full title list. Otherwise it proceeds straight to rip as
+        # today (tracks created at rip-start). (spec §5.1, §4.3)
+        if cfg.hold_for_review:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = datetime.now(timezone.utc)
+            await _persist_review_tracks(self.session, job, scan)
+        else:
+            job.status = JobStatus.IDENTIFIED
+
+    async def _hold_hit(
+        self, job: Job, scan: ScanResult, result: MetadataResult, miss_title: str | None, ambiguous_toc: bool
+    ) -> None:
+        # D-10: this kind's "Apply confident matches" switch is off. Keep
+        # the hit for the operator to confirm; the disc waits with no
+        # countdown (the ripper treats a null wait_start_time as "no
+        # countdown") and stays unidentified until they accept or
+        # resolve it. The review gate's own countdown never starts here.
+        job.title = miss_title
+        job.metadata_json = suggest_identity(job.metadata_json, result, now=datetime.now(timezone.utc))
+        job.status = JobStatus.AWAITING_REVIEW
+        job.wait_start_time = None
+        # The kind is the ROUTING input, not an identity claim: it is what
+        # resolve_routed_session_id keys `session_routes` on, so the review
+        # tracks below get the keep/drop defaults and preset provenance of
+        # the session this disc will actually rip into. Left unset, the
+        # disc routes as a never-identified one and accept never re-persists
+        # the tracks, so the operator would rip the wrong set. The hit's
+        # title/year/poster still reach nothing but the suggestion.
+        # result.kind is a subset of MediaType's values by construction.
+        job.media_type = MediaType(result.kind)
+        await _persist_review_tracks(self.session, job, scan)
+        logger.info(
+            "identify job_id=%s: %s hit %r held for confirmation (%s)",
+            job.id,
+            result.kind,
+            result.title,
+            "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
+        )
+
+    def _apply_miss(self, job: Job, cfg: Config, miss_title: str | None) -> None:
+        diagnostic: dict[str, bool] = {}
+        if self.timed_out:
+            diagnostic["dispatch_timeout"] = True
+        if cfg.block_on_miss:
+            job.status = JobStatus.AWAITING_USER_ID
+            job.title = miss_title
+            if diagnostic:
+                job.metadata_json = with_flags(job.metadata_json, **diagnostic)
+        else:
+            job.status = JobStatus.IDENTIFIED
+            job.title = miss_title
+            job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
+
+    async def _hold_previously_ripped(self, job: Job, scan: ScanResult, previous: Job) -> None:
+        # on_previously_ripped=hold: whatever identify concluded, the disc
+        # waits for Rip again or Discard. No countdown (wait_start_time
+        # stays unset), so the ripper never auto-starts it.
+        if job.status != JobStatus.AWAITING_REVIEW:
+            await _persist_review_tracks(self.session, job, scan)
+        job.status = JobStatus.AWAITING_REVIEW
+        job.wait_start_time = None
+        job.metadata_json = {
+            **(job.metadata_json or {}),
+            "previously_ripped": {"job_id": previous.id},
+        }
+        logger.info("identify job_id=%s: disc already ripped as job_id=%s; holding it", job.id, previous.id)
+
+    async def _identify_new_disc(self, job: Job, cfg: Config, scan: ScanResult) -> None:
+        await self._dispatch(job, cfg, scan)
+        miss_title = self._miss_title(scan)
+        self._record_miss_attempts(job)
+
+        result = self.result
+        ambiguous_toc = self._is_ambiguous_toc(result)
+        if result is not None and not ambiguous_toc and auto_apply_for(cfg, result.kind):
+            await self._apply_hit(job, cfg, scan, result)
+        elif result is not None:
+            await self._hold_hit(job, scan, result, miss_title, ambiguous_toc)
+        else:
+            self._apply_miss(job, cfg, miss_title)
+
+        if self.previous is not None:
+            await self._hold_previously_ripped(job, scan, self.previous)
+
+        # Apply every stored proposal: hint job fields for all outcomes, plus
+        # disc-map / preset track fields when review tracks were persisted.
+        await resolve_job(self.session, job)
+
     async def run(self) -> Job:
         self.drive = drive = await self._load_drive()
         self._mark_new_disc(drive)
@@ -938,94 +1042,7 @@ class _IdentifyFlow:
             self.result = None
             self.timed_out = False
         else:
-            await self._dispatch(job, cfg, scan)
-            miss_title = self._miss_title(scan)
-            self._record_miss_attempts(job)
-
-            # A CD matched only by track layout where several releases fit is a
-            # guess between pressings: hold it for the operator whatever the
-            # music auto-apply switch says.
-            ambiguous_toc = (
-                self.result is not None
-                and self.result.provider == "musicbrainz"
-                and len(self.result.payload.get("toc_candidates") or []) > 1
-            )
-            if self.result is not None and not ambiguous_toc and auto_apply_for(self.cfg, self.result.kind):
-                apply_identity_result(self.job, self.result, now=datetime.now(timezone.utc))
-                # Timed review gate: a GENUINELY identified disc (result is not None — not
-                # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
-                # for operator review when hold_for_review is on, stamping the countdown
-                # anchor and persisting the scan's titles as Track rows so the review UI
-                # shows the full title list. Otherwise it proceeds straight to rip as
-                # today (tracks created at rip-start). (spec §5.1, §4.3)
-                if self.cfg.hold_for_review:
-                    self.job.status = JobStatus.AWAITING_REVIEW
-                    self.job.wait_start_time = datetime.now(timezone.utc)
-                    await _persist_review_tracks(self.session, self.job, self.scan)
-                else:
-                    self.job.status = JobStatus.IDENTIFIED
-            elif self.result is not None:
-                # D-10: this kind's "Apply confident matches" switch is off. Keep
-                # the hit for the operator to confirm; the disc waits with no
-                # countdown (the ripper treats a null wait_start_time as "no
-                # countdown") and stays unidentified until they accept or
-                # resolve it. The review gate's own countdown never starts here.
-                self.job.title = miss_title
-                self.job.metadata_json = suggest_identity(
-                    self.job.metadata_json, self.result, now=datetime.now(timezone.utc)
-                )
-                self.job.status = JobStatus.AWAITING_REVIEW
-                self.job.wait_start_time = None
-                # The kind is the ROUTING input, not an identity claim: it is what
-                # resolve_routed_session_id keys `session_routes` on, so the review
-                # tracks below get the keep/drop defaults and preset provenance of
-                # the session this disc will actually rip into. Left unset, the
-                # disc routes as a never-identified one and accept never re-persists
-                # the tracks, so the operator would rip the wrong set. The hit's
-                # title/year/poster still reach nothing but the suggestion.
-                # result.kind is a subset of MediaType's values by construction.
-                self.job.media_type = MediaType(self.result.kind)
-                await _persist_review_tracks(self.session, self.job, self.scan)
-                logger.info(
-                    "identify job_id=%s: %s hit %r held for confirmation (%s)",
-                    self.job.id,
-                    self.result.kind,
-                    self.result.title,
-                    "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
-                )
-            else:
-                diagnostic: dict[str, bool] = {}
-                if self.timed_out:
-                    diagnostic["dispatch_timeout"] = True
-                if self.cfg.block_on_miss:
-                    self.job.status = JobStatus.AWAITING_USER_ID
-                    self.job.title = miss_title
-                    if diagnostic:
-                        self.job.metadata_json = with_flags(self.job.metadata_json, **diagnostic)
-                else:
-                    self.job.status = JobStatus.IDENTIFIED
-                    self.job.title = miss_title
-                    self.job.metadata_json = with_flags(self.job.metadata_json, unidentified=True, **diagnostic)
-
-            if self.previous is not None:
-                # on_previously_ripped=hold: whatever identify concluded, the disc
-                # waits for Rip again or Discard. No countdown (wait_start_time
-                # stays unset), so the ripper never auto-starts it.
-                if self.job.status != JobStatus.AWAITING_REVIEW:
-                    await _persist_review_tracks(self.session, self.job, self.scan)
-                self.job.status = JobStatus.AWAITING_REVIEW
-                self.job.wait_start_time = None
-                self.job.metadata_json = {
-                    **(self.job.metadata_json or {}),
-                    "previously_ripped": {"job_id": self.previous.id},
-                }
-                logger.info(
-                    "identify job_id=%s: disc already ripped as job_id=%s; holding it", self.job.id, self.previous.id
-                )
-
-            # Apply every stored proposal: hint job fields for all outcomes, plus
-            # disc-map / preset track fields when review tracks were persisted.
-            await resolve_job(self.session, self.job)
+            await self._identify_new_disc(job, cfg, scan)
 
         await self._save(job, scan)
         await self._emit_held_event(job, scan)
