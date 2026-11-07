@@ -16,6 +16,7 @@ from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
     after_rip,
+    ResolveFanOutOutcome,
     fan_out_waiting_identify_applications,
 )
 from arm_backend.config import settings
@@ -72,6 +73,7 @@ from arm_common.schemas import (
     PreviousRipView,
     RipAgainResponse,
     ResolveFanOutOutcomeView,
+    ResolveMatch,
     ResolveRequest,
     ResolveResponse,
     RipProgressSummary,
@@ -1223,6 +1225,177 @@ def _apply_match(md: JobMetadata, req: ResolveRequest, now: datetime) -> bool:
     return show_changed
 
 
+def _names_another_show(existing: ExternalIds, sent: ExternalIds) -> bool:
+    # I4: a different imdb / tmdb / tvdb names a different show, so every
+    # show id belonging to the old one and not sent now is stale: clear
+    # tvmaze, and imdb / tmdb / tvdb when absent from the request (a
+    # kept old imdb would let providers re-resolve the old show). An
+    # explicit null only clears that one id; it names no other show.
+    # R3: filling a blank id names no different show, so only a stored,
+    # non-null id replaced by a different value triggers the clear.
+    ids_set = sent.model_fields_set
+    return any(
+        name in ids_set
+        and getattr(sent, name) is not None
+        and getattr(existing, name) is not None
+        and getattr(sent, name) != getattr(existing, name)
+        for name in _SHOW_ID_FIELDS
+    )
+
+
+def _clear_old_show_ids(existing: ExternalIds, ids_set: set[str]) -> None:
+    for name in ("tvmaze", "tmdb_kind", *_SHOW_ID_FIELDS):
+        if name not in ids_set:
+            setattr(existing, name, None)
+
+
+def _overlay_sent_ids(existing: ExternalIds, sent: ExternalIds) -> None:
+    ids_set = sent.model_fields_set
+    if "imdb" in ids_set:
+        existing.imdb = sent.imdb
+    if "tmdb_kind" in ids_set:
+        existing.tmdb_kind = sent.tmdb_kind
+    elif "tmdb" in ids_set and sent.tmdb != existing.tmdb:
+        existing.tmdb_kind = None  # a new TMDb id of unknown kind
+    if "tmdb" in ids_set:
+        existing.tmdb = sent.tmdb
+    if "tvdb" in ids_set:
+        existing.tvdb = sent.tvdb
+    if "musicbrainz_release" in ids_set:
+        existing.musicbrainz_release = sent.musicbrainz_release
+
+
+def _merge_external_ids(md: JobMetadata, sent: ExternalIds) -> bool:
+    if md.identity is None:
+        md.identity = JobIdentity(provider="manual")
+    # Per-field overlay, not a wholesale replace: a request that only
+    # sets tmdb must not wipe a previously stored imdb/tvdb/etc.
+    # Re-assigned (not just mutated) so exclude_unset picks up
+    # external_ids as set even when identity was just freshly created.
+    existing_ids = md.identity.external_ids
+    ids_set = sent.model_fields_set
+    show_changed = _names_another_show(existing_ids, sent)
+    if show_changed:
+        _clear_old_show_ids(existing_ids, ids_set)
+    _overlay_sent_ids(existing_ids, sent)
+    md.identity.external_ids = existing_ids
+    return show_changed
+
+
+def _merge_identity_metadata(job: Job, req: ResolveRequest) -> tuple[dict[str, Any], bool]:
+    # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
+    # matching typed sections of the existing metadata_json; everything else
+    # (scan_result, provider_raw, etc.) round-trips untouched. The
+    # partial-edit case ("just fix the title") sends neither field and must
+    # NOT wipe auto-identified sections.
+    md = JobMetadata.model_validate(job.metadata_json or {})
+    show_changed = False
+    if req.music is not None:
+        md.music = req.music
+    # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
+    # the operator editing identity; each MEMBER field then follows
+    # omitted=keep / explicit-null=clears, via model_fields_set rather than
+    # `is not None` (which can't tell "sent null" from "not sent" once
+    # Pydantic has already collapsed both to None).
+    if req.match is not None:
+        show_changed = _apply_match(md, req, datetime.now(UTC))
+    elif req.external_ids is not None:
+        show_changed = _merge_external_ids(md, req.external_ids)
+    new_metadata = md.model_dump(mode="json", exclude_unset=True)
+    return new_metadata, show_changed
+
+
+def _apply_match_poster(job: Job, match: ResolveMatch, show_changed: bool) -> None:
+    # A picked match's poster is the automatic one; an operator-edited
+    # URL is a manual override (match picker spec 3.6). A match with no
+    # poster keeps the stored one unless it belongs to the old show, and
+    # never clears an override.
+    if match.poster_url is not None or show_changed:
+        job.poster_url = match.poster_url
+    if match.poster_is_manual:
+        job.poster_url_manual = match.poster_url_manual
+    elif match.poster_url is not None:
+        job.poster_url_manual = None
+
+
+def _clear_spent_markers(new_metadata: dict[str, Any]) -> None:
+    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
+    # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
+    # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
+    # over the placeholder status — see rip-complete) but has just as much
+    # identity landed as a PROMOTE job; leaving flags.unidentified=true
+    # forever would misreport it after the operator has already identified
+    # it.
+    new_metadata.pop("unidentified", None)
+    # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
+    new_metadata.pop("identity_suggestion", None)
+    # ...and the automatic match's miss reasons no longer apply.
+    new_metadata.pop("identify_attempts", None)
+    if isinstance(new_metadata.get("flags"), dict):
+        new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
+
+
+def _record_manual_disc_fields(job: Job, req: ResolveRequest) -> None:
+    # Disc position and season are identity fields: they go through the
+    # resolver as manual proposals so provenance is recorded and later
+    # sources (episode matching, disc hints) never override them. This must
+    # run AFTER resolve_identity's job.metadata_json = new_metadata -- record_manual_job
+    # writes into metadata_json too, and assigning new_metadata first would
+    # wipe the claim it just wrote.
+    #
+    # disc_number/disc_total/season are now classifications like media_type
+    # (Review Focus 5): omitted keeps the stored value (a title-only fix in
+    # the identify dialog must not wipe a disc-hint-filled disc_number), an
+    # EXPLICIT null is the operator clearing it. model_fields_set is the
+    # only way to tell "sent null" from "not sent" here.
+    manual_job: dict[str, Any] = {}
+    for name in ("disc_number", "disc_total", "season"):
+        if name in req.model_fields_set:
+            manual_job[name] = getattr(req, name)
+    if manual_job:
+        record_manual_job(job, manual_job)
+
+
+async def _emit_identify_resolved(session: AsyncSession, hub: WSHub, job: Job) -> None:
+    payload = {
+        "job_id": job.id,
+        "drive_id": job.drive_id,
+        "title": job.title,
+        "year": job.year,
+    }
+    await hub.emit(
+        topic=f"ripper.commands.{job.drive_id}",
+        event_type="identify.resolved",
+        payload=payload,
+        job_id=job.id,
+        session=session,
+    )
+    await hub.emit(
+        topic="ripper.events",
+        event_type="rip.identify_resolved",
+        payload=payload,
+        job_id=job.id,
+        session=session,
+    )
+
+
+def _resolve_response(job: Job, fan_out_outcomes: list[ResolveFanOutOutcome]) -> ResolveResponse:
+    return ResolveResponse(
+        job=JobView.model_validate(job),
+        fan_out=[
+            ResolveFanOutOutcomeView(
+                session_application_id=outcome.application.id,
+                session_id=outcome.application.session_id,
+                status=outcome.application.status,
+                task_count=len(outcome.tasks),
+                skipped_reason=outcome.skipped_reason,
+                error_detail=outcome.error_detail,
+            )
+            for outcome in fan_out_outcomes
+        ],
+    )
+
+
 @router.post("/{job_id}/resolve", response_model=ResolveResponse)
 async def resolve(
     job_id: JobIdParam,
@@ -1320,84 +1493,18 @@ async def resolve_identity(
     if before_identity is None:
         before_identity = _identity_snapshot(job)
 
-    # Typed merge (G-03/§3.4): req.music / req.external_ids overlay the
-    # matching typed sections of the existing metadata_json; everything else
-    # (scan_result, provider_raw, etc.) round-trips untouched. The
-    # partial-edit case ("just fix the title") sends neither field and must
-    # NOT wipe auto-identified sections.
-    md = JobMetadata.model_validate(job.metadata_json or {})
-    show_changed = False
-    if req.music is not None:
-        md.music = req.music
-    # Fix 75-5: "external_ids" sent (even as {} or with some fields null) is
-    # the operator editing identity; each MEMBER field then follows
-    # omitted=keep / explicit-null=clears, via model_fields_set rather than
-    # `is not None` (which can't tell "sent null" from "not sent" once
-    # Pydantic has already collapsed both to None).
-    if req.match is not None:
-        show_changed = _apply_match(md, req, datetime.now(UTC))
-    elif req.external_ids is not None:
-        if md.identity is None:
-            md.identity = JobIdentity(provider="manual")
-        # Per-field overlay, not a wholesale replace: a request that only
-        # sets tmdb must not wipe a previously stored imdb/tvdb/etc.
-        # Re-assigned (not just mutated) so exclude_unset picks up
-        # external_ids as set even when identity was just freshly created.
-        existing_ids = md.identity.external_ids
-        ids_set = req.external_ids.model_fields_set
-        # I4: a different imdb / tmdb / tvdb names a different show, so every
-        # show id belonging to the old one and not sent now is stale: clear
-        # tvmaze, and imdb / tmdb / tvdb when absent from the request (a
-        # kept old imdb would let providers re-resolve the old show). An
-        # explicit null only clears that one id; it names no other show.
-        # R3: filling a blank id names no different show, so only a stored,
-        # non-null id replaced by a different value triggers the clear.
-        show_changed = any(
-            name in ids_set
-            and getattr(req.external_ids, name) is not None
-            and getattr(existing_ids, name) is not None
-            and getattr(req.external_ids, name) != getattr(existing_ids, name)
-            for name in _SHOW_ID_FIELDS
-        )
-        if show_changed:
-            for name in ("tvmaze", "tmdb_kind", *_SHOW_ID_FIELDS):
-                if name not in ids_set:
-                    setattr(existing_ids, name, None)
-        if "imdb" in ids_set:
-            existing_ids.imdb = req.external_ids.imdb
-        if "tmdb_kind" in ids_set:
-            existing_ids.tmdb_kind = req.external_ids.tmdb_kind
-        elif "tmdb" in ids_set and req.external_ids.tmdb != existing_ids.tmdb:
-            existing_ids.tmdb_kind = None  # a new TMDb id of unknown kind
-        if "tmdb" in ids_set:
-            existing_ids.tmdb = req.external_ids.tmdb
-        if "tvdb" in ids_set:
-            existing_ids.tvdb = req.external_ids.tvdb
-        if "musicbrainz_release" in ids_set:
-            existing_ids.musicbrainz_release = req.external_ids.musicbrainz_release
-        md.identity.external_ids = existing_ids
-    new_metadata = md.model_dump(mode="json", exclude_unset=True)
+    new_metadata, show_changed = _merge_identity_metadata(job, req)
 
     job.title = req.title
     job.year = req.year
     if req.match is not None:
-        # A picked match's poster is the automatic one; an operator-edited
-        # URL is a manual override (match picker spec 3.6). A match with no
-        # poster keeps the stored one unless it belongs to the old show, and
-        # never clears an override.
-        if req.match.poster_url is not None or show_changed:
-            job.poster_url = req.match.poster_url
-        if req.match.poster_is_manual:
-            job.poster_url_manual = req.match.poster_url_manual
-        elif req.match.poster_url is not None:
-            job.poster_url_manual = None
+        _apply_match_poster(job, req.match, show_changed)
     # Fix 75-5: media_type is a classification, not part of the identity
     # statement -- omitted keeps the stored value, but an EXPLICIT null
     # clears it (the operator saying "clear the kind"). model_fields_set is
     # the only way to tell "sent null" from "not sent" here, since both
     # collapse to req.media_type is None.
-    fields_set = req.model_fields_set
-    if "media_type" in fields_set:
+    if "media_type" in req.model_fields_set:
         job.media_type = req.media_type
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
     # The rip already finished but rip-complete skipped after_rip because the
@@ -1406,20 +1513,7 @@ async def resolve_identity(
     rip_waited_for_identity = was_ripped_placeholder or (
         job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
     )
-    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
-    # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
-    # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
-    # over the placeholder status — see rip-complete) but has just as much
-    # identity landed as a PROMOTE job; leaving flags.unidentified=true
-    # forever would misreport it after the operator has already identified
-    # it.
-    new_metadata.pop("unidentified", None)
-    # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
-    new_metadata.pop("identity_suggestion", None)
-    # ...and the automatic match's miss reasons no longer apply.
-    new_metadata.pop("identify_attempts", None)
-    if isinstance(new_metadata.get("flags"), dict):
-        new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
+    _clear_spent_markers(new_metadata)
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
         # A placeholder whose rip already finished becomes RIPPED, not
         # IDENTIFIED — its rip is done (G-09).
@@ -1429,24 +1523,7 @@ async def resolve_identity(
         # R2: the stored episode entries were matched against the previous
         # show; forgetting their show id means no keep-path can hold them.
         forget_episode_show_ids(job)
-    # Disc position and season are identity fields: they go through the
-    # resolver as manual proposals so provenance is recorded and later
-    # sources (episode matching, disc hints) never override them. This must
-    # run AFTER job.metadata_json = new_metadata above -- record_manual_job
-    # writes into metadata_json too, and assigning new_metadata first would
-    # wipe the claim it just wrote.
-    #
-    # disc_number/disc_total/season are now classifications like media_type
-    # (Review Focus 5): omitted keeps the stored value (a title-only fix in
-    # the identify dialog must not wipe a disc-hint-filled disc_number), an
-    # EXPLICIT null is the operator clearing it. model_fields_set is the
-    # only way to tell "sent null" from "not sent" here.
-    manual_job: dict[str, Any] = {}
-    for name in ("disc_number", "disc_total", "season"):
-        if name in fields_set:
-            manual_job[name] = getattr(req, name)
-    if manual_job:
-        record_manual_job(job, manual_job)
+    _record_manual_disc_fields(job, req)
     await resolve_job(session, job)
     session.add(job)
 
@@ -1479,26 +1556,7 @@ async def resolve_identity(
         len(fan_out_outcomes),
     )
 
-    payload = {
-        "job_id": job.id,
-        "drive_id": job.drive_id,
-        "title": job.title,
-        "year": job.year,
-    }
-    await hub.emit(
-        topic=f"ripper.commands.{job.drive_id}",
-        event_type="identify.resolved",
-        payload=payload,
-        job_id=job.id,
-        session=session,
-    )
-    await hub.emit(
-        topic="ripper.events",
-        event_type="rip.identify_resolved",
-        payload=payload,
-        job_id=job.id,
-        session=session,
-    )
+    await _emit_identify_resolved(session, hub, job)
 
     # Second commit lands the fan-out's task rows (when after_rip/fan-out did
     # not already commit or roll back on its own) plus the
@@ -1512,20 +1570,7 @@ async def resolve_identity(
     if stage_runner is not None and _identity_snapshot(job) != before_identity:
         stage_runner.schedule(job.id)
 
-    return ResolveResponse(
-        job=JobView.model_validate(job),
-        fan_out=[
-            ResolveFanOutOutcomeView(
-                session_application_id=outcome.application.id,
-                session_id=outcome.application.session_id,
-                status=outcome.application.status,
-                task_count=len(outcome.tasks),
-                skipped_reason=outcome.skipped_reason,
-                error_detail=outcome.error_detail,
-            )
-            for outcome in fan_out_outcomes
-        ],
-    )
+    return _resolve_response(job, fan_out_outcomes)
 
 
 @router.post("/{job_id}/transcode", response_model=ApplySessionResponse)
