@@ -75,7 +75,10 @@ _session_application_id: ContextVar[str | None] = ContextVar("arm_log_session_ap
 
 
 def _correlation_ids(record: logging.LogRecord) -> dict[str, str | None]:
-    """The job/track/session-application ids for this record; an explicit `extra=` value wins over the ambient context."""
+    """The job/track/session-application ids for this record.
+
+    An explicit `extra=` value wins over the ambient context.
+    """
     # `extra={"job_id": ...}` lands as `record.job_id`. Explicit overrides
     # the ambient contextvar — single call sites win against ambient state.
     return {
