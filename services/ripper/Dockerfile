@@ -60,7 +60,9 @@ COPY services/ripper/install/install_ccextractor.sh /install_ccextractor.sh
 RUN chmod +x /install_ccextractor.sh && /install_ccextractor.sh
 
 # ---------- Stage 2: runtime image ----------
-FROM python:3.14-slim-bookworm
+# Named so publish-main.yml's nightly rebuild can refresh this stage alone
+# (no-cache-filters) while reusing the pinned MakeMKV build above.
+FROM python:3.14-slim-bookworm AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \

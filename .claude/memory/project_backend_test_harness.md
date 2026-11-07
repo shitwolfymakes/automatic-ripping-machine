@@ -11,14 +11,14 @@ The v3 backend has **two** test tiers under `services/backend/tests/`:
    one-router `FastAPI()`, override `get_session` with `tests._fakes.FakeSession`
    (an in-memory AST-matching fake `AsyncSession`). Use this for exhaustive
    router branch coverage — it's the fast path and the bulk of the suite.
-2. **Real-DB e2e harness** (`tests/e2e/`, ~3s/test): `conftest.py`'s `app_client`
+2. **Real-DB e2e harness** (`tests/e2e/`, ~0.5s/test): `conftest.py`'s `app_client`
    fixture boots the *actual* `arm_backend.main:app` (full lifespan, seeders,
    every router) against file-backed SQLite. Use this only for paths the
    fake-session approach structurally can't reach: `main.py` wiring/lifespan,
    `db.py`, `seeders.py`, real `require_jwt` user loading.
 
 Goal: drive backend coverage toward 100%. Coverage is measured in CI
-(`coverage run -m pytest` + `coverage report`) but **not gated** yet — no
+(`pytest -n auto --cov` + `coverage report`) but **not gated** yet — no
 `fail_under` in `pyproject.toml` `[tool.coverage]`; ratchet it up later.
 
 **Non-obvious gotchas (cost real debugging time):**

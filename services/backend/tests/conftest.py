@@ -12,5 +12,22 @@ developer's shell must not reach the singleton either.
 
 import os
 
+import pytest
+
 os.environ["DATABASE_URL"] = "postgresql://x:x@localhost/x"
 os.environ["ARM_SERVICE_TOKEN"] = "tok-service"
+
+
+@pytest.fixture(autouse=True)
+def _unspaced_musicbrainz_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove the MusicBrainz client's 1 s spacing between requests.
+
+    The client sleeps for real to stay under MusicBrainz's 1 req/s limit, and
+    across the metadata tests that adds up to over a minute of waiting. Tests
+    of the spacing itself set their own interval on top of this one. The
+    import sits in the fixture so `arm_backend` is never imported before the
+    environment above is set.
+    """
+    from arm_backend.metadata import musicbrainz
+
+    monkeypatch.setattr(musicbrainz, "_MIN_INTERVAL_SECONDS", 0.0)

@@ -97,8 +97,10 @@ than by taxing the whole suite.
 
 - **100% statements on the Backend; branch coverage measured.** Config in
   `pyproject.toml [tool.coverage]`, `branch = true`.
-- **CI measures, it does not gate.** `coverage run -m pytest` +
-  `coverage report` run in the `test-python` job. There is no `fail_under`
+- **CI measures, it does not gate.** The `test-python` job runs
+  `pytest -n auto --cov` (pytest-xdist spreads the suite over the runner's
+  cores; pytest-cov measures each worker and combines the data), then
+  `coverage report`. There is no `fail_under`
   — a deliberate choice (a regression *ratchet* below the achieved level
   is ready to enable when wanted, but a hard gate was explicitly declined
   for now so coverage noise doesn't block unrelated PRs).
