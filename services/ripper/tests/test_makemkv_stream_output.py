@@ -411,3 +411,27 @@ def test_record_title_failure_without_index_warns_and_leaves_state(caplog: pytes
     _parser(state)._record_title_failure(line, [])
     assert state == _ParserState()
     _assert_one(caplog, logging.WARNING, f"MSG:5003 without parseable title index: {line}")
+
+
+async def test_feed_tries_handlers_in_order_and_stops_at_the_first_taker(monkeypatch: pytest.MonkeyPatch) -> None:
+    names = ["expiry", "progress", "save_position", "title_line", "milestone", "msg"]
+    calls: list[str] = []
+
+    def install(parser: makemkv_rip._LineParser, take: str | None) -> None:
+        for name in names:
+
+            async def handler(line: str, name: str = name) -> bool:
+                calls.append(f"{name}:{line}")
+                return name == take
+
+            monkeypatch.setattr(parser, f"_apply_{name}", handler)
+
+    parser = _parser(_ParserState())
+    install(parser, None)
+    await parser.feed("L")
+    assert calls == [f"{n}:L" for n in names]
+
+    calls.clear()
+    install(parser, "title_line")
+    await parser.feed("M")
+    assert calls == [f"{n}:M" for n in names[:4]]

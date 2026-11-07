@@ -329,18 +329,20 @@ class _LineParser:
         self._gate_disc_progress = gate_disc_progress
 
     async def feed(self, line: str) -> None:
-        """Apply one non-blank robot line."""
-        if await self._apply_expiry(line):
-            return
-        if await self._apply_progress(line):
-            return
-        if await self._apply_save_position(line):
-            return
-        if await self._apply_title_line(line):
-            return
-        if await self._apply_milestone(line):
-            return
-        await self._apply_msg(line)
+        """Apply one non-blank robot line through the first handler that takes it.
+
+        Order matters: MSG:5021 is checked before everything else, and a PRGT title line before a generic milestone.
+        """
+        for apply in (
+            self._apply_expiry,
+            self._apply_progress,
+            self._apply_save_position,
+            self._apply_title_line,
+            self._apply_milestone,
+            self._apply_msg,
+        ):
+            if await apply(line):
+                return
 
     async def _apply_expiry(self, line: str) -> bool:
         """MSG:5021 (the binary's kill switch), the first time it appears: record it and kill makemkvcon."""
