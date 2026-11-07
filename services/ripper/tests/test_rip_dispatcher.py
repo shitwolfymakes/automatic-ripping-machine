@@ -31,7 +31,13 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, _eligible_source_indexes, _index_tracks, rip_all
+from arm_ripper.rip.dispatcher import (
+    _effective_disc_type,
+    _eligible_source_indexes,
+    _first_eligible_track,
+    _index_tracks,
+    rip_all,
+)
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.result import RipResult
 
@@ -1719,6 +1725,15 @@ def test_eligible_source_indexes_keep_a_track_of_unknown_length() -> None:
 def test_eligible_source_indexes_are_sorted_whatever_the_insertion_order() -> None:
     by_index = {5: _track(5), 2: _track(2), 9: _track(9)}
     assert _eligible_source_indexes(by_index, 60) == [2, 5, 9]
+
+
+def test_first_eligible_track_is_none_when_nothing_is_eligible() -> None:
+    assert _first_eligible_track({1: _track(1)}, []) is None
+
+
+def test_first_eligible_track_is_the_track_of_the_first_eligible_index() -> None:
+    by_index = {1: _track(1), 4: _track(4), 7: _track(7)}
+    assert _first_eligible_track(by_index, [4, 7]) is by_index[4]
 
 
 def test_effective_disc_type_is_data_when_every_track_is_a_full_disc_dump() -> None:

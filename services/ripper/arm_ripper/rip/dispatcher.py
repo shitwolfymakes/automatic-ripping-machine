@@ -259,6 +259,11 @@ def _eligible_source_indexes(track_by_index: dict[int, TrackView], min_length_se
     )
 
 
+def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[int]) -> TrackView | None:
+    """The track for the first eligible title, which carries the disc-level progress; None when nothing is eligible."""
+    return track_by_index[eligible[0]] if eligible else None
+
+
 async def _rip_optical(
     *,
     device_path: str,
@@ -361,10 +366,8 @@ async def _rip_optical(
         `total/max` channel. Per-title attribution still happens
         post-rip in the attribution loop below.
         """
-        if on_track_progress is None or not eligible_source_indexes:
-            return
-        first_track = track_by_index.get(eligible_source_indexes[0])
-        if first_track is None:
+        first_track = _first_eligible_track(track_by_index, eligible_source_indexes)
+        if on_track_progress is None or first_track is None:
             return
         await on_track_progress(first_track, fraction)
 
@@ -386,10 +389,8 @@ async def _rip_optical(
         return then
 
     async def _on_verify_progress(done: int, total: int, rate: float | None) -> None:
-        if on_track_progress is None or not eligible_source_indexes:
-            return
-        first_track = track_by_index.get(eligible_source_indexes[0])
-        if first_track is None:
+        first_track = _first_eligible_track(track_by_index, eligible_source_indexes)
+        if on_track_progress is None or first_track is None:
             return
         stats: TransferStats = {"bytes_done": done, "bytes_total": total, "rate_bps": rate, "phase": "verifying"}
         await on_track_progress(first_track, min(done / total, 1.0) if total else 0.0, stats)
