@@ -424,3 +424,26 @@ async def test_progress_publishes_the_percentage_and_transfer_stats(
         },
         {"track_id": "trk_0", "progress_pct": 75.0, "bytes_done": 2, "bytes_total": 4, "rate_bps": None},
     ]
+
+
+@pytest.mark.parametrize(
+    ("disc_type", "kinds", "expected"),
+    [
+        (DiscType.DVD, [TrackKind.VIDEO_TITLE], True),
+        (DiscType.BLURAY, [TrackKind.VIDEO_TITLE], True),
+        (DiscType.CD, [TrackKind.VIDEO_TITLE], False),
+        (DiscType.DVD, [TrackKind.DISC_BACKUP, TrackKind.DATA_DUMP], False),
+        (DiscType.DVD, [TrackKind.VIDEO_TITLE, TrackKind.DATA_DUMP], True),
+    ],
+)
+def test_resumable_needs_a_dvd_or_bd_drive_with_a_title_to_rip(disc_type, kinds, expected) -> None:
+    """Only a DVD or BD rip with at least one track that is not a full-disc backup or dump can resume."""
+    tracks = [_track(i, kind) for i, kind in enumerate(kinds)]
+    assert jc_module._resumable(disc_type, "/dev/sr0", tracks) is expected
+
+
+def test_resumable_is_false_for_an_iso_source(tmp_path: Path) -> None:
+    """An ISO file has no bus to drop off, so its rip never waits to resume."""
+    iso = tmp_path / "disc.iso"
+    iso.write_bytes(b"x")
+    assert jc_module._resumable(DiscType.DVD, str(iso), [_track(0)]) is False

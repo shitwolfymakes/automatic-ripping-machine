@@ -159,6 +159,19 @@ def _previously_ripped(response: httpx.Response) -> bool:
     return isinstance(detail, dict) and detail.get("reason") == "previously_ripped"
 
 
+def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -> bool:
+    """Whether a rip can wait out its drive dropping off the bus and resume on the drive's new node: a DVD or BD read
+    from a real drive, unless every track is a full-disc backup or dump."""
+    # A DVD/BD rip whose drive drops off the bus mid-rip stops makemkvcon
+    # and resumes on the drive's new node instead of failing every
+    # remaining title (D-133). ISO and folder sources have no bus to drop.
+    return (
+        disc_type in (DiscType.DVD, DiscType.BLURAY)
+        and not is_file_source(device_path)
+        and not all(t.kind in (TrackKind.DISC_BACKUP, TrackKind.DATA_DUMP) for t in tracks)
+    )
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -1133,14 +1146,7 @@ class _DiscRip:
         self._start_path = device_path
         self._output_dir = RAW_ROOT / job_id
         self._tracks = list(rip_start.tracks)
-        # A DVD/BD rip whose drive drops off the bus mid-rip stops makemkvcon
-        # and resumes on the drive's new node instead of failing every
-        # remaining title (D-133). ISO and folder sources have no bus to drop.
-        self._resumable = (
-            disc_type in (DiscType.DVD, DiscType.BLURAY)
-            and not is_file_source(device_path)
-            and not all(t.kind in (TrackKind.DISC_BACKUP, TrackKind.DATA_DUMP) for t in self._tracks)
-        )
+        self._resumable = _resumable(disc_type, device_path, self._tracks)
         self._lost = asyncio.Event()
         # Track ids whose title the lost drive left unfinished, and the files
         # of every title that finished (kept across a resume).
