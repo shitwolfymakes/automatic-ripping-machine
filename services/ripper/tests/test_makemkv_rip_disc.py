@@ -910,3 +910,33 @@ async def test_rip_disc_captured_title_without_fail_reason_gets_the_generic_erro
     assert result.titles[4].ok is False
     assert result.titles[4].error == "makemkvcon exited 0 but produced no .mkv for this title"
     assert 9 not in result.titles
+
+
+def _as_process(proc: _FakeProc) -> Any:
+    return proc
+
+
+async def test_wait_for_exit_without_stop_returns_false_when_the_proc_exits():
+    assert await makemkv_rip._wait_for_exit(_as_process(_FakeProc([])), None) is False
+
+
+async def test_wait_for_exit_without_stop_times_out_when_the_proc_never_exits(monkeypatch):
+    monkeypatch.setattr(makemkv_rip, "RIP_TIMEOUT_SECONDS", 0.01)
+    with pytest.raises(asyncio.TimeoutError):
+        await makemkv_rip._wait_for_exit(_as_process(_HangingProc()), None)
+
+
+async def test_wait_for_exit_with_stop_returns_false_when_the_proc_exits_first():
+    assert await makemkv_rip._wait_for_exit(_as_process(_FakeProc([])), asyncio.Event()) is False
+
+
+async def test_wait_for_exit_returns_true_when_stop_is_set_first():
+    stop = asyncio.Event()
+    stop.set()
+    assert await makemkv_rip._wait_for_exit(_as_process(_HangingProc()), stop) is True
+
+
+async def test_wait_for_exit_with_stop_times_out_when_neither_happens(monkeypatch):
+    monkeypatch.setattr(makemkv_rip, "RIP_TIMEOUT_SECONDS", 0.01)
+    with pytest.raises(asyncio.TimeoutError):
+        await makemkv_rip._wait_for_exit(_as_process(_HangingProc()), asyncio.Event())

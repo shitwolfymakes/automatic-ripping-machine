@@ -478,6 +478,28 @@ class RipDiscResult:
     titles: dict[int, RipResult]
 
 
+async def _wait_for_exit(proc: asyncio.subprocess.Process, stop: asyncio.Event | None) -> bool:
+    """Wait for makemkvcon to exit or for `stop` to be set; True when `stop` came first.
+
+    Raises asyncio.TimeoutError when neither happens within RIP_TIMEOUT_SECONDS.
+    """
+    if stop is None:
+        await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
+        return False
+    exited = asyncio.create_task(proc.wait())
+    stop_seen = asyncio.create_task(stop.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {exited, stop_seen}, timeout=RIP_TIMEOUT_SECONDS, return_when=asyncio.FIRST_COMPLETED
+        )
+    finally:
+        stop_seen.cancel()
+        exited.cancel()
+    if not done:
+        raise asyncio.TimeoutError
+    return exited not in done
+
+
 async def _run_makemkvcon(
     cmd: list[str],
     state: _ParserState,
@@ -517,23 +539,8 @@ async def _run_makemkvcon(
             gate_disc_progress=gate_disc_progress,
         )
     )
-    stopped = False
     try:
-        if stop is None:
-            await asyncio.wait_for(proc.wait(), timeout=RIP_TIMEOUT_SECONDS)
-        else:
-            exited = asyncio.create_task(proc.wait())
-            stop_seen = asyncio.create_task(stop.wait())
-            try:
-                done, _ = await asyncio.wait(
-                    {exited, stop_seen}, timeout=RIP_TIMEOUT_SECONDS, return_when=asyncio.FIRST_COMPLETED
-                )
-            finally:
-                stop_seen.cancel()
-                exited.cancel()
-            if not done:
-                raise asyncio.TimeoutError
-            stopped = exited not in done
+        stopped = await _wait_for_exit(proc, stop)
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
