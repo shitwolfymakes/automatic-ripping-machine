@@ -3,7 +3,7 @@ import contextlib
 import functools
 import logging
 import shutil
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +14,7 @@ import httpx
 from arm_common import DiscType, Job, JobStatus, TrackKind, TrackStatus, with_log_context
 from arm_common.schemas import JobView, RipperConfigView, RipStartResponse, ScanResult, TrackView, WSEnvelope
 from arm_ripper.backend_client import BackendClient
+from arm_ripper.backend_retry import BackendRetry
 from arm_ripper.community_keydb import refresh_community_keydb
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
@@ -30,10 +31,6 @@ logger = logging.getLogger("arm_ripper.job_controller")
 
 POLL_INITIAL_SECONDS = 5.0
 POLL_MAX_SECONDS = 30.0
-IDENTIFY_RETRY_INITIAL_SECONDS = 1.0
-IDENTIFY_RETRY_MAX_SECONDS = 30.0
-PATCH_RETRY_INITIAL_SECONDS = 1.0
-PATCH_RETRY_MAX_SECONDS = 30.0
 EJECT_GRACE_SECONDS = 3.0
 # Hard ceiling on awaiting_user_id wait; if no WS event arrives by then,
 # fall back to one REST GET to handle a stale-WS edge case (boot race or
@@ -219,6 +216,8 @@ class JobController:
         resolution_timeout: float | None = _RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
+        # The retried backend calls a rip makes (rip-start, rip-complete, track PATCH, identify).
+        self._backend = BackendRetry(client, drive_id)
         # Jobs whose countdown hold for a guessed placement was already logged.
         self._held_for_guess: set[str] = set()
         self._keydb_tasks: set[asyncio.Task[None]] = set()
@@ -650,7 +649,7 @@ class JobController:
         """Identify the scanned disc, or None when the backend refuses it: a disc ripped before is ejected, and any
         other rejection parks the pipeline."""
         try:
-            return await self._identify_with_retry(scan_result, pending_session_id=pending_session_id)
+            return await self._backend.identify(scan_result, pending_session_id=pending_session_id)
         except httpx.HTTPStatusError as e:
             if _previously_ripped(e.response):
                 # on_previously_ripped=reject: the backend made no job
@@ -666,37 +665,6 @@ class JobController:
                 self._drive_id,
             )
             return None
-
-    async def _identify_with_retry(
-        self,
-        scan_result: ScanResult,
-        *,
-        pending_session_id: str | None = None,
-    ) -> Job:
-        """Identify the scanned disc, retrying a transient failure and re-raising a 4xx other than 429."""
-        delay = IDENTIFY_RETRY_INITIAL_SECONDS
-        while True:
-            try:
-                return await self._client.identify(
-                    drive_id=self._drive_id,
-                    scan_result=scan_result,
-                    pending_session_id=pending_session_id,
-                )
-            except httpx.HTTPError as e:
-                status_code = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
-                if status_code is not None and 400 <= status_code < 500 and status_code != 429:
-                    # Non-retriable client error (e.g. 409 ripping-paused). Retrying
-                    # spins forever holding _active_lock and deadlocks the drive —
-                    # re-raise so the pipeline exits and the lock releases.
-                    logger.warning(
-                        "identify rejected (%s) for drive %s — not retriable; parking pipeline",
-                        status_code,
-                        self._drive_id,
-                    )
-                    raise
-                logger.warning("identify failed (%s); retrying in %.1fs", e, delay)
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, IDENTIFY_RETRY_MAX_SECONDS)
 
     async def _await_resolution(self, job_id: str, spec: _WaitSpec = _IDENTIFY_WAIT) -> JobView | None:
         """Park a held job on an Event and wait for it to leave the gate.
@@ -916,7 +884,7 @@ class JobController:
             await asyncio.gather(*list(self._sdf_tasks), return_exceptions=True)
 
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
-        rip_start = await self._rip_start_with_retry(job.id)
+        rip_start = await self._backend.rip_start(job.id)
         logger.info(
             "rip-start job_id=%s preset=%s tracks=%d",
             job.id,
@@ -1037,8 +1005,8 @@ class JobController:
             with with_log_context(track_id=track.id):
                 if track.id not in started:
                     started.add(track.id)
-                    await self._patch_track_with_retry(track.id, status=TrackStatus.IN_PROGRESS)
-                await self._patch_track_with_retry(track.id, status=TrackStatus.FAILED, last_error=reason)
+                    await self._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
+                await self._backend.patch_track(track.id, status=TrackStatus.FAILED, last_error=reason)
 
     async def _eject_with_retry(self, device_path: str) -> None:
         """Auto-eject with retries; non-fatal — logs but never raises.
@@ -1120,44 +1088,6 @@ class JobController:
             return None, "timeout"
         return proc.returncode, stderr_b.decode(errors="replace").strip()
 
-    @staticmethod
-    def _is_retryable(exc: httpx.HTTPError) -> bool:
-        """A 4xx response is the backend telling us the request itself
-        is wrong (validation error, missing job, conflict). Retrying
-        won't fix it and will keep hammering the backend forever — so
-        bail. Transport errors and 5xx responses are transient and
-        should keep retrying with backoff."""
-        if isinstance(exc, httpx.HTTPStatusError) and 400 <= exc.response.status_code < 500:
-            return False
-        return True
-
-    async def _retry_backend_call[T](self, call: Callable[[], Awaitable[T]], what: str) -> T:
-        """Run one backend call, retrying a transient failure with doubling backoff up to PATCH_RETRY_MAX_SECONDS and
-        re-raising a rejection."""
-        delay = PATCH_RETRY_INITIAL_SECONDS
-        while True:
-            try:
-                return await call()
-            except httpx.HTTPError as e:
-                if not self._is_retryable(e):
-                    logger.error("%s rejected by backend (%s); giving up", what, e)
-                    raise
-                logger.warning("%s failed (%s); retrying in %.1fs", what, e, delay)
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, PATCH_RETRY_MAX_SECONDS)
-
-    async def _rip_start_with_retry(self, job_id: str) -> RipStartResponse:
-        """Mark the job ripping on the backend, retrying a transient failure."""
-        return await self._retry_backend_call(lambda: self._client.rip_start(job_id), f"rip-start {job_id}")
-
-    async def _rip_complete_with_retry(self, job_id: str) -> JobView:
-        """Mark the job's rip complete on the backend, retrying a transient failure."""
-        return await self._retry_backend_call(lambda: self._client.rip_complete(job_id), f"rip-complete {job_id}")
-
-    async def _patch_track_with_retry(self, track_id: str, **fields: object) -> None:
-        """PATCH one track's fields on the backend, retrying a transient failure."""
-        await self._retry_backend_call(lambda: self._client.update_track(track_id, **fields), f"PATCH track {track_id}")
-
 
 class _DiscRip:
     """One disc's rip across its resumes: rip every title, leave the titles a lost drive cut short for one more pass
@@ -1203,7 +1133,7 @@ class _DiscRip:
             return
         self._started.add(track.id)
         with with_log_context(track_id=track.id):
-            await self._controller._patch_track_with_retry(track.id, status=TrackStatus.IN_PROGRESS)
+            await self._controller._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
 
     async def _on_track_done(self, track: TrackView, result: RipResult) -> None:
         """Record a finished title as done, left for a resume, or failed."""
@@ -1224,7 +1154,7 @@ class _DiscRip:
         """Keep a ripped title's file and patch the track DONE."""
         if result.output_path is not None:
             self._kept.add(Path(result.output_path))
-        await self._controller._patch_track_with_retry(track.id, **_done_fields(result))
+        await self._controller._backend.patch_track(track.id, **_done_fields(result))
         logger.info(
             "track %s done size=%s duration=%s",
             track.id,
@@ -1242,7 +1172,7 @@ class _DiscRip:
 
     async def _record_failed(self, track: TrackView, result: RipResult) -> None:
         """Patch the track FAILED with the rip's error."""
-        await self._controller._patch_track_with_retry(
+        await self._controller._backend.patch_track(
             track.id,
             status=TrackStatus.FAILED,
             last_error=result.error or "unknown error",
@@ -1331,7 +1261,7 @@ class _DiscRip:
 
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
-        completed = await self._controller._rip_complete_with_retry(self._job_id)
+        completed = await self._controller._backend.rip_complete(self._job_id)
         logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
 
         # Eject the node the drive is at NOW — it may have renumbered during

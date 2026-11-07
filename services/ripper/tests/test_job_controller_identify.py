@@ -1,4 +1,4 @@
-"""Unit tests for JobController._identify_with_retry error classification.
+"""Unit tests for BackendRetry.identify (via JobController._backend) error classification.
 
 Verifies that non-retriable 4xx responses (e.g. 409 ripping-paused) are
 re-raised immediately instead of retrying forever while holding _active_lock.
@@ -58,7 +58,7 @@ def _no_sleep(monkeypatch):
 def _controller(client) -> JobController:
     """Build a real JobController with a stub client, mirroring existing tests."""
     jc = JobController(client, "drv_test")
-    # _identify_with_retry only touches self._client, self._drive_id, and
+    # BackendRetry.identify only touches self._client, self._drive_id, and
     # asyncio.sleep — no other setup needed for these focused tests.
     return jc
 
@@ -71,7 +71,7 @@ async def test_identify_409_reraises_without_retry():
     """A 409 must be re-raised on the FIRST call — no retry loop."""
     jc = _controller(_StubClient(_status_error(409)))
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        await jc._identify_with_retry(_SCAN, pending_session_id=None)
+        await jc._backend.identify(_SCAN, pending_session_id=None)
     assert exc_info.value.response.status_code == 409
     assert jc._client.calls == 1  # the load-bearing assertion: zero retries
 
@@ -81,7 +81,7 @@ async def test_identify_400_reraises_without_retry():
     """400 Bad Request is also a non-retriable client error."""
     jc = _controller(_StubClient(_status_error(400)))
     with pytest.raises(httpx.HTTPStatusError):
-        await jc._identify_with_retry(_SCAN, pending_session_id=None)
+        await jc._backend.identify(_SCAN, pending_session_id=None)
     assert jc._client.calls == 1
 
 
@@ -90,7 +90,7 @@ async def test_identify_422_reraises_without_retry():
     """422 Unprocessable Entity is a non-retriable client error."""
     jc = _controller(_StubClient(_status_error(422)))
     with pytest.raises(httpx.HTTPStatusError):
-        await jc._identify_with_retry(_SCAN, pending_session_id=None)
+        await jc._backend.identify(_SCAN, pending_session_id=None)
     assert jc._client.calls == 1
 
 
@@ -99,7 +99,7 @@ async def test_identify_429_retries():
     """429 Too Many Requests is rate-limiting — must be retried."""
     stub = _StubClient(_status_error(429))
     jc = _controller(stub)
-    task = asyncio.ensure_future(jc._identify_with_retry(_SCAN, pending_session_id=None))
+    task = asyncio.ensure_future(jc._backend.identify(_SCAN, pending_session_id=None))
     # Yield enough times for at least 2 identify calls to happen.
     for _ in range(10):
         await asyncio.sleep(0)
@@ -114,7 +114,7 @@ async def test_identify_transport_error_retries():
     """Transport errors (connect failures, etc.) must retry with backoff."""
     stub = _StubClient(httpx.ConnectError("down", request=_req()))
     jc = _controller(stub)
-    task = asyncio.ensure_future(jc._identify_with_retry(_SCAN, pending_session_id=None))
+    task = asyncio.ensure_future(jc._backend.identify(_SCAN, pending_session_id=None))
     for _ in range(10):
         await asyncio.sleep(0)
     task.cancel()
@@ -128,7 +128,7 @@ async def test_identify_500_retries():
     """5xx is transient — must retry."""
     stub = _StubClient(_status_error(500))
     jc = _controller(stub)
-    task = asyncio.ensure_future(jc._identify_with_retry(_SCAN, pending_session_id=None))
+    task = asyncio.ensure_future(jc._backend.identify(_SCAN, pending_session_id=None))
     for _ in range(10):
         await asyncio.sleep(0)
     task.cancel()

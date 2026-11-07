@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
+import arm_ripper.backend_retry as backend_retry_module
 import arm_ripper.job_controller as jc_module
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
@@ -1025,8 +1026,8 @@ async def test_rip_start_5xx_keeps_retrying(monkeypatch, stub_scan, stub_eject):
 
     monkeypatch.setattr(client, "rip_start", flaky)
     # Don't actually sleep between retries.
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
 
     controller = JobController(client, "drv_test")
     await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
@@ -1430,8 +1431,8 @@ async def test_recover_held_job_releases_gate_when_run_rip_raises():
 @pytest.mark.parametrize("make_error", [lambda: _http_status_error(503), lambda: httpx.ConnectError("down")])
 async def test_rip_complete_retries_transient_error(monkeypatch, caplog, make_error):
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
     client = FakeClient()
     controller = JobController(client, "drv_test")
     calls: list[str] = []
@@ -1445,7 +1446,7 @@ async def test_rip_complete_retries_transient_error(monkeypatch, caplog, make_er
 
     client.rip_complete = flaky  # type: ignore[method-assign]
 
-    assert await controller._rip_complete_with_retry("job_test") is done
+    assert await controller._backend.rip_complete("job_test") is done
     assert calls == ["job_test"] * 3
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 2
@@ -1456,8 +1457,8 @@ async def test_rip_complete_retries_transient_error(monkeypatch, caplog, make_er
 @pytest.mark.asyncio
 async def test_rip_complete_rejected_4xx_gives_up(monkeypatch, caplog):
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
     client = FakeClient()
     controller = JobController(client, "drv_test")
     calls: list[str] = []
@@ -1469,7 +1470,7 @@ async def test_rip_complete_rejected_4xx_gives_up(monkeypatch, caplog):
     client.rip_complete = reject  # type: ignore[method-assign]
 
     with pytest.raises(httpx.HTTPStatusError):
-        await controller._rip_complete_with_retry("job_test")
+        await controller._backend.rip_complete("job_test")
 
     assert calls == ["job_test"]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -1483,8 +1484,8 @@ async def test_rip_complete_rejected_4xx_gives_up(monkeypatch, caplog):
 @pytest.mark.parametrize("make_error", [lambda: _http_status_error(502), lambda: httpx.ConnectError("down")])
 async def test_patch_track_retries_transient_error(monkeypatch, caplog, make_error):
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
     client = FakeClient()
     controller = JobController(client, "drv_test")
     calls: list[tuple[str, dict[str, object]]] = []
@@ -1496,7 +1497,7 @@ async def test_patch_track_retries_transient_error(monkeypatch, caplog, make_err
 
     client.update_track = flaky  # type: ignore[method-assign]
 
-    await controller._patch_track_with_retry("trk_1", status="ripped", progress=100)
+    await controller._backend.patch_track("trk_1", status="ripped", progress=100)
 
     assert calls == [("trk_1", {"status": "ripped", "progress": 100})] * 3
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
@@ -1508,8 +1509,8 @@ async def test_patch_track_retries_transient_error(monkeypatch, caplog, make_err
 @pytest.mark.asyncio
 async def test_patch_track_rejected_4xx_gives_up(monkeypatch, caplog):
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_INITIAL_SECONDS", 0.0)
+    monkeypatch.setattr(backend_retry_module, "PATCH_RETRY_MAX_SECONDS", 0.0)
     client = FakeClient()
     controller = JobController(client, "drv_test")
     calls: list[tuple[str, dict[str, object]]] = []
@@ -1521,7 +1522,7 @@ async def test_patch_track_rejected_4xx_gives_up(monkeypatch, caplog):
     client.update_track = reject  # type: ignore[method-assign]
 
     with pytest.raises(httpx.HTTPStatusError):
-        await controller._patch_track_with_retry("trk_1", status="ripped")
+        await controller._backend.patch_track("trk_1", status="ripped")
 
     assert calls == [("trk_1", {"status": "ripped"})]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -1621,7 +1622,7 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
     async def _record(track_id: str, **fields: object) -> None:
         patches.append((track_id, fields))
 
-    controller._patch_track_with_retry = _record  # type: ignore[method-assign]
+    controller._backend.patch_track = _record  # type: ignore[method-assign]
     tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
     started = {"trk_1"}
 
