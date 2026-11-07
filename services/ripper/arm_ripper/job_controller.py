@@ -20,6 +20,7 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_sdf import refresh_makemkv_sdf
 from arm_ripper.makemkv_key import refresh_makemkv_key
+from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.rip import RipResult, rip_all
 from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.rip.track_callbacks import TransferStats
@@ -468,7 +469,7 @@ class JobController:
     async def _auto_rip_enabled(self) -> bool:
         """Whether a disc insert should start a rip: the auto_rip_on_insert switch, or True when the config can't be
         read (fail-open, so a flapping backend never silently halts ripping)."""
-        cfg = await self._ripper_config_or_none("auto-rip config lookup", "proceeding fail-open")
+        cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
@@ -791,19 +792,11 @@ class JobController:
             logger.warning("get_job %s failed (%s); will retry on next signal", job_id, e)
             return None
 
-    async def _ripper_config_or_none(self, what: str, fallback: str) -> RipperConfigView | None:
-        """The ripper config, or None after a warning when the backend can't be reached."""
-        try:
-            return await self._client.get_ripper_config()
-        except httpx.HTTPError as e:
-            logger.warning("%s failed (%s); %s", what, e, fallback)
-            return None
-
     async def _safe_get_ripper_config(self) -> RipperConfigView | None:
         """Ripper config (ripping_paused + manual_wait_seconds) for the review
         countdown. None on transport error → the caller treats it as 'can't tell;
         keep waiting' (fail-safe: never auto-rip on a config blip)."""
-        return await self._ripper_config_or_none("get_ripper_config", "keeping countdown suspended")
+        return await ripper_config_or_none(self._client, "get_ripper_config", "keeping countdown suspended")
 
     async def _configured_makemkv_key(self) -> str | None:
         """The operator's UI-set MakeMKV key, or None to fall back to the
@@ -813,14 +806,14 @@ class JobController:
         error we return None, which leaves the legacy env/scrape behaviour
         intact rather than wiping a key the operator already configured.
         """
-        cfg = await self._ripper_config_or_none("makemkv key lookup", "using env/scrape fallback")
+        cfg = await ripper_config_or_none(self._client, "makemkv key lookup", "using env/scrape fallback")
         return None if cfg is None else cfg.makemkv_key
 
     async def _community_keydb_enabled(self) -> bool:
         """Whether the operator has the community-keydb auto-fetch enabled.
         Fail-open to True (the default) so a flapping backend doesn't silently
         disable the feature."""
-        cfg = await self._ripper_config_or_none("community keydb toggle lookup", "defaulting enabled")
+        cfg = await ripper_config_or_none(self._client, "community keydb toggle lookup", "defaulting enabled")
         return True if cfg is None else cfg.community_keydb_enabled
 
     async def _prepare_makemkv(self) -> None:
@@ -858,7 +851,7 @@ class JobController:
     async def _makemkv_sdf_enabled(self) -> bool:
         """Whether the operator has the MakeMKV SDF auto-refresh enabled.
         Fail-open to True so a flapping backend doesn't silently disable it."""
-        cfg = await self._ripper_config_or_none("makemkv sdf toggle lookup", "defaulting enabled")
+        cfg = await ripper_config_or_none(self._client, "makemkv sdf toggle lookup", "defaulting enabled")
         return True if cfg is None else cfg.makemkv_sdf_enabled
 
     def _spawn_sdf_refresh(self, *, enabled: bool) -> None:
