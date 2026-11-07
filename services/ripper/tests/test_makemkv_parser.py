@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from arm_common import DiscType
+from arm_common.schemas import ScanTitle
 from arm_ripper.scan.makemkv import parse_makemkvcon_info
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -84,3 +85,94 @@ def test_hd_dvd_does_not_match_dvd_branch():
     lines = ['CINFO:1,6207,"HD-DVD"']
     _, _, disc_type = parse_makemkvcon_info(lines)
     assert disc_type is None  # no enum yet — caller falls back to probe/heuristic
+
+
+def test_ignores_blank_lines_and_lines_without_colon():
+    lines = ["", "   ", "no colon here", 'CINFO:1,0,"DVD"', "TINFO 0 9 0 0:00:05"]
+    assert parse_makemkvcon_info(lines) == (None, [], DiscType.DVD)
+
+
+def test_ignores_cinfo_with_non_int_code():
+    assert parse_makemkvcon_info(['CINFO:x,0,"DVD"', 'CINFO:2,0,"LABEL"']) == ("LABEL", [], None)
+
+
+def test_ignores_cinfo_with_fewer_than_three_fields():
+    assert parse_makemkvcon_info(["CINFO:2,0", "CINFO:1", 'CINFO:1,0,"DVD"']) == (None, [], DiscType.DVD)
+
+
+def test_ignores_tinfo_with_non_int_title_index():
+    lines = ['TINFO:x,9,0,"0:00:05"', 'TINFO:1,9,0,"0:00:07"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=1, duration_seconds=7)], None)
+
+
+def test_ignores_tinfo_with_non_int_code():
+    lines = ['TINFO:0,x,0,"0:00:05"', 'TINFO:1,9,0,"0:00:07"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=1, duration_seconds=7)], None)
+
+
+def test_ignores_tinfo_with_fewer_than_four_fields():
+    lines = ["TINFO:0,9,0", "TINFO:0,9", 'TINFO:1,9,0,"0:00:07"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=1, duration_seconds=7)], None)
+
+
+def test_non_int_chapter_count_stays_none_but_title_is_kept():
+    lines = ['TINFO:0,9,0,"0:01:00"', 'TINFO:0,8,0,"many"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=0, duration_seconds=60)], None)
+
+
+def test_non_int_size_stays_none_but_title_is_kept():
+    lines = ['TINFO:0,9,0,"0:01:00"', 'TINFO:0,11,0,"big"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=0, duration_seconds=60)], None)
+
+
+def test_unparseable_duration_drops_the_title():
+    lines = ['TINFO:0,9,0,"soon"', 'TINFO:0,8,0,"4"', 'TINFO:0,27,0,"title00.mkv"']
+    assert parse_makemkvcon_info(lines) == (None, [], None)
+
+
+def test_unknown_tinfo_code_changes_nothing():
+    lines = ['TINFO:0,9,0,"0:00:09"', 'TINFO:0,2,0,"Some name"']
+    assert parse_makemkvcon_info(lines) == (None, [ScanTitle(index=0, duration_seconds=9)], None)
+
+
+def test_all_tinfo_fields_populate_the_title():
+    lines = ['TINFO:3,9,0,"1:02:03"', 'TINFO:3,8,0,"12"', 'TINFO:3,11,0,"2048"', 'TINFO:3,27,0,"title03.mkv"']
+    expected = ScanTitle(index=3, duration_seconds=3723, chapter_count=12, size_bytes=2048, source_file="title03.mkv")
+    assert parse_makemkvcon_info(lines) == (None, [expected], None)
+
+
+def test_first_cinfo_1_wins_once_classified():
+    lines = ['CINFO:1,0,"DVD"', 'CINFO:1,0,"Blu-ray disc"']
+    assert parse_makemkvcon_info(lines) == (None, [], DiscType.DVD)
+
+
+def test_later_cinfo_1_wins_while_disc_type_is_still_unclassified():
+    # The guard is `mkv_disc_type is None`, so an unrecognised first value does not lock it.
+    lines = ['CINFO:1,0,"Mystery format"', 'CINFO:1,0,"Blu-ray disc"']
+    assert parse_makemkvcon_info(lines) == (None, [], DiscType.BLURAY)
+
+
+def test_first_label_wins_across_cinfo_2_and_30():
+    lines = ['CINFO:30,0,"FROM_30"', 'CINFO:2,0,"FROM_2"', 'CINFO:30,0,"LATER_30"']
+    assert parse_makemkvcon_info(lines) == ("FROM_30", [], None)
+
+
+def test_empty_first_label_lets_a_later_one_win():
+    lines = ['CINFO:2,0,""', 'CINFO:30,0,"FROM_30"']
+    assert parse_makemkvcon_info(lines) == ("FROM_30", [], None)
+
+
+def test_commas_inside_quotes_are_rejoined():
+    lines = ['CINFO:2,0,"Hello, World"', 'TINFO:0,9,0,"0:00:05"', 'TINFO:0,27,0,"a,b.mkv"']
+    expected = ScanTitle(index=0, duration_seconds=5, source_file="a,b.mkv")
+    assert parse_makemkvcon_info(lines) == ("Hello,World", [expected], None)
+
+
+def test_titles_are_sorted_by_index_even_when_lines_arrive_out_of_order():
+    lines = ['TINFO:2,9,0,"0:00:30"', 'TINFO:0,9,0,"0:00:10"', 'TINFO:1,9,0,"0:00:20"', 'TINFO:0,8,0,"3"']
+    _, titles, _ = parse_makemkvcon_info(lines)
+    assert titles == [
+        ScanTitle(index=0, duration_seconds=10, chapter_count=3),
+        ScanTitle(index=1, duration_seconds=20),
+        ScanTitle(index=2, duration_seconds=30),
+    ]
