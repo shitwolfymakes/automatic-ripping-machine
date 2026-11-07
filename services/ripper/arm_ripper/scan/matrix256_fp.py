@@ -165,6 +165,20 @@ def collect_tree_records(source_path: str) -> tuple[list[tuple[str, int]], str]:
         iso.close()
 
 
+def _collect_records(source_path: str) -> tuple[list[tuple[str, int]], str] | None:
+    """(records, view name) for the source's file tree: the pycdlib walk, or a 7-Zip listing (view "udf-7z") when
+    pycdlib refuses the image; None when 7-Zip lists nothing either.
+    """
+    try:
+        return collect_tree_records(source_path)
+    except Exception as e:  # noqa: BLE001 — pycdlib refuses UDF-only images (no ISO 9660 PVD)
+        logger.debug("matrix256 pycdlib walk failed for %s: %s; trying 7z", source_path, e)
+        from arm_ripper.scan import udf_image
+
+        udf_records = udf_image.list_files(source_path)
+        return (udf_records, "udf-7z") if udf_records else None
+
+
 def probe_matrix256(source_path: str) -> str | None:
     """Compute the matrix256v1 fingerprint for a device/ISO path. Never raises.
 
@@ -174,14 +188,7 @@ def probe_matrix256(source_path: str) -> str | None:
     like thediscdb we never fingerprint nothing.
     """
     try:
-        try:
-            collected: tuple[list[tuple[str, int]], str] | None = collect_tree_records(source_path)
-        except Exception as e:  # noqa: BLE001 — pycdlib refuses UDF-only images (no ISO 9660 PVD)
-            logger.debug("matrix256 pycdlib walk failed for %s: %s; trying 7z", source_path, e)
-            from arm_ripper.scan import udf_image
-
-            udf_records = udf_image.list_files(source_path)
-            collected = (udf_records, "udf-7z") if udf_records else None
+        collected = _collect_records(source_path)
         if collected is None:
             return None
         records, view = collected

@@ -18,6 +18,7 @@ from arm_ripper.scan.matrix256_fp import (
     UnsafeRecordError,
     _choose_view,
     _collect_from_iso,
+    _collect_records,
     _hashed_path,
     collect_tree_records,
     fingerprint_records,
@@ -367,3 +368,50 @@ def test_hashed_path_extended_views_keep_a_semicolon_in_the_name(view: str) -> N
 
 def test_hashed_path_without_leading_slash_passes_through() -> None:
     assert _hashed_path("dir/a.txt", "udf") == "dir/a.txt"
+
+
+def test_collect_records_returns_pycdlib_result_without_calling_7zip(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.scan import udf_image
+
+    def _boom(_path: str) -> list[tuple[str, int]]:
+        raise AssertionError("7-Zip must not run when pycdlib succeeds")
+
+    monkeypatch.setattr(udf_image, "list_files", _boom)
+    with mock.patch.object(matrix256_fp, "collect_tree_records", return_value=([("a", 1)], "udf")):
+        assert _collect_records("/dev/sr0") == ([("a", 1)], "udf")
+
+
+def test_collect_records_falls_back_to_7zip_listing_and_logs(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from arm_ripper.scan import udf_image
+
+    monkeypatch.setattr(udf_image, "list_files", lambda _path: [("b", 2)])
+    with (
+        mock.patch.object(matrix256_fp, "collect_tree_records", side_effect=OSError("no PVD")),
+        caplog.at_level(logging.DEBUG, logger=matrix256_fp.logger.name),
+    ):
+        assert _collect_records("/dev/sr0") == ([("b", 2)], "udf-7z")
+    assert [r.getMessage() for r in caplog.records] == ["matrix256 pycdlib walk failed for /dev/sr0: no PVD; trying 7z"]
+
+
+def test_collect_records_none_when_7zip_lists_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.scan import udf_image
+
+    monkeypatch.setattr(udf_image, "list_files", lambda _path: [])
+    with mock.patch.object(matrix256_fp, "collect_tree_records", side_effect=OSError("no PVD")):
+        assert _collect_records("/dev/sr0") is None
+
+
+def test_collect_records_propagates_a_7zip_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.scan import udf_image
+
+    def _fail(_path: str) -> list[tuple[str, int]]:
+        raise RuntimeError("7z failed")
+
+    monkeypatch.setattr(udf_image, "list_files", _fail)
+    with (
+        mock.patch.object(matrix256_fp, "collect_tree_records", side_effect=OSError("no PVD")),
+        pytest.raises(RuntimeError, match="7z failed"),
+    ):
+        _collect_records("/dev/sr0")
