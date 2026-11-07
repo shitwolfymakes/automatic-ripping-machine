@@ -229,6 +229,25 @@ def _probe_line_state(raw: bytes, state: MakemkvKeyState) -> MakemkvKeyState | N
     return None
 
 
+async def _scan_probe_stdout(proc: asyncio.subprocess.Process) -> MakemkvKeyState:
+    """Read the probe's stdout to EOF and return the key state it reports, killing makemkvcon on every key message."""
+    assert proc.stdout is not None
+    state = MakemkvKeyState.VALID
+    async for raw in proc.stdout:
+        line_state = _probe_line_state(raw, state)
+        if line_state is not None:
+            state = line_state
+            proc.kill()
+    return state
+
+
+async def _discard_stderr(proc: asyncio.subprocess.Process) -> None:
+    """Drain the probe's stderr so makemkvcon never blocks on a full pipe."""
+    assert proc.stderr is not None
+    async for _ in proc.stderr:
+        pass
+
+
 async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
     """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
     (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
@@ -246,24 +265,10 @@ async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | Non
     except OSError as exc:
         return MakemkvKeyState.PROBE_FAILED, f"could not start makemkvcon: {exc}"
 
-    state = MakemkvKeyState.VALID
-
-    async def _scan_stdout() -> None:
-        nonlocal state
-        assert proc.stdout is not None
-        async for raw in proc.stdout:
-            line_state = _probe_line_state(raw, state)
-            if line_state is not None:
-                state = line_state
-                proc.kill()
-
-    async def _drain_stderr() -> None:
-        assert proc.stderr is not None
-        async for _ in proc.stderr:
-            pass
-
     try:
-        await asyncio.wait_for(asyncio.gather(_scan_stdout(), _drain_stderr()), timeout=PROBE_TIMEOUT_SECONDS)
+        state, _ = await asyncio.wait_for(
+            asyncio.gather(_scan_probe_stdout(proc), _discard_stderr(proc)), timeout=PROBE_TIMEOUT_SECONDS
+        )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()

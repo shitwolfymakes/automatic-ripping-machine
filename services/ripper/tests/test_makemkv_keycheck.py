@@ -207,3 +207,32 @@ def test_probe_line_state_eval_line_does_not_downgrade_expired(prefix):
 
 def test_probe_line_state_unrelated_line_is_none():
     assert mk._probe_line_state(b"MSG:1005,0,0,hello\n", MakemkvKeyState.VALID) is None
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected", "kills"),
+    [
+        ([b'MSG:1005,0,1,"MakeMKV started"\n'], MakemkvKeyState.VALID, 0),
+        ([_EXPIRED_LINE], MakemkvKeyState.BINARY_EXPIRED, 1),
+        ([_EVAL_LINE], MakemkvKeyState.UNREGISTERED_OR_EXPIRED, 1),
+        ([_EXPIRED_LINE, _EVAL_LINE], MakemkvKeyState.BINARY_EXPIRED, 1),
+    ],
+)
+async def test_scan_probe_stdout_returns_state_and_kills_per_qualifying_line(lines, expected, kills):
+    proc = _KillCountingProc(lines)
+    assert await mk._scan_probe_stdout(proc) == expected
+    assert proc.kills == kills
+
+
+async def test_discard_stderr_reads_stream_to_eof():
+    proc = _FakeProc([])
+    consumed = []
+
+    async def gen():
+        for item in (b"a\n", b"b\n"):
+            consumed.append(item)
+            yield item
+
+    proc.stderr = gen()
+    assert await mk._discard_stderr(proc) is None
+    assert consumed == [b"a\n", b"b\n"]
