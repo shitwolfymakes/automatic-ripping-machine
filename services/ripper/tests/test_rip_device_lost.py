@@ -543,3 +543,56 @@ def test_drive_gone_is_false_when_the_current_node_reads_fine(monkeypatch: pytes
     controller, calls = _drive_gone_controller(monkeypatch, DriveHandle("/dev/sr0"), None)
     assert controller._drive_gone("/dev/sr0") is False
     assert calls == ["/dev/sr0"]
+
+
+async def test_await_drive_return_gives_up_without_a_read_when_the_handle_stays_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty handle skips the drive read; once the deadline passes the wait returns None."""
+    handle = DriveHandle("/dev/sr0")
+    controller, calls = _drive_gone_controller(monkeypatch, handle, None)
+    handle.set(None)
+    monkeypatch.setattr(jc_module, "DEVICE_RETURN_WAIT_SECONDS", 0.0)
+    assert await controller._await_drive_return() is None
+    assert calls == []
+
+
+async def test_await_drive_return_returns_the_node_the_handle_fills_in_once_it_reads_a_disc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty handle is waited out; the node set while sleeping is read and returned on DISC_OK."""
+    handle = DriveHandle("/dev/sr0")
+    handle.set(None)
+    reads: list[str] = []
+
+    def fake_read(path: str) -> DriveState:
+        reads.append(path)
+        return DriveState.DISC_OK
+
+    async def fake_sleep(_seconds: float) -> None:
+        handle.set("/dev/sr1")
+
+    monkeypatch.setattr(jc_module, "read_drive_status", fake_read)
+    monkeypatch.setattr(jc_module, "DEVICE_RETURN_WAIT_SECONDS", 1000.0)
+    monkeypatch.setattr(jc_module, "DEVICE_WATCH_INTERVAL_SECONDS", 0.001)
+    monkeypatch.setattr(jc_module.asyncio, "sleep", fake_sleep)
+    controller = JobController(_Client(), "drv_x", device_path=handle)  # type: ignore[arg-type]
+    assert await controller._await_drive_return() == "/dev/sr1"
+    assert reads == ["/dev/sr1"]
+
+
+async def test_await_drive_return_keeps_waiting_while_the_node_reads_a_state_other_than_disc_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A readable node that is not DISC_OK is not returned; the wait ends None at the deadline."""
+    reads: list[str] = []
+
+    def fake_read(path: str) -> DriveState:
+        reads.append(path)
+        return DriveState.NOT_READY
+
+    monkeypatch.setattr(jc_module, "read_drive_status", fake_read)
+    monkeypatch.setattr(jc_module, "DEVICE_RETURN_WAIT_SECONDS", 0.0)
+    controller = JobController(_Client(), "drv_x", device_path=DriveHandle("/dev/sr0"))  # type: ignore[arg-type]
+    assert await controller._await_drive_return() is None
+    assert reads == ["/dev/sr0"]
