@@ -50,6 +50,29 @@ def _dd_command(device_path: str, output_path: Path) -> list[str]:
     return ["dd", f"if={device_path}", f"of={output_path}", "bs=2048", "conv=noerror,sync"]
 
 
+async def _stop_reporter(reporter: asyncio.Task[None] | None) -> None:
+    """Cancel the progress reporter, if any, and wait for it to finish."""
+    if reporter is None:
+        return
+    reporter.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await reporter
+
+
+async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
+    """Kill dd and reap it if it is still running."""
+    # Cancel-safe: if the parent task was cancelled (abandon flow),
+    # dd is still running. Kill it before letting CancelledError
+    # propagate so /raw/<id>/ rmtree finishes clean.
+    if proc.returncode is not None:
+        return
+    proc.kill()
+    try:
+        await proc.wait()
+    except BaseException:
+        pass
+
+
 async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
@@ -85,19 +108,8 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
         await proc.wait()
         return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
     finally:
-        if reporter is not None:
-            reporter.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await reporter
-        # Cancel-safe: if the parent task was cancelled (abandon flow),
-        # dd is still running. Kill it before letting CancelledError
-        # propagate so /raw/<id>/ rmtree finishes clean.
-        if proc.returncode is None:
-            proc.kill()
-            try:
-                await proc.wait()
-            except BaseException:
-                pass
+        await _stop_reporter(reporter)
+        await _kill_if_running(proc)
 
     if proc.returncode != 0:
         stderr = b""

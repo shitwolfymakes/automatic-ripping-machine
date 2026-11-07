@@ -237,3 +237,40 @@ def test_dd_command_device_uses_2k_blocks_with_noerror_sync(tmp_path: Path) -> N
         "bs=2048",
         "conv=noerror,sync",
     ]
+
+
+async def test_stop_reporter_without_reporter_returns() -> None:
+    await data_rip._stop_reporter(None)
+
+
+async def test_stop_reporter_cancels_running_task() -> None:
+    task = asyncio.create_task(asyncio.sleep(60))
+    await asyncio.sleep(0)
+    await data_rip._stop_reporter(task)
+    assert task.cancelled()
+
+
+async def test_stop_reporter_accepts_finished_task() -> None:
+    task = asyncio.create_task(asyncio.sleep(0))
+    await task
+    await data_rip._stop_reporter(task)
+    assert task.done() and not task.cancelled()
+
+
+async def test_kill_if_running_leaves_finished_proc_alone(tmp_path: Path) -> None:
+    proc = _HangProc(tmp_path / "o")
+    proc.returncode = 0
+    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    assert proc.kills == 0
+
+
+async def test_kill_if_running_kills_and_reaps(tmp_path: Path) -> None:
+    proc = _HangProc(tmp_path / "o")
+    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    assert proc.kills == 1 and proc.reaped
+
+
+async def test_kill_if_running_swallows_reap_error(tmp_path: Path) -> None:
+    proc = _HangProc(tmp_path / "o", reap_error=RuntimeError("boom"))
+    await data_rip._kill_if_running(proc)  # type: ignore[arg-type]
+    assert proc.kills == 1 and not proc.reaped
