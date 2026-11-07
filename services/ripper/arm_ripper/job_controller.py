@@ -138,6 +138,15 @@ def _command_payload(envelope: WSEnvelope) -> dict[str, Any]:
     return envelope.payload if isinstance(envelope.payload, dict) else {}
 
 
+async def _woken_within(event: asyncio.Event, timeout: float) -> bool:
+    """True when `event` is set within `timeout` seconds, False when the wait times out."""
+    try:
+        await asyncio.wait_for(event.wait(), timeout=timeout)
+    except asyncio.TimeoutError:
+        return False
+    return True
+
+
 def _previously_ripped(response: httpx.Response) -> bool:
     """identify's 409 for a disc the backend refused because it was ripped
     before (on_previously_ripped=reject)."""
@@ -663,9 +672,7 @@ class JobController:
     async def _wait_for_resolution(self, job_id: str, event: asyncio.Event, spec: _WaitSpec) -> JobView | None:
         # First-wait window: covers the boot race where we missed the
         # gate-leaving broadcast before subscribing.
-        try:
-            await asyncio.wait_for(event.wait(), timeout=RESOLUTION_WS_FIRST_WAIT_SECONDS)
-        except asyncio.TimeoutError:
+        if not await _woken_within(event, RESOLUTION_WS_FIRST_WAIT_SECONDS):
             outcome, view = self._classify_wait(await self._safe_get_job(job_id), job_id, spec)
             if outcome == "proceed":
                 return view
@@ -679,11 +686,8 @@ class JobController:
         timeout = self._resolution_timeout
         deadline = None if timeout is None else asyncio.get_event_loop().time() + timeout
         while deadline is None or asyncio.get_event_loop().time() < deadline:
-            woke_via_ws = True
-            try:
-                await asyncio.wait_for(event.wait(), timeout=POLL_MAX_SECONDS)
-            except asyncio.TimeoutError:
-                woke_via_ws = False  # periodic sanity poll — handles torn WS connections
+            # A timeout is the periodic sanity poll that handles torn WS connections.
+            woke_via_ws = await _woken_within(event, POLL_MAX_SECONDS)
             view = await self._safe_get_job(job_id)
             outcome, proceed_view = self._classify_wait(view, job_id, spec)
             if outcome == "proceed":
