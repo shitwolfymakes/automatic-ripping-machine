@@ -309,3 +309,18 @@ def test_virtual_drives_are_absent_from_diagnostic_items(signing_key, tmp_path) 
         body = _get(client, auth)
     ids = {d["id"] for d in body["drives"]}
     assert ids == {"drv_optical"}
+
+
+def test_scanner_without_a_finished_scan_reports_no_stale_scan_finding(signing_key, tmp_path) -> None:
+    """A scanner that has not completed a scan yet (last_scan_at is None) adds no "last scan was" finding."""
+    db = FakeSession()
+    (tmp_path / "by-id").mkdir()
+    client, auth = _app(
+        db,
+        signing_key,
+        scanner=_StubScanner(last_scan_at=None, last_error=None, disk_root=tmp_path),
+        manager=_StubManager(),
+    )
+    with client:
+        body = _get(client, auth)
+    assert body["system"] == []
