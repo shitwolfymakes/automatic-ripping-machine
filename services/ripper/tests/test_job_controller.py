@@ -1775,6 +1775,12 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
     tracks = [_unfinished_track(1), _unfinished_track(2), _unfinished_track(3)]
     rip = jc_module._DiscRip(
         controller,
+        backend=controller._backend,
+        ws=controller._ws,
+        ejector=controller._ejector,
+        device=controller._device,
+        default_min_length_seconds=controller._default_min_length_seconds,
+        output_dir=jc_module.RAW_ROOT / "job_x",
         job_id="job_x",
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",

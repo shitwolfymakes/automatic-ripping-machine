@@ -537,7 +537,19 @@ class JobController:
         rip_start: RipStartResponse,
     ) -> None:
         """Rip every title of the disc, report rip-complete and eject."""
-        await _DiscRip(self, job_id=job_id, disc_type=disc_type, device_path=device_path, rip_start=rip_start).run()
+        await _DiscRip(
+            self,
+            backend=self._backend,
+            ws=self._ws,
+            ejector=self._ejector,
+            device=self._device,
+            default_min_length_seconds=self._default_min_length_seconds,
+            output_dir=RAW_ROOT / job_id,
+            job_id=job_id,
+            disc_type=disc_type,
+            device_path=device_path,
+            rip_start=rip_start,
+        ).run()
 
 
 class _DiscRip:
@@ -548,17 +560,27 @@ class _DiscRip:
         self,
         controller: "JobController",
         *,
+        backend: BackendRetry,
+        ws: WSClient | None,
+        ejector: Ejector,
+        device: DriveHandle,
+        default_min_length_seconds: int,
+        output_dir: Path,
         job_id: str,
         disc_type: DiscType,
         device_path: str,
         rip_start: RipStartResponse,
     ) -> None:
         self._controller = controller
+        self._backend = backend
+        self._ws = ws
+        self._ejector = ejector
+        self._device = device
         self._job_id = job_id
         self._disc_type = disc_type
-        # The node at rip start; the controller's own `_device_path` is the live one.
+        # The node at rip start; the shared handle's `current` is the live one.
         self._start_path = device_path
-        self._output_dir = RAW_ROOT / job_id
+        self._output_dir = output_dir
         self._tracks = list(rip_start.tracks)
         self._resumable = _resumable(disc_type, device_path, self._tracks)
         self._lost = asyncio.Event()
@@ -569,9 +591,7 @@ class _DiscRip:
         # IN_PROGRESS is sent once per track across every pass.
         self._started: set[str] = set()
         self._min_length_seconds = (
-            rip_start.min_length_seconds
-            if rip_start.min_length_seconds is not None
-            else controller._default_min_length_seconds
+            rip_start.min_length_seconds if rip_start.min_length_seconds is not None else default_min_length_seconds
         )
         self._rip_path = device_path
         self._rip_dir = self._output_dir
@@ -584,7 +604,7 @@ class _DiscRip:
             return
         self._started.add(track.id)
         with with_log_context(track_id=track.id):
-            await self._controller._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
+            await self._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
 
     async def _on_track_done(self, track: TrackView, result: RipResult) -> None:
         """Record a finished title as done, left for a resume, or failed."""
@@ -605,7 +625,7 @@ class _DiscRip:
         """Keep a ripped title's file and patch the track DONE."""
         if result.output_path is not None:
             self._kept.add(Path(result.output_path))
-        await self._controller._backend.patch_track(track.id, **_done_fields(result))
+        await self._backend.patch_track(track.id, **_done_fields(result))
         logger.info(
             "track %s done size=%s duration=%s",
             track.id,
@@ -623,7 +643,7 @@ class _DiscRip:
 
     async def _record_failed(self, track: TrackView, result: RipResult) -> None:
         """Patch the track FAILED with the rip's error."""
-        await self._controller._backend.patch_track(
+        await self._backend.patch_track(
             track.id,
             status=TrackStatus.FAILED,
             last_error=result.error or "unknown error",
@@ -636,8 +656,8 @@ class _DiscRip:
         """Publish a track's progress to the websocket hub, when one is connected."""
         with with_log_context(track_id=track.id):
             logger.debug("track %s progress=%.2f", track.id, fraction)
-            if self._controller._ws is not None:
-                await self._controller._ws.publish(
+            if self._ws is not None:
+                await self._ws.publish(
                     topic=f"ripper.progress.{self._job_id}",
                     event_type="ripper.progress",
                     payload=_progress_payload(track.id, fraction, stats),
@@ -646,7 +666,7 @@ class _DiscRip:
     def _drive_gone(self, path: str) -> bool:
         """The drive this rip runs on has left `path`: the poll loop moved the
         handle (absent, or a new node), or the node no longer answers."""
-        if self._controller._device.current != path:
+        if self._device.current != path:
             return True
         try:
             read_drive_status(path)
@@ -658,7 +678,7 @@ class _DiscRip:
         """Set the lost event (which stops makemkvcon) once the drive leaves `path`.
         The poll loop keeps the handle current; this only reads it."""
         while not self._lost.is_set():
-            if self._controller._device.current != path:
+            if self._device.current != path:
                 logger.warning("drive left %s mid-rip; stopping makemkvcon", path)
                 self._lost.set()
                 return
@@ -670,7 +690,7 @@ class _DiscRip:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + DEVICE_RETURN_WAIT_SECONDS
         while True:
-            path = self._controller._device.current
+            path = self._device.current
             if path is not None:
                 try:
                     if read_drive_status(path) == DriveState.DISC_OK:
@@ -691,8 +711,8 @@ class _DiscRip:
             with with_log_context(track_id=track.id):
                 if track.id not in self._started:
                     self._started.add(track.id)
-                    await self._controller._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
-                await self._controller._backend.patch_track(track.id, status=TrackStatus.FAILED, last_error=reason)
+                    await self._backend.patch_track(track.id, status=TrackStatus.IN_PROGRESS)
+                await self._backend.patch_track(track.id, status=TrackStatus.FAILED, last_error=reason)
 
     async def run(self) -> None:
         """Rip the disc through its resumes, then finish it."""
@@ -759,12 +779,12 @@ class _DiscRip:
 
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
-        completed = await self._controller._backend.rip_complete(self._job_id)
+        completed = await self._backend.rip_complete(self._job_id)
         logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
 
         # Eject the node the drive is at NOW — it may have renumbered during
         # the rip (USB replug); the path captured at rip start is a hint only.
-        await self._controller._ejector.eject(self._controller._device_path or self._start_path)
+        await self._ejector.eject(self._device.current or self._start_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)
 
 

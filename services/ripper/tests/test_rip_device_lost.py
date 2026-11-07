@@ -501,6 +501,12 @@ def _disc_rip(controller: JobController) -> jc_module._DiscRip:
     """A disc rip on `/dev/sr0` reaching the drive handle through `controller`."""
     return jc_module._DiscRip(
         controller,
+        backend=controller._backend,
+        ws=controller._ws,
+        ejector=controller._ejector,
+        device=controller._device,
+        default_min_length_seconds=controller._default_min_length_seconds,
+        output_dir=jc_module.RAW_ROOT / _JOB,
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
