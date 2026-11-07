@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   greeting:
+    # Only the upstream repository greets newcomers; on a fork every issue
+    # opened by its owner would start a run that does nothing.
+    if: github.repository == 'automatic-ripping-machine/automatic-ripping-machine'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0

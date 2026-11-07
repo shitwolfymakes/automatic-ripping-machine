@@ -28,7 +28,7 @@ main()/lifespan defensive+shutdown arms, ws union fallthrough, exhaustive-
 enum raises, the dead docker-py ImportError fallback, two dispatcher race
 guards. Coverage config also excludes Protocol/overload `...` stubs.
 
-CI **measures** coverage (`coverage run -m pytest` + `coverage report`,
+CI **measures** coverage (`pytest -n auto --cov` + `coverage report`,
 config in `pyproject.toml [tool.coverage]`, branch=true) but does
 **not gate** — the user explicitly chose "measure but don't fail yet". A
 `fail_under` ratchet (≈97–98, below the achieved 99 to allow noise) is

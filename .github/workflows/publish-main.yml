@@ -54,12 +54,14 @@ jobs:
         # variants: base (CPU + NVENC), -intel (QSV) and -amd (VAAPI).
         # `dir` (default: the service name) is the services/ subdirectory
         # holding the Dockerfile; the arm-ui image is built from ui-neu.
+        # `fresh` lists the stages the nightly rebuild refreshes; see the
+        # Build & push step.
         include:
           - {service: backend, target: "", suffix: ""}
-          - {service: ripper, target: "", suffix: ""}
-          - {service: transcode, target: base, suffix: "", alias: "-nvidia"}
-          - {service: transcode, target: intel, suffix: "-intel"}
-          - {service: transcode, target: amd, suffix: "-amd"}
+          - {service: ripper, target: "", suffix: "", fresh: "runtime"}
+          - {service: transcode, target: base, suffix: "", alias: "-nvidia", fresh: "base"}
+          - {service: transcode, target: intel, suffix: "-intel", fresh: "base,intel"}
+          - {service: transcode, target: amd, suffix: "-amd", fresh: "base,amd"}
           - {service: ui, dir: ui-neu, target: "", suffix: ""}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -100,8 +102,15 @@ jobs:
             type=raw,value=latest,suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
             type=sha,prefix=main-,format=short,suffix=${{ matrix.alias }},enable=${{ matrix.alias != '' }}
 
-      # Nightly cron rebuilds without cache to pull fresh base + apt indices;
-      # ordinary trunk pushes reuse the gha cache for speed.
+      # The nightly cron rebuilds against fresh base images and apt indices;
+      # ordinary trunk pushes reuse the gha cache for speed. A leg with
+      # `fresh` rebuilds only those stages and takes its compile stage
+      # (HandBrake for transcode, MakeMKV + ccextractor for the ripper) from
+      # the cache. Those stages build pinned releases and ship only their
+      # binaries, so a nightly recompile produced the same programs while
+      # taking about 15 min per transcode leg and writing a new copy of the
+      # layers to the cache every night. Every other leg rebuilds with no
+      # cache at all.
       - name: Build & push
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -110,7 +119,8 @@ jobs:
           file: services/${{ matrix.dir || matrix.service }}/Dockerfile
           target: ${{ matrix.target }}
           push: true
-          no-cache: ${{ github.event_name == 'schedule' }}
+          no-cache: ${{ github.event_name == 'schedule' && !matrix.fresh }}
+          no-cache-filters: ${{ github.event_name == 'schedule' && matrix.fresh || '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true

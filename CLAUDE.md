@@ -70,6 +70,7 @@ containers (they are not compose services).
 
 ```bash
 uv run pytest                  # all backend / ripper / transcode suites — zero infra
+uv run pytest -n auto          # the same suites in parallel (pytest-xdist), as CI runs them
 ```
 
 Shell suites (zero-infra): `bash devtools/test-setup-dev.sh`, `bash devtools/test-install-walkthrough.sh`, and `bash deploy/tests/test-{armctl,bootstrap,bundle,stack-contract}.sh`.

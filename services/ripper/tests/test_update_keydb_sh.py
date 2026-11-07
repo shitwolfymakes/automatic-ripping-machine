@@ -71,6 +71,10 @@ def test_download_failure_keeps_existing(tmp_path):
     stub.mkdir()
     (stub / "curl").write_text("#!/usr/bin/env bash\nexit 7\n")
     (stub / "curl").chmod(0o755)
+    # The script waits 5 s and then 10 s between its three attempts; a no-op
+    # sleep keeps the retries without the wait.
+    (stub / "sleep").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (stub / "sleep").chmod(0o755)
     mk = tmp_path / ".MakeMKV"
     mk.mkdir()
     (mk / "keydb.cfg").write_text("old | V | keep\n")

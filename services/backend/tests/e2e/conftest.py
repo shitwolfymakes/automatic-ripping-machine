@@ -145,6 +145,13 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setattr(main_mod.settings, "ARM_SYSFS_ROOT", str(sysfs_root))
     monkeypatch.setattr(main_mod.settings, "ARM_HOST_DISK_ROOT", str(host_disk_root))
 
+    # The lifespan also sweeps MEDIA_ROOT for `.arm-inprogress` orphans. Its
+    # default is the host's /media, which on a dev machine can hold mounted
+    # drives that take seconds to walk, so give it an empty tree too.
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(main_mod.settings, "MEDIA_ROOT", str(media_root))
+
     # Postgres Alembic revisions can't run on SQLite — create the schema from
     # model metadata instead. Same effect for the API surface under test. A
     # throwaway *sync* engine on the same file sidesteps event-loop juggling
