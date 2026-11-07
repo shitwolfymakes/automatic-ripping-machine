@@ -25,7 +25,7 @@ import shutil
 from pathlib import Path
 
 from arm_common import IsoPreparePhase
-from arm_ripper import prepare
+from arm_ripper import extraction_routes, prepare
 
 logger = logging.getLogger("arm_ripper.iso_extract")
 
@@ -46,13 +46,6 @@ _FILE_ERROR = re.compile(r"^ERROR: [^:\n]+ : (.+)$", re.MULTILINE)
 # " 75% 3 - BDMV/STREAM/00002.m2ts" or just " 12%".
 _PROGRESS = re.compile(r"^\s*(\d{1,3})%(?:\s+\d+)?(?:\s+-\s+(.+?))?\s*$")
 
-# Image path -> the extracted disc folder MakeMKV should read instead.
-_extracted: dict[str, Path] = {}
-
-
-def extracted_dir(image_path: str) -> Path | None:
-    return _extracted.get(image_path)
-
 
 def parse_progress(text: str) -> tuple[int, str | None] | None:
     """The latest (percent, current file) in 7-Zip's `-bsp1` output, or None."""
@@ -65,8 +58,8 @@ def parse_progress(text: str) -> tuple[int, str | None] | None:
 
 def _drive_dir() -> Path:
     # Imported here: arm_ripper.config builds its Settings from the environment
-    # at import time, and source.py (which imports this module) must stay
-    # importable without it.
+    # at import time, and the scan dispatcher (which imports this module) must
+    # stay importable without it.
     from arm_ripper.config import settings
 
     return EXTRACT_ROOT / settings.ARM_DRIVE_ID
@@ -196,7 +189,7 @@ async def extract(image_path: str) -> Path | None:
             logger.warning("iso extract: %s has no BDMV or VIDEO_TS folder; not a video disc", image)
         await asyncio.to_thread(shutil.rmtree, base, True)
         return None
-    _extracted[image_path] = root
+    extraction_routes.route(image_path, root)
     logger.info("iso extract: %s extracted; MakeMKV reads file:%s", image, root)
     return root
 
@@ -204,8 +197,7 @@ async def extract(image_path: str) -> Path | None:
 async def discard_all() -> None:
     """Stop routing to every extraction this process made and remove them.
     The removal runs off the event loop: an extraction is a multi-GB tree."""
-    roots = list(_extracted.values())
-    _extracted.clear()
+    roots = extraction_routes.drop_all()
     await asyncio.to_thread(_remove_extractions, roots)
 
 

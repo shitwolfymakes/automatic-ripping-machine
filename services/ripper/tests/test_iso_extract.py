@@ -21,6 +21,7 @@ os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
+import arm_ripper.extraction_routes as extraction_routes  # noqa: E402
 import arm_ripper.iso_extract as iso_extract  # noqa: E402
 import arm_ripper.scan.dispatcher as scan_dispatcher  # noqa: E402
 from arm_common import DiscType  # noqa: E402
@@ -149,7 +150,7 @@ def _patch_scan(
 
     async def _extract(path: str) -> Path | None:
         if extracted is not None:
-            iso_extract._extracted[path] = extracted
+            extraction_routes.route(path, extracted)
         return extracted
 
     async def _no_cd(_p: str) -> None:
@@ -443,4 +444,4 @@ async def test_extract_removes_the_scratch_dir_when_run_7z_raises(
         await iso_extract.extract(str(iso))
 
     assert not (_scratch / "drv_test").exists()
-    assert iso_extract.extracted_dir(str(iso)) is None
+    assert extraction_routes.extracted_dir(str(iso)) is None

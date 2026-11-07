@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arm_ripper import iso_extract
+from arm_ripper import extraction_routes
 
 
 def is_iso_source(path: str) -> bool:
@@ -50,7 +50,7 @@ def makemkv_source_url(path: str) -> str:
     unpacked (MakeMKV could not open the image itself). Used by both `scan_disc`
     and `rip_disc`; centralising it here keeps the two callsites in lockstep.
     """
-    folder = iso_extract.extracted_dir(path)
+    folder = extraction_routes.extracted_dir(path)
     if folder is not None:
         return f"file:{_disc_tree(folder)}"
     if is_folder_source(path):

@@ -16,6 +16,7 @@ os.environ.setdefault("ARM_DRIVE_ID", "drv_test")
 os.environ.setdefault("ARM_BACKEND_URL", "https://backend.invalid")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "test-token")
 
+import arm_ripper.extraction_routes as extraction_routes  # noqa: E402
 import arm_ripper.iso_extract as iso_extract  # noqa: E402
 import arm_ripper.prepare as prepare  # noqa: E402
 import arm_ripper.scan.dispatcher as scan_dispatcher  # noqa: E402
@@ -137,13 +138,13 @@ async def test_scan_reports_scanning_then_the_extraction_then_scanning_again(
         phases.append(phase)
 
     async def _makemkv(_p: str) -> ScanResult:
-        if iso_extract.extracted_dir(str(iso)) is None:
+        if extraction_routes.extracted_dir(str(iso)) is None:
             raise ScanError("makemkvcon exited -11")
         return ScanResult(disc_type=DiscType.BLURAY, titles=[{"index": 0, "duration_seconds": 5400}])
 
     async def _extract(path: str) -> Path:
         await prepare.report(EXTRACTING, 50, "BDMV/x")
-        iso_extract._extracted[path] = tmp_path / "m"
+        extraction_routes.route(path, tmp_path / "m")
         return tmp_path / "m"
 
     async def _data(_p: str) -> ScanResult:
@@ -156,7 +157,7 @@ async def test_scan_reports_scanning_then_the_extraction_then_scanning_again(
     try:
         await scan_dispatcher.scan(str(iso))
     finally:
-        iso_extract._extracted.clear()
+        extraction_routes.drop_all()
 
     assert phases == [SCANNING, EXTRACTING, SCANNING]
 
