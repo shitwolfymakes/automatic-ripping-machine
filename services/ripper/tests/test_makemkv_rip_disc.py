@@ -940,3 +940,29 @@ async def test_wait_for_exit_with_stop_times_out_when_neither_happens(monkeypatc
     monkeypatch.setattr(makemkv_rip, "RIP_TIMEOUT_SECONDS", 0.01)
     with pytest.raises(asyncio.TimeoutError):
         await makemkv_rip._wait_for_exit(_as_process(_HangingProc()), asyncio.Event())
+
+
+async def test_kill_if_running_leaves_a_finished_proc_alone():
+    proc = _ScriptedHangingProc([])
+    proc.returncode = 0
+    await makemkv_rip._kill_if_running(_as_process(proc))
+    assert proc.kill_count == 0
+    assert proc.waits_after_kill == 0
+
+
+async def test_kill_if_running_kills_then_waits_for_a_running_proc():
+    proc = _ScriptedHangingProc([])
+    await makemkv_rip._kill_if_running(_as_process(proc))
+    assert proc.kill_count == 1
+    assert proc.waits_after_kill == 1
+
+
+@pytest.mark.parametrize("error", [RuntimeError("reap failed"), asyncio.CancelledError()], ids=["exception", "cancel"])
+async def test_kill_if_running_swallows_a_wait_that_raises(error):
+    class _Proc(_FakeProc):
+        async def wait(self) -> int:
+            raise error
+
+    proc = _Proc([])
+    await makemkv_rip._kill_if_running(_as_process(proc))
+    assert proc.returncode == -9

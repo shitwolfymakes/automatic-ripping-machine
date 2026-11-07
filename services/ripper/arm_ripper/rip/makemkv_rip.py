@@ -500,6 +500,19 @@ async def _wait_for_exit(proc: asyncio.subprocess.Process, stop: asyncio.Event |
     return exited not in done
 
 
+async def _kill_if_running(proc: asyncio.subprocess.Process) -> None:
+    """Kill makemkvcon and reap it if it is still running."""
+    # Cancel-safe cleanup: parent abandon → CancelledError. Kill the
+    # subprocess so /raw can be wiped without orphan fds.
+    if proc.returncode is not None:
+        return
+    proc.kill()
+    try:
+        await proc.wait()
+    except BaseException:
+        pass
+
+
 async def _run_makemkvcon(
     cmd: list[str],
     state: _ParserState,
@@ -547,14 +560,7 @@ async def _run_makemkvcon(
         streamer.cancel()
         return _compose_error(f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s", state.diagnostics)
     finally:
-        # Cancel-safe cleanup: parent abandon → CancelledError. Kill the
-        # subprocess so /raw can be wiped without orphan fds.
-        if proc.returncode is None:
-            proc.kill()
-            try:
-                await proc.wait()
-            except BaseException:
-                pass
+        await _kill_if_running(proc)
         streamer.cancel()
 
     # Drain the streamer so every line after EOF is processed before callers read `state`.
