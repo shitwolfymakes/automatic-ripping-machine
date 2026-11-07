@@ -651,6 +651,37 @@ async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs
     return titles_out
 
 
+def _failed_titles(state: _ParserState, eligible: list[int], ripped: dict[int, RipResult]) -> dict[int, RipResult]:
+    """Failures for titles without a file.
+
+    A captured MSG:5003 reason comes first, then a generic "produced no .mkv" for each eligible title left over.
+    """
+    failed: dict[int, RipResult] = {}
+    # If MSG:5003 captured a per-title failure reason and we didn't
+    # produce a file for it (because the eligible list and files
+    # ran out at different points), surface that reason via a
+    # FAILED entry. Cheap belt-and-braces — most of the time
+    # state.titles is empty in `mkv all` mode.
+    for title_idx, ts in state.titles.items():
+        if title_idx in ripped:
+            continue
+        if ts.fail_reason:
+            failed[title_idx] = RipResult(ok=False, error=ts.fail_reason)
+
+    # Eligible source indexes that didn't get a file *and* don't have
+    # a captured failure reason are surfaced as a generic "produced no
+    # .mkv" failure so the dispatcher can mark the track FAILED rather
+    # than silently dropping it.
+    for source_idx in eligible:
+        if source_idx in ripped or source_idx in failed:
+            continue
+        failed[source_idx] = RipResult(
+            ok=False,
+            error="makemkvcon exited 0 but produced no .mkv for this title",
+        )
+    return failed
+
+
 async def rip_disc(
     device_path: str,
     output_dir: Path,
@@ -721,27 +752,6 @@ async def rip_disc(
     eligible = eligible_source_indexes or []
     titles_out = await _attribute_outputs(output_dir, eligible, hash_outputs)
 
-    # If MSG:5003 captured a per-title failure reason and we didn't
-    # produce a file for it (because the eligible list and files
-    # ran out at different points), surface that reason via a
-    # FAILED entry. Cheap belt-and-braces — most of the time
-    # state.titles is empty in `mkv all` mode.
-    for title_idx, ts in state.titles.items():
-        if title_idx in titles_out:
-            continue
-        if ts.fail_reason:
-            titles_out[title_idx] = RipResult(ok=False, error=ts.fail_reason)
-
-    # Eligible source indexes that didn't get a file *and* don't have
-    # a captured failure reason are surfaced as a generic "produced no
-    # .mkv" failure so the dispatcher can mark the track FAILED rather
-    # than silently dropping it.
-    for source_idx in eligible:
-        if source_idx in titles_out:
-            continue
-        titles_out[source_idx] = RipResult(
-            ok=False,
-            error="makemkvcon exited 0 but produced no .mkv for this title",
-        )
+    titles_out.update(_failed_titles(state, eligible, titles_out))
 
     return RipDiscResult(overall_error=None, titles=titles_out)
