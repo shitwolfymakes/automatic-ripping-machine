@@ -756,6 +756,140 @@ class _IdentifyFlow:
             else:
                 job.pending_session_id = self.req.pending_session_id
 
+    async def _collected(self, call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
+        try:
+            return await call
+        finally:
+            self.attempts.extend(self.dispatcher.last_attempts)
+
+    async def _walk_sources(self, job: Job, cfg: Config, scan: ScanResult) -> MetadataResult | None:
+        release: MetadataResult | None = None
+        if self.thediscdb_match is not None:
+            imdb = external_imdb_id(self.thediscdb_match)
+            if imdb:
+                kind = release_kind(self.thediscdb_match)
+                if not self.dispatcher.has_imdb_lookup(cfg, kind):
+                    # D-1: no enabled source can resolve the id, so no
+                    # online TITLE call; the release names the disc.
+                    # Held, not returned yet: the fingerprint database
+                    # below needs no key either, so a keyless install
+                    # would otherwise never reach the one source it can
+                    # use. The fuzzy title search IS skipped — it would
+                    # outrank this exact content-hash match.
+                    release = release_result(self.thediscdb_match, imdb)
+                else:
+                    exact = await self._collected(self.dispatcher.identify_from_imdb(imdb, cfg, kind=kind))
+                    if exact is not None:
+                        return exact
+        if release is not None:
+            return await self._collected(self.dispatcher.identify_from_fingerprint(scan, cfg)) or release
+        return await self._collected(
+            self.dispatcher.identify(
+                scan,
+                cfg,
+                title_hint=hint_title(job, self.hints),
+                title_hint_is_tv=hint_is_tv(job, self.hints),
+                # Several same-length episode titles and no feature: a TV
+                # disc, whatever the label says (arm_common.disc_shape).
+                prefer_tv=looks_episodic(scan.titles),
+            )
+        )
+
+    async def _dispatch(self, job: Job, cfg: Config, scan: ScanResult) -> None:
+        # Every source the exact and the fuzzy walks tried, kept on a miss so
+        # the review card can say why the automatic match missed. The
+        # dispatcher keeps each call's attempts in the calling task's context,
+        # so they are read here, inside the task that ran the call: after it
+        # returns, or as wait_for cancels it when the whole dispatch times out.
+        self.attempts = []
+
+        try:
+            self.result = await asyncio.wait_for(self._walk_sources(job, cfg, scan), timeout=DISPATCH_TIMEOUT_SECONDS)
+            self.timed_out = False
+        except asyncio.TimeoutError:
+            logger.info("identify dispatch_timeout job_id=%s", job.id)
+            self.result = None
+            self.timed_out = True
+            self.attempts.append(
+                {
+                    "source": None,
+                    "step": "title",
+                    "kind": None,
+                    "outcome": "timeout",
+                    "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
+                }
+            )
+
+    def _miss_title(self, scan: ScanResult) -> str | None:
+        release_title = release_identity(self.thediscdb_match)[0] if self.thediscdb_match is not None else None
+        # The cleaned hint titles are search inputs only: a miss (or a held
+        # hit) is named by the disc's own BDMT name as written, else the
+        # release, else the label.
+        bdmt_name = (
+            scan.bd_meta.name.strip()
+            if scan.bd_meta is not None and any(h.id == "bd_title" for h in self.hints)
+            else ""
+        )
+        return bdmt_name or release_title or scan.volume_label
+
+    def _record_miss_attempts(self, job: Job) -> None:
+        # The miss reasons belong to a miss only; any hit (applied or held)
+        # leaves no list behind.
+        metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
+        if self.result is None:
+            # The most recent ones; a whole-dispatch timeout entry is last.
+            metadata["identify_attempts"] = self.attempts[-MAX_IDENTIFY_ATTEMPTS:]
+        job.metadata_json = metadata
+
+    async def _save(self, job: Job, scan: ScanResult) -> None:
+        job.metadata_json = {
+            **(job.metadata_json or {}),
+            "scan_result": scan.model_dump(mode="json"),
+        }
+
+        await self.session.commit()
+        await self.session.refresh(job)
+        logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
+
+    async def _emit_held_event(self, job: Job, scan: ScanResult) -> None:
+        if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
+            # awaiting_user_id -> needs identification; awaiting_review -> held for the
+            # timed review gate. Distinct event types so the dashboard can label them.
+            # WS-transition guard: only emit if this is a real status transition — do
+            # not re-emit for a reused job already sitting in the target held status.
+            if self.reuse_job is None or self.prior_status != job.status:
+                event_type = (
+                    "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
+                )
+                payload: dict[str, object] = {
+                    "job_id": job.id,
+                    "drive_id": job.drive_id,
+                    "volume_label": scan.volume_label,
+                    "disc_type": job.disc_type.value,
+                }
+                if self.previous is not None:
+                    payload["previous_job_id"] = self.previous.id
+                await self.hub.emit(
+                    topic="ripper.events",
+                    event_type=event_type,
+                    payload=payload,
+                    job_id=job.id,
+                    session=self.session,
+                )
+                await self.session.commit()
+
+    async def _schedule_episode_stage(self, job: Job) -> None:
+        # Background episode stage trigger (Task 8): only after the final commit
+        # above (whichever branch made it), and only when it's worth the async
+        # DB round-trip — the runner itself re-checks is_tv_candidate against
+        # freshly loaded tracks before doing any work.
+        if self.stage_runner is not None:
+            stage_tracks = (
+                (await self.session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+            )
+            if is_tv_candidate(job, stage_tracks):
+                self.stage_runner.schedule(job.id)
+
     async def run(self) -> Job:
         self.drive = drive = await self._load_drive()
         self._mark_new_disc(drive)
@@ -804,92 +938,9 @@ class _IdentifyFlow:
             self.result = None
             self.timed_out = False
         else:
-            # Every source the exact and the fuzzy walks tried, kept on a miss so
-            # the review card can say why the automatic match missed. The
-            # dispatcher keeps each call's attempts in the calling task's context,
-            # so they are read here, inside the task that ran the call: after it
-            # returns, or as wait_for cancels it when the whole dispatch times out.
-            self.attempts = []
-
-            async def _collected(call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
-                try:
-                    return await call
-                finally:
-                    self.attempts.extend(self.dispatcher.last_attempts)
-
-            try:
-
-                async def _identify() -> MetadataResult | None:
-                    # Narrowing for mypy: set before run() reaches here, so these cannot fail.
-                    assert self.cfg is not None and self.scan is not None and self.job is not None
-                    release: MetadataResult | None = None
-                    if self.thediscdb_match is not None:
-                        imdb = external_imdb_id(self.thediscdb_match)
-                        if imdb:
-                            kind = release_kind(self.thediscdb_match)
-                            if not self.dispatcher.has_imdb_lookup(self.cfg, kind):
-                                # D-1: no enabled source can resolve the id, so no
-                                # online TITLE call; the release names the disc.
-                                # Held, not returned yet: the fingerprint database
-                                # below needs no key either, so a keyless install
-                                # would otherwise never reach the one source it can
-                                # use. The fuzzy title search IS skipped — it would
-                                # outrank this exact content-hash match.
-                                release = release_result(self.thediscdb_match, imdb)
-                            else:
-                                exact = await _collected(self.dispatcher.identify_from_imdb(imdb, self.cfg, kind=kind))
-                                if exact is not None:
-                                    return exact
-                    if release is not None:
-                        return (
-                            await _collected(self.dispatcher.identify_from_fingerprint(self.scan, self.cfg)) or release
-                        )
-                    return await _collected(
-                        self.dispatcher.identify(
-                            self.scan,
-                            self.cfg,
-                            title_hint=hint_title(self.job, self.hints),
-                            title_hint_is_tv=hint_is_tv(self.job, self.hints),
-                            # Several same-length episode titles and no feature: a TV
-                            # disc, whatever the label says (arm_common.disc_shape).
-                            prefer_tv=looks_episodic(self.scan.titles),
-                        )
-                    )
-
-                self.result = await asyncio.wait_for(_identify(), timeout=DISPATCH_TIMEOUT_SECONDS)
-                self.timed_out = False
-            except asyncio.TimeoutError:
-                logger.info("identify dispatch_timeout job_id=%s", self.job.id)
-                self.result = None
-                self.timed_out = True
-                self.attempts.append(
-                    {
-                        "source": None,
-                        "step": "title",
-                        "kind": None,
-                        "outcome": "timeout",
-                        "detail": f"lookup took longer than {DISPATCH_TIMEOUT_SECONDS:g} s",
-                    }
-                )
-
-            release_title = release_identity(self.thediscdb_match)[0] if self.thediscdb_match is not None else None
-            # The cleaned hint titles are search inputs only: a miss (or a held
-            # hit) is named by the disc's own BDMT name as written, else the
-            # release, else the label.
-            bdmt_name = (
-                self.scan.bd_meta.name.strip()
-                if self.scan.bd_meta is not None and any(h.id == "bd_title" for h in self.hints)
-                else ""
-            )
-            miss_title = bdmt_name or release_title or self.scan.volume_label
-
-            # The miss reasons belong to a miss only; any hit (applied or held)
-            # leaves no list behind.
-            metadata = {k: v for k, v in (self.job.metadata_json or {}).items() if k != "identify_attempts"}
-            if self.result is None:
-                # The most recent ones; a whole-dispatch timeout entry is last.
-                metadata["identify_attempts"] = self.attempts[-MAX_IDENTIFY_ATTEMPTS:]
-            self.job.metadata_json = metadata
+            await self._dispatch(job, cfg, scan)
+            miss_title = self._miss_title(scan)
+            self._record_miss_attempts(job)
 
             # A CD matched only by track layout where several releases fit is a
             # guess between pressings: hold it for the operator whatever the
@@ -976,52 +1027,10 @@ class _IdentifyFlow:
             # disc-map / preset track fields when review tracks were persisted.
             await resolve_job(self.session, self.job)
 
-        self.job.metadata_json = {
-            **(self.job.metadata_json or {}),
-            "scan_result": self.scan.model_dump(mode="json"),
-        }
-
-        await self.session.commit()
-        await self.session.refresh(self.job)
-        logger.info("identify job_id=%s status=%s title=%s", self.job.id, self.job.status.value, self.job.title)
-
-        if self.job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
-            # awaiting_user_id -> needs identification; awaiting_review -> held for the
-            # timed review gate. Distinct event types so the dashboard can label them.
-            # WS-transition guard: only emit if this is a real status transition — do
-            # not re-emit for a reused job already sitting in the target held status.
-            if self.reuse_job is None or self.prior_status != self.job.status:
-                event_type = (
-                    "rip.needs_user_input" if self.job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
-                )
-                payload: dict[str, object] = {
-                    "job_id": self.job.id,
-                    "drive_id": self.job.drive_id,
-                    "volume_label": self.scan.volume_label,
-                    "disc_type": self.job.disc_type.value,
-                }
-                if self.previous is not None:
-                    payload["previous_job_id"] = self.previous.id
-                await self.hub.emit(
-                    topic="ripper.events",
-                    event_type=event_type,
-                    payload=payload,
-                    job_id=self.job.id,
-                    session=self.session,
-                )
-                await self.session.commit()
-
-        # Background episode stage trigger (Task 8): only after the final commit
-        # above (whichever branch made it), and only when it's worth the async
-        # DB round-trip — the runner itself re-checks is_tv_candidate against
-        # freshly loaded tracks before doing any work.
-        if self.stage_runner is not None:
-            stage_tracks = (
-                (await self.session.execute(select(Track).where(col(Track.job_id) == self.job.id))).scalars().all()
-            )
-            if is_tv_candidate(self.job, stage_tracks):
-                self.stage_runner.schedule(self.job.id)
-        return self.job
+        await self._save(job, scan)
+        await self._emit_held_event(job, scan)
+        await self._schedule_episode_stage(job)
+        return job
 
 
 @router.post("/identify", response_model=Job, dependencies=[Depends(require_service_token)])
