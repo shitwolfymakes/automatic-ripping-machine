@@ -101,6 +101,13 @@ async def _dd_failure(proc: asyncio.subprocess.Process) -> RipResult | None:
     return RipResult(ok=False, error=f"dd failed: {msg}")
 
 
+def _empty_output_failure(output_path: Path) -> RipResult | None:
+    """The failure for a dd that exited 0 without writing anything; None when the image has bytes."""
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        return RipResult(ok=False, error="dd exited 0 but produced empty output")
+    return None
+
+
 async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
@@ -137,8 +144,9 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     if failed is not None:
         return failed
 
-    if not output_path.exists() or output_path.stat().st_size == 0:
-        return RipResult(ok=False, error="dd exited 0 but produced empty output")
+    empty = _empty_output_failure(output_path)
+    if empty is not None:
+        return empty
 
     size = output_path.stat().st_size
     if on_progress is not None:

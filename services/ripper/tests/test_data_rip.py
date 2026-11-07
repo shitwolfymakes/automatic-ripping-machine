@@ -352,3 +352,23 @@ async def test_dd_failure_without_stderr_reports_exit_code() -> None:
 async def test_dd_failure_blank_stderr_reports_exit_code(stderr: bytes) -> None:
     result = await data_rip._dd_failure(_StderrProc(2, stderr))  # type: ignore[arg-type]
     assert result is not None and result.error == "dd failed: exit=2"
+
+
+def test_empty_output_failure_missing_file(tmp_path: Path) -> None:
+    result = data_rip._empty_output_failure(tmp_path / "missing.iso")
+    assert result is not None and not result.ok
+    assert result.error == "dd exited 0 but produced empty output"
+
+
+def test_empty_output_failure_empty_file(tmp_path: Path) -> None:
+    out = tmp_path / "dump.iso"
+    out.touch()
+    result = data_rip._empty_output_failure(out)
+    assert result is not None and not result.ok
+    assert result.error == "dd exited 0 but produced empty output"
+
+
+def test_empty_output_failure_file_with_bytes_is_none(tmp_path: Path) -> None:
+    out = tmp_path / "dump.iso"
+    out.write_bytes(b"x")
+    assert data_rip._empty_output_failure(out) is None
