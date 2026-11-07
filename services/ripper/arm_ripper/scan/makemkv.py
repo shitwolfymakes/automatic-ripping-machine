@@ -210,6 +210,33 @@ def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
     )
 
 
+async def _read_info_stdout(proc: asyncio.subprocess.Process) -> tuple[bytes, bool]:
+    """Read makemkvcon's stdout to EOF; return it and whether MSG:5021 (expired binary) appeared.
+
+    The first MSG:5021 line kills makemkvcon; the pipe is still drained to EOF.
+    """
+    assert proc.stdout is not None
+    chunks: list[bytes] = []
+    expired = False
+    async for raw in proc.stdout:
+        chunks.append(raw)
+        if not expired and raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
+            expired = True
+            proc.kill()
+            # Keep draining the pipe so the kernel doesn't block on
+            # buffered writes between SIGKILL and process teardown.
+    return b"".join(chunks), expired
+
+
+async def _read_info_stderr(proc: asyncio.subprocess.Process) -> bytes:
+    """Read makemkvcon's stderr to EOF."""
+    assert proc.stderr is not None
+    chunks: list[bytes] = []
+    async for chunk in proc.stderr:
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes, bool]:
     """Drain stdout + stderr concurrently. Returns (stdout, stderr, expired).
 
@@ -222,32 +249,11 @@ async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[byt
     """
     assert proc.stdout is not None
     assert proc.stderr is not None
-    stdout_chunks: list[bytes] = []
-    expired = False
-
-    async def _read_stdout() -> None:
-        nonlocal expired
-        assert proc.stdout is not None
-        async for raw in proc.stdout:
-            stdout_chunks.append(raw)
-            if not expired and raw.startswith(_MAKEMKV_EXPIRED_PREFIX):
-                expired = True
-                proc.kill()
-                # Keep draining the pipe so the kernel doesn't block on
-                # buffered writes between SIGKILL and process teardown.
-
-    async def _drain_stderr() -> bytes:
-        assert proc.stderr is not None
-        chunks: list[bytes] = []
-        async for chunk in proc.stderr:
-            chunks.append(chunk)
-        return b"".join(chunks)
-
-    stdout_task = asyncio.create_task(_read_stdout())
-    stderr_task = asyncio.create_task(_drain_stderr())
-    await stdout_task
+    stdout_task = asyncio.create_task(_read_info_stdout(proc))
+    stderr_task = asyncio.create_task(_read_info_stderr(proc))
+    stdout_bytes, expired = await stdout_task
     stderr_bytes = await stderr_task
-    return b"".join(stdout_chunks), stderr_bytes, expired
+    return stdout_bytes, stderr_bytes, expired
 
 
 def _is_malformed_key(key: str | None) -> bool:

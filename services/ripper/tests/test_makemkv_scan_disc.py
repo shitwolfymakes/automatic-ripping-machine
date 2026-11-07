@@ -24,6 +24,8 @@ from arm_ripper.scan.makemkv import (
     _fingerprints,
     _InfoRun,
     _raise_for_failure,
+    _read_info_stderr,
+    _read_info_stdout,
     scan_disc,
 )  # noqa: E402
 
@@ -260,3 +262,36 @@ def test_raise_for_failure_nonzero_exit_without_stderr_reports_first_200_stdout_
         _raise_for_failure(run)
 
     assert str(excinfo.value) == "makemkvcon exited 2: " + "x" * 200
+
+
+class _KillCountingProc(_Proc):
+    def __init__(self, stdout: Any, stderr: bytes = b"") -> None:
+        super().__init__(stdout, stderr)
+        self.kills = 0
+
+    def kill(self) -> None:
+        self.kills += 1
+        super().kill()
+
+
+async def test_read_info_stdout_without_expiry_joins_lines_and_does_not_kill() -> None:
+    proc = _KillCountingProc(_Stream(b"line one\nline two\n"))
+
+    stdout, expired = await _read_info_stdout(proc)  # type: ignore[arg-type]
+
+    assert (stdout, expired, proc.kills) == (b"line one\nline two\n", False, 0)
+
+
+async def test_read_info_stdout_kills_once_on_expiry_and_keeps_draining() -> None:
+    data = b"MSG:5021,a\nMSG:5021,b\nlater line\n"
+    proc = _KillCountingProc(_Stream(data))
+
+    stdout, expired = await _read_info_stdout(proc)  # type: ignore[arg-type]
+
+    assert (stdout, expired, proc.kills) == (data, True, 1)
+
+
+async def test_read_info_stderr_returns_joined_bytes() -> None:
+    proc = _KillCountingProc(_Stream(b""), stderr=b"err one\nerr two\n")
+
+    assert await _read_info_stderr(proc) == b"err one\nerr two\n"  # type: ignore[arg-type]
