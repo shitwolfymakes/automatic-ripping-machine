@@ -83,7 +83,7 @@ async def test_keydb_wrapper_spawn_oserror_returns_none(tmp_path, monkeypatch):
     async def _boom(*_a, **_k):
         raise OSError("no fork")
 
-    monkeypatch.setattr("arm_ripper.community_keydb.asyncio.create_subprocess_exec", _boom)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.create_subprocess_exec", _boom)
     result = await refresh_community_keydb(script_path=script, enabled=True)
     assert result is None
 
@@ -98,7 +98,7 @@ async def test_keydb_wrapper_timeout_kills_and_probe_failed(tmp_path, monkeypatc
         coro.close()
         raise TimeoutError
 
-    monkeypatch.setattr("arm_ripper.community_keydb.asyncio.wait_for", _timeout)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.wait_for", _timeout)
     result = await refresh_community_keydb(script_path=script, enabled=True)
     assert result.state is KeydbState.PROBE_FAILED
 
@@ -124,7 +124,7 @@ def _patch_spawn(monkeypatch, proc: _FakeProc) -> None:
     async def _spawn(*_a, **_k):
         return proc
 
-    monkeypatch.setattr("arm_ripper.community_keydb.asyncio.create_subprocess_exec", _spawn)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.create_subprocess_exec", _spawn)
 
 
 def _patch_timeout(monkeypatch) -> None:
@@ -132,7 +132,7 @@ def _patch_timeout(monkeypatch) -> None:
         coro.close()
         raise TimeoutError
 
-    monkeypatch.setattr("arm_ripper.community_keydb.asyncio.wait_for", _timeout)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.wait_for", _timeout)
 
 
 def _records(caplog):
@@ -156,7 +156,7 @@ async def test_keydb_oserror_logs_warning(tmp_path, monkeypatch, caplog):
     async def _boom(*_a, **_k):
         raise OSError("no fork")
 
-    monkeypatch.setattr("arm_ripper.community_keydb.asyncio.create_subprocess_exec", _boom)
+    monkeypatch.setattr("arm_ripper.refresh_script.asyncio.create_subprocess_exec", _boom)
     assert await refresh_community_keydb(script) is None
     assert _records(caplog) == [
         ("arm_ripper.community_keydb", logging.WARNING, f"community keydb refresh could not start ({script}): no fork")
