@@ -574,3 +574,28 @@ async def test_collect_7z_timeout_kills_reaps_and_raises(monkeypatch: pytest.Mon
 
     assert proc.kill_calls == 1
     assert proc.wait_calls == 1
+
+
+def test_archive_errors_keeps_only_archive_level_lines_stripped_and_in_order() -> None:
+    stderr = "\n".join(
+        [
+            "ERRORS:",
+            "ERROR: Data Error : CERTIFICATE/id.bdmv",
+            "",
+            "   ",
+            "  Can not open the file as archive",
+            "ERROR: Disk full",
+            "\tERROR: CRC Failed : BDMV/x.m2ts  ",
+            "Unexpected end of archive",
+        ]
+    )
+
+    assert iso_extract._archive_errors(stderr) == [
+        "Can not open the file as archive",
+        "ERROR: Disk full",
+        "Unexpected end of archive",
+    ]
+
+
+def test_archive_errors_of_empty_stderr_is_empty() -> None:
+    assert iso_extract._archive_errors("") == []

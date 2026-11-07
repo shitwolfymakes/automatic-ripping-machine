@@ -147,6 +147,15 @@ async def _run_7z(image: Path, dest: Path) -> bool:
     return _usable(image, proc.returncode, stderr.decode(errors="replace"))
 
 
+def _archive_errors(stderr: str) -> list[str]:
+    """7-Zip's stderr lines that are not per-file errors: what it reported about the archive itself."""
+    return [
+        line.strip()
+        for line in stderr.splitlines()
+        if line.strip() and line.strip() != "ERRORS:" and not _FILE_ERROR.match(line.strip())
+    ]
+
+
 def _usable(image: Path, rc: int | None, stderr: str) -> bool:
     """Whether 7z's result can be read as a disc folder.
 
@@ -169,11 +178,7 @@ def _usable(image: Path, rc: int | None, stderr: str) -> bool:
         return True
     # The whole picture, never a tail of stderr: a tail once showed only the
     # harmless CERTIFICATE files and hid a hundred unreadable streams.
-    archive_errors = [
-        line.strip()
-        for line in stderr.splitlines()
-        if line.strip() and line.strip() != "ERRORS:" and not _FILE_ERROR.match(line.strip())
-    ]
+    archive_errors = _archive_errors(stderr)
     logger.error(
         "iso extract: %s: 7z exited %s; %d unreadable file(s): %s; archive errors: %s",
         image,
