@@ -987,6 +987,18 @@ async def test_keydb_refresh_reports_result(monkeypatch):
     assert client.keydb_reports == [(KeydbState.OK, 42, None)]
 
 
+async def test_drain_keydb_tasks_with_no_tasks_does_not_gather(monkeypatch):
+    """Pin that draining with no keydb tasks returns without calling asyncio.gather."""
+
+    def _fail_gather(*args, **kwargs):
+        pytest.fail("asyncio.gather must not be called when there are no keydb tasks")
+
+    monkeypatch.setattr(jc_module.asyncio, "gather", _fail_gather)
+    controller = JobController(FakeClient(), "drv_test")
+    assert await controller._drain_keydb_tasks() is None
+    assert not controller._keydb_tasks
+
+
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
     monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", (0.0, 0.0, 0.0))
 
