@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+import arm_ripper.eject as eject_module
 import arm_ripper.job_controller as jc_module
 from arm_common import DiscType, JobStatus
 from arm_common.enums import TrackKind, TrackStatus
@@ -82,10 +83,10 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(jc_module, "read_drive_status", lambda _path: DriveState.DISC_OK)
     ejected: list[str] = []
 
-    async def _eject(self: JobController, device_path: str) -> None:
+    async def _eject(self, device_path: str) -> None:
         ejected.append(device_path)
 
-    monkeypatch.setattr(JobController, "_eject_with_retry", _eject)
+    monkeypatch.setattr(eject_module.Ejector, "eject", _eject)
     handle = DriveHandle("/dev/sr0")
     client = _Client()
     controller = JobController(client, "drv_x", device_path=handle)  # type: ignore[arg-type]

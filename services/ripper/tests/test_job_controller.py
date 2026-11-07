@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 import arm_ripper.backend_retry as backend_retry_module
+import arm_ripper.eject as eject_module
 import arm_ripper.job_controller as jc_module
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
@@ -22,6 +23,7 @@ from arm_common.schemas import (
     WSEnvelope,
 )
 from arm_ripper.drive_poll import DriveState
+from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
 
 
@@ -167,7 +169,7 @@ def stub_eject(monkeypatch):
     async def _noop_eject(self, device_path: str) -> None:
         return None
 
-    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _noop_eject)
+    monkeypatch.setattr(eject_module.Ejector, "eject", _noop_eject)
 
 
 @pytest.fixture
@@ -582,7 +584,7 @@ def eject_spy(monkeypatch):
     async def _spy(self, device_path: str) -> None:
         calls.append(device_path)
 
-    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _spy)
+    monkeypatch.setattr(eject_module.Ejector, "eject", _spy)
     return calls
 
 
@@ -713,7 +715,7 @@ async def test_abandon_stale_job_during_other_rip_does_not_eject(eject_spy):
 
 
 async def test_spawn_eject_creates_task_that_ejects_the_device(eject_spy):
-    """With a device path and no running task, _spawn_eject runs _eject_with_retry(device_path) in a new task."""
+    """With a device path and no running task, _spawn_eject runs Ejector.eject(device_path) in a new task."""
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
     controller._spawn_eject()
@@ -743,7 +745,7 @@ async def test_spawn_eject_is_deduped_while_a_task_is_running(monkeypatch):
         calls.append(device_path)
         await release.wait()
 
-    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _blocked)
+    monkeypatch.setattr(eject_module.Ejector, "eject", _blocked)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
     controller._spawn_eject()
@@ -986,7 +988,7 @@ async def test_keydb_refresh_reports_result(monkeypatch):
 
 
 async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
-    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.0, 0.0))
+    monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", (0.0, 0.0, 0.0))
 
     invocations: list[tuple[str, ...]] = []
     rc_sequence = iter([1, 1, 1, 0])  # umount fails, eject 1+2 fail, eject 3 succeeds
@@ -995,9 +997,9 @@ async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
         invocations.append(argv)
         return next(rc_sequence), "Device or resource busy"
 
-    monkeypatch.setattr(JobController, "_run_command", staticmethod(_fake_run))
+    monkeypatch.setattr(Ejector, "_run_command", staticmethod(_fake_run))
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
-    await controller._eject_with_retry("/dev/sr0")
+    await controller._ejector.eject("/dev/sr0")
 
     assert invocations[0] == ("umount", "/dev/sr0")
     assert all(call[0] == "eject" for call in invocations[1:])
@@ -1005,15 +1007,15 @@ async def test_eject_runs_umount_then_eject_until_success(monkeypatch):
 
 
 async def test_eject_gives_up_after_all_attempts(monkeypatch, caplog):
-    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.0))
+    monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", (0.0, 0.0))
 
     async def _always_busy(*argv: str, log_failure: bool = True) -> tuple[int | None, str]:
         return 1, "Device or resource busy"
 
-    monkeypatch.setattr(JobController, "_run_command", staticmethod(_always_busy))
+    monkeypatch.setattr(Ejector, "_run_command", staticmethod(_always_busy))
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     with caplog.at_level("ERROR", logger="arm_ripper.job_controller"):
-        await controller._eject_with_retry("/dev/sr0")
+        await controller._ejector.eject("/dev/sr0")
 
     assert any("check host auto-mount config" in r.message for r in caplog.records)
 
@@ -1283,9 +1285,9 @@ async def test_run_command_kill_survives_process_lookup_error(monkeypatch):
     async def _fake_exec(*_a, **_k):
         return _DeadProc()
 
-    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr(eject_module.asyncio, "create_subprocess_exec", _fake_exec)
 
-    rc, msg = await JobController._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
+    rc, msg = await Ejector._run_command("eject", "-sv", "/dev/sr0", log_failure=False)
     assert rc is None
     assert msg == "timeout"
 
@@ -1315,14 +1317,14 @@ def _patch_exec(monkeypatch, proc: _FakeProc) -> None:
     async def _fake_exec(*_a, **_k):
         return proc
 
-    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr(eject_module.asyncio, "create_subprocess_exec", _fake_exec)
 
 
 def _patch_exec_raising(monkeypatch, exc: OSError) -> None:
     async def _fake_exec(*_a, **_k):
         raise exc
 
-    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr(eject_module.asyncio, "create_subprocess_exec", _fake_exec)
 
 
 async def test_run_command_spawn_failure_logs_warning_and_returns_error(monkeypatch, caplog):
@@ -1330,7 +1332,7 @@ async def test_run_command_spawn_failure_logs_warning_and_returns_error(monkeypa
     _patch_exec_raising(monkeypatch, FileNotFoundError("no such eject"))
 
     with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
-        result = await JobController._run_command("eject", "-sv", "/dev/sr0")
+        result = await Ejector._run_command("eject", "-sv", "/dev/sr0")
 
     assert result == (None, "no such eject")
     assert [(r.levelno, r.getMessage()) for r in caplog.records] == [(logging.WARNING, "eject errored: no such eject")]
@@ -1341,7 +1343,7 @@ async def test_run_command_spawn_failure_is_silent_without_log_failure(monkeypat
     _patch_exec_raising(monkeypatch, OSError("boom"))
 
     with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
-        result = await JobController._run_command("umount", "/dev/sr0", log_failure=False)
+        result = await Ejector._run_command("umount", "/dev/sr0", log_failure=False)
 
     assert result == (None, "boom")
     assert caplog.records == []
@@ -1353,7 +1355,7 @@ async def test_run_command_timeout_logs_warning_kills_and_waits(monkeypatch, cap
     _patch_exec(monkeypatch, proc)
 
     with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
-        result = await JobController._run_command("eject", "/dev/sr0")
+        result = await Ejector._run_command("eject", "/dev/sr0")
 
     assert result == (None, "timeout")
     assert proc.calls == ["kill", "wait"]
@@ -1366,7 +1368,7 @@ async def test_run_command_success_returns_returncode_and_stripped_stderr(monkey
     _patch_exec(monkeypatch, proc)
 
     with caplog.at_level("WARNING", logger="arm_ripper.job_controller"):
-        result = await JobController._run_command("eject", "/dev/sr0")
+        result = await Ejector._run_command("eject", "/dev/sr0")
 
     assert result == (0, "some stderr")
     assert proc.calls == []
@@ -1377,7 +1379,7 @@ async def test_run_command_replaces_invalid_utf8_in_stderr(monkeypatch):
     """Undecodable stderr bytes become U+FFFD instead of raising, and a non-zero returncode is passed through."""
     _patch_exec(monkeypatch, _FakeProc(stderr=b"bad \xff byte\n", returncode=1))
 
-    assert await JobController._run_command("eject", "/dev/sr0") == (1, "bad \ufffd byte")
+    assert await Ejector._run_command("eject", "/dev/sr0") == (1, "bad \ufffd byte")
 
 
 async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
@@ -1697,13 +1699,13 @@ async def test_safe_get_ripper_config_returns_none_and_warns_on_http_error(caplo
 
 async def test_eject_sleeps_for_positive_delay_before_retrying(monkeypatch, caplog):
     caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
-    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", (0.0, 0.5))
+    monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", (0.0, 0.5))
     sleeps: list[float] = []
 
     async def _record_sleep(delay: float) -> None:
         sleeps.append(delay)
 
-    monkeypatch.setattr(jc_module.asyncio, "sleep", _record_sleep)
+    monkeypatch.setattr(eject_module.asyncio, "sleep", _record_sleep)
     results = iter([(0, ""), (1, "busy"), (0, "")])  # umount, eject 1 fails, eject 2 succeeds
     calls: list[tuple[str, ...]] = []
 
@@ -1712,8 +1714,8 @@ async def test_eject_sleeps_for_positive_delay_before_retrying(monkeypatch, capl
         return next(results)
 
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
-    controller._run_command = _fake_run  # type: ignore[method-assign]
-    await controller._eject_with_retry("/dev/sr0")
+    controller._ejector._run_command = _fake_run  # type: ignore[method-assign]
+    await controller._ejector.eject("/dev/sr0")
 
     assert sleeps == [0.5]
     assert [c[0] for c in calls] == ["umount", "eject", "eject"]

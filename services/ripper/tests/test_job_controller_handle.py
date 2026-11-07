@@ -7,6 +7,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 
 from arm_common import DiscType, JobStatus  # noqa: E402
 from arm_common.schemas import JobView, RipStartResponse  # noqa: E402
+from arm_ripper import eject as eject_module  # noqa: E402
 from arm_ripper import job_controller as jc_module  # noqa: E402
 from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 from arm_ripper.job_controller import JobController  # noqa: E402
@@ -56,7 +57,7 @@ async def test_eject_skipped_when_drive_is_absent(monkeypatch, caplog) -> None:
     """If the drive vanished (handle.current is None) by the time eject runs,
     don't bother retrying against a dead node — skip straight to a clear log
     line and never touch the subprocess layer."""
-    monkeypatch.setattr(jc_module, "EJECT_RETRY_DELAYS", ())
+    monkeypatch.setattr(eject_module, "EJECT_RETRY_DELAYS", ())
     monkeypatch.setattr(jc_module, "EJECT_GRACE_SECONDS", 0.0)
     subprocess_calls: list[tuple[str, ...]] = []
 
@@ -64,14 +65,14 @@ async def test_eject_skipped_when_drive_is_absent(monkeypatch, caplog) -> None:
         subprocess_calls.append(argv)
         raise AssertionError("subprocess must not be invoked while the drive is absent")
 
-    monkeypatch.setattr(jc_module.asyncio, "create_subprocess_exec", _create_subprocess_exec)
+    monkeypatch.setattr(eject_module.asyncio, "create_subprocess_exec", _create_subprocess_exec)
 
     handle = DriveHandle("/dev/sr0")
     c = JobController(_Client(), "drv_1", device_path=handle)  # type: ignore[arg-type]
     handle.set(None)
 
     with caplog.at_level("INFO", logger="arm_ripper.job_controller"):
-        await c._eject_with_retry("/dev/sr0")
+        await c._ejector.eject("/dev/sr0")
 
     assert subprocess_calls == []
     assert any("eject skipped" in r.message and "absent" in r.message for r in caplog.records)
@@ -91,7 +92,7 @@ async def test_post_rip_eject_uses_the_handles_current_node(monkeypatch, tmp_pat
         ejected.append(device_path)
 
     monkeypatch.setattr(jc_module, "rip_all", _rip_all)
-    monkeypatch.setattr(jc_module.JobController, "_eject_with_retry", _eject)
+    monkeypatch.setattr(eject_module.Ejector, "eject", _eject)
     handle = DriveHandle("/dev/sr0")
     c = JobController(_RipClient(), "drv_1", device_path=handle)  # type: ignore[arg-type]
     await c._execute_rip(

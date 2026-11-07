@@ -5,7 +5,7 @@ Covers the five code paths the iso-source helper flips:
   - source.is_iso_source / source.makemkv_source_url helpers
   - scan_disc: makemkvcon info source URL becomes `iso:<file>`
   - rip_disc: makemkvcon mkv source URL becomes `iso:<file>`
-  - _eject_with_retry: skipped for ISO sources
+  - Ejector.eject: skipped for ISO sources
   - heartbeat_loop: probe_drive_media is bypassed for ISO sources
 """
 
@@ -267,7 +267,7 @@ async def test_rip_disc_keeps_dev_source_url_for_block_device(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_eject_with_retry_skips_for_iso_source(tmp_path: Path) -> None:
+async def test_eject_skips_for_iso_source(tmp_path: Path) -> None:
     from arm_ripper.job_controller import JobController
 
     iso = tmp_path / "sintel.iso"
@@ -280,18 +280,18 @@ async def test_eject_with_retry_skips_for_iso_source(tmp_path: Path) -> None:
         device_path=str(iso),
         default_min_length_seconds=120,
     )
-    # If _run_command got called, it'd shell `umount` / `eject`. The test
+    # If Ejector._run_command got called, it'd shell `umount` / `eject`. The test
     # would not crash (the AsyncMock would absorb it), but we want to
     # *assert* no shell-out happened at all.
-    controller._run_command = AsyncMock()  # type: ignore[method-assign]
+    controller._ejector._run_command = AsyncMock()  # type: ignore[method-assign]
 
-    await controller._eject_with_retry(str(iso))
+    await controller._ejector.eject(str(iso))
 
-    controller._run_command.assert_not_called()
+    controller._ejector._run_command.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_eject_with_retry_runs_for_block_device(monkeypatch) -> None:
+async def test_eject_runs_for_block_device(monkeypatch) -> None:
     from arm_ripper.job_controller import JobController
 
     controller = JobController(
@@ -302,13 +302,13 @@ async def test_eject_with_retry_runs_for_block_device(monkeypatch) -> None:
         default_min_length_seconds=120,
     )
     # Short-circuit the retry delays so the test runs fast.
-    monkeypatch.setattr("arm_ripper.job_controller.EJECT_RETRY_DELAYS", [0])
-    controller._run_command = AsyncMock(return_value=(0, ""))  # type: ignore[method-assign]
+    monkeypatch.setattr("arm_ripper.eject.EJECT_RETRY_DELAYS", [0])
+    controller._ejector._run_command = AsyncMock(return_value=(0, ""))  # type: ignore[method-assign]
 
-    await controller._eject_with_retry("/dev/sr0")
+    await controller._ejector.eject("/dev/sr0")
 
     # umount first, then eject — both fired.
-    called_argvs = [call.args for call in controller._run_command.call_args_list]
+    called_argvs = [call.args for call in controller._ejector._run_command.call_args_list]
     assert any("umount" in argv for argv in called_argvs)
     assert any("eject" in argv for argv in called_argvs)
 
