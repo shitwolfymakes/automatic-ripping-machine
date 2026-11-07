@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 from arm_common import DriveMediaStatus, JobStatus, configure_service_logging
-from arm_ripper.backend_client import BackendClient, JobView, RegisterRefused
+from arm_ripper.backend_client import BackendClient, JobView
 from arm_ripper.config import settings
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, InsertDetector, classify_drive_error, read_drive_status
@@ -17,13 +17,12 @@ from arm_ripper.drive_status import probe_drive_media
 from arm_ripper.job_controller import JobController
 from arm_ripper.makemkv_keycheck import makemkv_keycheck_loop
 from arm_ripper.recovery import boot_probe
+from arm_ripper.registration import register_with_retry
 from arm_ripper import iso_extract, prepare
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
 
 CA_BUNDLE_PATH = "/etc/ssl/certs/ca-certificates.crt"
-
-RIPPER_VERSION = "0.0.0-skeleton"
 
 # Heartbeat carries the current CDROM_DRIVE_STATUS reading to the
 # backend so the manual-trigger endpoint can refuse clicks made
@@ -33,67 +32,12 @@ RIPPER_VERSION = "0.0.0-skeleton"
 # allowed through to identify (which will fail visibly).
 HEARTBEAT_INTERVAL_SECONDS = 30.0
 
-# A register refusal (unknown drive, not enrolled, identity mismatch) is not
-# retriable in the sense of "try again right now" — but it IS self-healing:
-# the operator can fix the enrollment (re-enroll to rebind identity, etc.)
-# without restarting the container. Poll slowly instead of parking forever.
-REGISTER_REFUSED_RETRY_SECONDS = 60.0
-
 # The backend spawns each ripper container for one Drive row and sets
 # HOSTNAME to arm-ripper-<serial>-<drive-id suffix> (a stable identity); srN
 # is not stable across a renumbering replug, so the log file is named from
 # the identity the manager assigned rather than the current device node.
 configure_service_logging(settings.HOSTNAME, level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_ripper")
-
-
-def _log_refusal(exc: RegisterRefused, last_refusal: str | None) -> str:
-    """Log a register refusal at ERROR the first time its text appears (or when it changes) and at DEBUG on an
-    unchanged repeat; returns the refusal text to compare the next one against.
-    """
-    message = str(exc)
-    # Log at ERROR the first time this refusal is seen and again
-    # whenever its text changes (a new/different problem); an
-    # unchanged repeat is downgraded to DEBUG so a stuck enrollment
-    # doesn't spam the log once a minute forever.
-    level = logging.ERROR if message != last_refusal else logging.DEBUG
-    logger.log(
-        level,
-        "register refused for drive_id=%s: %s — container left running for diagnosis; "
-        "fix the enrollment in the UI; retrying in %.0fs",
-        settings.ARM_DRIVE_ID,
-        exc,
-        REGISTER_REFUSED_RETRY_SECONDS,
-    )
-    return message
-
-
-async def register_with_retry(client: BackendClient, device_path: str) -> str:
-    """Retry transport/5xx failures with backoff. A refusal (unknown drive,
-    not enrolled, identity mismatch) is self-healing rather than fatal: the
-    operator can fix the enrollment from the UI (e.g. unenroll/re-enroll to
-    rebind identity) without restarting this container, so we log it and
-    keep polling slowly instead of parking forever (spec §3)."""
-    delay = 1.0
-    last_refusal: str | None = None
-    while True:
-        try:
-            drive = await client.register(
-                drive_id=settings.ARM_DRIVE_ID,
-                hostname=settings.HOSTNAME,
-                device_path=device_path,
-                ripper_version=RIPPER_VERSION,
-                by_id_name=settings.ARM_DRIVE_BY_ID,
-            )
-            logger.info("registered drive_id=%s device=%s", drive.id, device_path)
-            return drive.id
-        except RegisterRefused as exc:
-            last_refusal = _log_refusal(exc, last_refusal)
-            await asyncio.sleep(REGISTER_REFUSED_RETRY_SECONDS)
-        except (httpx.HTTPError, OSError) as exc:
-            logger.warning("register failed (%s); retrying in %.1fs", exc, delay)
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 30.0)
 
 
 # AWAITING_REVIEW is intentionally excluded: recovery for review-gated discs is
