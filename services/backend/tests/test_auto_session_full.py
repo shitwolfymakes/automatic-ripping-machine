@@ -309,6 +309,43 @@ async def test_overwrite_evicts_but_app_keeps_remaining_task(tmp_path: Path) -> 
     assert not any(t.id == "txt_collide" for t in db.rows["transcode_tasks"])
 
 
+async def test_evict_skips_application_deleted_before_cleanup() -> None:
+    """The application was deleted between the task eviction and the cleanup
+    (a concurrent delete), so the cleanup re-select finds nothing and there is
+    nothing left to drop."""
+    db = FakeSession()
+    job = _seed(db)
+    task = TranscodeTask(
+        id="txt_collide",
+        session_application_id="sap_gone",
+        source_track_id="trk_o1",
+        status=TranscodeTaskStatus.DONE,
+        output_path=_COLLIDE_PATH,
+        progress_pct=100,
+        attempts=1,
+    )
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_gone",
+            session_id="ses_other",
+            job_id=job.id,
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    ]
+    db.rows["transcode_tasks"] = [task]
+
+    async def flush_with_concurrent_delete() -> None:
+        db.rows["session_applications"] = []
+
+    db.flush = flush_with_concurrent_delete  # type: ignore[method-assign]
+
+    await asx._evict_colliding_tasks(db, [_COLLIDE_PATH], job_id=job.id)
+
+    assert db.rows["transcode_tasks"] == []
+    assert db.deleted == [task]
+
+
 async def test_overwrite_evicts_only_same_job_tasks(tmp_path: Path) -> None:
     """Two jobs' applications collide on the same output_path. Applying job
     A with overwrite=True must not touch job B's task: the apply is skipped
