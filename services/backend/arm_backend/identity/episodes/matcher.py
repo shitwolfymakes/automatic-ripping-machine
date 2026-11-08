@@ -40,7 +40,7 @@ def _known(runtime: int | None) -> int | None:
     return runtime if runtime is not None and runtime > 0 else None
 
 
-def _eff_tol(reference: int, tolerance: int) -> int:
+def effective_tolerance(reference: int, tolerance: int) -> int:
     """Effective tolerance: clamp to [EFFECTIVE_TOL_FLOOR_S, tolerance], narrowed
     to a tenth of the reference runtime."""
     return min(tolerance, max(EFFECTIVE_TOL_FLOOR_S, reference // EFFECTIVE_TOL_FRACTION))
@@ -61,16 +61,16 @@ def _is_play_all(
         for k in range(start, len(runtimes)):
             rt = runtimes[k]
             total += rt
-            if k - start + 1 >= 3 and abs(seconds - total) <= _eff_tol(total, tolerance):
+            if k - start + 1 >= 3 and abs(seconds - total) <= effective_tolerance(total, tolerance):
                 return True
-            if total > seconds + _eff_tol(total, tolerance):
+            if total > seconds + effective_tolerance(total, tolerance):
                 break
 
     # Rule C: play-all if 3+ other titles and title length matches sum of other titles
     other_titles = [t for i, t in enumerate(titles) if i != title_idx]
     if len(other_titles) >= 3:
         sum_others = sum(t.seconds for t in other_titles)
-        if abs(seconds - sum_others) <= _eff_tol(sum_others, tolerance):
+        if abs(seconds - sum_others) <= effective_tolerance(sum_others, tolerance):
             return True
     elif len(other_titles) == 2 and abs(seconds - sum(t.seconds for t in other_titles)) < PLAY_ALL_PAIR_WINDOW_S:
         return True
@@ -83,11 +83,11 @@ def _one_cost(seconds: int, runtime: int | None, tolerance: int, ref_rt: int) ->
     rt = _known(runtime)
     if rt is None:
         # Unknown runtime: check plausibility against ref_rt
-        if abs(seconds - ref_rt) <= _eff_tol(ref_rt, tolerance):
+        if abs(seconds - ref_rt) <= effective_tolerance(ref_rt, tolerance):
             return tolerance / 2
         return None
     delta = abs(seconds - rt)
-    eff = _eff_tol(rt, tolerance)
+    eff = effective_tolerance(rt, tolerance)
     return float(delta) if delta <= eff else None
 
 
@@ -201,7 +201,7 @@ def align(
                 a, b = _known(episodes[j].runtime_s), _known(episodes[j + 1].runtime_s)
                 if a is not None and b is not None:
                     delta = abs(elig[i].seconds - (a + b))
-                    eff = _eff_tol(a + b, tolerance)
+                    eff = effective_tolerance(a + b, tolerance)
                     if delta <= eff:
                         relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
 
@@ -226,10 +226,10 @@ def align(
             rt = _known(ep.runtime_s)
             if rt is not None:
                 delta_val: int | None = abs(title.seconds - rt)
-                eff = _eff_tol(rt, tolerance)
+                eff = effective_tolerance(rt, tolerance)
             else:
                 delta_val = None
-                eff = _eff_tol(ref_rt, tolerance)
+                eff = effective_tolerance(ref_rt, tolerance)
             matches.append(
                 TitleMatch(title.ref, ep.season, ep.number, None, ep.name, delta_val, _confidence(delta_val, eff))
             )
@@ -238,7 +238,7 @@ def align(
             first, second = episodes[pj], episodes[pj + 1]
             doubles.update((pj, pj + 1))
             delta_val = abs(title.seconds - ((first.runtime_s or 0) + (second.runtime_s or 0)))
-            eff = _eff_tol((first.runtime_s or 0) + (second.runtime_s or 0), tolerance)
+            eff = effective_tolerance((first.runtime_s or 0) + (second.runtime_s or 0), tolerance)
             matches.append(
                 TitleMatch(
                     title.ref,

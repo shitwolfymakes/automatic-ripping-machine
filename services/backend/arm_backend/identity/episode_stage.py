@@ -37,7 +37,7 @@ from arm_common.schemas import ExternalIds
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
-from arm_backend.identity.episodes.matcher import _eff_tol
+from arm_backend.identity.episodes.matcher import effective_tolerance
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
@@ -267,7 +267,7 @@ def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance:
     # A disc with nothing episode-shaped is judged on all its titles: that is the
     # TVmaze case, a list of round runtimes no title comes near.
     shaped = _episode_shaped(titles, remaining, tolerance) or list(titles)
-    fitting = sum(1 for t in shaped if any(abs(t.seconds - rt) <= _eff_tol(rt, tolerance) for rt in known))
+    fitting = sum(1 for t in shaped if any(abs(t.seconds - rt) <= effective_tolerance(rt, tolerance) for rt in known))
     return fitting < len(shaped) / 2
 
 
