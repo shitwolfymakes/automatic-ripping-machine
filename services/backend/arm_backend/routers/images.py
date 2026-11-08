@@ -117,7 +117,33 @@ def _split_fallback_group(url: str) -> tuple[str, str | None]:
 
 
 class _ImageTooLarge(Exception):
-    """Raised inside _fetch_image when the body exceeds the size cap."""
+    """Raised by _read_capped_body when the body exceeds the size cap."""
+
+
+def _next_hop(fetch_url: str, resp: httpx.Response) -> str | None:
+    """The next URL to fetch for a redirect response, or None when it must not be followed."""
+    location = resp.headers.get("location")
+    if not location:
+        return None
+    # Resolve relative redirects against the current URL, then
+    # re-validate the destination host (SSRF guard per hop).
+    next_url = str(httpx.URL(fetch_url).join(location))
+    nxt = urlparse(next_url)
+    if nxt.scheme not in ("http", "https") or not _host_allowed(nxt.hostname):
+        return None
+    return next_url
+
+
+async def _read_capped_body(resp: httpx.Response) -> bytes:
+    """Read the response body, raising _ImageTooLarge once it exceeds the size cap."""
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.aiter_bytes():
+        total += len(chunk)
+        if total > _MAX_FETCH_BYTES:
+            raise _ImageTooLarge
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes, str] | None:
@@ -132,14 +158,8 @@ async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes
     for _ in range(_MAX_REDIRECTS + 1):
         async with client.stream("GET", fetch_url) as resp:
             if resp.is_redirect:
-                location = resp.headers.get("location")
-                if not location:
-                    return None
-                # Resolve relative redirects against the current URL, then
-                # re-validate the destination host (SSRF guard per hop).
-                next_url = str(httpx.URL(fetch_url).join(location))
-                nxt = urlparse(next_url)
-                if nxt.scheme not in ("http", "https") or not _host_allowed(nxt.hostname):
+                next_url = _next_hop(fetch_url, resp)
+                if next_url is None:
                     return None
                 fetch_url = next_url
                 continue
@@ -150,14 +170,7 @@ async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "image/jpeg")
             safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "image/jpeg"
-            chunks: list[bytes] = []
-            total = 0
-            async for chunk in resp.aiter_bytes():
-                total += len(chunk)
-                if total > _MAX_FETCH_BYTES:
-                    raise _ImageTooLarge
-                chunks.append(chunk)
-            return b"".join(chunks), safe_type
+            return await _read_capped_body(resp), safe_type
     # Exhausted the hop budget without reaching a terminal response.
     return None
 
