@@ -11,9 +11,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from arm_backend.identity.sources import thediscdb_index, thediscdb_snapshot
+from arm_backend.identity.sources import thediscdb_index, thediscdb_refresh
 from arm_backend.identity.sources.thediscdb_index import build_index
-from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, refresh
+from arm_backend.identity.sources.thediscdb_refresh import TARBALL_URL, refresh
+from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore
 
 DISC = {
     "Index": 1,
@@ -234,25 +235,25 @@ async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: 
 
     async def _fake_locked(http: object, dir_path: Path) -> int:
         nonlocal active, peak
-        running_during.append(thediscdb_snapshot.refresh_running())
+        running_during.append(thediscdb_refresh.refresh_running())
         active += 1
         peak = max(peak, active)
         await asyncio.sleep(0.01)
         active -= 1
         return 1
 
-    monkeypatch.setattr(thediscdb_snapshot, "_refresh_locked", _fake_locked)
-    assert not thediscdb_snapshot.refresh_running()
+    monkeypatch.setattr(thediscdb_refresh, "_refresh_locked", _fake_locked)
+    assert not thediscdb_refresh.refresh_running()
     results = await asyncio.gather(
         refresh(object(), tmp_path),  # type: ignore[arg-type]
         refresh(object(), tmp_path),  # type: ignore[arg-type]
         return_exceptions=True,
     )
     assert results[0] == 1
-    assert isinstance(results[1], thediscdb_snapshot.RefreshBusy)
+    assert isinstance(results[1], thediscdb_refresh.RefreshBusy)
     assert peak == 1
     assert running_during == [True]
-    assert not thediscdb_snapshot.refresh_running()
+    assert not thediscdb_refresh.refresh_running()
 
 
 def _series_disc(index: int, season: str, hash_: str) -> dict:

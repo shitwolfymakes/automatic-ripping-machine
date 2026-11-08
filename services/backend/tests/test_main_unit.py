@@ -241,7 +241,7 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
 
     from fastapi import FastAPI
 
-    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.identity.sources import thediscdb_refresh, thediscdb_snapshot as snap
     from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config, RetentionPolicy
 
@@ -273,7 +273,7 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
         calls.append((http, path))
         return 3
 
-    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+    monkeypatch.setattr(thediscdb_refresh, "refresh", _fake_refresh)
 
     real_sleep = asyncio.sleep
 
@@ -304,7 +304,7 @@ async def test_thediscdb_refresh_loop_skips_when_disabled(monkeypatch: pytest.Mo
 
     from fastapi import FastAPI
 
-    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.identity.sources import thediscdb_refresh, thediscdb_snapshot as snap
     from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config, RetentionPolicy
 
@@ -336,7 +336,7 @@ async def test_thediscdb_refresh_loop_skips_when_disabled(monkeypatch: pytest.Mo
         calls.append((http, path))
         return 3
 
-    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+    monkeypatch.setattr(thediscdb_refresh, "refresh", _fake_refresh)
 
     real_sleep = asyncio.sleep
 
@@ -369,7 +369,7 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
 
     from fastapi import FastAPI
 
-    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.identity.sources import thediscdb_refresh
     from arm_backend.constants import CONFIG_SINGLETON_ID
     from arm_common import Config, RetentionPolicy
 
@@ -402,7 +402,7 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
         calls.append((http, path))
         return 3
 
-    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+    monkeypatch.setattr(thediscdb_refresh, "refresh", _fake_refresh)
 
     real_sleep = asyncio.sleep
 

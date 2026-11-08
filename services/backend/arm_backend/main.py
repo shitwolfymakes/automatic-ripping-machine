@@ -167,7 +167,7 @@ async def _refresh_gpu_inventory(hub: WSHub) -> None:
 async def _thediscdb_refresh_loop(app: FastAPI) -> None:
     """Daily check; refresh the snapshot when absent or older than
     cfg.thediscdb_refresh_days. Failures keep the previous index."""
-    from arm_backend.identity.sources.thediscdb_snapshot import refresh as thediscdb_refresh
+    from arm_backend.identity.sources.thediscdb_refresh import refresh as thediscdb_refresh
 
     while True:
         try:
