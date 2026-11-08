@@ -9,11 +9,12 @@ in the window (ambiguity -> no join; a wrong label is worse than no label).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from datetime import datetime
 from typing import Any, Literal
 
 from arm_common.enums import TrackRole
-from arm_common.schemas import ScanResult
+from arm_common.schemas import ScanResult, ScanTitle
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
@@ -60,71 +61,110 @@ def _int_or_none(value: Any) -> int | None:
         return None
 
 
-def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> SourceClaims:
-    by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
-    tracks: dict[str, TrackClaim] = {}
-    episode_seasons: set[int] = set()
+def _valid_entries(match: DiscMatch) -> Iterator[tuple[dict[str, Any], dict[str, Any]]]:
+    """Each dict entry of the disc's `Titles` with its `Item` (an empty dict
+    when missing or not a dict)."""
     for entry in match.disc.get("Titles") or []:
         if not isinstance(entry, dict):
             continue
         item = entry.get("Item") or {}
         if not isinstance(item, dict):
             item = {}
-        source_file = str(entry.get("SourceFile") or "").lower()
-        scan_title = by_source_file.get(source_file)
-        if scan_title is None:
-            want = parse_duration(str(entry.get("Duration") or ""))
-            if want is None:
-                continue
-            candidates = [
-                t
-                for t in scan.titles
-                if t.source_file is None and abs(t.duration_seconds - want) <= DURATION_WINDOW_SECONDS
-            ]
-            if len(candidates) != 1:
-                continue
-            scan_title = candidates[0]
-        ref = str(scan_title.index)
-        if ref in tracks:
-            continue  # first disc entry wins; don't flip-flop on dupes
-        type_name = str(item.get("Type") or "Unknown")
-        fields: dict[str, Any] = {"role": role_for_disc_type(type_name)}
-        if item.get("Title"):
-            fields["episode_name"] = str(item["Title"])
-        season = _int_or_none(item.get("Season"))
-        if season is not None:
-            fields["season"] = season
-            if type_name == "Episode":
-                episode_seasons.add(season)
-        episode = _int_or_none(item.get("Episode"))
-        if episode is not None:
-            fields["episode"] = episode
-        if entry.get("Comment"):
-            fields["filename"] = str(entry["Comment"])
-        if type_name in _SELECT_TYPES:
-            fields["selected"] = True
-        tracks[ref] = TrackClaim(**fields)
+        yield entry, item
+
+
+def _join_scan_title(entry: dict[str, Any], scan: ScanResult, by_source_file: dict[str, ScanTitle]) -> ScanTitle | None:
+    """The scan title an entry describes: the one with its source file, else
+    the one scan title without a source file within DURATION_WINDOW_SECONDS
+    of its duration; None when neither joins."""
+    source_file = str(entry.get("SourceFile") or "").lower()
+    scan_title = by_source_file.get(source_file)
+    if scan_title is not None:
+        return scan_title
+    want = parse_duration(str(entry.get("Duration") or ""))
+    if want is None:
+        return None
+    candidates = [
+        t for t in scan.titles if t.source_file is None and abs(t.duration_seconds - want) <= DURATION_WINDOW_SECONDS
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _type_name(item: dict[str, Any]) -> str:
+    """The item's TheDiscDB type, `Unknown` when unset."""
+    return str(item.get("Type") or "Unknown")
+
+
+def _track_fields(entry: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    """The track-claim fields an entry proposes: role, episode name, season,
+    episode, file name and selection."""
+    type_name = _type_name(item)
+    fields: dict[str, Any] = {"role": role_for_disc_type(type_name)}
+    if item.get("Title"):
+        fields["episode_name"] = str(item["Title"])
+    season = _int_or_none(item.get("Season"))
+    if season is not None:
+        fields["season"] = season
+    episode = _int_or_none(item.get("Episode"))
+    if episode is not None:
+        fields["episode"] = episode
+    if entry.get("Comment"):
+        fields["filename"] = str(entry["Comment"])
+    if type_name in _SELECT_TYPES:
+        fields["selected"] = True
+    return fields
+
+
+def _episode_season(item: dict[str, Any]) -> int | None:
+    """The season of an `Episode` item, else None."""
+    return _int_or_none(item.get("Season")) if _type_name(item) == "Episode" else None
+
+
+def _job_claim(match: DiscMatch, episode_seasons: set[int]) -> JobClaim:
+    """The job claim: the season when every matched episode shares one, and
+    the disc number when the release has a single season."""
     job = JobClaim()
     if len(episode_seasons) == 1:
         job.season = next(iter(episode_seasons))
     disc_index = match.disc.get("Index")
     if match.release_seasons and len(match.release_seasons) == 1 and isinstance(disc_index, int):
         job.disc_number = disc_index
+    return job
+
+
+def _contributors(match: DiscMatch) -> list[str]:
+    """The names of the release's contributors."""
+    return [
+        str(c.get("Name")) for c in (match.release.get("Contributors") or []) if isinstance(c, dict) and c.get("Name")
+    ]
+
+
+def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> SourceClaims:
+    by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
+    tracks: dict[str, TrackClaim] = {}
+    episode_seasons: set[int] = set()
+    for entry, item in _valid_entries(match):
+        scan_title = _join_scan_title(entry, scan, by_source_file)
+        if scan_title is None:
+            continue
+        ref = str(scan_title.index)
+        if ref in tracks:
+            continue  # first disc entry wins; don't flip-flop on dupes
+        tracks[ref] = TrackClaim(**_track_fields(entry, item))
+        season = _episode_season(item)
+        if season is not None:
+            episode_seasons.add(season)
     return SourceClaims(
         run_at=now,
         status="ok",
-        job=job,
+        job=_job_claim(match, episode_seasons),
         tracks=tracks,
         extra={
             "release_slug": match.release_slug,
             "title_slug": match.title_slug,
             "kind": match.kind,
             # Community credit (spec): who contributed this disc layout.
-            "contributors": [
-                str(c.get("Name"))
-                for c in (match.release.get("Contributors") or [])
-                if isinstance(c, dict) and c.get("Name")
-            ],
+            "contributors": _contributors(match),
         },
     )
 
