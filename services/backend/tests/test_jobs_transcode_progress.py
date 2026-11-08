@@ -38,7 +38,7 @@ from arm_common import (  # noqa: E402
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_backend.routers.jobs import _summarize_transcode_progress  # noqa: E402
+from arm_backend.job_views import _summarize_transcode_progress  # noqa: E402
 
 
 def _sa(sa_id: str, status: SessionApplicationStatus) -> SessionApplication:
@@ -157,7 +157,7 @@ def test_parked_apps_settle_once_the_rip_is_over() -> None:
     unidentified partial rip) is waiting on identity, not transcoding, so it
     is settled for the rollup like any other post-rip job's. A job that has
     not ripped yet still drains at rip-complete."""
-    from arm_backend.routers.jobs import _parked_apps_are_settled
+    from arm_backend.job_views import _parked_apps_are_settled
     from arm_common import Job
 
     def job(status: JobStatus, metadata: dict[str, Any]) -> Job:
