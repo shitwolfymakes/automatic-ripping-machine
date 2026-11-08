@@ -95,6 +95,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     engine. `app_client` starts it; a test that drives the lifespan itself
     (e.g. a failing shutdown) opens its own `TestClient`."""
     import arm_backend.db as db_mod
+    import arm_backend.gpu_inventory as gpu_inventory
     import arm_backend.main as main_mod
     import arm_backend.routers.auth as auth_router_mod
     import arm_backend.seeders as seeders_mod
@@ -121,6 +122,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setattr(db_mod, "engine", test_engine)
     monkeypatch.setattr(db_mod, "SessionLocal", test_sessionmaker)
     monkeypatch.setattr(main_mod, "SessionLocal", test_sessionmaker)
+    monkeypatch.setattr(gpu_inventory, "SessionLocal", test_sessionmaker)
 
     # Force the docker-less lifespan path deterministically: container spawns
     # need a real docker socket, which the SQLite e2e tier can't provide. The
@@ -133,7 +135,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     # Deterministic GPU inventory: ARM_GPUS is unset under test, so the loader
     # would return [] anyway, but pin it so the `transcode.hw_unavailable` emit
     # branch is stable regardless of any stray env. CI has no GPU, so model that.
-    monkeypatch.setattr(main_mod, "load_configured_gpus", lambda _raw: [])
+    monkeypatch.setattr(gpu_inventory, "load_configured_gpus", lambda _raw: [])
 
     # The lifespan boots the real DriveScanner. Point it at empty trees so it
     # finds no drives, instead of scanning the host's /sys (and /host-disk),

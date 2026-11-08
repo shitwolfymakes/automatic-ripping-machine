@@ -1,10 +1,10 @@
 """GPU inventory management — /api/gpus.
 
 The `gpus` table is DB-authoritative (ARM_GPUS only seeds an empty table at
-boot; see `main._refresh_gpu_inventory`), so this router is where operators
-manage the inventory: list devices, flip the enabled switch, delete a row.
-Deleting every row and restarting the backend re-seeds from the env
-descriptor — the Settings > GPUs card documents that path.
+boot; see `gpu_inventory.refresh_gpu_inventory`), so this router is where
+operators manage the inventory: list devices, flip the enabled switch,
+delete a row. Deleting every row and restarting the backend re-seeds from
+the env descriptor — the Settings > GPUs card documents that path.
 
 Re-probing (`POST /api/gpus/{id}/probe`, `POST /api/gpus/probe`) schedules
 the backend-spawned device probe (`gpu_probe_runner`) in the background and

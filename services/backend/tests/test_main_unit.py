@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from arm_backend import gpu_inventory
 from arm_backend import main as main_mod
 
 
@@ -107,7 +108,7 @@ def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "host" in captured and "port" in captured
 
 
-# --- _refresh_gpu_inventory (both populated + empty branches) ----------------
+# --- refresh_gpu_inventory (both populated + empty branches) ----------------
 
 
 class _SessionCtx:
@@ -136,14 +137,14 @@ async def test_refresh_gpu_inventory_populates(monkeypatch: pytest.MonkeyPatch) 
     from tests._fakes import FakeSession
 
     db = FakeSession()
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(gpu_inventory, "SessionLocal", lambda: _SessionCtx(db))
     monkeypatch.setattr(
-        main_mod,
+        gpu_inventory,
         "load_configured_gpus",
         lambda _raw: [ProbedGpu(vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", encoder_kinds=["h264"])],
     )
     hub = _Hub()
-    await main_mod._refresh_gpu_inventory(hub)
+    await gpu_inventory.refresh_gpu_inventory(hub)
     added = [r for r in db.added if type(r).__name__ == "Gpu"]
     assert len(added) == 1
     # The descriptor's encoder_kinds are hints only: a seeded row is unprobed
@@ -157,10 +158,10 @@ async def test_refresh_gpu_inventory_empty_emits_unavailable(monkeypatch: pytest
     from tests._fakes import FakeSession
 
     db = FakeSession()
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    monkeypatch.setattr(main_mod, "load_configured_gpus", lambda _raw: [])
+    monkeypatch.setattr(gpu_inventory, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(gpu_inventory, "load_configured_gpus", lambda _raw: [])
     hub = _Hub()
-    await main_mod._refresh_gpu_inventory(hub)
+    await gpu_inventory.refresh_gpu_inventory(hub)
     assert hub.events == ["transcode.hw_unavailable"]
 
 
@@ -174,14 +175,14 @@ async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.
 
     db = FakeSession()
     db.rows["gpus"] = [Gpu(vendor=GpuVendor.NVENC, device_path="nvidia://0", encoder_kinds=["h265"], enabled=False)]
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(gpu_inventory, "SessionLocal", lambda: _SessionCtx(db))
 
     def _boom(_raw: object) -> list:
         raise AssertionError("ARM_GPUS must not be consulted when rows exist")
 
-    monkeypatch.setattr(main_mod, "load_configured_gpus", _boom)
+    monkeypatch.setattr(gpu_inventory, "load_configured_gpus", _boom)
     hub = _Hub()
-    await main_mod._refresh_gpu_inventory(hub)
+    await gpu_inventory.refresh_gpu_inventory(hub)
     assert [r for r in db.added if type(r).__name__ == "Gpu"] == []
     assert db.rows["gpus"][0].enabled is False  # operator switch untouched
     assert hub.events == []
@@ -218,8 +219,8 @@ async def test_refresh_gpu_inventory_releases_orphaned_claims(monkeypatch: pytes
         task("txt_q", TranscodeTaskStatus.QUEUED),
         task("txt_r", TranscodeTaskStatus.IN_PROGRESS),
     ]
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    await main_mod._refresh_gpu_inventory(_Hub())
+    monkeypatch.setattr(gpu_inventory, "SessionLocal", lambda: _SessionCtx(db))
+    await gpu_inventory.refresh_gpu_inventory(_Hub())
     state = {g.id: (g.status, g.claimed_by_task_id) for g in db.rows["gpus"]}
     assert state == {
         "nulled": (GpuStatus.AVAILABLE, None),

@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 import subprocess
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,14 +10,13 @@ from pathlib import Path
 import httpx
 import uvicorn
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import declare_guest_reads
 from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
-from arm_backend.gpu_probe import load_configured_gpus
+from arm_backend.gpu_inventory import refresh_gpu_inventory
 from arm_backend.gpu_probe_runner import GpuProbeRunner
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend import image_cache
@@ -68,7 +67,7 @@ from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dis
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
-from arm_common import Config, Gpu, GpuStatus, TranscodeTask, TranscodeTaskStatus, configure_service_logging
+from arm_common import Config, configure_service_logging
 
 configure_service_logging("arm-backend", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_backend")
@@ -90,76 +89,6 @@ async def _run_seeders() -> None:
     async with SessionLocal() as session:
         await run_seeders(session)
     logger.info("seeders complete")
-
-
-async def _release_orphaned_gpu_claims(session: AsyncSession, gpus: Sequence[Gpu]) -> None:
-    """Free BUSY rows no live task holds: the claim was nulled by a task
-    delete (the FK only sets NULL), or its task already finished. A QUEUED
-    or IN_PROGRESS claimant may be a transcoder that outlived the restart,
-    so those stay for `sweep_stale_claims`."""
-    released = 0
-    for gpu in gpus:
-        if gpu.status != GpuStatus.BUSY:
-            continue
-        task = None
-        if gpu.claimed_by_task_id is not None:
-            task = (
-                await session.execute(select(TranscodeTask).where(col(TranscodeTask.id) == gpu.claimed_by_task_id))
-            ).scalar_one_or_none()
-        if task is not None and task.status in (TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS):
-            continue
-        gpu.status = GpuStatus.AVAILABLE
-        gpu.claimed_by_task_id = None
-        released += 1
-    if released:
-        logger.warning("gpu inventory: released %d orphaned GPU claim(s)", released)
-        await session.commit()
-
-
-async def _refresh_gpu_inventory(hub: WSHub) -> None:
-    """Seed the `gpus` table from `ARM_GPUS` - but only when it is empty.
-
-    The table is DB-authoritative: operators manage devices from Settings >
-    GPUs (enable/disable/delete), and those edits must survive restarts, so
-    an already-populated table is left untouched. Deleting every row and
-    restarting the backend is the deliberate re-seed path (the GPUs card
-    documents it). The env descriptor comes from host-side detection at
-    install time (or is hand-written for remote transcode hosts). Its
-    `encoder_kinds` are hints only: seeded rows start with no verified
-    encoders and `probed_at` NULL, and the boot probe pass
-    (`GpuProbeRunner.probe_unprobed`) verifies each device. `load_configured_gpus`
-    degrades to `[]` on malformed input. Emits `transcode.hw_unavailable` when
-    the inventory ends up empty.
-    """
-    now = datetime.now(UTC)
-    async with SessionLocal() as session:
-        existing = (await session.execute(select(Gpu))).scalars().all()
-        if existing:
-            logger.info("gpu inventory: %d device(s) in DB (authoritative); ARM_GPUS not consulted", len(existing))
-            await _release_orphaned_gpu_claims(session, existing)
-            return
-        probed = load_configured_gpus(settings.ARM_GPUS)
-        for g in probed:
-            session.add(
-                Gpu(
-                    vendor=g.vendor,
-                    device_path=g.device_path,
-                    encoder_kinds=[],
-                    status=GpuStatus.AVAILABLE,
-                    last_seen_at=now,
-                    probed_at=None,
-                )
-            )
-        if probed:
-            logger.info("gpu inventory: seeded %d device(s) from ARM_GPUS into an empty table", len(probed))
-        else:
-            await hub.emit(
-                topic="transcode.events",
-                event_type="transcode.hw_unavailable",
-                payload={},
-                session=session,
-            )
-        await session.commit()
 
 
 async def _thediscdb_refresh_loop(app: FastAPI) -> None:
@@ -241,7 +170,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
 
     # GPU inventory — seed the gpus table from ARM_GPUS only when empty
     # (DB-authoritative thereafter). Runs before the dispatcher starts.
-    await _refresh_gpu_inventory(app.state.ws_hub)
+    await refresh_gpu_inventory(app.state.ws_hub)
 
     # Phase 9 — reset every RIPPING job's tracks to queued and stamp
     # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
