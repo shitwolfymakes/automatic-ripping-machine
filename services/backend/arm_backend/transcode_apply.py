@@ -221,6 +221,48 @@ def _track_kinds_for_media(media_type: MediaType) -> set[TrackKind]:
     return set()  # pragma: no cover — MediaType is exhaustively handled above
 
 
+def _check_required_tokens(job: Job, track: Track, session: Session, ctx: dict[str, str], required: set[str]) -> bool:
+    """Raise when a required token resolved empty; return True when only episode
+    tokens did and this track may leave them empty."""
+    allowed_empty = False
+    for token in sorted(required):
+        if not ctx.get(token):
+            if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track, session):
+                allowed_empty = True
+                continue
+            hint = "" if token in NEVER_OPTIONAL else f"; mark it optional as {{{token}?}} to allow that"
+            raise TemplateValidationError(
+                f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata{hint}"
+            )
+    return allowed_empty
+
+
+def _render_with_empty_episode_path(template: str, ctx: dict[str, str], referenced: set[str], track_index: int) -> str:
+    """Render the path segment by segment for a track whose episode tokens may stay empty."""
+    segments = _render_with_empty_episode(template, ctx)
+    if any(not seg for seg in segments):
+        raise TemplateValidationError(
+            f"track index={track_index}: an allowed-empty episode token left an empty path segment"
+        )
+    if "track" not in referenced:
+        segments[-1] = _with_track_suffix(segments[-1], ctx["track"])
+    return "/".join(segments)
+
+
+def _apply_custom_filename(path: str, custom_filename: str) -> str:
+    """Replace the path's file stem with the sanitised custom filename, keeping its extension."""
+    p = PurePosixPath(path)
+    ext = p.suffix
+    # Sanitize, then use the stem only (strip any extension the operator
+    # typed) so we never produce "name.avi.mkv"; fall back to a safe stem
+    # if the name sanitizes to empty (e.g. "..").
+    sanitized = sanitize_path_component(custom_filename)
+    stem = PurePosixPath(sanitized).stem or "untitled"
+    name = f"{stem}{ext}" if ext else stem
+    parent = str(p.parent)
+    return name if parent == "." else f"{parent}/{name}"
+
+
 def compute_outputs(
     job: Job,
     tracks: list[Track],
@@ -239,38 +281,12 @@ def compute_outputs(
     resolved: list[ResolvedTask] = []
     for track in candidates:
         ctx = _build_track_ctx(job, track, transcode_preset)
-        allowed_empty = False
-        for token in sorted(required):
-            if not ctx.get(token):
-                if token in _EPISODE_TOKENS and not _episode_tokens_required(job, track, session):
-                    allowed_empty = True
-                    continue
-                hint = "" if token in NEVER_OPTIONAL else f"; mark it optional as {{{token}?}} to allow that"
-                raise TemplateValidationError(
-                    f"track index={track.index}: token {{{token}}} resolved empty against the job's metadata{hint}"
-                )
-        if allowed_empty:
-            segments = _render_with_empty_episode(template, ctx)
-            if any(not seg for seg in segments):
-                raise TemplateValidationError(
-                    f"track index={track.index}: an allowed-empty episode token left an empty path segment"
-                )
-            if "track" not in referenced:
-                segments[-1] = _with_track_suffix(segments[-1], ctx["track"])
-            path = "/".join(segments)
+        if _check_required_tokens(job, track, session, ctx, required):
+            path = _render_with_empty_episode_path(template, ctx, referenced, track.index)
         else:
             path = expand_template(template, ctx)
         if track.custom_filename:
-            p = PurePosixPath(path)
-            ext = p.suffix
-            # Sanitize, then use the stem only (strip any extension the operator
-            # typed) so we never produce "name.avi.mkv"; fall back to a safe stem
-            # if the name sanitizes to empty (e.g. "..").
-            sanitized = sanitize_path_component(track.custom_filename)
-            stem = PurePosixPath(sanitized).stem or "untitled"
-            name = f"{stem}{ext}" if ext else stem
-            parent = str(p.parent)
-            path = name if parent == "." else f"{parent}/{name}"
+            path = _apply_custom_filename(path, track.custom_filename)
         resolved.append(ResolvedTask(track_id=track.id, output_path=path))
     return resolved
 
