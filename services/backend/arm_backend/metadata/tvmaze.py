@@ -40,6 +40,28 @@ def title_is_close(query: str, name: str) -> bool:
     return SequenceMatcher(None, q, n).ratio() >= 0.75
 
 
+def _externals_to_ids(raw_externals: Any) -> dict[str, str]:
+    """The IMDb and TVDB ids a TVmaze `externals` object carries, under the payload keys `external_ids_of` reads."""
+    externals: dict[str, Any] = raw_externals if isinstance(raw_externals, dict) else {}
+    ids: dict[str, str] = {}
+    imdb = externals.get("imdb")
+    if isinstance(imdb, str) and imdb:
+        ids["imdb_id"] = imdb
+    tvdb = externals.get("thetvdb")
+    if isinstance(tvdb, int) or (isinstance(tvdb, str) and tvdb):
+        ids["tvdb_id"] = str(tvdb)
+    return ids
+
+
+def _poster_of(raw_image: Any) -> str | None:
+    """The show's poster URL (medium, else original), or None without an http URL."""
+    image: dict[str, Any] = raw_image if isinstance(raw_image, dict) else {}
+    poster = image.get("medium") or image.get("original")
+    if isinstance(poster, str) and poster.startswith("http"):
+        return poster
+    return None
+
+
 def show_to_result(show: Any) -> MetadataResult | None:
     """One TVmaze show object → MetadataResult, or None without a name.
     Ids and the poster are normalised into the keys `external_ids_of` and
@@ -54,18 +76,9 @@ def show_to_result(show: Any) -> MetadataResult | None:
     payload: dict[str, Any] = dict(show)
     if show.get("id") is not None:
         payload["tvmaze_id"] = str(show["id"])
-    raw_externals = show.get("externals")
-    externals: dict[str, Any] = raw_externals if isinstance(raw_externals, dict) else {}
-    imdb = externals.get("imdb")
-    if isinstance(imdb, str) and imdb:
-        payload["imdb_id"] = imdb
-    tvdb = externals.get("thetvdb")
-    if isinstance(tvdb, int) or (isinstance(tvdb, str) and tvdb):
-        payload["tvdb_id"] = str(tvdb)
-    raw_image = show.get("image")
-    image: dict[str, Any] = raw_image if isinstance(raw_image, dict) else {}
-    poster = image.get("medium") or image.get("original")
-    if isinstance(poster, str) and poster.startswith("http"):
+    payload.update(_externals_to_ids(show.get("externals")))
+    poster = _poster_of(show.get("image"))
+    if poster is not None:
         payload["poster_url"] = poster
     return MetadataResult(title=name, year=year, kind="tv", payload=payload)
 
