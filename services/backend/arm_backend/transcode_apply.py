@@ -107,7 +107,6 @@ def _episode_label(track: Track) -> str:
 def _build_track_ctx(
     job: Job,
     track: Track,
-    session: Session,
     transcode_preset: TranscodePreset | None,
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
@@ -152,9 +151,6 @@ def _build_track_ctx(
         "transcode_slug": slugify(transcode_preset.name) if transcode_preset is not None else "",
         "ext": transcode_preset.container.value if transcode_preset is not None else "",
     }
-    # Session is reserved for future use (overrides_json may seed extra ctx keys);
-    # keep the param so call sites don't rebreak when overrides land.
-    _ = session
     return ctx
 
 
@@ -242,7 +238,7 @@ def compute_outputs(
     required = required_tokens(template)
     resolved: list[ResolvedTask] = []
     for track in candidates:
-        ctx = _build_track_ctx(job, track, session, transcode_preset)
+        ctx = _build_track_ctx(job, track, transcode_preset)
         allowed_empty = False
         for token in sorted(required):
             if not ctx.get(token):

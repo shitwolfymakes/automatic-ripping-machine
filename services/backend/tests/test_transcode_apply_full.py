@@ -90,7 +90,7 @@ def test_track_kinds_for_media_all_types() -> None:
 
 def test_build_track_ctx_reads_music_title_and_preset() -> None:
     job = _job({"tracks": [{"title": "Opening Theme"}], "artist": "Band", "album": "LP"})
-    ctx = _build_track_ctx(job, _track(index=1), _session(), _tp())
+    ctx = _build_track_ctx(job, _track(index=1), _tp())
     assert ctx["track_title"] == "Opening Theme"
     assert ctx["artist"] == "Band"
     assert ctx["transcode_slug"] == "plex-1080p"
@@ -98,7 +98,7 @@ def test_build_track_ctx_reads_music_title_and_preset() -> None:
 
 
 def test_build_track_ctx_no_preset_blank_slug() -> None:
-    ctx = _build_track_ctx(_job(), _track(), _session(), None)
+    ctx = _build_track_ctx(_job(), _track(), None)
     assert ctx["transcode_slug"] == ""
     assert ctx["ext"] == ""
     assert ctx["track_title"] == ""  # no metadata tracks list
@@ -107,9 +107,9 @@ def test_build_track_ctx_no_preset_blank_slug() -> None:
 def test_build_track_ctx_tracks_meta_edge_shapes() -> None:
     # index out of range (72->77), entry not a dict, raw_title not a str
     # (74->77) — each leaves track_title blank without raising.
-    assert _build_track_ctx(_job({"tracks": []}), _track(index=1), _session(), None)["track_title"] == ""
-    assert _build_track_ctx(_job({"tracks": ["nope"]}), _track(index=1), _session(), None)["track_title"] == ""
-    assert _build_track_ctx(_job({"tracks": [{"title": 123}]}), _track(index=1), _session(), None)["track_title"] == ""
+    assert _build_track_ctx(_job({"tracks": []}), _track(index=1), None)["track_title"] == ""
+    assert _build_track_ctx(_job({"tracks": ["nope"]}), _track(index=1), None)["track_title"] == ""
+    assert _build_track_ctx(_job({"tracks": [{"title": 123}]}), _track(index=1), None)["track_title"] == ""
 
 
 def test_compute_outputs_no_relevant_tracks() -> None:
