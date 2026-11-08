@@ -9,7 +9,7 @@ from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
 
-from arm_backend.identity import episode_siblings, episode_stage
+from arm_backend.identity import episode_holds, episode_siblings, episode_stage
 from arm_backend.identity.episode_stage import (
     StageOptions,
     compute_episode_claims,
@@ -1405,9 +1405,9 @@ def test_hold_reasons_table(
     code: str | None, fit: dict[str, Any], runner_up: Any, scanned: bool, auto_apply: bool
 ) -> None:
     """Each of the eight hold-reason codes, by name, fires on its own."""
-    season_fit = episode_stage._SeasonFit(**{"result": _result(), "nominal": False, "sibling_conflict": False, **fit})
+    season_fit = episode_holds.SeasonFit(**{"result": _result(), "nominal": False, "sibling_conflict": False, **fit})
     ranked = [(1, season_fit.result), (2, runner_up)]
-    reasons = episode_stage.hold_reasons(season_fit, ranked, scanned=scanned, auto_apply=auto_apply)
+    reasons = episode_holds.hold_reasons(season_fit, ranked, scanned=scanned, auto_apply=auto_apply)
     assert reasons == ([code] if code else [])
 
 

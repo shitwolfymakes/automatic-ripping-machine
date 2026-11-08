@@ -11,7 +11,7 @@ A result the stage is not sure of (ambiguous positions, low coverage, low
 confidence, two seasons that fit about equally, nominal broadcast-slot
 runtimes) is stored with `suggestion=True`, which the resolver applies as a
 guess (`Resolution.episode_unsure`, held countdown, amber in the UI), and
-`extra["hold_reasons"]` names every reason (`hold_reasons`).
+`extra["hold_reasons"]` names every reason (`episode_holds.hold_reasons`).
 
 With no known season, every season the provider lists is fetched, in
 `season_scan_order`: the disc hint's season, then seasons sibling discs hold,
@@ -35,6 +35,7 @@ from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
+from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
 from arm_backend.identity.episode_siblings import sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
@@ -58,14 +59,6 @@ logger = logging.getLogger(__name__)
 # Nominal runtimes: a provider listing every episode at a whole number of
 # 5-minute broadcast slots (e.g. TVmaze's 60 min for a 44-minute episode).
 NOMINAL_SLOT_S = 300
-# Suggestion thresholds (C2).
-MIN_COVERAGE = 0.5
-MIN_MEAN_CONFIDENCE = 0.4
-NEAR_TIE_COST_RATIO = 0.1
-# I5: a scanned season wins thinly when the runner-up's mean cost is within
-# max(THIN_WIN_RATIO * runner-up, THIN_WIN_MIN_S) seconds of the best.
-THIN_WIN_RATIO = 0.1
-THIN_WIN_MIN_S = 30
 
 _EPISODE_SOURCE_IDS = frozenset(EPISODE_SOURCE_BY_SETTING.values())
 
@@ -87,13 +80,6 @@ class SourceOutcome:
     source_id: str
     claims: SourceClaims
     result: MatchResult | None
-
-
-@dataclass(frozen=True)
-class _SeasonFit:
-    result: MatchResult
-    nominal: bool
-    sibling_conflict: bool
 
 
 def is_tv_candidate(job: Job, tracks: Sequence[Track]) -> bool:
@@ -194,17 +180,6 @@ def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance:
     return fitting < len(shaped) / 2
 
 
-def _mean_cost(result: MatchResult) -> float:
-    return result.cost / max(1, len(result.matches))
-
-
-def _near_tie(first: MatchResult, second: MatchResult) -> bool:
-    if first.coverage != second.coverage or len(first.matches) != len(second.matches):
-        return False
-    a, b = _mean_cost(first), _mean_cost(second)
-    return abs(a - b) <= NEAR_TIE_COST_RATIO * max(a, b)
-
-
 def _episode_shaped(titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int) -> list[TitleIn]:
     """Titles whose length could be an episode of this season, so menus, trailers
     and extras are left out. With no known runtime every title counts."""
@@ -234,7 +209,7 @@ class _Request:
     placed: Mapping[int, frozenset[int]]
 
 
-async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> _SeasonFit | None:
+async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> SeasonFit | None:
     try:
         episodes = await provider.season(req.show_id, season)
     except SourceMiss:
@@ -255,40 +230,12 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
         remaining = [replace(e, runtime_s=None) for e in remaining]
     claimed = frozenset().union(*(s.episodes for s in siblings)) if siblings else frozenset()
     result = align_runs(req.titles, remaining, claimed=claimed, tolerance=req.tolerance, anchor=anchor)
-    return _SeasonFit(result, nominal, conflict)
-
-
-def _thin_win(best: MatchResult, runner_up: MatchResult) -> bool:
-    gap = _mean_cost(runner_up) - _mean_cost(best)
-    return gap < max(THIN_WIN_RATIO * _mean_cost(runner_up), THIN_WIN_MIN_S)
-
-
-def hold_reasons(
-    fit: _SeasonFit, ranked: Sequence[tuple[int, MatchResult]], *, scanned: bool, auto_apply: bool
-) -> list[str]:
-    """Why `fit` (the best-ranked season's) is held as a suggestion, in a
-    fixed order; empty when it applies on its own. `near_tie` and `thin_win`
-    compare against the runner-up in `ranked`; `thin_win` only for a scanned
-    season (I5)."""
-    result = fit.result
-    runner_up = ranked[1][1] if len(ranked) > 1 else None
-    mean_conf = sum(m.confidence for m in result.matches) / max(1, len(result.matches))
-    checks = (
-        ("auto_apply_off", not auto_apply),
-        ("ambiguous", result.ambiguous),
-        ("low_coverage", result.coverage < MIN_COVERAGE),
-        ("low_confidence", mean_conf < MIN_MEAN_CONFIDENCE),
-        ("near_tie", runner_up is not None and _near_tie(result, runner_up)),
-        ("thin_win", scanned and runner_up is not None and _thin_win(result, runner_up)),
-        ("nominal_runtimes", fit.nominal),
-        ("sibling_conflict", fit.sibling_conflict),
-    )
-    return [code for code, held in checks if held]
+    return SeasonFit(result, nominal, conflict)
 
 
 async def _pick_season(
     provider: EpisodeListProvider, req: _Request, order: Sequence[tuple[int, bool]]
-) -> tuple[int, _SeasonFit, list[tuple[int, MatchResult]], bool] | None:
+) -> tuple[int, SeasonFit, list[tuple[int, MatchResult]], bool] | None:
     """The best-ranked season's fit, the ranking of the seasons tried, and
     whether the scan stopped early (seasons were left untried); None when no
     season could be fetched.
@@ -296,7 +243,7 @@ async def _pick_season(
     Seasons are tried in `order`. A season with `from_hint` set stops the
     scan when it ranks first and nothing holds its fit (judged as if
     auto-apply were on: the stop is about confidence)."""
-    fits: dict[int, _SeasonFit] = {}
+    fits: dict[int, SeasonFit] = {}
     ranked: list[tuple[int, MatchResult]] = []
     for i, (season, from_hint) in enumerate(order):
         fit = await _fit_season(provider, req, season)
@@ -314,7 +261,7 @@ async def _pick_season(
 
 def _ok_claims(
     season: int,
-    fit: _SeasonFit,
+    fit: SeasonFit,
     ranked: Sequence[tuple[int, MatchResult]],
     *,
     scanned: bool,

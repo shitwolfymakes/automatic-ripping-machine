@@ -13,13 +13,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 
-from arm_backend.identity.episode_stage import (
-    _near_tie,
-    _SeasonFit,
-    episode_shaped_count,
-    hold_reasons,
-    season_scan_order,
-)
+from arm_backend.identity.episode_holds import SeasonFit, _near_tie, hold_reasons
+from arm_backend.identity.episode_stage import episode_shaped_count, season_scan_order
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.model import MatchResult, TitleIn
 from tests.thediscdb_corpus import Disc, Series
@@ -133,10 +128,10 @@ def _hinted_scan(
     stopping as soon as a hinted season ranks first and nothing holds it."""
     found = re.search(r"Season (\d+)", disc.name or "")
     order = season_scan_order(series.season_numbers(), hint=int(found.group(1)) if found else None, sibling_seasons=[])
-    fits: dict[int, _SeasonFit] = {}
+    fits: dict[int, SeasonFit] = {}
     ranked: list[tuple[int, MatchResult]] = []
     for s, from_hint in order:
-        fits[s] = _SeasonFit(_fit(series, disc, s, titles, siblings, None, None), False, conflict)
+        fits[s] = SeasonFit(_fit(series, disc, s, titles, siblings, None, None), False, conflict)
         ranked = rank_seasons({k: f.result for k, f in fits.items()})
         if from_hint and ranked[0][0] == s and not hold_reasons(fits[s], ranked, scanned=True, auto_apply=True):
             break
