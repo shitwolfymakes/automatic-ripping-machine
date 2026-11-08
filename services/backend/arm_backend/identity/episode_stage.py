@@ -206,6 +206,19 @@ class _Request:
     placed: Mapping[int, frozenset[int]]
 
 
+@dataclass(frozen=True)
+class _StageContext:
+    """The per-job values every provider's match shares."""
+
+    job: Job
+    cfg: Config
+    opts: StageOptions
+    titles: Sequence[TitleIn]
+    rows: Sequence[tuple[Job, list[Track]]]
+    placed: Mapping[int, frozenset[int]]
+    now: datetime
+
+
 async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int) -> SeasonFit | None:
     try:
         episodes = await provider.season(req.show_id, season)
@@ -339,26 +352,19 @@ def _tolerance(job: Job, source_id: str, opts: StageOptions, cfg: Config) -> int
 
 async def _match(
     provider: EpisodeListProvider,
-    job: Job,
-    cfg: Config,
-    opts: StageOptions,
-    *,
-    titles: Sequence[TitleIn],
-    rows: Sequence[tuple[Job, list[Track]]],
-    placed: Mapping[int, frozenset[int]],
-    now: datetime,
+    ctx: _StageContext,
     inputs: dict[str, Any],
 ) -> SourceOutcome:
     """One provider's outcome. Fills `inputs` as soon as they are known so an
     error raised later still carries them (C7)."""
     source_id = provider.source_id
-    reason = provider.configured(cfg)
+    reason = provider.configured(ctx.cfg)
     if reason is not None:
-        return SourceOutcome(source_id, SourceClaims(run_at=now, status="skipped", detail=reason), None)
-    previous = claims_of(job).sources.get(source_id)
-    known_season = _known_season(job, opts)
-    disc_number = opts.disc_number if opts.disc_number is not None else job.disc_number
-    tolerance = _tolerance(job, source_id, opts, cfg)
+        return SourceOutcome(source_id, SourceClaims(run_at=ctx.now, status="skipped", detail=reason), None)
+    previous = claims_of(ctx.job).sources.get(source_id)
+    known_season = _known_season(ctx.job, ctx.opts)
+    disc_number = ctx.opts.disc_number if ctx.opts.disc_number is not None else ctx.job.disc_number
+    tolerance = _tolerance(ctx.job, source_id, ctx.opts, ctx.cfg)
     # The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
     # the show id is the one the last stored entry used, and the rest is this
     # request's, so put_source keeps the last good claims only when the
@@ -373,18 +379,18 @@ async def _match(
     )
     if provider.http.backing_off():
         backoff_inputs = {**kept, "nominal_runtimes": prior_inputs.get("nominal_runtimes")} if kept else {}
-        claims = SourceClaims(run_at=now, status="error", detail="backing off", inputs=backoff_inputs)
+        claims = SourceClaims(run_at=ctx.now, status="error", detail="backing off", inputs=backoff_inputs)
         return SourceOutcome(source_id, claims, None)
 
     try:
-        ids = await resolve_show_ids(job, [provider], persist=opts.apply, raise_errors=True)
+        ids = await resolve_show_ids(ctx.job, [provider], persist=ctx.opts.apply, raise_errors=True)
     except SourceError:
         # M3: a transient failure, not "show not found".
         inputs.update(kept)
         raise
     show_id = getattr(ids, provider.id_field, None)
     if not show_id:
-        return SourceOutcome(source_id, SourceClaims(run_at=now, status="miss", detail="show not found"), None)
+        return SourceOutcome(source_id, SourceClaims(run_at=ctx.now, status="miss", detail="show not found"), None)
 
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
@@ -395,17 +401,17 @@ async def _match(
             listed = await provider.seasons(show_id)
         except SourceMiss:
             # A stale cached show id: the provider no longer knows the show.
-            claims = SourceClaims(run_at=now, status="miss", detail="show not found", inputs=dict(inputs))
+            claims = SourceClaims(run_at=ctx.now, status="miss", detail="show not found", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
         if not listed:
-            claims = SourceClaims(run_at=now, status="miss", detail="no seasons listed", inputs=dict(inputs))
+            claims = SourceClaims(run_at=ctx.now, status="miss", detail="no seasons listed", inputs=dict(inputs))
             return SourceOutcome(source_id, claims, None)
-        order = season_scan_order(listed, hint=hint_season(job), sibling_seasons=sibling_seasons(rows, ids))
+        order = season_scan_order(listed, hint=hint_season(ctx.job), sibling_seasons=sibling_seasons(ctx.rows, ids))
 
-    req = _Request(show_id, ids, titles, rows, disc_number, job.disc_total, tolerance, placed)
+    req = _Request(show_id, ids, ctx.titles, ctx.rows, disc_number, ctx.job.disc_total, tolerance, ctx.placed)
     picked = await _pick_season(provider, req, order)
     if picked is None or not picked[1].result.matches:
-        claims = SourceClaims(run_at=now, status="miss", detail="no episodes matched", inputs=dict(inputs))
+        claims = SourceClaims(run_at=ctx.now, status="miss", detail="no episodes matched", inputs=dict(inputs))
         return SourceOutcome(source_id, claims, picked[1].result if picked else None)
     season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
@@ -415,8 +421,8 @@ async def _match(
         scanned=known_season is None,
         stopped_early=stopped_early,
         inputs=inputs,
-        now=now,
-        auto_apply=episode_auto_apply(cfg),
+        now=ctx.now,
+        auto_apply=episode_auto_apply(ctx.cfg),
     )
     return SourceOutcome(source_id, claims, fit.result)
 
@@ -462,13 +468,12 @@ async def compute_episode_claims(
     rows = await sibling_rows(session, job)
     placed = operator_placed(job_tracks)
     now = datetime.now(UTC)
+    ctx = _StageContext(job, cfg, opts, titles, rows, placed, now)
     outcomes: list[SourceOutcome] = []
     for provider in _ordered_providers(job, providers, opts.only_source, cfg):
         inputs: dict[str, Any] = {}
         try:
-            outcome = await _match(
-                provider, job, cfg, opts, titles=titles, rows=rows, placed=placed, now=now, inputs=inputs
-            )
+            outcome = await _match(provider, ctx, inputs)
         except SourceError as e:
             logger.warning("episode stage: source %s failed job_id=%s: %s", provider.source_id, job.id, e)
             outcome = _error(job, provider.source_id, e, inputs, now)
