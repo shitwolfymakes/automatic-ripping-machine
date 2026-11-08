@@ -47,6 +47,71 @@ class Resolution:
     episode_unsure: bool = False
 
 
+def _usable_sources(
+    claims: IdentityClaims, tiers: Mapping[str, int], pinned: set[str], disabled: frozenset[str]
+) -> list[str]:
+    """The ids of the sources that may contribute: known, ok, and not
+    unchecked by the operator unless pinned, in claim order."""
+    usable: list[str] = []
+    for source_id, source in claims.sources.items():
+        if source_id not in tiers:
+            logger.debug("identity resolver: ignoring unknown source %s", source_id)
+            continue
+        # PR 4: a source the operator unchecked contributes nothing unless
+        # pinned; it stays in `known_sources` (via `tiers`), so fields it
+        # owned still reset to default when nothing else claims them.
+        if source_id in disabled and source_id not in pinned:
+            continue
+        if source.status != "ok":
+            continue
+        usable.append(source_id)
+    return usable
+
+
+def _source_sort_key(
+    source_id: str, claims: IdentityClaims, tiers: Mapping[str, int], ranks: Mapping[str, int], pinned: set[str]
+) -> tuple[int, int, int, bool, int, str]:
+    """Order sources by tier, then pinned first, then clean before held, then
+    the operator's rank (unranked last), then id."""
+    return (
+        tiers[source_id],
+        0 if source_id in pinned else 1,
+        1 if claims.sources[source_id].suggestion else 0,
+        source_id not in ranks,
+        ranks.get(source_id, 0),
+        source_id,
+    )
+
+
+def _first_episode_source(ordered: Sequence[str], tiers: Mapping[str, int]) -> str | None:
+    """The first episode-match source in `ordered`, or None."""
+    return next((s for s in ordered if tiers[s] == _EPISODE_TIER), None)
+
+
+def _collect_winners(claims: IdentityClaims, ordered: Sequence[str], known_sources: frozenset[str]) -> Resolution:
+    """Each job and track field's value from the first source in `ordered`
+    that proposes it; tracks with no field are dropped."""
+    res = Resolution(known_sources=known_sources)
+    for source_id in ordered:
+        source = claims.sources[source_id]
+        for name in source.job.model_fields_set & JOB_CLAIM_FIELDS.keys():
+            res.job.setdefault(name, Winner(getattr(source.job, name), source_id))
+        for ref, claim in source.tracks.items():
+            slot = res.tracks.setdefault(ref, {})
+            for name in claim.model_fields_set & TRACK_CLAIM_FIELDS.keys():
+                slot.setdefault(name, Winner(getattr(claim, name), source_id))
+    res.tracks = {ref: slot for ref, slot in res.tracks.items() if slot}
+    return res
+
+
+def _episode_unsure(res: Resolution, claims: IdentityClaims, winner: str) -> bool:
+    """Whether the winning episode placement is a guess."""
+    # A guess the operator has overridden on every track is no guess any
+    # more: the flag follows the placements that are actually on the tracks.
+    owns_a_track = any(w.source == winner for slot in res.tracks.values() for w in slot.values())
+    return owns_a_track and claims.sources[winner].suggestion
+
+
 def resolve(
     claims: IdentityClaims,
     *,
@@ -60,52 +125,17 @@ def resolve(
     # through `episode_unsure`; within a tier a clean result outranks a held
     # one, and a pin outranks both, so a source the operator chose in Fix
     # match keeps its placement until the match is cleared or re-run.
-    usable = []
-    for source_id, source in claims.sources.items():
-        if source_id not in tiers:
-            logger.debug("identity resolver: ignoring unknown source %s", source_id)
-            continue
-        # PR 4: a source the operator unchecked contributes nothing unless
-        # pinned; it stays in `known_sources` (via `tiers`), so fields it
-        # owned still reset to default when nothing else claims them.
-        if source_id in disabled and source_id not in pinned:
-            continue
-        if source.status != "ok":
-            continue
-        usable.append(source_id)
-    usable.sort(
-        key=lambda s: (
-            tiers[s],
-            0 if s in pinned else 1,
-            1 if claims.sources[s].suggestion else 0,
-            s not in ranks,
-            ranks.get(s, 0),
-            s,
-        )
-    )
+    usable = _usable_sources(claims, tiers, pinned, disabled)
+    usable.sort(key=lambda s: _source_sort_key(s, claims, tiers, ranks, pinned))
+    episode_winner = _first_episode_source(usable, tiers)
     # Keep only the first usable episode-match source (the pin sorts first);
     # every other one contributes nothing, so a lower-ranked provider can
     # never fill a track the winner called an extra with a duplicate number.
-    episode_sources = [s for s in usable if tiers[s] == _EPISODE_TIER]
-    usable = [s for s in usable if tiers[s] != _EPISODE_TIER or s == episode_sources[0]]
-
-    res = Resolution(known_sources=frozenset(tiers))
-    for source_id in usable:
-        source = claims.sources[source_id]
-        for name in source.job.model_fields_set & JOB_CLAIM_FIELDS.keys():
-            res.job.setdefault(name, Winner(getattr(source.job, name), source_id))
-        for ref, claim in source.tracks.items():
-            slot = res.tracks.setdefault(ref, {})
-            for name in claim.model_fields_set & TRACK_CLAIM_FIELDS.keys():
-                slot.setdefault(name, Winner(getattr(claim, name), source_id))
-    res.tracks = {ref: slot for ref, slot in res.tracks.items() if slot}
-    if episode_sources:
-        winner = episode_sources[0]
-        res.episode_source = winner
-        # A guess the operator has overridden on every track is no guess any
-        # more: the flag follows the placements that are actually on the tracks.
-        owns_a_track = any(w.source == winner for slot in res.tracks.values() for w in slot.values())
-        res.episode_unsure = owns_a_track and claims.sources[winner].suggestion
+    usable = [s for s in usable if tiers[s] != _EPISODE_TIER or s == episode_winner]
+    res = _collect_winners(claims, usable, frozenset(tiers))
+    if episode_winner is not None:
+        res.episode_source = episode_winner
+        res.episode_unsure = _episode_unsure(res, claims, episode_winner)
     return res
 
 
