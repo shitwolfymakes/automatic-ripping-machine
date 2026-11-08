@@ -72,7 +72,7 @@ class Tally:
 def _siblings(
     disc: Disc, others: Sequence[Disc], mode: str, season: int, disc_known: bool
 ) -> tuple[list[SiblingDisc], bool]:
-    """Mimic `episode_stage._siblings`: only a sibling with a known, different
+    """Mimic `episode_siblings.sibling_discs`: only a sibling with a known, different
     disc number claims its episodes; any other sibling holding episodes of
     this season is a conflict."""
     out: list[SiblingDisc] = []

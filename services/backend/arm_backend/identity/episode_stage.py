@@ -22,7 +22,6 @@ early, and only when its fit would apply on its own.
 from __future__ import annotations
 
 import logging
-from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -31,17 +30,18 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, Job, JobStatus, Track, TrackKind
+from arm_common import Config, Job, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
+from arm_backend.identity.episode_siblings import sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
-from arm_backend.identity.ids import current_ids, resolve_show_ids
+from arm_backend.identity.ids import resolve_show_ids
 from arm_backend.identity.hints import hint_season
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import MANUAL, claims_of, put_source
@@ -68,8 +68,6 @@ THIN_WIN_RATIO = 0.1
 THIN_WIN_MIN_S = 30
 
 _EPISODE_SOURCE_IDS = frozenset(EPISODE_SOURCE_BY_SETTING.values())
-# Jobs that never produced a disc's episodes; they are not siblings.
-_DEAD_STATUSES = frozenset({JobStatus.FAILED, JobStatus.ABANDONED})
 
 
 @dataclass(frozen=True)
@@ -167,81 +165,6 @@ async def _job_tracks(session: AsyncSession, job: Job) -> list[Track]:
     return list((await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
 
 
-async def _sibling_rows(session: AsyncSession, job: Job) -> list[tuple[Job, list[Track]]]:
-    """Other live TV jobs of the same show (a shared show id, not the title
-    string), with their tracks; a job with no external ids has none. Failed
-    and abandoned jobs never hold episodes. Tracks load only for these."""
-    ids = current_ids(job)
-    if not ids.model_dump(exclude_none=True):
-        return []
-    stmt = select(Job).where(col(Job.media_type) == MediaType.TV)
-    jobs = [
-        j
-        for j in (await session.execute(stmt)).scalars().all()
-        if j.id != job.id and j.status not in _DEAD_STATUSES and _shares_id(ids, current_ids(j))
-    ]
-    if not jobs:
-        return []
-    tracks = (await session.execute(select(Track).where(col(Track.job_id).in_([j.id for j in jobs])))).scalars().all()
-    return [(j, [t for t in tracks if t.job_id == j.id]) for j in jobs]
-
-
-def _shares_id(ids: ExternalIds, other: ExternalIds) -> bool:
-    theirs = other.model_dump(exclude_none=True)
-    return any(value and theirs.get(key) == value for key, value in ids.model_dump(exclude_none=True).items())
-
-
-def _held_numbers(sibling: Job, tracks: Sequence[Track], season: int) -> frozenset[int]:
-    numbers: set[int] = set()
-    for t in tracks:
-        track_season = t.season if t.season is not None else sibling.season
-        if track_season != season or t.episode_number is None:
-            continue
-        end = max(t.episode_number_end or t.episode_number, t.episode_number)
-        numbers.update(range(t.episode_number, end + 1))
-    return frozenset(numbers)
-
-
-def _siblings(
-    rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds, season: int, disc_number: int | None
-) -> tuple[list[SiblingDisc], bool]:
-    """Sibling discs of the same show (a shared non-empty external id) and
-    season, with every episode number their resolved tracks hold.
-
-    Only a sibling that is provably a different disc (both disc numbers known
-    and different) claims its episodes. A sibling holding episodes that may be
-    this same disc (an earlier rip of it, or either disc number unknown) is a
-    conflict: returned as True so the result becomes a suggestion."""
-    out: list[SiblingDisc] = []
-    conflict = False
-    for sibling, tracks in rows:
-        if not _shares_id(ids, current_ids(sibling)):
-            continue
-        if sibling.season != season and not any(t.season == season for t in tracks):
-            continue
-        numbers = _held_numbers(sibling, tracks, season)
-        if not numbers:
-            continue
-        if disc_number is not None and sibling.disc_number is not None and sibling.disc_number != disc_number:
-            out.append(SiblingDisc(sibling.disc_number, numbers))
-        else:
-            conflict = True
-    return out, conflict
-
-
-def sibling_seasons(rows: Sequence[tuple[Job, list[Track]]], ids: ExternalIds) -> list[int]:
-    """Seasons the sibling rows sharing an external id with `ids` hold (each
-    job's season and every track's season), most frequent first, ties
-    ascending."""
-    counts: Counter[int] = Counter()
-    for sibling, tracks in rows:
-        if not _shares_id(ids, current_ids(sibling)):
-            continue
-        held = [sibling.season, *(t.season for t in tracks)]
-        counts.update(season for season in held if season is not None)
-    return sorted(counts, key=lambda season: (-counts[season], season))
-
-
 def season_scan_order(
     seasons: Sequence[int], *, hint: int | None, sibling_seasons: Sequence[int]
 ) -> list[tuple[int, bool]]:
@@ -316,7 +239,7 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
         episodes = await provider.season(req.show_id, season)
     except SourceMiss:
         return None
-    siblings, conflict = _siblings(req.rows, req.ids, season, req.disc_number)
+    siblings, conflict = sibling_discs(req.rows, req.ids, season, req.disc_number)
     if held := req.placed.get(season):
         # Claims the operator's numbers without anchoring on a disc.
         siblings.append(SiblingDisc(None, held))
@@ -592,7 +515,7 @@ async def compute_episode_claims(
         # no tracks; rip-start schedules the stage again). No outcome means
         # nothing is stored, so `sweep_startup` can still pick the job up.
         return []
-    rows = await _sibling_rows(session, job)
+    rows = await sibling_rows(session, job)
     placed = operator_placed(job_tracks)
     now = datetime.now(UTC)
     outcomes: list[SourceOutcome] = []

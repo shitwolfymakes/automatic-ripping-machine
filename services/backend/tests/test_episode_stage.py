@@ -9,7 +9,7 @@ from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
 
-from arm_backend.identity import episode_stage
+from arm_backend.identity import episode_siblings, episode_stage
 from arm_backend.identity.episode_stage import (
     StageOptions,
     compute_episode_claims,
@@ -526,7 +526,7 @@ async def test_siblings_match_by_show_id_not_title_string() -> None:
         for i, s in enumerate(DISTINCT[:2])
     ]
     db = _db(job, DISC, sibling, extra_tracks=sib_tracks)
-    rows = await episode_stage._sibling_rows(db, job)
+    rows = await episode_siblings.sibling_rows(db, job)
     assert [j.id for j, _ in rows] == ["job_2"]
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
     outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
@@ -551,7 +551,7 @@ async def test_other_show_contributes_no_tracks_to_the_rows() -> None:
         return await real_execute(stmt, *args, **kwargs)
 
     db.execute = spy  # type: ignore[method-assign]
-    rows = await episode_stage._sibling_rows(db, job)
+    rows = await episode_siblings.sibling_rows(db, job)
 
     assert [j.id for j, _ in rows] == ["job_2"]
     assert all(t.job_id == "job_2" for _, tracks in rows for t in tracks)
@@ -562,17 +562,17 @@ async def test_other_show_contributes_no_tracks_to_the_rows() -> None:
 
 
 def test_siblings_skip_a_row_of_another_show() -> None:
-    """`_siblings` matches rows on the provider's resolved ids, which can
+    """`sibling_discs` matches rows on the provider's resolved ids, which can
     differ from the job's own: a row sharing none of them holds nothing."""
     other = _job("job_3", disc_number=1, ids={"imdb": "tt9"})
     tracks = [_track("job_3", 0, 1500, role=TrackRole.EPISODE, season=1, episode_number=1)]
-    assert episode_stage._siblings([(other, tracks)], ExternalIds(imdb="tt1"), 1, 2) == ([], False)
+    assert episode_siblings.sibling_discs([(other, tracks)], ExternalIds(imdb="tt1"), 1, 2) == ([], False)
 
 
 async def test_job_without_ids_has_no_siblings() -> None:
     job = _job(ids={}, disc_number=2)
     db = _db(job, DISC, _job("job_2", disc_number=1))
-    assert await episode_stage._sibling_rows(db, job) == []
+    assert await episode_siblings.sibling_rows(db, job) == []
 
 
 # ---------------------------------------------------------------------------
@@ -1361,7 +1361,7 @@ def test_sibling_seasons_counts_shared_id_rows_most_frequent_first() -> None:
     other_show = _job("job_4", season=9, ids={"imdb": "tt2"})
     rows = [(same, tracks), (also, []), (other_show, [_track("job_4", 0, 1500, season=8)])]
 
-    assert episode_stage.sibling_seasons(rows, ExternalIds(imdb="tt1")) == [5, 1, 3]
+    assert episode_siblings.sibling_seasons(rows, ExternalIds(imdb="tt1")) == [5, 1, 3]
 
 
 async def test_hold_reasons_name_why_a_result_is_a_suggestion() -> None:
