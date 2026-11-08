@@ -157,7 +157,7 @@ class ScanSummary:
     pruned: int
 
 
-def _apply_scan(row: Drive, d: ScannedDrive, now: datetime) -> None:
+def _apply_scan(row: Drive, d: ScannedDrive) -> None:
     """Refresh the host facts a scan can see. Applies to every lifecycle —
     a port-identity drive that renumbers is followed only because this
     updates device_path on enrolled rows too (spec §2)."""
@@ -224,7 +224,7 @@ async def reconcile_drives(
             )
             rows.append(row)
             logger.info("drive detected: %s %s %s (%s)", d.node, d.vendor, d.model, d.by_id_name or d.sysfs_port)
-        _apply_scan(row, d, now)
+        _apply_scan(row, d)
         # Presence is scanner-owned only for rows without a ripper (spec §1).
         if row.lifecycle is not DriveLifecycle.ENROLLED:
             row.present = True
