@@ -12,6 +12,7 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
+from arm_backend.auto_session import load_transcode_preset
 from arm_backend.session_routing import resolve_routed_session_id
 from arm_backend.path_template import (
     TemplateValidationError,
@@ -21,7 +22,7 @@ from arm_backend.path_template import (
     validate_template_or_http,
 )
 from arm_backend.transcode_apply import ResolvedTask, compute_outputs
-from arm_common import Job, Session, Track, TranscodePreset, User
+from arm_common import Job, Session, Track, User
 from arm_common.enums import MediaType
 from arm_common.schemas import (
     JobNamingPreviewResponse,
@@ -67,18 +68,6 @@ async def _preview_session(db: AsyncSession, job: Job, session_id: str | None) -
     return (await db.execute(select(Session).where(col(Session.id) == effective))).scalar_one_or_none()
 
 
-async def _load_transcode_preset(db: AsyncSession, sess: Session) -> TranscodePreset | None:
-    """The session's transcode preset, or None when it has none."""
-    # Resolve the session's transcode preset (may be None — compute_outputs then
-    # leaves {transcode_slug}/{ext} empty, which validate_template already
-    # forbids for non-iso templates that reference them). Mirrors auto_session.py.
-    if sess.transcode_preset_id is None:
-        return None
-    return (
-        await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-    ).scalar_one_or_none()
-
-
 def _preview_items(resolved: list[ResolvedTask], tracks: list[Track]) -> list[NamingPreviewItem]:
     """One preview item per resolved output, with its track's number."""
     track_number_by_id = {t.id: t.index for t in tracks}
@@ -114,7 +103,10 @@ async def job_naming_preview(
     if sess is None or not sess.output_path_template:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="job has no output template")
 
-    transcode_preset = await _load_transcode_preset(db, sess)
+    # Resolve the session's transcode preset (may be None — compute_outputs then
+    # leaves {transcode_slug}/{ext} empty, which validate_template already
+    # forbids for non-iso templates that reference them). Same loader as the apply path.
+    transcode_preset = await load_transcode_preset(db, sess)
 
     # Sorted by index to match the apply path (auto_session) — item order and
     # job_output_dir (taken from items[0]) must be deterministic, and a bare
