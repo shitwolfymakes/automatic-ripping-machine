@@ -506,6 +506,25 @@ async def emit_session_outcome(
     )
 
 
+async def emit_task_failed(hub: "WSHub", db: AsyncSession, task: TranscodeTask) -> None:
+    """Announce a task's `task.failed` event on `transcode.events`."""
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
+    ).scalar_one()
+    await hub.emit(
+        topic="transcode.events",
+        event_type="task.failed",
+        payload={
+            "task_id": task.id,
+            "session_application_id": task.session_application_id,
+            "last_error": task.last_error,
+        },
+        job_id=application.job_id,
+        track_id=task.source_track_id,
+        session=db,
+    )
+
+
 async def settle_session_application(db: AsyncSession, hub: "WSHub", application: SessionApplication) -> None:
     """Recompute the application's status from its tasks and announce a terminal
     transition; the caller commits."""

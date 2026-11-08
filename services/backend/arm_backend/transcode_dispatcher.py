@@ -566,7 +566,9 @@ class TranscodeDispatcher:
                         task.attempts,
                         task.id,
                     )
-                    await self._emit_task_failed(db, task)
+                    from arm_backend.transcode_apply import emit_task_failed, settle_session_application
+
+                    await emit_task_failed(self._hub, db, task)
                     # Race guard: the app row appearing between the two checks.
                     if stale_application is None:  # pragma: no cover
                         # Re-load defensively in case the row appeared between checks.
@@ -577,8 +579,6 @@ class TranscodeDispatcher:
                                 )
                             )
                         ).scalar_one()
-                    from arm_backend.transcode_apply import settle_session_application
-
                     await settle_session_application(db, self._hub, stale_application)
                 else:
                     task.status = TranscodeTaskStatus.QUEUED
@@ -681,25 +681,6 @@ class TranscodeDispatcher:
                     logger.warning("orphan sweep ws emit failed sap=%s: %s", application.id, exc)
                 acted += 1
         return acted
-
-    async def _emit_task_failed(self, db: AsyncSession, task: TranscodeTask) -> None:
-        application = (
-            await db.execute(
-                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
-            )
-        ).scalar_one()
-        await self._hub.emit(
-            topic="transcode.events",
-            event_type="task.failed",
-            payload={
-                "task_id": task.id,
-                "session_application_id": task.session_application_id,
-                "last_error": task.last_error,
-            },
-            job_id=application.job_id,
-            track_id=task.source_track_id,
-            session=db,
-        )
 
     # --- spawn loop ---------------------------------------------------------
 
@@ -837,12 +818,12 @@ class TranscodeDispatcher:
     async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
         """Terminal-fail a queued task that can never run as configured, emit
         `task.failed`, settle its session application, and commit."""
-        from arm_backend.transcode_apply import settle_session_application
+        from arm_backend.transcode_apply import emit_task_failed, settle_session_application
 
         task.status = TranscodeTaskStatus.FAILED
         task.last_error = reason
         logger.error("transcode task failed before spawn task_id=%s: %s", task.id, reason)
-        await self._emit_task_failed(db, task)
+        await emit_task_failed(self._hub, db, task)
         application = (
             await db.execute(
                 select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
