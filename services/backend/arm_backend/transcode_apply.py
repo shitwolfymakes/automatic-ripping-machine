@@ -71,6 +71,39 @@ def _format_duration_human(seconds: int | None) -> str:
     return f"{hours:02d}h{minutes:02d}m"
 
 
+def _music_track_title(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> str:
+    """Return the best-effort music title for the 1-based track index, or ''."""
+    # Best-effort per-track music title from the music track list.
+    tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
+    if isinstance(tracks_meta, list) and 0 <= index - 1 < len(tracks_meta):
+        entry = tracks_meta[index - 1]
+        if isinstance(entry, dict):
+            raw_title = entry.get("title")
+            if isinstance(raw_title, str):
+                return raw_title
+    return ""
+
+
+def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | None]:
+    """Return the track's effective (title, year, season), falling back to the job's."""
+    # Per-track identity overrides job-level (null = inherit). Multi-title discs
+    # set these; a movie's single track leaves them null and inherits job identity.
+    eff_title = track.title or job.title or ""
+    eff_year = track.year if track.year is not None else job.year
+    eff_season = track.season if track.season is not None else job.season
+    return eff_title, eff_year, eff_season
+
+
+def _episode_label(track: Track) -> str:
+    """Return the zero-padded episode label, with an end range when the title spans episodes."""
+    if track.episode_number is None:
+        return ""
+    if track.episode_number_end is not None and track.episode_number_end > track.episode_number:
+        # Multi-episode title: S01E01-E02 (the Plex / Jellyfin form).
+        return f"{track.episode_number:02d}-E{track.episode_number_end:02d}"
+    return f"{track.episode_number:02d}"
+
+
 def _build_track_ctx(
     job: Job,
     track: Track,
@@ -86,28 +119,10 @@ def _build_track_ctx(
     raw_music = metadata.get("music")
     music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
 
-    # Best-effort per-track music title from the music track list.
-    track_title = ""
-    tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
-    if isinstance(tracks_meta, list) and 0 <= track.index - 1 < len(tracks_meta):
-        entry = tracks_meta[track.index - 1]
-        if isinstance(entry, dict):
-            raw_title = entry.get("title")
-            if isinstance(raw_title, str):
-                track_title = raw_title
+    track_title = _music_track_title(music_meta, metadata, track.index)
 
-    # Per-track identity overrides job-level (null = inherit). Multi-title discs
-    # set these; a movie's single track leaves them null and inherits job identity.
-    eff_title = track.title or job.title or ""
-    eff_year = track.year if track.year is not None else job.year
-    eff_season = track.season if track.season is not None else job.season
-    if track.episode_number is None:
-        episode = ""
-    elif track.episode_number_end is not None and track.episode_number_end > track.episode_number:
-        # Multi-episode title: S01E01-E02 (the Plex / Jellyfin form).
-        episode = f"{track.episode_number:02d}-E{track.episode_number_end:02d}"
-    else:
-        episode = f"{track.episode_number:02d}"
+    eff_title, eff_year, eff_season = _effective_identity(job, track)
+    episode = _episode_label(track)
 
     # Human-readable metadata fields land inside path segments; sanitise
     # so titles like "Crown / She Said" don't introduce a phantom path
