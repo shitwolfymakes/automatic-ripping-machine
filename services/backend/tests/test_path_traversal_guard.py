@@ -26,8 +26,9 @@ from arm_backend import job_files
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
+from arm_backend import log_reader
 from arm_backend.routers import logs as logs_router
-from arm_backend.routers.logs import per_job_log_path
+from arm_backend.log_reader import per_job_log_path
 from arm_common import User
 from arm_common.ulid import is_valid_id, new_id
 
@@ -87,7 +88,7 @@ def test_per_job_log_path_rejects_bad_id() -> None:
 
 
 def test_per_job_log_path_builds_path_for_good_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     assert per_job_log_path(VALID_JOB_ID) == tmp_path / "jobs" / f"{VALID_JOB_ID}.log"
 
 
@@ -155,7 +156,7 @@ def test_delete_job_rejects_bad_id(bad: str, signing_key: bytes) -> None:
 def test_valid_id_passes_pattern_to_handler(
     signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)  # empty → 200, no lines
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)  # empty → 200, no lines
     app, token = _app_with(logs_router, signing_key)
     with TestClient(app) as client:
         r = client.get(f"/api/logs/{VALID_JOB_ID}", headers=_auth(token))

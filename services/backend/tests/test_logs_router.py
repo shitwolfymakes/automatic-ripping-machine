@@ -1,7 +1,7 @@
 """Phase 12 — `/api/logs/{job_id}` (NDJSON) and `/api/logs/{job_id}.zip`.
 
 Both endpoints grep `LOG_DIR/*.log` line-by-line for `record["job_id"]`.
-Tests monkeypatch `arm_backend.routers.logs.LOG_DIR` to a `tmp_path`
+Tests monkeypatch `arm_backend.log_reader.LOG_DIR` to a `tmp_path`
 seeded with hand-rolled JSONL across multiple service files.
 """
 
@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
+from arm_backend import log_reader
 from arm_backend.routers import logs as logs_router
 from arm_common import User
 from arm_common.models.user import GUEST_ROLE
@@ -87,7 +88,7 @@ def _auth(token: str) -> dict[str, str]:
 
 
 def test_grep_returns_only_matching_lines(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(
         tmp_path,
         service="arm-backend",
@@ -107,7 +108,7 @@ def test_grep_returns_only_matching_lines(tmp_path: Path, signing_key: bytes, mo
 
 
 def test_grep_files_alphabetical_no_resort(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="zzz-svc", lines=[_line(msg="z1"), _line(msg="z2")])
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="b1")])
     app, token = _make_app(signing_key)
@@ -122,7 +123,7 @@ def test_grep_files_alphabetical_no_resort(tmp_path: Path, signing_key: bytes, m
 def test_grep_per_file_limit_clamps_each_file(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="svc-a", lines=[_line(msg=f"a{i}") for i in range(5)])
     _seed(tmp_path, service="svc-b", lines=[_line(msg=f"b{i}") for i in range(5)])
     app, token = _make_app(signing_key)
@@ -135,8 +136,8 @@ def test_grep_per_file_limit_clamps_each_file(
 
 
 def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(logs_router.settings, "ARM_LOG_PER_FILE_HARD_CAP", 3)  # cheap cap for the test
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader.settings, "ARM_LOG_PER_FILE_HARD_CAP", 3)  # cheap cap for the test
     _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
@@ -146,7 +147,7 @@ def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeyp
 
 
 def test_grep_skips_unparseable_lines(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     path = tmp_path / "svc.log"
     with path.open("w", encoding="utf-8") as fh:
         fh.write("not json\n")
@@ -163,7 +164,7 @@ def test_grep_skips_unparseable_lines(tmp_path: Path, signing_key: bytes, monkey
 
 def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001")
@@ -173,7 +174,7 @@ def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pyte
 def test_zip_contains_one_entry_per_service_with_matching_lines(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(
         tmp_path,
         service="arm-backend",
@@ -201,8 +202,8 @@ def test_zip_contains_one_entry_per_service_with_matching_lines(
 
 
 def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(logs_router.settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 3)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader.settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 3)
     _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
@@ -214,7 +215,7 @@ def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch:
 
 def test_zip_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip")
@@ -239,7 +240,7 @@ def test_zip_uses_per_job_file_when_present(
     """When `/logs/jobs/<job_id>.log` exists, the zip is served from it
     directly (single entry) rather than scanning service logs. The
     service-level files are ignored even if they have matching lines."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     # Seed a stale service log with a different message — it should NOT
     # appear in the response because the per-job file is the source.
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="stale-service-line")])
@@ -262,7 +263,7 @@ def test_zip_falls_back_to_service_scan_when_per_job_file_absent(
 ) -> None:
     """Legacy path: a job whose run predated the per-job append still
     has its lines in service logs. The endpoint walks them as before."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="legacy-line")])
     # No /jobs/job_01JZXR7K3M5Q8N4VWA00000001.log exists.
     app, token = _make_app(signing_key)
@@ -277,7 +278,7 @@ def test_zip_falls_back_to_service_scan_when_per_job_file_absent(
 def test_grep_uses_per_job_file_when_present(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="stale-service-line")])
     _seed_per_job(tmp_path, job_id="job_01JZXR7K3M5Q8N4VWA00000001", lines=[_line(msg="per-job-line")])
 
@@ -295,7 +296,7 @@ def test_grep_uses_per_job_file_when_present(
 def test_zip_per_job_present_but_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """per-job file exists but has no lines → _read_capped_lines returns [],
     so no zip entry is written (85->93)."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     (tmp_path / "jobs").mkdir()
     (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").write_text("")
     app, token = _make_app(signing_key)
@@ -317,8 +318,8 @@ class _UnopenableFile:
 
 
 def test_stream_per_job_open_oserror(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(logs_router, "per_job_log_path", lambda _jid: _UnopenableFile())
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "per_job_log_path", lambda _jid: _UnopenableFile())
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
@@ -327,7 +328,7 @@ def test_stream_per_job_open_oserror(tmp_path: Path, signing_key: bytes, monkeyp
 
 
 def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     (tmp_path / "jobs").mkdir()
     with (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").open("w", encoding="utf-8") as fh:
         for i in range(5):
@@ -343,7 +344,7 @@ def test_stream_limit_zero_returns_no_lines(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
     _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
     app, token = _make_app(signing_key)
@@ -365,7 +366,7 @@ def test_stream_fallback_skips_unreadable_log(
 ) -> None:
     """A directory named like a log file: glob picks it, .open() raises
     OSError → the fallback `continue`s past it (140-141)."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     (tmp_path / "bad.log").mkdir()  # directory, not a file
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="hello")])
     app, token = _make_app(signing_key)
@@ -378,7 +379,7 @@ def test_stream_fallback_skips_unreadable_log(
 def test_zip_fallback_skips_unreadable_log(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """_read_capped_lines hits OSError opening the dir-as-log and returns []
     (161-162); the real log still lands in the zip."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     (tmp_path / "bad.log").mkdir()
     _seed(tmp_path, service="arm-backend", lines=[_line(msg="zipme")])
     app, token = _make_app(signing_key)
@@ -408,7 +409,7 @@ def _job_file(log_dir: Path, name: str, body: str, mtime: float) -> Path:
 def test_index_lists_size_and_mtime_newest_first(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _job_file(tmp_path, f"{_JOB_A}.log", "abc\n", 1_700_000_000)
     _job_file(tmp_path, f"{_JOB_B}.log", "abcdef\n", 1_700_000_100)
     app, token = _make_app(signing_key)
@@ -424,7 +425,7 @@ def test_index_lists_size_and_mtime_newest_first(
 def test_index_skips_invalid_names_and_non_log_files(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _job_file(tmp_path, f"{_JOB_A}.log", "x", 1_700_000_000)
     _job_file(tmp_path, "notes.log", "x", 1_700_000_000)
     _job_file(tmp_path, "..x.log", "x", 1_700_000_000)
@@ -440,7 +441,7 @@ def test_index_skips_a_file_that_cannot_be_checked(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A listed file whose `is_file` check raises `OSError` is skipped, not a 500."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _job_file(tmp_path, f"{_JOB_A}.log", "x", 1_700_000_000)
     broken = _job_file(tmp_path, f"{_JOB_B}.log", "x", 1_700_000_100)
     real_is_file = Path.is_file
@@ -459,7 +460,7 @@ def test_index_skips_a_file_that_cannot_be_checked(
 
 
 def test_index_missing_directory_is_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path / "nope")
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path / "nope")
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs", headers=_auth(token))
@@ -468,7 +469,7 @@ def test_index_missing_directory_is_empty(tmp_path: Path, signing_key: bytes, mo
 
 
 def test_index_rejects_bad_token(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     app, _ = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs", headers=_auth("not-a-jwt"))
@@ -476,7 +477,7 @@ def test_index_rejects_bad_token(tmp_path: Path, signing_key: bytes, monkeypatch
 
 
 def test_index_does_not_shadow_job_routes(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _job_file(tmp_path, f"{_JOB_A}.log", '{"job_id": "x", "msg": "hi"}\n', 1_700_000_000)
     app, token = _make_app(signing_key)
     with TestClient(app) as client:

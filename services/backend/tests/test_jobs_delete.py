@@ -24,7 +24,7 @@ from arm_backend import job_files
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
-from arm_backend.routers import logs as logs_router
+from arm_backend import log_reader
 from arm_common import DiscType, Job, JobStatus, User
 
 from tests._fakes import FakeSession
@@ -272,7 +272,7 @@ def test_delete_removes_per_job_log(tmp_path: Any, signing_key: bytes, monkeypat
     """The per-job aggregated log at `/logs/jobs/<job_id>.log` is removed
     when the Job row is hard-deleted. Cascade is filesystem-side, not
     DB-side — the DB doesn't know the file exists."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir()
     log_file = jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000002.log"
@@ -294,7 +294,7 @@ def test_delete_succeeds_when_per_job_log_missing(
 ) -> None:
     """Older jobs that ran before the per-job append landed have no log
     file. Delete must still succeed — no error, no 500."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     # Note: no /jobs/job_01JZXR7K3M5Q8N4VWA00000002.log exists.
     db = FakeSession()
     _seed_admin(db)
@@ -309,7 +309,7 @@ def test_delete_succeeds_when_per_job_log_missing(
 def test_bulk_delete_removes_per_job_logs(tmp_path: Any, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """Bulk delete removes the per-job log for every job that was actually
     deleted. Skipped (non-terminal) jobs keep their logs."""
-    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir()
     (jobs_dir / "job_01JZXR7K3M5Q8N4VWA00000002.log").write_text("{}\n")

@@ -24,7 +24,7 @@ from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.transcode_dispatcher import count_queued_encode_tasks, max_parallel_transcodes, release_gpu_for_task
 from arm_backend.db import get_session
-from arm_backend.routers.logs import LOG_DIR
+from arm_backend.log_reader import LOG_DIR, effective_cap
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.encoders import gpu_is_usable
 from arm_common.models import TranscodeTask
@@ -197,8 +197,7 @@ async def stream_transcode_log(
     path = _transcode_log_path(task_id)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
-    eff_limit = settings.ARM_LOG_PER_FILE_DEFAULT if limit is None else limit
-    cap = max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
+    cap = effective_cap(limit)
 
     def gen() -> Iterator[bytes]:
         yielded = 0
