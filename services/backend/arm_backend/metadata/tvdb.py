@@ -15,6 +15,30 @@ def _base_url() -> str:
     return settings.ARM_TVDB_BASE_URL
 
 
+def _tvdb_id_of(entry: dict[str, Any]) -> str | None:
+    """The entry's TVDB id as a string (`tvdb_id`, else `id`), or None without a usable one."""
+    tvdb_id = entry.get("tvdb_id") or entry.get("id")
+    if tvdb_id is not None and str(tvdb_id):
+        return str(tvdb_id)
+    return None
+
+
+def _imdb_from_remote_ids(remote_ids: Any) -> str | None:
+    """The first IMDb id in a TVDB remote-ids list, or None."""
+    for remote in remote_ids or []:
+        if isinstance(remote, dict) and str(remote.get("sourceName", "")).upper() == "IMDB" and remote.get("id"):
+            return str(remote["id"])
+    return None
+
+
+def _poster_of(entry: dict[str, Any]) -> str | None:
+    """The entry's poster URL (`image_url`, else `image`), or None without an http URL."""
+    poster = entry.get("image_url") or entry.get("image")
+    if isinstance(poster, str) and poster.startswith("http"):
+        return poster
+    return None
+
+
 def series_to_result(entry: Any) -> MetadataResult | None:
     """One TVDB search entry (or the `series` object of a remoteid result)
     → MetadataResult, or None without a name."""
@@ -26,15 +50,14 @@ def series_to_result(entry: Any) -> MetadataResult | None:
     raw_year = entry.get("year")
     year = year_from(str(raw_year)) if raw_year is not None else None
     payload: dict[str, Any] = dict(entry)
-    tvdb_id = entry.get("tvdb_id") or entry.get("id")
-    if tvdb_id is not None and str(tvdb_id):
-        payload["tvdb_id"] = str(tvdb_id)
-    for remote in entry.get("remote_ids") or []:
-        if isinstance(remote, dict) and str(remote.get("sourceName", "")).upper() == "IMDB" and remote.get("id"):
-            payload["imdb_id"] = str(remote["id"])
-            break
-    poster = entry.get("image_url") or entry.get("image")
-    if isinstance(poster, str) and poster.startswith("http"):
+    tvdb_id = _tvdb_id_of(entry)
+    if tvdb_id is not None:
+        payload["tvdb_id"] = tvdb_id
+    imdb_id = _imdb_from_remote_ids(entry.get("remote_ids"))
+    if imdb_id is not None:
+        payload["imdb_id"] = imdb_id
+    poster = _poster_of(entry)
+    if poster is not None:
         payload["poster_url"] = poster
     return MetadataResult(title=name, year=year, kind="tv", payload=payload)
 
@@ -149,8 +172,7 @@ class TVDBClient:
         result = series_to_result(data)
         if result is None or not isinstance(data, dict):
             raise LookupError("tvdb malformed response")
-        for remote in data.get("remoteIds") or []:
-            if isinstance(remote, dict) and str(remote.get("sourceName", "")).upper() == "IMDB" and remote.get("id"):
-                result.payload["imdb_id"] = str(remote["id"])
-                break
+        imdb = _imdb_from_remote_ids(data.get("remoteIds"))
+        if imdb is not None:
+            result.payload["imdb_id"] = imdb
         return result
