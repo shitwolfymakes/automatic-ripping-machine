@@ -22,7 +22,7 @@ import asyncio
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
@@ -207,6 +207,82 @@ async def count_queued_encode_tasks(db: AsyncSession) -> int:
 
 WAITING_FOR_PROBE_REASON = "waiting for GPU probe"
 
+
+def _assignment_before_device_lookup(preset: TranscodePreset | None) -> GpuAssignment | EncoderSpec:
+    """The final assignment when `preset` needs no device lookup (no preset,
+    an unknown encoder, a `preset` or `cpu_*` encoder, or a container the
+    encoder's vendor cannot write); otherwise the GPU-capable encoder spec
+    to look a device up for."""
+    if preset is None:
+        return GpuAssignment(gpu=None, encoder=None, action="spawn")
+    try:
+        spec = get_encoder(preset.encoder)
+    except ValueError:
+        return GpuAssignment(
+            gpu=None,
+            encoder=None,
+            action="fail",
+            reason=f"preset {preset.id} has unknown encoder {preset.encoder!r}",
+        )
+    if spec.kind == "preset":
+        return GpuAssignment(gpu=None, encoder=None, action="spawn")
+    if spec.kind == "cpu":
+        return GpuAssignment(gpu=None, encoder=spec, action="spawn")
+    if spec.vendor is not None and not vendor_supports_container(spec.vendor, preset.container):
+        # A preset saved before the API refused this pairing.
+        return GpuAssignment(
+            gpu=None,
+            encoder=spec,
+            action="fail",
+            reason=f"encoder {spec.id} cannot write {preset.container.value}; edit the preset to use mkv or mp4",
+        )
+    return spec
+
+
+def _assignment_with_no_candidate(
+    spec: EncoderSpec,
+    codec: str,
+    eligible: list[Gpu],
+    gpus: list[Gpu],
+    awaiting_probe: Callable[[Gpu], bool],
+) -> GpuAssignment:
+    """What to do when no eligible device can be claimed right now: wait for
+    a mid-probe device or a pending probe, fall back to CPU for `any_*`, or
+    fail."""
+    if eligible:
+        # Every eligible device is mid-probe; it is only absent for
+        # this tick, so wait rather than fail or fall back to CPU.
+        return GpuAssignment(gpu=None, encoder=spec, action="queue")
+    if any(gpu_could_serve(g, spec) and awaiting_probe(g) for g in gpus):
+        # A never-probed device that could serve this encoder has a
+        # probe scheduled or running; its result decides the device.
+        return GpuAssignment(gpu=None, encoder=spec, action="queue", reason=WAITING_FOR_PROBE_REASON)
+    if spec.kind == "any":
+        return GpuAssignment(gpu=None, encoder=cpu_encoder_for(codec), action="spawn")
+    return GpuAssignment(
+        gpu=None,
+        encoder=spec,
+        action="fail",
+        reason=f"no enabled device has verified {spec.id}; re-probe or enable it in Settings > GPUs",
+    )
+
+
+def _pick_free_gpu(candidates: list[Gpu]) -> Gpu | None:
+    """The best-ranked available device among `candidates`, or None."""
+    # Deterministic pick instead of row order: vendor rank, then device
+    # path, so a mixed-vendor host always prefers the same silicon.
+    free = sorted(
+        (g for g in candidates if g.status == GpuStatus.AVAILABLE),
+        key=lambda g: (VENDOR_RANK.get(g.vendor, 99), g.device_path),
+    )
+    return free[0] if free else None
+
+
+def _enabled_vendors(gpus: Sequence[Gpu]) -> set[GpuVendor]:
+    """The vendors that have at least one enabled device in `gpus`."""
+    return {g.vendor for g in gpus if g.enabled}
+
+
 # The running backend's dispatcher, for code paths with no app handle (the
 # apply-time encoder gate). None outside a running backend.
 _active_dispatcher: TranscodeDispatcher | None = None
@@ -358,7 +434,7 @@ class TranscodeDispatcher:
         error here surfaces the same as any other tick-body exception, via
         `run()`'s per-tick catch-all) and never affects `ok`."""
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
-        self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
+        self._enabled_gpu_vendors = _enabled_vendors(all_gpus)
 
     # --- stale claim sweep ---------------------------------------------------
 
@@ -867,35 +943,17 @@ class TranscodeDispatcher:
         Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
         a device in `probing_gpu_ids` is never claimed.
         """
-        if preset is None:
-            return GpuAssignment(gpu=None, encoder=None, action="spawn")
-        try:
-            spec = get_encoder(preset.encoder)
-        except ValueError:
-            return GpuAssignment(
-                gpu=None,
-                encoder=None,
-                action="fail",
-                reason=f"preset {preset.id} has unknown encoder {preset.encoder!r}",
-            )
-        if spec.kind == "preset":
-            return GpuAssignment(gpu=None, encoder=None, action="spawn")
-        if spec.kind == "cpu":
-            return GpuAssignment(gpu=None, encoder=spec, action="spawn")
+        decided = _assignment_before_device_lookup(preset)
+        if isinstance(decided, GpuAssignment):
+            return decided
+        assert preset is not None  # a spec is only returned for a real preset
+        spec = decided
         codec = str(spec.codec)
-        if spec.vendor is not None and not vendor_supports_container(spec.vendor, preset.container):
-            # A preset saved before the API refused this pairing.
-            return GpuAssignment(
-                gpu=None,
-                encoder=spec,
-                action="fail",
-                reason=f"encoder {spec.id} cannot write {preset.container.value}; edit the preset to use mkv or mp4",
-            )
         # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
         # gpus table is small (1-4 rows on real hosts) so the cost is trivial.
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
-        self._enabled_gpu_vendors = {g.vendor for g in all_gpus if g.enabled}
+        self._enabled_gpu_vendors = _enabled_vendors(all_gpus)
         # An `any_*` WebM preset must not land on a VAAPI device, whose
         # ffmpeg engine cannot write WebM (a pinned vaapi_* + WebM preset is
         # refused at create time).
@@ -905,31 +963,10 @@ class TranscodeDispatcher:
         ]
         candidates = [g for g in eligible if g.id not in self.probing_gpu_ids]
         if not candidates:
-            if eligible:
-                # Every eligible device is mid-probe; it is only absent for
-                # this tick, so wait rather than fail or fall back to CPU.
-                return GpuAssignment(gpu=None, encoder=spec, action="queue")
-            if any(gpu_could_serve(g, spec) and self.awaiting_probe(g) for g in all_gpus):
-                # A never-probed device that could serve this encoder has a
-                # probe scheduled or running; its result decides the device.
-                return GpuAssignment(gpu=None, encoder=spec, action="queue", reason=WAITING_FOR_PROBE_REASON)
-            if spec.kind == "any":
-                return GpuAssignment(gpu=None, encoder=cpu_encoder_for(codec), action="spawn")
-            return GpuAssignment(
-                gpu=None,
-                encoder=spec,
-                action="fail",
-                reason=f"no enabled device has verified {spec.id}; re-probe or enable it in Settings > GPUs",
-            )
-        # Deterministic pick instead of row order: vendor rank, then device
-        # path, so a mixed-vendor host always prefers the same silicon.
-        free = sorted(
-            (g for g in candidates if g.status == GpuStatus.AVAILABLE),
-            key=lambda g: (VENDOR_RANK.get(g.vendor, 99), g.device_path),
-        )
-        if not free:
+            return _assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe)
+        gpu = _pick_free_gpu(candidates)
+        if gpu is None:
             return GpuAssignment(gpu=None, encoder=spec, action="queue")
-        gpu = free[0]
         gpu.status = GpuStatus.BUSY
         gpu.claimed_by_task_id = task.id
         self.claimed_gpu_ids.add(gpu.id)
