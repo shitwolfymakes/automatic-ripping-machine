@@ -47,12 +47,12 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, effective_transcode_capable
-from arm_backend.transcode_container_spec import gpu_run_kwargs
+from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
 from arm_backend.ws import WSHub
 from arm_common import Gpu
-from arm_common.enums import GpuStatus, GpuVendor, VideoCodec
+from arm_common.enums import GpuStatus, VideoCodec
 
 logger = logging.getLogger("arm_backend.gpu_probe_runner")
 
@@ -366,12 +366,7 @@ class GpuProbeRunner:
         }
         # Same uid/gid/render-group handling as a real transcode spawn, so the
         # probe runs under exactly the permissions the encode will.
-        if self._settings.ARM_TRANSCODE_PUID:
-            env["PUID"] = self._settings.ARM_TRANSCODE_PUID
-        if self._settings.ARM_TRANSCODE_PGID:
-            env["PGID"] = self._settings.ARM_TRANSCODE_PGID
-        if gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and self._settings.ARM_RENDER_GID:
-            env["RENDER_GID"] = self._settings.ARM_RENDER_GID
+        env.update(container_identity_env(self._settings, gpu.vendor))
         kwargs: dict[str, Any] = {
             "image": image,
             "command": list(PROBE_COMMAND),

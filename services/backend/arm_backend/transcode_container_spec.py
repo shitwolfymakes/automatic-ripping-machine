@@ -7,8 +7,26 @@ from __future__ import annotations
 
 from typing import Any
 
+from arm_backend.config import Settings
 from arm_common import Gpu
 from arm_common.enums import GpuVendor
+
+
+def container_identity_env(settings: Settings, gpu_vendor: GpuVendor | None) -> dict[str, str]:
+    env: dict[str, str] = {}
+    # Override the drop uid/gid so the transcoder writes /media as the
+    # owner of the (possibly remote) media export, instead of the
+    # entrypoint's default uid. Empty settings leave the default in place.
+    if settings.ARM_TRANSCODE_PUID:
+        env["PUID"] = settings.ARM_TRANSCODE_PUID
+    if settings.ARM_TRANSCODE_PGID:
+        env["PGID"] = settings.ARM_TRANSCODE_PGID
+    # VAAPI/QSV: the entrypoint self-derives the render gid from the
+    # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
+    # (passed through as RENDER_GID, which wins in the entrypoint).
+    if gpu_vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and settings.ARM_RENDER_GID:
+        env["RENDER_GID"] = settings.ARM_RENDER_GID
+    return env
 
 
 def gpu_run_kwargs(gpu: Gpu) -> dict[str, Any]:

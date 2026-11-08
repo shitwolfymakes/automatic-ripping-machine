@@ -35,7 +35,7 @@ from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.container_logging import log_config
 from arm_backend.docker_client import HealingDockerClient
 from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
-from arm_backend.transcode_container_spec import gpu_run_kwargs
+from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs
 from arm_backend.transcode_images import (
     VARIANT_SUFFIX,
     image_for,
@@ -214,6 +214,59 @@ def gpu_awaiting_probe(gpu: Gpu) -> bool:
     """`TranscodeDispatcher.awaiting_probe` on the running dispatcher; False
     when none is running."""
     return _active_dispatcher is not None and _active_dispatcher.awaiting_probe(gpu)
+
+
+def _backend_url_for_spawn(settings: Settings) -> str:
+    remote = bool(settings.ARM_TRANSCODE_DOCKER_HOST)
+    if remote and not settings.ARM_TRANSCODE_BACKEND_URL:
+        logger.warning(
+            "ARM_TRANSCODE_DOCKER_HOST set but ARM_TRANSCODE_BACKEND_URL empty — "
+            "remote transcoder will use the unroutable in-network https://arm-backend:8443; "
+            "set ARM_TRANSCODE_BACKEND_URL to a host-routable backend URL"
+        )
+    return (
+        settings.ARM_TRANSCODE_BACKEND_URL
+        if remote and settings.ARM_TRANSCODE_BACKEND_URL
+        else "https://arm-backend:8443"
+    )
+
+
+def _task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[str, str]:
+    return {
+        "ARM_TRANSCODE_TASK_ID": task.id,
+        "ARM_BACKEND_URL": backend_url,
+        "ARM_SERVICE_TOKEN": settings.ARM_SERVICE_TOKEN,
+        "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
+        # Phase 12 — per-task log filename so parallel transcoders don't
+        # clobber a shared `/logs/arm-transcode.log` rotation.
+        "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
+    }
+
+
+def _task_volumes(settings: Settings) -> dict[str, dict[str, str]]:
+    certs_root = Path(settings.ARM_HOST_CERTS_PATH)
+    return {
+        settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
+        settings.ARM_HOST_MEDIA_PATH: {"bind": "/media", "mode": "rw"},
+        settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
+        str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
+    }
+
+
+def _gpu_env(gpu: Gpu | None, encoder: EncoderSpec | None) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if encoder is not None:
+        # The worker resolves everything from the catalog id. The
+        # ARM_GPU_* vars below are a harmless fallback only: an image that
+        # predates --probe-device can never verify a row, so it is never
+        # handed a GPU; the upgrade path is rebuilding or pulling it.
+        env["ARM_TRANSCODE_ENCODER"] = encoder.id
+    if gpu is not None:
+        env["ARM_GPU_VENDOR"] = gpu.vendor.value
+        env["ARM_GPU_DEVICE"] = gpu.device_path
+        if encoder is not None:
+            env["ARM_GPU_CODEC"] = str(encoder.codec)
+    return env
 
 
 class TranscodeDispatcher:
@@ -1120,63 +1173,20 @@ class TranscodeDispatcher:
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
         remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
-        if remote and not self._settings.ARM_TRANSCODE_BACKEND_URL:
-            logger.warning(
-                "ARM_TRANSCODE_DOCKER_HOST set but ARM_TRANSCODE_BACKEND_URL empty — "
-                "remote transcoder will use the unroutable in-network https://arm-backend:8443; "
-                "set ARM_TRANSCODE_BACKEND_URL to a host-routable backend URL"
-            )
-        backend_url = (
-            self._settings.ARM_TRANSCODE_BACKEND_URL
-            if remote and self._settings.ARM_TRANSCODE_BACKEND_URL
-            else "https://arm-backend:8443"
-        )
+        backend_url = _backend_url_for_spawn(self._settings)
+        gpu = assignment.gpu if assignment is not None else None
+        gpu_vendor = gpu.vendor if gpu is not None else None
         env = {
-            "ARM_TRANSCODE_TASK_ID": task.id,
-            "ARM_BACKEND_URL": backend_url,
-            "ARM_SERVICE_TOKEN": self._settings.ARM_SERVICE_TOKEN,
-            "ARM_LOG_LEVEL": self._settings.ARM_LOG_LEVEL,
-            # Phase 12 — per-task log filename so parallel transcoders don't
-            # clobber a shared `/logs/arm-transcode.log` rotation.
-            "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
+            **_task_env(self._settings, task, backend_url),
+            **container_identity_env(self._settings, gpu_vendor),
+            **_gpu_env(gpu, assignment.encoder if assignment is not None else None),
         }
-        # Override the drop uid/gid so the transcoder writes /media as the
-        # owner of the (possibly remote) media export, instead of the
-        # entrypoint's default uid. Empty settings leave the default in place.
-        if self._settings.ARM_TRANSCODE_PUID:
-            env["PUID"] = self._settings.ARM_TRANSCODE_PUID
-        if self._settings.ARM_TRANSCODE_PGID:
-            env["PGID"] = self._settings.ARM_TRANSCODE_PGID
-        certs_root = Path(self._settings.ARM_HOST_CERTS_PATH)
-        volumes = {
-            self._settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
-            self._settings.ARM_HOST_MEDIA_PATH: {"bind": "/media", "mode": "rw"},
-            self._settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
-            str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
-        }
-        extra_run_kwargs: dict[str, Any] = {}
-        if assignment is not None and assignment.encoder is not None:
-            # The worker resolves everything from the catalog id. The
-            # ARM_GPU_* vars below are a harmless fallback only: an image that
-            # predates --probe-device can never verify a row, so it is never
-            # handed a GPU; the upgrade path is rebuilding or pulling it.
-            env["ARM_TRANSCODE_ENCODER"] = assignment.encoder.id
-        if assignment is not None and assignment.gpu is not None:
-            env["ARM_GPU_VENDOR"] = assignment.gpu.vendor.value
-            env["ARM_GPU_DEVICE"] = assignment.gpu.device_path
-            if assignment.encoder is not None:
-                env["ARM_GPU_CODEC"] = str(assignment.encoder.codec)
-            # VAAPI/QSV: the entrypoint self-derives the render gid from the
-            # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
-            # (passed through as RENDER_GID, which wins in the entrypoint).
-            if assignment.gpu.vendor in (GpuVendor.VAAPI, GpuVendor.QSV) and self._settings.ARM_RENDER_GID:
-                env["RENDER_GID"] = self._settings.ARM_RENDER_GID
-            extra_run_kwargs.update(gpu_run_kwargs(assignment.gpu))
+        volumes = _task_volumes(self._settings)
+        extra_run_kwargs = gpu_run_kwargs(gpu) if gpu is not None else {}
         # Container hostname is the last 12 chars of the ULID — short enough
         # for `docker ps` and unique enough that two simultaneous transcoders
         # never collide.
         hostname = f"arm-transcode-{task.id[-12:]}"
-        gpu_vendor = assignment.gpu.vendor if assignment is not None and assignment.gpu is not None else None
         image = image_for(self._settings, gpu_vendor, exists=self.variant_available)
         run_kwargs: dict[str, Any] = dict(
             image=image,
