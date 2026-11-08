@@ -20,7 +20,7 @@ from arm_backend.path_template import (
     tokens_for_media,
     validate_template_or_http,
 )
-from arm_backend.transcode_apply import compute_outputs
+from arm_backend.transcode_apply import ResolvedTask, compute_outputs
 from arm_common import Job, Session, Track, TranscodePreset, User
 from arm_common.enums import MediaType
 from arm_common.schemas import (
@@ -47,58 +47,40 @@ async def naming_variables(
     return NamingVariablesResponse(variables=variables)
 
 
-@router.get("/api/jobs/{job_id}/naming-preview", response_model=JobNamingPreviewResponse)
-async def job_naming_preview(
-    job_id: JobIdParam,
-    session_id: str | None = Query(default=None, description="Preview this session instead of the job's effective one"),
-    _: User = Depends(require_jwt),
-    db: AsyncSession = Depends(get_session),
-) -> JobNamingPreviewResponse:
-    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-
-    sess: Session | None = None
+async def _preview_session(db: AsyncSession, job: Job, session_id: str | None) -> Session | None:
+    """The session to preview: the one asked for (404 if unknown), else the job's routed one (None if none)."""
     if session_id is not None:
         # The Apply dialog previews the session the operator is about to pick,
         # which is not the job's effective one until it is applied.
         sess = (await db.execute(select(Session).where(col(Session.id) == session_id))).scalar_one_or_none()
         if sess is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown session_id: {session_id}")
-    else:
-        # The ROUTED session (pending_session_id, else the compatibility-gated
-        # drive default, else a session_routes match) - via the shared
-        # auto_session helper so previews cannot drift from apply.
-        # auto_transcode_on_idle deliberately does not gate the preview: it only
-        # gates unattended queueing at rip-complete (gap analysis §5.1).
-        effective: str | None = await resolve_routed_session_id(db, job)
-        if effective is not None:
-            sess = (await db.execute(select(Session).where(col(Session.id) == effective))).scalar_one_or_none()
-    if sess is None or not sess.output_path_template:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="job has no output template")
+        return sess
+    # The ROUTED session (pending_session_id, else the compatibility-gated
+    # drive default, else a session_routes match) - via the shared
+    # auto_session helper so previews cannot drift from apply.
+    # auto_transcode_on_idle deliberately does not gate the preview: it only
+    # gates unattended queueing at rip-complete (gap analysis §5.1).
+    effective: str | None = await resolve_routed_session_id(db, job)
+    if effective is None:
+        return None
+    return (await db.execute(select(Session).where(col(Session.id) == effective))).scalar_one_or_none()
 
+
+async def _load_transcode_preset(db: AsyncSession, sess: Session) -> TranscodePreset | None:
+    """The session's transcode preset, or None when it has none."""
     # Resolve the session's transcode preset (may be None — compute_outputs then
     # leaves {transcode_slug}/{ext} empty, which validate_template already
     # forbids for non-iso templates that reference them). Mirrors auto_session.py.
-    transcode_preset: TranscodePreset | None = None
-    if sess.transcode_preset_id is not None:
-        transcode_preset = (
-            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-        ).scalar_one_or_none()
+    if sess.transcode_preset_id is None:
+        return None
+    return (
+        await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+    ).scalar_one_or_none()
 
-    # Sorted by index to match the apply path (auto_session) — item order and
-    # job_output_dir (taken from items[0]) must be deterministic, and a bare
-    # SELECT has no ordering guarantee.
-    tracks = sorted(
-        (await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all(),
-        key=lambda t: t.index,
-    )
 
-    try:
-        resolved = compute_outputs(job, tracks, sess, transcode_preset)
-    except TemplateValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-
+def _preview_items(resolved: list[ResolvedTask], tracks: list[Track]) -> list[NamingPreviewItem]:
+    """One preview item per resolved output, with its track's number."""
     track_number_by_id = {t.id: t.index for t in tracks}
     items: list[NamingPreviewItem] = []
     for r in resolved:
@@ -114,6 +96,40 @@ async def job_naming_preview(
                 output_name=p.name,
             )
         )
+    return items
+
+
+@router.get("/api/jobs/{job_id}/naming-preview", response_model=JobNamingPreviewResponse)
+async def job_naming_preview(
+    job_id: JobIdParam,
+    session_id: str | None = Query(default=None, description="Preview this session instead of the job's effective one"),
+    _: User = Depends(require_jwt),
+    db: AsyncSession = Depends(get_session),
+) -> JobNamingPreviewResponse:
+    job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
+
+    sess = await _preview_session(db, job, session_id)
+    if sess is None or not sess.output_path_template:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="job has no output template")
+
+    transcode_preset = await _load_transcode_preset(db, sess)
+
+    # Sorted by index to match the apply path (auto_session) — item order and
+    # job_output_dir (taken from items[0]) must be deterministic, and a bare
+    # SELECT has no ordering guarantee.
+    tracks = sorted(
+        (await db.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all(),
+        key=lambda t: t.index,
+    )
+
+    try:
+        resolved = compute_outputs(job, tracks, sess, transcode_preset)
+    except TemplateValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+
+    items = _preview_items(resolved, tracks)
     job_output_dir = items[0].output_dir if items else ""
     job_output_name = sanitize_path_component(job.title or "")
     return JobNamingPreviewResponse(
