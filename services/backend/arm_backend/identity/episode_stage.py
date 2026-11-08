@@ -25,7 +25,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -243,12 +243,20 @@ async def _fit_season(provider: EpisodeListProvider, req: _Request, season: int)
     return SeasonFit(result, nominal, conflict)
 
 
+class _SeasonPick(NamedTuple):
+    """The season `_pick_season` chose: its fit, the ranking of the seasons
+    tried, and whether the scan stopped early (seasons were left untried)."""
+
+    season: int
+    fit: SeasonFit
+    ranked: list[tuple[int, MatchResult]]
+    stopped_early: bool
+
+
 async def _pick_season(
     provider: EpisodeListProvider, req: _Request, order: Sequence[tuple[int, bool]]
-) -> tuple[int, SeasonFit, list[tuple[int, MatchResult]], bool] | None:
-    """The best-ranked season's fit, the ranking of the seasons tried, and
-    whether the scan stopped early (seasons were left untried); None when no
-    season could be fetched.
+) -> _SeasonPick | None:
+    """The chosen season (`_SeasonPick`); None when no season could be fetched.
 
     Seasons are tried in `order`. A season with `from_hint` set stops the
     scan when it ranks first and nothing holds its fit (judged as if
@@ -262,11 +270,11 @@ async def _pick_season(
         fits[season] = fit
         ranked = rank_seasons({s: f.result for s, f in fits.items()})
         if from_hint and ranked[0][0] == season and not hold_reasons(fit, ranked, scanned=True, auto_apply=True):
-            return season, fit, ranked, i < len(order) - 1
+            return _SeasonPick(season, fit, ranked, i < len(order) - 1)
     if not ranked:
         return None
     season = ranked[0][0]
-    return season, fits[season], ranked, False
+    return _SeasonPick(season, fits[season], ranked, False)
 
 
 def _ok_claims(
@@ -449,8 +457,8 @@ async def _match(
 
     req = _Request(show_id, ids, ctx.titles, ctx.rows, disc_number, ctx.job.disc_total, tolerance, ctx.placed)
     picked = await _pick_season(provider, req, order)
-    if picked is None or not picked[1].result.matches:
-        return _miss_outcome(source_id, "no episodes matched", inputs, ctx.now, picked[1].result if picked else None)
+    if picked is None or not picked.fit.result.matches:
+        return _miss_outcome(source_id, "no episodes matched", inputs, ctx.now, picked.fit.result if picked else None)
     season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
         season,
