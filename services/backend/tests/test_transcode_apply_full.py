@@ -186,6 +186,27 @@ async def test_find_collisions_existing_task_populates_job_id(tmp_path: Path) ->
     assert cols[0].existing_job_id == "job_owner"
 
 
+async def test_find_collisions_existing_task_without_application_id(tmp_path: Path) -> None:
+    """An empty application id is never looked up, so the job id stays None."""
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_live",
+            session_application_id="",
+            source_track_id="trk_1",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="a.flac",
+            progress_pct=0,
+            attempts=0,
+        )
+    ]
+    cols = await find_collisions(db, ["a.flac"], tmp_path)  # type: ignore[arg-type]
+    assert len(cols) == 1
+    assert cols[0].reason == "existing_task"
+    assert cols[0].existing_task_id == "txt_live"
+    assert cols[0].existing_job_id is None
+
+
 async def test_find_collisions_on_disk(tmp_path: Path) -> None:
     (tmp_path / "b.flac").write_text("x")
     cols = await find_collisions(FakeSession(), ["b.flac"], tmp_path)  # type: ignore[arg-type]
