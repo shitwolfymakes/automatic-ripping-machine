@@ -2,7 +2,6 @@ import asyncio
 import contextvars
 import logging
 import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -15,6 +14,7 @@ from arm_backend.metadata.musicbrainz import TOC_NOT_FOUND
 from arm_backend.metadata.source_selection import fingerprint_sources, online_source_ids, sources_for
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
+from arm_backend.metadata.volume_label import normalize_volume_label
 from arm_common import Config, DiscType
 from arm_common.schemas import ScanResult
 
@@ -24,25 +24,10 @@ PROVIDER_TIMEOUT_SECONDS = 8.0
 
 DISPATCH_TIMEOUT_SECONDS = 25.0
 
-_YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
 # A release year at the end of a disc-hint title (`THE_OFFICE_2005_S1_D2` ->
 # "the office 2005"). Capped at 2029 so a title ending in a later number
 # (BLADE_RUNNER_2049) is never shortened.
 _HINT_YEAR_SUFFIX_RE = re.compile(r"\s*\(?(?:19\d{2}|20[0-2]\d)\)?$")
-# DVDs commonly bake the broadcast standard into the volume label
-# (e.g. `THE_MATRIX_NTSC` or `MOVIE_NTSC_1999`). It's noise for title
-# matching — strip it before the underscore-to-space pass so OMDB/TMDB
-# searches don't see "MATRIX NTSC".
-_NTSC_TOKEN_RE = re.compile(r"_NTSC(?=[_.\s\-]|$)", re.IGNORECASE)
-# Blu-rays bake disc-format branding into the title/label the same way.
-# v2 stripped a fixed set of "Blu-rayTM" suffixes off the BDMV disc title
-# (see arm/ripper/main/identify.py); reproduce that here generically so a
-# label like `MOVIE_BLU_RAY`, `Movie - Blu-rayTM`, or `BLURAY` loses the
-# branding before lookup. The optional `tm|™` covers the trademark glyph
-# in either pre- or post-ASCII-normalised form.
-_BLURAY_BRANDING_RE = re.compile(r"[\s_\-]*blu[\s_\-]?ray(?:\s*(?:tm|™))?", re.IGNORECASE)
-# `_BD` (Blu-ray Disc) token, mirroring the `_NTSC` treatment.
-_BD_TOKEN_RE = re.compile(r"_BD(?=[_.\s\-]|$)", re.IGNORECASE)
 
 # One entry per source the dispatcher tried (or skipped) during an identify
 # call: why the automatic match missed, shown on the job's review card.
@@ -70,29 +55,6 @@ _attempt_log: contextvars.ContextVar[_AttemptLog | None] = contextvars.ContextVa
 _Candidate = tuple[str, int | None, bool]
 
 
-def _normalize_volume_label(label: str) -> tuple[str, int | None]:
-    # Fold compatibility glyphs WITHOUT dropping non-ASCII: NFKC turns
-    # "Blu-ray™" → "Blu-rayTM" and full-width forms → half-width, but keeps
-    # accents and non-Latin scripts intact ("Amélie", "Война и мир", "君の名は"
-    # all survive) so worldwide titles still reach the providers. This is
-    # deliberately NOT the NFKD→ASCII strip `slugify` uses — that targets
-    # ASCII filename tokens; here we must preserve the real searchable title.
-    cleaned = unicodedata.normalize("NFKC", label)
-    cleaned = _NTSC_TOKEN_RE.sub("", cleaned)
-    cleaned = _BD_TOKEN_RE.sub("", cleaned)
-    cleaned = _BLURAY_BRANDING_RE.sub("", cleaned)
-    cleaned = cleaned.replace("_", " ").replace(".", " ").strip()
-    year: int | None = None
-    m = re.search(r"(\d{4})", cleaned)
-    if m:
-        candidate = int(m.group(1))
-        if 1900 <= candidate <= 2100:
-            year = candidate
-    cleaned = _YEAR_SUFFIX_RE.sub("", cleaned).strip()
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    return cleaned, year
-
-
 def _search_candidates(
     scan: ScanResult, cfg: Config, title_hint: str | None, title_hint_is_tv: bool
 ) -> list[_Candidate]:
@@ -110,7 +72,7 @@ def _search_candidates(
     label_title: str | None = None
     label_year: int | None = None
     if scan.volume_label:
-        label_title, label_year = _normalize_volume_label(scan.volume_label)
+        label_title, label_year = normalize_volume_label(scan.volume_label)
     # D-4: the volume label is a search candidate only while the `label`
     # disc hint is enabled; an operator who ignores disc text gets no
     # label search at all. Its year still narrows the hint candidate.

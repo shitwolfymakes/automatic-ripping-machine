@@ -140,9 +140,10 @@ class LabelSource:
             fields["disc_total"] = hints.disc_total
         # A search-title hint is only worth proposing when parse_label actually
         # stripped a season/disc marker off the label — otherwise this is just
-        # a cruder version of the dispatcher's own _normalize_volume_label
-        # pass (which also strips NTSC/Blu-ray branding and keeps the year for
-        # a filtered search), and running it first only risks a worse hit
+        # a cruder version of the dispatcher's volume-label pass
+        # (`metadata.volume_label.normalize_volume_label`, which also strips
+        # NTSC/Blu-ray branding and keeps the year for a filtered search), and
+        # running it first only risks a worse hit
         # ("THE_MATRIX_NTSC" -> "the matrix ntsc", "ALIEN_1979" -> "alien
         # 1979" instead of a year-filtered "alien"/1979).
         if (

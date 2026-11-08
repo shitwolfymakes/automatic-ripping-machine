@@ -11,7 +11,8 @@ from __future__ import annotations
 import httpx
 import respx
 
-from arm_backend.metadata.dispatcher import MetadataDispatcher, _normalize_volume_label
+from arm_backend.metadata.dispatcher import MetadataDispatcher
+from arm_backend.metadata.volume_label import normalize_volume_label
 from arm_common import Config, DiscType
 from arm_common.schemas import ScanResult
 
@@ -35,7 +36,7 @@ def _scan(**kw: object) -> ScanResult:
 
 def test_normalize_year_out_of_range() -> None:
     """A 4-digit run outside 1900-2100 is not treated as a year (35->37)."""
-    title, year = _normalize_volume_label("DISC_3050")
+    title, year = normalize_volume_label("DISC_3050")
     assert year is None
     assert "3050" not in title or title  # number kept in title, just not parsed as year
 
