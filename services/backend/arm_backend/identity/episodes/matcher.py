@@ -144,13 +144,8 @@ def _confidence(delta: int | None, eff_tol: int) -> float:
     return round(min(1.0, max(0.0, 1 - delta / eff_tol)), 3)
 
 
-def align(
-    titles: Sequence[TitleIn],
-    episodes: Sequence[Episode],
-    *,
-    tolerance: int = 300,
-    anchor: int | None = None,
-) -> MatchResult:
+def _check_inputs(titles: Sequence[TitleIn], tolerance: int) -> None:
+    """Rule E: raise ValueError for a tolerance below 1 or duplicate title refs."""
     # Rule E: raise ValueError for invalid tolerance
     if tolerance < 1:
         raise ValueError("tolerance must be >= 1")
@@ -160,18 +155,33 @@ def align(
     if len(refs) != len(set(refs)):
         raise ValueError("title refs must be unique")
 
-    # Rule B: compute ref_rt = median of known runtimes, or median of all title lengths
+
+def _reference_runtime(titles: Sequence[TitleIn], episodes: Sequence[Episode]) -> int:
+    """Rule B: the median of the known episode runtimes, else the median of all title lengths, else 0."""
     known_runtimes_list: list[int] = [rt for e in episodes if (rt := _known(e.runtime_s)) is not None]
     if known_runtimes_list:
-        ref_rt = int(statistics.median_low(known_runtimes_list))
-    else:
-        all_lengths = [t.seconds for t in titles]
-        ref_rt = int(statistics.median_low(all_lengths)) if all_lengths else 0
+        return int(statistics.median_low(known_runtimes_list))
+    all_lengths = [t.seconds for t in titles]
+    return int(statistics.median_low(all_lengths)) if all_lengths else 0
 
-    # Rule C: play-all detection (now with ref_rt and other-titles support)
-    play_all = tuple(
-        t.ref for i, t in enumerate(titles) if _is_play_all(t.seconds, episodes, tolerance, ref_rt, titles, i)
-    )
+
+def _play_all_refs(
+    titles: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int, ref_rt: int
+) -> tuple[str, ...]:
+    """Rule C: the refs of the titles that look like play-all titles, in title order."""
+    return tuple(t.ref for i, t in enumerate(titles) if _is_play_all(t.seconds, episodes, tolerance, ref_rt, titles, i))
+
+
+def align(
+    titles: Sequence[TitleIn],
+    episodes: Sequence[Episode],
+    *,
+    tolerance: int = 300,
+    anchor: int | None = None,
+) -> MatchResult:
+    _check_inputs(titles, tolerance)
+    ref_rt = _reference_runtime(titles, episodes)
+    play_all = _play_all_refs(titles, episodes, tolerance, ref_rt)
     elig = [t for t in titles if t.ref not in play_all]
     m, n = len(elig), len(episodes)
 
