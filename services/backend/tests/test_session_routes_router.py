@@ -228,7 +228,7 @@ def test_upsert_media_type_mismatch_422(signing_key: bytes) -> None:
 def test_upsert_movie_route_to_iso_session_accepted(signing_key: bytes) -> None:
     """A movie route pointing at an iso-dump session is expressible: an
     iso/data session consumes a dump of any video disc, matching what the
-    apply path (_media_types_compatible) already allows."""
+    apply path (media_types_compatible) already allows."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["sessions"] = [_session(session_id="ses_iso", media_type=MediaType.ISO)]

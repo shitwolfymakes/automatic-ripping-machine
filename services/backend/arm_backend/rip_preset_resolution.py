@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auto_session import resolve_routed_session_id
+from arm_backend.session_routing import resolve_routed_session_id
 from arm_common import DiscType, Job, RipPreset, Session
 
 logger = logging.getLogger("arm_backend.rip_preset_resolution")

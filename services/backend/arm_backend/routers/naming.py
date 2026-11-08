@@ -12,7 +12,7 @@ from arm_backend.routers._params import JobIdParam
 from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.path_sanitize import sanitize_path_component
-from arm_backend.auto_session import resolve_routed_session_id
+from arm_backend.session_routing import resolve_routed_session_id
 from arm_backend.path_template import (
     TemplateValidationError,
     expand_template,
@@ -58,7 +58,7 @@ async def _preview_session(db: AsyncSession, job: Job, session_id: str | None) -
         return sess
     # The ROUTED session (pending_session_id, else the compatibility-gated
     # drive default, else a session_routes match) - via the shared
-    # auto_session helper so previews cannot drift from apply.
+    # session_routing helper so previews cannot drift from apply.
     # auto_transcode_on_idle deliberately does not gate the preview: it only
     # gates unattended queueing at rip-complete (gap analysis §5.1).
     effective: str | None = await resolve_routed_session_id(db, job)

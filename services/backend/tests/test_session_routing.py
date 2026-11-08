@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from arm_backend.auto_session import auto_apply_allowed, resolve_routed_session_id
+from arm_backend.session_routing import auto_apply_allowed, resolve_routed_session_id
 from arm_common import (
     Config,
     DiscType,
