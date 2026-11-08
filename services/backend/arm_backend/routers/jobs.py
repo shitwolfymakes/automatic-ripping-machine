@@ -24,7 +24,7 @@ from arm_backend.job_abandon import abandon_job_transition
 from arm_backend.job_files import delete_job_files
 from arm_backend.job_views import job_detail_view, job_list_views
 from arm_backend.log_reader import per_job_log_path
-from arm_backend.metadata.base import external_ids_of
+from arm_backend.metadata.identity_payload import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.routers._params import JobIdParam

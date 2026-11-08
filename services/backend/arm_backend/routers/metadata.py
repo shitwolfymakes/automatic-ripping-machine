@@ -15,9 +15,10 @@ from arm_backend.auth import require_jwt
 from arm_backend.db import get_session
 from arm_backend.identity.sources.registry import search_provider_setting
 from arm_backend.metadata.base import LookupError as MetaLookupError
-from arm_backend.metadata.base import LookupTimeout, MetadataResult, external_ids_of
+from arm_backend.metadata.base import LookupTimeout, MetadataResult
 from arm_backend.metadata.details_cache import TtlCache
 from arm_backend.metadata.facts import facts_for
+from arm_backend.metadata.identity_payload import external_ids_of
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.poster import extract_poster_url
 from arm_backend.metadata.source_selection import (

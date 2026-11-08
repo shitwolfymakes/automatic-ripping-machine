@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arm_backend.metadata.base import MetadataResult, external_ids_of, metadata_with_identity
+from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.identity_payload import external_ids_of, metadata_with_identity
 from arm_backend.metadata.poster import extract_poster_url
 
 
