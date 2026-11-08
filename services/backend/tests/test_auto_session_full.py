@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from arm_backend import auto_session as asx
 from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session
 from arm_backend.path_template import TemplateValidationError
+from arm_backend.session_eviction import evict_colliding_tasks
 from arm_common import (
     Config,
     Drive,
@@ -209,7 +210,7 @@ _COLLIDE_PATH = "Iron Man (2008)/Iron Man - plex-1080p-h-265.mkv"
 
 async def test_overwrite_fs_only_collision_no_db_row(tmp_path: Path) -> None:
     """overwrite=True, output path exists on disk but the applying job has no
-    session_applications at all yet → _evict_colliding_tasks returns early
+    session_applications at all yet → evict_colliding_tasks returns early
     on the `own_application_ids` guard (no prior application to scope to)."""
     _media_root(tmp_path)
     db = FakeSession()
@@ -228,7 +229,7 @@ async def test_overwrite_fs_only_collision_with_own_prior_application(tmp_path: 
     """overwrite=True, output path exists on disk (no DB task), but the
     applying job DOES have a prior session_application (for an unrelated
     path) → own_application_ids is non-empty, so the deeper `if not rows`
-    early-return inside _evict_colliding_tasks is the one that fires."""
+    early-return inside evict_colliding_tasks is the one that fires."""
     _media_root(tmp_path)
     db = FakeSession()
     job = _seed(db)
@@ -340,7 +341,7 @@ async def test_evict_skips_application_deleted_before_cleanup() -> None:
 
     db.flush = flush_with_concurrent_delete  # type: ignore[method-assign]
 
-    await asx._evict_colliding_tasks(db, [_COLLIDE_PATH], job_id=job.id)
+    await evict_colliding_tasks(db, [_COLLIDE_PATH], job_id=job.id)
 
     assert db.rows["transcode_tasks"] == []
     assert db.deleted == [task]
