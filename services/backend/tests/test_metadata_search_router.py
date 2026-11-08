@@ -715,7 +715,7 @@ def test_search_provider_literal_matches_registry() -> None:
     and the registry cannot drift apart."""
     from typing import get_args
 
-    from arm_backend.identity.sources.registry import known_source_ids
+    from arm_backend.metadata.source_selection import known_source_ids
 
     reg = build_online_sources(httpx.AsyncClient())
     assert set(get_args(metadata_router.SearchProvider)) == set(known_source_ids("movie", reg)) | set(

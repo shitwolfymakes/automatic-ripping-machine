@@ -9,14 +9,10 @@ from typing import Any, Literal
 
 import httpx
 
-from arm_backend.identity.sources.registry import (
-    fingerprint_sources,
-    hint_sources_setting,
-    online_source_ids,
-    sources_for,
-)
+from arm_backend.identity.sources.registry import hint_sources_setting
 from arm_backend.metadata.base import LookupError, MetadataResult
 from arm_backend.metadata.musicbrainz import TOC_NOT_FOUND
+from arm_backend.metadata.source_selection import fingerprint_sources, online_source_ids, sources_for
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_common import Config, DiscType

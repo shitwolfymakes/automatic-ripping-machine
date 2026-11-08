@@ -4,7 +4,7 @@ An adapter knows which client method implements which capability and which
 Config key it needs. It reads the key off `cfg` on every call, so a key saved
 after boot is used on the next lookup (TVDB, whose client holds a login token,
 keeps one client per key and replaces it when the key changes). Order and
-enablement are not decided here: `identity.sources.registry.sources_for` does
+enablement are not decided here: `metadata.source_selection.sources_for` does
 that."""
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
 os.environ.setdefault("ARM_SERVICE_TOKEN", "tok-service")
 
 from arm_backend.identity.sources import registry as reg_mod  # noqa: E402
-from arm_backend.identity.sources.registry import (  # noqa: E402
+from arm_backend.metadata.source_selection import (  # noqa: E402
     fingerprint_sources,
     known_source_ids,
     lookup_sources,
@@ -117,7 +117,7 @@ def test_search_source_reads_the_search_provider_setting(caplog):
     assert search_source(_cfg(search_provider_tv="tmdb"), "tv", reg).id == "tmdb"
     assert search_source(_cfg(), "music", reg).id == "musicbrainz"
     reg["omdb"]._reason = "no omdb key"
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.metadata.source_selection"):
         assert search_source(_cfg(search_provider_movie="omdb"), "movie", reg).id == "tmdb"
     assert "search provider omdb unusable (no omdb key); using tmdb for movie" in caplog.text
 
@@ -126,7 +126,7 @@ def test_search_source_falls_back_for_an_unknown_id(caplog):
     """A row may hold an unknown id the registry does not know (a downgrade, a hand
     edit); the box falls back to the first usable ranked source."""
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}))
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.metadata.source_selection"):
         assert search_source(_cfg(search_provider_tv="bogus"), "tv", reg).id == "tmdb"
     assert "search provider bogus unusable (no adapter named bogus); using tmdb for tv" in caplog.text
 
@@ -185,7 +185,7 @@ def test_sources_for_tv_skips_ids_without_an_adapter():
 
 
 def test_fingerprint_sources_honours_the_switch():
-    from arm_backend.identity.sources.registry import fingerprint_sources
+    from arm_backend.metadata.source_selection import fingerprint_sources
 
     reg = _registry(FakeSource("arm_server", {"movie"}))
     assert [s.id for s in fingerprint_sources(_cfg(), reg)] == ["arm_server"]
@@ -244,14 +244,14 @@ def test_search_provider_survives_an_emptied_ranked_list(caplog):
     reg = _registry(FakeSource("musicbrainz", {"music"}, search_releases=_noop))
     cfg = _cfg(music_sources=[])
     assert sources_for(cfg, "music", reg) == ()
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.metadata.source_selection"):
         assert search_source(cfg, "music", reg).id == "musicbrainz"
     assert "unusable" not in caplog.text
 
 
 def test_search_provider_that_cannot_serve_the_type_falls_back(caplog):
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("musicbrainz", {"music"}))
-    with caplog.at_level("INFO", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("INFO", logger="arm_backend.metadata.source_selection"):
         assert search_source(_cfg(search_provider_movie="musicbrainz"), "movie", reg).id == "tmdb"
     assert "musicbrainz does not search movie" in caplog.text
 
@@ -273,7 +273,7 @@ def test_search_source_uses_a_provider_outside_the_ranked_list():
 def test_search_source_unconfigured_outside_provider_falls_back(caplog):
     reg = _registry(FakeSource("tmdb", {"movie", "tv"}), FakeSource("omdb", {"movie", "tv"}, reason="no omdb key"))
     cfg = _cfg(search_provider_movie="omdb", movie_sources=["tmdb"])
-    with caplog.at_level("DEBUG", logger="arm_backend.identity.sources.registry"):
+    with caplog.at_level("DEBUG", logger="arm_backend.metadata.source_selection"):
         assert search_source(cfg, "movie", reg).id == "tmdb"
     assert "search provider omdb unusable (no omdb key); using tmdb for movie" in caplog.text
 
