@@ -226,7 +226,7 @@ class MusicBrainzClient:
         catalog_number = None
         if label_info and isinstance(label_info[0], dict):
             catalog_number = label_info[0].get("catalog-number")
-        fmt = media[0].get("format") if media and isinstance(media[0], dict) else None
+        fmt = _first_medium_format(media)
         payload: dict[str, Any] = {
             "artist": artist,
             "album": title_val,
@@ -270,16 +270,28 @@ class MusicBrainzClient:
         )
         results: list[MetadataResult] = []
         for rel in (body.get("releases") or [])[:limit]:
-            title = rel.get("title")
-            if not title:
-                continue
-            year = year_from(rel.get("date") or "")
-            artist_name = _join_artist_credit(rel.get("artist-credit") or [])
-            media = rel.get("media") or []
-            fmt = media[0].get("format") if media and isinstance(media[0], dict) else None
-            payload: dict[str, Any] = {"artist": artist_name, "album": title, "format": fmt, **rel}
-            results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
+            result = _release_to_result(rel)
+            if result is not None:
+                results.append(result)
         return results
+
+
+def _first_medium_format(media: list[Any]) -> Any:
+    """The first medium's `format` (e.g. "CD"), or None without a dict medium."""
+    return media[0].get("format") if media and isinstance(media[0], dict) else None
+
+
+def _release_to_result(rel: dict[str, Any]) -> MetadataResult | None:
+    """One search-result release as a music MetadataResult, or None without a title."""
+    title = rel.get("title")
+    if not title:
+        return None
+    year = year_from(rel.get("date") or "")
+    artist_name = _join_artist_credit(rel.get("artist-credit") or [])
+    media = rel.get("media") or []
+    fmt = _first_medium_format(media)
+    payload: dict[str, Any] = {"artist": artist_name, "album": title, "format": fmt, **rel}
+    return MetadataResult(title=title, year=year, kind="music", payload=payload)
 
 
 def _escape_lucene(term: str) -> str:
