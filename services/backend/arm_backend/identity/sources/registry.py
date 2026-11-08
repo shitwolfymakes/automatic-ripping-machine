@@ -117,9 +117,14 @@ def episode_tolerance(cfg: Config | None) -> int:
     return EPISODE_TOLERANCE_S if value is None else int(value)
 
 
+def _flag(cfg: Config | None, name: str, default: bool) -> bool:
+    """A boolean Config column, or `default` when the row has no value (a legacy or in-memory row)."""
+    value = getattr(cfg, name, None)
+    return default if value is None else bool(value)
+
+
 def episode_auto_apply(cfg: Config | None) -> bool:
-    value = getattr(cfg, "episode_auto_apply", None)
-    return EPISODE_AUTO_APPLY if value is None else bool(value)
+    return _flag(cfg, "episode_auto_apply", EPISODE_AUTO_APPLY)
 
 
 # ---------------------------------------------------------------------------
@@ -159,13 +164,11 @@ def search_provider_setting(cfg: Config | None, media_type: str) -> str:
 
 
 def movie_auto_apply(cfg: Config | None) -> bool:
-    value = getattr(cfg, "movie_auto_apply", None)
-    return True if value is None else bool(value)
+    return _flag(cfg, "movie_auto_apply", True)
 
 
 def music_auto_apply(cfg: Config | None) -> bool:
-    value = getattr(cfg, "music_auto_apply", None)
-    return True if value is None else bool(value)
+    return _flag(cfg, "music_auto_apply", True)
 
 
 def auto_apply_for(cfg: Config | None, kind: str) -> bool:
@@ -182,5 +185,4 @@ def auto_apply_for(cfg: Config | None, kind: str) -> bool:
 
 
 def crc64service_enabled(cfg: Config | None) -> bool:
-    value = getattr(cfg, "crc64service_enabled", None)
-    return True if value is None else bool(value)
+    return _flag(cfg, "crc64service_enabled", True)
