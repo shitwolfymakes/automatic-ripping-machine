@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Iterator, Sequence
-from typing import cast
+from typing import NamedTuple
 
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 
@@ -200,6 +200,15 @@ def _double_match(title: TitleIn, first: Episode, second: Episode, tolerance: in
     )
 
 
+class _Step(NamedTuple):
+    """A back-pointer: the move that reached a cell and the cell (i, j) it moved from.
+    A start step points at its own cell."""
+
+    kind: str
+    i: int
+    j: int
+
+
 class _AlignTable:
     """The alignment DP table: the cheapest cost and back-pointer for each
     (eligible title, episode) cell, filled by the skip and match moves."""
@@ -218,12 +227,12 @@ class _AlignTable:
         self.skip_ep_cost = tolerance + 1
 
         self.dp = [[_INF] * (self.n + 1) for _ in range(self.m + 1)]
-        self.back: list[list[tuple[object, ...] | None]] = [[None] * (self.n + 1) for _ in range(self.m + 1)]
+        self.back: list[list[_Step | None]] = [[None] * (self.n + 1) for _ in range(self.m + 1)]
         for j in range(self.n + 1):
             self.dp[0][j] = ANCHOR_WEIGHT * abs(j - anchor) if anchor is not None else FREE_START_WEIGHT * j
-            self.back[0][j] = ("start",)
+            self.back[0][j] = _Step("start", 0, j)
 
-    def relax(self, i: int, j: int, cost: float, step: tuple[object, ...]) -> None:
+    def relax(self, i: int, j: int, cost: float, step: _Step) -> None:
         """Lower cell (i, j) to `cost`, reached by `step`, when that is cheaper."""
         if cost < self.dp[i][j]:
             self.dp[i][j] = cost
@@ -235,9 +244,9 @@ class _AlignTable:
             for j in range(self.n + 1):
                 cur = self.dp[i][j]
                 if i < self.m:
-                    self.relax(i + 1, j, cur + self.skip_title_cost, ("skip_title", i, j))
+                    self.relax(i + 1, j, cur + self.skip_title_cost, _Step("skip_title", i, j))
                 if i > 0 and j < self.n:
-                    self.relax(i, j + 1, cur + self.skip_ep_cost, ("skip_ep", i, j))
+                    self.relax(i, j + 1, cur + self.skip_ep_cost, _Step("skip_ep", i, j))
                 self._relax_one(i, j, cur)
                 self._relax_two(i, j, cur)
 
@@ -246,7 +255,7 @@ class _AlignTable:
         if i < self.m and j < self.n:
             one = _one_cost(self.elig[i].seconds, self.episodes[j].runtime_s, self.tolerance, self.ref_rt)
             if one is not None:
-                self.relax(i + 1, j + 1, cur + one, ("one", i, j))
+                self.relax(i + 1, j + 1, cur + one, _Step("one", i, j))
 
     def _relax_two(self, i: int, j: int, cur: float) -> None:
         """The two-episode move: title i matches consecutive episodes j and j + 1 of one season when
@@ -262,19 +271,16 @@ class _AlignTable:
                 delta = abs(self.elig[i].seconds - (a + b))
                 eff = effective_tolerance(a + b, self.tolerance)
                 if delta <= eff:
-                    self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
+                    self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, _Step("two", i, j))
 
-    def path(self, j: int) -> Iterator[tuple[str, int, int]]:
-        """The (kind, title index, episode index) steps of the cheapest path ending at cell (m, j), last step first."""
+    def path(self, j: int) -> Iterator[_Step]:
+        """The steps of the cheapest path ending at cell (m, j), last step first."""
         i = self.m
-        while (step := self.back[i][j]) is not None:
-            if step[0] == "start":
-                break
-            kind = cast(str, step[0])
-            pi = cast(int, step[1]) if len(step) > 1 else 0
-            pj = cast(int, step[2]) if len(step) > 2 else 0
-            yield kind, pi, pj
-            i, j = pi, pj
+        step = self.back[i][j]
+        while step is not None and step.kind != "start":
+            yield step
+            i, j = step.i, step.j
+            step = self.back[i][j]
 
 
 def align(
