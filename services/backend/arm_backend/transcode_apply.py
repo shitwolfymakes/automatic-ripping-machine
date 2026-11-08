@@ -291,15 +291,8 @@ def compute_outputs(
     return resolved
 
 
-async def find_collisions(
-    db: AsyncSession,
-    paths: list[str],
-    media_root: Path,
-) -> list[CollisionInfo]:
-    """Return any `output_path` already claimed by a live task or sitting on disk."""
-    if not paths:
-        return []
-
+async def _live_task_hits(db: AsyncSession, paths: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the live tasks holding `paths` as (task id, application id) maps keyed by path."""
     stmt = (
         select(TranscodeTask.id, TranscodeTask.output_path, TranscodeTask.session_application_id)
         .where(col(TranscodeTask.output_path).in_(paths))
@@ -314,11 +307,14 @@ async def find_collisions(
         db_hits[row.output_path] = row.id
         if row.session_application_id:
             hit_application_ids[row.output_path] = row.session_application_id
+    return db_hits, hit_application_ids
 
+
+async def _job_ids_by_application(db: AsyncSession, application_ids: list[str]) -> dict[str, str]:
+    """Map each session application id to its owning job id."""
     # Batch-resolve the owning job id for every colliding task in one extra
     # query (task -> session_application -> job_id), rather than one query
     # per collision.
-    application_ids = sorted(set(hit_application_ids.values()))
     job_id_by_application: dict[str, str] = {}
     if application_ids:
         app_stmt = select(SessionApplication.id, SessionApplication.job_id).where(
@@ -326,7 +322,17 @@ async def find_collisions(
         )
         app_result = await db.execute(app_stmt)
         job_id_by_application = {row.id: row.job_id for row in app_result.all()}
+    return job_id_by_application
 
+
+def _collisions_for_paths(
+    paths: list[str],
+    db_hits: dict[str, str],
+    hit_application_ids: dict[str, str],
+    job_id_by_application: dict[str, str],
+    media_root: Path,
+) -> list[CollisionInfo]:
+    """Flag each distinct path held by a live task or already on disk."""
     collisions: list[CollisionInfo] = []
     seen: set[str] = set()
     for path in paths:
@@ -356,10 +362,11 @@ async def find_collisions(
                     reason="on_disk",
                 )
             )
+    return collisions
 
-    # Same path resolved twice in this apply — usually a template missing `{track}`
-    # for a multi-track rip. Surfaces distinctly so the user can fix the template
-    # rather than chase a non-existent on-disk file.
+
+def _add_duplicate_collisions(paths: list[str], collisions: list[CollisionInfo]) -> None:
+    """Append a collision for each path repeated in the request and not already flagged."""
     seen_in_request: set[str] = set()
     for path in paths:
         if path in seen_in_request:
@@ -374,6 +381,26 @@ async def find_collisions(
                     )
                 )
         seen_in_request.add(path)
+
+
+async def find_collisions(
+    db: AsyncSession,
+    paths: list[str],
+    media_root: Path,
+) -> list[CollisionInfo]:
+    """Return any `output_path` already claimed by a live task or sitting on disk."""
+    if not paths:
+        return []
+
+    db_hits, hit_application_ids = await _live_task_hits(db, paths)
+    application_ids = sorted(set(hit_application_ids.values()))
+    job_id_by_application = await _job_ids_by_application(db, application_ids)
+    collisions = _collisions_for_paths(paths, db_hits, hit_application_ids, job_id_by_application, media_root)
+
+    # Same path resolved twice in this apply — usually a template missing `{track}`
+    # for a multi-track rip. Surfaces distinctly so the user can fix the template
+    # rather than chase a non-existent on-disk file.
+    _add_duplicate_collisions(paths, collisions)
     return collisions
 
 
