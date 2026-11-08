@@ -77,9 +77,9 @@ class LabelHints:
     part_marker_only: bool = False
 
 
-def parse_label(raw: str) -> LabelHints:
-    if not raw:
-        return LabelHints("", None, None, None)
+def _clean_label(raw: str) -> str:
+    """The label folded to NFKC with underscores as spaces, and the aspect,
+    SKU, Blu-ray-suffix and dot noise removed."""
     # NFKC folds compatibility glyphs (e.g. "Blu-ray™" -> "Blu-rayTM") so the
     # Blu-ray-suffix strip below still matches after non-ASCII input.
     raw = unicodedata.normalize("NFKC", raw)
@@ -89,29 +89,61 @@ def parse_label(raw: str) -> LabelHints:
     for suffix in _BLURAY_SUFFIXES:
         s = s.replace(suffix, "")
     s = s.replace(".", " ").rstrip()
+    return s
 
-    season: int | None = None
-    disc: int | None = None
+
+def _split_season_disc(s: str) -> tuple[str, int | None, int | None] | None:
+    """A combined `S<n>D<n>` marker: (the text before it, season, disc), or None without one."""
+    m = _SEASON_DISC_RE.search(s)
+    if m:
+        return s[: m.start()], _bounded(m.group(1), 0, _SEASON_MAX), _bounded(m.group(2), 1, _DISC_MAX)
+    return None
+
+
+def _split_disc(s: str) -> tuple[str, int | None, int | None, bool]:
+    """A trailing disc marker (`DISC <word>`, or `P` / `D` / `DISC <n>` with
+    an optional `OF <n>`): (the text before it, disc, total, whether the
+    marker was a bare `P`). With no marker: (s, None, None, False)."""
+    if m := _DISC_WORD_RE.search(s):
+        return s[: m.start()], _WORD_NUMBERS[m.group(1).lower()], None, False
+    if m := _DISC_RE.search(s):
+        marker = m.group(1).upper()
+        total = _bounded(m.group(3), 1, _DISC_MAX) if m.group(3) else None
+        return s[: m.start()], _bounded(m.group(2), 1, _DISC_MAX), total, marker == "P"
+    return s, None, None, False
+
+
+def _split_season(s: str) -> tuple[str, int | None]:
+    """A trailing `SEASON <n>` or `S<n>` marker: (the text before it, season). With no marker: (s, None)."""
+    if m := _SEASON_KEYWORD_RE.search(s) or _SEASON_RE.search(s):
+        return s[: m.start()], _bounded(m.group(1), 0, _SEASON_MAX)
+    return s, None
+
+
+def _tidy_title(s: str) -> str:
+    """The search title: hyphens as spaces, whitespace collapsed, trailing ` :,` trimmed, lower-cased."""
+    return re.sub(r"\s+", " ", s.replace("-", " ")).strip().rstrip(" :,").lower()
+
+
+def parse_label(raw: str) -> LabelHints:
+    """Parse a volume label into its search title and season / disc markers (see the module docstring)."""
+    if not raw:
+        return LabelHints("", None, None, None)
+    s = _clean_label(raw)
+    season: int | None
+    disc: int | None
     total: int | None = None
     part_marker_only = False
-    if m := _SEASON_DISC_RE.search(s):
-        season, disc, s = _bounded(m.group(1), 0, _SEASON_MAX), _bounded(m.group(2), 1, _DISC_MAX), s[: m.start()]
+    if combined := _split_season_disc(s):
+        s, season, disc = combined
     else:
-        if m := _DISC_WORD_RE.search(s):
-            disc, s = _WORD_NUMBERS[m.group(1).lower()], s[: m.start()]
-        elif m := _DISC_RE.search(s):
-            marker = m.group(1).upper()
-            disc, s = _bounded(m.group(2), 1, _DISC_MAX), s[: m.start()]
-            total = _bounded(m.group(3), 1, _DISC_MAX) if m.group(3) else None
-            part_marker_only = marker == "P"
-        if m := _SEASON_KEYWORD_RE.search(s) or _SEASON_RE.search(s):
-            season, s = _bounded(m.group(1), 0, _SEASON_MAX), s[: m.start()]
-            if season is not None:
-                part_marker_only = False
+        s, disc, total, part_marker_only = _split_disc(s)
+        s, season = _split_season(s)
+        if season is not None:
+            part_marker_only = False
     if total is not None and disc is not None and total < disc:
         total = None
-    title = re.sub(r"\s+", " ", s.replace("-", " ")).strip().rstrip(" :,").lower()
-    return LabelHints(title, season, disc, total, part_marker_only)
+    return LabelHints(_tidy_title(s), season, disc, total, part_marker_only)
 
 
 class LabelSource:
