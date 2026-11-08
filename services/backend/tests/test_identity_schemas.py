@@ -67,11 +67,11 @@ def test_track_revert_field_literal_matches_track_claim_attrs() -> None:
 
 
 def test_router_identity_attr_sets_derive_from_claim_fields() -> None:
-    from arm_backend.routers import jobs as jobs_router
+    from arm_backend.identity import manual_edits
 
-    assert jobs_router._IDENTITY_TRACK_ATTRS == frozenset(TRACK_CLAIM_FIELDS.values())
+    assert manual_edits._IDENTITY_TRACK_ATTRS == frozenset(TRACK_CLAIM_FIELDS.values())
     # JobUpdateRequest has no season (season is set through /resolve).
-    assert jobs_router._IDENTITY_JOB_ATTRS == frozenset({"disc_number", "disc_total"})
+    assert manual_edits._IDENTITY_JOB_ATTRS == frozenset({"disc_number", "disc_total"})
 
 
 def test_source_claims_suggestion_and_new_external_ids_round_trip() -> None:
