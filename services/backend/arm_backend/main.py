@@ -93,6 +93,26 @@ async def _run_seeders() -> None:
     logger.info("seeders complete")
 
 
+async def _startup_sweep(sweep: Callable[[], Awaitable[int]], done: str, failed: str) -> None:
+    """Run one boot sweep and log how many rows it touched; a failure is
+    logged and never stops startup."""
+    try:
+        count = await sweep()
+        if count:
+            logger.info(done, count)
+    except Exception as exc:
+        logger.exception(failed, exc)
+
+
+async def _sweep_orphaned_applications(dispatcher: TranscodeDispatcher) -> int:
+    """Reconcile session applications a crash left orphaned, on a session of
+    their own; returns how many."""
+    async with SessionLocal() as db:
+        orphaned = await dispatcher.sweeps.sweep_orphaned_applications(db)
+        await db.commit()
+    return orphaned
+
+
 class _BackendServices:
     """The backend's long-running services: `start` brings them up in boot
     order and `stop` runs their shutdown steps in order."""
@@ -153,25 +173,21 @@ class _BackendServices:
 
         # Phase 9 — reset every RIPPING job's tracks to queued and stamp
         # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
-        try:
-            swept = await sweep_in_flight_jobs(SessionLocal)
-            # Only when a crashed RIPPING job is recovered; sweep logic is unit-tested in test_crash_recovery.
-            if swept:  # pragma: no cover
-                logger.info("backend startup: resumed %d crashed rip(s)", swept)
-        except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
-            logger.exception("startup crash-recovery sweep failed: %s", exc)
+        await _startup_sweep(
+            lambda: sweep_in_flight_jobs(SessionLocal),
+            "backend startup: resumed %d crashed rip(s)",
+            "startup crash-recovery sweep failed: %s",
+        )
 
         # Episode stage startup sweep (Review Focus 5): schedule the background
         # episode stage once for every TV-candidate job that never got an
         # episode-source entry (e.g. the backend restarted between identify and
         # the runner picking it up).
-        try:
-            swept = await self._app.state.episode_stage.sweep_startup()
-            # Only hit when an eligible job exists; sweep logic is unit-tested in test_stage_runner.
-            if swept:  # pragma: no cover
-                logger.info("backend startup: scheduled episode stage for %d job(s)", swept)
-        except Exception as exc:  # pragma: no cover — startup-degradation guard; sweep failing is real-DB-only
-            logger.exception("startup episode-stage sweep failed: %s", exc)
+        await _startup_sweep(
+            self._app.state.episode_stage.sweep_startup,
+            "backend startup: scheduled episode stage for %d job(s)",
+            "startup episode-stage sweep failed: %s",
+        )
 
         # No-transcode-mode: the dispatcher now always runs, even for a
         # ripper-only deployment (ARM_TRANSCODE_CAPABLE=false, no remote docker
@@ -206,22 +222,16 @@ class _BackendServices:
         # docker-side): a ripper-only deployment still needs orphaned
         # .arm-inprogress markers and crash-orphaned session_applications cleaned
         # up on boot.
-        try:
-            swept = await self._transcode_dispatcher.sweeps.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
-            # Only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher.
-            if swept:  # pragma: no cover
-                logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
-        except Exception as exc:  # pragma: no cover, startup-degradation guard; sweep failing is real-DB-only
-            logger.exception("startup .arm-inprogress sweep failed: %s", exc)
-        try:
-            async with SessionLocal() as db:
-                orphaned = await self._transcode_dispatcher.sweeps.sweep_orphaned_applications(db)
-                await db.commit()
-            # Only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher.
-            if orphaned:  # pragma: no cover
-                logger.info("backend startup: reconciled %d orphaned session_application(s)", orphaned)
-        except Exception as exc:  # pragma: no cover, startup-degradation guard; sweep failing is real-DB-only
-            logger.exception("startup orphaned-application sweep failed: %s", exc)
+        await _startup_sweep(
+            lambda: self._transcode_dispatcher.sweeps.sweep_arm_inprogress(Path(settings.MEDIA_ROOT)),
+            "backend startup: swept %d .arm-inprogress orphans",
+            "startup .arm-inprogress sweep failed: %s",
+        )
+        await _startup_sweep(
+            lambda: _sweep_orphaned_applications(self._transcode_dispatcher),
+            "backend startup: reconciled %d orphaned session_application(s)",
+            "startup orphaned-application sweep failed: %s",
+        )
         self._dispatcher_task = asyncio.create_task(self._transcode_dispatcher.run())
         self._app.state.transcode_dispatcher = self._transcode_dispatcher
         set_active_dispatcher(self._transcode_dispatcher)

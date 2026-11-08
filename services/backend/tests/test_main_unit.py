@@ -456,3 +456,36 @@ def test_ensure_roots_never_raises(tmp_path, caplog) -> None:
     ensure_roots({"media": str(blocker / "media"), "raw": str(tmp_path / "raw")})
     assert (tmp_path / "raw").is_dir()
     assert "cannot create media" in caplog.text
+
+
+# --- _startup_sweep ---------------------------------------------------------
+
+
+async def test_startup_sweep_logs_the_count_when_rows_were_touched(caplog) -> None:
+    async def _sweep() -> int:
+        return 3
+
+    with caplog.at_level("INFO", logger="arm_backend"):
+        await main_mod._startup_sweep(_sweep, "swept %d rows", "sweep failed: %s")
+    assert [(r.levelname, r.getMessage()) for r in caplog.records if r.name == "arm_backend"] == [
+        ("INFO", "swept 3 rows")
+    ]
+
+
+async def test_startup_sweep_logs_nothing_when_no_rows_were_touched(caplog) -> None:
+    async def _sweep() -> int:
+        return 0
+
+    with caplog.at_level("INFO", logger="arm_backend"):
+        await main_mod._startup_sweep(_sweep, "swept %d rows", "sweep failed: %s")
+    assert [r for r in caplog.records if r.name == "arm_backend"] == []
+
+
+async def test_startup_sweep_swallows_a_failure_and_logs_it(caplog) -> None:
+    async def _sweep() -> int:
+        raise RuntimeError("boom")
+
+    with caplog.at_level("INFO", logger="arm_backend"):
+        await main_mod._startup_sweep(_sweep, "swept %d rows", "sweep failed: %s")
+    records = [r for r in caplog.records if r.name == "arm_backend"]
+    assert [(r.levelname, r.getMessage()) for r in records] == [("ERROR", "sweep failed: boom")]
