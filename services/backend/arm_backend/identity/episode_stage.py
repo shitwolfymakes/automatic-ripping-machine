@@ -278,16 +278,9 @@ async def _pick_season(
 
 
 def _ok_claims(
-    season: int,
-    fit: SeasonFit,
-    ranked: Sequence[tuple[int, MatchResult]],
-    *,
-    scanned: bool,
-    stopped_early: bool,
-    inputs: dict[str, Any],
-    now: datetime,
-    auto_apply: bool,
+    pick: _SeasonPick, *, scanned: bool, inputs: dict[str, Any], now: datetime, auto_apply: bool
 ) -> SourceClaims:
+    season, fit, ranked, stopped_early = pick
     result = fit.result
     reasons = hold_reasons(fit, ranked, scanned=scanned, auto_apply=auto_apply)
     near_tie = "near_tie" in reasons
@@ -459,18 +452,14 @@ async def _match(
     picked = await _pick_season(provider, req, order)
     if picked is None or not picked.fit.result.matches:
         return _miss_outcome(source_id, "no episodes matched", inputs, ctx.now, picked.fit.result if picked else None)
-    season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
-        season,
-        fit,
-        ranked,
+        picked,
         scanned=known_season is None,
-        stopped_early=stopped_early,
         inputs=inputs,
         now=ctx.now,
         auto_apply=episode_auto_apply(ctx.cfg),
     )
-    return SourceOutcome(source_id, claims, fit.result)
+    return SourceOutcome(source_id, claims, picked.fit.result)
 
 
 def _error(job: Job, source_id: str, e: Exception, inputs: dict[str, Any], now: datetime) -> SourceOutcome:
