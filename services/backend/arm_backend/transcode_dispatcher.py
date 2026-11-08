@@ -360,107 +360,122 @@ class _SpawnPass:
                 return
             if not await self._admit_encode():
                 return
-            # No separate re-verify needed here: the fresh,
-            # `populate_existing`-forced, FOR UPDATE-locked load at the
-            # top of this iteration (`_reload_locked`) already confirmed `task` is
-            # current and still QUEUED, right before we act on it.
-            assignment = await self._dispatcher._claim_gpu_for_task(self._db, task, preset)
-            if assignment.action == "queue":
-                logger.info(
-                    "transcode task waiting for GPU encoder=%s task_id=%s%s",
-                    assignment.encoder.id if assignment.encoder is not None else None,
-                    task.id,
-                    f" ({assignment.reason})" if assignment.reason else "",
-                )
-                return
-            if assignment.action == "fail":
-                # Same isolation as `_run_passthrough_isolated`: a raise while
-                # failing this task (hub.emit, aggregate, commit) rolls
-                # back and moves on, never aborting the tick; `task_id`
-                # (loop variable) is logged, never an ORM attribute.
-                try:
-                    await self._dispatcher._fail_queued_task(self._db, task, str(assignment.reason))
-                except Exception as exc:
-                    logger.exception("failing unrunnable transcode task failed task_id=%s: %s", task_id, exc)
-                    await self._db.rollback()
-                return
-            # Read before the try: after a failed flush/commit no ORM
-            # attribute is readable until the rollback (see below).
-            claimed_gpu_id = assignment.gpu.id if assignment.gpu is not None else None
-            started = False
+            await self._claim_and_spawn(task, task_id, preset)
+
+    async def _claim_and_spawn(self, task: TranscodeTask, task_id: str, preset: TranscodePreset | None) -> None:
+        # No separate re-verify needed here: the fresh,
+        # `populate_existing`-forced, FOR UPDATE-locked load at the
+        # top of this iteration (`_reload_locked`) already confirmed `task` is
+        # current and still QUEUED, right before we act on it.
+        assignment = await self._dispatcher._claim_gpu_for_task(self._db, task, preset)
+        if assignment.action == "queue":
+            self._log_waiting(task, assignment)
+            return
+        if assignment.action == "fail":
+            await self._fail_isolated(task, task_id, str(assignment.reason))
+            return
+        await self._spawn_claimed_task(task, task_id, assignment)
+
+    def _log_waiting(self, task: TranscodeTask, assignment: GpuAssignment) -> None:
+        logger.info(
+            "transcode task waiting for GPU encoder=%s task_id=%s%s",
+            assignment.encoder.id if assignment.encoder is not None else None,
+            task.id,
+            f" ({assignment.reason})" if assignment.reason else "",
+        )
+
+    async def _fail_isolated(self, task: TranscodeTask, task_id: str, reason: str) -> None:
+        # Same isolation as `_run_passthrough_isolated`: a raise while
+        # failing this task (hub.emit, aggregate, commit) rolls
+        # back and moves on, never aborting the tick; `task_id`
+        # (loop variable) is logged, never an ORM attribute.
+        try:
+            await self._dispatcher._fail_queued_task(self._db, task, reason)
+        except Exception as exc:
+            logger.exception("failing unrunnable transcode task failed task_id=%s: %s", task_id, exc)
+            await self._db.rollback()
+
+    async def _spawn_claimed_task(self, task: TranscodeTask, task_id: str, assignment: GpuAssignment) -> None:
+        # Read before the try: after a failed flush/commit no ORM
+        # attribute is readable until the rollback (see `_revert_failed_claim`).
+        claimed_gpu_id = assignment.gpu.id if assignment.gpu is not None else None
+        started = False
+        try:
+            # `_spawn_container` is a blocking call: a plain docker
+            # socket round-trip normally, but on the SSH-transport-
+            # rebuild path (see arm_backend.docker_client) it also does a
+            # blocking TCP+SSH handshake that can take tens of
+            # seconds against a black-holed remote host. Run it off
+            # the event loop so a stuck spawn doesn't freeze
+            # HTTP/WS/ripper callbacks for the whole tick.
+            # `_spawn_container` touches only the docker client,
+            # `self._settings`, and its own
+            # locals/args (never the AsyncSession), so moving it to a
+            # thread doesn't put any DB access off the loop.
+            await asyncio.to_thread(self._dispatcher._spawn_container, task, assignment=assignment)
+            started = True
+            self.spawned += 1
+            self._dispatcher.last_spawn_error = None
+            # Commit this task's GPU claim promptly, per-task, right
+            # after its container is confirmed running: a later
+            # task's exception (and rollback, see
+            # `_run_passthrough_isolated`) must never be able to revert a GPU claim
+            # whose container already exists.
+            await self._db.commit()
+        except Exception as exc:
+            self._dispatcher.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
+            # `task_id` (loop variable), never `task.id`: see
+            # `_run_passthrough_isolated` for why no ORM
+            # attribute may be read before the rollback in `_revert_failed_claim`.
+            logger.exception("transcode spawn failed task_id=%s: %s", task_id, exc)
+            await self._revert_failed_claim(task_id, assignment, started)
+        finally:
+            # Committed (other sessions now read BUSY) or rolled back
+            # and released: either way the in-process marker is done.
+            if claimed_gpu_id is not None:
+                self._dispatcher.claimed_gpu_ids.discard(claimed_gpu_id)
+
+    async def _revert_failed_claim(self, task_id: str, assignment: GpuAssignment, started: bool) -> None:
+        # The raise that brought us here can come from `_spawn_container`
+        # itself (the container never started) OR from the commit at the
+        # end of `_spawn_claimed_task`'s try (the container IS running but
+        # the GPU-claim commit failed) -- either way, mirroring
+        # `_run_passthrough_isolated`, roll back first: a raise from inside a
+        # flush/commit leaves the session in "pending rollback"
+        # state, and the NEXT statement issued for the NEXT
+        # queued task would raise PendingRollbackError outside
+        # any try/except and abort the whole tick.
+        await self._db.rollback()
+        # Release the GPU claim so the task can retry claiming a
+        # GPU on a later tick. A real SQLAlchemy session's
+        # rollback (expire_on_rollback=True by default) already
+        # discards whatever uncommitted BUSY assignment
+        # `_claim_gpu_for_task` made and expires the gpu object
+        # back to its last-committed value, but relying on that
+        # implicit expire-on-rollback behavior for correctness is
+        # fragile (and the in-memory test fake doesn't model it
+        # at all), so the revert is re-applied explicitly here,
+        # AFTER the rollback -- applying it before would just
+        # have the rollback above discard it again. It's
+        # committed immediately rather than deferred to the
+        # trailing end-of-loop commit: an uncommitted revert
+        # sitting in the shared session for the rest of the loop
+        # would be discarded again by a LATER task's own rollback
+        # (the same hazard `_run_passthrough_isolated`'s per-task
+        # commits guard against).
+        if assignment.gpu is not None:
+            assignment.gpu.status = GpuStatus.AVAILABLE
+            assignment.gpu.claimed_by_task_id = None
+            await self._db.commit()
+        # Only a container that never started counts as an
+        # attempt: when just the commit failed, the transcoder
+        # is running and will claim the task.
+        if not started:
             try:
-                # `_spawn_container` is a blocking call: a plain docker
-                # socket round-trip normally, but on the SSH-transport-
-                # rebuild path (see arm_backend.docker_client) it also does a
-                # blocking TCP+SSH handshake that can take tens of
-                # seconds against a black-holed remote host. Run it off
-                # the event loop so a stuck spawn doesn't freeze
-                # HTTP/WS/ripper callbacks for the whole tick.
-                # `_spawn_container` touches only the docker client,
-                # `self._settings`, and its own
-                # locals/args (never the AsyncSession), so moving it to a
-                # thread doesn't put any DB access off the loop.
-                await asyncio.to_thread(self._dispatcher._spawn_container, task, assignment=assignment)
-                started = True
-                self.spawned += 1
-                self._dispatcher.last_spawn_error = None
-                # Commit this task's GPU claim promptly, per-task, right
-                # after its container is confirmed running: a later
-                # task's exception (and rollback, see
-                # `_run_passthrough_isolated`) must never be able to revert a GPU claim
-                # whose container already exists.
-                await self._db.commit()
-            except Exception as exc:
-                self._dispatcher.last_spawn_error = f"{type(exc).__name__}: {exc}"[:300]
-                # `task_id` (loop variable), never `task.id`: see
-                # `_run_passthrough_isolated` for why no ORM
-                # attribute may be read before the rollback below.
-                logger.exception("transcode spawn failed task_id=%s: %s", task_id, exc)
-                # A raise here can come from `_spawn_container` itself
-                # (the container never started) OR from the commit right
-                # above (the container IS running but the GPU-claim
-                # commit failed) -- either way, mirroring
-                # `_run_passthrough_isolated`, roll back first: a raise from inside a
-                # flush/commit leaves the session in "pending rollback"
-                # state, and the NEXT statement issued for the NEXT
-                # queued task would raise PendingRollbackError outside
-                # any try/except and abort the whole tick.
+                await self._dispatcher._count_failed_spawn(self._db, task_id)
+            except Exception:
+                logger.exception("could not count the failed spawn task_id=%s", task_id)
                 await self._db.rollback()
-                # Release the GPU claim so the task can retry claiming a
-                # GPU on a later tick. A real SQLAlchemy session's
-                # rollback (expire_on_rollback=True by default) already
-                # discards whatever uncommitted BUSY assignment
-                # `_claim_gpu_for_task` made and expires the gpu object
-                # back to its last-committed value, but relying on that
-                # implicit expire-on-rollback behavior for correctness is
-                # fragile (and the in-memory test fake doesn't model it
-                # at all), so the revert is re-applied explicitly here,
-                # AFTER the rollback -- applying it before would just
-                # have the rollback above discard it again. It's
-                # committed immediately rather than deferred to the
-                # trailing end-of-loop commit: an uncommitted revert
-                # sitting in the shared session for the rest of the loop
-                # would be discarded again by a LATER task's own rollback
-                # (the same hazard `_run_passthrough_isolated`'s per-task
-                # commits guard against).
-                if assignment.gpu is not None:
-                    assignment.gpu.status = GpuStatus.AVAILABLE
-                    assignment.gpu.claimed_by_task_id = None
-                    await self._db.commit()
-                # Only a container that never started counts as an
-                # attempt: when just the commit failed, the transcoder
-                # is running and will claim the task.
-                if not started:
-                    try:
-                        await self._dispatcher._count_failed_spawn(self._db, task_id)
-                    except Exception:
-                        logger.exception("could not count the failed spawn task_id=%s", task_id)
-                        await self._db.rollback()
-            finally:
-                # Committed (other sessions now read BUSY) or rolled back
-                # and released: either way the in-process marker is done.
-                if claimed_gpu_id is not None:
-                    self._dispatcher.claimed_gpu_ids.discard(claimed_gpu_id)
 
 
 class TranscodeDispatcher:
