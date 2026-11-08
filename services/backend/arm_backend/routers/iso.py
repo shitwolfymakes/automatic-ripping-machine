@@ -1,6 +1,7 @@
 """`/api/iso`: browse the ISO library and create/cancel "Rip from ISO" jobs
-(spec 2026-09-30-iso-source-rip, sections 5-6). The lifecycle plumbing
-(create, cancel, the watchdog) lives in `iso_rips`; this router is thin."""
+(spec 2026-09-30-iso-source-rip, sections 5-6). Create and cancel live in
+`iso_rips` and the watchdog in `virtual_drive_lifecycle`; this router is
+thin."""
 
 from __future__ import annotations
 

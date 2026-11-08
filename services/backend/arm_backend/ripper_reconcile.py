@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel import col, select
 
-from arm_backend.iso_rips import sweep_virtual_drives
 from arm_backend.ripper_manager import ReconcileSummary, RipperManager, RipperManagerError
+from arm_backend.virtual_drive_lifecycle import sweep_virtual_drives
 from arm_common import Drive, DriveLifecycle, DriveStatus, Job, JobStatus
 
 if TYPE_CHECKING:

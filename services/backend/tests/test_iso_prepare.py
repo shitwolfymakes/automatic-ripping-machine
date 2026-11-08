@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from arm_backend import iso_prepare, iso_rips
+from arm_backend import iso_prepare, virtual_drive_lifecycle
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.db import get_session
 from arm_backend.routers import iso as iso_router
@@ -157,5 +157,5 @@ async def test_retire_clears_the_drives_preparing_status() -> None:
     from tests.test_iso_rips import _Manager
 
     iso_prepare.record(IsoPrepareReport(drive_id="drv_iso1", phase=IsoPreparePhase.EXTRACTING, progress_pct=10))
-    await iso_rips.retire_virtual_drive(FakeSession(), _Manager(), _virtual())  # type: ignore[arg-type]
+    await virtual_drive_lifecycle.retire_virtual_drive(FakeSession(), _Manager(), _virtual())  # type: ignore[arg-type]
     assert iso_prepare.views() == []

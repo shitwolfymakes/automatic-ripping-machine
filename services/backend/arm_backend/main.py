@@ -30,7 +30,7 @@ from arm_backend.notifications.apprise_listener import AppriseListener
 from arm_backend.notifications.apprise_notifier import RealAppriseNotifier
 from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
-from arm_backend.iso_rips import run_virtual_drive_watchdog
+from arm_backend.virtual_drive_lifecycle import run_virtual_drive_watchdog
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
 from arm_backend.routers import (

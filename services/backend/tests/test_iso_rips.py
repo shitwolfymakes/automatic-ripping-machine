@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from arm_backend import iso_library, iso_rips
+from arm_backend import iso_library, iso_rips, virtual_drive_lifecycle
 from arm_backend.config import settings
 from arm_backend.ripper_manager import RipperManagerError
 from arm_common.enums import PRE_RIP_JOB_STATUSES
@@ -176,7 +176,7 @@ async def test_retire_marks_retired_offline_absent_and_removes_the_container() -
     drive = _virtual()
     db.rows["drives"] = [drive]
     manager = _Manager()
-    await iso_rips.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
+    await virtual_drive_lifecycle.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert drive.status is DriveStatus.OFFLINE
     assert drive.present is False
@@ -192,7 +192,7 @@ async def test_retire_commits_before_removing_the_container() -> None:
     db = FakeSession()
     drive = _virtual()
     manager = _OrderingManager(db)
-    await iso_rips.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
+    await virtual_drive_lifecycle.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
     assert db.call_log[-2:] == ["commit", "remove"]
     assert manager.committed_at_remove == [1]
 
@@ -202,8 +202,8 @@ async def test_retire_logs_and_continues_when_removal_fails(caplog: pytest.LogCa
     db = FakeSession()
     drive = _virtual()
     manager = _Manager(remove_raises=RipperManagerError("APIError: boom"))
-    with caplog.at_level(logging.WARNING, logger="arm_backend.iso_rips"):
-        await iso_rips.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.virtual_drive_lifecycle"):
+        await virtual_drive_lifecycle.retire_virtual_drive(db, manager, drive)  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert "boom" in caplog.text
 
@@ -219,7 +219,7 @@ async def test_retire_removes_the_rippers_iso_extraction(tmp_path: Path, monkeyp
     other.mkdir(parents=True)
     (mine / "index.bdmv").write_bytes(b"x")
 
-    await iso_rips.retire_virtual_drive(FakeSession(), _Manager(), _virtual())  # type: ignore[arg-type]
+    await virtual_drive_lifecycle.retire_virtual_drive(FakeSession(), _Manager(), _virtual())  # type: ignore[arg-type]
 
     assert not (tmp_path / ".iso-extract" / "drv_iso1").exists()
     assert other.is_dir()
@@ -233,7 +233,7 @@ async def test_sweep_returns_zero_without_virtual_drives() -> None:
     db = FakeSession()
     db.rows["drives"] = [_optical()]
     manager = _Manager()
-    assert await iso_rips.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
     assert manager.status_calls == []  # docker is not asked when there is nothing to check
 
 
@@ -244,7 +244,7 @@ async def test_sweep_skips_running() -> None:
     db.rows["drives"] = [drive]
     db.rows["jobs"] = [_job("job_1", "drv_iso1", JobStatus.RIPPING)]
     manager, hub = _Manager({"drv_iso1": "running"}), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.ENROLLED
     assert db.rows["jobs"][0].status is JobStatus.RIPPING
     assert manager.removed == [] and hub.events == []
@@ -260,7 +260,7 @@ async def test_sweep_leaves_unknown_and_live_states_alone(state: str) -> None:
     db.rows["drives"] = [drive]
     db.rows["jobs"] = [_job("job_1", "drv_iso1", JobStatus.RIPPING)]
     manager = _Manager({"drv_iso1": state})
-    assert await iso_rips.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.ENROLLED and manager.removed == []
 
 
@@ -274,7 +274,7 @@ async def test_sweep_grace_skips_missing_within_window() -> None:
     drive.created_at = datetime.now(UTC) - timedelta(seconds=10)
     db.rows["drives"] = [drive]
     manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.ENROLLED
     assert manager.removed == [] and hub.events == []
 
@@ -285,10 +285,10 @@ async def test_sweep_grace_expired_retires() -> None:
     dead state."""
     db = FakeSession()
     drive = _virtual()
-    drive.created_at = datetime.now(UTC) - timedelta(seconds=iso_rips.SPAWN_GRACE_SECONDS + 1)
+    drive.created_at = datetime.now(UTC) - timedelta(seconds=virtual_drive_lifecycle.SPAWN_GRACE_SECONDS + 1)
     db.rows["drives"] = [drive]
     manager, hub = _Manager(), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert manager.removed == ["drv_iso1"]
 
@@ -302,7 +302,7 @@ async def test_sweep_grace_none_created_at_retires_immediately() -> None:
     assert drive.created_at is None
     db.rows["drives"] = [drive]
     manager, hub = _Manager(), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert manager.removed == ["drv_iso1"]
 
@@ -314,7 +314,7 @@ async def test_sweep_retires_exited_with_terminal_job() -> None:
     db.rows["drives"] = [drive]
     db.rows["jobs"] = [_job("job_1", "drv_iso1", JobStatus.RIPPED)]
     manager, hub = _Manager({"drv_iso1": "exited"}), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert manager.removed == ["drv_iso1"]
     assert db.rows["jobs"][0].status is JobStatus.RIPPED
@@ -329,14 +329,14 @@ async def test_sweep_retires_exited_with_no_job() -> None:
     drive = _virtual()
     db.rows["drives"] = [drive]
     manager, hub = _Manager({"drv_iso1": "exited"}), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
     assert hub.events == []
 
 
 @pytest.fixture(autouse=True)
 def _forget_respawns() -> None:
-    iso_rips._respawned.clear()
+    virtual_drive_lifecycle._respawned.clear()
 
 
 @pytest.mark.asyncio
@@ -353,8 +353,8 @@ async def test_sweep_starts_the_ripper_again_for_a_parked_job(
     job = _job("job_1", "drv_iso1", status)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
-    with caplog.at_level(logging.INFO, logger="arm_backend.iso_rips"):
-        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    with caplog.at_level(logging.INFO, logger="arm_backend.virtual_drive_lifecycle"):
+        assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     assert job.status is status
     assert drive.lifecycle is DriveLifecycle.ENROLLED and manager.removed == []
@@ -366,18 +366,18 @@ async def test_sweep_starts_the_ripper_again_for_a_parked_job(
 @pytest.mark.asyncio
 async def test_sweep_fails_a_parked_job_whose_ripper_crash_loops(monkeypatch: pytest.MonkeyPatch) -> None:
     now = {"t": 1000.0}
-    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    monkeypatch.setattr(virtual_drive_lifecycle.time, "monotonic", lambda: now["t"])
     db = FakeSession()
     drive = _virtual()
     db.rows["drives"] = [drive]
     job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     # Missing again within the cooldown: crash-looping, not started a second time.
-    now["t"] += iso_rips.CRASH_LOOP_WINDOW_SECONDS - 1
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    now["t"] += virtual_drive_lifecycle.CRASH_LOOP_WINDOW_SECONDS - 1
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1"]
     assert job.status is JobStatus.FAILED
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
@@ -390,16 +390,16 @@ async def test_sweep_starts_a_parked_jobs_ripper_again_after_the_window(monkeypa
     # whose ripper ran past the crash-loop window before dying must not be
     # failed for it.
     now = {"t": 1000.0}
-    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    monkeypatch.setattr(virtual_drive_lifecycle.time, "monotonic", lambda: now["t"])
     db = FakeSession()
     drive = _virtual()
     db.rows["drives"] = [drive]
     job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
-    now["t"] += iso_rips.CRASH_LOOP_WINDOW_SECONDS
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    now["t"] += virtual_drive_lifecycle.CRASH_LOOP_WINDOW_SECONDS
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert manager.started == ["drv_iso1", "drv_iso1"]
     assert job.status is JobStatus.AWAITING_REVIEW
     assert drive.lifecycle is DriveLifecycle.ENROLLED and hub.events == []
@@ -412,18 +412,18 @@ async def test_sweep_fails_a_parked_job_whose_ripper_keeps_dying_past_the_window
     # A ripper that dies every few minutes (a slow scan that then crashes) is
     # crash-looping too: it is started again up to the hourly budget, then failed.
     now = {"t": 1000.0}
-    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    monkeypatch.setattr(virtual_drive_lifecycle.time, "monotonic", lambda: now["t"])
     db = FakeSession()
     drive = _virtual()
     db.rows["drives"] = [drive]
     job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()
-    for _ in range(iso_rips.RESPAWN_BUDGET):
-        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    for _ in range(virtual_drive_lifecycle.RESPAWN_BUDGET):
+        assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
         now["t"] += 180
-    assert manager.started == ["drv_iso1"] * iso_rips.RESPAWN_BUDGET
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert manager.started == ["drv_iso1"] * virtual_drive_lifecycle.RESPAWN_BUDGET
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert job.status is JobStatus.FAILED
     assert [e["event_type"] for e in hub.events] == ["rip.failed"]
 
@@ -433,17 +433,17 @@ async def test_sweep_respawn_budget_frees_up_after_the_hour(monkeypatch: pytest.
     # Starts older than the budget window no longer count: a disc parked for
     # days survives the occasional backend rollout.
     now = {"t": 1000.0}
-    monkeypatch.setattr(iso_rips.time, "monotonic", lambda: now["t"])
+    monkeypatch.setattr(virtual_drive_lifecycle.time, "monotonic", lambda: now["t"])
     db = FakeSession()
     drive = _virtual()
     db.rows["drives"] = [drive]
     job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(), _Hub()
-    for _ in range(iso_rips.RESPAWN_BUDGET + 1):
-        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
-        now["t"] += iso_rips.RESPAWN_BUDGET_WINDOW_SECONDS / iso_rips.RESPAWN_BUDGET
-    assert manager.started == ["drv_iso1"] * (iso_rips.RESPAWN_BUDGET + 1)
+    for _ in range(virtual_drive_lifecycle.RESPAWN_BUDGET + 1):
+        assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+        now["t"] += virtual_drive_lifecycle.RESPAWN_BUDGET_WINDOW_SECONDS / virtual_drive_lifecycle.RESPAWN_BUDGET
+    assert manager.started == ["drv_iso1"] * (virtual_drive_lifecycle.RESPAWN_BUDGET + 1)
     assert job.status is JobStatus.AWAITING_REVIEW and hub.events == []
 
 
@@ -455,8 +455,8 @@ async def test_sweep_fails_a_parked_job_when_the_ripper_cannot_start(caplog: pyt
     job = _job("job_1", "drv_iso1", JobStatus.AWAITING_REVIEW)
     db.rows["jobs"] = [job]
     manager, hub = _Manager(start_raises=RipperManagerError("docker unavailable")), _Hub()
-    with caplog.at_level(logging.WARNING, logger="arm_backend.iso_rips"):
-        assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    with caplog.at_level(logging.WARNING, logger="arm_backend.virtual_drive_lifecycle"):
+        assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert manager.started == []
     assert job.status is JobStatus.FAILED
     assert drive.lifecycle is DriveLifecycle.RETIRED
@@ -477,7 +477,7 @@ async def test_sweep_fails_unfinished_job_and_retires() -> None:
         Track(job_id="job_other", kind=TrackKind.VIDEO_TITLE, index=0, source_ref="0", status=TrackStatus.DONE),
     ]
     manager, hub = _Manager(), _Hub()  # no container at all -> "missing"
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert job.status is JobStatus.FAILED
     assert job.ripped_at is not None  # same as every other rip_complete outcome
     assert drive.lifecycle is DriveLifecycle.RETIRED and manager.removed == ["drv_iso1"]
@@ -512,7 +512,7 @@ async def test_sweep_cancels_the_failed_jobs_parked_applications() -> None:
         overwrite=False,
     )
     db.rows["session_applications"] = [parked]
-    assert await iso_rips.sweep_virtual_drives(db, _Manager(), _Hub()) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, _Manager(), _Hub()) == 1  # type: ignore[arg-type]
     assert parked.status is SessionApplicationStatus.CANCELLED and parked.completed_at is not None
 
 
@@ -526,7 +526,8 @@ async def test_sweep_judges_the_latest_job() -> None:
     new = _job("job_new", "drv_iso1", JobStatus.RIPPED, created_at=now)
     db.rows["jobs"] = [new, old]
     hub = _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, _Manager({"drv_iso1": "exited"}), hub) == 1  # type: ignore[arg-type]
+    manager = _Manager({"drv_iso1": "exited"})
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert old.status is JobStatus.RIPPING and hub.events == []
 
 
@@ -538,7 +539,7 @@ async def test_sweep_ignores_optical_and_retired() -> None:
     db.rows["drives"] = [optical, retired]
     db.rows["jobs"] = [_job("job_1", "drv_sr0", JobStatus.RIPPING), _job("job_2", "drv_gone", JobStatus.RIPPING)]
     manager = _Manager()
-    assert await iso_rips.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
     assert optical.lifecycle is DriveLifecycle.ENROLLED and retired.lifecycle is DriveLifecycle.RETIRED
     assert all(j.status is JobStatus.RIPPING for j in db.rows["jobs"])
     assert manager.removed == [] and manager.status_calls == []
@@ -560,7 +561,7 @@ async def test_sweep_skips_a_drive_retired_after_the_listing() -> None:
     db.rows["drives"] = [drive]
     db.rows["jobs"] = [job]
     manager, hub = _Manager({"drv_iso1": "exited"}), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 0  # type: ignore[arg-type]
     assert job.status is JobStatus.ABANDONED
     assert hub.events == [] and manager.removed == []
     assert db.locked == ["drives"]
@@ -581,7 +582,7 @@ async def test_sweep_does_not_fail_a_job_that_became_terminal_after_the_listing(
     db.rows["drives"] = [drive]
     db.rows["jobs"] = [job]
     manager, hub = _OrderingManager(db, {"drv_iso1": "exited"}), _Hub()
-    assert await iso_rips.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
     assert job.status is JobStatus.ABANDONED and hub.events == []
     assert drive.lifecycle is DriveLifecycle.RETIRED
     assert db.locked == ["drives", "jobs"]
@@ -594,7 +595,7 @@ async def test_sweep_skips_a_drive_deleted_after_the_listing() -> None:
     db = _RaceSession({"drives": lambda: db.rows["drives"].clear()})
     db.rows["drives"] = [drive]
     manager = _Manager({"drv_iso1": "exited"})
-    assert await iso_rips.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, _Hub()) == 0  # type: ignore[arg-type]
     assert manager.removed == []
 
 
@@ -635,8 +636,16 @@ async def test_watchdog_sweeps_logs_failures_and_stops_on_cancel(caplog: pytest.
         return db
 
     manager = _Manager({"drv_iso1": "exited"})
-    with caplog.at_level(logging.INFO, logger="arm_backend.iso_rips"), pytest.raises(asyncio.CancelledError):
-        await iso_rips.run_virtual_drive_watchdog(factory, manager, _Hub(), interval=0)  # type: ignore[arg-type]
+    with (
+        caplog.at_level(logging.INFO, logger="arm_backend.virtual_drive_lifecycle"),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await virtual_drive_lifecycle.run_virtual_drive_watchdog(
+            factory,
+            manager,  # type: ignore[arg-type]
+            _Hub(),  # type: ignore[arg-type]
+            interval=0,
+        )
     assert calls == 3
     assert "db down" in caplog.text  # the first pass failed and the loop kept going
     assert drive.lifecycle is DriveLifecycle.RETIRED  # the second pass swept

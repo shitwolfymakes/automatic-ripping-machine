@@ -29,7 +29,7 @@ from arm_ripper import extraction_routes, prepare
 
 logger = logging.getLogger("arm_ripper.iso_extract")
 
-# Must match the backend's `iso_rips.EXTRACT_DIRNAME` under RAW_ROOT.
+# Must match the backend's `virtual_drive_lifecycle.EXTRACT_DIRNAME` under RAW_ROOT.
 EXTRACT_ROOT = Path("/raw/.iso-extract")
 
 # A disc folder MakeMKV can open carries one of these at its root.

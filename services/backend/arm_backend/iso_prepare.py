@@ -11,7 +11,7 @@ the ripper re-sends its current phase as a keepalive, so a backend restart
 loses it for one interval at most. A status the ripper stopped refreshing
 ages out after `STALE_SECONDS`; identify (the job exists now) and retire
 (the rip is over) drop it explicitly. Dependency-free, so routers and
-`iso_rips` can import it without a cycle.
+`virtual_drive_lifecycle` can import it without a cycle.
 """
 
 from __future__ import annotations
