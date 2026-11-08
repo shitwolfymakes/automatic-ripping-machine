@@ -1,8 +1,8 @@
 """Pure helpers for the ISO library (Rip from ISO, spec section 4.4).
 
 Dependency-free on purpose: it imports only settings and the stdlib, so both
-`ripper_manager` (spawn mounts) and `iso_rips` (lifecycle) can use it without
-an import cycle.
+`ripper_container_spec` (spawn mounts) and `iso_rips` (lifecycle) can use it
+without an import cycle.
 """
 
 from __future__ import annotations

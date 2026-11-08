@@ -9,9 +9,14 @@ import docker.errors
 import pytest
 
 from arm_backend.config import Settings
-from arm_backend.ripper_manager import (
+import arm_backend.ripper_manager as ripper_manager_mod
+from arm_backend.ripper_container_spec import (
     DOCKER_LABEL_KEY,
     SPEC_HASH_LABEL_KEY,
+    container_name,
+    container_spec,
+)
+from arm_backend.ripper_manager import (
     ReconcileSummary,
     RipperManager,
     RipperManagerError,
@@ -78,7 +83,7 @@ def _container(drive_id: str, status: str = "running", name: str = "arm-ripper-x
 
 def _current(m: RipperManager, c: MagicMock, drive: Drive) -> MagicMock:
     """Label `c` with the spec hash `m` would create `drive`'s container with now."""
-    c.labels[SPEC_HASH_LABEL_KEY] = m.container_spec(drive)["labels"][SPEC_HASH_LABEL_KEY]
+    c.labels[SPEC_HASH_LABEL_KEY] = container_spec(m._settings, drive)["labels"][SPEC_HASH_LABEL_KEY]
     return c
 
 
@@ -86,26 +91,22 @@ def _current(m: RipperManager, c: MagicMock, drive: Drive) -> MagicMock:
 
 
 def test_container_name_uses_the_serial_slug() -> None:
-    m, _ = _manager()
-    assert m.container_name(_drive()) == "arm-ripper-aaaabbbb000e-jkmnpq"
+    assert container_name(_drive()) == "arm-ripper-aaaabbbb000e-jkmnpq"
 
 
 def test_container_name_falls_back_to_the_drive_id_suffix() -> None:
-    m, _ = _manager()
-    assert m.container_name(_drive(serial=None)) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
+    assert container_name(_drive(serial=None)) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
 
 
 def test_container_name_falls_back_to_the_drive_id_suffix_for_an_empty_serial() -> None:
     """B3: an empty-string serial sanitises to "" (not None), so the `or`
     fallback in `container_name` must trigger on the sanitised-empty case
     too, not just serial is None."""
-    m, _ = _manager()
-    assert m.container_name(_drive(serial="")) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
+    assert container_name(_drive(serial="")) == "arm-ripper-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
 
 
 def test_container_name_sanitises_hostname_unsafe_characters() -> None:
-    m, _ = _manager()
-    assert m.container_name(_drive(serial="S/N 12_3.")) == "arm-ripper-s-n-12-3-jkmnpq"
+    assert container_name(_drive(serial="S/N 12_3.")) == "arm-ripper-s-n-12-3-jkmnpq"
 
 
 # --- spec ------------------------------------------------------------------
@@ -114,17 +115,15 @@ def test_container_name_sanitises_hostname_unsafe_characters() -> None:
 def test_container_names_differ_for_two_drives_sharing_a_serial() -> None:
     """D-017: a USB bridge and a SATA drive can report the same short serial;
     their containers (and hostnames) must not collide."""
-    m, _ = _manager()
     a = _drive(serial="0123456789")
     b = _drive(serial="0123456789")
     b.id = "drv_01JZYXWVUTSRQPNMK"
-    assert m.container_name(a) != m.container_name(b)
-    assert m.container_name(a).startswith("arm-ripper-0123456789-")
+    assert container_name(a) != container_name(b)
+    assert container_name(a).startswith("arm-ripper-0123456789-")
 
 
 def test_container_spec_matches_spec_section_3() -> None:
-    m, _ = _manager(PUID="1001", PGID="1000", CDROM_GID="24")
-    spec = m.container_spec(_drive())
+    spec = container_spec(_settings(PUID="1001", PGID="1000", CDROM_GID="24"), _drive())
     assert spec["image"] == "arm-ripper:test"
     assert spec["name"] == spec["hostname"] == "arm-ripper-aaaabbbb000e-jkmnpq"
     assert spec["labels"] == {
@@ -156,14 +155,13 @@ def test_container_spec_matches_spec_section_3() -> None:
 
 
 def test_container_spec_omits_by_id_and_ids_when_unset() -> None:
-    m, _ = _manager()
-    env = m.container_spec(_drive(by_id_name=None))["environment"]
+    env = container_spec(_settings(), _drive(by_id_name=None))["environment"]
     assert "ARM_DRIVE_BY_ID" not in env
     assert "PUID" not in env and "PGID" not in env and "CDROM_GID" not in env
 
 
 def test_container_spec_forwards_ripper_tunables_under_their_ripper_names() -> None:
-    m, _ = _manager(
+    settings = _settings(
         ARM_RIPPER_POLL_INTERVAL_SECONDS="1.5",
         ARM_RIPPER_MIN_LENGTH_SECONDS="300",
         ARM_RIPPER_MAKEMKV_KEYCHECK_INTERVAL_SECONDS="3600",
@@ -171,7 +169,7 @@ def test_container_spec_forwards_ripper_tunables_under_their_ripper_names() -> N
         ARM_RIPPER_OPTICAL_SR_MAX="15",
         ARM_RIPPER_OPTICAL_SG_MAX="31",
     )
-    env = m.container_spec(_drive())["environment"]
+    env = container_spec(settings, _drive())["environment"]
     assert env["POLL_INTERVAL_SECONDS"] == "1.5"
     assert env["ARM_MIN_LENGTH_SECONDS"] == "300"
     assert env["MAKEMKV_KEYCHECK_INTERVAL_SECONDS"] == "3600"
@@ -181,14 +179,12 @@ def test_container_spec_forwards_ripper_tunables_under_their_ripper_names() -> N
 
 
 def test_container_spec_omits_unset_tunables() -> None:
-    m, _ = _manager()
-    env = m.container_spec(_drive())["environment"]
+    env = container_spec(_settings(), _drive())["environment"]
     assert "POLL_INTERVAL_SECONDS" not in env and "ARM_OPTICAL_SR_MAX" not in env
 
 
 def test_container_spec_prefers_the_local_ripper_certs_path() -> None:
-    m, _ = _manager(ARM_RIPPER_CERTS_PATH="/local/certs")
-    volumes = m.container_spec(_drive())["volumes"]
+    volumes = container_spec(_settings(ARM_RIPPER_CERTS_PATH="/local/certs"), _drive())["volumes"]
     assert "/local/certs/arm-ca.crt" in volumes and "/host/certs/arm-ca.crt" not in volumes
 
 
@@ -211,22 +207,20 @@ def _iso_drive(**overrides: Any) -> Drive:
 def test_virtual_container_spec_mounts_an_iso_whose_name_has_a_colon() -> None:
     """D-101: a colon in the file name must not reach a `host:container:mode`
     volume string; the ISO is a Mount with separate source and target."""
-    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/lib")
     d = _iso_drive(source_path="A: B.iso", device_path="/source/A: B.iso")
-    spec = m.container_spec(d)
+    spec = container_spec(_settings(ARM_HOST_ISO_LIBRARY_PATH="/lib"), d)
     assert not any(":" in host for host in spec["volumes"])
     assert [(mt["Source"], mt["Target"]) for mt in spec["mounts"]] == [("/lib/A: B.iso", "/source/A: B.iso")]
 
 
 def test_virtual_container_name_uses_the_iso_prefix() -> None:
-    m, _ = _manager()
-    assert m.container_name(_iso_drive()) == "arm-ripper-iso-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
+    assert container_name(_iso_drive()) == "arm-ripper-iso-" + "drv_01JABCDEFGHJKMNPQ"[-12:].lower()
 
 
 def test_virtual_container_spec_mounts_only_the_iso() -> None:
-    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso", PUID="1001", PGID="1000", CDROM_GID="24")
+    settings = _settings(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso", PUID="1001", PGID="1000", CDROM_GID="24")
     d = _iso_drive(by_id_name="should-not-leak")
-    spec = m.container_spec(d)
+    spec = container_spec(settings, d)
     assert spec["mounts"] == [
         {
             "Target": "/source/Blade Runner.iso",
@@ -258,8 +252,8 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
 
 
 def test_virtual_container_spec_carries_session() -> None:
-    m, _ = _manager(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
-    env = m.container_spec(_iso_drive(rip_params_json={"session_id": "ses_01ABC"}))["environment"]
+    settings = _settings(ARM_HOST_ISO_LIBRARY_PATH="/mnt/nas/iso")
+    env = container_spec(settings, _iso_drive(rip_params_json={"session_id": "ses_01ABC"}))["environment"]
     assert env["ARM_SOURCE_SESSION_ID"] == "ses_01ABC"
 
 
@@ -489,12 +483,10 @@ def test_reconcile_does_not_recreate_when_the_image_lookup_fails(caplog) -> None
 
 
 def test_spec_hash_is_stable_and_tracks_settings() -> None:
-    m, _ = _manager()
     d = _drive()
-    first = m.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY]
-    assert m.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY] == first
-    raised, _ = _manager(ARM_RIPPER_OPTICAL_SG_MAX="31")
-    assert raised.container_spec(d)["labels"][SPEC_HASH_LABEL_KEY] != first
+    first = container_spec(_settings(), d)["labels"][SPEC_HASH_LABEL_KEY]
+    assert container_spec(_settings(), d)["labels"][SPEC_HASH_LABEL_KEY] == first
+    assert container_spec(_settings(ARM_RIPPER_OPTICAL_SG_MAX="31"), d)["labels"][SPEC_HASH_LABEL_KEY] != first
 
 
 def test_reconcile_recreates_an_idle_container_whose_spec_drifted(caplog) -> None:
@@ -598,14 +590,14 @@ def test_reconcile_records_a_drift_check_failure_per_drive(monkeypatch) -> None:
     bad, good = _drive("drv_bad", serial="B"), _drive("drv_good", serial="G")
     client.containers.list.return_value = [_container("drv_bad"), _container("drv_good")]
     client.containers.run.return_value = _container("drv_good", name="arm-ripper-g")
-    real_spec = m.container_spec
+    real_spec = container_spec
 
-    def spec(drive):
+    def spec(settings, drive):
         if drive.id == "drv_bad":
             raise RuntimeError("no host path for drive")
-        return real_spec(drive)
+        return real_spec(settings, drive)
 
-    monkeypatch.setattr(m, "container_spec", spec)
+    monkeypatch.setattr(ripper_manager_mod, "container_spec", spec)
     summary = m.reconcile([bad, good])
     assert "no host path" in summary.failed["drv_bad"]
     assert summary.recreated == ["drv_good"]
