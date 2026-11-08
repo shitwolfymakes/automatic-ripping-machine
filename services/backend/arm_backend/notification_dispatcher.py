@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
@@ -37,6 +38,9 @@ from arm_backend.notification_format import format_event
 from arm_backend.notifications.message import Message, NotificationListener
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Event, Job, with_log_context
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 logger = logging.getLogger("arm_backend.notification_dispatcher")
 
@@ -72,6 +76,35 @@ DEFAULT_INBOX_EVENT_TYPES: frozenset[str] = frozenset(
 NOTABLE_EVENT_TYPES: frozenset[str] = NOTIFIABLE_EVENT_TYPES | DEFAULT_INBOX_EVENT_TYPES
 
 
+async def _unsent_events(db: AsyncSession) -> Sequence[Event]:
+    """Every notable event not yet notified, oldest first."""
+    # Filter on notified_at in SQL: the events table is never pruned,
+    # so loading every notable event each tick grows with history (D-168).
+    return (
+        (
+            await db.execute(
+                select(Event)
+                .where(col(Event.event_type).in_(NOTABLE_EVENT_TYPES))
+                .where(col(Event.notified_at).is_(None))
+                .order_by(col(Event.emitted_at).asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _apprise_enabled(db: AsyncSession) -> bool:
+    """Whether the global notifications toggle allows external (apprise)
+    delivery."""
+    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    # The global toggle gates EXTERNAL (apprise) delivery only — the
+    # in-app inbox must keep working out of the box, and inbox-only
+    # events (rip.needs_user_input) must never be consumed unseen.
+    # Listeners receive the flag on the message and decide themselves.
+    return cfg is not None and cfg.notifications_enabled
+
+
 class MessageDispatcher:
     def __init__(
         self,
@@ -103,57 +136,19 @@ class MessageDispatcher:
 
     async def _tick(self) -> None:
         async with self._db_factory() as db:
-            # Filter on notified_at in SQL: the events table is never pruned,
-            # so loading every notable event each tick grows with history (D-168).
-            unsent = (
-                (
-                    await db.execute(
-                        select(Event)
-                        .where(col(Event.event_type).in_(NOTABLE_EVENT_TYPES))
-                        .where(col(Event.notified_at).is_(None))
-                        .order_by(col(Event.emitted_at).asc())
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            unsent = await _unsent_events(db)
             if not unsent:
                 return
 
-            cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-            # The global toggle gates EXTERNAL (apprise) delivery only — the
-            # in-app inbox must keep working out of the box, and inbox-only
-            # events (rip.needs_user_input) must never be consumed unseen.
-            # Listeners receive the flag on the message and decide themselves.
-            enabled = cfg is not None and cfg.notifications_enabled
+            enabled = await _apprise_enabled(db)
 
             for event in unsent:
                 with with_log_context(
                     job_id=event.job_id,
                     session_application_id=event.session_application_id,
                 ):
-                    job = await self._load_job(db, event.job_id)
-                    default_title, default_body = format_event(event, job)
-                    message = Message(
-                        event_id=event.id,
-                        event_type=event.event_type,
-                        job_id=event.job_id,
-                        default_title=default_title,
-                        default_body=default_body,
-                        job=job,
-                        payload=event.payload_json or {},
-                        apprise_enabled=enabled,
-                    )
-                    for listener in self._listeners:
-                        try:
-                            await listener.handle(db, message)
-                        except Exception as exc:
-                            logger.exception(
-                                "listener %s failed for event_id=%s: %s",
-                                type(listener).__name__,
-                                event.id,
-                                exc,
-                            )
+                    message = await self._build_message(db, event, enabled)
+                    await self._fan_out(db, message)
                     event.notified_at = datetime.now(UTC)
                     # Commit per event: apprise sends are external side effects
                     # that already happened — a batch-wide commit would re-send
@@ -161,6 +156,35 @@ class MessageDispatcher:
                     # (e.g. a channel deleted mid-tick) or shutdown lands
                     # between send and commit.
                     await db.commit()
+
+    async def _build_message(self, db: AsyncSession, event: Event, apprise_enabled: bool) -> Message:
+        """The event's message: its job, default title and body, and payload."""
+        job = await self._load_job(db, event.job_id)
+        default_title, default_body = format_event(event, job)
+        return Message(
+            event_id=event.id,
+            event_type=event.event_type,
+            job_id=event.job_id,
+            default_title=default_title,
+            default_body=default_body,
+            job=job,
+            payload=event.payload_json or {},
+            apprise_enabled=apprise_enabled,
+        )
+
+    async def _fan_out(self, db: AsyncSession, message: Message) -> None:
+        """Hand `message` to every listener; one listener's failure is logged
+        and never stops the rest."""
+        for listener in self._listeners:
+            try:
+                await listener.handle(db, message)
+            except Exception as exc:
+                logger.exception(
+                    "listener %s failed for event_id=%s: %s",
+                    type(listener).__name__,
+                    message.event_id,
+                    exc,
+                )
 
     async def _load_job(self, db: AsyncSession, job_id: str | None) -> Job | None:
         if job_id is None:
