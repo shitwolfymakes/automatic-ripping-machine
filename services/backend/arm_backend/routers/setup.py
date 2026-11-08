@@ -214,6 +214,40 @@ async def dismiss_checklist(_: User = Depends(require_writer), db: AsyncSession 
 _DISC_KINDS = (MediaType.MOVIE, MediaType.TV, MediaType.MUSIC, MediaType.DATA, MediaType.ISO)
 
 
+def _first_builtin_session_id(sessions: list[Session], kind: MediaType) -> str | None:
+    """The first built-in session of ``kind`` by name, else None."""
+    builtin = sorted((s for s in sessions if s.is_builtin and s.media_type == kind), key=lambda s: s.name)
+    return builtin[0].id if builtin else None
+
+
+async def _route_for_kind(
+    db: AsyncSession, kind: MediaType, sessions: list[Session], by_id: dict[str, Session]
+) -> Session | None:
+    """The session a disc of ``kind`` gets: its session route, else the first built-in of that type."""
+    sid = await route_session_id_for(db, kind, None)
+    if sid is None:
+        sid = _first_builtin_session_id(sessions, kind)
+    return by_id.get(sid) if sid else None
+
+
+def _summary_for(
+    kind: MediaType, sess: Session | None, rip: dict[str, RipPreset], tc: dict[str, TranscodePreset]
+) -> DiscRouteSummary:
+    """The setup-table row for ``kind``; bare when no session handles it."""
+    if sess is None:
+        return DiscRouteSummary(kind=kind)
+    rp = rip.get(sess.rip_preset_id)
+    tp = tc.get(sess.transcode_preset_id) if sess.transcode_preset_id else None
+    return DiscRouteSummary(
+        kind=kind,
+        session_id=sess.id,
+        session_name=sess.name,
+        rip_summary=rp.name if rp else None,
+        transcode_summary=tp.name if tp else None,
+        output_template=sess.output_path_template,
+    )
+
+
 @router.get("/disc-routes", response_model=list[DiscRouteSummary])
 async def disc_routes(
     _: User = Depends(require_writer),
@@ -228,24 +262,6 @@ async def disc_routes(
     tc = {p.id: p for p in (await db.execute(select(TranscodePreset))).scalars().all()}
     out: list[DiscRouteSummary] = []
     for kind in _DISC_KINDS:
-        sid = await route_session_id_for(db, kind, None)
-        if sid is None:
-            builtin = sorted((s for s in sessions if s.is_builtin and s.media_type == kind), key=lambda s: s.name)
-            sid = builtin[0].id if builtin else None
-        sess = by_id.get(sid) if sid else None
-        if sess is None:
-            out.append(DiscRouteSummary(kind=kind))
-            continue
-        rp = rip.get(sess.rip_preset_id)
-        tp = tc.get(sess.transcode_preset_id) if sess.transcode_preset_id else None
-        out.append(
-            DiscRouteSummary(
-                kind=kind,
-                session_id=sess.id,
-                session_name=sess.name,
-                rip_summary=rp.name if rp else None,
-                transcode_summary=tp.name if tp else None,
-                output_template=sess.output_path_template,
-            )
-        )
+        sess = await _route_for_kind(db, kind, sessions, by_id)
+        out.append(_summary_for(kind, sess, rip, tc))
     return out
