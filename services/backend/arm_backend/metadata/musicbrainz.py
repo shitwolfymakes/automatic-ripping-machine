@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import time
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
@@ -43,6 +44,33 @@ _DISC_NOT_FOUND = "musicbrainz disc_id not found"
 _DISC_NO_RELEASES = "musicbrainz disc_id has no releases"
 TOC_NOT_FOUND = "musicbrainz toc not found"
 _TOC_CANDIDATES = 5
+
+
+# The release-search filters, in the order search_releases ANDs them onto the
+# query: (parameter, Lucene field, quoted, escaped).
+_RELEASE_FILTERS: tuple[tuple[str, str, bool, bool], ...] = (
+    ("artist", "artist", True, True),
+    ("track_count", "tracks", False, False),
+    ("release_type", "primarytype", False, True),
+    ("format", "format", True, True),
+    ("country", "country", False, True),
+    ("status", "status", False, True),
+)
+
+
+def _lucene_query(query: str, filters: Mapping[str, str | int | None]) -> str:
+    """`query` with each present filter AND-ed on as a Lucene term, in `_RELEASE_FILTERS` order.
+
+    A filter is absent when it is None or the empty string, so a track count of 0 still counts.
+    """
+    lucene = query
+    for name, field, quoted, escaped in _RELEASE_FILTERS:
+        value = filters.get(name)
+        if value is None or value == "":
+            continue
+        text = _escape_lucene(str(value)) if escaped else str(value)
+        lucene = f'{lucene} AND {field}:"{text}"' if quoted else f"{lucene} AND {field}:{text}"
+    return lucene
 
 
 class MusicBrainzClient:
@@ -225,19 +253,17 @@ class MusicBrainzClient:
     ) -> list[MetadataResult]:
         """Lucene release search for interactive lookup. Returns up to `limit`.
         Each present filter is AND-ed into the Lucene query."""
-        lucene = query
-        if artist:
-            lucene = f'{lucene} AND artist:"{_escape_lucene(artist)}"'
-        if track_count is not None:
-            lucene = f"{lucene} AND tracks:{track_count}"
-        if release_type:
-            lucene = f"{lucene} AND primarytype:{_escape_lucene(release_type)}"
-        if format:
-            lucene = f'{lucene} AND format:"{_escape_lucene(format)}"'
-        if country:
-            lucene = f"{lucene} AND country:{_escape_lucene(country)}"
-        if status:
-            lucene = f"{lucene} AND status:{_escape_lucene(status)}"
+        lucene = _lucene_query(
+            query,
+            {
+                "artist": artist,
+                "track_count": track_count,
+                "release_type": release_type,
+                "format": format,
+                "country": country,
+                "status": status,
+            },
+        )
         body = await self._get(
             "/release",
             params={"query": lucene, "fmt": "json", "limit": limit},

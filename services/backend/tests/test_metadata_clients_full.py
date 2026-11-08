@@ -399,6 +399,44 @@ async def test_search_releases_builds_lucene_with_filters(  # type: ignore[no-un
     assert "status:official" in q
 
 
+_LUCENE_CASES = [
+    ({}, "q"),
+    (
+        {
+            "artist": "Metronomy",
+            "track_count": 12,
+            "release_type": "album",
+            "format": "CD",
+            "country": "GB",
+            "status": "official",
+        },
+        'q AND artist:"Metronomy" AND tracks:12 AND primarytype:album AND format:"CD"'
+        " AND country:GB AND status:official",
+    ),
+    ({"track_count": 0}, "q AND tracks:0"),
+    ({"artist": ""}, "q"),
+    ({"artist": 'AC\\DC "Live"'}, 'q AND artist:"AC\\\\DC \\"Live\\""'),
+]
+
+
+@pytest.mark.parametrize(("filters", "expected"), _LUCENE_CASES)
+@respx.mock
+async def test_search_releases_sends_exact_lucene_query(  # type: ignore[no-untyped-def]
+    http_client, monkeypatch: pytest.MonkeyPatch, filters, expected
+) -> None:
+    monkeypatch.setattr(mb_mod, "_MIN_INTERVAL_SECONDS", 0)
+    route = respx.get("https://musicbrainz.org/ws/2/release").mock(
+        return_value=httpx.Response(200, json={"releases": []})
+    )
+    await MusicBrainzClient("UA/1.0", http_client).search_releases("q", **filters)
+    assert dict(route.calls.last.request.url.params)["query"] == expected
+
+
+@pytest.mark.parametrize(("filters", "expected"), _LUCENE_CASES)
+def test_lucene_query_builds_exact_string(filters, expected) -> None:  # type: ignore[no-untyped-def]
+    assert mb_mod._lucene_query("q", filters) == expected
+
+
 def test_to_candidate_populates_music_facets() -> None:
     from arm_backend.routers.metadata import _to_candidate
 
