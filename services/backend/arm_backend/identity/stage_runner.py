@@ -61,17 +61,13 @@ from arm_backend.identity.http import POLICIES, SourceHttp
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import ResolveOutcome
 from arm_backend.identity.proposals import claims_of
-from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
+from arm_backend.identity.sources.registry import EPISODE_SOURCE_IDS
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, JobStatus, Track
 from arm_common.schemas import ExternalIds
 
 logger = logging.getLogger("arm_backend.identity.stage_runner")
-
-# Every episode-match source id (independent of the sources.registry rank/
-# tier maps, which PR 4 will make operator-configurable).
-_EPISODE_SOURCE_IDS: tuple[str, ...] = tuple(EPISODE_SOURCE_BY_SETTING.values())
 
 # Most jobs whose episode stage computes and applies at once (M5): bounds
 # provider load and DB connections when many jobs are scheduled together
@@ -171,7 +167,7 @@ class EpisodeStageRunner:
         # Built once, kept for the runner's lifetime: state (rate limit,
         # cache, backoff) is per-instance and must survive across runs.
         self._http_map: dict[str, SourceHttp] = {
-            source_id: SourceHttp(http, POLICIES[source_id]) for source_id in _EPISODE_SOURCE_IDS
+            source_id: SourceHttp(http, POLICIES[source_id]) for source_id in EPISODE_SOURCE_IDS
         }
         self._providers: list[EpisodeListProvider] | None = None
         self._providers_key: tuple[str | None, str | None] | None = None
@@ -431,7 +427,7 @@ class EpisodeStageRunner:
                 if not is_tv_candidate(job, tracks_by_job.get(job.id, [])):
                     continue
                 claims = claims_of(job)
-                if claims.episodes_cleared or any(source_id in claims.sources for source_id in _EPISODE_SOURCE_IDS):
+                if claims.episodes_cleared or any(source_id in claims.sources for source_id in EPISODE_SOURCE_IDS):
                     continue
                 self.schedule(job.id)
                 count += 1

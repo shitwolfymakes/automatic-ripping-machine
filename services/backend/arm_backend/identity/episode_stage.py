@@ -48,7 +48,7 @@ from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import MANUAL, claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,
-    EPISODE_SOURCE_BY_SETTING,
+    EPISODE_SOURCE_IDS,
     enabled_episode_source_ids,
     episode_auto_apply,
     episode_tolerance,
@@ -59,8 +59,6 @@ logger = logging.getLogger(__name__)
 # Nominal runtimes: a provider listing every episode at a whole number of
 # 5-minute broadcast slots (e.g. TVmaze's 60 min for a 44-minute episode).
 NOMINAL_SLOT_S = 300
-
-_EPISODE_SOURCE_IDS = frozenset(EPISODE_SOURCE_BY_SETTING.values())
 
 
 @dataclass(frozen=True)
@@ -122,7 +120,7 @@ def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
         if track.kind != TrackKind.VIDEO_TITLE or track.excluded or _placed(track):
             continue
         role_source = (track.identity_provenance or {}).get("role")
-        if track.role not in (None, TrackRole.EPISODE) and role_source not in _EPISODE_SOURCE_IDS:
+        if track.role not in (None, TrackRole.EPISODE) and role_source not in EPISODE_SOURCE_IDS:
             continue
         length = _length(track)
         if length:
@@ -319,7 +317,7 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
         return None
     if opts.season is not None:
         return opts.season
-    if (job.identity_provenance or {}).get("season") in _EPISODE_SOURCE_IDS:
+    if (job.identity_provenance or {}).get("season") in EPISODE_SOURCE_IDS:
         return None
     return job.season
 

@@ -44,6 +44,8 @@ EPISODE_SOURCE_BY_SETTING: dict[str, str] = {
     "tvmaze": "episodes_tvmaze",
     "tvdb": "episodes_tvdb",
 }
+# Every episode-match source id, in the settings map's order.
+EPISODE_SOURCE_IDS: tuple[str, ...] = tuple(EPISODE_SOURCE_BY_SETTING.values())
 
 # Episode-match provider settings in default rank order (spec 4.5 default;
 # PR 4 makes this the operator's setting).
@@ -99,7 +101,7 @@ def enabled_hint_sources(cfg: Config | None) -> tuple[Source, ...]:
 
 def disabled_source_ids(cfg: Config | None) -> frozenset[str]:
     """Ranked-capability sources the operator unchecked (spec 4.5: membership = enabled)."""
-    every = set(EPISODE_SOURCE_BY_SETTING.values()) | set(HINT_SOURCE_BY_SETTING)
+    every = set(EPISODE_SOURCE_IDS) | set(HINT_SOURCE_BY_SETTING)
     enabled = set(enabled_episode_source_ids(cfg)) | {s.id for s in enabled_hint_sources(cfg)}
     return frozenset(every - enabled)
 
