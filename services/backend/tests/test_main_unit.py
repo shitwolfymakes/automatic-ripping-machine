@@ -12,6 +12,7 @@ import pytest
 
 from arm_backend import gpu_inventory
 from arm_backend import main as main_mod
+from arm_backend import thediscdb_schedule
 
 
 def test_run_migrations_invokes_alembic(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -265,8 +266,8 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
     )
     db = FakeSession()
     db.rows["config"] = [cfg]
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+    monkeypatch.setattr(thediscdb_schedule, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(thediscdb_schedule.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
 
     calls: list[tuple[object, Path]] = []
 
@@ -290,7 +291,7 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
     app.state.thediscdb = snap.SnapshotStore(Path(str(tmp_path)))  # no index on disk → stale
 
     with pytest.raises(asyncio.CancelledError):
-        await main_mod._thediscdb_refresh_loop(app)
+        await thediscdb_schedule.thediscdb_refresh_loop(app)
 
     assert calls == [(app.state.http, Path(str(tmp_path)))]
     assert cfg.thediscdb_refreshed_at is not None
@@ -328,8 +329,8 @@ async def test_thediscdb_refresh_loop_skips_when_disabled(monkeypatch: pytest.Mo
     )
     db = FakeSession()
     db.rows["config"] = [cfg]
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+    monkeypatch.setattr(thediscdb_schedule, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(thediscdb_schedule.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
 
     calls: list[tuple[object, Path]] = []
 
@@ -353,7 +354,7 @@ async def test_thediscdb_refresh_loop_skips_when_disabled(monkeypatch: pytest.Mo
     app.state.thediscdb = snap.SnapshotStore(Path(str(tmp_path)))
 
     with pytest.raises(asyncio.CancelledError):
-        await main_mod._thediscdb_refresh_loop(app)
+        await thediscdb_schedule.thediscdb_refresh_loop(app)
 
     assert calls == []
     assert cfg.thediscdb_refreshed_at is None
@@ -394,8 +395,8 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
     )
     db = FakeSession()
     db.rows["config"] = [cfg]
-    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
-    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+    monkeypatch.setattr(thediscdb_schedule, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(thediscdb_schedule.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
 
     calls: list[tuple[object, Path]] = []
 
@@ -419,7 +420,7 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
     app.state.thediscdb = types.SimpleNamespace(exists=lambda: True)
 
     with pytest.raises(asyncio.CancelledError):
-        await main_mod._thediscdb_refresh_loop(app)
+        await thediscdb_schedule.thediscdb_refresh_loop(app)
 
     assert calls == []
     assert cfg.thediscdb_refreshed_at == refreshed_at
@@ -438,10 +439,10 @@ async def test_thediscdb_refresh_loop_survives_an_error(monkeypatch: pytest.Monk
     async def _stop(_seconds: float) -> None:
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(main_mod, "SessionLocal", _broken_session)
-    monkeypatch.setattr(main_mod.asyncio, "sleep", _stop)
+    monkeypatch.setattr(thediscdb_schedule, "SessionLocal", _broken_session)
+    monkeypatch.setattr(thediscdb_schedule.asyncio, "sleep", _stop)
     with pytest.raises(asyncio.CancelledError):
-        await main_mod._thediscdb_refresh_loop(object())  # type: ignore[arg-type]
+        await thediscdb_schedule.thediscdb_refresh_loop(object())  # type: ignore[arg-type]
     assert "thediscdb: refresh loop error: db down" in caplog.text
 
 

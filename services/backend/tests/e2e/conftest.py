@@ -99,6 +99,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     import arm_backend.main as main_mod
     import arm_backend.routers.auth as auth_router_mod
     import arm_backend.seeders as seeders_mod
+    import arm_backend.thediscdb_schedule as thediscdb_schedule
 
     saved_types = _retype_pg_columns_to_json()
 
@@ -123,6 +124,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setattr(db_mod, "SessionLocal", test_sessionmaker)
     monkeypatch.setattr(main_mod, "SessionLocal", test_sessionmaker)
     monkeypatch.setattr(gpu_inventory, "SessionLocal", test_sessionmaker)
+    monkeypatch.setattr(thediscdb_schedule, "SessionLocal", test_sessionmaker)
 
     # Force the docker-less lifespan path deterministically: container spawns
     # need a real docker socket, which the SQLite e2e tier can't provide. The
