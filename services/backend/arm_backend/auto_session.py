@@ -843,6 +843,106 @@ async def cancel_parked_applications(db: AsyncSession, job: Job) -> int:
     return len(parked)
 
 
+def _to_resolve_fan_out_outcome(
+    app: SessionApplication, job: Job, sess: Session, outcome: ApplySessionOutcome
+) -> ResolveFanOutOutcome:
+    """Map a fan-out's ApplySessionOutcome to the outcome resolve reports for that application."""
+    if outcome.skipped_reason == "collisions":
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="collisions",
+            error_detail=f"output path collisions: {len(outcome.collisions)} path(s) already claimed",
+        )
+
+    if outcome.skipped_reason == "no_tracks":
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="no_tracks",
+            error_detail=_NO_TRACKS_DETAIL,
+        )
+
+    if outcome.skipped_reason == "media_mismatch":
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="media_mismatch",
+            error_detail=outcome.error_detail or media_mismatch_detail(job, sess),
+        )
+
+    if outcome.skipped_reason == "no_outputs":
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="no_outputs",
+            error_detail=_NO_OUTPUTS_DETAIL,
+        )
+
+    assert outcome.application is not None
+    return ResolveFanOutOutcome(
+        application=outcome.application,
+        tasks=outcome.tasks,
+        skipped_reason=None,
+        error_detail=None,
+    )
+
+
+async def _fan_out_waiting_application(
+    db: AsyncSession,
+    app: SessionApplication,
+    job: Job,
+    tracks: list[Track],
+    hub: WSHub | None,
+) -> ResolveFanOutOutcome:
+    """Try to promote one waiting_identify application to queued and return its outcome."""
+    sess = (await db.execute(select(Session).where(col(Session.id) == app.session_id))).scalar_one_or_none()
+    if sess is None:
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="session_missing",
+            error_detail=f"session {app.session_id} no longer exists",
+        )
+
+    transcode_preset = await _load_transcode_preset(db, sess)
+    if sess.transcode_preset_id is not None and transcode_preset is None:
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="session_missing",
+            error_detail=f"transcode_preset {sess.transcode_preset_id} no longer exists",
+        )
+
+    refusal = await _encode_gate_refusal(db, transcode_preset)
+    if refusal is not None:
+        skipped_reason, error_detail = refusal
+        return ResolveFanOutOutcome(application=app, tasks=[], skipped_reason=skipped_reason, error_detail=error_detail)
+
+    try:
+        outcome = await _fan_out_tasks_for_application(
+            db,
+            application=app,
+            job=job,
+            sess=sess,
+            transcode_preset=transcode_preset,
+            tracks=tracks,
+            hub=hub,
+            source="manual",
+            overwrite=False,
+            created_by_user_id=None,
+        )
+    except TemplateValidationError as exc:
+        return ResolveFanOutOutcome(
+            application=app,
+            tasks=[],
+            skipped_reason="template",
+            error_detail=str(exc),
+        )
+
+    return _to_resolve_fan_out_outcome(app, job, sess, outcome)
+
+
 async def fan_out_waiting_identify_applications(
     db: AsyncSession,
     *,
@@ -874,121 +974,7 @@ async def fan_out_waiting_identify_applications(
 
     tracks = await _job_tracks(db, job)
 
-    outcomes: list[ResolveFanOutOutcome] = []
-    for app in apps:
-        sess = (await db.execute(select(Session).where(col(Session.id) == app.session_id))).scalar_one_or_none()
-        if sess is None:
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="session_missing",
-                    error_detail=f"session {app.session_id} no longer exists",
-                )
-            )
-            continue
-
-        transcode_preset = await _load_transcode_preset(db, sess)
-        if sess.transcode_preset_id is not None and transcode_preset is None:
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="session_missing",
-                    error_detail=f"transcode_preset {sess.transcode_preset_id} no longer exists",
-                )
-            )
-            continue
-
-        refusal = await _encode_gate_refusal(db, transcode_preset)
-        if refusal is not None:
-            skipped_reason, error_detail = refusal
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app, tasks=[], skipped_reason=skipped_reason, error_detail=error_detail
-                )
-            )
-            continue
-
-        try:
-            outcome = await _fan_out_tasks_for_application(
-                db,
-                application=app,
-                job=job,
-                sess=sess,
-                transcode_preset=transcode_preset,
-                tracks=tracks,
-                hub=hub,
-                source="manual",
-                overwrite=False,
-                created_by_user_id=None,
-            )
-        except TemplateValidationError as exc:
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="template",
-                    error_detail=str(exc),
-                )
-            )
-            continue
-
-        if outcome.skipped_reason == "collisions":
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="collisions",
-                    error_detail=f"output path collisions: {len(outcome.collisions)} path(s) already claimed",
-                )
-            )
-            continue
-
-        if outcome.skipped_reason == "no_tracks":
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="no_tracks",
-                    error_detail=_NO_TRACKS_DETAIL,
-                )
-            )
-            continue
-
-        if outcome.skipped_reason == "media_mismatch":
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="media_mismatch",
-                    error_detail=outcome.error_detail or media_mismatch_detail(job, sess),
-                )
-            )
-            continue
-
-        if outcome.skipped_reason == "no_outputs":
-            outcomes.append(
-                ResolveFanOutOutcome(
-                    application=app,
-                    tasks=[],
-                    skipped_reason="no_outputs",
-                    error_detail=_NO_OUTPUTS_DETAIL,
-                )
-            )
-            continue
-
-        assert outcome.application is not None
-        outcomes.append(
-            ResolveFanOutOutcome(
-                application=outcome.application,
-                tasks=outcome.tasks,
-                skipped_reason=None,
-                error_detail=None,
-            )
-        )
-
-    return outcomes
+    return [await _fan_out_waiting_application(db, app, job, tracks, hub) for app in apps]
 
 
 async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOutOutcome]:
