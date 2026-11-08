@@ -172,6 +172,62 @@ def _play_all_refs(
     return tuple(t.ref for i, t in enumerate(titles) if _is_play_all(t.seconds, episodes, tolerance, ref_rt, titles, i))
 
 
+class _AlignTable:
+    """The alignment DP table: the cheapest cost and back-pointer for each
+    (eligible title, episode) cell, filled by the skip and match moves."""
+
+    def __init__(
+        self, elig: Sequence[TitleIn], episodes: Sequence[Episode], tolerance: int, ref_rt: int, anchor: int | None
+    ) -> None:
+        self.elig = elig
+        self.episodes = episodes
+        self.tolerance = tolerance
+        self.ref_rt = ref_rt
+        self.m, self.n = len(elig), len(episodes)
+
+        # Rule D: skip_title cost = tolerance + 2; skip_ep = tolerance + 1
+        self.skip_title_cost = tolerance + 2
+        self.skip_ep_cost = tolerance + 1
+
+        self.dp = [[_INF] * (self.n + 1) for _ in range(self.m + 1)]
+        self.back: list[list[tuple[object, ...] | None]] = [[None] * (self.n + 1) for _ in range(self.m + 1)]
+        for j in range(self.n + 1):
+            self.dp[0][j] = ANCHOR_WEIGHT * abs(j - anchor) if anchor is not None else FREE_START_WEIGHT * j
+            self.back[0][j] = ("start",)
+
+    def relax(self, i: int, j: int, cost: float, step: tuple[object, ...]) -> None:
+        """Lower cell (i, j) to `cost`, reached by `step`, when that is cheaper."""
+        if cost < self.dp[i][j]:
+            self.dp[i][j] = cost
+            self.back[i][j] = step
+
+    def fill(self) -> None:
+        """Relax every cell's moves, row by row."""
+        for i in range(self.m + 1):
+            for j in range(self.n + 1):
+                cur = self.dp[i][j]
+                if i < self.m:
+                    self.relax(i + 1, j, cur + self.skip_title_cost, ("skip_title", i, j))
+                if i > 0 and j < self.n:
+                    self.relax(i, j + 1, cur + self.skip_ep_cost, ("skip_ep", i, j))
+                if i < self.m and j < self.n:
+                    one = _one_cost(self.elig[i].seconds, self.episodes[j].runtime_s, self.tolerance, self.ref_rt)
+                    if one is not None:
+                        self.relax(i + 1, j + 1, cur + one, ("one", i, j))
+                if (
+                    i < self.m
+                    and j + 1 < self.n
+                    and self.episodes[j].season == self.episodes[j + 1].season
+                    and self.episodes[j + 1].number == self.episodes[j].number + 1
+                ):
+                    a, b = _known(self.episodes[j].runtime_s), _known(self.episodes[j + 1].runtime_s)
+                    if a is not None and b is not None:
+                        delta = abs(self.elig[i].seconds - (a + b))
+                        eff = effective_tolerance(a + b, self.tolerance)
+                        if delta <= eff:
+                            self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
+
+
 def align(
     titles: Sequence[TitleIn],
     episodes: Sequence[Episode],
@@ -185,44 +241,9 @@ def align(
     elig = [t for t in titles if t.ref not in play_all]
     m, n = len(elig), len(episodes)
 
-    # Rule D: skip_title cost = tolerance + 2; skip_ep = tolerance + 1
-    skip_title_cost = tolerance + 2
-    skip_ep_cost = tolerance + 1
-
-    dp = [[_INF] * (n + 1) for _ in range(m + 1)]
-    back: list[list[tuple[object, ...] | None]] = [[None] * (n + 1) for _ in range(m + 1)]
-    for j in range(n + 1):
-        dp[0][j] = ANCHOR_WEIGHT * abs(j - anchor) if anchor is not None else FREE_START_WEIGHT * j
-        back[0][j] = ("start",)
-
-    def relax(i: int, j: int, cost: float, step: tuple[object, ...]) -> None:
-        if cost < dp[i][j]:
-            dp[i][j] = cost
-            back[i][j] = step
-
-    for i in range(m + 1):
-        for j in range(n + 1):
-            cur = dp[i][j]
-            if i < m:
-                relax(i + 1, j, cur + skip_title_cost, ("skip_title", i, j))
-            if i > 0 and j < n:
-                relax(i, j + 1, cur + skip_ep_cost, ("skip_ep", i, j))
-            if i < m and j < n:
-                one = _one_cost(elig[i].seconds, episodes[j].runtime_s, tolerance, ref_rt)
-                if one is not None:
-                    relax(i + 1, j + 1, cur + one, ("one", i, j))
-            if (
-                i < m
-                and j + 1 < n
-                and episodes[j].season == episodes[j + 1].season
-                and episodes[j + 1].number == episodes[j].number + 1
-            ):
-                a, b = _known(episodes[j].runtime_s), _known(episodes[j + 1].runtime_s)
-                if a is not None and b is not None:
-                    delta = abs(elig[i].seconds - (a + b))
-                    eff = effective_tolerance(a + b, tolerance)
-                    if delta <= eff:
-                        relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
+    table = _AlignTable(elig, episodes, tolerance, ref_rt, anchor)
+    table.fill()
+    dp, back = table.dp, table.back
 
     best_j = min(range(n + 1), key=lambda j: (dp[m][j], j))
     matches: list[TitleMatch] = []
