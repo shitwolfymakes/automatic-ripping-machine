@@ -16,7 +16,7 @@ import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -47,6 +47,9 @@ from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_i
 from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
 from arm_common.schemas import CollisionInfo
+
+if TYPE_CHECKING:
+    from arm_backend.ws.hub import WSHub
 
 LIVE_STATES: tuple[TranscodeTaskStatus, ...] = (
     TranscodeTaskStatus.QUEUED,
@@ -483,3 +486,29 @@ async def aggregate_session_application(
     application.status = target
     application.completed_at = datetime.now(UTC)
     return AggregateOutcome(transitioned_to=target, event_type=event)
+
+
+async def emit_session_outcome(
+    hub: "WSHub", db: AsyncSession, application: SessionApplication, event_type: str
+) -> None:
+    """Announce a session application's `session.*` event on `transcode.events`."""
+    await hub.emit(
+        topic="transcode.events",
+        event_type=event_type,
+        payload={
+            "session_application_id": application.id,
+            "session_id": application.session_id,
+            "job_id": application.job_id,
+            "status": application.status.value,
+        },
+        job_id=application.job_id,
+        session=db,
+    )
+
+
+async def settle_session_application(db: AsyncSession, hub: "WSHub", application: SessionApplication) -> None:
+    """Recompute the application's status from its tasks and announce a terminal
+    transition; the caller commits."""
+    outcome = await aggregate_session_application(db, application)
+    if outcome.event_type is not None:
+        await emit_session_outcome(hub, db, application, outcome.event_type)
