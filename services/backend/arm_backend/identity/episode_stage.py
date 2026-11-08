@@ -350,6 +350,67 @@ def _tolerance(job: Job, source_id: str, opts: StageOptions, cfg: Config) -> int
     return episode_tolerance(cfg)
 
 
+def _kept_inputs(
+    prior_inputs: Mapping[str, Any], known_season: int | None, disc_number: int | None, tolerance: int
+) -> dict[str, Any]:
+    """The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
+    the show id is the one the last stored entry used, and the rest is this
+    request's, so put_source keeps the last good claims only when the
+    request is unchanged. With no known previous show id (none stored, or
+    cleared by /resolve naming a different show) nothing can be kept, and
+    this is empty."""
+    prior_show_id = prior_inputs.get("show_id")
+    return (
+        {"show_id": prior_show_id, "season": known_season, "disc_number": disc_number, "tolerance": tolerance}
+        if prior_show_id is not None
+        else {}
+    )
+
+
+def _backoff_outcome(
+    source_id: str, kept: dict[str, Any], prior_inputs: Mapping[str, Any], now: datetime
+) -> SourceOutcome:
+    """The error outcome while the provider backs off: the keep-path inputs and
+    the last stored `nominal_runtimes`, so put_source keeps the last good claims."""
+    backoff_inputs = {**kept, "nominal_runtimes": prior_inputs.get("nominal_runtimes")} if kept else {}
+    claims = SourceClaims(run_at=now, status="error", detail="backing off", inputs=backoff_inputs)
+    return SourceOutcome(source_id, claims, None)
+
+
+def _miss_outcome(
+    source_id: str,
+    detail: str,
+    inputs: Mapping[str, Any],
+    now: datetime,
+    result: MatchResult | None = None,
+) -> SourceOutcome:
+    """A miss outcome carrying a copy of this request's inputs."""
+    return SourceOutcome(source_id, SourceClaims(run_at=now, status="miss", detail=detail, inputs=dict(inputs)), result)
+
+
+async def _season_order(
+    provider: EpisodeListProvider,
+    ctx: _StageContext,
+    show_id: str,
+    ids: ExternalIds,
+    known_season: int | None,
+    inputs: Mapping[str, Any],
+) -> list[tuple[int, bool]] | SourceOutcome:
+    """The seasons to try, in order: the known season alone, else every listed
+    season in `season_scan_order`; a miss outcome instead when the provider no
+    longer knows the show or lists no seasons."""
+    if known_season is not None:
+        return [(known_season, False)]
+    try:
+        listed = await provider.seasons(show_id)
+    except SourceMiss:
+        # A stale cached show id: the provider no longer knows the show.
+        return _miss_outcome(provider.source_id, "show not found", inputs, ctx.now)
+    if not listed:
+        return _miss_outcome(provider.source_id, "no seasons listed", inputs, ctx.now)
+    return season_scan_order(listed, hint=hint_season(ctx.job), sibling_seasons=sibling_seasons(ctx.rows, ids))
+
+
 async def _match(
     provider: EpisodeListProvider,
     ctx: _StageContext,
@@ -365,22 +426,10 @@ async def _match(
     known_season = _known_season(ctx.job, ctx.opts)
     disc_number = ctx.opts.disc_number if ctx.opts.disc_number is not None else ctx.job.disc_number
     tolerance = _tolerance(ctx.job, source_id, ctx.opts, ctx.cfg)
-    # The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
-    # the show id is the one the last stored entry used, and the rest is this
-    # request's, so put_source keeps the last good claims only when the
-    # request is unchanged. With no known previous show id (none stored, or
-    # cleared by /resolve naming a different show) nothing can be kept.
     prior_inputs = previous.inputs if previous else {}
-    prior_show_id = prior_inputs.get("show_id")
-    kept = (
-        {"show_id": prior_show_id, "season": known_season, "disc_number": disc_number, "tolerance": tolerance}
-        if prior_show_id is not None
-        else {}
-    )
+    kept = _kept_inputs(prior_inputs, known_season, disc_number, tolerance)
     if provider.http.backing_off():
-        backoff_inputs = {**kept, "nominal_runtimes": prior_inputs.get("nominal_runtimes")} if kept else {}
-        claims = SourceClaims(run_at=ctx.now, status="error", detail="backing off", inputs=backoff_inputs)
-        return SourceOutcome(source_id, claims, None)
+        return _backoff_outcome(source_id, kept, prior_inputs, ctx.now)
 
     try:
         ids = await resolve_show_ids(ctx.job, [provider], persist=ctx.opts.apply, raise_errors=True)
@@ -394,25 +443,14 @@ async def _match(
 
     inputs.update(show_id=show_id, season=known_season, disc_number=disc_number, tolerance=tolerance)
 
-    if known_season is not None:
-        order = [(known_season, False)]
-    else:
-        try:
-            listed = await provider.seasons(show_id)
-        except SourceMiss:
-            # A stale cached show id: the provider no longer knows the show.
-            claims = SourceClaims(run_at=ctx.now, status="miss", detail="show not found", inputs=dict(inputs))
-            return SourceOutcome(source_id, claims, None)
-        if not listed:
-            claims = SourceClaims(run_at=ctx.now, status="miss", detail="no seasons listed", inputs=dict(inputs))
-            return SourceOutcome(source_id, claims, None)
-        order = season_scan_order(listed, hint=hint_season(ctx.job), sibling_seasons=sibling_seasons(ctx.rows, ids))
+    order = await _season_order(provider, ctx, show_id, ids, known_season, inputs)
+    if isinstance(order, SourceOutcome):
+        return order
 
     req = _Request(show_id, ids, ctx.titles, ctx.rows, disc_number, ctx.job.disc_total, tolerance, ctx.placed)
     picked = await _pick_season(provider, req, order)
     if picked is None or not picked[1].result.matches:
-        claims = SourceClaims(run_at=ctx.now, status="miss", detail="no episodes matched", inputs=dict(inputs))
-        return SourceOutcome(source_id, claims, picked[1].result if picked else None)
+        return _miss_outcome(source_id, "no episodes matched", inputs, ctx.now, picked[1].result if picked else None)
     season, fit, ranked, stopped_early = picked
     claims = _ok_claims(
         season,
