@@ -39,6 +39,7 @@ from arm_backend.session_routing import (
     routing_media_type,
 )
 from arm_backend.transcode_apply import (
+    ResolvedTask,
     compute_outputs,
     encoder_available,
     find_collisions,
@@ -493,6 +494,74 @@ async def _apply_session_internal(
     return outcome
 
 
+async def _add_application(
+    db: AsyncSession,
+    sess: Session,
+    job: Job,
+    status: SessionApplicationStatus,
+    overwrite: bool,
+    created_by_user_id: str | None,
+) -> SessionApplication:
+    """Create a SessionApplication row in `status`, add it and flush so its id is populated."""
+    application = SessionApplication(
+        session_id=sess.id,
+        job_id=job.id,
+        status=status,
+        overwrite=overwrite,
+        created_by_user_id=created_by_user_id,
+    )
+    db.add(application)
+    await db.flush()
+    return application
+
+
+def _queue_tasks(
+    db: AsyncSession,
+    application: SessionApplication,
+    resolved: list[ResolvedTask],
+) -> list[TranscodeTask]:
+    """Add one QUEUED TranscodeTask per resolved output and return them."""
+    new_tasks = [
+        TranscodeTask(
+            session_application_id=application.id,
+            source_track_id=r.track_id,
+            status=TranscodeTaskStatus.QUEUED,
+            output_path=r.output_path,
+            attempts=0,
+            progress_pct=0,
+        )
+        for r in resolved
+    ]
+    db.add_all(new_tasks)
+    return new_tasks
+
+
+async def _announce_queued(
+    hub: WSHub | None,
+    db: AsyncSession,
+    application: SessionApplication,
+    sess: Session,
+    job: Job,
+    source: ApplySource,
+    new_tasks: list[TranscodeTask],
+) -> None:
+    """Emit session.queued when there is a hub and at least one new task."""
+    if hub is not None and new_tasks:
+        await hub.emit(
+            topic="session.events",
+            event_type="session.queued",
+            payload={
+                "session_application_id": application.id,
+                "session_id": sess.id,
+                "job_id": job.id,
+                "source": source,
+                "task_count": len(new_tasks),
+            },
+            job_id=job.id,
+            session=db,
+        )
+
+
 def _media_mismatch_outcome(
     application: SessionApplication | None,
     job: Job,
@@ -563,15 +632,9 @@ async def _park_before_rip(
                 idempotent=True,
                 skipped_reason="no_tracks",
             )
-        application = SessionApplication(
-            session_id=sess.id,
-            job_id=job.id,
-            status=SessionApplicationStatus.WAITING_IDENTIFY,
-            overwrite=overwrite,
-            created_by_user_id=created_by_user_id,
+        application = await _add_application(
+            db, sess, job, SessionApplicationStatus.WAITING_IDENTIFY, overwrite, created_by_user_id
         )
-        db.add(application)
-        await db.flush()
     return ApplySessionOutcome(
         application=application,
         tasks=[],
@@ -597,15 +660,9 @@ async def _park_no_outputs(
     # promises a rip-complete fan-out that can't happen: the tracks are
     # already here and already don't qualify).
     if application is None:
-        application = SessionApplication(
-            session_id=sess.id,
-            job_id=job.id,
-            status=SessionApplicationStatus.WAITING_IDENTIFY,
-            overwrite=overwrite,
-            created_by_user_id=created_by_user_id,
+        application = await _add_application(
+            db, sess, job, SessionApplicationStatus.WAITING_IDENTIFY, overwrite, created_by_user_id
         )
-        db.add(application)
-        await db.flush()
     return ApplySessionOutcome(
         application=application,
         tasks=[],
@@ -738,45 +795,14 @@ async def _fan_out_tasks_for_application(
         return blocked
 
     if application is None:
-        application = SessionApplication(
-            session_id=sess.id,
-            job_id=job.id,
-            status=SessionApplicationStatus.QUEUED,
-            overwrite=overwrite,
-            created_by_user_id=created_by_user_id,
+        application = await _add_application(
+            db, sess, job, SessionApplicationStatus.QUEUED, overwrite, created_by_user_id
         )
-        db.add(application)
-        await db.flush()
     else:
         application.status = SessionApplicationStatus.QUEUED
 
-    new_tasks = [
-        TranscodeTask(
-            session_application_id=application.id,
-            source_track_id=r.track_id,
-            status=TranscodeTaskStatus.QUEUED,
-            output_path=r.output_path,
-            attempts=0,
-            progress_pct=0,
-        )
-        for r in resolved
-    ]
-    db.add_all(new_tasks)
-
-    if hub is not None and new_tasks:
-        await hub.emit(
-            topic="session.events",
-            event_type="session.queued",
-            payload={
-                "session_application_id": application.id,
-                "session_id": sess.id,
-                "job_id": job.id,
-                "source": source,
-                "task_count": len(new_tasks),
-            },
-            job_id=job.id,
-            session=db,
-        )
+    new_tasks = _queue_tasks(db, application, resolved)
+    await _announce_queued(hub, db, application, sess, job, source, new_tasks)
 
     return ApplySessionOutcome(
         application=application,
