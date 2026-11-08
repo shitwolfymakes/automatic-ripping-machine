@@ -5,7 +5,8 @@ import logging
 
 import pytest
 
-from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError, reconcile_enrolled_rippers
+from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError
+from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
 from arm_common import (
     DiscType,
     Drive,
@@ -100,7 +101,7 @@ async def test_boot_reconcile_logs_and_returns_none_when_the_daemon_is_unlistabl
     db = FakeSession()
     db.rows["drives"] = [_row("drv_ok", DriveLifecycle.ENROLLED)]
     manager = _StubManager(RipperManagerError("DockerException: no socket"))
-    with caplog.at_level(logging.ERROR, logger="arm_backend.ripper_manager"):
+    with caplog.at_level(logging.ERROR, logger="arm_backend.ripper_reconcile"):
         assert await reconcile_enrolled_rippers(manager, _factory(db), hub=_StubHub()) is None  # type: ignore[arg-type]
     assert "no socket" in caplog.text
 
