@@ -22,7 +22,8 @@ from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common.disc_shape import looks_episodic
 from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
-from arm_backend.identity.pipeline import hint_is_tv, hint_title, resolve_job, run_disc_hints
+from arm_backend.identity.hints import hint_is_tv, hint_title
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, record_preset
 from arm_backend.identity.sources.base import Source
 from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources

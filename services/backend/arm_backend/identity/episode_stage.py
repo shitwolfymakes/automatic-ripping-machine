@@ -42,7 +42,8 @@ from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, resolve_show_ids
-from arm_backend.identity.pipeline import ResolveOutcome, hint_season, resolve_job
+from arm_backend.identity.hints import hint_season
+from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import MANUAL, claims_of, put_source
 from arm_backend.identity.sources.registry import (
     COVERAGE_STOP,

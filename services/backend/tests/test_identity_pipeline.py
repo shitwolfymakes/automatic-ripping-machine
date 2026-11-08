@@ -10,7 +10,8 @@ from arm_common.enums import TrackRole
 from arm_common.schemas import BdDiscMeta, ScanResult
 from arm_common.schemas.identity import SourceClaims, TrackClaim
 
-from arm_backend.identity.pipeline import resolve_job, run_disc_hints, hint_title, hint_is_tv, hint_season
+from arm_backend.identity.hints import hint_is_tv, hint_season, hint_title
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, claims_of
 from tests._fakes import FakeSession
 
