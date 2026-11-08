@@ -28,8 +28,9 @@ import json
 import os
 import zipfile
 from datetime import UTC, datetime
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+from typing import TextIO
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
@@ -68,6 +69,55 @@ def per_job_log_path(job_id: str) -> Path:
 # (not global) — see the module docstring.
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+
+def _effective_cap(limit: int | None) -> int:
+    eff_limit = settings.ARM_LOG_PER_FILE_DEFAULT if limit is None else limit
+    return max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
+
+
+def _open_log(path: Path) -> TextIO | None:
+    try:
+        return path.open("r", encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _normalised_lines(lines: Iterable[str], predicate: Callable[[str], bool]) -> Iterator[str]:
+    for line in lines:
+        if not predicate(line):
+            continue
+        yield line if line.endswith("\n") else line + "\n"
+
+
+def _iter_lines(path: Path, predicate: Callable[[str], bool], cap: int) -> Iterator[bytes]:
+    fh = _open_log(path)
+    if fh is None:
+        return
+    with fh:
+        yielded = 0
+        for normalised in _normalised_lines(fh, predicate):
+            yield normalised.encode("utf-8")
+            yielded += 1
+            if yielded >= cap:
+                break
+
+
+def _iter_legacy(job_id: str, cap: int) -> Iterator[bytes]:
+    for path in sorted(LOG_DIR.glob("*.log")):
+        yield from _iter_lines(path, lambda line: _line_matches_job(line, job_id), cap)
+
+
+def _job_log_lines(job_id: str, cap: int) -> Iterator[bytes]:
+    # `_iter_lines` checks the cap only after yielding, so a zero cap
+    # would still emit one line (per file on the fallback path).
+    if cap == 0:
+        return
+    per_job = per_job_log_path(job_id)
+    if per_job.is_file():
+        yield from _iter_lines(per_job, lambda _: True, cap)
+    else:
+        yield from _iter_legacy(job_id, cap)
 
 
 # Plain `def`: the directory scan and per-file stat are blocking I/O, so
@@ -160,62 +210,18 @@ async def stream_job_logs(
     within a file in append order; no cross-file resort — the consumer
     can sort by `ts` if global ordering matters).
     """
-    eff_limit = settings.ARM_LOG_PER_FILE_DEFAULT if limit is None else limit
-    cap = max(0, min(eff_limit, settings.ARM_LOG_PER_FILE_HARD_CAP))
-
-    def gen() -> Iterator[bytes]:
-        # The loops below check the cap only after yielding, so a zero cap
-        # would still emit one line (per file on the fallback path).
-        if cap == 0:
-            return
-        per_job = per_job_log_path(job_id)
-        if per_job.is_file():
-            yielded = 0
-            try:
-                fh = per_job.open("r", encoding="utf-8", errors="replace")
-            except OSError:
-                return
-            with fh:
-                for line in fh:
-                    out = line if line.endswith("\n") else line + "\n"
-                    yield out.encode("utf-8")
-                    yielded += 1
-                    if yielded >= cap:
-                        return
-            return
-
-        for path in sorted(LOG_DIR.glob("*.log")):
-            yielded = 0
-            try:
-                fh = path.open("r", encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            with fh:
-                for line in fh:
-                    if not _line_matches_job(line, job_id):
-                        continue
-                    out = line if line.endswith("\n") else line + "\n"
-                    yield out.encode("utf-8")
-                    yielded += 1
-                    if yielded >= cap:
-                        break
-
-    return StreamingResponse(gen(), media_type="application/x-ndjson")
+    return StreamingResponse(_job_log_lines(job_id, _effective_cap(limit)), media_type="application/x-ndjson")
 
 
 def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str]:
     """Read lines from `path` matching `predicate`, capped by line+byte limits."""
     out: list[str] = []
     byte_count = 0
-    try:
-        fh = path.open("r", encoding="utf-8", errors="replace")
-    except OSError:
+    fh = _open_log(path)
+    if fh is None:
         return out
     with fh:
-        for line in fh:
-            if not predicate(line):
-                continue
-            normalised = line if line.endswith("\n") else line + "\n"
+        for normalised in _normalised_lines(fh, predicate):
             out.append(normalised)
             byte_count += len(normalised)
             if (
