@@ -143,52 +143,7 @@ class _PassthroughRun:
             # blocking I/O (see docstring).
             await self._db.commit()
 
-            error: str | None = None
-            size: int | None = None
-            if self._track is None or not self._track_output_path:
-                error = "source track has no output_path on disk; rip not complete or raw deleted"
-            elif not self._task_output_path:
-                error = "task has no output_path"
-            else:
-                final = Path(self._settings.MEDIA_ROOT) / self._task_output_path
-                is_folder = self._track.kind == TrackKind.DISC_BACKUP
-                mover = move_tree if is_folder else transcode_none
-                cancel = _cancel_events[self._task_id] = threading.Event()
-                source = Path(self._track_output_path)
-                progress = _CopyProgress(sizer=(lambda: tree_size(source)) if is_folder else None)
-                stop_publisher = asyncio.Event()
-                publisher = asyncio.ensure_future(
-                    _publish_progress(
-                        self._db,
-                        self._hub,
-                        self._task_id,
-                        self._job_id,
-                        self._source_track_id,
-                        progress,
-                        stop_publisher,
-                    )
-                )
-                try:
-                    # Move and chown together in the worker thread: a backup
-                    # tree's chown walks every file, too much for the event loop.
-                    size = await asyncio.to_thread(
-                        _move_and_chown, mover, source, final, self._settings, is_folder, cancel, progress
-                    )
-                except CopyCancelled:
-                    error = "cancelled"
-                    logger.info("passthrough task_id=%s cancelled mid-copy; source kept", self._task_id)
-                except OSError as exc:
-                    error = f"{type(exc).__name__}: {exc}"[:300]
-                finally:
-                    _cancel_events.pop(self._task_id, None)
-                    # Stop the publisher before this coroutine uses `db` again. It
-                    # checks the event between writes, so a commit is never cut
-                    # off part way; and nothing it raises replaces the move's result.
-                    stop_publisher.set()
-                    try:
-                        await publisher
-                    except Exception:
-                        logger.exception("passthrough progress publisher failed task_id=%s", self._task_id)
+            size, error = await self._move_or_reject()
 
             # Re-fetch: cancel_running (a different session) may have deleted
             # this row while the move was in flight. `populate_existing=True`
@@ -347,6 +302,64 @@ class _PassthroughRun:
             track_id=self._source_track_id,
             session=self._db,
         )
+
+    async def _move_or_reject(self) -> tuple[int | None, str | None]:
+        """Move the file, or reject a task with no source or output path; returns (size, error)."""
+        track = self._track
+        if track is None or not self._track_output_path:
+            return None, "source track has no output_path on disk; rip not complete or raw deleted"
+        if not self._task_output_path:
+            return None, "task has no output_path"
+        return await self._move(
+            track, Path(self._track_output_path), Path(self._settings.MEDIA_ROOT) / self._task_output_path
+        )
+
+    async def _move(self, track: Track, source: Path, final: Path) -> tuple[int | None, str | None]:
+        """Move `source` to `final` in a worker thread with progress publishing; returns (size, error)."""
+        error: str | None = None
+        size: int | None = None
+        is_folder = track.kind == TrackKind.DISC_BACKUP
+        mover = move_tree if is_folder else transcode_none
+        cancel = _cancel_events[self._task_id] = threading.Event()
+        progress = _CopyProgress(sizer=(lambda: tree_size(source)) if is_folder else None)
+        stop_publisher = asyncio.Event()
+        publisher = asyncio.ensure_future(
+            _publish_progress(
+                self._db,
+                self._hub,
+                self._task_id,
+                self._job_id,
+                self._source_track_id,
+                progress,
+                stop_publisher,
+            )
+        )
+        try:
+            # Move and chown together in the worker thread: a backup
+            # tree's chown walks every file, too much for the event loop.
+            size = await asyncio.to_thread(
+                _move_and_chown, mover, source, final, self._settings, is_folder, cancel, progress
+            )
+        except CopyCancelled:
+            error = "cancelled"
+            logger.info("passthrough task_id=%s cancelled mid-copy; source kept", self._task_id)
+        except OSError as exc:
+            error = f"{type(exc).__name__}: {exc}"[:300]
+        finally:
+            _cancel_events.pop(self._task_id, None)
+            await self._stop_publisher(publisher, stop_publisher)
+        return size, error
+
+    async def _stop_publisher(self, publisher: asyncio.Future[None], stop: asyncio.Event) -> None:
+        """Stop the progress publisher and wait for it, logging rather than raising its failure."""
+        # Stop the publisher before this coroutine uses `db` again. It
+        # checks the event between writes, so a commit is never cut
+        # off part way; and nothing it raises replaces the move's result.
+        stop.set()
+        try:
+            await publisher
+        except Exception:
+            logger.exception("passthrough progress publisher failed task_id=%s", self._task_id)
 
 
 async def execute_passthrough_task(
