@@ -189,6 +189,102 @@ def _apply_scan(row: Drive, d: ScannedDrive) -> None:
         row.identity_kind = DriveIdentityKind.PORT
 
 
+def _match_row(d: ScannedDrive, by_id: dict[str, Drive], by_port: dict[str, Drive]) -> Drive | None:
+    """The tracked row a scanned drive is: by its by-id link first, else by
+    its sysfs port."""
+    row = by_id.get(d.by_id_name) if d.by_id_name else None
+    if row is None:
+        row = by_port.get(d.sysfs_port)
+    return row
+
+
+def _new_drive_row(d: ScannedDrive) -> Drive:
+    """A new DETECTED row for a drive no row matches, logged as detected."""
+    # A per-row unique id, not d.node: two different physical drives
+    # can land on the same srN across ticks (a swap, or an ignored
+    # row that is never pruned), and hostname is UNIQUE — a
+    # node-keyed placeholder collided and wedged every later tick.
+    drive_id = new_id("drv")
+    row = Drive(
+        id=drive_id,
+        hostname=f"scan-{drive_id}",  # placeholder until Plan 3 names the ripper by drive id
+        device_path=d.device_path,
+        lifecycle=DriveLifecycle.DETECTED,
+        present=True,
+    )
+    logger.info("drive detected: %s %s %s (%s)", d.node, d.vendor, d.model, d.by_id_name or d.sysfs_port)
+    return row
+
+
+def _touch_presence(row: Drive, now: datetime) -> None:
+    """Mark a scanned row present as of `now`, unless a ripper owns its
+    presence."""
+    # Presence is scanner-owned only for rows without a ripper (spec §1).
+    if row.lifecycle is not DriveLifecycle.ENROLLED:
+        row.present = True
+        row.last_seen_at = now
+
+
+def _mark_absent(row: Drive) -> None:
+    """Mark an unseen row absent, logging the change."""
+    if row.present:
+        row.present = False
+        logger.info("drive absent: %s (%s)", row.device_path, row.by_id_name or row.sysfs_port)
+
+
+def _aware_last_seen(row: Drive) -> datetime | None:
+    """The row's last_seen_at, made aware (UTC) when the database handed it
+    back naive."""
+    last_seen = row.last_seen_at
+    if last_seen is not None and last_seen.tzinfo is None:
+        # SQLite hands back naive datetimes; `now`/`cutoff` are always
+        # aware (UTC) — comparing naive to aware raises TypeError.
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    return last_seen
+
+
+def _prunable(row: Drive, cutoff: datetime) -> bool:
+    """Whether a DETECTED row was last seen before `cutoff`."""
+    last_seen = _aware_last_seen(row)
+    return row.lifecycle is DriveLifecycle.DETECTED and last_seen is not None and last_seen < cutoff
+
+
+async def _retire_unseen(
+    session: AsyncSession,
+    rows: list[Drive],
+    seen: set[int],
+    *,
+    now: datetime,
+    prune_days: int,
+) -> int:
+    """Mark every row this scan didn't see absent, and delete the DETECTED
+    ones past the prune window; enrolled rows are left alone. Returns how
+    many were pruned."""
+    pruned = 0
+    cutoff = now - timedelta(days=prune_days)
+    for row in list(rows):
+        if id(row) in seen or row.lifecycle is DriveLifecycle.ENROLLED:
+            continue
+        _mark_absent(row)
+        if _prunable(row, cutoff):
+            await session.delete(row)
+            rows.remove(row)
+            pruned += 1
+            logger.info("drive pruned after %dd absent: %s", prune_days, row.by_id_name or row.sysfs_port)
+    return pruned
+
+
+def _summarise(rows: list[Drive], pruned: int) -> ScanSummary:
+    """The scan's counts by lifecycle and presence."""
+    return ScanSummary(
+        detected=sum(r.lifecycle is DriveLifecycle.DETECTED for r in rows),
+        ignored=sum(r.lifecycle is DriveLifecycle.IGNORED for r in rows),
+        enrolled=sum(r.lifecycle is DriveLifecycle.ENROLLED for r in rows),
+        absent=sum((not r.present) and r.lifecycle is not DriveLifecycle.ENROLLED for r in rows),
+        pruned=pruned,
+    )
+
+
 async def reconcile_drives(
     session: AsyncSession,
     scanned: list[ScannedDrive],
@@ -205,63 +301,22 @@ async def reconcile_drives(
     seen: set[int] = set()
 
     for d in scanned:
-        row = by_id.get(d.by_id_name) if d.by_id_name else None
-        if row is None:
-            row = by_port.get(d.sysfs_port)
+        row = _match_row(d, by_id, by_port)
         is_new = row is None
         if row is None:
-            # A per-row unique id, not d.node: two different physical drives
-            # can land on the same srN across ticks (a swap, or an ignored
-            # row that is never pruned), and hostname is UNIQUE — a
-            # node-keyed placeholder collided and wedged every later tick.
-            drive_id = new_id("drv")
-            row = Drive(
-                id=drive_id,
-                hostname=f"scan-{drive_id}",  # placeholder until Plan 3 names the ripper by drive id
-                device_path=d.device_path,
-                lifecycle=DriveLifecycle.DETECTED,
-                present=True,
-            )
+            row = _new_drive_row(d)
             rows.append(row)
-            logger.info("drive detected: %s %s %s (%s)", d.node, d.vendor, d.model, d.by_id_name or d.sysfs_port)
         _apply_scan(row, d)
-        # Presence is scanner-owned only for rows without a ripper (spec §1).
-        if row.lifecycle is not DriveLifecycle.ENROLLED:
-            row.present = True
-            row.last_seen_at = now
+        _touch_presence(row, now)
         seen.add(id(row))
         if is_new:
             # Only genuinely new rows need session.add(); adding an
             # already-tracked row would register it a second time.
             session.add(row)
 
-    pruned = 0
-    cutoff = now - timedelta(days=prune_days)
-    for row in list(rows):
-        if id(row) in seen or row.lifecycle is DriveLifecycle.ENROLLED:
-            continue
-        if row.present:
-            row.present = False
-            logger.info("drive absent: %s (%s)", row.device_path, row.by_id_name or row.sysfs_port)
-        last_seen = row.last_seen_at
-        if last_seen is not None and last_seen.tzinfo is None:
-            # SQLite hands back naive datetimes; `now`/`cutoff` are always
-            # aware (UTC) — comparing naive to aware raises TypeError.
-            last_seen = last_seen.replace(tzinfo=timezone.utc)
-        if row.lifecycle is DriveLifecycle.DETECTED and last_seen is not None and last_seen < cutoff:
-            await session.delete(row)
-            rows.remove(row)
-            pruned += 1
-            logger.info("drive pruned after %dd absent: %s", prune_days, row.by_id_name or row.sysfs_port)
-
+    pruned = await _retire_unseen(session, rows, seen, now=now, prune_days=prune_days)
     await session.commit()
-    return ScanSummary(
-        detected=sum(r.lifecycle is DriveLifecycle.DETECTED for r in rows),
-        ignored=sum(r.lifecycle is DriveLifecycle.IGNORED for r in rows),
-        enrolled=sum(r.lifecycle is DriveLifecycle.ENROLLED for r in rows),
-        absent=sum((not r.present) and r.lifecycle is not DriveLifecycle.ENROLLED for r in rows),
-        pruned=pruned,
-    )
+    return _summarise(rows, pruned)
 
 
 DEFAULT_SCAN_INTERVAL_SECONDS = 30
