@@ -36,7 +36,7 @@ from arm_common.schemas import ExternalIds
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
-from arm_backend.identity.episode_siblings import sibling_discs, sibling_rows, sibling_seasons
+from arm_backend.identity.episode_siblings import episode_range, sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
@@ -108,8 +108,7 @@ def operator_placed(tracks: Sequence[Track]) -> dict[int, frozenset[int]]:
     held: dict[int, set[int]] = {}
     for track in tracks:
         if _placed(track) and track.season is not None and track.episode_number is not None:
-            end = max(track.episode_number_end or track.episode_number, track.episode_number)
-            held.setdefault(track.season, set()).update(range(track.episode_number, end + 1))
+            held.setdefault(track.season, set()).update(episode_range(track.episode_number, track.episode_number_end))
     return {season: frozenset(numbers) for season, numbers in held.items()}
 
 

@@ -43,14 +43,19 @@ def _shares_id(ids: ExternalIds, other: ExternalIds) -> bool:
     return any(value and theirs.get(key) == value for key, value in ids.model_dump(exclude_none=True).items())
 
 
+def episode_range(first: int, last: int | None) -> range:
+    """The episode numbers a track holds: `first` through a double episode's
+    `last`, or `first` alone when `last` is unset or below it."""
+    return range(first, max(last or first, first) + 1)
+
+
 def _held_numbers(sibling: Job, tracks: Sequence[Track], season: int) -> frozenset[int]:
     numbers: set[int] = set()
     for t in tracks:
         track_season = t.season if t.season is not None else sibling.season
         if track_season != season or t.episode_number is None:
             continue
-        end = max(t.episode_number_end or t.episode_number, t.episode_number)
-        numbers.update(range(t.episode_number, end + 1))
+        numbers.update(episode_range(t.episode_number, t.episode_number_end))
     return frozenset(numbers)
 
 
