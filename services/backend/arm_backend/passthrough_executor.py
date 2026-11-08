@@ -23,7 +23,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,81 +145,7 @@ class _PassthroughRun:
 
             size, error = await self._move_or_reject()
 
-            # Re-fetch: cancel_running (a different session) may have deleted
-            # this row while the move was in flight. `populate_existing=True`
-            # for the same reason as the claim re-select above -- force a
-            # refresh from the current row rather than silently reusing
-            # whatever this identity-mapped object already had cached.
-            fresh_task = (
-                await self._db.execute(
-                    select(TranscodeTask)
-                    .where(col(TranscodeTask.id) == self._task_id)
-                    .execution_options(populate_existing=True)
-                )
-            ).scalar_one_or_none()
-            if self._application is not None:
-                # The progress publisher committed (or rolled back) on this
-                # session while the move ran; reload before the aggregate reads it.
-                self._application = (
-                    await self._db.execute(
-                        select(SessionApplication)
-                        .where(col(SessionApplication.id) == self._session_application_id)
-                        .execution_options(populate_existing=True)
-                    )
-                ).scalar_one_or_none()
-            if fresh_task is None:
-                logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", self._task_id)
-                return error is None
-
-            if error is None:
-                fresh_task.status = TranscodeTaskStatus.DONE
-                fresh_task.progress_pct = 100
-                fresh_task.last_error = None
-                event_type, payload_extra = (
-                    "task.completed",
-                    {"output_path": self._task_output_path, "size_bytes": size},
-                )
-                logger.info("passthrough complete task_id=%s output=%s", self._task_id, self._task_output_path)
-            else:
-                fresh_task.status = TranscodeTaskStatus.FAILED
-                fresh_task.last_error = error
-                event_type, payload_extra = "task.failed", {"last_error": error}
-                logger.error("passthrough failed task_id=%s: %s", self._task_id, error)
-            await self._db.flush()
-
-            await self._hub.emit(
-                topic="transcode.events",
-                event_type=event_type,
-                payload={
-                    "task_id": self._task_id,
-                    "session_application_id": self._session_application_id,
-                    **payload_extra,
-                },
-                job_id=self._job_id,
-                track_id=self._source_track_id,
-                session=self._db,
-            )
-            if self._application is not None:
-                from arm_backend.transcode_apply import aggregate_session_application  # noqa: PLC0415 - matches dispatcher's lazy import
-
-                outcome = await aggregate_session_application(self._db, self._application)
-                if outcome.event_type is not None:
-                    await self._hub.emit(
-                        topic="transcode.events",
-                        event_type=outcome.event_type,
-                        payload={
-                            "session_application_id": self._application.id,
-                            "session_id": self._application.session_id,
-                            "job_id": self._application.job_id,
-                            "status": self._application.status.value,
-                        },
-                        job_id=self._job_id,
-                        session=self._db,
-                    )
-            # Commit the terminal state (+ any aggregate transition) as its own
-            # transaction, separate from the claim commit above.
-            await self._db.commit()
-            return error is None
+            return await self._finish(size, error)
 
     async def _lock_if_claimable(self) -> TranscodeTask | None:
         """Re-select the task row locked; None when it is gone or no longer QUEUED."""
@@ -360,6 +286,91 @@ class _PassthroughRun:
             await publisher
         except Exception:
             logger.exception("passthrough progress publisher failed task_id=%s", self._task_id)
+
+    async def _finish(self, size: int | None, error: str | None) -> bool:
+        """Write the terminal state and its events, commit, and return whether the task succeeded."""
+        fresh_task = await self._refetch_task()
+        await self._reload_application()
+        if fresh_task is None:
+            logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", self._task_id)
+            return error is None
+
+        event_type, payload_extra = await self._record_terminal(fresh_task, size, error)
+        await self._announce_terminal(event_type, payload_extra)
+        if self._application is not None:
+            from arm_backend.transcode_apply import (  # noqa: PLC0415 - matches dispatcher's lazy import
+                settle_session_application,
+            )
+
+            await settle_session_application(self._db, self._hub, self._application)
+        # Commit the terminal state (+ any aggregate transition) as its own
+        # transaction, separate from the claim commit above.
+        await self._db.commit()
+        return error is None
+
+    async def _refetch_task(self) -> TranscodeTask | None:
+        """Re-select the task row, None when a concurrent cancel deleted it."""
+        # Re-fetch: cancel_running (a different session) may have deleted
+        # this row while the move was in flight. `populate_existing=True`
+        # for the same reason as the claim re-select above -- force a
+        # refresh from the current row rather than silently reusing
+        # whatever this identity-mapped object already had cached.
+        return (
+            await self._db.execute(
+                select(TranscodeTask)
+                .where(col(TranscodeTask.id) == self._task_id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+
+    async def _reload_application(self) -> None:
+        """Reload the session application after the move, when there is one."""
+        if self._application is not None:
+            # The progress publisher committed (or rolled back) on this
+            # session while the move ran; reload before the aggregate reads it.
+            self._application = (
+                await self._db.execute(
+                    select(SessionApplication)
+                    .where(col(SessionApplication.id) == self._session_application_id)
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+
+    async def _record_terminal(
+        self, fresh_task: TranscodeTask, size: int | None, error: str | None
+    ) -> tuple[str, dict[str, Any]]:
+        """Mark the task DONE or FAILED and flush; returns the event type and its extra payload."""
+        if error is None:
+            fresh_task.status = TranscodeTaskStatus.DONE
+            fresh_task.progress_pct = 100
+            fresh_task.last_error = None
+            event_type, payload_extra = (
+                "task.completed",
+                {"output_path": self._task_output_path, "size_bytes": size},
+            )
+            logger.info("passthrough complete task_id=%s output=%s", self._task_id, self._task_output_path)
+        else:
+            fresh_task.status = TranscodeTaskStatus.FAILED
+            fresh_task.last_error = error
+            event_type, payload_extra = "task.failed", {"last_error": error}
+            logger.error("passthrough failed task_id=%s: %s", self._task_id, error)
+        await self._db.flush()
+        return event_type, payload_extra
+
+    async def _announce_terminal(self, event_type: str, payload_extra: dict[str, Any]) -> None:
+        """Emit the task's terminal event."""
+        await self._hub.emit(
+            topic="transcode.events",
+            event_type=event_type,
+            payload={
+                "task_id": self._task_id,
+                "session_application_id": self._session_application_id,
+                **payload_extra,
+            },
+            job_id=self._job_id,
+            track_id=self._source_track_id,
+            session=self._db,
+        )
 
 
 async def execute_passthrough_task(
