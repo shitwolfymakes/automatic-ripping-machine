@@ -94,6 +94,31 @@ def _load_json_member(tar: tarfile.TarFile, member: tarfile.TarInfo) -> dict[str
         return None
 
 
+def _metadata_key(parts: list[str]) -> str | None:
+    """The "<kind>/<title-dir>" key of a title's metadata.json path, or None
+    for any other path."""
+    return "/".join(parts[2:4]) if len(parts) >= 4 and parts[-1] == "metadata.json" and parts[1] == "data" else None
+
+
+def _release_key(parts: list[str]) -> str | None:
+    """The "<kind>/<title>/<release>" key of a release's release.json path,
+    or None for any other path."""
+    return "/".join(parts[2:5]) if parts[-1] == "release.json" and len(parts) >= 5 and parts[1] == "data" else None
+
+
+def _add_disc(discs: list[tuple[str, str, str, dict[str, Any]]], m: re.Match[str], obj: dict[str, Any] | None) -> None:
+    """Record a loaded disc JSON that has a ContentHash under its (kind,
+    title_dir, release_dir)."""
+    if obj and obj.get("ContentHash"):
+        discs.append((m.group(1), m.group(2), m.group(3), obj))
+
+
+def _add_json(by_key: dict[str, dict[str, Any]], key: str, obj: dict[str, Any] | None) -> None:
+    """Record a loaded JSON object under `key`."""
+    if obj is not None:
+        by_key[key] = obj
+
+
 def _read_tarball(
     tarball: Path,
 ) -> tuple[list[tuple[str, str, str, dict[str, Any]]], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
@@ -110,19 +135,12 @@ def _read_tarball(
             if not member.isfile() or not member.name.endswith(".json"):
                 continue
             parts = member.name.split("/")
-            m = _DISC_RE.match(member.name)
-            if m:
-                obj = _load_json_member(tar, member)
-                if obj and obj.get("ContentHash"):
-                    discs.append((m.group(1), m.group(2), m.group(3), obj))
-            elif len(parts) >= 4 and parts[-1] == "metadata.json" and parts[1] == "data":
-                obj = _load_json_member(tar, member)
-                if obj is not None:
-                    metadata_by_title["/".join(parts[2:4])] = obj  # "<kind>/<title-dir>"
-            elif parts[-1] == "release.json" and len(parts) >= 5 and parts[1] == "data":
-                obj = _load_json_member(tar, member)
-                if obj is not None:
-                    release_by_dir["/".join(parts[2:5])] = obj  # "<kind>/<title>/<release>"
+            if m := _DISC_RE.match(member.name):
+                _add_disc(discs, m, _load_json_member(tar, member))
+            elif (key := _metadata_key(parts)) is not None:
+                _add_json(metadata_by_title, key, _load_json_member(tar, member))  # "<kind>/<title-dir>"
+            elif (key := _release_key(parts)) is not None:
+                _add_json(release_by_dir, key, _load_json_member(tar, member))  # "<kind>/<title>/<release>"
     return discs, metadata_by_title, release_by_dir
 
 
