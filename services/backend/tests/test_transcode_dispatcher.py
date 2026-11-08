@@ -1686,7 +1686,7 @@ async def test_stale_claim_resets_to_queued() -> None:
     )
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
-    touched = await disp.sweep_stale_claims(db)
+    touched = await disp.sweeps.sweep_stale_claims(db)
     assert touched == 1
     task = db.rows["transcode_tasks"][0]
     assert task.status == TranscodeTaskStatus.QUEUED
@@ -1703,7 +1703,7 @@ async def test_stale_claim_hard_fails_after_max_attempts() -> None:
     )
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(ARM_TRANSCODE_MAX_ATTEMPTS=3), _db_factory(db), docker, WSHub())
-    await disp.sweep_stale_claims(db)
+    await disp.sweeps.sweep_stale_claims(db)
     task = db.rows["transcode_tasks"][0]
     assert task.status == TranscodeTaskStatus.FAILED
     assert "exceeded retry limit" in (task.last_error or "")
@@ -1739,7 +1739,7 @@ async def test_stale_hard_fail_keeps_application_open_while_a_sibling_task_is_li
 
     hub.emit = _capture  # type: ignore[method-assign]
     disp = TranscodeDispatcher(_settings(ARM_TRANSCODE_MAX_ATTEMPTS=3), _db_factory(db), MagicMock(), hub)
-    assert await disp.sweep_stale_claims(db) == 1
+    assert await disp.sweeps.sweep_stale_claims(db) == 1
     failed, sibling = db.rows["transcode_tasks"]
     assert failed.status == TranscodeTaskStatus.FAILED
     assert "exceeded retry limit" in (failed.last_error or "")
@@ -1761,7 +1761,7 @@ async def test_stale_sweep_no_op_when_heartbeat_recent() -> None:
     )
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
-    touched = await disp.sweep_stale_claims(db)
+    touched = await disp.sweeps.sweep_stale_claims(db)
     assert touched == 0
 
 
@@ -1793,7 +1793,7 @@ async def test_arm_inprogress_sweep_deletes_orphans(tmp_path: Path) -> None:
     db.rows["session_applications"] = []
 
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    deleted = await disp.sweep_arm_inprogress(media)
+    deleted = await disp.sweeps.sweep_arm_inprogress(media)
     assert deleted == 1
     assert not orphan.exists()
     assert live_marker.exists()
@@ -1802,7 +1802,7 @@ async def test_arm_inprogress_sweep_deletes_orphans(tmp_path: Path) -> None:
 async def test_arm_inprogress_sweep_skips_when_media_root_missing(tmp_path: Path) -> None:
     db = FakeSession()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    deleted = await disp.sweep_arm_inprogress(tmp_path / "does-not-exist")
+    deleted = await disp.sweeps.sweep_arm_inprogress(tmp_path / "does-not-exist")
     assert deleted == 0
 
 
@@ -1916,7 +1916,7 @@ async def test_cancel_running_skips_docker_stop_but_still_deletes_when_terminal(
 async def test_orphan_sweep_fails_husk_running_app() -> None:
     db = _orphan_db(SessionApplicationStatus.RUNNING, created_age_seconds=3600)
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     app = db.rows["session_applications"][0]
     assert n == 1
     assert app.status == SessionApplicationStatus.FAILED
@@ -1926,7 +1926,7 @@ async def test_orphan_sweep_fails_husk_running_app() -> None:
 async def test_orphan_sweep_fails_husk_queued_app() -> None:
     db = _orphan_db(SessionApplicationStatus.QUEUED, created_age_seconds=3600)
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     assert n == 1
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.FAILED
 
@@ -1934,7 +1934,7 @@ async def test_orphan_sweep_fails_husk_queued_app() -> None:
 async def test_orphan_sweep_skips_fresh_app_within_grace() -> None:
     db = _orphan_db(SessionApplicationStatus.RUNNING, created_age_seconds=5)
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     assert n == 0
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
 
@@ -1942,7 +1942,7 @@ async def test_orphan_sweep_skips_fresh_app_within_grace() -> None:
 async def test_orphan_sweep_skips_waiting_identify() -> None:
     db = _orphan_db(SessionApplicationStatus.WAITING_IDENTIFY, created_age_seconds=3600)
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     assert n == 0
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
 
@@ -1954,7 +1954,7 @@ async def test_orphan_sweep_skips_app_with_live_task() -> None:
         task_statuses=[TranscodeTaskStatus.IN_PROGRESS],
     )
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     assert n == 0
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
 
@@ -1966,7 +1966,7 @@ async def test_orphan_sweep_settles_all_done_app() -> None:
         task_statuses=[TranscodeTaskStatus.DONE, TranscodeTaskStatus.DONE],
     )
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     app = db.rows["session_applications"][0]
     assert n == 1
     assert app.status == SessionApplicationStatus.DONE
@@ -1980,7 +1980,7 @@ async def test_orphan_sweep_settles_mixed_terminal_to_partial() -> None:
         task_statuses=[TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED],
     )
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.DONE_PARTIAL
     assert n == 1
 
@@ -1995,7 +1995,7 @@ async def test_orphan_sweep_emits_ws_event_for_husk() -> None:
 
     hub.emit = _capture  # type: ignore[method-assign]
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), hub)
-    await disp.sweep_orphaned_applications(db)
+    await disp.sweeps.sweep_orphaned_applications(db)
     assert len(sent) == 1
     assert sent[0]["event_type"] == "session.failed"
     assert sent[0]["payload"]["session_application_id"] == "sap_orphan"
@@ -2011,7 +2011,7 @@ async def test_orphan_sweep_survives_emit_failure() -> None:
 
     hub.emit = _boom  # type: ignore[method-assign]
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), hub)
-    n = await disp.sweep_orphaned_applications(db)
+    n = await disp.sweeps.sweep_orphaned_applications(db)
     # Status transition still commits even though the emit failed.
     assert n == 1
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.FAILED
@@ -2034,8 +2034,8 @@ async def test_tick_runs_orphan_sweep_after_stale_sweep(monkeypatch: pytest.Monk
         calls.append("spawn")
         return 0
 
-    monkeypatch.setattr(disp, "sweep_stale_claims", _stale)
-    monkeypatch.setattr(disp, "sweep_orphaned_applications", _orphan)
+    monkeypatch.setattr(disp.sweeps, "sweep_stale_claims", _stale)
+    monkeypatch.setattr(disp.sweeps, "sweep_orphaned_applications", _orphan)
     monkeypatch.setattr(disp, "spawn_pending", _spawn)
     await disp._tick()
     assert calls == ["stale", "orphan", "spawn"]

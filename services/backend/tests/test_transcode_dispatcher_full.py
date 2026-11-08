@@ -169,7 +169,7 @@ async def test_sweep_arm_inprogress_unlink_oserror(tmp_path: Path, monkeypatch: 
         real_unlink(self, *a, **k)
 
     monkeypatch.setattr(Path, "unlink", _bad_unlink)
-    deleted = await _disp(FakeSession()).sweep_arm_inprogress(tmp_path)
+    deleted = await _disp(FakeSession()).sweeps.sweep_arm_inprogress(tmp_path)
     assert deleted == 0  # unlink failed, swallowed
 
 

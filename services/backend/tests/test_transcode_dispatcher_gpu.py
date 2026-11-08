@@ -375,7 +375,7 @@ async def test_stale_claim_sweep_releases_gpu() -> None:
         )
     ]
     disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
-    touched = await disp.sweep_stale_claims(db)
+    touched = await disp.sweeps.sweep_stale_claims(db)
     assert touched == 1
     # GPU is released back to AVAILABLE.
     gpu = db.rows["gpus"][0]

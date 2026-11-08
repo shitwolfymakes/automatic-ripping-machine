@@ -300,14 +300,14 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     # .arm-inprogress markers and crash-orphaned session_applications cleaned
     # up on boot.
     try:
-        swept = await transcode_dispatcher.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
+        swept = await transcode_dispatcher.sweeps.sweep_arm_inprogress(Path(settings.MEDIA_ROOT))
         if swept:  # pragma: no cover, only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher
             logger.info("backend startup: swept %d .arm-inprogress orphans", swept)
     except Exception as exc:  # pragma: no cover, startup-degradation guard; sweep failing is real-DB-only
         logger.exception("startup .arm-inprogress sweep failed: %s", exc)
     try:
         async with SessionLocal() as db:
-            orphaned = await transcode_dispatcher.sweep_orphaned_applications(db)
+            orphaned = await transcode_dispatcher.sweeps.sweep_orphaned_applications(db)
             await db.commit()
         if orphaned:  # pragma: no cover, only when a startup orphan exists; sweep logic is unit-tested in test_transcode_dispatcher
             logger.info("backend startup: reconciled %d orphaned session_application(s)", orphaned)
