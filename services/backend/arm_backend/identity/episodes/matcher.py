@@ -46,16 +46,8 @@ def effective_tolerance(reference: int, tolerance: int) -> int:
     return min(tolerance, max(EFFECTIVE_TOL_FLOOR_S, reference // EFFECTIVE_TOL_FRACTION))
 
 
-def _is_play_all(
-    seconds: int, episodes: Sequence[Episode], tolerance: int, ref_rt: int, titles: Sequence[TitleIn], title_idx: int
-) -> bool:
-    """Check if a title is play-all: matches sum of 3+ consecutive episodes, or sum of the other titles
-    (within tolerance for 3+ others; within PLAY_ALL_PAIR_WINDOW_S for exactly 2, where a genuine two-part
-    title is otherwise just as likely)."""
-    # Rule B: in play-all scan, treat unknown runtime as ref_rt
-    runtimes = [_known(e.runtime_s) or ref_rt for e in episodes]
-
-    # Check if title matches sum of 3+ consecutive episodes
+def _matches_consecutive_sum(seconds: int, runtimes: Sequence[int], tolerance: int) -> bool:
+    """True when the title matches the sum of 3+ consecutive episode runtimes."""
     for start in range(len(runtimes)):
         total = 0
         for k in range(start, len(runtimes)):
@@ -65,7 +57,12 @@ def _is_play_all(
                 return True
             if total > seconds + effective_tolerance(total, tolerance):
                 break
+    return False
 
+
+def _matches_other_titles_sum(seconds: int, titles: Sequence[TitleIn], title_idx: int, tolerance: int) -> bool:
+    """True when the title matches the sum of the other titles: within tolerance for 3+ others,
+    within PLAY_ALL_PAIR_WINDOW_S for exactly 2."""
     # Rule C: play-all if 3+ other titles and title length matches sum of other titles
     other_titles = [t for i, t in enumerate(titles) if i != title_idx]
     if len(other_titles) >= 3:
@@ -74,8 +71,20 @@ def _is_play_all(
             return True
     elif len(other_titles) == 2 and abs(seconds - sum(t.seconds for t in other_titles)) < PLAY_ALL_PAIR_WINDOW_S:
         return True
-
     return False
+
+
+def _is_play_all(
+    seconds: int, episodes: Sequence[Episode], tolerance: int, ref_rt: int, titles: Sequence[TitleIn], title_idx: int
+) -> bool:
+    """Check if a title is play-all: matches sum of 3+ consecutive episodes, or sum of the other titles
+    (within tolerance for 3+ others; within PLAY_ALL_PAIR_WINDOW_S for exactly 2, where a genuine two-part
+    title is otherwise just as likely)."""
+    # Rule B: in play-all scan, treat unknown runtime as ref_rt
+    runtimes = [_known(e.runtime_s) or ref_rt for e in episodes]
+    return _matches_consecutive_sum(seconds, runtimes, tolerance) or _matches_other_titles_sum(
+        seconds, titles, title_idx, tolerance
+    )
 
 
 def _one_cost(seconds: int, runtime: int | None, tolerance: int, ref_rt: int) -> float | None:
