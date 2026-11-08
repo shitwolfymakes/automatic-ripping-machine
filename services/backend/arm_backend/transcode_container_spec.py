@@ -5,11 +5,16 @@ Shared by task spawns and GPU probes.
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any
 
 from arm_backend.config import Settings
-from arm_common import Gpu
+from arm_common import Gpu, TranscodeTask
+from arm_common.encoders import EncoderSpec
 from arm_common.enums import GpuVendor
+
+logger = logging.getLogger(__name__)
 
 
 def container_identity_env(settings: Settings, gpu_vendor: GpuVendor | None) -> dict[str, str]:
@@ -81,3 +86,56 @@ def gpu_run_kwargs(gpu: Gpu) -> dict[str, Any]:
                 fallback["Count"] = base_kwargs["count"]
             kwargs["device_requests"] = [fallback]
     return kwargs
+
+
+def backend_url_for_spawn(settings: Settings) -> str:
+    remote = bool(settings.ARM_TRANSCODE_DOCKER_HOST)
+    if remote and not settings.ARM_TRANSCODE_BACKEND_URL:
+        logger.warning(
+            "ARM_TRANSCODE_DOCKER_HOST set but ARM_TRANSCODE_BACKEND_URL empty — "
+            "remote transcoder will use the unroutable in-network https://arm-backend:8443; "
+            "set ARM_TRANSCODE_BACKEND_URL to a host-routable backend URL"
+        )
+    return (
+        settings.ARM_TRANSCODE_BACKEND_URL
+        if remote and settings.ARM_TRANSCODE_BACKEND_URL
+        else "https://arm-backend:8443"
+    )
+
+
+def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[str, str]:
+    return {
+        "ARM_TRANSCODE_TASK_ID": task.id,
+        "ARM_BACKEND_URL": backend_url,
+        "ARM_SERVICE_TOKEN": settings.ARM_SERVICE_TOKEN,
+        "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
+        # Phase 12 — per-task log filename so parallel transcoders don't
+        # clobber a shared `/logs/arm-transcode.log` rotation.
+        "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
+    }
+
+
+def task_volumes(settings: Settings) -> dict[str, dict[str, str]]:
+    certs_root = Path(settings.ARM_HOST_CERTS_PATH)
+    return {
+        settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
+        settings.ARM_HOST_MEDIA_PATH: {"bind": "/media", "mode": "rw"},
+        settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
+        str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
+    }
+
+
+def gpu_env(gpu: Gpu | None, encoder: EncoderSpec | None) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if encoder is not None:
+        # The worker resolves everything from the catalog id. The
+        # ARM_GPU_* vars below are a harmless fallback only: an image that
+        # predates --probe-device can never verify a row, so it is never
+        # handed a GPU; the upgrade path is rebuilding or pulling it.
+        env["ARM_TRANSCODE_ENCODER"] = encoder.id
+    if gpu is not None:
+        env["ARM_GPU_VENDOR"] = gpu.vendor.value
+        env["ARM_GPU_DEVICE"] = gpu.device_path
+        if encoder is not None:
+            env["ARM_GPU_CODEC"] = str(encoder.codec)
+    return env

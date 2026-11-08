@@ -279,7 +279,7 @@ async def test_spawn_remote_without_backend_url_warns_and_falls_back(
         WSHub(),
     )
 
-    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_dispatcher"):
+    with caplog.at_level(logging.WARNING, logger="arm_backend.transcode_container_spec"):
         spawned = await disp.spawn_pending(db)
     assert spawned == 1
 
