@@ -215,6 +215,51 @@ async def _respawn_parked(manager: RipperManager, drive: Drive, job: Job) -> boo
     return True
 
 
+async def _enrolled_virtual_drives(db: AsyncSession) -> list[Drive]:
+    """The virtual drives still enrolled: one per ISO rip in flight."""
+    return list(
+        (
+            await db.execute(
+                select(Drive).where(
+                    col(Drive.kind) == DriveKind.VIRTUAL, col(Drive.lifecycle) == DriveLifecycle.ENROLLED
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _is_dead(state: str, drive: Drive) -> bool:
+    """True when the drive's ripper is gone for good: exited, dead, or
+    missing once the spawn grace has passed."""
+    if state not in _DEAD_STATES:
+        return False
+    return not (state == "missing" and _within_spawn_grace(drive))
+
+
+async def _sweep_one(db: AsyncSession, manager: RipperManager, hub: WSHub, listed: Drive, state: str) -> bool:
+    """Act on one virtual drive whose ripper is dead: start a parked rip's
+    ripper again, or fail its unfinished job and retire the drive. True when
+    the drive was retired."""
+    # The caller's container listing is a snapshot: a cancel may have retired this
+    # drive (and abandoned its job) since. Re-read both under a row
+    # lock and act only on what is still current.
+    drive = await _locked_drive(db, listed.id)
+    if drive is None or drive.lifecycle != DriveLifecycle.ENROLLED:
+        await db.commit()  # release the lock; nothing to do
+        return False
+    job = await _latest_job(db, drive.id)
+    if job is not None and job.status in PRE_RIP_JOB_STATUSES and await _respawn_parked(manager, drive, job):
+        await db.commit()  # release the lock; the drive stays enrolled
+        return False
+    if job is not None and job.status not in TERMINAL_JOB_STATUSES:
+        await _fail_job(db, hub, job)
+    await retire_virtual_drive(db, manager, drive)
+    logger.info("iso drive_id=%s retired (container %s)", drive.id, state)
+    return True
+
+
 async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WSHub) -> int:
     """One watchdog pass over the enrolled virtual drives. Returns how many it retired.
 
@@ -233,43 +278,15 @@ async def sweep_virtual_drives(db: AsyncSession, manager: RipperManager, hub: WS
     just abandoned is never turned into a failure. Each retire commits on
     its own.
     """
-    drives = list(
-        (
-            await db.execute(
-                select(Drive).where(
-                    col(Drive.kind) == DriveKind.VIRTUAL, col(Drive.lifecycle) == DriveLifecycle.ENROLLED
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
+    drives = await _enrolled_virtual_drives(db)
     if not drives:
         return 0
     statuses = await asyncio.to_thread(manager.container_statuses, [d.id for d in drives])
     retired = 0
     for listed in drives:
         state, _image_current = statuses.get(listed.id, ("missing", None))
-        if state not in _DEAD_STATES:
-            continue
-        if state == "missing" and _within_spawn_grace(listed):
-            continue
-        # The listing above is a snapshot: a cancel may have retired this
-        # drive (and abandoned its job) since. Re-read both under a row
-        # lock and act only on what is still current.
-        drive = await _locked_drive(db, listed.id)
-        if drive is None or drive.lifecycle != DriveLifecycle.ENROLLED:
-            await db.commit()  # release the lock; nothing to do
-            continue
-        job = await _latest_job(db, drive.id)
-        if job is not None and job.status in PRE_RIP_JOB_STATUSES and await _respawn_parked(manager, drive, job):
-            await db.commit()  # release the lock; the drive stays enrolled
-            continue
-        if job is not None and job.status not in TERMINAL_JOB_STATUSES:
-            await _fail_job(db, hub, job)
-        await retire_virtual_drive(db, manager, drive)
-        logger.info("iso drive_id=%s retired (container %s)", drive.id, state)
-        retired += 1
+        if _is_dead(state, listed) and await _sweep_one(db, manager, hub, listed, state):
+            retired += 1
     return retired
 
 
@@ -376,17 +393,7 @@ async def create_iso_rip(
             if session is None:
                 raise IsoRipError(404, "unknown session")
         await sweep_virtual_drives(db, manager, hub)
-        live = list(
-            (
-                await db.execute(
-                    select(Drive).where(
-                        col(Drive.kind) == DriveKind.VIRTUAL, col(Drive.lifecycle) == DriveLifecycle.ENROLLED
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        live = await _enrolled_virtual_drives(db)
         if any(d.source_path == rel_norm for d in live):
             raise IsoRipError(409, "This ISO is already being ripped.")
         cap = await _iso_cap(db)
