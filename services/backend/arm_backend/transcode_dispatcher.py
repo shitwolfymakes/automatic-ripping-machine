@@ -283,7 +283,7 @@ class _SpawnPass:
             return
         job_id = await self._job_id_for(task)
         with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
-            preset = await self._dispatcher._resolve_preset_for_task(self._db, task)
+            preset = await resolve_preset_for_task(self._db, task)
             if is_passthrough_preset(preset):
                 await self._run_passthrough_isolated(task, task_id)
                 return
@@ -799,9 +799,6 @@ class TranscodeDispatcher:
             )
             return
         await db.commit()
-
-    async def _resolve_preset_for_task(self, db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
-        return await resolve_preset_for_task(db, task)
 
     def awaiting_probe(self, gpu: Gpu) -> bool:
         """A never-probed row whose probe is reserved, running, or about to be

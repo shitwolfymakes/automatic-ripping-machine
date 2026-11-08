@@ -1,5 +1,5 @@
 """Residual TranscodeDispatcher coverage: run-loop error/timeout, _tick,
-spawn slots<=0, _resolve_preset_for_task None paths, the GPU run-kwarg
+spawn slots<=0, resolve_preset_for_task None paths, the GPU run-kwarg
 injector (every vendor + NVENC idx/no-idx + unknown), sweep_arm_inprogress
 unlink OSError, and cancel_running's row-gone / docker-stop-error paths.
 """
@@ -17,6 +17,7 @@ import pytest
 from arm_backend import transcode_dispatcher as tdmod
 from arm_backend.transcode_container_spec import gpu_run_kwargs
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.transcode_queue import resolve_preset_for_task
 from arm_backend.ws import WSHub
 from arm_common import (
     ContainerFormat,
@@ -105,7 +106,6 @@ async def test_spawn_pending_no_slots() -> None:
 
 async def test_resolve_preset_none_paths() -> None:
     db = FakeSession()
-    d = _disp(db)
     task = TranscodeTask(
         id="txt_1",
         session_application_id="sap_missing",
@@ -115,7 +115,7 @@ async def test_resolve_preset_none_paths() -> None:
         attempts=0,
     )
     # application missing → None
-    assert await d._resolve_preset_for_task(db, task) is None
+    assert await resolve_preset_for_task(db, task) is None
 
     # application present but session has no transcode preset → None
     db.rows["session_applications"] = [
@@ -128,7 +128,7 @@ async def test_resolve_preset_none_paths() -> None:
         )
     ]
     db.rows["sessions"] = []
-    assert await d._resolve_preset_for_task(db, task) is None
+    assert await resolve_preset_for_task(db, task) is None
 
 
 def _gpu(vendor: GpuVendor, device_path: str) -> Gpu:
