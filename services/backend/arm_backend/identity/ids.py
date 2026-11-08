@@ -40,6 +40,50 @@ def current_ids(job: Job) -> ExternalIds:
         return ExternalIds()
 
 
+def _scrub_movie_tmdb(stored: ExternalIds) -> ExternalIds:
+    """The ids episode sources may look a show up by: `stored` without a movie's TMDb id."""
+    # A movie's TMDb id is not a show id (TMDb numbers movies and shows
+    # separately): episode sources look the show up by IMDb / TVDB instead.
+    return stored.model_copy(update={"tmdb": None, "tmdb_kind": None}) if stored.tmdb_kind == "movie" else stored
+
+
+async def _ask_provider(provider: EpisodeListProvider, ids: ExternalIds, job: Job, *, raise_errors: bool) -> str | None:
+    """The provider's show id for `ids`, or None when it has none or fails;
+    a `SourceError` is re-raised when `raise_errors` is set."""
+    try:
+        return await provider.resolve_show_id(ids)
+    except (SourceError, SourceMiss) as e:
+        if raise_errors and isinstance(e, SourceError):
+            raise
+        logger.warning("resolve_show_id failed source=%s job_id=%s: %s", provider.source_id, job.id, e)
+        return None
+
+
+def _provider_update(provider: EpisodeListProvider, show_id: str) -> dict[str, str]:
+    """The ids to record for a provider's resolved show id; a TMDb id is tagged as a TV id."""
+    update: dict[str, str] = {provider.id_field: show_id}
+    if provider.id_field == "tmdb":
+        update["tmdb_kind"] = "tv"
+    return update
+
+
+def _write_external_ids(job: Job, ids: ExternalIds) -> bool:
+    """Write `ids` into `metadata_json["identity"]["external_ids"]`, keeping
+    every other key; False, writing nothing, when the job has no dict
+    `identity` section."""
+    identity = (job.metadata_json or {}).get("identity")
+    if not isinstance(identity, dict):
+        return False
+    job.metadata_json = {
+        **(job.metadata_json or {}),
+        "identity": {
+            **identity,
+            "external_ids": ids.model_dump(mode="json", exclude_none=True),
+        },
+    }
+    return True
+
+
 async def resolve_show_ids(
     job: Job, providers: Sequence[EpisodeListProvider], *, persist: bool = True, raise_errors: bool = False
 ) -> ExternalIds:
@@ -59,39 +103,21 @@ async def resolve_show_ids(
     resolved the same way but never written back.
     """
     stored = current_ids(job)
-    # A movie's TMDb id is not a show id (TMDb numbers movies and shows
-    # separately): episode sources look the show up by IMDb / TVDB instead.
-    ids = stored.model_copy(update={"tmdb": None, "tmdb_kind": None}) if stored.tmdb_kind == "movie" else stored
+    ids = _scrub_movie_tmdb(stored)
     found = False
     for provider in providers:
         if getattr(ids, provider.id_field, None):
             continue
-        try:
-            show_id = await provider.resolve_show_id(ids)
-        except (SourceError, SourceMiss) as e:
-            if raise_errors and isinstance(e, SourceError):
-                raise
-            logger.warning("resolve_show_id failed source=%s job_id=%s: %s", provider.source_id, job.id, e)
-            continue
+        show_id = await _ask_provider(provider, ids, job, raise_errors=raise_errors)
         if show_id is None:
             continue
-        update: dict[str, str] = {provider.id_field: show_id}
-        if provider.id_field == "tmdb":
-            update["tmdb_kind"] = "tv"
+        update = _provider_update(provider, show_id)
         ids = ids.model_copy(update=update)
         stored = stored.model_copy(update=update)
         found = True
 
     if found and persist:
-        identity = (job.metadata_json or {}).get("identity")
-        if isinstance(identity, dict):
-            job.metadata_json = {
-                **(job.metadata_json or {}),
-                "identity": {
-                    **identity,
-                    "external_ids": stored.model_dump(mode="json", exclude_none=True),
-                },
-            }
+        _write_external_ids(job, stored)
 
     return ids
 
@@ -120,15 +146,4 @@ def merge_new_ids(target_job: Job, found: ExternalIds) -> bool:
     }
     if not new_values:
         return False
-    identity = (target_job.metadata_json or {}).get("identity")
-    if not isinstance(identity, dict):
-        return False
-    merged = existing.model_copy(update=new_values)
-    target_job.metadata_json = {
-        **(target_job.metadata_json or {}),
-        "identity": {
-            **identity,
-            "external_ids": merged.model_dump(mode="json", exclude_none=True),
-        },
-    }
-    return True
+    return _write_external_ids(target_job, existing.model_copy(update=new_values))
