@@ -22,7 +22,8 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
-from arm_backend.transcode_dispatcher import count_queued_encode_tasks, max_parallel_transcodes, release_gpu_for_task
+from arm_backend.gpu_claim import release_gpu_for_task
+from arm_backend.transcode_dispatcher import count_queued_encode_tasks, max_parallel_transcodes
 from arm_backend.db import get_session
 from arm_backend.log_reader import LOG_DIR, effective_cap
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User

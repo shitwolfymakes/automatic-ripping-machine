@@ -28,8 +28,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from arm_backend.config import Settings
+from arm_backend.gpu_claim import GpuAssignment
 from arm_backend.transcode_dispatcher import (
-    GpuAssignment,
     TranscodeDispatcher,
     gpu_awaiting_probe,
     set_active_dispatcher,

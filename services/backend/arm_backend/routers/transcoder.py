@@ -25,9 +25,9 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
+from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.routers._deps import get_hub
 from arm_backend.transcode_apply import settle_session_application
-from arm_backend.transcode_dispatcher import release_gpu_for_task
 from arm_backend.ws import WSHub
 from arm_common import (
     Session,

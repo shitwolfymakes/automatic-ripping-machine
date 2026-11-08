@@ -25,7 +25,7 @@ import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
@@ -35,6 +35,13 @@ from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.container_logging import log_config
 from arm_backend.docker_client import HealingDockerClient
 from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
+from arm_backend.gpu_claim import (
+    GpuAssignment,
+    assignment_before_device_lookup,
+    assignment_with_no_candidate,
+    pick_free_gpu,
+    release_gpu_for_task,
+)
 from arm_backend.transcode_container_spec import (
     backend_url_for_spawn,
     container_identity_env,
@@ -64,11 +71,6 @@ from arm_common import (
     with_log_context,
 )
 from arm_common.encoders import (
-    VENDOR_RANK,
-    EncoderSpec,
-    cpu_encoder_for,
-    get_encoder,
-    gpu_could_serve,
     gpu_encoder_for,
     gpu_is_eligible,
     vendor_supports_container,
@@ -105,24 +107,6 @@ _QUEUE_SCAN_LIMIT = 50
 _PROBE_HOLD_LOG_SECONDS = 600
 
 
-class GpuAssignment(NamedTuple):
-    """Outcome of `_claim_gpu_for_task`.
-
-    `gpu` is the claimed device, or None for a CPU spawn. `encoder` is the
-    RESOLVED catalog encoder the worker runs: for an `any_<codec>` preset it
-    is the claimed vendor's GPU encoder or the `cpu_<codec>` fallback; it is
-    None for the `preset` encoder (HandBrake's own). `action="queue"` leaves
-    the task queued for a later tick (every eligible device busy or being
-    probed, or a device still awaiting its first probe); `action="fail"`
-    means the task can never run as configured and `reason` says why.
-    """
-
-    gpu: Gpu | None
-    encoder: EncoderSpec | None
-    action: Literal["spawn", "queue", "fail"]
-    reason: str | None = None
-
-
 async def max_parallel_transcodes(db: AsyncSession, *, default: int | None = None) -> int:
     """The dispatcher parallelism cap from operator config (Settings >
     Transcoding). Falls back to `default` (the caller's env-derived value)
@@ -133,19 +117,6 @@ async def max_parallel_transcodes(db: AsyncSession, *, default: int | None = Non
     if cfg is None or cfg.max_parallel_transcodes is None:
         return default if default is not None else settings.MAX_PARALLEL_TRANSCODES
     return cfg.max_parallel_transcodes
-
-
-async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
-    """Flip every GPU row claimed by this task back to AVAILABLE.
-
-    Called from the transcoder router on complete/fail and from the
-    stale-claim sweep. Idempotent — a no-op if no GPU was claimed.
-    Caller is responsible for committing.
-    """
-    gpus = (await db.execute(select(Gpu).where(col(Gpu.claimed_by_task_id) == task_id))).scalars().all()
-    for gpu in gpus:
-        gpu.status = GpuStatus.AVAILABLE
-        gpu.claimed_by_task_id = None
 
 
 async def resolve_preset_for_task(db: AsyncSession, task: TranscodeTask) -> TranscodePreset | None:
@@ -203,79 +174,6 @@ async def count_queued_encode_tasks(db: AsyncSession) -> int:
         if not is_passthrough_preset(presets.get(preset_id) if preset_id is not None else None):
             count += 1
     return count
-
-
-WAITING_FOR_PROBE_REASON = "waiting for GPU probe"
-
-
-def _assignment_before_device_lookup(preset: TranscodePreset | None) -> GpuAssignment | EncoderSpec:
-    """The final assignment when `preset` needs no device lookup (no preset,
-    an unknown encoder, a `preset` or `cpu_*` encoder, or a container the
-    encoder's vendor cannot write); otherwise the GPU-capable encoder spec
-    to look a device up for."""
-    if preset is None:
-        return GpuAssignment(gpu=None, encoder=None, action="spawn")
-    try:
-        spec = get_encoder(preset.encoder)
-    except ValueError:
-        return GpuAssignment(
-            gpu=None,
-            encoder=None,
-            action="fail",
-            reason=f"preset {preset.id} has unknown encoder {preset.encoder!r}",
-        )
-    if spec.kind == "preset":
-        return GpuAssignment(gpu=None, encoder=None, action="spawn")
-    if spec.kind == "cpu":
-        return GpuAssignment(gpu=None, encoder=spec, action="spawn")
-    if spec.vendor is not None and not vendor_supports_container(spec.vendor, preset.container):
-        # A preset saved before the API refused this pairing.
-        return GpuAssignment(
-            gpu=None,
-            encoder=spec,
-            action="fail",
-            reason=f"encoder {spec.id} cannot write {preset.container.value}; edit the preset to use mkv or mp4",
-        )
-    return spec
-
-
-def _assignment_with_no_candidate(
-    spec: EncoderSpec,
-    codec: str,
-    eligible: list[Gpu],
-    gpus: list[Gpu],
-    awaiting_probe: Callable[[Gpu], bool],
-) -> GpuAssignment:
-    """What to do when no eligible device can be claimed right now: wait for
-    a mid-probe device or a pending probe, fall back to CPU for `any_*`, or
-    fail."""
-    if eligible:
-        # Every eligible device is mid-probe; it is only absent for
-        # this tick, so wait rather than fail or fall back to CPU.
-        return GpuAssignment(gpu=None, encoder=spec, action="queue")
-    if any(gpu_could_serve(g, spec) and awaiting_probe(g) for g in gpus):
-        # A never-probed device that could serve this encoder has a
-        # probe scheduled or running; its result decides the device.
-        return GpuAssignment(gpu=None, encoder=spec, action="queue", reason=WAITING_FOR_PROBE_REASON)
-    if spec.kind == "any":
-        return GpuAssignment(gpu=None, encoder=cpu_encoder_for(codec), action="spawn")
-    return GpuAssignment(
-        gpu=None,
-        encoder=spec,
-        action="fail",
-        reason=f"no enabled device has verified {spec.id}; re-probe or enable it in Settings > GPUs",
-    )
-
-
-def _pick_free_gpu(candidates: list[Gpu]) -> Gpu | None:
-    """The best-ranked available device among `candidates`, or None."""
-    # Deterministic pick instead of row order: vendor rank, then device
-    # path, so a mixed-vendor host always prefers the same silicon.
-    free = sorted(
-        (g for g in candidates if g.status == GpuStatus.AVAILABLE),
-        key=lambda g: (VENDOR_RANK.get(g.vendor, 99), g.device_path),
-    )
-    return free[0] if free else None
 
 
 def _enabled_vendors(gpus: Sequence[Gpu]) -> set[GpuVendor]:
@@ -943,7 +841,7 @@ class TranscodeDispatcher:
         Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
         a device in `probing_gpu_ids` is never claimed.
         """
-        decided = _assignment_before_device_lookup(preset)
+        decided = assignment_before_device_lookup(preset)
         if isinstance(decided, GpuAssignment):
             return decided
         assert preset is not None  # a spec is only returned for a real preset
@@ -963,8 +861,8 @@ class TranscodeDispatcher:
         ]
         candidates = [g for g in eligible if g.id not in self.probing_gpu_ids]
         if not candidates:
-            return _assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe)
-        gpu = _pick_free_gpu(candidates)
+            return assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe)
+        gpu = pick_free_gpu(candidates)
         if gpu is None:
             return GpuAssignment(gpu=None, encoder=spec, action="queue")
         gpu.status = GpuStatus.BUSY
