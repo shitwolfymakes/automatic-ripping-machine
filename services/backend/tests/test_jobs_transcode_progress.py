@@ -377,6 +377,33 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
     assert (tracks["t:2"]["transcode_fps"], tracks["t:2"]["transcode_avg_fps"]) == (None, None)
 
 
+def test_get_job_detail_keeps_the_newer_task_when_an_older_one_is_listed_after_it() -> None:
+    """An older task seen after a newer one for the same track does not replace it."""
+    db = FakeSession()
+    _seed_admin(db)
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000031"
+    db.rows["jobs"] = [_ripped_job(job_id)]
+    track_a = _track("trk_01JZXR7K3M5Q8N4VWAAAAAAA1", job_id, "t:1")
+    db.rows["tracks"] = [track_a]
+    sa = _sa("sap_31", SessionApplicationStatus.DONE)
+    sa.job_id = job_id
+    db.rows["session_applications"] = [sa]
+    task_old = _task_for_track("txt_01JZXR7K3M5Q8N4VWAAAAAAAA", "sap_31", track_a.id, TranscodeTaskStatus.DONE)
+    task_new = _task_for_track("txt_01JZXR7K3M5Q8N4VWAAAAAZZZ", "sap_31", track_a.id, TranscodeTaskStatus.FAILED)
+    task_old.fps, task_old.avg_fps = 99.0, 98.0
+    task_new.fps, task_new.avg_fps = 45.7, 23.5
+    db.rows["transcode_tasks"] = [task_new, task_old]
+
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{job_id}", headers=_auth(token))
+
+    assert r.status_code == 200
+    track = r.json()["tracks"][0]
+    assert track["transcode_status"] == "failed"
+    assert (track["transcode_fps"], track["transcode_avg_fps"]) == (45.7, 23.5)
+
+
 def test_summarize_includes_tasks_failed() -> None:
     """TranscodeProgressSummary.tasks_failed is populated and surfaced via the detail endpoint."""
     db = FakeSession()

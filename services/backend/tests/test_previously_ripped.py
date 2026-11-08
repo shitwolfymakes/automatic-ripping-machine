@@ -459,6 +459,19 @@ def test_job_detail_describes_the_earlier_rip(tmp_path: Path, monkeypatch: pytes
         assert client.get("/api/jobs/job_01M4R7CH6DK8PA8MPD79PATMPD", headers=auth).json()["previous_rip"] is None
 
 
+def test_job_detail_reports_unknown_outputs_when_the_earlier_job_has_no_tracks() -> None:
+    """An earlier job without tracks is still described, with outputs_present left unknown."""
+    db = _db(PreviouslyRippedAction.HOLD)
+    db.rows["jobs"].append(_held())
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.get("/api/jobs/job_01M4R7CH6DK8PA8MPD79PATMPD", headers=auth)
+    assert r.status_code == 200
+    prev = r.json()["previous_rip"]
+    assert prev["job_id"] == _PRIOR
+    assert prev["outputs_present"] is None
+
+
 def test_rip_again_starts_a_held_copy_of_the_disc() -> None:
     db = _db(PreviouslyRippedAction.HOLD)
     held = _held()
