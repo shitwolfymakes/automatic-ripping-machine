@@ -367,11 +367,12 @@ def _collisions_for_paths(
 
 def _add_duplicate_collisions(paths: list[str], collisions: list[CollisionInfo]) -> None:
     """Append a collision for each path repeated in the request and not already flagged."""
+    flagged_paths = {c.output_path for c in collisions}
     seen_in_request: set[str] = set()
     for path in paths:
         if path in seen_in_request:
-            already_flagged = any(c.output_path == path for c in collisions)
-            if not already_flagged:
+            if path not in flagged_paths:
+                flagged_paths.add(path)
                 collisions.append(
                     CollisionInfo(
                         output_path=path,
