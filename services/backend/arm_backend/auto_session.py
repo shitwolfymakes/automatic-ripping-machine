@@ -204,6 +204,13 @@ async def _existing_parked_application(db: AsyncSession, session_id: str, job_id
     )
 
 
+async def _job_tracks(db: AsyncSession, job: Job) -> list[Track]:
+    """Return the job's tracks in index order."""
+    return list(
+        (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
+    )
+
+
 async def _load_transcode_preset(db: AsyncSession, sess: Session) -> TranscodePreset | None:
     """Load the session's transcode preset; None means no preset or a dangling id (see `sess.transcode_preset_id`)."""
     if sess.transcode_preset_id is None:
@@ -439,9 +446,7 @@ async def _apply_session_internal(
             detail=f"session references missing rip_preset_id={sess.rip_preset_id}",
         )
 
-    tracks = list(
-        (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
-    )
+    tracks = await _job_tracks(db, job)
 
     # A FOLDER (disc backup) session files the backup folder. On a job that was
     # ripped as titles its template would file a title's .mkv as an
@@ -867,9 +872,7 @@ async def fan_out_waiting_identify_applications(
     if not apps:
         return []
 
-    tracks = list(
-        (await db.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index)))).scalars().all()
-    )
+    tracks = await _job_tracks(db, job)
 
     outcomes: list[ResolveFanOutOutcome] = []
     for app in apps:
@@ -885,45 +888,27 @@ async def fan_out_waiting_identify_applications(
             )
             continue
 
-        transcode_preset: TranscodePreset | None = None
-        if sess.transcode_preset_id is not None:
-            transcode_preset = (
-                await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-            ).scalar_one_or_none()
-            if transcode_preset is None:
-                outcomes.append(
-                    ResolveFanOutOutcome(
-                        application=app,
-                        tasks=[],
-                        skipped_reason="session_missing",
-                        error_detail=f"transcode_preset {sess.transcode_preset_id} no longer exists",
-                    )
-                )
-                continue
-
-        if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+        transcode_preset = await _load_transcode_preset(db, sess)
+        if sess.transcode_preset_id is not None and transcode_preset is None:
             outcomes.append(
                 ResolveFanOutOutcome(
                     application=app,
                     tasks=[],
-                    skipped_reason="transcode_disabled",
-                    error_detail=_TRANSCODE_DISABLED_DETAIL,
+                    skipped_reason="session_missing",
+                    error_detail=f"transcode_preset {sess.transcode_preset_id} no longer exists",
                 )
             )
             continue
 
-        if not is_passthrough_preset(transcode_preset):
-            assert transcode_preset is not None
-            if not await encoder_available(db, transcode_preset.encoder):
-                outcomes.append(
-                    ResolveFanOutOutcome(
-                        application=app,
-                        tasks=[],
-                        skipped_reason="encoder_unavailable",
-                        error_detail=_encoder_unavailable_detail(transcode_preset),
-                    )
+        refusal = await _encode_gate_refusal(db, transcode_preset)
+        if refusal is not None:
+            skipped_reason, error_detail = refusal
+            outcomes.append(
+                ResolveFanOutOutcome(
+                    application=app, tasks=[], skipped_reason=skipped_reason, error_detail=error_detail
                 )
-                continue
+            )
+            continue
 
         try:
             outcome = await _fan_out_tasks_for_application(
