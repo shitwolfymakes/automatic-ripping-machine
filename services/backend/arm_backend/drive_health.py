@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arm_backend.drive_scanner import DriveScanner, _tunables
+from arm_backend.drive_scanner import DriveScanner, scan_tunables
 from arm_backend.ripper_manager import RipperManager
 from arm_common import Drive, DriveIdentityKind, DriveLifecycle, DriveStatus
 from arm_common.schemas import DriveDiagnosticItem
@@ -129,7 +129,7 @@ async def scanner_findings(scanner: DriveScanner | None, db: AsyncSession, now: 
     findings: list[str] = []
     if scanner.last_error:
         findings.append(f"last scan failed: {scanner.last_error}")
-    interval, _prune_days = await _tunables(db)
+    interval, _prune_days = await scan_tunables(db)
     if scanner.last_scan_at is not None:
         age = int((now - _aware(scanner.last_scan_at)).total_seconds())
         if age > 3 * interval:

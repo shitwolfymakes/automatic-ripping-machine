@@ -28,7 +28,7 @@ async def test_tunables_zero_value_is_not_treated_as_missing() -> None:
     wait) or drive_detected_prune_days=0 (prune immediately) would be
     ignored. `x if x is not None else DEFAULT` must honour an explicit 0."""
     db = _db(interval=0, prune=0)
-    interval, prune = await mod._tunables(db)
+    interval, prune = await mod.scan_tunables(db)
     assert (interval, prune) == (0, 0)
 
 

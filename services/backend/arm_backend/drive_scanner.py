@@ -198,7 +198,7 @@ DEFAULT_SCAN_INTERVAL_SECONDS = 30
 DEFAULT_PRUNE_DAYS = 7
 
 
-async def _tunables(session: AsyncSession) -> tuple[int, int]:
+async def scan_tunables(session: AsyncSession) -> tuple[int, int]:
     """(interval_seconds, prune_days) from the Config singleton; defaults when
     the row is missing or a column is None (in-memory rows predating 0030)."""
     cfg = (await session.execute(select(Config))).scalars().first()
@@ -258,7 +258,7 @@ class DriveScanner:
                 problem = self.enumeration_problem()
                 if problem is not None:
                     raise PruneUnavailable(problem)
-            _, prune_days = await _tunables(session)
+            _, prune_days = await scan_tunables(session)
             scanned = enumerate_optical(sysfs_root=self._sysfs_root, disk_root=self._disk_root)
             summary = await reconcile_drives(
                 session, scanned, now=datetime.now(timezone.utc), prune_days=0 if prune_now else prune_days
@@ -273,7 +273,7 @@ class DriveScanner:
             interval = DEFAULT_SCAN_INTERVAL_SECONDS
             try:
                 async with self._session_factory() as session:
-                    interval, _ = await _tunables(session)
+                    interval, _ = await scan_tunables(session)
                     await self.scan_once(session)
             except asyncio.CancelledError:
                 raise
