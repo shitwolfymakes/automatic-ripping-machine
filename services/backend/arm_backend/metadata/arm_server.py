@@ -19,6 +19,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from_any
 
 logger = logging.getLogger("arm_backend.metadata.arm_server")
 
@@ -75,11 +76,7 @@ class ArmServerClient:
         if not isinstance(title_val, str) or not title_val:
             raise LookupError("arm_server result missing title")
 
-        year_val: int | None = None
-        if isinstance(year_raw, int):
-            year_val = year_raw
-        elif isinstance(year_raw, str) and year_raw[:4].isdigit():
-            year_val = int(year_raw[:4])
+        year_val = year_from_any(year_raw)
 
         # 1337server's `video_type` distinguishes movie / tv but we only carry
         # `kind` ∈ {movie, tv, music} — anything not "tv" maps to movie.

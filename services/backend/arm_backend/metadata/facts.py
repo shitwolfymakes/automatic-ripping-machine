@@ -11,6 +11,7 @@ import re
 from html import unescape
 from typing import Any, Literal
 
+from arm_backend.metadata.years import year_from_any
 from arm_common.schemas.job_metadata import IdentityFacts
 
 RatingSource = Literal["imdb", "tmdb", "tvmaze"]
@@ -25,14 +26,6 @@ def _text(value: Any) -> str | None:
         return None
     text = " ".join(unescape(_TAG.sub(" ", value)).split())
     return text if text and text != "N/A" else None
-
-
-def _year(value: Any) -> int | None:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value[:4].isdigit():
-        return int(value[:4])
-    return None
 
 
 def _number(value: Any) -> float | None:
@@ -103,7 +96,7 @@ def tmdb_facts(payload: dict[str, Any], kind: str) -> IdentityFacts:
     else:
         creators = _names([c for c in _dicts(credits.get("crew")) if c.get("job") == "Director"])
     return IdentityFacts(
-        end_year=_year(payload.get("last_air_date")) if is_tv and status in _ENDED else None,
+        end_year=year_from_any(payload.get("last_air_date")) if is_tv and status in _ENDED else None,
         overview=_text(payload.get("overview")),
         rating=rating,
         rating_source=source,
@@ -120,7 +113,7 @@ def omdb_facts(payload: dict[str, Any], kind: str) -> IdentityFacts:
     votes = _count(None if payload.get("imdbVotes") == "N/A" else payload.get("imdbVotes"))
     rating, source = _rating(None if payload.get("imdbRating") == "N/A" else payload.get("imdbRating"), votes, "imdb")
     return IdentityFacts(
-        end_year=_year(years[1]) if len(years) > 1 else None,
+        end_year=year_from_any(years[1]) if len(years) > 1 else None,
         overview=_text(payload.get("Plot")),
         rating=rating,
         rating_source=source,
@@ -141,7 +134,7 @@ def tvmaze_facts(payload: dict[str, Any]) -> IdentityFacts:
     )
     episodes = embedded.get("episodes")
     return IdentityFacts(
-        end_year=_year(payload.get("ended")),
+        end_year=year_from_any(payload.get("ended")),
         overview=_text(payload.get("summary")),
         rating=rating,
         rating_source=source,
@@ -172,7 +165,7 @@ def tvdb_facts(payload: dict[str, Any]) -> IdentityFacts:
     )
     people = sorted(_dicts(payload.get("characters")), key=lambda c: _sort_key(c, "sort"))
     return IdentityFacts(
-        end_year=_year(payload.get("lastAired")) if status in _ENDED else None,
+        end_year=year_from_any(payload.get("lastAired")) if status in _ENDED else None,
         overview=_text(english) or _text(payload.get("overview")),
         genres=_tvdb_genres(payload.get("genres")),
         creators=_names([p for p in people if p.get("peopleType") == "Creator"], key="personName"),

@@ -9,6 +9,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.musicbrainz")
 
@@ -126,7 +127,7 @@ class MusicBrainzClient:
     def _project_disc(self, releases: list[dict[str, Any]], disc_id: str | None, toc: str | None) -> MetadataResult:
         top = releases[0]
         title_val = top.get("title")
-        year_val = _parse_year(top.get("date") or "")
+        year_val = year_from(top.get("date") or "")
         if not title_val:
             raise LookupError("musicbrainz top release missing title")
 
@@ -187,7 +188,7 @@ class MusicBrainzClient:
         title_val = body.get("title")
         if not title_val:
             raise LookupError("musicbrainz release missing title")
-        year_val = _parse_year(body.get("date") or "")
+        year_val = year_from(body.get("date") or "")
         artist = _join_artist_credit(body.get("artist-credit") or [])
         media = body.get("media") or []
         tracks: list[dict[str, Any]] = []
@@ -246,18 +247,13 @@ class MusicBrainzClient:
             title = rel.get("title")
             if not title:
                 continue
-            year = _parse_year(rel.get("date") or "")
+            year = year_from(rel.get("date") or "")
             artist_name = _join_artist_credit(rel.get("artist-credit") or [])
             media = rel.get("media") or []
             fmt = media[0].get("format") if media and isinstance(media[0], dict) else None
             payload: dict[str, Any] = {"artist": artist_name, "album": title, "format": fmt, **rel}
             results.append(MetadataResult(title=title, year=year, kind="music", payload=payload))
         return results
-
-
-def _parse_year(date: str) -> int | None:
-    """Year from a MusicBrainz date string ("1973-03-01" -> 1973), or None."""
-    return int(date[:4]) if date[:4].isdigit() else None
 
 
 def _escape_lucene(term: str) -> str:

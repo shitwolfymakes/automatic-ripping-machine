@@ -7,6 +7,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.tmdb")
 
@@ -74,7 +75,7 @@ class TMDBClient:
             title_val = top.get("name") or top.get("original_name") or ""
         if not title_val:
             return None
-        year_val = int(release[:4]) if release[:4].isdigit() else None
+        year_val = year_from(release)
         return MetadataResult(title=title_val, year=year_val, kind=kind, payload=top)
 
     async def search_movie(self, title: str, year: int | None = None) -> MetadataResult:

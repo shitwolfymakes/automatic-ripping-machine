@@ -5,6 +5,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.omdb")
 
@@ -72,7 +73,7 @@ class OMDBClient:
 
         title_val = body.get("Title")
         year_str = body.get("Year") or ""
-        year_val = int(year_str[:4]) if year_str[:4].isdigit() else None
+        year_val = year_from(year_str)
         if not title_val:
             raise LookupError("omdb hit missing title")
 
@@ -98,7 +99,7 @@ class OMDBClient:
             if not title_val:
                 continue
             year_str = item.get("Year") or ""
-            year_val = int(year_str[:4]) if year_str[:4].isdigit() else None
+            year_val = year_from(year_str)
             out.append(MetadataResult(title=title_val, year=year_val, kind=kind, payload=item))
         return out
 
@@ -111,6 +112,6 @@ class OMDBClient:
         if not title_val:
             raise LookupError("omdb hit missing title")
         year_str = body.get("Year") or ""
-        year_val = int(year_str[:4]) if year_str[:4].isdigit() else None
+        year_val = year_from(year_str)
         kind: Literal["movie", "tv"] = "tv" if body.get("Type") == "series" else "movie"
         return MetadataResult(title=title_val, year=year_val, kind=kind, payload=body)

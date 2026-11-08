@@ -6,6 +6,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.tvdb")
 
@@ -23,7 +24,7 @@ def series_to_result(entry: Any) -> MetadataResult | None:
     if not isinstance(name, str) or not name:
         return None
     raw_year = entry.get("year")
-    year = int(str(raw_year)[:4]) if raw_year is not None and str(raw_year)[:4].isdigit() else None
+    year = year_from(str(raw_year)) if raw_year is not None else None
     payload: dict[str, Any] = dict(entry)
     tvdb_id = entry.get("tvdb_id") or entry.get("id")
     if tvdb_id is not None and str(tvdb_id):

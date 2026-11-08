@@ -11,6 +11,7 @@ import httpx
 
 from arm_backend.config import settings
 from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.tvmaze")
 
@@ -49,7 +50,7 @@ def show_to_result(show: Any) -> MetadataResult | None:
     if not isinstance(name, str) or not name:
         return None
     premiered = show.get("premiered") or ""
-    year = int(premiered[:4]) if isinstance(premiered, str) and premiered[:4].isdigit() else None
+    year = year_from(premiered) if isinstance(premiered, str) else None
     payload: dict[str, Any] = dict(show)
     if show.get("id") is not None:
         payload["tvmaze_id"] = str(show["id"])
