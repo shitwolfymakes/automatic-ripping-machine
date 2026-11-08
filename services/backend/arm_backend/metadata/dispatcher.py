@@ -66,6 +66,10 @@ class _AttemptLog:
 _attempt_log: contextvars.ContextVar[_AttemptLog | None] = contextvars.ContextVar("identify_attempt_log", default=None)
 
 
+# A search candidate: (title, year, tv_first).
+_Candidate = tuple[str, int | None, bool]
+
+
 def _normalize_volume_label(label: str) -> tuple[str, int | None]:
     # Fold compatibility glyphs WITHOUT dropping non-ASCII: NFKC turns
     # "Blu-ray™" → "Blu-rayTM" and full-width forms → half-width, but keeps
@@ -87,6 +91,56 @@ def _normalize_volume_label(label: str) -> tuple[str, int | None]:
     cleaned = _YEAR_SUFFIX_RE.sub("", cleaned).strip()
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned, year
+
+
+def _search_candidates(
+    scan: ScanResult, cfg: Config, title_hint: str | None, title_hint_is_tv: bool
+) -> list[_Candidate]:
+    """The hint, hint-without-year and label titles to search, in order."""
+    # Disc hints (bd_title / label, see arm_backend.identity) supply a
+    # cleaner search title than the raw volume label — try it first, then
+    # fall back to the normalized volume-label title. Empty and duplicate
+    # (case-insensitive) candidates are skipped so a hint equal to the
+    # label title doesn't double the provider calls. A hint that carries
+    # a season claim (a season/box-set disc) is TV-shaped: search TV before
+    # movie for THAT candidate only. The label-derived candidate keeps the
+    # movie-first order. The label candidate's year is computed first so
+    # the hint candidate — which has no year of its own — is searched with
+    # the same year filter.
+    label_title: str | None = None
+    label_year: int | None = None
+    if scan.volume_label:
+        label_title, label_year = _normalize_volume_label(scan.volume_label)
+    # D-4: the volume label is a search candidate only while the `label`
+    # disc hint is enabled; an operator who ignores disc text gets no
+    # label search at all. Its year still narrows the hint candidate.
+    label_enabled = "label" in hint_sources_setting(cfg)
+
+    candidates: list[_Candidate] = []
+    if title_hint and title_hint.strip():
+        hint = title_hint.strip()
+        candidates.append((hint, label_year, title_hint_is_tv))
+        # A trailing year can be the release year (THE_OFFICE_2005_S1_D2)
+        # or part of the title (WONDER_WOMAN_1984, 1917), and the label
+        # cannot tell which. Search the hint as given first, then without
+        # the year.
+        if without_year := _HINT_YEAR_SUFFIX_RE.sub("", hint).rstrip(" :,"):
+            candidates.append((without_year, label_year, title_hint_is_tv))
+    if label_title and label_enabled:
+        candidates.append((label_title, label_year, False))
+    return candidates
+
+
+def _dedupe_casefold(candidates: list[_Candidate]) -> list[_Candidate]:
+    """Drop candidates whose title repeats an earlier one, ignoring case."""
+    seen: set[str] = set()
+    unique: list[_Candidate] = []
+    for title, year, tv_first in candidates:
+        key = title.casefold()
+        if key not in seen:
+            seen.add(key)
+            unique.append((title, year, tv_first))
+    return unique
 
 
 class MetadataDispatcher:
@@ -169,56 +223,27 @@ class MetadataDispatcher:
         if hit is not None:
             return hit
 
-        # Disc hints (bd_title / label, see arm_backend.identity) supply a
-        # cleaner search title than the raw volume label — try it first, then
-        # fall back to the normalized volume-label title. Empty and duplicate
-        # (case-insensitive) candidates are skipped so a hint equal to the
-        # label title doesn't double the provider calls. A hint that carries
-        # a season claim (a season/box-set disc) is TV-shaped: search TV before
-        # movie for THAT candidate only. The label-derived candidate keeps the
-        # movie-first order. The label candidate's year is computed first so
-        # the hint candidate — which has no year of its own — is searched with
-        # the same year filter.
-        label_title: str | None = None
-        label_year: int | None = None
-        if scan.volume_label:
-            label_title, label_year = _normalize_volume_label(scan.volume_label)
-        # D-4: the volume label is a search candidate only while the `label`
-        # disc hint is enabled; an operator who ignores disc text gets no
-        # label search at all. Its year still narrows the hint candidate.
-        label_enabled = "label" in hint_sources_setting(cfg)
-
-        candidates: list[tuple[str, int | None, bool]] = []
-        if title_hint and title_hint.strip():
-            hint = title_hint.strip()
-            candidates.append((hint, label_year, title_hint_is_tv))
-            # A trailing year can be the release year (THE_OFFICE_2005_S1_D2)
-            # or part of the title (WONDER_WOMAN_1984, 1917), and the label
-            # cannot tell which. Search the hint as given first, then without
-            # the year.
-            if without_year := _HINT_YEAR_SUFFIX_RE.sub("", hint).rstrip(" :,"):
-                candidates.append((without_year, label_year, title_hint_is_tv))
-        if label_title and label_enabled:
-            candidates.append((label_title, label_year, False))
-        seen: set[str] = set()
-        unique: list[tuple[str, int | None, bool]] = []
-        for title, year, tv_first in candidates:
-            key = title.casefold()
-            if key not in seen:
-                seen.add(key)
-                unique.append((title, year, tv_first))
+        unique = _dedupe_casefold(_search_candidates(scan, cfg, title_hint, title_hint_is_tv))
         if prefer_tv:
-            # The disc itself is TV-shaped (arm_common.disc_shape): search TV for
-            # every candidate before any movie, so one candidate's movie
-            # fallback can't win while another candidate would have found the
-            # series.
-            for kind in ("tv", "movie"):
-                for title, year, _ in unique:
-                    hit = await self._search_kind(title, year, cfg, kind)
-                    if hit is not None:
-                        return hit
-            return None
-        for title, year, tv_first in unique:
+            return await self._search_tv_then_movie(unique, cfg)
+        return await self._search_in_candidate_order(unique, cfg)
+
+    async def _search_tv_then_movie(self, candidates: list[_Candidate], cfg: Config) -> MetadataResult | None:
+        """Search TV for every candidate before any movie; the first hit wins."""
+        # The disc itself is TV-shaped (arm_common.disc_shape): search TV for
+        # every candidate before any movie, so one candidate's movie
+        # fallback can't win while another candidate would have found the
+        # series.
+        for kind in ("tv", "movie"):
+            for title, year, _ in candidates:
+                hit = await self._search_kind(title, year, cfg, kind)
+                if hit is not None:
+                    return hit
+        return None
+
+    async def _search_in_candidate_order(self, candidates: list[_Candidate], cfg: Config) -> MetadataResult | None:
+        """Search each candidate in its own kind order; the first hit wins."""
+        for title, year, tv_first in candidates:
             kinds: tuple[Kind, Kind] = ("tv", "movie") if tv_first else ("movie", "tv")
             for kind in kinds:
                 hit = await self._search_kind(title, year, cfg, kind)
