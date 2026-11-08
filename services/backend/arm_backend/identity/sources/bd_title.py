@@ -9,7 +9,7 @@ from arm_common import DiscType
 from arm_common.schemas.identity import JobClaim, SourceClaims
 
 from arm_backend.identity.sources.base import Capability, JobContext
-from arm_backend.identity.sources.label_hints import parse_label
+from arm_backend.identity.sources.label_parser import parse_label
 
 
 class BdTitleSource:

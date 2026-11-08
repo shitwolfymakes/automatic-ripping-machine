@@ -7,7 +7,8 @@ from arm_common import DiscType, Job, JobStatus
 from arm_common.schemas import ScanResult
 
 from arm_backend.identity.sources.base import JobContext
-from arm_backend.identity.sources.label_hints import LABEL, LabelHints, parse_label
+from arm_backend.identity.sources.label_hints import LABEL
+from arm_backend.identity.sources.label_parser import LabelHints, parse_label
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 
