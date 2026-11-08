@@ -117,82 +117,27 @@ class _PassthroughRun:
 
     async def run(self) -> bool | None:
         """Run the task; see `execute_passthrough_task`."""
-        # `populate_existing=True` is required in addition to `with_for_update()`:
-        # if `task` (or another reference to the same row) is already in this
-        # session's identity map and ISN'T expired, a plain re-select would
-        # silently return the cached, possibly-stale object without overwriting
-        # its attributes from this query's result -- exactly the gap that let a
-        # concurrent writer's committed status change go unnoticed.
-        current = (
-            await self._db.execute(
-                select(TranscodeTask)
-                .where(col(TranscodeTask.id) == self._task_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-        ).scalar_one_or_none()
-        if current is None or current.status != TranscodeTaskStatus.QUEUED:
-            logger.debug(
-                "passthrough task_id=%s no longer claimable (gone or status changed); skipping",
-                self._task_id,
-            )
+        current = await self._lock_if_claimable()
+        if current is None:
             return None
         self._task = current
 
-        self._application = (
-            await self._db.execute(
-                select(SessionApplication).where(col(SessionApplication.id) == self._task.session_application_id)
-            )
-        ).scalar_one_or_none()
-        self._job_id = self._application.job_id if self._application is not None else None
+        await self._load_application()
         self._source_track_id = self._task.source_track_id
         self._session_application_id = self._task.session_application_id
         with with_log_context(
             job_id=self._job_id, track_id=self._source_track_id, session_application_id=self._session_application_id
         ):
-            self._track = (
-                await self._db.execute(select(Track).where(col(Track.id) == self._source_track_id))
-            ).scalar_one_or_none()
-            self._track_output_path = self._track.output_path if self._track is not None else None
+            await self._load_track()
             self._task_output_path = self._task.output_path
 
-            self._task.status = TranscodeTaskStatus.IN_PROGRESS
-            self._task.claimed_by = IN_PROCESS_CLAIMANT
-            self._task.claim_heartbeat_at = self._task.started_at = datetime.now(UTC)
-            self._task.attempts = (self._task.attempts or 0) + 1
-            self._task.progress_pct = 0
-            await self._db.flush()
+            await self._write_claim()
             # Same claim-time side effects as the container path's
             # POST /tasks/{id}/claim: flip the application QUEUED -> RUNNING
             # (session.started) and announce the task (task.started), so the
             # transcodes UI and the session rollup see an identical lifecycle.
-            if self._application is not None and self._application.status == SessionApplicationStatus.QUEUED:
-                self._application.status = SessionApplicationStatus.RUNNING
-                await self._db.flush()
-                await self._hub.emit(
-                    topic="transcode.events",
-                    event_type="session.started",
-                    payload={
-                        "session_application_id": self._application.id,
-                        "session_id": self._application.session_id,
-                        "job_id": self._application.job_id,
-                    },
-                    job_id=self._job_id,
-                    session=self._db,
-                )
-            await self._hub.emit(
-                topic="transcode.events",
-                event_type="task.started",
-                payload={
-                    "task_id": self._task_id,
-                    "session_application_id": self._session_application_id,
-                    "claimed_by": self._task.claimed_by,
-                    "attempts": self._task.attempts,
-                },
-                job_id=self._job_id,
-                track_id=self._source_track_id,
-                session=self._db,
-            )
+            await self._start_application()
+            await self._announce_task_started()
             # Commit the claim before the (possibly slow, cross-mount) file
             # move so the tick's FOR UPDATE row locks aren't held across
             # blocking I/O (see docstring).
@@ -320,6 +265,88 @@ class _PassthroughRun:
             # transaction, separate from the claim commit above.
             await self._db.commit()
             return error is None
+
+    async def _lock_if_claimable(self) -> TranscodeTask | None:
+        """Re-select the task row locked; None when it is gone or no longer QUEUED."""
+        # `populate_existing=True` is required in addition to `with_for_update()`:
+        # if `task` (or another reference to the same row) is already in this
+        # session's identity map and ISN'T expired, a plain re-select would
+        # silently return the cached, possibly-stale object without overwriting
+        # its attributes from this query's result -- exactly the gap that let a
+        # concurrent writer's committed status change go unnoticed.
+        current = (
+            await self._db.execute(
+                select(TranscodeTask)
+                .where(col(TranscodeTask.id) == self._task_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if current is None or current.status != TranscodeTaskStatus.QUEUED:
+            logger.debug(
+                "passthrough task_id=%s no longer claimable (gone or status changed); skipping",
+                self._task_id,
+            )
+            return None
+        return current
+
+    async def _load_application(self) -> None:
+        """Load the task's session application and its job id."""
+        self._application = (
+            await self._db.execute(
+                select(SessionApplication).where(col(SessionApplication.id) == self._task.session_application_id)
+            )
+        ).scalar_one_or_none()
+        self._job_id = self._application.job_id if self._application is not None else None
+
+    async def _load_track(self) -> None:
+        """Load the source track and its output path."""
+        self._track = (
+            await self._db.execute(select(Track).where(col(Track.id) == self._source_track_id))
+        ).scalar_one_or_none()
+        self._track_output_path = self._track.output_path if self._track is not None else None
+
+    async def _write_claim(self) -> None:
+        """Stamp the claim fields on the task and flush."""
+        self._task.status = TranscodeTaskStatus.IN_PROGRESS
+        self._task.claimed_by = IN_PROCESS_CLAIMANT
+        self._task.claim_heartbeat_at = self._task.started_at = datetime.now(UTC)
+        self._task.attempts = (self._task.attempts or 0) + 1
+        self._task.progress_pct = 0
+        await self._db.flush()
+
+    async def _start_application(self) -> None:
+        """Flip a QUEUED application to RUNNING and emit session.started."""
+        if self._application is not None and self._application.status == SessionApplicationStatus.QUEUED:
+            self._application.status = SessionApplicationStatus.RUNNING
+            await self._db.flush()
+            await self._hub.emit(
+                topic="transcode.events",
+                event_type="session.started",
+                payload={
+                    "session_application_id": self._application.id,
+                    "session_id": self._application.session_id,
+                    "job_id": self._application.job_id,
+                },
+                job_id=self._job_id,
+                session=self._db,
+            )
+
+    async def _announce_task_started(self) -> None:
+        """Emit task.started for the claimed task."""
+        await self._hub.emit(
+            topic="transcode.events",
+            event_type="task.started",
+            payload={
+                "task_id": self._task_id,
+                "session_application_id": self._session_application_id,
+                "claimed_by": self._task.claimed_by,
+                "attempts": self._task.attempts,
+            },
+            job_id=self._job_id,
+            track_id=self._source_track_id,
+            session=self._db,
+        )
 
 
 async def execute_passthrough_task(
