@@ -120,15 +120,7 @@ def _job_log_lines(job_id: str, cap: int) -> Iterator[bytes]:
         yield from _iter_legacy(job_id, cap)
 
 
-# Plain `def`: the directory scan and per-file stat are blocking I/O, so
-# FastAPI runs this in its threadpool instead of on the event loop.
-@router.get("", response_model=list[JobLogFileView])
-def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
-    """Every per-job log file under `LOG_DIR/jobs`, newest first.
-
-    Only `<job_id>.log` regular files whose stem is a valid job id are listed;
-    anything else in the directory is ignored. A missing directory is `[]`.
-    """
+def _job_log_files() -> list[JobLogFileView]:
     jobs_dir = LOG_DIR / "jobs"
     out: list[JobLogFileView] = []
     try:
@@ -155,6 +147,31 @@ def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
     return out
 
 
+def _job_log_slices(job_id: str) -> Iterator[tuple[str, list[str]]]:
+    per_job = per_job_log_path(job_id)
+    if per_job.is_file():
+        lines = _read_capped_lines(per_job, lambda _: True)
+        if lines:
+            yield per_job.name, lines
+        return
+    for path in sorted(LOG_DIR.glob("*.log")):
+        lines = _read_capped_lines(path, lambda line: _line_matches_job(line, job_id))
+        if lines:
+            yield path.name, lines
+
+
+# Plain `def`: the directory scan and per-file stat are blocking I/O, so
+# FastAPI runs this in its threadpool instead of on the event loop.
+@router.get("", response_model=list[JobLogFileView])
+def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
+    """Every per-job log file under `LOG_DIR/jobs`, newest first.
+
+    Only `<job_id>.log` regular files whose stem is a valid job id are listed;
+    anything else in the directory is ignored. A missing directory is `[]`.
+    """
+    return _job_log_files()
+
+
 # Declared before `/{job_id}` so FastAPI matches the `.zip` suffix first;
 # otherwise `/{job_id}` would consume `job_x.zip` as a job_id with `.zip`
 # in it and the zip route would be unreachable.
@@ -173,18 +190,9 @@ async def download_job_logs_zip(
          service that contributed any matching lines.
     """
     buf = io.BytesIO()
-    per_job = per_job_log_path(job_id)
-
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        if per_job.is_file():
-            slice_lines = _read_capped_lines(per_job, lambda _: True)
-            if slice_lines:
-                zf.writestr(per_job.name, "".join(slice_lines))
-        else:
-            for path in sorted(LOG_DIR.glob("*.log")):
-                slice_lines = _read_capped_lines(path, lambda line: _line_matches_job(line, job_id))
-                if slice_lines:
-                    zf.writestr(path.name, "".join(slice_lines))
+        for name, lines in _job_log_slices(job_id):
+            zf.writestr(name, "".join(lines))
 
     body = buf.getvalue()
     return Response(
