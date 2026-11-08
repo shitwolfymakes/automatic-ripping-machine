@@ -175,6 +175,50 @@ async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes
     return None
 
 
+def _image_response(content: bytes, media_type: str) -> Response:
+    """The 200 image response, cacheable by the browser for a week."""
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
+
+
+def _cached_response(safe_url: str) -> Response | None:
+    """The response for a cache hit, or None on a miss or an unreadable cache."""
+    # The cache is an optimization, never a hard dependency: a broken or
+    # unwritable cache dir must degrade to a live fetch, not fail the request.
+    try:
+        cached = image_cache.retrieve(safe_url)
+    except OSError:
+        logger.warning("image cache read failed; serving uncached", exc_info=True)
+        cached = None
+    if cached is None:
+        return None
+    content, content_type = cached
+    safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "application/octet-stream"
+    return _image_response(content, safe_type)
+
+
+async def _fetch_with_fallback(
+    client: httpx.AsyncClient, safe_url: str, fallback_group: str | None
+) -> tuple[bytes, str] | None:
+    """Fetch the image, falling back to the release-group cover when the release has none."""
+    fetched = await _fetch_image(client, safe_url)
+    # On a release-level 404, fall back to the album's release-group
+    # cover (Picard model) — re-validating the constructed host.
+    if fetched is None and fallback_group:
+        group_url = COVERART_GROUP_FRONT_URL_TEMPLATE.format(mbid=fallback_group)
+        gp = urlparse(group_url)
+        if gp.scheme in ("http", "https") and _host_allowed(gp.hostname):
+            fetched = await _fetch_image(client, group_url)
+    return fetched
+
+
+def _store_quietly(safe_url: str, content: bytes, safe_type: str) -> None:
+    """Write the image to the cache, degrading to uncached serving if the write fails."""
+    try:
+        image_cache.store(safe_url, content, safe_type)
+    except OSError:
+        logger.warning("image cache write failed; serving uncached", exc_info=True)
+
+
 # Intentionally unauthenticated: hit via <img src> (no bearer header possible).
 # The host allowlist + size cap + scheme guard are the security boundary.
 @router.get("/images/proxy")
@@ -187,17 +231,9 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
     if not _host_allowed(parsed.hostname):
         return _not_found("Image host not allowed")
 
-    # The cache is an optimization, never a hard dependency: a broken or
-    # unwritable cache dir must degrade to a live fetch, not fail the request.
-    try:
-        cached = image_cache.retrieve(safe_url)
-    except OSError:
-        logger.warning("image cache read failed; serving uncached", exc_info=True)
-        cached = None
+    cached = _cached_response(safe_url)
     if cached is not None:
-        content, content_type = cached
-        safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "application/octet-stream"
-        return Response(content=content, media_type=safe_type, headers={"Cache-Control": "public, max-age=604800"})
+        return cached
 
     now = time.time()
     neg_expiry = _NEGATIVE_CACHE.get(safe_url)
@@ -209,14 +245,7 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
         # against the allowlist (no SSRF via redirect) — Cover Art Archive 307s
         # to archive.org then 302s to a per-request data-node subdomain.
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            fetched = await _fetch_image(client, safe_url)
-            # On a release-level 404, fall back to the album's release-group
-            # cover (Picard model) — re-validating the constructed host.
-            if fetched is None and fallback_group:
-                group_url = COVERART_GROUP_FRONT_URL_TEMPLATE.format(mbid=fallback_group)
-                gp = urlparse(group_url)
-                if gp.scheme in ("http", "https") and _host_allowed(gp.hostname):
-                    fetched = await _fetch_image(client, group_url)
+            fetched = await _fetch_with_fallback(client, safe_url, fallback_group)
     except _ImageTooLarge:
         _negative_cache_put(safe_url, now)
         return _not_found("Image too large")
@@ -229,12 +258,9 @@ async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -
         return _not_found("Image unavailable")
 
     content, safe_type = fetched
-    try:
-        image_cache.store(safe_url, content, safe_type)
-    except OSError:
-        logger.warning("image cache write failed; serving uncached", exc_info=True)
+    _store_quietly(safe_url, content, safe_type)
     _NEGATIVE_CACHE.pop(safe_url, None)
-    return Response(content=content, media_type=safe_type, headers={"Cache-Control": "public, max-age=604800"})
+    return _image_response(content, safe_type)
 
 
 @router.get("/images/cache")
