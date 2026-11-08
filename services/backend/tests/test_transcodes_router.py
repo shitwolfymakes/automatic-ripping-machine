@@ -278,7 +278,7 @@ def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: by
 async def test_queued_encode_count_does_not_query_per_task() -> None:
     """D-067 follow-up: the Transcoder page polls this, so it reads each table
     once rather than three queries per queued task."""
-    from arm_backend.transcode_dispatcher import count_queued_encode_tasks
+    from arm_backend.transcode_queue import count_queued_encode_tasks
 
     db = FakeSession()
     _seed_encode_and_passthrough_queue(db)

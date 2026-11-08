@@ -19,7 +19,8 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.ripper_manager import RipperManager
-from arm_backend.transcode_dispatcher import TranscodeDispatcher, count_queued_encode_tasks
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
+from arm_backend.transcode_queue import count_queued_encode_tasks
 from arm_backend.utils import default_roots
 from arm_common import (
     Config,
