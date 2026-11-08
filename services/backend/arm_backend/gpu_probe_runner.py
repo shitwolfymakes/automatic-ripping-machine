@@ -47,6 +47,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, effective_transcode_capable
+from arm_backend.transcode_container_spec import gpu_run_kwargs
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
 from arm_backend.ws import WSHub
@@ -383,7 +384,7 @@ class GpuProbeRunner:
             # Kept until `logs` is read after `wait`; removed in `finally`.
             "auto_remove": False,
         }
-        self._dispatcher._inject_gpu_run_kwargs(kwargs, gpu)
+        kwargs.update(gpu_run_kwargs(gpu))
         return kwargs
 
     async def _run_container(self, docker: Any, gpu: Gpu) -> ProbeOutcome:

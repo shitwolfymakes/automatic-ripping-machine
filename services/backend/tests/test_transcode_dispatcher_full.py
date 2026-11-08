@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from arm_backend import transcode_dispatcher as tdmod
+from arm_backend.transcode_container_spec import gpu_run_kwargs
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -135,33 +136,25 @@ def _gpu(vendor: GpuVendor, device_path: str) -> Gpu:
 
 
 def test_inject_gpu_kwargs_vaapi_qsv() -> None:
-    d = _disp(FakeSession())
     for vendor in (GpuVendor.VAAPI, GpuVendor.QSV):
-        kw: dict[str, Any] = {}
-        d._inject_gpu_run_kwargs(kw, _gpu(vendor, "/dev/dri/renderD128"))
+        kw = gpu_run_kwargs(_gpu(vendor, "/dev/dri/renderD128"))
         assert kw["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
 
 
 def test_inject_gpu_kwargs_nvenc_with_and_without_index() -> None:
-    d = _disp(FakeSession())
-    with_idx: dict[str, Any] = {}
-    d._inject_gpu_run_kwargs(with_idx, _gpu(GpuVendor.NVENC, "nvidia://1"))
+    with_idx = gpu_run_kwargs(_gpu(GpuVendor.NVENC, "nvidia://1"))
     assert with_idx["runtime"] == "nvidia"
     assert with_idx["device_requests"]
 
-    no_idx: dict[str, Any] = {}
-    d._inject_gpu_run_kwargs(no_idx, _gpu(GpuVendor.NVENC, "nvidia://"))
+    no_idx = gpu_run_kwargs(_gpu(GpuVendor.NVENC, "nvidia://"))
     assert no_idx["runtime"] == "nvidia"
 
 
 def test_inject_gpu_kwargs_unknown_vendor_noop() -> None:
-    d = _disp(FakeSession())
-    kw: dict[str, Any] = {}
     # A vendor that's neither VAAPI/QSV nor NVENC → both ifs fall through.
     fake = _gpu(GpuVendor.NVENC, "x")
     object.__setattr__(fake, "vendor", "unknown-vendor")
-    d._inject_gpu_run_kwargs(kw, fake)
-    assert kw == {}
+    assert gpu_run_kwargs(fake) == {}
 
 
 async def test_sweep_arm_inprogress_unlink_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
