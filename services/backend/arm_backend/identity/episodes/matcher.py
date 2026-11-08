@@ -210,22 +210,31 @@ class _AlignTable:
                     self.relax(i + 1, j, cur + self.skip_title_cost, ("skip_title", i, j))
                 if i > 0 and j < self.n:
                     self.relax(i, j + 1, cur + self.skip_ep_cost, ("skip_ep", i, j))
-                if i < self.m and j < self.n:
-                    one = _one_cost(self.elig[i].seconds, self.episodes[j].runtime_s, self.tolerance, self.ref_rt)
-                    if one is not None:
-                        self.relax(i + 1, j + 1, cur + one, ("one", i, j))
-                if (
-                    i < self.m
-                    and j + 1 < self.n
-                    and self.episodes[j].season == self.episodes[j + 1].season
-                    and self.episodes[j + 1].number == self.episodes[j].number + 1
-                ):
-                    a, b = _known(self.episodes[j].runtime_s), _known(self.episodes[j + 1].runtime_s)
-                    if a is not None and b is not None:
-                        delta = abs(self.elig[i].seconds - (a + b))
-                        eff = effective_tolerance(a + b, self.tolerance)
-                        if delta <= eff:
-                            self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
+                self._relax_one(i, j, cur)
+                self._relax_two(i, j, cur)
+
+    def _relax_one(self, i: int, j: int, cur: float) -> None:
+        """The one-episode move: title i matches episode j alone when its runtime fits."""
+        if i < self.m and j < self.n:
+            one = _one_cost(self.elig[i].seconds, self.episodes[j].runtime_s, self.tolerance, self.ref_rt)
+            if one is not None:
+                self.relax(i + 1, j + 1, cur + one, ("one", i, j))
+
+    def _relax_two(self, i: int, j: int, cur: float) -> None:
+        """The two-episode move: title i matches consecutive episodes j and j + 1 of one season when
+        their summed known runtimes fit, at DOUBLE_PENALTY extra."""
+        if (
+            i < self.m
+            and j + 1 < self.n
+            and self.episodes[j].season == self.episodes[j + 1].season
+            and self.episodes[j + 1].number == self.episodes[j].number + 1
+        ):
+            a, b = _known(self.episodes[j].runtime_s), _known(self.episodes[j + 1].runtime_s)
+            if a is not None and b is not None:
+                delta = abs(self.elig[i].seconds - (a + b))
+                eff = effective_tolerance(a + b, self.tolerance)
+                if delta <= eff:
+                    self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
 
 
 def align(
