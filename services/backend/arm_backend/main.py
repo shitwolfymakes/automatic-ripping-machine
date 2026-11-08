@@ -113,6 +113,17 @@ async def _sweep_orphaned_applications(dispatcher: TranscodeDispatcher) -> int:
     return orphaned
 
 
+async def _load_signing_key() -> bytes:
+    """Read the session signing key the first-boot seeders stored on the
+    config row."""
+    async with SessionLocal() as session:
+        cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
+        # Defensive only: _run_seeders always populates this.
+        if cfg.session_signing_key is None:  # pragma: no cover
+            raise RuntimeError("session_signing_key missing — seeders should have populated it")
+        return cfg.session_signing_key
+
+
 class _BackendServices:
     """The backend's long-running services: `start` brings them up in boot
     order and `stop` runs their shutdown steps in order."""
@@ -140,32 +151,14 @@ class _BackendServices:
         # Rebuild the image-proxy disk-cache index from disk (LRU/TTL). Sync, fast,
         # no DB — safe to run before the session/dispatchers come up.
         image_cache.startup_scan()
-        async with SessionLocal() as session:
-            cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
-            # Defensive only: _run_seeders always populates this.
-            if cfg.session_signing_key is None:  # pragma: no cover
-                raise RuntimeError("session_signing_key missing — seeders should have populated it")
-            self._app.state.signing_key = cfg.session_signing_key
+        self._app.state.signing_key = await _load_signing_key()
         # Silently create any missing data root (never chown, never raise —
         # the entrypoint's writability guard owns the fatal cases). Diagnostics
         # re-ensures on every read.
         ensure_roots(default_roots())
-        http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
-        self._app.state.http = http
-        self._app.state.started_at = datetime.now(UTC)
-        self._app.state.dispatcher = MetadataDispatcher(http)
-        self._app.state.ws_hub = WSHub()
-        # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
-        # request path, triggered by identify/resolve/PATCH (routers) and the
-        # startup sweep below. One SourceHttp per source id lives on the runner
-        # for its whole lifetime (rate limit / cache / backoff state, and TVDB's
-        # login token on the provider built from it).
-        self._app.state.episode_stage = EpisodeStageRunner(SessionLocal, http, self._app.state.ws_hub)
+        self._attach_request_services()
 
-        from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore
-
-        self._app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
-        self._thediscdb_refresh_task = asyncio.create_task(thediscdb_refresh_loop(self._app))
+        self._start_thediscdb()
 
         # GPU inventory — seed the gpus table from ARM_GPUS only when empty
         # (DB-authoritative thereafter). Runs before the dispatcher starts.
@@ -189,6 +182,73 @@ class _BackendServices:
             "startup episode-stage sweep failed: %s",
         )
 
+        self._transcode_dispatcher = self._build_transcode_dispatcher()
+        # One-shot sweeps run in every mode (they are DB/file-side, not
+        # docker-side): a ripper-only deployment still needs orphaned
+        # .arm-inprogress markers and crash-orphaned session_applications cleaned
+        # up on boot.
+        await _startup_sweep(
+            lambda: self._transcode_dispatcher.sweeps.sweep_arm_inprogress(Path(settings.MEDIA_ROOT)),
+            "backend startup: swept %d .arm-inprogress orphans",
+            "startup .arm-inprogress sweep failed: %s",
+        )
+        await _startup_sweep(
+            lambda: _sweep_orphaned_applications(self._transcode_dispatcher),
+            "backend startup: reconciled %d orphaned session_application(s)",
+            "startup orphaned-application sweep failed: %s",
+        )
+        self._start_transcode_dispatcher()
+        gpu_probe_runner = self._start_gpu_probe_runner()
+
+        await self._start_ripper_manager()
+
+        self._start_notifications()
+
+        self._start_log_tailer()
+
+        self._start_drive_scanner()
+
+        self._start_disk_refresher()
+
+        self._shutdown_steps = [
+            ("thediscdb refresh", self._stop_thediscdb_refresh),
+            ("disk refresher", self._stop_disk_refresher),
+            ("log tailer", self._stop_log_tailer),
+            ("drive scanner", self._stop_drive_scanner),
+            ("iso watchdog", self._stop_iso_watchdog),
+            ("notification dispatcher", self._stop_notifications),
+            # Cancels the boot pass and any re-probe, waiting briefly so each
+            # cancelled probe removes its container.
+            ("gpu probe runner", gpu_probe_runner.shutdown),
+            ("transcode dispatcher", self._stop_transcode_dispatcher),
+            ("episode stage runner", self._app.state.episode_stage.shutdown),
+            ("metadata dispatcher", self._app.state.dispatcher.aclose),
+        ]
+
+    def _attach_request_services(self) -> None:
+        """Put the clients the request path shares on app.state."""
+        http = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0))
+        self._app.state.http = http
+        self._app.state.started_at = datetime.now(UTC)
+        self._app.state.dispatcher = MetadataDispatcher(http)
+        self._app.state.ws_hub = WSHub()
+        # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
+        # request path, triggered by identify/resolve/PATCH (routers) and the
+        # startup sweep below. One SourceHttp per source id lives on the runner
+        # for its whole lifetime (rate limit / cache / backoff state, and TVDB's
+        # login token on the provider built from it).
+        self._app.state.episode_stage = EpisodeStageRunner(SessionLocal, http, self._app.state.ws_hub)
+
+    def _start_thediscdb(self) -> None:
+        """Open the TheDiscDB snapshot and start its daily refresh loop."""
+        from arm_backend.identity.sources.thediscdb_snapshot import SnapshotStore
+
+        self._app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
+        self._thediscdb_refresh_task = asyncio.create_task(thediscdb_refresh_loop(self._app))
+
+    def _build_transcode_dispatcher(self) -> TranscodeDispatcher:
+        """Build the transcode dispatcher, with a docker client only when this
+        deployment can transcode."""
         # No-transcode-mode: the dispatcher now always runs, even for a
         # ripper-only deployment (ARM_TRANSCODE_CAPABLE=false, no remote docker
         # host), since it still needs it for passthrough tasks and the
@@ -211,30 +271,24 @@ class _BackendServices:
         docker_client = _make_docker_client() if capable else None
         if not capable:  # pragma: no cover, needs ARM_TRANSCODE_CAPABLE=false; e2e runs the default-capable path
             logger.info("transcode capability off (ripper-only); dispatcher runs for passthrough and sweeps only")
-        self._transcode_dispatcher = TranscodeDispatcher(
+        return TranscodeDispatcher(
             settings=settings,
             db_factory=SessionLocal,
             docker_client=docker_client,
             hub=self._app.state.ws_hub,
             docker_client_factory=_make_docker_client if capable else None,
         )
-        # One-shot sweeps run in every mode (they are DB/file-side, not
-        # docker-side): a ripper-only deployment still needs orphaned
-        # .arm-inprogress markers and crash-orphaned session_applications cleaned
-        # up on boot.
-        await _startup_sweep(
-            lambda: self._transcode_dispatcher.sweeps.sweep_arm_inprogress(Path(settings.MEDIA_ROOT)),
-            "backend startup: swept %d .arm-inprogress orphans",
-            "startup .arm-inprogress sweep failed: %s",
-        )
-        await _startup_sweep(
-            lambda: _sweep_orphaned_applications(self._transcode_dispatcher),
-            "backend startup: reconciled %d orphaned session_application(s)",
-            "startup orphaned-application sweep failed: %s",
-        )
+
+    def _start_transcode_dispatcher(self) -> None:
+        """Start the transcode dispatcher's loop and publish it as the active
+        dispatcher."""
         self._dispatcher_task = asyncio.create_task(self._transcode_dispatcher.run())
         self._app.state.transcode_dispatcher = self._transcode_dispatcher
         set_active_dispatcher(self._transcode_dispatcher)
+
+    def _start_gpu_probe_runner(self) -> GpuProbeRunner:
+        """Start the boot pass of per-device GPU probes; returns the runner for
+        shutdown."""
         # Per-device GPU probes: the boot pass removes orphaned probe containers
         # and verifies every enabled row that was never probed or has no verified
         # encoder, in the background (a no-op without a docker client); the
@@ -242,7 +296,11 @@ class _BackendServices:
         gpu_probe_runner = GpuProbeRunner(settings, SessionLocal, self._transcode_dispatcher, self._app.state.ws_hub)
         self._app.state.gpu_probe_runner = gpu_probe_runner
         gpu_probe_runner.start_boot_pass()
+        return gpu_probe_runner
 
+    async def _start_ripper_manager(self) -> None:
+        """Reconcile the enrolled rippers on the local docker daemon and start
+        the ISO watchdog."""
         # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
         # daemon and always its OWN client: the drives are plugged into this
         # host, whatever ARM_TRANSCODE_DOCKER_HOST says about transcoders, and a
@@ -273,6 +331,9 @@ class _BackendServices:
                 )
         self._app.state.ripper_manager = ripper_manager
 
+    def _start_notifications(self) -> None:
+        """Start the outbound notification dispatcher (Apprise, bash hooks and
+        the inbox)."""
         # Phase 11 - outbound notifications (Apprise + bash hooks). Off out of the box;
         # the dispatcher polls but no-ops until the user enables notifications in
         # the UI and saves at least one valid Apprise URL.
@@ -292,11 +353,16 @@ class _BackendServices:
         self._notification_task = asyncio.create_task(self._notification_dispatcher.run())
         self._app.state.notification_dispatcher = self._notification_dispatcher
 
+    def _start_log_tailer(self) -> None:
+        """Start the singleton tail of the job logs onto their WebSocket
+        topics."""
         # Phase 12 — singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
         self._log_tailer = LogTailer(self._app.state.ws_hub)
         self._log_tailer_task = asyncio.create_task(self._log_tailer.run())
         self._app.state.log_tailer = self._log_tailer
 
+    def _start_drive_scanner(self) -> None:
+        """Start the periodic host drive scan."""
         # Drive lifecycle Plan 2 — periodic host drive scan (spec §2).
         self._drive_scanner = DriveScanner(
             SessionLocal, sysfs_root=Path(settings.ARM_SYSFS_ROOT), disk_root=Path(settings.ARM_HOST_DISK_ROOT)
@@ -304,6 +370,8 @@ class _BackendServices:
         self._drive_scanner_task = asyncio.create_task(self._drive_scanner.run())
         self._app.state.drive_scanner = self._drive_scanner
 
+    def _start_disk_refresher(self) -> None:
+        """Start the periodic disk-usage refresh of the data roots."""
         _roots_map = getattr(self._app.state, "system_paths", None) or {
             "MEDIA_ROOT": settings.MEDIA_ROOT,
             "RAW_ROOT": settings.RAW_ROOT,
@@ -313,21 +381,6 @@ class _BackendServices:
         self._disk_refresher = DiskRefresher(list(_roots_map.values()))
         self._disk_refresher_task = asyncio.create_task(self._disk_refresher.run())
         self._app.state.disk_refresher = self._disk_refresher
-
-        self._shutdown_steps = [
-            ("thediscdb refresh", self._stop_thediscdb_refresh),
-            ("disk refresher", self._stop_disk_refresher),
-            ("log tailer", self._stop_log_tailer),
-            ("drive scanner", self._stop_drive_scanner),
-            ("iso watchdog", self._stop_iso_watchdog),
-            ("notification dispatcher", self._stop_notifications),
-            # Cancels the boot pass and any re-probe, waiting briefly so each
-            # cancelled probe removes its container.
-            ("gpu probe runner", gpu_probe_runner.shutdown),
-            ("transcode dispatcher", self._stop_transcode_dispatcher),
-            ("episode stage runner", self._app.state.episode_stage.shutdown),
-            ("metadata dispatcher", self._app.state.dispatcher.aclose),
-        ]
 
     async def _stop_thediscdb_refresh(self) -> None:
         self._thediscdb_refresh_task.cancel()
