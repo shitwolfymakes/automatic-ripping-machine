@@ -346,6 +346,63 @@ async def _job_list_views(session: AsyncSession, jobs: list[Job]) -> list[JobVie
     return views
 
 
+def _latest_task_by_track(tasks: list[TranscodeTask]) -> dict[str, TranscodeTask]:
+    """The most recent transcode task of each source track."""
+    # Most-recent transcode task per source track (ULID ids are monotonic,
+    # so the greatest id is the newest task). Built from the already-loaded
+    # job_tasks — no extra query.
+    latest_task: dict[str, TranscodeTask] = {}
+    for task in tasks:
+        prev = latest_task.get(task.source_track_id)
+        if prev is None or task.id > prev.id:
+            latest_task[task.source_track_id] = task
+    return latest_task
+
+
+def _track_view(track: Track, latest_task: dict[str, TranscodeTask]) -> TrackView:
+    """The TrackView of a track, with the status and frame rate of its latest transcode task."""
+    tv = TrackView.model_validate(track)
+    task = latest_task.get(track.id)
+    if task is not None:
+        tv.transcode_status = task.status
+        tv.transcode_fps = task.fps
+        tv.transcode_avg_fps = task.avg_fps
+    return tv
+
+
+async def _job_detail_view(session: AsyncSession, job: Job) -> JobDetailView:
+    """The job with its tracks, fingerprints, transcode progress and earlier rip."""
+    tracks = (
+        (await session.execute(select(Track).where(col(Track.job_id) == job.id).order_by(col(Track.index))))
+        .scalars()
+        .all()
+    )
+    fingerprints = (
+        (
+            await session.execute(
+                select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job.id).order_by(col(DiscFingerprint.algo))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    sas_by_job, tasks_by_job = await _apps_and_tasks_for(session, [job.id])
+    sas = sas_by_job.get(job.id, [])
+    job_tasks = tasks_by_job.get(job.id, [])
+    job_view = JobView.model_validate(job)
+    job_view.transcode_progress = _summarize_transcode_progress(
+        sas, job_tasks, parked_settled=_parked_apps_are_settled(job)
+    )
+    job_view.parked_session_ids = _parked_session_ids(sas)
+    latest_task = _latest_task_by_track(job_tasks)
+    return JobDetailView(
+        job=job_view,
+        tracks=[_track_view(t, latest_task) for t in tracks],
+        fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
+        previous_rip=await _previous_rip_view(session, job),
+    )
+
+
 @router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
 async def list_jobs(
     response: Response,
@@ -398,63 +455,7 @@ async def get_job_detail(
     job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    tracks = (
-        (await session.execute(select(Track).where(col(Track.job_id) == job_id).order_by(col(Track.index))))
-        .scalars()
-        .all()
-    )
-    fingerprints = (
-        (
-            await session.execute(
-                select(DiscFingerprint).where(col(DiscFingerprint.job_id) == job_id).order_by(col(DiscFingerprint.algo))
-            )
-        )
-        .scalars()
-        .all()
-    )
-    sas = (
-        (await session.execute(select(SessionApplication).where(col(SessionApplication.job_id) == job_id)))
-        .scalars()
-        .all()
-    )
-    sa_ids = [sa.id for sa in sas]
-    job_tasks: list[TranscodeTask] = []
-    if sa_ids:
-        job_tasks = list(
-            (await session.execute(select(TranscodeTask).where(col(TranscodeTask.session_application_id).in_(sa_ids))))
-            .scalars()
-            .all()
-        )
-    job_view = JobView.model_validate(job)
-    job_view.transcode_progress = _summarize_transcode_progress(
-        list(sas), job_tasks, parked_settled=_parked_apps_are_settled(job)
-    )
-    job_view.parked_session_ids = _parked_session_ids(list(sas))
-
-    # Most-recent transcode task per source track (ULID ids are monotonic,
-    # so the greatest id is the newest task). Built from the already-loaded
-    # job_tasks — no extra query.
-    latest_task: dict[str, TranscodeTask] = {}
-    for task in job_tasks:
-        prev = latest_task.get(task.source_track_id)
-        if prev is None or task.id > prev.id:
-            latest_task[task.source_track_id] = task
-
-    def _track_view(t: Track) -> TrackView:
-        tv = TrackView.model_validate(t)
-        task = latest_task.get(t.id)
-        if task is not None:
-            tv.transcode_status = task.status
-            tv.transcode_fps = task.fps
-            tv.transcode_avg_fps = task.avg_fps
-        return tv
-
-    return JobDetailView(
-        job=job_view,
-        tracks=[_track_view(t) for t in tracks],
-        fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
-        previous_rip=await _previous_rip_view(session, job),
-    )
+    return await _job_detail_view(session, job)
 
 
 async def _previous_rip_view(db: AsyncSession, job: Job) -> PreviousRipView | None:
