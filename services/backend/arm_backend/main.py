@@ -25,11 +25,9 @@ from arm_backend.disk_refresh import DiskRefresher
 from arm_backend.drive_scanner import DriveScanner
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
-from arm_backend.notification_dispatcher import (
-    MessageDispatcher,
-    _RealAppriseNotifier,
-)
+from arm_backend.notification_dispatcher import MessageDispatcher
 from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.apprise_notifier import RealAppriseNotifier
 from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.iso_rips import run_virtual_drive_watchdog
@@ -357,7 +355,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     # Phase 11 - outbound notifications (Apprise + bash hooks). Off out of the box;
     # the dispatcher polls but no-ops until the user enables notifications in
     # the UI and saves at least one valid Apprise URL.
-    notifier = _RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
+    notifier = RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
     app.state.notifier = notifier
     notification_dispatcher = MessageDispatcher(
         settings=settings,

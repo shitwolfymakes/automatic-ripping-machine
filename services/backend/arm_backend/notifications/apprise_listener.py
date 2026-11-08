@@ -15,9 +15,10 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from arm_backend.notification_dispatcher import AppriseNotifier, redact_apprise_url
 from arm_backend.notification_format import TemplateRenderError, context_from_message, resolve_title_body
+from arm_backend.notifications.apprise_notifier import AppriseNotifier
 from arm_backend.notifications.message import Message
+from arm_backend.notifications.url_composer import redact_apprise_url
 from arm_common import NotificationChannel, NotificationDispatchLog
 
 logger = logging.getLogger("arm_backend.notifications.apprise_listener")

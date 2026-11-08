@@ -18,11 +18,9 @@ from typing import Any
 import pytest
 
 from arm_backend.config import Settings
-from arm_backend.notification_dispatcher import (
-    MessageDispatcher,
-    redact_apprise_url,
-)
+from arm_backend.notification_dispatcher import MessageDispatcher
 from arm_backend.notifications.apprise_listener import AppriseListener
+from arm_backend.notifications.url_composer import redact_apprise_url
 from arm_common import (
     Config,
     DiscType,

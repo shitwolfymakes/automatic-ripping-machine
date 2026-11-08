@@ -36,12 +36,10 @@ from sqlmodel import col, func, select
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.db import get_session
-from arm_backend.notification_dispatcher import (
-    AppriseNotifier,
-)
 from arm_backend.notification_events import EVENT_VOCAB
 from arm_backend.notification_format import TemplateRenderError, resolve_title_body
 from arm_backend.notifications import catalog as catalog_module
+from arm_backend.notifications.apprise_notifier import AppriseNotifier
 from arm_backend.notifications.channel_edits import apply_channel_patch, new_channel
 from arm_backend.notifications.bash_hook import (
     HookError,
