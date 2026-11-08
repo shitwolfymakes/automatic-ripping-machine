@@ -29,6 +29,7 @@ import pytest
 
 from arm_backend.config import Settings
 from arm_backend.transcode_dispatcher import (
+    GpuAssignment,
     TranscodeDispatcher,
     gpu_awaiting_probe,
     set_active_dispatcher,
@@ -256,6 +257,23 @@ async def test_render_gid_passed_as_env_for_qsv() -> None:
     kwargs = docker.containers.run.call_args.kwargs
     assert kwargs["environment"]["RENDER_GID"] == "110"
     assert kwargs["devices"] == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
+
+
+def test_spawn_with_a_gpu_but_no_encoder_sets_no_codec_or_encoder_env() -> None:
+    """A claimed GPU with no resolved encoder still gets its vendor, device and run kwargs, but no codec."""
+    db = _build_db(gpus=[(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h264", "h265"], None)])
+    docker = MagicMock()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    gpu = db.rows["gpus"][0]
+    disp._spawn_container(
+        db.rows["transcode_tasks"][0], assignment=GpuAssignment(gpu=gpu, encoder=None, action="spawn")
+    )
+    kwargs = docker.containers.run.call_args.kwargs
+    assert kwargs["environment"]["ARM_GPU_VENDOR"] == "vaapi"
+    assert kwargs["environment"]["ARM_GPU_DEVICE"] == gpu.device_path
+    assert "ARM_GPU_CODEC" not in kwargs["environment"]
+    assert "ARM_TRANSCODE_ENCODER" not in kwargs["environment"]
+    assert kwargs["devices"] == [f"{gpu.device_path}:{gpu.device_path}:rwm"]
 
 
 # --- NVENC: runtime + device_requests injection ------------------------------
