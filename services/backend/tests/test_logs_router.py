@@ -436,6 +436,28 @@ def test_index_skips_invalid_names_and_non_log_files(
     assert [row["job_id"] for row in r.json()] == [_JOB_A]
 
 
+def test_index_skips_a_file_that_cannot_be_checked(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A listed file whose `is_file` check raises `OSError` is skipped, not a 500."""
+    monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path)
+    _job_file(tmp_path, f"{_JOB_A}.log", "x", 1_700_000_000)
+    broken = _job_file(tmp_path, f"{_JOB_B}.log", "x", 1_700_000_100)
+    real_is_file = Path.is_file
+
+    def flaky_is_file(self: Path, *, follow_symlinks: bool = True) -> bool:
+        if self == broken:
+            raise PermissionError("denied")
+        return real_is_file(self, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "is_file", flaky_is_file)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs", headers=_auth(token))
+    assert r.status_code == 200
+    assert [row["job_id"] for row in r.json()] == [_JOB_A]
+
+
 def test_index_missing_directory_is_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(logs_router, "LOG_DIR", tmp_path / "nope")
     app, token = _make_app(signing_key)
