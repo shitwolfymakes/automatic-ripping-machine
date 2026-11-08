@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Iterator, Sequence
+from enum import Enum
 from typing import NamedTuple
 
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
@@ -200,11 +201,21 @@ def _double_match(title: TitleIn, first: Episode, second: Episode, tolerance: in
     )
 
 
+class _Move(Enum):
+    """The DP move that reached a table cell."""
+
+    START = "start"
+    SKIP_TITLE = "skip_title"
+    SKIP_EP = "skip_ep"
+    ONE = "one"
+    TWO = "two"
+
+
 class _Step(NamedTuple):
     """A back-pointer: the move that reached a cell and the cell (i, j) it moved from.
     A start step points at its own cell."""
 
-    kind: str
+    kind: _Move
     i: int
     j: int
 
@@ -230,7 +241,7 @@ class _AlignTable:
         self.back: list[list[_Step | None]] = [[None] * (self.n + 1) for _ in range(self.m + 1)]
         for j in range(self.n + 1):
             self.dp[0][j] = ANCHOR_WEIGHT * abs(j - anchor) if anchor is not None else FREE_START_WEIGHT * j
-            self.back[0][j] = _Step("start", 0, j)
+            self.back[0][j] = _Step(_Move.START, 0, j)
 
     def relax(self, i: int, j: int, cost: float, step: _Step) -> None:
         """Lower cell (i, j) to `cost`, reached by `step`, when that is cheaper."""
@@ -244,9 +255,9 @@ class _AlignTable:
             for j in range(self.n + 1):
                 cur = self.dp[i][j]
                 if i < self.m:
-                    self.relax(i + 1, j, cur + self.skip_title_cost, _Step("skip_title", i, j))
+                    self.relax(i + 1, j, cur + self.skip_title_cost, _Step(_Move.SKIP_TITLE, i, j))
                 if i > 0 and j < self.n:
-                    self.relax(i, j + 1, cur + self.skip_ep_cost, _Step("skip_ep", i, j))
+                    self.relax(i, j + 1, cur + self.skip_ep_cost, _Step(_Move.SKIP_EP, i, j))
                 self._relax_one(i, j, cur)
                 self._relax_two(i, j, cur)
 
@@ -255,7 +266,7 @@ class _AlignTable:
         if i < self.m and j < self.n:
             one = _one_cost(self.elig[i].seconds, self.episodes[j].runtime_s, self.tolerance, self.ref_rt)
             if one is not None:
-                self.relax(i + 1, j + 1, cur + one, _Step("one", i, j))
+                self.relax(i + 1, j + 1, cur + one, _Step(_Move.ONE, i, j))
 
     def _relax_two(self, i: int, j: int, cur: float) -> None:
         """The two-episode move: title i matches consecutive episodes j and j + 1 of one season when
@@ -271,13 +282,13 @@ class _AlignTable:
                 delta = abs(self.elig[i].seconds - (a + b))
                 eff = effective_tolerance(a + b, self.tolerance)
                 if delta <= eff:
-                    self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, _Step("two", i, j))
+                    self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, _Step(_Move.TWO, i, j))
 
     def path(self, j: int) -> Iterator[_Step]:
         """The steps of the cheapest path ending at cell (m, j), last step first."""
         i = self.m
         step = self.back[i][j]
-        while step is not None and step.kind != "start":
+        while step is not None and step.kind is not _Move.START:
             yield step
             i, j = step.i, step.j
             step = self.back[i][j]
@@ -306,12 +317,12 @@ def align(
     singles: list[tuple[int, int]] = []
     doubles: set[int] = set()
     for kind, pi, pj in table.path(best_j):
-        if kind == "skip_title":
+        if kind is _Move.SKIP_TITLE:
             skipped.append(elig[pi].ref)
-        elif kind == "one":
+        elif kind is _Move.ONE:
             singles.append((pj, elig[pi].seconds))
             matches.append(_single_match(elig[pi], episodes[pj], tolerance, ref_rt))
-        elif kind == "two":
+        elif kind is _Move.TWO:
             doubles.update((pj, pj + 1))
             matches.append(_double_match(elig[pi], episodes[pj], episodes[pj + 1], tolerance))
     matches.reverse()
