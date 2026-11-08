@@ -203,6 +203,128 @@ async def _existing_parked_application(db: AsyncSession, session_id: str, job_id
     )
 
 
+async def _existing_auto_outcome(db: AsyncSession, session_id: str, job: Job) -> ApplySessionOutcome | None:
+    """Return the outcome for the job's existing application of the session, or None if there is none."""
+    existing_rows = (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.session_id) == session_id)
+                .where(col(SessionApplication.job_id) == job.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(existing_rows) > 1:
+        # Parked twice before D-141; the extra rows still drain, each into
+        # its own collisions park, until someone deletes them.
+        logger.warning(
+            "job %s has %d applications of session %s; using the first (%s)",
+            job.id,
+            len(existing_rows),
+            session_id,
+            existing_rows[0].id,
+        )
+    existing = existing_rows[0] if existing_rows else None
+    if existing is not None:
+        tasks = await _load_tasks(db, existing.id)
+        retried = await _retry_failed_tasks(db, tasks)
+        if retried > 0:
+            if existing.status in (
+                SessionApplicationStatus.FAILED,
+                SessionApplicationStatus.DONE_PARTIAL,
+                SessionApplicationStatus.DONE,
+            ):
+                existing.status = SessionApplicationStatus.RUNNING
+                existing.completed_at = None
+            await db.commit()
+            tasks = await _load_tasks(db, existing.id)
+            logger.info(
+                "apply (auto): reset %d failed task(s) on existing session_application=%s",
+                retried,
+                existing.id,
+            )
+        return ApplySessionOutcome(
+            application=existing,
+            tasks=tasks,
+            collisions=[],
+            idempotent=retried == 0,
+            skipped_reason=None,
+        )
+    return None
+
+
+async def _park_waiting_identify(
+    db: AsyncSession, session_id: str, job: Job, created_by_user_id: str | None
+) -> ApplySessionOutcome:
+    """Return the already-parked application, or park a new waiting_identify one with no tasks."""
+    parked = await _existing_parked_application(db, session_id, job.id)
+    if parked is not None:
+        return ApplySessionOutcome(
+            application=parked,
+            tasks=[],
+            collisions=[],
+            idempotent=True,
+            skipped_reason=None,
+        )
+    application = SessionApplication(
+        session_id=session_id,
+        job_id=job.id,
+        status=SessionApplicationStatus.WAITING_IDENTIFY,
+        overwrite=False,
+        created_by_user_id=created_by_user_id,
+    )
+    db.add(application)
+    await db.commit()
+    await db.refresh(application)
+    return ApplySessionOutcome(
+        application=application,
+        tasks=[],
+        collisions=[],
+        idempotent=False,
+        skipped_reason=None,
+    )
+
+
+def _missing_backup_track(rip_preset: RipPreset, job: Job, tracks: list[Track]) -> bool:
+    """Whether a FOLDER session runs on a ripped job that has no usable backup track."""
+    return (
+        rip_preset.output_mode == OutputMode.FOLDER
+        and job.status in POST_RIP_JOB_STATUSES
+        and not any(t.kind == TrackKind.DISC_BACKUP and not t.excluded for t in tracks)
+    )
+
+
+def _log_apply_result(
+    outcome: ApplySessionOutcome, session_id: str, job: Job, overwrite: bool, source: ApplySource
+) -> None:
+    """Log how the apply ended: parked with no tracks, parked with no outputs, or fanned out."""
+    if outcome.skipped_reason == "no_tracks":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (not ripped yet; fans out at rip-complete) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
+    elif outcome.skipped_reason == "no_outputs":
+        logger.info(
+            "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; stays parked) source=%s",
+            session_id,
+            job.id,
+            source,
+        )
+    else:
+        logger.info(
+            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
+            session_id,
+            job.id,
+            len(outcome.tasks),
+            overwrite,
+            source,
+        )
+
+
 async def _apply_session_internal(
     db: AsyncSession,
     *,
@@ -231,54 +353,8 @@ async def _apply_session_internal(
     # replace a transcoder that's actively writing. The exception is a park
     # (pre-rip or pre-identify): it does no work yet, so a repeat click
     # returns the already-parked row (see `_existing_parked_application`).
-    if source == "auto":
-        existing_rows = (
-            (
-                await db.execute(
-                    select(SessionApplication)
-                    .where(col(SessionApplication.session_id) == session_id)
-                    .where(col(SessionApplication.job_id) == job.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        if len(existing_rows) > 1:
-            # Parked twice before D-141; the extra rows still drain, each into
-            # its own collisions park, until someone deletes them.
-            logger.warning(
-                "job %s has %d applications of session %s; using the first (%s)",
-                job.id,
-                len(existing_rows),
-                session_id,
-                existing_rows[0].id,
-            )
-        existing = existing_rows[0] if existing_rows else None
-        if existing is not None:
-            tasks = await _load_tasks(db, existing.id)
-            retried = await _retry_failed_tasks(db, tasks)
-            if retried > 0:
-                if existing.status in (
-                    SessionApplicationStatus.FAILED,
-                    SessionApplicationStatus.DONE_PARTIAL,
-                    SessionApplicationStatus.DONE,
-                ):
-                    existing.status = SessionApplicationStatus.RUNNING
-                    existing.completed_at = None
-                await db.commit()
-                tasks = await _load_tasks(db, existing.id)
-                logger.info(
-                    "apply (auto): reset %d failed task(s) on existing session_application=%s",
-                    retried,
-                    existing.id,
-                )
-            return ApplySessionOutcome(
-                application=existing,
-                tasks=tasks,
-                collisions=[],
-                idempotent=retried == 0,
-                skipped_reason=None,
-            )
+    if source == "auto" and (existing := await _existing_auto_outcome(db, session_id, job)) is not None:
+        return existing
 
     transcode_preset: TranscodePreset | None = None
     if sess.transcode_preset_id is not None:
@@ -331,32 +407,7 @@ async def _apply_session_internal(
     # same way: transcode is gated on identity, and resolve's after-rip pass
     # promotes the application once the operator supplies it.
     if job.status in APPLY_PARK_JOB_STATUSES:
-        parked = await _existing_parked_application(db, session_id, job.id)
-        if parked is not None:
-            return ApplySessionOutcome(
-                application=parked,
-                tasks=[],
-                collisions=[],
-                idempotent=True,
-                skipped_reason=None,
-            )
-        application = SessionApplication(
-            session_id=session_id,
-            job_id=job.id,
-            status=SessionApplicationStatus.WAITING_IDENTIFY,
-            overwrite=False,
-            created_by_user_id=created_by_user_id,
-        )
-        db.add(application)
-        await db.commit()
-        await db.refresh(application)
-        return ApplySessionOutcome(
-            application=application,
-            tasks=[],
-            collisions=[],
-            idempotent=False,
-            skipped_reason=None,
-        )
+        return await _park_waiting_identify(db, session_id, job, created_by_user_id)
 
     if job.status not in APPLY_OK_JOB_STATUSES:
         # Manual route maps this to 409; auto path never reaches here because
@@ -383,11 +434,7 @@ async def _apply_session_internal(
     # ripped as titles its template would file a title's .mkv as an
     # extension-less "Title (Year)" file, so it is a mismatch, not a fan-out.
     # Only once ripped: before the rip there is no backup track to look for yet.
-    if (
-        rip_preset.output_mode == OutputMode.FOLDER
-        and job.status in POST_RIP_JOB_STATUSES
-        and not any(t.kind == TrackKind.DISC_BACKUP and not t.excluded for t in tracks)
-    ):
+    if _missing_backup_track(rip_preset, job, tracks):
         logger.warning(
             "apply: backup session on a job without a backup track session_id=%s job_id=%s source=%s",
             sess.id,
@@ -429,29 +476,7 @@ async def _apply_session_internal(
     for task in outcome.tasks:
         await db.refresh(task)
 
-    if outcome.skipped_reason == "no_tracks":
-        logger.info(
-            "apply: parked session_id=%s job_id=%s (not ripped yet; fans out at rip-complete) source=%s",
-            session_id,
-            job.id,
-            source,
-        )
-    elif outcome.skipped_reason == "no_outputs":
-        logger.info(
-            "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; stays parked) source=%s",
-            session_id,
-            job.id,
-            source,
-        )
-    else:
-        logger.info(
-            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-            session_id,
-            job.id,
-            len(outcome.tasks),
-            overwrite,
-            source,
-        )
+    _log_apply_result(outcome, session_id, job, overwrite, source)
 
     return outcome
 
