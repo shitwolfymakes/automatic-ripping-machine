@@ -15,7 +15,7 @@ list order, not from runtimes.
 from __future__ import annotations
 
 import statistics
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import cast
 
 from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
@@ -172,6 +172,34 @@ def _play_all_refs(
     return tuple(t.ref for i, t in enumerate(titles) if _is_play_all(t.seconds, episodes, tolerance, ref_rt, titles, i))
 
 
+def _single_match(title: TitleIn, ep: Episode, tolerance: int, ref_rt: int) -> TitleMatch:
+    """The match of a title to one episode; an unknown runtime has no delta and is judged against the
+    reference runtime's tolerance."""
+    rt = _known(ep.runtime_s)
+    if rt is not None:
+        delta_val: int | None = abs(title.seconds - rt)
+        eff = effective_tolerance(rt, tolerance)
+    else:
+        delta_val = None
+        eff = effective_tolerance(ref_rt, tolerance)
+    return TitleMatch(title.ref, ep.season, ep.number, None, ep.name, delta_val, _confidence(delta_val, eff))
+
+
+def _double_match(title: TitleIn, first: Episode, second: Episode, tolerance: int) -> TitleMatch:
+    """The match of a title to two consecutive episodes."""
+    delta_val = abs(title.seconds - ((first.runtime_s or 0) + (second.runtime_s or 0)))
+    eff = effective_tolerance((first.runtime_s or 0) + (second.runtime_s or 0), tolerance)
+    return TitleMatch(
+        title.ref,
+        first.season,
+        first.number,
+        second.number,
+        first.name,
+        delta_val,
+        _confidence(delta_val, eff),
+    )
+
+
 class _AlignTable:
     """The alignment DP table: the cheapest cost and back-pointer for each
     (eligible title, episode) cell, filled by the skip and match moves."""
@@ -236,6 +264,18 @@ class _AlignTable:
                 if delta <= eff:
                     self.relax(i + 1, j + 2, cur + delta + DOUBLE_PENALTY, ("two", i, j))
 
+    def path(self, j: int) -> Iterator[tuple[str, int, int]]:
+        """The (kind, title index, episode index) steps of the cheapest path ending at cell (m, j), last step first."""
+        i = self.m
+        while (step := self.back[i][j]) is not None:
+            if step[0] == "start":
+                break
+            kind = cast(str, step[0])
+            pi = cast(int, step[1]) if len(step) > 1 else 0
+            pj = cast(int, step[2]) if len(step) > 2 else 0
+            yield kind, pi, pj
+            i, j = pi, pj
+
 
 def align(
     titles: Sequence[TitleIn],
@@ -252,54 +292,22 @@ def align(
 
     table = _AlignTable(elig, episodes, tolerance, ref_rt, anchor)
     table.fill()
-    dp, back = table.dp, table.back
+    dp = table.dp
 
     best_j = min(range(n + 1), key=lambda j: (dp[m][j], j))
     matches: list[TitleMatch] = []
     skipped: list[str] = []
     singles: list[tuple[int, int]] = []
     doubles: set[int] = set()
-    i, j = m, best_j
-    while (step := back[i][j]) is not None:
-        if step[0] == "start":
-            break
-        kind = cast(str, step[0])
-        pi = cast(int, step[1]) if len(step) > 1 else 0
-        pj = cast(int, step[2]) if len(step) > 2 else 0
+    for kind, pi, pj in table.path(best_j):
         if kind == "skip_title":
             skipped.append(elig[pi].ref)
         elif kind == "one":
-            title = elig[pi]
-            ep = episodes[pj]
-            singles.append((pj, title.seconds))
-            rt = _known(ep.runtime_s)
-            if rt is not None:
-                delta_val: int | None = abs(title.seconds - rt)
-                eff = effective_tolerance(rt, tolerance)
-            else:
-                delta_val = None
-                eff = effective_tolerance(ref_rt, tolerance)
-            matches.append(
-                TitleMatch(title.ref, ep.season, ep.number, None, ep.name, delta_val, _confidence(delta_val, eff))
-            )
+            singles.append((pj, elig[pi].seconds))
+            matches.append(_single_match(elig[pi], episodes[pj], tolerance, ref_rt))
         elif kind == "two":
-            title = elig[pi]
-            first, second = episodes[pj], episodes[pj + 1]
             doubles.update((pj, pj + 1))
-            delta_val = abs(title.seconds - ((first.runtime_s or 0) + (second.runtime_s or 0)))
-            eff = effective_tolerance((first.runtime_s or 0) + (second.runtime_s or 0), tolerance)
-            matches.append(
-                TitleMatch(
-                    title.ref,
-                    first.season,
-                    first.number,
-                    second.number,
-                    first.name,
-                    delta_val,
-                    _confidence(delta_val, eff),
-                )
-            )
-        i, j = pi, pj
+            matches.append(_double_match(elig[pi], episodes[pj], episodes[pj + 1], tolerance))
     matches.reverse()
     skipped.reverse()
     coverage = len(matches) / m if m else 0.0
