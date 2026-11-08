@@ -386,7 +386,7 @@ class GpuProbeRunner:
         # variant_available may ping the docker host or pull a variant image,
         # so it runs off the loop too.
         image = await asyncio.to_thread(
-            image_for, self._settings, gpu.vendor, exists=self._dispatcher.variant_available
+            image_for, self._settings, gpu.vendor, exists=self._dispatcher.images.variant_available
         )
         kwargs = self._run_kwargs(gpu, image)
         logger.info("gpu probe: probing %s (%s %s) with %s", gpu.id, gpu.vendor.value, gpu.device_path, image)

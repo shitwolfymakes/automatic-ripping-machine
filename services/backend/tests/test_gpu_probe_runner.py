@@ -178,7 +178,7 @@ def _build(
         docker_client=fake_docker,
         hub=hub,  # type: ignore[arg-type]
     )
-    dispatcher.variant_available = variant_available or (lambda _image: False)  # type: ignore[method-assign]
+    dispatcher.images.variant_available = variant_available or (lambda _image: False)  # type: ignore[method-assign]
     runner = GpuProbeRunner(settings, _db_factory(db), dispatcher, hub)  # type: ignore[arg-type]
     return runner, db, fake_docker, hub, dispatcher
 

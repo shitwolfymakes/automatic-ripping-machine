@@ -733,7 +733,7 @@ def test_image_exists_rebuilds_docker_client_on_dead_ssh_transport() -> None:
         _settings(), _db_factory(FakeSession()), dead, WSHub(), docker_client_factory=lambda: fresh
     )
 
-    assert disp.image_exists("arm-transcode:variant") is True
+    assert disp.images.image_exists("arm-transcode:variant") is True
     assert disp._docker is fresh
     fresh.images.get.assert_called_once_with("arm-transcode:variant")
 
@@ -758,14 +758,14 @@ def test_rebuild_invalidates_every_cached_probe(monkeypatch: pytest.MonkeyPatch)
 
     disp = TranscodeDispatcher(_settings(), _db_factory(FakeSession()), dead, WSHub(), docker_client_factory=factory)
     assert disp.probe()[0] is False
-    assert disp.image_exists("arm-transcode:variant") is False
+    assert disp.images.image_exists("arm-transcode:variant") is False
     now["t"] += REBUILD_RETRY_SECONDS + 1.0
 
-    assert disp.image_exists("arm-transcode:other") is True  # this check rebuilds
+    assert disp.images.image_exists("arm-transcode:other") is True  # this check rebuilds
 
     assert disp._docker is fresh
     assert disp.probe() == (True, None)
-    assert disp.image_exists("arm-transcode:variant") is True
+    assert disp.images.image_exists("arm-transcode:variant") is True
 
 
 async def test_spawn_failure_reports_why_the_rebuild_failed() -> None:
