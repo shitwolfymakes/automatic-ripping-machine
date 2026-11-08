@@ -1,6 +1,6 @@
-"""Unit coverage for main.py's pure entrypoint helpers — _run_migrations,
-_build_docker_client (both branches), and main() — without booting the app
-(the lifespan itself is exercised by the e2e harness).
+"""Unit coverage for the backend entrypoint's helpers — _run_migrations,
+docker_factory.build_docker_client (both branches), and main() — without
+booting the app (the lifespan itself is exercised by the e2e harness).
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from arm_backend import gpu_inventory
+from arm_backend import docker_factory, gpu_inventory
 from arm_backend import main as main_mod
 from arm_backend import thediscdb_schedule
 
@@ -40,7 +40,7 @@ def test_build_docker_client_returns_client(monkeypatch: pytest.MonkeyPatch) -> 
     sentinel = object()
     fake_docker = type("D", (), {"from_env": staticmethod(lambda: sentinel)})
     monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
-    assert main_mod._build_docker_client() is sentinel
+    assert docker_factory.build_docker_client() is sentinel
 
 
 def test_build_docker_client_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,7 +49,7 @@ def test_build_docker_client_returns_none_on_error(monkeypatch: pytest.MonkeyPat
 
     fake_docker = type("D", (), {"from_env": staticmethod(_raise)})
     monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
-    assert main_mod._build_docker_client() is None
+    assert docker_factory.build_docker_client() is None
 
 
 def test_build_docker_client_remote_uses_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,7 +62,7 @@ def test_build_docker_client_remote_uses_base_url(monkeypatch: pytest.MonkeyPatc
 
     fake_docker = type("D", (), {"DockerClient": staticmethod(_docker_client)})
     monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
-    assert main_mod._build_docker_client("ssh://sam@transcoder-server") is sentinel
+    assert docker_factory.build_docker_client("ssh://sam@transcoder-server") is sentinel
     assert captured["base_url"] == "ssh://sam@transcoder-server"
 
 
@@ -75,7 +75,7 @@ def test_build_docker_client_default_purpose_is_transcode_dispatcher(
     fake_docker = type("D", (), {"from_env": staticmethod(_raise)})
     monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
     with caplog.at_level("WARNING", logger="arm_backend"):
-        assert main_mod._build_docker_client() is None
+        assert docker_factory.build_docker_client() is None
     assert "transcode dispatcher disabled" in caplog.text
 
 
@@ -91,7 +91,7 @@ def test_build_docker_client_purpose_is_used_in_the_warning(
     fake_docker = type("D", (), {"from_env": staticmethod(_raise)})
     monkeypatch.setitem(__import__("sys").modules, "docker", fake_docker)
     with caplog.at_level("WARNING", logger="arm_backend"):
-        assert main_mod._build_docker_client(purpose="ripper manager") is None
+        assert docker_factory.build_docker_client(purpose="ripper manager") is None
     assert "ripper manager disabled" in caplog.text
     assert "transcode dispatcher" not in caplog.text
 

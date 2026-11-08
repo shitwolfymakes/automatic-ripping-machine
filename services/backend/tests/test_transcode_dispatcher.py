@@ -580,7 +580,7 @@ async def test_spawn_no_retry_without_factory() -> None:
 async def test_spawn_factory_returns_none_keeps_old_client(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """I2: `_build_docker_client` (main.py) returns None on any factory
+    """I2: `docker_factory.build_docker_client` returns None on any factory
     failure, not an exception. Assigning `self._docker = None` would make
     every LATER spawn raise AttributeError instead of following the
     transport-death path — permanently wedging the dispatcher. The old

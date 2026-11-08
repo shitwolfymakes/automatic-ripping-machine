@@ -21,6 +21,7 @@ from arm_backend.gpu_probe_runner import GpuProbeRunner
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
+from arm_backend.docker_factory import build_docker_client
 from arm_backend.drive_scanner import DriveScanner
 from arm_backend.log_tailer import LogTailer
 from arm_backend.metadata import MetadataDispatcher
@@ -90,24 +91,6 @@ async def _run_seeders() -> None:
     async with SessionLocal() as session:
         await run_seeders(session)
     logger.info("seeders complete")
-
-
-def _build_docker_client(docker_host: str = "", *, purpose: str = "transcode dispatcher") -> object | None:
-    """Construct a docker-py client. When `docker_host` is set (e.g.
-    "ssh://sam@transcoder-server"), target that remote daemon so transcode
-    containers spawn on a remote GPU host; otherwise use the local socket.
-    Returns None if the client can't be built (dev without the socket, or an
-    unreachable/misconfigured remote host) so the caller's docker-backed
-    feature (named by `purpose`, e.g. "ripper manager") stays disabled rather
-    than crashing the backend."""
-    try:
-        import docker  # type: ignore[import-untyped]
-
-        client: object = docker.DockerClient(base_url=docker_host) if docker_host else docker.from_env()
-        return client
-    except Exception as exc:
-        logger.warning("docker-py client unavailable: %s — %s disabled", exc, purpose)
-        return None
 
 
 @asynccontextmanager
@@ -185,7 +168,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
         )
 
     def _make_docker_client() -> object | None:
-        return _build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
+        return build_docker_client(settings.ARM_TRANSCODE_DOCKER_HOST)
 
     docker_client = _make_docker_client() if capable else None
     if not capable:  # pragma: no cover, needs ARM_TRANSCODE_CAPABLE=false; e2e runs the default-capable path
@@ -233,7 +216,7 @@ async def _lifespan_services(app: FastAPI) -> AsyncIterator[None]:
     # (each has its own connection pool / lifecycle expectations).
     ripper_manager: RipperManager | None = None
     iso_watchdog_task: asyncio.Task[None] | None = None
-    local_docker = _build_docker_client(purpose="ripper manager")
+    local_docker = build_docker_client(purpose="ripper manager")
     if local_docker is not None:  # pragma: no cover — needs a real docker socket; integration tier
         ripper_manager = RipperManager(settings=settings, docker_client=local_docker)
         if not ripper_manager.host_paths_set():
