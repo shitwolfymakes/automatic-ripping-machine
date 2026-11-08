@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func
+from sqlalchemy import ColumnElement, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -243,37 +243,29 @@ _LIST_JOBS_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
-@router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
-async def list_jobs(
-    response: Response,
-    _: User = Depends(require_jwt),
-    session: AsyncSession = Depends(get_session),
-    status_filter: JobStatus | None = Query(default=None, alias="status"),
-    drive_id: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-) -> list[JobView]:
-    """One page of jobs, newest first with a stable `id` tiebreak so a page
-    does not shuffle between polls. The filtered total rides in the
-    `X-Total-Count` header; the body stays a plain `JobView[]`."""
-    filters = []
+def _job_filters(status_filter: JobStatus | None, drive_id: str | None) -> list[ColumnElement[bool]]:
+    """The optional status and drive filters of the job list, in query order."""
+    filters: list[ColumnElement[bool]] = []
     if status_filter is not None:
         filters.append(col(Job.status) == status_filter)
     if drive_id is not None:
         filters.append(col(Job.drive_id) == drive_id)
-    stmt = (
-        select(Job).where(*filters).order_by(col(Job.created_at).desc(), col(Job.id).desc()).limit(limit).offset(offset)
-    )
-    result = await session.execute(stmt)
-    jobs = list(result.scalars().all())
+    return filters
+
+
+async def _total_count(
+    session: AsyncSession, jobs: list[Job], filters: list[ColumnElement[bool]], *, limit: int, offset: int
+) -> int:
+    """The number of jobs matching the filters, before limit/offset."""
     # A short page already pins the total (the poll's common case), so the
     # COUNT round trip runs only for a full page or one past the end.
     if len(jobs) < limit and (jobs or offset == 0):
-        total = offset + len(jobs)
-    else:
-        total = (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
-    response.headers["X-Total-Count"] = str(total)
+        return offset + len(jobs)
+    return (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
 
+
+async def _tracks_for_ripping(session: AsyncSession, jobs: list[Job]) -> dict[str, list[Track]]:
+    """The tracks of the ripping jobs in the page, grouped by job id."""
     # One batched track lookup keyed on the ripping-job IDs feeds the
     # dashboard's "Track N of M" line without an N+1 fetch. Skipped
     # entirely when no job in the page is ripping (which is the common
@@ -294,10 +286,15 @@ async def list_jobs(
         )
         for tr in track_rows:
             tracks_by_job.setdefault(tr.job_id, []).append(tr)
+    return tracks_by_job
 
+
+async def _apps_and_tasks_for(
+    session: AsyncSession, job_ids: list[str]
+) -> tuple[dict[str, list[SessionApplication]], dict[str, list[TranscodeTask]]]:
+    """The session applications and transcode tasks of the given jobs, grouped by job id."""
     # Batched session_application + transcode_task lookup keyed on ALL job ids
     # in the page (any job can have a session, not just ripping jobs).
-    job_ids = [j.id for j in jobs]
     sas_by_job: dict[str, list[SessionApplication]] = {}
     transcode_tasks_by_job: dict[str, list[TranscodeTask]] = {}
     if job_ids:
@@ -327,6 +324,14 @@ async def list_jobs(
                 # returned task's session_application_id is in the map.
                 owning_job = sa_id_to_job[t.session_application_id]
                 transcode_tasks_by_job.setdefault(owning_job, []).append(t)
+    return sas_by_job, transcode_tasks_by_job
+
+
+async def _job_list_views(session: AsyncSession, jobs: list[Job]) -> list[JobView]:
+    """The JobView of each job, with its rip and transcode progress filled in."""
+    tracks_by_job = await _tracks_for_ripping(session, jobs)
+    job_ids = [j.id for j in jobs]
+    sas_by_job, transcode_tasks_by_job = await _apps_and_tasks_for(session, job_ids)
 
     views: list[JobView] = []
     for j in jobs:
@@ -339,6 +344,30 @@ async def list_jobs(
         view.parked_session_ids = _parked_session_ids(sas_by_job.get(j.id, []))
         views.append(view)
     return views
+
+
+@router.get("", response_model=list[JobView], responses=_LIST_JOBS_RESPONSES)
+async def list_jobs(
+    response: Response,
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+    status_filter: JobStatus | None = Query(default=None, alias="status"),
+    drive_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[JobView]:
+    """One page of jobs, newest first with a stable `id` tiebreak so a page
+    does not shuffle between polls. The filtered total rides in the
+    `X-Total-Count` header; the body stays a plain `JobView[]`."""
+    filters = _job_filters(status_filter, drive_id)
+    stmt = (
+        select(Job).where(*filters).order_by(col(Job.created_at).desc(), col(Job.id).desc()).limit(limit).offset(offset)
+    )
+    result = await session.execute(stmt)
+    jobs = list(result.scalars().all())
+    total = await _total_count(session, jobs, filters, limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return await _job_list_views(session, jobs)
 
 
 @router.get("/stats", response_model=JobStatsResponse)
