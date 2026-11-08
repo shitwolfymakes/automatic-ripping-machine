@@ -80,23 +80,30 @@ def _episode_seasons(disc: dict[str, Any]) -> set[int]:
     return seasons
 
 
-def build_index(tarball: Path, dest_sqlite: Path) -> int:
-    """Parse the data tarball into a fresh sqlite index; atomic replace."""
+def _load_json_member(tar: tarfile.TarFile, member: tarfile.TarInfo) -> dict[str, Any] | None:
+    """A member's JSON object, or None when it can't be extracted, isn't
+    valid JSON or isn't an object."""
+    fh = tar.extractfile(member)
+    if fh is None:
+        return None
+    try:
+        loaded = json.load(fh)
+        return loaded if isinstance(loaded, dict) else None
+    except json.JSONDecodeError, UnicodeDecodeError:
+        logger.debug("thediscdb: skipping malformed %s", member.name)
+        return None
+
+
+def _read_tarball(
+    tarball: Path,
+) -> tuple[list[tuple[str, str, str, dict[str, Any]]], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Every disc, title-metadata and release JSON in the data tarball,
+    grouped by directory: (discs as (kind, title_dir, release_dir, disc),
+    metadata by "<kind>/<title-dir>", release by "<kind>/<title>/<release>")."""
     # Pass 1: read everything grouped by directory.
     discs: list[tuple[str, str, str, dict[str, Any]]] = []  # (kind, title_dir, release_dir, disc)
     metadata_by_title: dict[str, dict[str, Any]] = {}
     release_by_dir: dict[str, dict[str, Any]] = {}
-
-    def _load(tar: tarfile.TarFile, member: tarfile.TarInfo) -> dict[str, Any] | None:
-        fh = tar.extractfile(member)
-        if fh is None:
-            return None
-        try:
-            loaded = json.load(fh)
-            return loaded if isinstance(loaded, dict) else None
-        except json.JSONDecodeError, UnicodeDecodeError:
-            logger.debug("thediscdb: skipping malformed %s", member.name)
-            return None
 
     with tarfile.open(tarball, "r:gz") as tar:
         for member in tar:
@@ -105,21 +112,29 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
             parts = member.name.split("/")
             m = _DISC_RE.match(member.name)
             if m:
-                obj = _load(tar, member)
+                obj = _load_json_member(tar, member)
                 if obj and obj.get("ContentHash"):
                     discs.append((m.group(1), m.group(2), m.group(3), obj))
             elif len(parts) >= 4 and parts[-1] == "metadata.json" and parts[1] == "data":
-                obj = _load(tar, member)
+                obj = _load_json_member(tar, member)
                 if obj is not None:
                     metadata_by_title["/".join(parts[2:4])] = obj  # "<kind>/<title-dir>"
             elif parts[-1] == "release.json" and len(parts) >= 5 and parts[1] == "data":
-                obj = _load(tar, member)
+                obj = _load_json_member(tar, member)
                 if obj is not None:
                     release_by_dir["/".join(parts[2:5])] = obj  # "<kind>/<title>/<release>"
+    return discs, metadata_by_title, release_by_dir
 
-    if not discs:
-        raise ValueError("thediscdb: tarball contained no indexable discs — refusing to replace index")
 
+def _replace_index_atomically(
+    dest_sqlite: Path,
+    discs: list[tuple[str, str, str, dict[str, Any]]],
+    metadata_by_title: dict[str, dict[str, Any]],
+    release_by_dir: dict[str, dict[str, Any]],
+) -> int:
+    """Write the index to a uniquely named temp file beside `dest_sqlite` and
+    os.replace it over the live one; the temp file is removed on any failure.
+    Returns the row count."""
     dest_sqlite.parent.mkdir(parents=True, exist_ok=True)
     # Unique name per build: a fixed `<dest>.new` let two overlapping builds
     # unlink each other's open database (D-159).
@@ -132,6 +147,15 @@ def build_index(tarball: Path, dest_sqlite: Path) -> int:
     except BaseException:
         new_path.unlink(missing_ok=True)
         raise
+    return rows
+
+
+def build_index(tarball: Path, dest_sqlite: Path) -> int:
+    """Parse the data tarball into a fresh sqlite index; atomic replace."""
+    discs, metadata_by_title, release_by_dir = _read_tarball(tarball)
+    if not discs:
+        raise ValueError("thediscdb: tarball contained no indexable discs — refusing to replace index")
+    rows = _replace_index_atomically(dest_sqlite, discs, metadata_by_title, release_by_dir)
     logger.info("thediscdb: index built with %d discs", rows)
     return rows
 
