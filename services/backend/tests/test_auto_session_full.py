@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from arm_backend import auto_session as asx
+from arm_backend import session_drain as sdx
 from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.session_eviction import evict_colliding_tasks
@@ -536,8 +537,8 @@ async def test_drain_survives_a_failed_job_reload_after_rollback(
     async def _raising_refresh(_obj: object) -> None:
         raise RuntimeError("boom: reload failed")
 
-    monkeypatch.setattr(asx, "fan_out_waiting_identify_applications", _raising_fan_out)
+    monkeypatch.setattr(sdx, "fan_out_waiting_identify_applications", _raising_fan_out)
     monkeypatch.setattr(db, "refresh", _raising_refresh)
 
-    assert await asx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
+    assert await sdx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
     assert "after a failed drain failed" in caplog.text

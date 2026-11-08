@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import SQLModel, select
 
 import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
-from arm_backend import auto_session, config_effects
+from arm_backend import config_effects, session_drain
 from arm_common import DiscType, Job, JobStatus, SessionApplication, SessionApplicationStatus
 
 
@@ -78,7 +78,7 @@ async def test_redrain_survives_a_failed_job_and_drains_the_rest(
                     raise RuntimeError("fan-out failed")
                 return []
 
-            monkeypatch.setattr(auto_session, "fan_out_waiting_identify_applications", fan_out)
+            monkeypatch.setattr(session_drain, "fan_out_waiting_identify_applications", fan_out)
             async with factory() as db:
                 await config_effects.redrain_parked_applications(db, None)
                 assert drained == ["job_1", "job_2"]
@@ -115,11 +115,11 @@ async def test_after_rip_keeps_using_the_job_after_a_failed_drain(
             async def auto_apply(db: AsyncSession, job: Job, hub: Any) -> None:
                 seen.append(job.id)  # a plain attribute read on the reloaded job
 
-            monkeypatch.setattr(auto_session, "fan_out_waiting_identify_applications", fan_out)
-            monkeypatch.setattr(auto_session, "maybe_auto_apply_session", auto_apply)
+            monkeypatch.setattr(session_drain, "fan_out_waiting_identify_applications", fan_out)
+            monkeypatch.setattr(session_drain, "maybe_auto_apply_session", auto_apply)
             async with factory() as db:
                 job = (await db.execute(select(Job).where(Job.id == "job_1"))).scalar_one()
-                assert await auto_session.after_rip(db, job, None) == []  # type: ignore[arg-type]
+                assert await session_drain.after_rip(db, job, None) == []  # type: ignore[arg-type]
             assert seen == ["job_1"]
         finally:
             await engine.dispose()

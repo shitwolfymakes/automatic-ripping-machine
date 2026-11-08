@@ -13,7 +13,8 @@ from typing import Any
 
 import pytest
 
-from arm_backend.auto_session import after_rip, apply_session_internal, maybe_auto_apply_session
+from arm_backend.auto_session import apply_session_internal, maybe_auto_apply_session
+from arm_backend.session_drain import after_rip
 from arm_common import (
     Config,
     ContainerFormat,

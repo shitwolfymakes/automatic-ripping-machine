@@ -12,7 +12,7 @@ from arm_backend.auth import (
     require_drive_owner_by_track,
     require_service_token,
 )
-from arm_backend.auto_session import after_rip, cancel_parked_applications
+from arm_backend.session_drain import after_rip, cancel_parked_applications
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher

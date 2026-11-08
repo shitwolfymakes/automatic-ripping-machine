@@ -7,11 +7,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arm_backend.auto_session import ResolveFanOutOutcome, after_rip, fan_out_waiting_identify_applications
 from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import forget_episode_show_ids, record_manual_job
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.session_drain import ResolveFanOutOutcome, after_rip, fan_out_waiting_identify_applications
 from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, MediaType
 from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES

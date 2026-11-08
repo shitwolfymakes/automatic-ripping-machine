@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel import col, select
 
 from arm_backend import disc_folders, file_browser, iso_image, iso_prepare
-from arm_backend.auto_session import cancel_parked_applications
+from arm_backend.session_drain import cancel_parked_applications
 from arm_backend.config import settings
 from arm_backend.file_browser import PathError
 from arm_backend.iso_library import library_configured

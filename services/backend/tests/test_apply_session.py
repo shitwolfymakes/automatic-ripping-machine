@@ -910,7 +910,7 @@ def test_apply_ripped_with_all_tracks_excluded_parks_as_no_outputs_not_no_tracks
     # resolves zero outputs and must leave the application parked.
     import asyncio
 
-    from arm_backend.auto_session import fan_out_waiting_identify_applications
+    from arm_backend.session_drain import fan_out_waiting_identify_applications
 
     class _NoopHub:
         async def emit(self, *args: object, **kwargs: object) -> None:

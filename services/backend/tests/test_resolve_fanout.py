@@ -3,7 +3,7 @@
 Resolve transitions a job from `awaiting_user_id` (or `ripped_awaiting_identify`)
 to `identified` and, in the same handler, promotes every parked
 `session_application` for that job: load its session/preset/tracks, run the
-shared `_fan_out_tasks_for_application` helper, and either flip it to `queued`
+shared `fan_out_tasks_for_application` helper, and either flip it to `queued`
 with TranscodeTask rows or leave it parked with a per-application
 `skipped_reason` in the response body. Identify itself never fails because of
 a fan-out problem.
@@ -630,7 +630,7 @@ def test_resolve_commits_identity_before_after_rip_drain_raises(
         raise RuntimeError("boom: simulated drain failure")
 
     monkeypatch.setattr(
-        "arm_backend.auto_session.fan_out_waiting_identify_applications",
+        "arm_backend.session_drain.fan_out_waiting_identify_applications",
         _raising_fan_out,
     )
 

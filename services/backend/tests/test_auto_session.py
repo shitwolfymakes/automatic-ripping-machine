@@ -12,9 +12,9 @@ import pytest
 from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
-    fan_out_waiting_identify_applications,
     media_mismatch_detail,
 )
+from arm_backend.session_drain import fan_out_waiting_identify_applications
 from arm_common import (
     Config,
     ContainerFormat,

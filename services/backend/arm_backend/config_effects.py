@@ -5,9 +5,9 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.auto_session import drain_parked_applications_after_rip
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.stage_runner import EpisodeStageRunner, emit_identity_resolved
+from arm_backend.session_drain import drain_parked_applications_after_rip
 from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, SessionApplication, SessionApplicationStatus
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, REDRAIN_JOB_STATUSES

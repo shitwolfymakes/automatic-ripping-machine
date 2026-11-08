@@ -1964,12 +1964,12 @@ def _rip_complete(db: FakeSession, hub: _Hub, monkeypatch: pytest.MonkeyPatch) -
     depend on it — while auto-apply is patched out at its own module so
     these tests need no drive-default/config seeding.
     """
-    from arm_backend import auto_session as auto_session_mod
+    from arm_backend import session_drain as session_drain_mod
 
     async def _noop(*_a: Any, **_k: Any) -> None:
         return None
 
-    monkeypatch.setattr(auto_session_mod, "maybe_auto_apply_session", _noop)
+    monkeypatch.setattr(session_drain_mod, "maybe_auto_apply_session", _noop)
     app = _make_app(db, hub=hub)
     with TestClient(app) as client:
         return client.post(
@@ -2309,15 +2309,15 @@ def test_rip_complete_failed_rip_cancels_parked_application(monkeypatch: pytest.
 
 def test_rip_complete_survives_parked_drain_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The drain hook must never break the ripper's rip-complete call."""
-    from arm_backend import auto_session as auto_session_mod
     from arm_backend import config as bcfg
+    from arm_backend import session_drain as session_drain_mod
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
 
     async def _boom(*_a: Any, **_k: Any) -> None:
         raise RuntimeError("db exploded")
 
-    monkeypatch.setattr(auto_session_mod, "fan_out_waiting_identify_applications", _boom)
+    monkeypatch.setattr(session_drain_mod, "fan_out_waiting_identify_applications", _boom)
     db = FakeSession()
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
     db.rows["drives"] = [_drive()]
