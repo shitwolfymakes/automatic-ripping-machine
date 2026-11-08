@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, Response
 from arm_backend import image_cache
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
-from arm_backend.metadata.base import COVERART_GROUP_FRONT_URL_TEMPLATE
+from arm_backend.metadata.poster import COVERART_GROUP_FRONT_URL_TEMPLATE
 from arm_common import User
 
 logger = logging.getLogger("arm_backend.routers.images")

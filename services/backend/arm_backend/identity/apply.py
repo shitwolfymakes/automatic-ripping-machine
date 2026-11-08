@@ -15,10 +15,10 @@ from typing import Any
 from arm_backend.metadata.base import (
     MetadataResult,
     external_ids_of,
-    extract_poster_url,
     first_str,
     metadata_with_identity,
 )
+from arm_backend.metadata.poster import extract_poster_url
 from arm_common import Job
 from arm_common.enums import MediaType
 from arm_common.schemas.job_metadata import IdentitySuggestion, with_flags

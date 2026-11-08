@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arm_backend.metadata.base import MetadataResult, external_ids_of, extract_poster_url, metadata_with_identity
+from arm_backend.metadata.base import MetadataResult, external_ids_of, metadata_with_identity
+from arm_backend.metadata.poster import extract_poster_url
 
 
 def test_tmdb_tv_hit_records_all_ids_and_kind() -> None:

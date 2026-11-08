@@ -19,10 +19,10 @@ from arm_backend.metadata.base import (
     LookupError,
     LookupTimeout,
     MetadataResult,
-    extract_poster_url,
 )
 from arm_backend.metadata.musicbrainz import MusicBrainzClient
 from arm_backend.metadata.omdb import OMDBClient
+from arm_backend.metadata.poster import extract_poster_url
 from arm_backend.metadata.tmdb import TMDBClient
 
 
