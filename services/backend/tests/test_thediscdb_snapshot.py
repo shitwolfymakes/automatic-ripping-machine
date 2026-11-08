@@ -11,8 +11,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from arm_backend.identity.sources import thediscdb_snapshot
-from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, build_index, refresh
+from arm_backend.identity.sources import thediscdb_index, thediscdb_snapshot
+from arm_backend.identity.sources.thediscdb_index import build_index
+from arm_backend.identity.sources.thediscdb_snapshot import TARBALL_URL, SnapshotStore, refresh
 
 DISC = {
     "Index": 1,
@@ -90,7 +91,7 @@ def test_build_failure_removes_temp_file_and_keeps_live_index(tmp_path: Path, mo
     def _boom(src: object, dst: object) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(thediscdb_snapshot.os, "replace", _boom)
+    monkeypatch.setattr(thediscdb_index.os, "replace", _boom)
     with pytest.raises(OSError, match="disk full"):
         build_index(_mini_tarball(tmp_path), dest)
     assert SnapshotStore(tmp_path).count() == 1
@@ -100,13 +101,13 @@ def test_build_failure_removes_temp_file_and_keeps_live_index(tmp_path: Path, mo
 def test_overlapping_builds_use_distinct_temp_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # D-159: two builds into the same dest must not share a temp path.
     seen: list[Path] = []
-    real_write = thediscdb_snapshot._write_index
+    real_write = thediscdb_index._write_index
 
     def _spy(new_path: Path, *args: object) -> int:
         seen.append(new_path)
         return real_write(new_path, *args)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(thediscdb_snapshot, "_write_index", _spy)
+    monkeypatch.setattr(thediscdb_index, "_write_index", _spy)
     dest = tmp_path / "index.sqlite"
     build_index(_mini_tarball(tmp_path), dest)
     build_index(_mini_tarball(tmp_path), dest)
