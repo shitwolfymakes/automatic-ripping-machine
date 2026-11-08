@@ -296,6 +296,135 @@ async def test_thediscdb_refresh_loop_persists_refreshed_at(monkeypatch: pytest.
     assert cfg in db.added
 
 
+async def test_thediscdb_refresh_loop_skips_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    """With the feature disabled the loop skips the refresh and parks on its
+    daily sleep."""
+    import asyncio
+    from pathlib import Path
+
+    from fastapi import FastAPI
+
+    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.constants import CONFIG_SINGLETON_ID
+    from arm_common import Config, RetentionPolicy
+
+    from tests._fakes import FakeSession
+
+    cfg = Config(
+        id=CONFIG_SINGLETON_ID,
+        auto_transcode_on_idle=False,
+        auto_rip_on_insert=True,
+        block_on_miss=True,
+        community_keydb_enabled=True,
+        makemkv_sdf_enabled=True,
+        hold_for_review=False,
+        ripping_paused=False,
+        thediscdb_enabled=False,
+        thediscdb_refresh_days=7,
+        thediscdb_refreshed_at=None,
+        manual_wait_seconds=60,
+        default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+    )
+    db = FakeSession()
+    db.rows["config"] = [cfg]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+
+    calls: list[tuple[object, Path]] = []
+
+    async def _fake_refresh(http: object, path: Path) -> int:
+        calls.append((http, path))
+        return 3
+
+    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+
+    real_sleep = asyncio.sleep
+
+    async def _sleep(delay: float, *a: object, **k: object) -> None:
+        if delay >= 24 * 3600:  # the loop's daily park: end the test here
+            raise asyncio.CancelledError
+        await real_sleep(delay, *a, **k)
+
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
+
+    app = FastAPI()
+    app.state.http = object()
+    app.state.thediscdb = snap.SnapshotStore(Path(str(tmp_path)))
+
+    with pytest.raises(asyncio.CancelledError):
+        await main_mod._thediscdb_refresh_loop(app)
+
+    assert calls == []
+    assert cfg.thediscdb_refreshed_at is None
+    assert cfg not in db.added
+
+
+async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    """An enabled feature with an index on disk refreshed an hour ago is not
+    stale, so the loop just sleeps."""
+    import asyncio
+    import types
+    from datetime import UTC, datetime, timedelta
+    from pathlib import Path
+
+    from fastapi import FastAPI
+
+    from arm_backend.identity.sources import thediscdb_snapshot as snap
+    from arm_backend.constants import CONFIG_SINGLETON_ID
+    from arm_common import Config, RetentionPolicy
+
+    from tests._fakes import FakeSession
+
+    refreshed_at = datetime.now(UTC) - timedelta(hours=1)
+    cfg = Config(
+        id=CONFIG_SINGLETON_ID,
+        auto_transcode_on_idle=False,
+        auto_rip_on_insert=True,
+        block_on_miss=True,
+        community_keydb_enabled=True,
+        makemkv_sdf_enabled=True,
+        hold_for_review=False,
+        ripping_paused=False,
+        thediscdb_enabled=True,
+        thediscdb_refresh_days=7,
+        thediscdb_refreshed_at=refreshed_at,
+        manual_wait_seconds=60,
+        default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
+    )
+    db = FakeSession()
+    db.rows["config"] = [cfg]
+    monkeypatch.setattr(main_mod, "SessionLocal", lambda: _SessionCtx(db))
+    monkeypatch.setattr(main_mod.settings, "ARM_THEDISCDB_PATH", str(tmp_path))
+
+    calls: list[tuple[object, Path]] = []
+
+    async def _fake_refresh(http: object, path: Path) -> int:
+        calls.append((http, path))
+        return 3
+
+    monkeypatch.setattr(snap, "refresh", _fake_refresh)
+
+    real_sleep = asyncio.sleep
+
+    async def _sleep(delay: float, *a: object, **k: object) -> None:
+        if delay >= 24 * 3600:  # the loop's daily park: end the test here
+            raise asyncio.CancelledError
+        await real_sleep(delay, *a, **k)
+
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
+
+    app = FastAPI()
+    app.state.http = object()
+    app.state.thediscdb = types.SimpleNamespace(exists=lambda: True)
+
+    with pytest.raises(asyncio.CancelledError):
+        await main_mod._thediscdb_refresh_loop(app)
+
+    assert calls == []
+    assert cfg.thediscdb_refreshed_at == refreshed_at
+    assert cfg not in db.added
+
+
 async def test_thediscdb_refresh_loop_survives_an_error(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
     """A failing pass is logged and the loop sleeps until the next one. Pinned
     here because the e2e boot only reaches this line when its refresh happens
