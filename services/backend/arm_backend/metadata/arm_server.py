@@ -31,6 +31,35 @@ def _base_url() -> str:
 _USER_AGENT = "automatic-ripping-machine/v3"
 
 
+def _top_result(body: dict[str, Any]) -> dict[str, Any]:
+    """Return the first (canonical) result of the envelope, or raise LookupError."""
+    results = body.get("results") or {}
+    # 1337server keys results numerically as strings ("0", "1", …) — same
+    # shape v2 reads. Only the first entry is the canonical match.
+    top = results.get("0") if isinstance(results, dict) else None
+    if not isinstance(top, dict):
+        raise LookupError("arm_server response missing results.0")
+    return top
+
+
+def _kind_of(top: dict[str, Any]) -> Literal["movie", "tv", "music"]:
+    """Map the result's `video_type` to a metadata kind."""
+    # 1337server's `video_type` distinguishes movie / tv but we only carry
+    # `kind` ∈ {movie, tv, music} — anything not "tv" maps to movie.
+    return "tv" if str(top.get("video_type", "")).lower() == "tv" else "movie"
+
+
+def _with_poster(top: dict[str, Any]) -> dict[str, Any]:
+    """Copy the result into a payload, adding a synthetic OMDB-shaped Poster URL."""
+    # Inject a synthetic OMDB-shaped Poster URL so the existing
+    # `extract_poster_url` helper picks it up without special-casing.
+    poster = top.get("poster_img")
+    payload: dict[str, Any] = dict(top)
+    if isinstance(poster, str) and poster.startswith("http"):
+        payload.setdefault("Poster", poster)
+    return payload
+
+
 class ArmServerClient:
     """Look up a DVD title by its pydvdid CRC64."""
 
@@ -44,6 +73,23 @@ class ArmServerClient:
         # (disc_probe), but normalise here too so a stray separator from any
         # caller can't silently miss every disc on format alone.
         crc64 = crc64.replace("|", "")
+        body = await self._fetch_envelope(crc64)
+        top = _top_result(body)
+
+        title_val = top.get("title")
+        year_raw = top.get("year")
+        if not isinstance(title_val, str) or not title_val:
+            raise LookupError("arm_server result missing title")
+
+        year_val = year_from_any(year_raw)
+
+        return MetadataResult(title=title_val, year=year_val, kind=_kind_of(top), payload=_with_poster(top))
+
+    async def _fetch_envelope(self, crc64: str) -> dict[str, Any]:
+        """GET the 1337server envelope for `crc64`.
+
+        Raises LookupTimeout on a timeout, and LookupError on a transport or status failure or a miss.
+        """
         try:
             r = await self._http.get(
                 _base_url(),
@@ -63,30 +109,4 @@ class ArmServerClient:
         body: dict[str, Any] = r.json()
         if not body.get("success"):
             raise LookupError(f"arm_server miss: {body.get('error', 'no match')}")
-
-        results = body.get("results") or {}
-        # 1337server keys results numerically as strings ("0", "1", …) — same
-        # shape v2 reads. Only the first entry is the canonical match.
-        top = results.get("0") if isinstance(results, dict) else None
-        if not isinstance(top, dict):
-            raise LookupError("arm_server response missing results.0")
-
-        title_val = top.get("title")
-        year_raw = top.get("year")
-        if not isinstance(title_val, str) or not title_val:
-            raise LookupError("arm_server result missing title")
-
-        year_val = year_from_any(year_raw)
-
-        # 1337server's `video_type` distinguishes movie / tv but we only carry
-        # `kind` ∈ {movie, tv, music} — anything not "tv" maps to movie.
-        kind: Literal["movie", "tv", "music"] = "tv" if str(top.get("video_type", "")).lower() == "tv" else "movie"
-
-        # Inject a synthetic OMDB-shaped Poster URL so the existing
-        # `extract_poster_url` helper picks it up without special-casing.
-        poster = top.get("poster_img")
-        payload: dict[str, Any] = dict(top)
-        if isinstance(poster, str) and poster.startswith("http"):
-            payload.setdefault("Poster", poster)
-
-        return MetadataResult(title=title_val, year=year_val, kind=kind, payload=payload)
+        return body
