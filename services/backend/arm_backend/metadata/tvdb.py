@@ -62,6 +62,14 @@ def series_to_result(entry: Any) -> MetadataResult | None:
     return MetadataResult(title=name, year=year, kind="tv", payload=payload)
 
 
+def _check_status(r: httpx.Response) -> None:
+    """Raise LookupError for a 404 or any other non-200 response."""
+    if r.status_code == 404:
+        raise LookupError("tvdb miss")
+    if r.status_code != 200:
+        raise LookupError(f"tvdb status={r.status_code}")
+
+
 class TVDBClient:
     """TVDB v4 client. Key validation plus TV title search (PR 2b);
     episode listing lives in identity/episodes/providers/tvdb.py.
@@ -103,28 +111,28 @@ class TVDBClient:
 
     async def _get_authed(self, path: str, params: dict[str, Any] | None = None) -> Any:
         token = self._token or await self._login()
-        for attempt in (1, 2):
-            try:
-                r = await self._http.get(
-                    f"{_base_url()}{path}", params=params, headers={"Authorization": f"Bearer {token}"}
-                )
-            except httpx.TimeoutException as e:
-                raise LookupTimeout("tvdb timeout") from e
-            except httpx.HTTPError as e:
-                raise LookupError(f"tvdb transport error: {e}") from e
-            if r.status_code == 401 and attempt == 1:
-                token = await self._login()  # expired token: one re-login
-                continue
+        r = await self._send(path, params, token)
+        if r.status_code == 401:
+            token = await self._login()  # expired token: one re-login
+            r = await self._send(path, params, token)
             if r.status_code == 401:
                 raise LookupError("tvdb auth failed after re-login")
-            if r.status_code == 404:
-                raise LookupError("tvdb miss")
-            if r.status_code != 200:
-                raise LookupError(f"tvdb status={r.status_code}")
-            try:
-                return r.json()
-            except ValueError as e:
-                raise LookupError("tvdb malformed response") from e
+        _check_status(r)
+        try:
+            return r.json()
+        except ValueError as e:
+            raise LookupError("tvdb malformed response") from e
+
+    async def _send(self, path: str, params: dict[str, Any] | None, token: str) -> httpx.Response:
+        """One authenticated GET; transport failures become LookupTimeout/LookupError."""
+        try:
+            return await self._http.get(
+                f"{_base_url()}{path}", params=params, headers={"Authorization": f"Bearer {token}"}
+            )
+        except httpx.TimeoutException as e:
+            raise LookupTimeout("tvdb timeout") from e
+        except httpx.HTTPError as e:
+            raise LookupError(f"tvdb transport error: {e}") from e
 
     async def search_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:
         body = await self._get_authed("/search", {"query": title, "type": "series"})
