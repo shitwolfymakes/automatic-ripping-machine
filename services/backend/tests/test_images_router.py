@@ -414,6 +414,19 @@ def test_release_404_and_group_404_returns_404(client, monkeypatch):
     assert _RELEASE_URL in images_router._NEGATIVE_CACHE
 
 
+def test_release_404_skips_group_fallback_on_non_allowlisted_host(client, monkeypatch):
+    """A group URL template on a non-allowlisted host is never fetched; the proxy answers 404."""
+    monkeypatch.setattr(
+        images_router, "COVERART_GROUP_FRONT_URL_TEMPLATE", "https://evil.example.com/release-group/{mbid}/front-250"
+    )
+    requested = _patch_fetch_recording(monkeypatch, {"/release/rel-1/": "404"})
+    r = client.get("/api/images/proxy", params={"url": f"{_RELEASE_URL}?fallback_group=grp-1"})
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Image unavailable"}
+    assert r.headers["cache-control"] == "public, max-age=3600"
+    assert requested == [_RELEASE_URL]
+
+
 def test_fallback_group_param_stripped_from_upstream_fetch(client, monkeypatch):
     # The upstream request URL must NOT carry fallback_group (clean request/cache key).
     requested = _patch_fetch_recording(monkeypatch, {"/release/rel-1/": ("image", b"IMG", "image/jpeg")})
