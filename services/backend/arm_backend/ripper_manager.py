@@ -88,6 +88,28 @@ def _spec_hash(spec: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
+def _by_drive(containers: Iterable[Any]) -> dict[str, Any]:
+    """Index the labelled containers by drive id; the first one listed for
+    an id wins."""
+    by_drive: dict[str, Any] = {}
+    for c in containers:
+        by_drive.setdefault(c.labels.get(DOCKER_LABEL_KEY), c)
+    return by_drive
+
+
+def _log_summary(summary: ReconcileSummary) -> None:
+    """Log one line counting each reconcile outcome."""
+    logger.info(
+        "ripper reconcile: created=%d adopted=%d restarted=%d recreated=%d orphans_removed=%d failed=%d",
+        len(summary.created),
+        len(summary.adopted),
+        len(summary.restarted),
+        len(summary.recreated),
+        len(summary.orphans_removed),
+        len(summary.failed),
+    )
+
+
 class RipperManager:
     def __init__(self, settings: Settings, docker_client: Any) -> None:
         self._settings = settings
@@ -316,9 +338,7 @@ class RipperManager:
         except Exception as exc:  # noqa: BLE001
             logger.warning("cannot list containers: %s", _err(exc))
             return dict.fromkeys(ids, ("unknown", None))
-        by_drive: dict[str, Any] = {}
-        for c in containers:
-            by_drive.setdefault(c.labels.get(DOCKER_LABEL_KEY), c)
+        by_drive = _by_drive(containers)
         result: dict[str, tuple[str, bool | None]] = {}
         for drive_id in ids:
             existing = by_drive.get(drive_id)
@@ -345,11 +365,18 @@ class RipperManager:
             containers = self._labelled()
         except Exception as exc:  # noqa: BLE001
             raise RipperManagerError(_err(exc)) from exc
-        by_drive: dict[str, Any] = {}
-        for c in containers:
-            by_drive.setdefault(c.labels.get(DOCKER_LABEL_KEY), c)
+        by_drive = _by_drive(containers)
         wanted = {d.id for d in enrolled}
         summary = ReconcileSummary()
+        self._remove_orphans(by_drive, wanted, summary)
+        for drive in enrolled:
+            self._reconcile_drive(drive, by_drive.get(drive.id), busy, summary)
+        _log_summary(summary)
+        return summary
+
+    def _remove_orphans(self, by_drive: dict[str, Any], wanted: set[str], summary: ReconcileSummary) -> None:
+        """Stop and remove every labelled container whose drive is no longer
+        enrolled, recording each outcome."""
         for drive_id, c in by_drive.items():
             if drive_id in wanted:
                 continue
@@ -358,49 +385,48 @@ class RipperManager:
                 summary.orphans_removed.append(drive_id)
             except Exception as exc:  # noqa: BLE001
                 summary.failed[drive_id] = _err(exc)
-        for drive in enrolled:
-            existing = by_drive.get(drive.id)
-            try:
-                drift = self._drift(drive, existing) if existing is not None else None
-            except Exception as exc:  # noqa: BLE001
-                # container_spec can raise for one bad drive; that must not
-                # abort the reconcile for every other drive.
-                summary.failed[drive.id] = _err(exc)
-                continue
-            if drift is not None:
-                if drive.id in busy:
-                    logger.info(
-                        "ripper drive_id=%s runs %s but is ripping — adopting; recreated at the "
-                        "next backend restart once the drive is idle",
-                        drive.id,
-                        drift,
-                    )
-                else:
-                    try:
-                        self._stop_and_remove(existing)
-                        self._docker.containers.run(**self.container_spec(drive))
-                    except Exception as exc:  # noqa: BLE001
-                        summary.failed[drive.id] = _err(exc)
-                        continue
-                    logger.info("ripper recreated drive_id=%s: it ran %s", drive.id, drift)
-                    summary.recreated.append(drive.id)
-                    continue
-            try:
-                outcome = self._start_or_create(drive, existing)
-            except Exception as exc:  # noqa: BLE001
-                summary.failed[drive.id] = _err(exc)
-                continue
-            getattr(summary, outcome).append(drive.id)
-        logger.info(
-            "ripper reconcile: created=%d adopted=%d restarted=%d recreated=%d orphans_removed=%d failed=%d",
-            len(summary.created),
-            len(summary.adopted),
-            len(summary.restarted),
-            len(summary.recreated),
-            len(summary.orphans_removed),
-            len(summary.failed),
-        )
-        return summary
+
+    def _reconcile_drive(
+        self, drive: Drive, existing: Any | None, busy: frozenset[str], summary: ReconcileSummary
+    ) -> None:
+        """Bring one enrolled drive's container in line with its spec,
+        recording the outcome; never raises."""
+        try:
+            drift = self._drift(drive, existing) if existing is not None else None
+        except Exception as exc:  # noqa: BLE001
+            # container_spec can raise for one bad drive; that must not
+            # abort the reconcile for every other drive.
+            summary.failed[drive.id] = _err(exc)
+            return
+        if drift is not None:
+            if drive.id in busy:
+                logger.info(
+                    "ripper drive_id=%s runs %s but is ripping — adopting; recreated at the "
+                    "next backend restart once the drive is idle",
+                    drive.id,
+                    drift,
+                )
+            else:
+                self._recreate(drive, existing, drift, summary)
+                return
+        try:
+            outcome = self._start_or_create(drive, existing)
+        except Exception as exc:  # noqa: BLE001
+            summary.failed[drive.id] = _err(exc)
+            return
+        getattr(summary, outcome).append(drive.id)
+
+    def _recreate(self, drive: Drive, existing: Any, drift: str, summary: ReconcileSummary) -> None:
+        """Replace a drifted, idle container with one built from the current
+        spec."""
+        try:
+            self._stop_and_remove(existing)
+            self._docker.containers.run(**self.container_spec(drive))
+        except Exception as exc:  # noqa: BLE001
+            summary.failed[drive.id] = _err(exc)
+            return
+        logger.info("ripper recreated drive_id=%s: it ran %s", drive.id, drift)
+        summary.recreated.append(drive.id)
 
 
 async def reconcile_enrolled_rippers(
