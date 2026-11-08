@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 
-from arm_backend.drive_scanner import ScannedDrive, enumerate_optical, parse_short_serial
+from arm_backend.drive_sysfs import ScannedDrive, enumerate_optical, parse_short_serial
 
 BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
 

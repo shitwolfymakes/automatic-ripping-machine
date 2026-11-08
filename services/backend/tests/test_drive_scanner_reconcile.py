@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 
-from arm_backend.drive_scanner import ScannedDrive, ScanSummary, reconcile_drives
+from arm_backend.drive_scanner import ScanSummary, reconcile_drives
+from arm_backend.drive_sysfs import ScannedDrive
 from arm_common import Drive, DriveIdentityKind, DriveKind, DriveLifecycle, DriveSourceKind, DriveStatus
 
 from tests._fakes import FakeSession
