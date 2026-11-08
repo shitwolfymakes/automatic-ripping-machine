@@ -493,34 +493,13 @@ async def _apply_session_internal(
     return outcome
 
 
-async def _fan_out_tasks_for_application(
-    db: AsyncSession,
-    *,
+def _media_mismatch_outcome(
     application: SessionApplication | None,
     job: Job,
     sess: Session,
-    transcode_preset: TranscodePreset | None,
-    tracks: list[Track],
-    hub: WSHub | None,
     source: ApplySource,
-    overwrite: bool,
-    created_by_user_id: str | None,
-) -> ApplySessionOutcome:
-    """Compute outputs, check collisions, fan out TranscodeTask rows, emit session.queued.
-
-    Two call modes, controlled by `application`:
-      * Manual apply path (`application=None`): a fresh `SessionApplication`
-        is created in `QUEUED` state. On collision-without-overwrite no
-        application is created — caller sees `skipped_reason='collisions'`
-        with `application=None`.
-      * Resolve fan-out path (`application=<existing WAITING_IDENTIFY row>`):
-        the existing application is flipped to `QUEUED` on success; on
-        collision-without-overwrite it is left untouched (still
-        WAITING_IDENTIFY) and returned with `skipped_reason='collisions'`.
-
-    Caller is responsible for the commit. The helper only `flush`es so the
-    new application's id is populated for downstream task FKs.
-    """
+) -> ApplySessionOutcome | None:
+    """Return the media_mismatch skip when the session and job media types disagree, else None."""
     # routing_media_type, not job.media_type: an audio CD MusicBrainz missed
     # is still music, and a video session on it would fan out nothing (D-033).
     job_media_type = routing_media_type(job)
@@ -562,81 +541,91 @@ async def _fan_out_tasks_for_application(
             skipped_reason="media_mismatch",
             error_detail=media_mismatch_detail(job, sess),
         )
+    return None
 
-    # Park-for-later is keyed on RIP STATE, not on whether Track rows exist.
-    # A pre-rip job can already carry Track rows: identify's hold_for_review
-    # path persists the scan's titles (`_persist_review_tracks`) so the review
-    # card can list them, and rip-start reuses those rows. Fanning out against
-    # them would queue transcode tasks for titles that have not been ripped.
-    # So every pre-rip fan-out (manual apply, resolve fan-out, transcode
-    # re-enable redrain) parks as "no_tracks" with no tasks, and
-    # `drain_parked_applications_after_rip` fans it out from rip-complete.
-    # Output paths are not resolved here either: a still-strict template
-    # token (e.g. `{year}` with no year yet) is checked at drain time, where
-    # it surfaces as a parked `template` outcome rather than blocking apply.
-    if job.status not in POST_RIP_JOB_STATUSES:
-        if application is None:
-            parked = await _existing_parked_application(db, sess.id, job.id)
-            if parked is not None:
-                return ApplySessionOutcome(
-                    application=parked,
-                    tasks=[],
-                    collisions=[],
-                    idempotent=True,
-                    skipped_reason="no_tracks",
-                )
-            application = SessionApplication(
-                session_id=sess.id,
-                job_id=job.id,
-                status=SessionApplicationStatus.WAITING_IDENTIFY,
-                overwrite=overwrite,
-                created_by_user_id=created_by_user_id,
+
+async def _park_before_rip(
+    db: AsyncSession,
+    application: SessionApplication | None,
+    sess: Session,
+    job: Job,
+    overwrite: bool,
+    created_by_user_id: str | None,
+) -> ApplySessionOutcome:
+    """Park a pre-rip fan-out as no_tracks, reusing or creating a WAITING_IDENTIFY row."""
+    if application is None:
+        parked = await _existing_parked_application(db, sess.id, job.id)
+        if parked is not None:
+            return ApplySessionOutcome(
+                application=parked,
+                tasks=[],
+                collisions=[],
+                idempotent=True,
+                skipped_reason="no_tracks",
             )
-            db.add(application)
-            await db.flush()
-        return ApplySessionOutcome(
-            application=application,
-            tasks=[],
-            collisions=[],
-            idempotent=False,
-            skipped_reason="no_tracks",
+        application = SessionApplication(
+            session_id=sess.id,
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=overwrite,
+            created_by_user_id=created_by_user_id,
         )
+        db.add(application)
+        await db.flush()
+    return ApplySessionOutcome(
+        application=application,
+        tasks=[],
+        collisions=[],
+        idempotent=False,
+        skipped_reason="no_tracks",
+    )
 
-    # Fix 75-7: post-rip, `not resolved` is its own terminal outcome, never
-    # "no_tracks". Tracks can exist and still resolve zero outputs (every
-    # track excluded, or none match the session's media_type/track-kind
-    # routing); parking as "no_tracks" there would promise a rip-complete
-    # fan-out that will never come, because the rip is already done.
-    resolved = compute_outputs(job, tracks, sess, transcode_preset)
 
-    if not resolved:
-        # Tracks exist but none resolved to an output (excluded, or none
-        # match the session's media_type/track-kind routing). This is its
-        # own honest, terminal outcome — never promote an empty QUEUED husk
-        # that no drain will ever fill, and never claim "no_tracks" (which
-        # promises a rip-complete fan-out that can't happen: the tracks are
-        # already here and already don't qualify).
-        if application is None:
-            application = SessionApplication(
-                session_id=sess.id,
-                job_id=job.id,
-                status=SessionApplicationStatus.WAITING_IDENTIFY,
-                overwrite=overwrite,
-                created_by_user_id=created_by_user_id,
-            )
-            db.add(application)
-            await db.flush()
-        return ApplySessionOutcome(
-            application=application,
-            tasks=[],
-            collisions=[],
-            idempotent=False,
-            skipped_reason="no_outputs",
+async def _park_no_outputs(
+    db: AsyncSession,
+    application: SessionApplication | None,
+    sess: Session,
+    job: Job,
+    overwrite: bool,
+    created_by_user_id: str | None,
+) -> ApplySessionOutcome:
+    """Park a post-rip fan-out that resolved no outputs as the terminal no_outputs outcome."""
+    # Tracks exist but none resolved to an output (excluded, or none
+    # match the session's media_type/track-kind routing). This is its
+    # own honest, terminal outcome — never promote an empty QUEUED husk
+    # that no drain will ever fill, and never claim "no_tracks" (which
+    # promises a rip-complete fan-out that can't happen: the tracks are
+    # already here and already don't qualify).
+    if application is None:
+        application = SessionApplication(
+            session_id=sess.id,
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=overwrite,
+            created_by_user_id=created_by_user_id,
         )
+        db.add(application)
+        await db.flush()
+    return ApplySessionOutcome(
+        application=application,
+        tasks=[],
+        collisions=[],
+        idempotent=False,
+        skipped_reason="no_outputs",
+    )
 
-    paths = [r.output_path for r in resolved]
-    media_root = Path(settings.MEDIA_ROOT)
-    collisions = await find_collisions(db, paths, media_root)
+
+async def _handle_collisions(
+    db: AsyncSession,
+    application: SessionApplication | None,
+    collisions: list[CollisionInfo],
+    job: Job,
+    overwrite: bool,
+) -> ApplySessionOutcome | None:
+    """Return the collisions outcome when the collisions block the apply.
+
+    Otherwise evict the job's own colliding tasks (on overwrite) and return None.
+    """
     if collisions and not overwrite:
         return ApplySessionOutcome(
             application=application,
@@ -684,6 +673,69 @@ async def _fan_out_tasks_for_application(
             c.output_path for c in collisions if c.reason != "existing_task" or c.existing_job_id == job.id
         ]
         await evict_colliding_tasks(db, same_job_paths, job_id=job.id)
+    return None
+
+
+async def _fan_out_tasks_for_application(
+    db: AsyncSession,
+    *,
+    application: SessionApplication | None,
+    job: Job,
+    sess: Session,
+    transcode_preset: TranscodePreset | None,
+    tracks: list[Track],
+    hub: WSHub | None,
+    source: ApplySource,
+    overwrite: bool,
+    created_by_user_id: str | None,
+) -> ApplySessionOutcome:
+    """Compute outputs, check collisions, fan out TranscodeTask rows, emit session.queued.
+
+    Two call modes, controlled by `application`:
+      * Manual apply path (`application=None`): a fresh `SessionApplication`
+        is created in `QUEUED` state. On collision-without-overwrite no
+        application is created — caller sees `skipped_reason='collisions'`
+        with `application=None`.
+      * Resolve fan-out path (`application=<existing WAITING_IDENTIFY row>`):
+        the existing application is flipped to `QUEUED` on success; on
+        collision-without-overwrite it is left untouched (still
+        WAITING_IDENTIFY) and returned with `skipped_reason='collisions'`.
+
+    Caller is responsible for the commit. The helper only `flush`es so the
+    new application's id is populated for downstream task FKs.
+    """
+    if (mismatch := _media_mismatch_outcome(application, job, sess, source)) is not None:
+        return mismatch
+
+    # Park-for-later is keyed on RIP STATE, not on whether Track rows exist.
+    # A pre-rip job can already carry Track rows: identify's hold_for_review
+    # path persists the scan's titles (`_persist_review_tracks`) so the review
+    # card can list them, and rip-start reuses those rows. Fanning out against
+    # them would queue transcode tasks for titles that have not been ripped.
+    # So every pre-rip fan-out (manual apply, resolve fan-out, transcode
+    # re-enable redrain) parks as "no_tracks" with no tasks, and
+    # `drain_parked_applications_after_rip` fans it out from rip-complete.
+    # Output paths are not resolved here either: a still-strict template
+    # token (e.g. `{year}` with no year yet) is checked at drain time, where
+    # it surfaces as a parked `template` outcome rather than blocking apply.
+    if job.status not in POST_RIP_JOB_STATUSES:
+        return await _park_before_rip(db, application, sess, job, overwrite, created_by_user_id)
+
+    # Fix 75-7: post-rip, `not resolved` is its own terminal outcome, never
+    # "no_tracks". Tracks can exist and still resolve zero outputs (every
+    # track excluded, or none match the session's media_type/track-kind
+    # routing); parking as "no_tracks" there would promise a rip-complete
+    # fan-out that will never come, because the rip is already done.
+    resolved = compute_outputs(job, tracks, sess, transcode_preset)
+
+    if not resolved:
+        return await _park_no_outputs(db, application, sess, job, overwrite, created_by_user_id)
+
+    paths = [r.output_path for r in resolved]
+    media_root = Path(settings.MEDIA_ROOT)
+    collisions = await find_collisions(db, paths, media_root)
+    if (blocked := await _handle_collisions(db, application, collisions, job, overwrite)) is not None:
+        return blocked
 
     if application is None:
         application = SessionApplication(
