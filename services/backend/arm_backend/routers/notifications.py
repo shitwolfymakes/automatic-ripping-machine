@@ -262,6 +262,36 @@ def _apply_channel_patch(ch: NotificationChannel, req: NotificationChannelUpdate
     ch.updated_at = datetime.now(UTC)
 
 
+def _new_channel(req: NotificationChannelCreateRequest, created_by_user_id: str) -> NotificationChannel:
+    if req.type == "inapp":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot create an inapp channel; the in-app bell (ncl_inbox) is system-managed",
+        )
+    _validate_events(req.subscribed_events)
+    _validate_template_keys(req.templates)
+    raw = req.config.model_dump(mode="json")
+    if req.type == "bash":
+        try:
+            # Nothing is stored yet, so the request's secret_keys can only add
+            # masking; keep them when the header cannot be read.
+            config = storage_config(raw, settings.ARM_SCRIPTS_ROOT, fallback_secret_keys=raw.get("secret_keys") or [])
+        except HookError as exc:
+            raise _hook_422(exc) from exc
+        _validate_template_inputs(_templates_to_storage(req.templates), config["secret_keys"])
+    else:
+        config = _apprise_config_to_storage(raw)
+    return NotificationChannel(
+        type=req.type,
+        name=req.name,
+        enabled=req.enabled,
+        config=config,
+        subscribed_events=list(req.subscribed_events),
+        templates=_templates_to_storage(req.templates),
+        created_by_user_id=created_by_user_id,
+    )
+
+
 @router.get("/channels", response_model=list[NotificationChannelView])
 async def list_channels(
     _: User = Depends(require_jwt),
@@ -295,33 +325,7 @@ async def create_channel(
     user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    if req.type == "inapp":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="cannot create an inapp channel; the in-app bell (ncl_inbox) is system-managed",
-        )
-    _validate_events(req.subscribed_events)
-    _validate_template_keys(req.templates)
-    raw = req.config.model_dump(mode="json")
-    if req.type == "bash":
-        try:
-            # Nothing is stored yet, so the request's secret_keys can only add
-            # masking; keep them when the header cannot be read.
-            config = storage_config(raw, settings.ARM_SCRIPTS_ROOT, fallback_secret_keys=raw.get("secret_keys") or [])
-        except HookError as exc:
-            raise _hook_422(exc) from exc
-        _validate_template_inputs(_templates_to_storage(req.templates), config["secret_keys"])
-    else:
-        config = _apprise_config_to_storage(raw)
-    ch = NotificationChannel(
-        type=req.type,
-        name=req.name,
-        enabled=req.enabled,
-        config=config,
-        subscribed_events=list(req.subscribed_events),
-        templates=_templates_to_storage(req.templates),
-        created_by_user_id=user.id,
-    )
+    ch = _new_channel(req, user.id)
     db.add(ch)
     await db.commit()
     await db.refresh(ch)
