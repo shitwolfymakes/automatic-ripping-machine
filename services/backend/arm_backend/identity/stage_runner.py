@@ -40,16 +40,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.identity.episode_stage import (
-    SourceOutcome,
     StageOptions,
-    apply_episode_outcomes,
     compute_episode_claims,
     is_tv_candidate,
 )
@@ -57,9 +55,9 @@ from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.episodes.providers.tmdb import TmdbEpisodes
 from arm_backend.identity.episodes.providers.tvdb import TvdbEpisodes
 from arm_backend.identity.episodes.providers.tvmaze import TvmazeEpisodes
+from arm_backend.identity.events import apply_outcomes_and_emit
 from arm_backend.identity.http import POLICIES, SourceHttp
 from arm_backend.identity.ids import current_ids, merge_new_ids
-from arm_backend.identity.pipeline import ResolveOutcome
 from arm_backend.identity.proposals import claims_of
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_IDS
 from arm_backend.constants import CONFIG_SINGLETON_ID
@@ -94,62 +92,6 @@ def build_providers(http_map: dict[str, SourceHttp], cfg: Config) -> list[Episod
         TvmazeEpisodes(http_map["episodes_tvmaze"]),
         TvdbEpisodes(http_map["episodes_tvdb"], cfg.tvdb_api_key),
     ]
-
-
-async def emit_identity_resolved(
-    session: AsyncSession,
-    hub: WSHub,
-    job: Job,
-    resolved: ResolveOutcome,
-    *,
-    sources: dict[str, str],
-) -> None:
-    """Emit `job.identity_updated` (payload carries `sources`, a source id ->
-    status map) plus one `track.updated` per track `resolved` says the
-    resolver changed.
-
-    Shared by the episode stage's apply path (`apply_outcomes_and_emit`) and
-    the identity router's pin-clear (Task 9 F3), so every caller that runs
-    the resolver and wants to tell the UI about it reports identically —
-    spec 7 requires `job.identity_updated` whenever the resolver changes
-    anything, not just when the episode stage supplied new outcomes."""
-    await hub.emit(
-        topic="ripper.events",
-        event_type="job.identity_updated",
-        payload={"job_id": job.id, "sources": sources},
-        job_id=job.id,
-        session=session,
-    )
-    for track_id in sorted(resolved.track_ids):
-        await hub.emit(
-            topic="ripper.events",
-            event_type="track.updated",
-            payload={"track_id": track_id, "job_id": job.id},
-            job_id=job.id,
-            track_id=track_id,
-            session=session,
-        )
-
-
-async def apply_outcomes_and_emit(
-    session: AsyncSession,
-    job: Job,
-    outcomes: Sequence[SourceOutcome],
-    hub: WSHub,
-) -> ResolveOutcome:
-    """Store `outcomes` (`apply_episode_outcomes`: put_source then resolve),
-    commit, then emit via `emit_identity_resolved`, committing again. `job`
-    must already be the freshly re-selected row the caller intends to write
-    to.
-
-    Shared by the background runner's apply phase and the identity router's
-    `apply=True` path (controller ruling 2) so both commit and emit
-    identically."""
-    resolved = await apply_episode_outcomes(session, job, outcomes)
-    await session.commit()
-    await emit_identity_resolved(session, hub, job, resolved, sources={o.source_id: o.claims.status for o in outcomes})
-    await session.commit()
-    return resolved
 
 
 class EpisodeStageRunner:

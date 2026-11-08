@@ -33,12 +33,13 @@ from arm_backend.identity.episode_stage import (
 )
 from arm_backend.identity.episodes.model import Episode
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
+from arm_backend.identity.events import apply_outcomes_and_emit, emit_identity_resolved
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import claims_of, clear_pin, forget_episode_sources, record_manual_job, set_pin
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_BY_SETTING
-from arm_backend.identity.stage_runner import EpisodeStageRunner, apply_outcomes_and_emit, emit_identity_resolved
+from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.routers._params import JobIdParam
 from arm_backend.constants import CONFIG_SINGLETON_ID
