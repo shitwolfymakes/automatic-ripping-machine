@@ -203,6 +203,39 @@ async def _existing_parked_application(db: AsyncSession, session_id: str, job_id
     )
 
 
+async def _load_transcode_preset(db: AsyncSession, sess: Session) -> TranscodePreset | None:
+    """Load the session's transcode preset; None means no preset or a dangling id (see `sess.transcode_preset_id`)."""
+    if sess.transcode_preset_id is None:
+        return None
+    return (
+        await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
+    ).scalar_one_or_none()
+
+
+async def _encode_gate_refusal(
+    db: AsyncSession, transcode_preset: TranscodePreset | None
+) -> tuple[SkippedReason, str] | None:
+    """Return `(skipped_reason, error_detail)` for why an encode apply must be refused now, or None.
+
+    Passthrough presets skip both gates; the transcode_enabled gate runs before the encoder one.
+    """
+    if is_passthrough_preset(transcode_preset):
+        return None
+    if not await transcode_enabled_now(db):
+        return "transcode_disabled", _TRANSCODE_DISABLED_DETAIL
+    # Vendor-pinned encoders (catalog kind "gpu") need a currently-eligible
+    # device; refuse the apply up front rather than let it queue a task the
+    # dispatcher can only fail once it reaches the front of the line. Runs
+    # after the transcode_disabled gate above so a deployment with
+    # transcoding off reports that reason even when the encoder would also
+    # be unavailable. `is_passthrough_preset` returning False guarantees
+    # `transcode_preset` is not None.
+    assert transcode_preset is not None
+    if not await encoder_available(db, transcode_preset.encoder):
+        return "encoder_unavailable", _encoder_unavailable_detail(transcode_preset)
+    return None
+
+
 async def _existing_auto_outcome(db: AsyncSession, session_id: str, job: Job) -> ApplySessionOutcome | None:
     """Return the outcome for the job's existing application of the session, or None if there is none."""
     existing_rows = (
@@ -356,50 +389,29 @@ async def _apply_session_internal(
     if source == "auto" and (existing := await _existing_auto_outcome(db, session_id, job)) is not None:
         return existing
 
-    transcode_preset: TranscodePreset | None = None
-    if sess.transcode_preset_id is not None:
-        transcode_preset = (
-            await db.execute(select(TranscodePreset).where(col(TranscodePreset.id) == sess.transcode_preset_id))
-        ).scalar_one_or_none()
-        if transcode_preset is None:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
-            )
+    transcode_preset = await _load_transcode_preset(db, sess)
+    if sess.transcode_preset_id is not None and transcode_preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"session references missing transcode_preset_id={sess.transcode_preset_id}",
+        )
 
     # The transcode_enabled gate runs before the WAITING_IDENTIFY park so an
     # encode apply is refused (422 on the manual route) in every job state,
     # not accepted-and-parked for jobs still awaiting identity. It sits below
     # the auto idempotency block on purpose: a repeat auto apply of an
     # already-existing application returns that application unchanged.
-    if not is_passthrough_preset(transcode_preset) and not await transcode_enabled_now(db):
+    refusal = await _encode_gate_refusal(db, transcode_preset)
+    if refusal is not None:
+        skipped_reason, error_detail = refusal
         return ApplySessionOutcome(
             application=None,
             tasks=[],
             collisions=[],
             idempotent=False,
-            skipped_reason="transcode_disabled",
-            error_detail=_TRANSCODE_DISABLED_DETAIL,
+            skipped_reason=skipped_reason,
+            error_detail=error_detail,
         )
-
-    # Vendor-pinned encoders (catalog kind "gpu") need a currently-eligible
-    # device; refuse the apply up front rather than let it queue a task the
-    # dispatcher can only fail once it reaches the front of the line. Runs
-    # after the transcode_disabled gate above so a deployment with
-    # transcoding off reports that reason even when the encoder would also
-    # be unavailable. `is_passthrough_preset` returning False guarantees
-    # `transcode_preset` is not None.
-    if not is_passthrough_preset(transcode_preset):
-        assert transcode_preset is not None
-        if not await encoder_available(db, transcode_preset.encoder):
-            return ApplySessionOutcome(
-                application=None,
-                tasks=[],
-                collisions=[],
-                idempotent=False,
-                skipped_reason="encoder_unavailable",
-                error_detail=_encoder_unavailable_detail(transcode_preset),
-            )
 
     # `awaiting_user_id` → park as `waiting_identify` with no tasks.
     # In practice this only happens via the manual route. A placeholder rip
