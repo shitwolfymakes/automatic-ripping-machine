@@ -736,6 +736,37 @@ async def test_spawn_pending_fails_task_when_pinned_encoder_vanished() -> None:
     assert any(e["event_type"] == "session.failed" for e in sent)
 
 
+async def test_failed_queued_task_keeps_application_open_while_a_sibling_task_is_live() -> None:
+    """Failing a queued task before spawn emits `task.failed` but no `session.*` while a sibling runs."""
+    db = _build_db(encoder="qsv_h265", gpus=[])
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_2",
+            session_application_id="sap_x",
+            source_track_id="trk_2",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            claimed_by="live-host",
+            claim_heartbeat_at=datetime.now(UTC),
+            attempts=1,
+            progress_pct=10,
+            output_path="Iron Man (2008)/Extras.mkv",
+        )
+    )
+    hub, sent = _capture_hub()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), hub)
+    assert await disp.spawn_pending(db) == 0
+    failed, sibling = db.rows["transcode_tasks"]
+    assert failed.status == TranscodeTaskStatus.FAILED
+    assert failed.last_error == "no enabled device has verified qsv_h265; re-probe or enable it in Settings > GPUs"
+    assert sibling.status == TranscodeTaskStatus.IN_PROGRESS
+    application = db.rows["session_applications"][0]
+    assert application.status == SessionApplicationStatus.QUEUED
+    assert application.completed_at is None
+    event_types = [e["event_type"] for e in sent]
+    assert event_types.count("task.failed") == 1
+    assert not [t for t in event_types if t.startswith("session.")]
+
+
 async def test_probing_device_is_never_claimed() -> None:
     db = _build_db(
         encoder="any_h265",

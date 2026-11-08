@@ -1710,6 +1710,48 @@ async def test_stale_claim_hard_fails_after_max_attempts() -> None:
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.FAILED
 
 
+async def test_stale_hard_fail_keeps_application_open_while_a_sibling_task_is_live() -> None:
+    """A hard-failed stale task emits `task.failed` but no `session.*` while a sibling still runs."""
+    db = _app_with_one_task(
+        TranscodeTaskStatus.IN_PROGRESS,
+        claimed_by="dead-host",
+        claim_heartbeat_at=datetime.now(UTC) - timedelta(seconds=200),
+        attempts=3,
+    )
+    db.rows["transcode_tasks"].append(
+        TranscodeTask(
+            id="txt_2",
+            session_application_id="sap_x",
+            source_track_id="trk_2",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            claimed_by="live-host",
+            claim_heartbeat_at=datetime.now(UTC) - timedelta(seconds=10),
+            attempts=1,
+            progress_pct=10,
+            output_path="Iron Man (2008)/Extras.mkv",
+        )
+    )
+    hub = WSHub()
+    sent: list[dict[str, Any]] = []
+
+    async def _capture(**kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    hub.emit = _capture  # type: ignore[method-assign]
+    disp = TranscodeDispatcher(_settings(ARM_TRANSCODE_MAX_ATTEMPTS=3), _db_factory(db), MagicMock(), hub)
+    assert await disp.sweep_stale_claims(db) == 1
+    failed, sibling = db.rows["transcode_tasks"]
+    assert failed.status == TranscodeTaskStatus.FAILED
+    assert "exceeded retry limit" in (failed.last_error or "")
+    assert sibling.status == TranscodeTaskStatus.IN_PROGRESS
+    application = db.rows["session_applications"][0]
+    assert application.status == SessionApplicationStatus.QUEUED
+    assert application.completed_at is None
+    event_types = [e["event_type"] for e in sent]
+    assert event_types.count("task.failed") == 1
+    assert not [t for t in event_types if t.startswith("session.")]
+
+
 async def test_stale_sweep_no_op_when_heartbeat_recent() -> None:
     db = _app_with_one_task(
         TranscodeTaskStatus.IN_PROGRESS,
