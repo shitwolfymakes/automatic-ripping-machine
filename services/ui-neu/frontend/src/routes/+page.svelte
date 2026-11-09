@@ -3,7 +3,6 @@
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
 	import { bulkDeleteJobs } from '$lib/api/jobs';
-	import type { JobView } from '$lib/types/api.gen';
 	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
@@ -22,8 +21,7 @@
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { fade, slide } from 'svelte/transition';
-	import { isAwaitingAction } from '$lib/utils/job-status';
-	import { isReviewCardStatus } from '$lib/utils/job-status-groups';
+	import { groupActiveJobs, newReviewIds } from '$lib/utils/dashboard-groups';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -51,33 +49,18 @@
 
 	// Record jobs seen in review so they stick through a post-apply `identified`.
 	$effect(() => {
-		const toAdd = activeJobs.filter((j) => isReviewCardStatus(j.status ?? '') && !stickyReviewIds.has(j.id));
+		const toAdd = newReviewIds(activeJobs, stickyReviewIds);
 		if (toAdd.length > 0) {
-			stickyReviewIds = new Set([...stickyReviewIds, ...toAdd.map((j) => j.id)]);
+			stickyReviewIds = new Set([...stickyReviewIds, ...toAdd]);
 		}
 	});
 
 	let preparingRips = $derived(dash.preparing ?? []);
-	let scanningJobs = $derived(activeJobs.filter((j: JobView) => j.status?.toLowerCase() === 'created'));
-	let waitingJobs = $derived(
-		activeJobs.filter((j: JobView) => {
-			if (dismissedJobIds.has(j.id)) return false;
-			// In review while awaiting (incl. awaiting_review), sticky after an apply
-			// promoted it to identified, OR post-rip awaiting a transcode session
-			// (ripped/ripped_partial, no session in flight) — these come BACK as a
-			// rich review card so the operator can apply a session + fix metadata.
-			return (
-				isReviewCardStatus(j.status ?? '') ||
-				(stickyReviewIds.has(j.id) && j.status?.toLowerCase() === 'identified') ||
-				isAwaitingAction(j)
-			);
-		})
-	);
-	let waitingJobIds = $derived(new Set(waitingJobs.map((j) => j.id)));
-	let nonWaitingActiveJobs = $derived(activeJobs.filter((j: JobView) => j.status?.toLowerCase() === 'ripping'));
-	// A sticky review card that promoted to `identified` shows in Waiting, not
-	// also in Finishing — exclude anything currently rendered as a review card.
-	let finishingJobs = $derived(activeJobs.filter((j: JobView) => isAwaitingAction(j) && !waitingJobIds.has(j.id)));
+	const groups = $derived(groupActiveJobs(activeJobs, dismissedJobIds, stickyReviewIds));
+	let scanningJobs = $derived(groups.scanning);
+	let waitingJobs = $derived(groups.waiting);
+	let nonWaitingActiveJobs = $derived(groups.ripping);
+	let finishingJobs = $derived(groups.finishing);
 
 	function dismissJob(jobId: string) {
 		dismissedJobIds = new Set([...dismissedJobIds, jobId]);
