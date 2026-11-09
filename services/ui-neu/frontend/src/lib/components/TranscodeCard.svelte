@@ -4,8 +4,7 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import { elapsedTime, etaTime, formatRemaining, statusAccentVar } from '$lib/utils/format';
 	import { formatFps } from '$lib/utils/fps';
-	import { liveSample, type TranscodeLiveSample } from '$lib/utils/transcode-progress';
-	import { wsClient } from '$lib/api/ws';
+	import { TranscodeLive } from '$lib/stores/transcodeLive.svelte';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { slide } from 'svelte/transition';
@@ -30,16 +29,14 @@
 	// values from the last REST heartbeat. For the ETA alone, extrapolate as a
 	// last resort from when the task was claimed, never from created_at, which
 	// would count the time it sat queued as encode time.
-	let live = $state<TranscodeLiveSample | null>(null);
+	const live = new TranscodeLive();
 	let taskId = $derived(isActive ? job?.id : undefined);
 	$effect(() => {
 		const id = taskId;
 		if (!id) return;
-		return wsClient.subscribe(`transcode.progress.${id}`, (env) => {
-			live = liveSample(id, env.payload);
-		});
+		return live.follow(id);
 	});
-	let liveForJob = $derived(live && job && live.taskId === job.id ? live : null);
+	let liveForJob = $derived(live.sampleFor(job?.id));
 	let etaDisplay = $derived.by(() => {
 		if (!isActive || !job) return null;
 		const eta = liveForJob?.eta ?? job.eta_seconds;
