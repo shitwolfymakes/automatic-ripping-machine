@@ -20,6 +20,7 @@
 	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
 	import { FollowScroll } from '$lib/stores/followScroll.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
+	import LogSegmentGroup from '$lib/components/log-view/LogSegmentGroup.svelte';
 
 	interface Props {
 		entries: LogEntry[];
@@ -129,35 +130,21 @@
 
 	{#if !collapsed}
 		<div class="log-view-toolbar">
-			<div class="log-view-segment-group" role="radiogroup" aria-label="Log filter">
-				{#each SERVICE_FILTERS as f (f.key)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={serviceFilter === f.key}
-						data-testid="job-log-filter-{f.key}"
-						onclick={() => {
-							serviceFilter = f.key;
-						}}
-						class="log-view-segment">{f.label}</button
-					>
-				{/each}
-			</div>
+			<LogSegmentGroup
+				label="Log filter"
+				options={SERVICE_FILTERS}
+				value={serviceFilter}
+				testid="job-log-filter"
+				onpick={(k) => (serviceFilter = k)}
+			/>
 			<span class="log-view-divider" aria-hidden="true"></span>
-			<div class="log-view-segment-group" role="radiogroup" aria-label="Log level filter">
-				{#each LEVEL_FILTERS as f (f.key)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={levelFilter === f.key}
-						data-testid="job-log-level-{f.key}"
-						onclick={() => {
-							levelFilter = f.key;
-						}}
-						class="log-view-segment">{f.label}</button
-					>
-				{/each}
-			</div>
+			<LogSegmentGroup
+				label="Log level filter"
+				options={LEVEL_FILTERS}
+				value={levelFilter}
+				testid="job-log-level"
+				onpick={(k) => (levelFilter = k)}
+			/>
 			{#if search}
 				<div class="log-view-search">
 					<span class="log-view-search-prompt" aria-hidden="true">/</span>
@@ -287,33 +274,10 @@
 		padding: 0.5rem 0.875rem;
 		border-bottom: 1px solid color-mix(in srgb, var(--color-terminal-ink) 6%, transparent);
 	}
-	.log-view-segment-group {
-		display: flex;
-		gap: 2px;
-	}
 	.log-view-divider {
 		width: 1px;
 		height: 18px;
 		background: color-mix(in srgb, var(--color-terminal-ink) 12%, transparent);
-	}
-	.log-view-segment {
-		border-radius: var(--radius-sm);
-		padding: 0.25rem 0.5625rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		font-weight: 500;
-		color: color-mix(in srgb, var(--color-terminal-ink) 65%, transparent);
-		background: transparent;
-		transition:
-			background-color var(--motion-fast) var(--ease),
-			color var(--motion-fast) var(--ease);
-	}
-	.log-view-segment:hover {
-		background: color-mix(in srgb, var(--color-terminal-ink) 6%, transparent);
-	}
-	.log-view-segment[aria-checked='true'] {
-		background: color-mix(in srgb, var(--color-primary) 32%, transparent);
-		color: color-mix(in srgb, var(--color-primary) 40%, var(--color-terminal-ink));
 	}
 
 	/* search: a composite field that grows into the leftover toolbar space */
