@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
 
-// Branch pins for EpisodeMatchPanel's loading and match actions, beside
-// EpisodeMatchPanel.test.ts. These branches and lines cannot be reached from
-// the rendered panel, so nothing here forces them:
+// Branch pins for EpisodeMatchPanel, beside EpisodeMatchPanel.test.ts: the
+// loading, the match actions, the season and episode lists, and the by-hand
+// saves. These branches and lines cannot be reached from the rendered
+// panel, so nothing here forces them:
 // - labelOf's two fallbacks (`?? id ?? ''`): every label it is asked for is
 //   one of the three sources.
 // - shortId's `?? ''`: it is only called with a source, never null.
@@ -17,6 +18,13 @@ import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$l
 // - held's `: null` (when the panel is not showing a guess): the derived is
 //   read only inside `view === 'unsure' && held`, and an unsure view always
 //   has an identity, so it is never evaluated in any other state.
+// - setByHand's `if (!m) return;`: EpisodeRows only sends values from the
+//   options the panel gives it, roles or `s<season>e<episode>`, so every
+//   value parses.
+// - setByHand's missing row (`row ? ... : null`): the trackId always comes
+//   from a shown row.
+// - fillTheRest with no picker source: Fill the rest only shows when there is
+//   one.
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -43,7 +51,7 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import EpisodeMatchPanel from '../EpisodeMatchPanel.svelte';
-import { fetchNamingPreview } from '$lib/api/jobs';
+import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 import { clearEpisodeMatch, fetchEpisodes, fetchSeasons, matchIdentity } from '$lib/api/identity';
 import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
@@ -453,5 +461,247 @@ describe('EpisodeMatchPanel run branches', () => {
 		await openRerun();
 		await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 		expect(await screen.findByRole('alert')).toHaveTextContent("TMDb didn't answer (error).");
+	});
+});
+
+const placedTrack = (i: number, o: Record<string, unknown> = {}) => ({ ...applied.tracks![i], ...o });
+const seasonSelectOf = (ref: string) => screen.getByLabelText(`Season for ${ref}`) as HTMLSelectElement;
+const placementOf = (ref: string) => screen.getByLabelText(`Set placement for ${ref}`) as HTMLSelectElement;
+const optionValues = (sel: HTMLSelectElement) => [...sel.options].map((o) => o.value);
+const reloadOf = (component: unknown) => (component as { reload: () => Promise<void> }).reload();
+const freshIdentity = () => Promise.resolve(structuredClone(applied));
+
+describe('EpisodeMatchPanel season list', () => {
+	it('shows an empty season list (a select with only Specials) when the response has no seasons', async () => {
+		vi.mocked(fetchSeasons).mockResolvedValue({ source_id: 'episodes_tmdb', show_id: '5084' } as never);
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		await openRerun();
+		const select = (await screen.findByLabelText('Season')) as HTMLSelectElement;
+		await waitFor(() => expect(select.tagName).toBe('SELECT'));
+		expect([...select.options].map((o) => o.text)).toEqual(['-', 'Scan all seasons', 'Specials', 'Season 1']);
+	});
+
+	it('keeps the second source seasons when the first fetch rejects after the form source changed', async () => {
+		const first = deferred<{ source_id: string; show_id: string; seasons: number[] }>();
+		vi.mocked(fetchSeasons).mockImplementation(((_id: string, src: string) =>
+			src === 'tmdb' ? first.promise : Promise.resolve({ source_id: 'x', show_id: '1', seasons: [7, 8] })) as never);
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await rerunSeasonOption('Season 7');
+		first.reject(new Error('HTTP 500'));
+		await settle();
+		const select = screen.getByLabelText('Season') as HTMLSelectElement;
+		expect(select.tagName).toBe('SELECT');
+		expect([...select.options].map((o) => o.text)).toEqual([
+			'-',
+			'Scan all seasons',
+			'Specials',
+			'Season 7',
+			'Season 8'
+		]);
+		expect(fetchSeasons).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('EpisodeMatchPanel season list resolving late', () => {
+	it('keeps the second source seasons when the first fetch resolves after the form source changed', async () => {
+		const first = deferred<{ source_id: string; show_id: string; seasons: number[] }>();
+		vi.mocked(fetchSeasons).mockImplementation(((_id: string, src: string) =>
+			src === 'tmdb' ? first.promise : Promise.resolve({ source_id: 'x', show_id: '1', seasons: [7, 8] })) as never);
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		await openRerun();
+		await fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'tvmaze' } });
+		await rerunSeasonOption('Season 7');
+		first.resolve({ source_id: 'episodes_tmdb', show_id: '5084', seasons: [1, 2, 3] });
+		await settle();
+		const select = screen.getByLabelText('Season') as HTMLSelectElement;
+		expect([...select.options].map((o) => o.text)).toEqual([
+			'-',
+			'Scan all seasons',
+			'Specials',
+			'Season 7',
+			'Season 8'
+		]);
+	});
+});
+
+describe('EpisodeMatchPanel episode lists', () => {
+	const onlyB = (aFetch: Promise<unknown>) =>
+		vi.mocked(fetchEpisodes).mockImplementation(((id: string) =>
+			id === 'job_A'
+				? aFetch
+				: Promise.resolve({
+						source_id: 'episodes_tmdb',
+						show_id: '5084',
+						season: 1,
+						episodes: [{ number: 4, name: 'B Four', runtime_s: 3000 }]
+					})) as never);
+
+	it('does not use a list that resolves after the job changed', async () => {
+		const forA = deferred<unknown>();
+		onlyB(forA.promise);
+		const { rerender } = renderComponent(EpisodeMatchPanel, { props: panelProps({ id: 'job_A', season: 1 }) });
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_A', 'tmdb', 1));
+		await rerender({ job: job({ id: 'job_B', season: 1 }), tracks, matching: false });
+		await waitFor(() => expect(optionValues(placementOf('t03'))).toContain('s1e4'));
+		await waitFor(() => expect([...placementOf('t00').options].map((o) => o.text)).toContain('E04 B Four, 50m (used)'));
+		forA.resolve({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			season: 1,
+			episodes: [{ number: 4, name: 'A Four', runtime_s: 3000 }]
+		});
+		await settle();
+		const texts = [...placementOf('t00').options].map((o) => o.text);
+		expect(texts).toContain('E04 B Four, 50m (used)');
+		expect(texts.join('|')).not.toContain('A Four');
+	});
+
+	it('treats a list response with no episodes as an empty list and does not ask for it again', async () => {
+		vi.mocked(fetchEpisodes).mockResolvedValue({ source_id: 'episodes_tmdb', show_id: '5084', season: 1 } as never);
+		fetchIdentity.mockImplementation(freshIdentity);
+		const { component } = renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		const select = await screen.findByLabelText('Set placement for t04');
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(1));
+		await settle();
+		expect(optionValues(select as HTMLSelectElement)).toEqual(['', 's1e5', 'extra', 'trailer', 'other']);
+		await reloadOf(component);
+		await settle();
+		expect(fetchEpisodes).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not ask again for the new job season when the first job list rejects after the job changed', async () => {
+		const forA = deferred<unknown>();
+		onlyB(forA.promise);
+		fetchIdentity.mockImplementation(freshIdentity);
+		const { rerender, component } = renderComponent(EpisodeMatchPanel, {
+			props: panelProps({ id: 'job_A', season: 1 })
+		});
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_A', 'tmdb', 1));
+		await rerender({ job: job({ id: 'job_B', season: 1 }), tracks, matching: false });
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledWith('job_B', 'tmdb', 1));
+		forA.reject(new Error('HTTP 500'));
+		await settle();
+		await reloadOf(component);
+		await settle();
+		const forB = vi.mocked(fetchEpisodes).mock.calls.filter((c) => c[0] === 'job_B');
+		expect(forB).toHaveLength(1);
+	});
+});
+
+describe('EpisodeMatchPanel placed tracks', () => {
+	it('lists no episode as used when the identity has no tracks', async () => {
+		fetchIdentity.mockResolvedValue({ sources: { episodes_tmdb: { status: 'ok' } }, pin: {} });
+		vi.mocked(fetchEpisodes).mockResolvedValue({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			season: 1,
+			episodes: [{ number: 1, name: 'One', runtime_s: 3000 }]
+		});
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		const select = await screen.findByLabelText('Set placement for t00');
+		await waitFor(() => expect(optionValues(select as HTMLSelectElement)).toContain('s1e1'));
+		expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toContain('E01 One, 50m');
+	});
+});
+
+describe('EpisodeMatchPanel by-hand saves', () => {
+	it('shows "Could not save the track: <message>" and neither reloads nor calls onchanged when the save rejects with an Error', async () => {
+		vi.mocked(updateTrack).mockRejectedValue(new Error('HTTP 500'));
+		const onchanged = vi.fn();
+		renderComponent(EpisodeMatchPanel, { props: { ...panelProps({ season: 1 }), onchanged } });
+		const select = await screen.findByLabelText('Set placement for t04');
+		const before = fetchIdentity.mock.calls.length;
+		await fireEvent.change(select, { target: { value: 'extra' } });
+		expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the track: HTTP 500');
+		await settle();
+		expect(fetchIdentity).toHaveBeenCalledTimes(before);
+		expect(onchanged).not.toHaveBeenCalled();
+	});
+
+	it('shows "Could not save the track: Could not save" when the save rejects with something that is not an Error', async () => {
+		vi.mocked(updateTrack).mockRejectedValue('boom');
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		await fireEvent.change(await screen.findByLabelText('Set placement for t04'), { target: { value: 'extra' } });
+		expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the track: Could not save');
+	});
+
+	it('saves episode_name null when the season list has not loaded', async () => {
+		vi.mocked(fetchEpisodes).mockReturnValue(new Promise(() => {}));
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		const select = await screen.findByLabelText('Set placement for t03');
+		await waitFor(() => expect(fetchEpisodes).toHaveBeenCalledTimes(1));
+		await fireEvent.change(select, { target: { value: 's1e4' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: 1,
+			episode_number: 4,
+			episode_name: null
+		});
+	});
+
+	it('saves episode_name null when the loaded list does not hold the episode', async () => {
+		vi.mocked(fetchEpisodes).mockResolvedValue({
+			source_id: 'episodes_tmdb',
+			show_id: '5084',
+			season: 1,
+			episodes: [{ number: 9, name: 'Nine', runtime_s: 3000 }]
+		});
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		const select = await screen.findByLabelText('Set placement for t03');
+		await waitFor(() => expect(optionValues(select as HTMLSelectElement)).toContain('s1e9'));
+		await fireEvent.change(select, { target: { value: 's1e4' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: 1,
+			episode_number: 4,
+			episode_name: null
+		});
+	});
+
+	// Oddity pinned as it is: with no season anywhere, the only episode value the
+	// picker can send is the row's own placement, which reads `s0e<n>` for a
+	// seasonless one, so the save sends season 0.
+	it('saves season 0 and episode_name null when a seasonless placed row is picked with no season anywhere', async () => {
+		const id = structuredClone(applied);
+		id.tracks![3] = placedTrack(3, { season: null, episode_number: 3, episode_name: 'Three' }) as never;
+		fetchIdentity.mockResolvedValue(id);
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		const select = await screen.findByLabelText('Set placement for t03');
+		expect(optionValues(select as HTMLSelectElement)).toEqual(['', 's0e3', 'extra', 'trailer', 'other']);
+		await fireEvent.change(select, { target: { value: 's0e3' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: 0,
+			episode_number: 3,
+			episode_name: null
+		});
+	});
+
+	it('keeps the row picked season when its revert fails', async () => {
+		const id = structuredClone(applied);
+		id.tracks![1].identity_provenance = { episode_number: 'manual' };
+		fetchIdentity.mockResolvedValue(id);
+		vi.mocked(updateTrack).mockRejectedValue(new Error('HTTP 500'));
+		renderComponent(EpisodeMatchPanel, { props: panelProps({ season: 1 }) });
+		await screen.findByLabelText('Season for t01');
+		await within(seasonSelectOf('t01')).findByRole('option', { name: 'Season 2' });
+		await fireEvent.change(seasonSelectOf('t01'), { target: { value: '2' } });
+		expect(seasonSelectOf('t01').value).toBe('2');
+		await fireEvent.click(screen.getByRole('button', { name: 'Revert' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the track: HTTP 500');
+		expect(seasonSelectOf('t01').value).toBe('2');
+	});
+
+	it('unticking a row include box saves excluded, then reloads and calls onchanged', async () => {
+		const onchanged = vi.fn();
+		renderComponent(EpisodeMatchPanel, { props: { ...panelProps({ season: 1 }), onchanged } });
+		const box = await screen.findByLabelText('Include t02');
+		const before = fetchIdentity.mock.calls.length;
+		await fireEvent.click(box);
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_2', { excluded: true });
+		await waitFor(() => expect(onchanged).toHaveBeenCalledTimes(1));
+		expect(fetchIdentity).toHaveBeenCalledTimes(before + 1);
 	});
 });
