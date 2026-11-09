@@ -4,6 +4,7 @@
 // editor. Passthrough = no transcode preset at all, or a preset whose tool is
 // the explicit 'none' tool; those still finalize in-process without a
 // transcoder, so they stay visible everywhere.
+import type { DiscType, MediaType } from '$lib/types/api.gen';
 
 /** Tool of the 'none' (passthrough) transcode preset. */
 export const PASSTHROUGH_TOOL = 'none';
@@ -73,4 +74,23 @@ export function mediaTypesCompatible(jobMediaType: string, sessionMediaType: str
 		(sessionMediaType === 'iso' || sessionMediaType === 'data') &&
 		(VIDEO_MEDIA_TYPES.has(jobMediaType) || jobMediaType === 'data')
 	);
+}
+
+// dvd/bluray → movie, cd → music, data → data, otherwise (e.g. unknown) → null
+// (no media type, so every session applies).
+function discTypeToMediaType(dt: DiscType): MediaType | null {
+	if (dt === 'dvd' || dt === 'bluray') return 'movie';
+	if (dt === 'cd') return 'music';
+	if (dt === 'data') return 'data';
+	return null;
+}
+
+/**
+ * The sessions a disc of this type can take: those of its media type plus tv
+ * sessions, or every session when the disc type maps to no media type
+ * (unknown).
+ */
+export function sessionsForDisc<S extends { media_type: string }>(sessions: readonly S[], discType: DiscType): S[] {
+	const mt = discTypeToMediaType(discType);
+	return sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
 }

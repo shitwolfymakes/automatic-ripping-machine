@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { defaultSessionChoices, manualRipSessionChoices, mediaTypesCompatible } from './sessions';
+import { defaultSessionChoices, manualRipSessionChoices, mediaTypesCompatible, sessionsForDisc } from './sessions';
 
 const presets = [
 	{ id: 'p-none', tool: 'none' },
@@ -60,5 +60,37 @@ describe('mediaTypesCompatible (mirrors auto_session._media_types_compatible)', 
 		['data', 'movie', false]
 	])('job %s, session %s -> %s', (job, session, expected) => {
 		expect(mediaTypesCompatible(job, session)).toBe(expected);
+	});
+});
+
+describe('sessionsForDisc', () => {
+	const movie = { id: 'movie', media_type: 'movie' };
+	const tv = { id: 'tv', media_type: 'tv' };
+	const music = { id: 'music', media_type: 'music' };
+	const data = { id: 'data', media_type: 'data' };
+	const mixed = [movie, tv, music, data];
+
+	it.each([
+		['bluray', [movie, tv]],
+		['dvd', [movie, tv]],
+		['cd', [tv, music]],
+		['data', [tv, data]]
+	] as const)('a %s disc takes its media type plus tv', (discType, expected) => {
+		expect(sessionsForDisc(mixed, discType)).toEqual(expected);
+	});
+
+	it('offers every session for an unknown disc', () => {
+		expect(sessionsForDisc(mixed, 'unknown')).toEqual(mixed);
+	});
+
+	it.each(['bluray', 'dvd', 'cd', 'data', 'unknown'] as const)('keeps a tv session for a %s disc', (discType) => {
+		expect(sessionsForDisc([tv], discType)).toEqual([tv]);
+	});
+
+	it('keeps the input order', () => {
+		const first = { id: 'a', media_type: 'movie' };
+		const second = { id: 'b', media_type: 'tv' };
+		const third = { id: 'c', media_type: 'movie' };
+		expect(sessionsForDisc([third, second, first], 'dvd')).toEqual([third, second, first]);
 	});
 });

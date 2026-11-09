@@ -6,14 +6,12 @@
 	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
-	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
+	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
-		DiscType,
 		JobNamingPreviewResponse,
 		JobView,
-		MediaType,
 		RipPresetView,
 		SessionView,
 		TranscodePresetView
@@ -42,15 +40,6 @@
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 
-	// Faithful port of Vue's discTypeToMediaType: dvd/bluray → movie, cd → music,
-	// data → data, otherwise (e.g. unknown) → null (show all).
-	function discTypeToMediaType(dt: DiscType): MediaType | null {
-		if (dt === 'dvd' || dt === 'bluray') return 'movie';
-		if (dt === 'cd') return 'music';
-		if (dt === 'data') return 'data';
-		return null;
-	}
-
 	// id -> tool for the passthrough filter below; presetToolById.get(id) is
 	// undefined until transcodePresets has loaded, which only excludes
 	// preset-backed sessions from the filtered list until then (a session
@@ -58,8 +47,7 @@
 	const presetToolById = $derived(presetToolMap(transcodePresets));
 
 	const filteredSessions = $derived.by(() => {
-		const mt = discTypeToMediaType(job.disc_type);
-		const byMediaType = sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
+		const byMediaType = sessionsForDisc(sessions, job.disc_type);
 		// Encode sessions can only be applied while transcoding is running;
 		// when it's disabled, only passthrough-compatible sessions are offered
 		// - but only once transcodePresets has loaded (presetsLoading), since a
