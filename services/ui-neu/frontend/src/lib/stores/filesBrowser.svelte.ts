@@ -2,8 +2,8 @@
 // its sort order and the selection on it.
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
 import type { FileRoot, DirectoryListing } from '$lib/api/files';
-
-const rootOrder: Record<string, number> = { raw: 0, transcode: 1, completed: 2, music: 3 };
+import { sortEntries, nextSort, sortRoots } from '$lib/utils/files';
+import type { SortKey, SortDir } from '$lib/utils/files';
 
 export class FilesBrowser {
 	roots = $state<FileRoot[]>([]);
@@ -15,8 +15,8 @@ export class FilesBrowser {
 	filesError = $derived<Error | null>(this.error ? new Error(this.error) : null);
 
 	// Sort state
-	sortKey = $state<'name' | 'size' | 'modified'>('name');
-	sortDir = $state<'asc' | 'desc'>('asc');
+	sortKey = $state<SortKey>('name');
+	sortDir = $state<SortDir>('asc');
 
 	// Selection state — key is `subpath/name` within the current root
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Set, copy-on-write; reassigning the $state field triggers updates
@@ -24,21 +24,7 @@ export class FilesBrowser {
 
 	isReadonly = $derived(this.listing?.readonly === true);
 
-	sortedEntries = $derived.by(() => {
-		if (!this.listing) return [];
-		return [...this.listing.entries].sort((a, b) => {
-			if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-			let cmp: number;
-			if (this.sortKey === 'size') {
-				cmp = (a.size ?? 0) - (b.size ?? 0);
-			} else if (this.sortKey === 'modified') {
-				cmp = (a.modified ?? '').localeCompare(b.modified ?? '');
-			} else {
-				cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-			}
-			return this.sortDir === 'asc' ? cmp : -cmp;
-		});
-	});
+	sortedEntries = $derived(this.listing ? sortEntries(this.listing.entries, this.sortKey, this.sortDir) : []);
 
 	allSelected = $derived(
 		this.sortedEntries.length > 0 && this.sortedEntries.every((e) => this.selectedKeys.has(this.selectionKey(e.name)))
@@ -54,13 +40,10 @@ export class FilesBrowser {
 		return `${this.current.root}::${this.itemSubpath(entryName)}`;
 	};
 
-	toggleSort = (key: 'name' | 'size' | 'modified') => {
-		if (this.sortKey === key) {
-			this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
-		} else {
-			this.sortKey = key;
-			this.sortDir = key === 'modified' ? 'desc' : 'asc';
-		}
+	toggleSort = (key: SortKey) => {
+		const next = nextSort(this.sortKey, this.sortDir, key);
+		this.sortKey = next.key;
+		this.sortDir = next.dir;
 	};
 
 	sortIconDir = (key: string): 'asc' | 'desc' | null => {
@@ -90,7 +73,7 @@ export class FilesBrowser {
 
 	loadRoots = async () => {
 		try {
-			this.roots = (await fetchRoots()).sort((a, b) => (rootOrder[a.key ?? ''] ?? 99) - (rootOrder[b.key ?? ''] ?? 99));
+			this.roots = sortRoots(await fetchRoots());
 			if (this.roots.length > 0 && !this.current.root) {
 				this.current = { root: this.roots[0].key, subpath: '' };
 			}
