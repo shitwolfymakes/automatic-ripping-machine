@@ -16,6 +16,7 @@
 		prescanOverrideCount,
 		startRipBlockedReason
 	} from '$lib/utils/drives';
+	import { numberInputText, parsePrescanInput, parseRipSpeed } from '$lib/utils/drive-settings';
 	import StatusStrip from './StatusStrip.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
@@ -91,10 +92,10 @@
 	// Sync server values to inputs when settings panel closes
 	$effect.pre(() => {
 		if (!showSettings) {
-			prescanCacheInput = drive?.prescan_cache_mb != null ? String(drive.prescan_cache_mb) : '';
-			prescanTimeoutInput = drive?.prescan_timeout != null ? String(drive.prescan_timeout) : '';
-			prescanRetriesInput = drive?.prescan_retries != null ? String(drive.prescan_retries) : '';
-			discEnumTimeoutInput = drive?.disc_enum_timeout != null ? String(drive.disc_enum_timeout) : '';
+			prescanCacheInput = numberInputText(drive?.prescan_cache_mb);
+			prescanTimeoutInput = numberInputText(drive?.prescan_timeout);
+			prescanRetriesInput = numberInputText(drive?.prescan_retries);
+			discEnumTimeoutInput = numberInputText(drive?.disc_enum_timeout);
 		}
 	});
 
@@ -158,30 +159,25 @@
 	] as const;
 
 	async function savePrescanField(field: (typeof PRESCAN_FIELDS)[number]) {
-		const trimmed = (field.input() ?? '').trim();
-		let newVal = trimmed === '' ? null : parseInt(trimmed, 10);
-		if (newVal !== null && (isNaN(newVal) || newVal < field.min || newVal > field.max)) return;
-		// If the value matches the global default, store null (use global)
-		if (newVal !== null && newVal === field.globalDefault()) {
-			newVal = null;
-			field.setInput('');
-		}
-		if (newVal === (field.current() ?? null)) return;
+		const parsed = parsePrescanInput(field.input(), field, field.globalDefault());
+		if (!parsed) return;
+		if (parsed.matchesDefault) field.setInput('');
+		if (parsed.value === (field.current() ?? null)) return;
 
 		if (!drive) return;
 		savingPrescan = true;
 		try {
-			await updateDrive(drive.id, { [field.key]: newVal });
+			await updateDrive(drive.id, { [field.key]: parsed.value });
 			onupdate?.();
 		} catch {
-			field.setInput(field.current() != null ? String(field.current()) : '');
+			field.setInput(numberInputText(field.current()));
 		} finally {
 			savingPrescan = false;
 		}
 	}
 
 	$effect.pre(() => {
-		const serverValue = drive?.rip_speed != null ? String(drive.rip_speed) : '';
+		const serverValue = numberInputText(drive?.rip_speed);
 		if (!showSettings) {
 			speedInput = serverValue;
 		}
@@ -189,15 +185,8 @@
 
 	async function saveSpeed() {
 		if (!drive) return;
-		// bind:value on a number input can hand us a number; coerce before trim.
-		const trimmed = String(speedInput ?? '').trim();
-		const newSpeed = trimmed === '' ? null : parseInt(trimmed, 10);
-
-		// Skip save if value hasn't changed
-		if (newSpeed === (drive.rip_speed ?? null)) return;
-
-		// Basic validation - let the API reject out-of-range
-		if (newSpeed !== null && (isNaN(newSpeed) || newSpeed < 1 || newSpeed > 99)) return;
+		const newSpeed = parseRipSpeed(speedInput);
+		if (newSpeed === undefined || newSpeed === (drive.rip_speed ?? null)) return;
 
 		savingSpeed = true;
 		try {
@@ -205,7 +194,7 @@
 			onupdate?.();
 		} catch {
 			// revert input on failure
-			speedInput = drive.rip_speed != null ? String(drive.rip_speed) : '';
+			speedInput = numberInputText(drive.rip_speed);
 		} finally {
 			savingSpeed = false;
 		}
@@ -216,7 +205,7 @@
 			(e.target as HTMLInputElement).blur();
 		}
 		if (e.key === 'Escape') {
-			speedInput = drive?.rip_speed != null ? String(drive.rip_speed) : '';
+			speedInput = numberInputText(drive?.rip_speed);
 			showSettings = false;
 		}
 	}
@@ -677,14 +666,14 @@
 									type="number"
 									min={field.min}
 									max={field.max}
-									placeholder={field.globalDefault() != null ? String(field.globalDefault()) : ''}
+									placeholder={numberInputText(field.globalDefault())}
 									value={field.input()}
 									oninput={(e) => field.setInput((e.target as HTMLInputElement).value)}
 									onblur={() => savePrescanField(field)}
 									onkeydown={(e) => {
 										if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
 										if (e.key === 'Escape') {
-											field.setInput(field.current() != null ? String(field.current()) : '');
+											field.setInput(numberInputText(field.current()));
 											showSettings = false;
 										}
 									}}

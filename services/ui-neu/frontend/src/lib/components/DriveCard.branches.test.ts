@@ -8,10 +8,6 @@
 //   saveDefaultSession, confirmUnenroll, saveEdit, toggleUhd, setMode and
 //   saveEssentialUhd, and the `!drive` half of the guard in saveEssentialName:
 //   every control that calls them renders only once `drive` is set
-// - `field.input() ?? ''` in savePrescanField: each input getter returns a
-//   string, never null or undefined
-// - the isNaN half of the range check in savePrescanField and saveSpeed: a
-//   number input never hands back text that fails to parse, it hands back ''
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
