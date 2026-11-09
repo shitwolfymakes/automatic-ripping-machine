@@ -13,7 +13,8 @@ import {
 	formatDateTime,
 	formatShortDateTime,
 	calendarTimeAgo,
-	formatTrackLength
+	formatTrackLength,
+	formatElapsed
 } from '../utils/format';
 
 describe('formatBytes', () => {
@@ -325,5 +326,46 @@ describe('formatTrackLength', () => {
 		[3725, '62:05']
 	])('formatTrackLength(%s) = %j', (input, expected) => {
 		expect(formatTrackLength(input)).toBe(expected);
+	});
+});
+
+describe('formatElapsed', () => {
+	const START = '2025-01-01T00:00:00Z';
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it.each<[string | null, string]>([
+		[null, 'no start'],
+		['not-a-date', 'unparsable start']
+	])('returns null for %j (%s)', (start) => {
+		expect(formatElapsed(start, START)).toBeNull();
+	});
+
+	it('returns null for an unparsable end', () => {
+		expect(formatElapsed(START, 'not-a-date')).toBeNull();
+	});
+
+	it('formats hours, minutes and seconds', () => {
+		expect(formatElapsed(START, '2025-01-01T01:02:03Z')).toBe('1h 2m 3s');
+	});
+
+	it('omits hours when under an hour', () => {
+		expect(formatElapsed(START, '2025-01-01T00:02:03Z')).toBe('2m 3s');
+	});
+
+	it('shows only seconds when under a minute', () => {
+		expect(formatElapsed(START, '2025-01-01T00:00:03Z')).toBe('3s');
+	});
+
+	it('clamps an end before the start to 0s', () => {
+		expect(formatElapsed('2025-01-01T00:00:10Z', START)).toBe('0s');
+	});
+
+	it('measures to now when there is no end', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2025-01-01T00:01:05Z'));
+		expect(formatElapsed(START)).toBe('1m 5s');
 	});
 });

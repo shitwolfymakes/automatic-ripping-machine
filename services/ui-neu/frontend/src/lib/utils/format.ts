@@ -13,6 +13,26 @@ export function timeAgo(dateString: string | null | undefined): string {
 	return `${days}d ago`;
 }
 
+/**
+ * The time from startISO to endISO (or to now when endISO is missing) as
+ * `1h 2m 3s`, `2m 3s` or `3s`; null when the start is missing or either
+ * stamp is unparsable. An end before the start gives `0s`.
+ */
+export function formatElapsed(startISO: string | null, endISO?: string | null): string | null {
+	if (!startISO) return null;
+	const start = new Date(startISO).getTime();
+	if (isNaN(start)) return null;
+	const end = endISO ? new Date(endISO).getTime() : Date.now();
+	if (isNaN(end)) return null;
+	const diffSec = Math.max(0, Math.floor((end - start) / 1000));
+	const h = Math.floor(diffSec / 3600);
+	const m = Math.floor((diffSec % 3600) / 60);
+	const sec = diffSec % 60;
+	if (h > 0) return `${h}h ${m}m ${sec}s`;
+	if (m > 0) return `${m}m ${sec}s`;
+	return `${sec}s`;
+}
+
 const MINUTE = 60_000;
 
 function startOfDay(d: Date): number {

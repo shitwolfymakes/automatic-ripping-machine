@@ -15,6 +15,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { formatElapsed } from '$lib/utils/format';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { fetchGpus } from '$lib/api/gpus';
 	import { wsClient } from '$lib/api/ws';
@@ -53,21 +54,6 @@
 	let s = $derived($stats);
 	function statusCount(status: string): number {
 		return s.tasks_by_status?.[status] ?? 0;
-	}
-
-	function formatDuration(startISO: string | null, endISO?: string | null): string | null {
-		if (!startISO) return null;
-		const start = new Date(startISO).getTime();
-		if (isNaN(start)) return null;
-		const end = endISO ? new Date(endISO).getTime() : Date.now();
-		if (isNaN(end)) return null;
-		const diffSec = Math.max(0, Math.floor((end - start) / 1000));
-		const h = Math.floor(diffSec / 3600);
-		const m = Math.floor((diffSec % 3600) / 60);
-		const sec = diffSec % 60;
-		if (h > 0) return `${h}h ${m}m ${sec}s`;
-		if (m > 0) return `${m}m ${sec}s`;
-		return `${sec}s`;
 	}
 
 	function sourceBasename(path: string | null | undefined): string {
@@ -335,7 +321,7 @@
 											{/if}
 										</p>
 										{#if worker.claim_heartbeat_at}
-											{@const dur = formatDuration(worker.claim_heartbeat_at)}
+											{@const dur = formatElapsed(worker.claim_heartbeat_at)}
 											<p class="transcoder-page-worker-heartbeat">
 												{worker.progress_pct}%{#if dur}
 													&middot; {dur} since heartbeat{/if}
@@ -489,7 +475,7 @@
 										<!-- From claim to finish: created_at would add the queue wait (D-202).
 										     Tasks from before started_at existed fall back to created_at. -->
 										{#if job.status === 'done' && (job.started_at ?? job.created_at) && job.updated_at}
-											{@const dur = formatDuration(job.started_at ?? job.created_at, job.updated_at)}
+											{@const dur = formatElapsed(job.started_at ?? job.created_at, job.updated_at)}
 											{#if dur}
 												<span class="transcoder-page-took">Took {dur}</span>
 											{/if}
