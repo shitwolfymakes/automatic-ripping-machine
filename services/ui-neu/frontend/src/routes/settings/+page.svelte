@@ -38,7 +38,7 @@
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
 	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
-	import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
+	import { ImageCache } from '$lib/stores/imageCache.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
@@ -153,39 +153,7 @@
 	let themeFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
 	// --- Image cache state ---
-	let cacheStats = $state<ImageCacheStats | null>(null);
-	let cacheLoading = $state(false);
-	let cacheBusy = $state(false);
-	let cacheConfirmOpen = $state(false);
-	let cacheFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-
-	async function loadCacheStats() {
-		cacheLoading = true;
-		try {
-			cacheStats = await fetchImageCacheStats();
-		} catch {
-			cacheStats = null;
-		}
-		cacheLoading = false;
-	}
-
-	async function handleClearCache() {
-		cacheBusy = true;
-		cacheConfirmOpen = false;
-		try {
-			const result = await clearImageCache();
-			const cleared = result.cleared ?? 0;
-			const freedMb = ((result.freed_bytes ?? 0) / 1048576).toFixed(1);
-			cacheFeedback = {
-				type: 'success',
-				message: `Cleared ${cleared} cached image${cleared !== 1 ? 's' : ''} (${freedMb} MB)`
-			};
-			cacheStats = await fetchImageCacheStats();
-		} catch (e) {
-			cacheFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to clear cache' };
-		}
-		cacheBusy = false;
-	}
+	const imageCache = new ImageCache();
 
 	async function handleThemeDelete(id: string, label: string) {
 		if (!confirm(`Delete user theme "${label}"?`)) return;
@@ -209,7 +177,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'interface') loadCacheStats();
+		if (tab === 'interface') imageCache.load();
 		if (tab === 'drives') loadDriveSessions();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
@@ -234,7 +202,7 @@
 			.then(() => drives.start());
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'interface') loadCacheStats();
+		if (activeTab === 'interface') imageCache.load();
 		if (activeTab === 'drives') loadDriveSessions();
 		function onHashChange() {
 			if (programmaticHashChange) {
@@ -244,7 +212,7 @@
 			const tab = tabFromHash(window.location.hash);
 			activeTab = tab;
 			pendingField = fieldFromHash(window.location.hash);
-			if (tab === 'interface') loadCacheStats();
+			if (tab === 'interface') imageCache.load();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
@@ -453,8 +421,10 @@
 							<div>
 								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
 								<p class="settings-page-description mt-1">
-									{#if cacheLoading}Loading...
-									{:else if cacheStats}{cacheStats.count} cached image{cacheStats.count !== 1 ? 's' : ''} ({cacheStats.size_mb}
+									{#if imageCache.loading}Loading...
+									{:else if imageCache.stats}{imageCache.stats.count} cached image{imageCache.stats.count !== 1
+											? 's'
+											: ''} ({imageCache.stats.size_mb}
 										MB)
 									{:else}Unable to load cache stats
 									{/if}
@@ -462,16 +432,16 @@
 							</div>
 							<button
 								type="button"
-								onclick={() => (cacheConfirmOpen = true)}
-								disabled={cacheBusy || !cacheStats?.count}
+								onclick={() => (imageCache.confirmOpen = true)}
+								disabled={imageCache.busy || !imageCache.stats?.count}
 								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
 							>
 								Clear Cache
 							</button>
 						</div>
-						{#if cacheFeedback}
-							<p class="mt-2 settings-page-feedback" data-error={cacheFeedback.type !== 'success'}>
-								{cacheFeedback.message}
+						{#if imageCache.feedback}
+							<p class="mt-2 settings-page-feedback" data-error={imageCache.feedback.type !== 'success'}>
+								{imageCache.feedback.message}
 							</p>
 						{/if}
 					</div>
@@ -739,13 +709,13 @@
 </div>
 
 <ConfirmDialog
-	open={cacheConfirmOpen}
+	open={imageCache.confirmOpen}
 	title="Clear Image Cache"
 	message="Delete all cached poster images? They will be re-fetched on next view."
 	confirmLabel="Clear"
 	variant="danger"
-	onconfirm={handleClearCache}
-	oncancel={() => (cacheConfirmOpen = false)}
+	onconfirm={imageCache.clear}
+	oncancel={() => (imageCache.confirmOpen = false)}
 />
 
 <ToastHost />
