@@ -2,7 +2,7 @@
 // its sort order and the selection on it.
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
 import type { FileRoot, DirectoryListing } from '$lib/api/files';
-import { sortEntries, nextSort, sortRoots } from '$lib/utils/files';
+import { sortEntries, nextSort, sortRoots, childSubpath, selectionKey as buildSelectionKey } from '$lib/utils/files';
 import type { SortKey, SortDir } from '$lib/utils/files';
 
 export class FilesBrowser {
@@ -18,7 +18,7 @@ export class FilesBrowser {
 	sortKey = $state<SortKey>('name');
 	sortDir = $state<SortDir>('asc');
 
-	// Selection state — key is `subpath/name` within the current root
+	// Selection state — key is `root::subpath` (built by selectionKey)
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Set, copy-on-write; reassigning the $state field triggers updates
 	selectedKeys = $state(new Set<string>());
 
@@ -32,12 +32,12 @@ export class FilesBrowser {
 
 	// Build the item subpath for a named entry in the current directory
 	itemSubpath = (entryName: string): string => {
-		return this.current.subpath ? `${this.current.subpath}/${entryName}` : entryName;
+		return childSubpath(this.current.subpath, entryName);
 	};
 
 	// Build a selection key (root::subpath) for an entry
 	selectionKey = (entryName: string): string => {
-		return `${this.current.root}::${this.itemSubpath(entryName)}`;
+		return buildSelectionKey(this.current.root, this.itemSubpath(entryName));
 	};
 
 	toggleSort = (key: SortKey) => {

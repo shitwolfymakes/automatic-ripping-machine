@@ -5,6 +5,7 @@
 	import type { DirectoryListing } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
 	import { formatBytes } from '$lib/utils/format';
+	import { parseSelectionKey, moveTargetFolders, childSubpath } from '$lib/utils/files';
 	import {
 		fetchOrphanFolders,
 		deleteFolder as deleteOrphanFolder,
@@ -55,12 +56,8 @@
 	let pickerFolders = $derived.by(() => {
 		if (!pickerListing) return [];
 		// Only exclude selected folders when the picker is browsing the same dir as the source.
-		// When the picker is in a different dir, none of the source selection applies.
 		const sameDir = picker.root === browser.current.root && picker.subpath === browser.current.subpath;
-		const movingNames = sameDir
-			? new Set([...browser.selectedKeys].map((k) => k.split('::')[1].split('/').pop()))
-			: new Set<string | undefined>();
-		return pickerListing.entries.filter((e) => e.type === 'directory' && !movingNames.has(e.name));
+		return moveTargetFolders(pickerListing.entries, browser.selectedKeys, sameDir);
 	});
 
 	// Can we go up from picker?
@@ -169,7 +166,7 @@
 		let moved = 0;
 		let failed = 0;
 		for (const key of browser.selectedKeys) {
-			const [srcRoot, srcSubpath] = key.split('::');
+			const { root: srcRoot, subpath: srcSubpath } = parseSelectionKey(key);
 			try {
 				await moveFile(srcRoot, srcSubpath, picker.root, picker.subpath);
 				moved++;
@@ -193,12 +190,7 @@
 		let deleted = 0;
 		let failed = 0;
 		// Sort by subpath length descending so children are deleted before parents
-		const items = [...browser.selectedKeys]
-			.map((k) => {
-				const [r, sp] = k.split('::');
-				return { root: r, subpath: sp };
-			})
-			.sort((a, b) => b.subpath.length - a.subpath.length);
+		const items = [...browser.selectedKeys].map(parseSelectionKey).sort((a, b) => b.subpath.length - a.subpath.length);
 		for (const item of items) {
 			try {
 				await deleteFile(item.root, item.subpath);
@@ -896,8 +888,7 @@
 					{#each pickerFolders as folder (folder.name)}
 						<button
 							type="button"
-							onclick={() =>
-								pickerNavigate(picker.root, picker.subpath ? `${picker.subpath}/${folder.name}` : folder.name)}
+							onclick={() => pickerNavigate(picker.root, childSubpath(picker.subpath, folder.name))}
 							class="flex w-full items-center gap-3 files-page-picker-row files-page-picker-row-folder"
 						>
 							<svg

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { sortEntries, nextSort, sortRoots } from '../files';
+import {
+	sortEntries,
+	nextSort,
+	sortRoots,
+	childSubpath,
+	selectionKey,
+	parseSelectionKey,
+	moveTargetFolders
+} from '../files';
 import type { FileEntry, FileRoot } from '$lib/api/files';
 
 const file = (name: string, size?: number, modified?: string): FileEntry =>
@@ -78,5 +86,45 @@ describe('sortRoots', () => {
 	it('sorts in place and returns the same array', () => {
 		const input = [root('music'), root('raw')];
 		expect(sortRoots(input)).toBe(input);
+	});
+});
+
+describe('childSubpath', () => {
+	it('is just the name at the top of a root', () => {
+		expect(childSubpath('', 'a')).toBe('a');
+	});
+
+	it('joins the parent and the name below the top', () => {
+		expect(childSubpath('x/y', 'a')).toBe('x/y/a');
+	});
+});
+
+describe('selectionKey and parseSelectionKey', () => {
+	it('round-trips an ordinary path', () => {
+		const key = selectionKey('raw', 'x/y');
+		expect(key).toBe('raw::x/y');
+		expect(parseSelectionKey(key)).toEqual({ root: 'raw', subpath: 'x/y' });
+	});
+
+	it('cuts a name containing :: at the second separator (bug #535)', () => {
+		// Pins today's split; the fix belongs to #535
+		expect(parseSelectionKey('raw::a::b')).toEqual({ root: 'raw', subpath: 'a' });
+	});
+});
+
+describe('moveTargetFolders', () => {
+	const entries = [dir('movies'), file('notes.txt'), dir('shows')];
+	const selected = new Set(['raw::movies', 'raw::notes.txt']);
+
+	it('keeps only directories when the picker is elsewhere', () => {
+		expect(names(moveTargetFolders(entries, selected, false))).toEqual(['movies', 'shows']);
+	});
+
+	it('hides the selected names when the picker shows the source directory', () => {
+		expect(names(moveTargetFolders(entries, selected, true))).toEqual(['shows']);
+	});
+
+	it('hides the last segment of a nested selected path', () => {
+		expect(names(moveTargetFolders(entries, new Set(['raw::deep/er/shows']), true))).toEqual(['movies']);
 	});
 });

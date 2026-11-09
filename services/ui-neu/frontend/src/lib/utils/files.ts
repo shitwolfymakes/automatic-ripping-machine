@@ -1,5 +1,6 @@
-// Pure rules for the Files page: how a directory listing is sorted and how
-// the roots are ordered.
+// Pure rules for the Files page: how a directory listing is sorted, how the
+// roots are ordered, how selection keys are built and split, and which
+// folders the move picker offers.
 import type { FileEntry, FileRoot } from '$lib/api/files';
 
 export type SortKey = 'name' | 'size' | 'modified';
@@ -33,4 +34,38 @@ export function nextSort(key: SortKey, dir: SortDir, clicked: SortKey): { key: S
 // Known roots in a fixed order, any other key (or none) after them
 export function sortRoots(roots: FileRoot[]): FileRoot[] {
 	return roots.sort((a, b) => (rootOrder[a.key ?? ''] ?? 99) - (rootOrder[b.key ?? ''] ?? 99));
+}
+
+// The subpath of a named entry inside a directory: `parent/name`, or just
+// `name` at the top of the root
+export function childSubpath(parent: string, name: string): string {
+	return parent ? `${parent}/${name}` : name;
+}
+
+// A selected item is identified across roots by `root::subpath`
+export function selectionKey(root: string, subpath: string): string {
+	return `${root}::${subpath}`;
+}
+
+// Splits a selection key back into its root and subpath. It splits on every
+// `::`, so a name that itself contains `::` loses everything after it; that
+// is bug #535 and is fixed there, not here.
+export function parseSelectionKey(key: string): { root: string; subpath: string } {
+	const [root, subpath] = key.split('::');
+	return { root, subpath };
+}
+
+// The folders the move picker offers: the directories among its entries. When
+// the picker shows the source directory (sameDir) the selected items' own
+// names are hidden, since an item cannot be moved into itself. When it shows
+// another directory none of the source selection applies.
+export function moveTargetFolders(
+	entries: readonly FileEntry[],
+	selectedKeys: ReadonlySet<string>,
+	sameDir: boolean
+): FileEntry[] {
+	const movingNames = sameDir
+		? new Set([...selectedKeys].map((k) => parseSelectionKey(k).subpath.split('/').pop()))
+		: new Set<string | undefined>();
+	return entries.filter((e) => e.type === 'directory' && !movingNames.has(e.name));
 }
