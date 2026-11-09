@@ -1,29 +1,24 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { page } from '$app/stores';
-	import type MiniSearch from 'minisearch';
 	import {
 		fetchDocsNav,
 		fetchDocsPage,
-		loadDocsSearch,
-		searchDocs,
 		slugToId,
 		DocsNotFoundError,
 		type DocsNavSection,
-		type DocsPage,
-		type DocsSearchHit
+		type DocsPage
 	} from '$lib/docs/api';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
+	import { HelpSearch } from '$lib/stores/helpSearch.svelte';
 
 	const id = $derived(slugToId($page.params.slug));
 
 	let nav = $state<DocsNavSection[]>([]);
 	let doc = $state<DocsPage | null>(null);
 	let status = $state<'loading' | 'ready' | 'missing' | 'error'>('loading');
-	let query = $state('');
-	let hits = $state<DocsSearchHit[]>([]);
+	const helpSearch = new HelpSearch();
 	let topicsOpen = $state(false);
-	let search: MiniSearch | null = null;
 
 	fetchDocsNav()
 		.then((n) => (nav = n))
@@ -32,8 +27,7 @@
 	$effect(() => {
 		const current = id;
 		status = 'loading';
-		query = '';
-		hits = [];
+		helpSearch.clear();
 		topicsOpen = false;
 		fetchDocsPage(current)
 			.then(async (p) => {
@@ -51,23 +45,6 @@
 				status = e instanceof DocsNotFoundError ? 'missing' : 'error';
 			});
 	});
-
-	// Takes the value from the event rather than bind:value, so the query is
-	// never read before the binding has updated it.
-	async function onSearch(value: string) {
-		query = value;
-		if (!query.trim()) {
-			hits = [];
-			return;
-		}
-		try {
-			search ??= await loadDocsSearch();
-			hits = searchDocs(search, query);
-		} catch {
-			console.warn('help: search.json unavailable');
-			hits = [];
-		}
-	}
 </script>
 
 <svelte:head>
@@ -82,12 +59,12 @@
 			placeholder="Search help"
 			aria-label="Search help"
 			autocomplete="off"
-			value={query}
-			oninput={(e) => onSearch(e.currentTarget.value)}
+			value={helpSearch.query}
+			oninput={(e) => helpSearch.run(e.currentTarget.value)}
 		/>
-		{#if query.trim()}
+		{#if helpSearch.query.trim()}
 			<div class="panel panel-compact help-results">
-				{#each hits as hit (hit.id)}
+				{#each helpSearch.hits as hit (hit.id)}
 					<a class="nav-item" href={hit.href}>{hit.title}</a>
 				{:else}
 					<p class="help-empty">No matches</p>
