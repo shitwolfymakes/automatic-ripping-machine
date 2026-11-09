@@ -15,6 +15,7 @@ import {
 	formatShortDateTime,
 	calendarTimeAgo,
 	formatTrackLength,
+	formatTrackDuration,
 	formatMinSec,
 	formatElapsed
 } from '../utils/format';
@@ -340,6 +341,22 @@ describe('formatTrackLength', () => {
 		[3725, '62:05']
 	])('formatTrackLength(%s) = %j', (input, expected) => {
 		expect(formatTrackLength(input)).toBe(expected);
+	});
+});
+
+describe('formatTrackDuration', () => {
+	it.each([
+		[null, '--'],
+		[undefined, '--'],
+		[0, '--'],
+		[59, '0m 59s'],
+		[123, '2m 3s'],
+		[3599, '59m 59s'],
+		[3600, '1h 0m 0s'],
+		[3723, '1h 2m 3s'],
+		[90000, '25h 0m 0s']
+	])('formatTrackDuration(%s) = %j', (input, expected) => {
+		expect(formatTrackDuration(input)).toBe(expected);
 	});
 });
 

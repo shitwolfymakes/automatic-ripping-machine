@@ -302,6 +302,17 @@ export function formatTrackLength(seconds: number | null | undefined): string {
 	return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Formats a track length in seconds as "1h 2m 3s", or "2m 3s" under an hour
+// ('--' when missing or 0).
+export function formatTrackDuration(secs: number | null | undefined): string {
+	if (!secs) return '--';
+	const h = Math.floor(secs / 3600);
+	const m = Math.floor((secs % 3600) / 60);
+	const s = secs % 60;
+	if (h > 0) return `${h}h ${m}m ${s}s`;
+	return `${m}m ${s}s`;
+}
+
 /**
  * A length as m:ss, rounded to the nearest second, and `-` when missing.
  * `unitsPerSecond` is 1000 for milliseconds and 1 for seconds.
