@@ -10,6 +10,7 @@
 	import Glyph from './Glyph.svelte';
 	import IsoLibrarySetup from './iso-picker/IsoLibrarySetup.svelte';
 	import IsoPathBreadcrumb from './iso-picker/IsoPathBreadcrumb.svelte';
+	import IsoPickerFooter from './iso-picker/IsoPickerFooter.svelte';
 	import { pathTailTruncate } from '$lib/utils/truncate';
 	import { formatBytes } from '$lib/utils/format';
 	import { pathTrail } from '$lib/utils/path';
@@ -510,28 +511,15 @@
 			<div class="sr-only" aria-live="polite">{announcement}</div>
 		</div>
 
-		<div class="iso-picker-footer">
-			{#if browser.notConfigured}
-				<p class="iso-picker-footer-helper">Nothing to pick until the library is set up.</p>
-				<div class="flex gap-2">
-					<button type="button" class="btn" onclick={() => onclose()}>Close</button>
-				</div>
-			{:else}
-				<p class="iso-picker-footer-helper">
-					{selectedName
-						? `Selected: ${selectedName}`
-						: isFolderMode
-							? 'Pick a disc folder to start.'
-							: 'Pick an ISO to start.'}
-				</p>
-				<div class="flex gap-2">
-					<button type="button" class="btn" onclick={() => onclose()} disabled={starting}>Cancel</button>
-					<button type="button" class="btn btn-primary" onclick={handleStart} disabled={!selectedPath || starting}>
-						{starting ? 'Starting...' : 'Start rip'}
-					</button>
-				</div>
-			{/if}
-		</div>
+		<IsoPickerFooter
+			notConfigured={browser.notConfigured}
+			{isFolderMode}
+			{selectedName}
+			{selectedPath}
+			{starting}
+			{onclose}
+			onstart={handleStart}
+		/>
 	</div>
 </SlideOver>
 
@@ -678,11 +666,6 @@
 		text-transform: none;
 		color: var(--color-text-faint);
 	}
-	/* The slide-over's body (SlideOver.svelte's own markup) is the scrolling
-	   container; pinning the footer to ITS bottom (rather than letting it
-	   scroll away with the content) is this component's one deliberate
-	   departure from the New-session slide-over pattern (spec 7.1). Negative
-	   margins cancel that body's p-6 so the footer spans full-bleed. */
 	/* The picker fills SlideOver's scrolling body (min-height: 100% of its
 	   content box) as a column, so the footer sits at the panel's bottom
 	   even when the library is short or empty; sticky keeps it there when a
@@ -695,28 +678,5 @@
 	.iso-picker-main {
 		flex: 1 0 auto;
 		padding-bottom: 1rem;
-	}
-	.iso-picker-footer {
-		position: sticky;
-		bottom: -1.5rem;
-		margin: 0 -1.5rem -1.5rem;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		border-top: 1px solid var(--color-border);
-		background: var(--color-surface);
-		padding: 0.75rem 1.5rem;
-	}
-	.iso-picker-footer-helper {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
-	}
-	@media (max-width: 400px) {
-		.iso-picker-footer {
-			flex-direction: column;
-			align-items: stretch;
-		}
 	}
 </style>
