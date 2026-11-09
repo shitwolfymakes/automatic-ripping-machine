@@ -2,7 +2,14 @@
 	import { untrack, type Snippet } from 'svelte';
 	import type { LogEntry } from '$lib/api/logs';
 	import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
-	import { filterEntries, type LogLevelFilter, type LogServiceFilter } from '$lib/utils/log-view';
+	import {
+		countLabel,
+		filterEntries,
+		followLabel,
+		matchLabel,
+		type LogLevelFilter,
+		type LogServiceFilter
+	} from '$lib/utils/log-view';
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 
@@ -72,22 +79,6 @@
 			query: search ? searchText : '',
 			matchCase
 		})
-	);
-
-	const isFiltered = $derived(filtered.length !== entries.length);
-
-	const countLabel = $derived(
-		isFiltered ? `Showing ${filtered.length} of ${entries.length} lines` : `${entries.length} lines`
-	);
-
-	const matchLabel = $derived(`${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}`);
-
-	const followLabel = $derived(
-		following
-			? 'Following'
-			: newWhilePaused === 0
-				? 'Paused'
-				: `Paused · ${newWhilePaused} new ${newWhilePaused === 1 ? 'line' : 'lines'}`
 	);
 
 	// The well is a fixed dark surface in both modes (see the --color-terminal-*
@@ -282,7 +273,7 @@
 						data-testid="job-log-search"
 					/>
 					{#if searchText}
-						<span class="log-view-search-count" data-testid="job-log-search-count">{matchLabel}</span>
+						<span class="log-view-search-count" data-testid="job-log-search-count">{matchLabel(filtered.length)}</span>
 						<CloseButton label="Clear filter" class="log-view-search-clear" onclick={clearSearch} />
 					{/if}
 					<button
@@ -352,9 +343,9 @@
 		</div>
 
 		<div class="log-view-status">
-			<span data-testid="job-log-count">{countLabel}</span>
+			<span data-testid="job-log-count">{countLabel(filtered.length, entries.length)}</span>
 			<span aria-hidden="true">·</span>
-			<span data-testid="job-log-follow">{followLabel}</span>
+			<span data-testid="job-log-follow">{followLabel(following, newWhilePaused)}</span>
 		</div>
 	{/if}
 </div>

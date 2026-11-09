@@ -33,3 +33,22 @@ export function filterEntries(entries: LogEntry[], filter: LogFilter): LogEntry[
 		return true;
 	});
 }
+
+/** "N lines", or "Showing X of Y lines" once a filter hides some. */
+export function countLabel(shown: number, total: number): string {
+	return shown !== total ? `Showing ${shown} of ${total} lines` : `${total} lines`;
+}
+
+/** "1 match", or "N matches". */
+export function matchLabel(count: number): string {
+	return `${count} ${count === 1 ? 'match' : 'matches'}`;
+}
+
+/** "Following", "Paused", or "Paused · N new line(s)". */
+export function followLabel(following: boolean, waiting: number): string {
+	return following
+		? 'Following'
+		: waiting === 0
+			? 'Paused'
+			: `Paused · ${waiting} new ${waiting === 1 ? 'line' : 'lines'}`;
+}

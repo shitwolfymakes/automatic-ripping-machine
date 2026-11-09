@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '$lib/api/logs';
-import { filterEntries, type LogFilter } from '../log-view';
+import { countLabel, filterEntries, followLabel, matchLabel, type LogFilter } from '../log-view';
 
 function entry(over: Partial<LogEntry> = {}): LogEntry {
 	return { level: 'info', logger: 'log', event: 'evt', service: 'arm-backend', ...over };
@@ -108,5 +108,52 @@ describe('filterEntries combined filters', () => {
 	it('keeps the order of the entries', () => {
 		const entries = [entry({ event: 'c' }), entry({ event: 'a' }), entry({ event: 'b' })];
 		expect(filterEntries(entries, filter()).map((e) => e.event)).toEqual(['c', 'a', 'b']);
+	});
+});
+
+describe('countLabel', () => {
+	it('shows just the total when nothing is hidden', () => {
+		expect(countLabel(5, 5)).toBe('5 lines');
+	});
+
+	it('shows just the total for 0 of 0', () => {
+		expect(countLabel(0, 0)).toBe('0 lines');
+	});
+
+	it('shows X of Y when a filter hides some lines', () => {
+		expect(countLabel(2, 7)).toBe('Showing 2 of 7 lines');
+	});
+});
+
+describe('matchLabel', () => {
+	it('uses the plural for 0', () => {
+		expect(matchLabel(0)).toBe('0 matches');
+	});
+
+	it('uses the singular for 1', () => {
+		expect(matchLabel(1)).toBe('1 match');
+	});
+
+	it('uses the plural for 2', () => {
+		expect(matchLabel(2)).toBe('2 matches');
+	});
+});
+
+describe('followLabel', () => {
+	it('says Following whatever the waiting count', () => {
+		expect(followLabel(true, 0)).toBe('Following');
+		expect(followLabel(true, 3)).toBe('Following');
+	});
+
+	it('says Paused with nothing waiting', () => {
+		expect(followLabel(false, 0)).toBe('Paused');
+	});
+
+	it('says Paused with 1 new line', () => {
+		expect(followLabel(false, 1)).toBe('Paused · 1 new line');
+	});
+
+	it('says Paused with N new lines', () => {
+		expect(followLabel(false, 2)).toBe('Paused · 2 new lines');
 	});
 });
