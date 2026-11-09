@@ -5,14 +5,8 @@
 	// submit-body shapes follow the Vue source faithfully.
 	import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
+	import { trackFiltersBody, type TrackFilters } from '$lib/utils/track-filters';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
-
-	type TrackFilters = {
-		min_duration_seconds?: number | null;
-		max_duration_seconds?: number | null;
-		title_indices?: number[] | null;
-		title_indices_exclude?: number[] | null;
-	};
 
 	let {
 		preset = null,
@@ -41,13 +35,6 @@
 	const showFilters = $derived(trackSelection === 'custom' && !isBuiltin);
 	const canSubmit = $derived(!submitting && name.trim().length > 0);
 
-	// Mirrors the Vue source: only send a track_filters_json object for the
-	// custom selection, and drop null/undefined keys from it; otherwise null.
-	function buildTrackFilters(): TrackFilters | null {
-		if (trackSelection !== 'custom') return null;
-		return Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== null && v !== undefined)) as TrackFilters;
-	}
-
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		// Built-ins are read-only — no save path (Enter is a no-op too).
@@ -63,7 +50,7 @@
 					track_selection: trackSelection,
 					identification_mode: identificationMode,
 					output_mode: outputMode,
-					track_filters_json: buildTrackFilters()
+					track_filters_json: trackFiltersBody(trackSelection, filters)
 				});
 			} else {
 				result = await createRipPreset({
@@ -72,7 +59,7 @@
 					track_selection: trackSelection,
 					identification_mode: identificationMode,
 					output_mode: outputMode,
-					track_filters_json: buildTrackFilters()
+					track_filters_json: trackFiltersBody(trackSelection, filters)
 				});
 			}
 			onsaved(result);

@@ -1,6 +1,8 @@
 // A rip preset's custom track filters (its track_filters_json) and the
 // parsing behind their inputs.
 
+import type { TrackSelection } from '$lib/types/api.gen';
+
 /** The `track_filters_json` shape; all conditions are ANDed. */
 export type TrackFilters = {
 	min_duration_seconds?: number | null;
@@ -23,4 +25,14 @@ export function parseIndexList(v: string): number[] {
 /** A duration input's seconds; null when blank. */
 export function parseDuration(v: string): number | null {
 	return v ? Number(v) : null;
+}
+
+/**
+ * The `track_filters_json` a rip preset request sends. Mirrors the Vue
+ * source: an object only for the custom selection, with its null and
+ * undefined keys dropped; null otherwise.
+ */
+export function trackFiltersBody(selection: TrackSelection, filters: TrackFilters): TrackFilters | null {
+	if (selection !== 'custom') return null;
+	return Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== null && v !== undefined)) as TrackFilters;
 }

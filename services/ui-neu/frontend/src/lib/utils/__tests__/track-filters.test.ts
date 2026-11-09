@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDuration, parseIndexList } from '../track-filters';
+import { parseDuration, parseIndexList, trackFiltersBody } from '../track-filters';
 
 describe('parseIndexList', () => {
 	it('splits on commas', () => {
@@ -46,5 +46,39 @@ describe('parseDuration', () => {
 
 	it('gives NaN for non-numeric text', () => {
 		expect(parseDuration('abc')).toBeNaN();
+	});
+});
+
+describe('trackFiltersBody', () => {
+	it.each(['main_feature', 'all_tracks', 'archive'] as const)(
+		'gives null for the %s selection, even with filters set',
+		(selection) => {
+			expect(trackFiltersBody(selection, { min_duration_seconds: 60, title_indices: [1] })).toBeNull();
+		}
+	);
+
+	it('drops null and undefined keys for the custom selection', () => {
+		expect(
+			trackFiltersBody('custom', {
+				min_duration_seconds: null,
+				max_duration_seconds: undefined,
+				title_indices: [2]
+			})
+		).toEqual({ title_indices: [2] });
+	});
+
+	it('keeps a zero, an empty array and a non-empty array', () => {
+		const filters = { min_duration_seconds: 0, title_indices: [], title_indices_exclude: [3, 4] };
+		expect(trackFiltersBody('custom', filters)).toEqual(filters);
+	});
+
+	it('gives an empty object for empty filters', () => {
+		expect(trackFiltersBody('custom', {})).toEqual({});
+	});
+
+	it('leaves the input object unchanged', () => {
+		const filters = { min_duration_seconds: null, title_indices: [1] };
+		trackFiltersBody('custom', filters);
+		expect(filters).toEqual({ min_duration_seconds: null, title_indices: [1] });
 	});
 });
