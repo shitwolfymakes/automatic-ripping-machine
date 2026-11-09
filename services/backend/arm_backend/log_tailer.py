@@ -140,14 +140,28 @@ class LogTailer:
         state = self._files.get(path)
         if state is None:
             return
-        loop = asyncio.get_event_loop()
         # Drain until EOF (readline returns "").
+        await self._drain_to_eof(state)
+        new_state = await self._rotate_if_needed(path, state)
+        if new_state is not None:
+            # Drain the freshly-opened file in this same tick so a rotation
+            # mid-burst doesn't lose a tick of latency on subscribers.
+            await self._drain_to_eof(new_state)
+
+    async def _drain_to_eof(self, state: _FileState) -> None:
+        """Emit every line the file holds, up to EOF."""
+        loop = asyncio.get_event_loop()
         while True:
             line = await loop.run_in_executor(None, state.fd.readline)
             if not line:
                 break
             await self._emit_line(line)
 
+    async def _rotate_if_needed(self, path: Path, state: _FileState) -> _FileState | None:
+        """Reopen `path` when it now names a new file (the
+        RotatingFileHandler rotated it), returning the new state; None when
+        it did not rotate, is gone for the moment, or cannot be reopened.
+        """
         # Detect rotation: stat the path; if inode changed the
         # RotatingFileHandler renamed the file and opened a new one.
         try:
@@ -155,32 +169,33 @@ class LogTailer:
         except FileNotFoundError:
             # File temporarily gone (rotation in progress). Keep old fd;
             # next tick will retry the stat.
-            return
-        if new_inode != state.inode:
-            logger.debug("tail rotation detected path=%s old_inode=%d new_inode=%d", path, state.inode, new_inode)
-            try:
-                state.fd.close()
-            except Exception:
-                pass
-            try:
-                fd = await asyncio.to_thread(open, path, "r", encoding="utf-8", errors="replace")
-                # On a fresh post-rotation file, read from the start —
-                # `RotatingFileHandler` opened the new file empty, so any
-                # bytes already there are unread by us.
-                inode = os.fstat(fd.fileno()).st_ino
-                self._files[path] = _FileState(path=path, fd=fd, inode=inode)
-            except OSError as exc:
-                logger.warning("tail reopen failed path=%s err=%s", path, exc)
-                self._files.pop(path, None)
-                return
-            # Drain the freshly-opened file in this same tick so a rotation
-            # mid-burst doesn't lose a tick of latency on subscribers.
-            new_state = self._files[path]
-            while True:
-                line = await loop.run_in_executor(None, new_state.fd.readline)
-                if not line:
-                    break
-                await self._emit_line(line)
+            return None
+        if new_inode == state.inode:
+            return None
+        logger.debug("tail rotation detected path=%s old_inode=%d new_inode=%d", path, state.inode, new_inode)
+        return await self._reopen(path, state)
+
+    async def _reopen(self, path: Path, state: _FileState) -> _FileState | None:
+        """Swap a rotated file's handle for one on the new file, read from
+        its start; None when the new file cannot be opened, which also stops
+        tailing it.
+        """
+        try:
+            state.fd.close()
+        except Exception:
+            pass
+        try:
+            fd = await asyncio.to_thread(open, path, "r", encoding="utf-8", errors="replace")
+            # On a fresh post-rotation file, read from the start —
+            # `RotatingFileHandler` opened the new file empty, so any
+            # bytes already there are unread by us.
+            inode = os.fstat(fd.fileno()).st_ino
+            self._files[path] = _FileState(path=path, fd=fd, inode=inode)
+        except OSError as exc:
+            logger.warning("tail reopen failed path=%s err=%s", path, exc)
+            self._files.pop(path, None)
+            return None
+        return self._files[path]
 
     async def _emit_line(self, raw: str) -> None:
         line = raw.strip()
