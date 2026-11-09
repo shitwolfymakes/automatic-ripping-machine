@@ -184,6 +184,17 @@ export function resolveJob(jobId: string, body: ResolveJobBody): Promise<Resolve
 	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, buildResolvePayload(body));
 }
 
+// In wire order; a key the caller left undefined is not sent.
+const OPTIONAL_RESOLVE_KEYS = [
+	'season',
+	'disc_number',
+	'disc_total',
+	'media_type',
+	'music',
+	'external_ids',
+	'match'
+] as const satisfies readonly (keyof ResolveJobBody)[];
+
 // season/disc_number/disc_total are a classification like media_type on the
 // Backend, not part of the identity statement: omitted keeps whatever value
 // is already stored (a disc-hint source may have filled it before the
@@ -195,22 +206,10 @@ function buildResolvePayload(body: ResolveJobBody): Record<string, unknown> {
 		title: body.title,
 		year: body.year ?? null
 	};
-	if (body.season !== undefined) {
-		payload.season = body.season;
-	}
-	if (body.disc_number !== undefined) {
-		payload.disc_number = body.disc_number;
-	}
-	if (body.disc_total !== undefined) {
-		payload.disc_total = body.disc_total;
-	}
-	payload.media_type = body.media_type;
-	payload.music = body.music;
-	if (body.external_ids !== undefined) {
-		payload.external_ids = body.external_ids;
-	}
-	if (body.match !== undefined) {
-		payload.match = body.match;
+	for (const key of OPTIONAL_RESOLVE_KEYS) {
+		if (body[key] !== undefined) {
+			payload[key] = body[key];
+		}
 	}
 	return payload;
 }
