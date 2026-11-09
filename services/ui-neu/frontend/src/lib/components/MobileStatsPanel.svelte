@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
+	import { transcoderDotStatus } from '$lib/utils/header-status';
 	import { countRipping } from '$lib/utils/job-status';
 	import SidebarStats from './SidebarStats.svelte';
 
@@ -35,12 +36,7 @@
 		{
 			label: 'Transcode',
 			href: '/transcoder',
-			status:
-				$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true)
-					? 'ok'
-					: $dashboard.transcoder_online
-						? 'warn'
-						: 'off'
+			status: transcoderDotStatus($dashboard)
 		},
 		{
 			label: 'Key',

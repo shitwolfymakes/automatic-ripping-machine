@@ -33,6 +33,32 @@ describe('transcoderDotStatus', () => {
 	it('is off when offline', () => {
 		expect(transcoderDotStatus({ transcoder_online: false, transcoder_stats: null } as Input)).toBe('off');
 	});
+
+	it('is ok when online and worker_running is null', () => {
+		expect(
+			transcoderDotStatus({
+				transcoder_online: true,
+				transcoder_stats: { worker_running: null }
+			} as unknown as Input)
+		).toBe('ok');
+	});
+
+	it('is ok when online and the stats are missing', () => {
+		expect(transcoderDotStatus({ transcoder_online: true } as Input)).toBe('ok');
+	});
+
+	it.each([true, false, null, undefined])('is off when offline with worker_running %s', (running) => {
+		expect(
+			transcoderDotStatus({
+				transcoder_online: false,
+				transcoder_stats: { worker_running: running }
+			} as unknown as Input)
+		).toBe('off');
+	});
+
+	it('is off when offline with empty stats', () => {
+		expect(transcoderDotStatus({ transcoder_online: false, transcoder_stats: {} } as Input)).toBe('off');
+	});
 });
 
 describe('makemkvKeyTitle', () => {
