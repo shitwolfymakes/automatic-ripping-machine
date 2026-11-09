@@ -857,7 +857,7 @@ function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: bool
  * dark", permanently overriding a saved `light` preference the moment the
  * user leaves a locked scheme.
  */
-function resolveEffectiveDark(root: HTMLElement, scheme: ColorScheme): boolean {
+function resolveEffectiveDark(scheme: ColorScheme): boolean {
 	if (scheme.mode === 'dark') return true;
 	if (scheme.mode === 'light') return false;
 	const saved = localStorage.getItem('theme');
@@ -871,7 +871,7 @@ function applyScheme(id: string) {
 	const schemes = get(allSchemes);
 	const scheme = schemes.find((s) => s.id === id) ?? DEFAULT_SCHEME;
 	const root = document.documentElement;
-	const effectiveDark = resolveEffectiveDark(root, scheme);
+	const effectiveDark = resolveEffectiveDark(scheme);
 	applyTokens(root, scheme, effectiveDark);
 
 	root.dataset.scheme = scheme.id;
