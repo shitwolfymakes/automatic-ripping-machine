@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { JobView, TrackView } from '$lib/types/api.gen';
 
-vi.mock('$lib/api/jobs', () => ({ fetchJob: vi.fn(), fetchNamingPreview: vi.fn(), updateTrack: vi.fn() }));
+vi.mock('$lib/api/jobs', () => ({
+	fetchJob: vi.fn(),
+	fetchNamingPreview: vi.fn(),
+	updateTrack: vi.fn(),
+	resolveJob: vi.fn()
+}));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 import { goto } from '$app/navigation';
-import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
+import { buildResolveBody } from '$lib/utils/job-resolve';
 import { ApiError } from '$lib/api/client';
 import { createJob, createTrack, createJobDetail } from '$lib/components/__fixtures__/job';
 import { JobDetail } from '../jobDetail.svelte';
@@ -14,6 +20,7 @@ const mockFetchJob = vi.mocked(fetchJob);
 const mockPreview = vi.mocked(fetchNamingPreview);
 const mockUpdateTrack = vi.mocked(updateTrack);
 const mockGoto = vi.mocked(goto);
+const mockResolve = vi.mocked(resolveJob);
 
 const previewOf = (...trackIds: string[]) =>
 	({ job_output_dir: '', job_output_name: '', items: trackIds.map((track_id) => ({ track_id })) }) as never;
@@ -33,6 +40,7 @@ beforeEach(() => {
 	mockPreview.mockReset();
 	mockUpdateTrack.mockReset();
 	mockGoto.mockReset();
+	mockResolve.mockReset();
 	mockFetchJob.mockResolvedValue(createJobDetail());
 	mockPreview.mockResolvedValue(previewOf());
 });
@@ -274,5 +282,39 @@ describe('JobDetail derived values', () => {
 		const d = detailWith({ metadata_json: null as never });
 		expect(d.rawMetadataPairs).toEqual([]);
 		expect(d.jobMeta).toEqual({});
+	});
+});
+
+describe('JobDetail saveFact', () => {
+	it('returns false and sends nothing when no job is loaded', async () => {
+		const d = newDetail();
+		expect(await d.saveFact('title', 'Dune')).toBe(false);
+		expect(mockResolve).not.toHaveBeenCalled();
+		expect(mockFetchJob).not.toHaveBeenCalled();
+	});
+
+	it('throws on a blank title before any request', async () => {
+		const d = detailWith({ id: 'job_1' });
+		await expect(d.saveFact('title', '   ')).rejects.toThrow('A title is required');
+		expect(mockResolve).not.toHaveBeenCalled();
+		expect(mockFetchJob).not.toHaveBeenCalled();
+	});
+
+	it('sends the resolve body, reloads the job and returns true for a TV season change', async () => {
+		const d = detailWith({ id: 'job_1', media_type: 'tv', season: 1 });
+		const job = d.detail!.job;
+		mockResolve.mockResolvedValue({ job: { ...job, season: 2 } } as never);
+		expect(await d.saveFact('season', '2')).toBe(true);
+		expect(mockResolve).toHaveBeenCalledWith('job_1', buildResolveBody(job, 'season', '2'));
+		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+
+	it('returns false for a movie edit, still reloading the job', async () => {
+		const d = detailWith({ id: 'job_1', media_type: 'movie' });
+		const job = d.detail!.job;
+		mockResolve.mockResolvedValue({ job: { ...job, title: 'Dune' } } as never);
+		expect(await d.saveFact('title', 'Dune')).toBe(false);
+		expect(mockResolve).toHaveBeenCalledWith('job_1', buildResolveBody(job, 'title', 'Dune'));
+		expect(mockFetchJob).toHaveBeenCalledTimes(1);
 	});
 });

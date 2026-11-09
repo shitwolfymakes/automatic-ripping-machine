@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { resolveJob } from '$lib/api/jobs';
 	import { posterSrc, posterFallback, jobPoster } from '$lib/utils/poster';
 	import PosterImage from '$lib/components/PosterImage.svelte';
 	import type { ResolveResponse, ApplySessionResponse } from '$lib/types/api.gen';
@@ -24,7 +23,6 @@
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
-	import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
 	import { formatFps } from '$lib/utils/fps';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -107,16 +105,8 @@
 		jobDetail.load();
 	}
 
-	// A fact edited in place goes through resolve (see buildResolveBody). A TV
-	// job's season or disc change re-runs the episode match, so the panel shows
-	// it matching until the run reports.
 	async function saveFact(field: EditableJobField | 'title', raw: string) {
-		if (!detail) return;
-		const job = detail.job;
-		const body = buildResolveBody(job, field, raw);
-		const resp = await resolveJob(job.id, body);
-		await jobDetail.load();
-		if (tvSeasonOrDiscChanged(job, resp?.job)) matching.start();
+		if (await jobDetail.saveFact(field, raw)) matching.start();
 	}
 
 	function handleSeriesApplied() {

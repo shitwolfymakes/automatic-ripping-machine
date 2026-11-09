@@ -1,10 +1,12 @@
 // The job page's job: the loaded job detail, its loading and error state,
 // the rendered naming preview and the values derived from the job alone.
 import { goto } from '$app/navigation';
-import { fetchJob, fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
 import type { JobDetailView, NamingPreviewItem } from '$lib/types/api.gen';
+import type { EditableJobField } from '$lib/utils/job-fields';
 import { readJobMetadata } from '$lib/utils/job-metadata';
+import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
 import { extractMusicTracks } from '$lib/utils/music-tracks';
 
 // The last preview answered 409 (no routed session, so no template). The
@@ -62,6 +64,19 @@ export class JobDetail {
 			// on failure to restore the last server-truth value in the checkbox.
 			await this.load();
 		}
+	};
+
+	// A fact edited in place goes through resolve (see buildResolveBody). A TV
+	// job's season or disc change re-runs the episode match, so this returns
+	// true then and the caller restarts the match, which the panel shows as
+	// matching until the run reports.
+	saveFact = async (field: EditableJobField | 'title', raw: string): Promise<boolean> => {
+		if (!this.detail) return false;
+		const job = this.detail.job;
+		const body = buildResolveBody(job, field, raw);
+		const resp = await resolveJob(job.id, body);
+		await this.load();
+		return tvSeasonOrDiscChanged(job, resp?.job);
 	};
 
 	#loadPreview = async (id: string, poll: boolean): Promise<void> => {
