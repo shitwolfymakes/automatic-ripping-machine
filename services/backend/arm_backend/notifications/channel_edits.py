@@ -11,7 +11,8 @@ from fastapi import HTTPException, status
 from arm_backend.config import settings
 from arm_backend.notification_dispatcher import NOTABLE_EVENT_TYPES
 from arm_backend.notifications.apprise_notifier import first_invalid_apprise_url
-from arm_backend.notifications.bash_hook import HookError, patch_bash_config, secret_set, storage_config
+from arm_backend.notifications.bash_config import patch_bash_config, storage_config
+from arm_backend.notifications.bash_hook import HookError, secret_set
 from arm_backend.notifications.field_map import compose_url_from_fields, merge_patch_config
 from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 from arm_backend.notifications.url_composer import redact_apprise_url

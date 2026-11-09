@@ -6,15 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from arm_backend.notifications.bash_hook import (
-    HookError,
-    masked,
+from arm_backend.notifications.bash_config import (
     mask_bash_config,
     merge_bash_config,
     patch_bash_config,
+    storage_config,
+)
+from arm_backend.notifications.bash_hook import (
+    HookError,
+    masked,
     prepare_run,
     redact_secrets,
-    storage_config,
 )
 
 HEADER = (

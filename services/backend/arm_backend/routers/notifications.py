@@ -41,12 +41,11 @@ from arm_backend.notification_format import TemplateRenderError, resolve_title_b
 from arm_backend.notifications import catalog as catalog_module
 from arm_backend.notifications.apprise_notifier import AppriseNotifier
 from arm_backend.notifications.channel_edits import apply_channel_patch, new_channel
+from arm_backend.notifications.bash_config import mask_bash_config, merge_bash_config
 from arm_backend.notifications.bash_hook import (
     HookError,
     PreparedRun,
-    mask_bash_config,
     masked,
-    merge_bash_config,
     prepare_run,
     redact_secrets,
     secret_set,
