@@ -1,5 +1,6 @@
 import type { JobView, JobStatus, TranscodeTaskView, ConfigView, IsoPrepareView } from '$lib/types/api.gen';
 import { apiFetch } from './client';
+import { fetchConfigView } from './config';
 import { fetchDrives } from './drives';
 import { fetchIsoPreparing } from './iso';
 import { fetchJobs } from './jobs';
@@ -97,10 +98,6 @@ function isActiveJob(job: JobView): boolean {
 
 const IN_PROGRESS_TRANSCODE_STATUSES = new Set(['queued', 'in_progress']);
 
-function fetchConfig(): Promise<ConfigView> {
-	return apiFetch<ConfigView>('/api/config');
-}
-
 /** The dashboard with every failed read's fields filled with empty defaults. */
 export async function fetchDashboard(): Promise<DashboardData> {
 	const s = await fetchDashboardSnapshot();
@@ -182,7 +179,7 @@ function activeTranscodesOf(transcodes: TranscodeTaskView[] | null): TranscodeTa
 export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 	const [configRes, jobsRes, drivesRes, transcodesRes, transcoderStatsRes, notificationsRes, preparingRes] =
 		await Promise.allSettled([
-			fetchConfig(),
+			fetchConfigView(),
 			fetchJobs(),
 			fetchDrives({ includeRetired: true }),
 			fetchTranscoderJobs(),

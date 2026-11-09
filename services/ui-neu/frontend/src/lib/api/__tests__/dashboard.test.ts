@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/api/client', () => ({
-	apiFetch: vi.fn(() =>
+vi.mock('$lib/api/client', () => {
+	const apiFetch = vi.fn((_path: string, _init?: RequestInit) =>
 		Promise.resolve({ ripping_paused: false, makemkv_key_valid: true, makemkv_key_checked_at: null })
-	)
-}));
+	);
+	// config.ts reads through `get`, which is apiFetch(path, { method: 'GET' }).
+	return { apiFetch, get: (path: string) => apiFetch(path, { method: 'GET' }) };
+});
 
 vi.mock('$lib/api/drives', () => ({
 	fetchDrives: vi.fn()
