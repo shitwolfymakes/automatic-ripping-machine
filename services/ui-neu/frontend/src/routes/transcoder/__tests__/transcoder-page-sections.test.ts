@@ -2,10 +2,9 @@
 // into helpers, classes and components. transcoder-page.test.ts covers the
 // happy paths; this file covers the gaps it leaves.
 //
-// Three branches of +page.svelte cannot be reached and stay uncovered:
+// Two branches of +page.svelte cannot be reached and stay uncovered:
 // - `if (!startISO) return null` in formatDuration: both callers check the
 //   start before calling it.
-// - `TAB_LABELS[tab] ?? tab`: every tab has a label.
 // - `parts[parts.length - 1] ?? ''` in sourceBasename: a split never returns
 //   an empty list.
 //

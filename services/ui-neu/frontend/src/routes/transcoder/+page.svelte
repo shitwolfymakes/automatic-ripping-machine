@@ -395,7 +395,7 @@
 			<div class="tabs transcoder-page-tabs">
 				{#each tabs as tab (tab)}
 					<button onclick={() => switchTab(tab)} data-selected={activeTab === tab} class="tabs-tab transcoder-page-tab">
-						{TAB_LABELS[tab] ?? tab}
+						{TAB_LABELS[tab]}
 					</button>
 				{/each}
 			</div>
