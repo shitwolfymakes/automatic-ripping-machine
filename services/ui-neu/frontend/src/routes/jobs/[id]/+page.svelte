@@ -24,6 +24,7 @@
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
 	import { formatFps } from '$lib/utils/fps';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -106,29 +107,16 @@
 		jobDetail.load();
 	}
 
-	// A fact edited in place: title, year, season, disc number or disc total go
-	// through resolve (title and year restate the identity; the rest are
-	// classifications, null clears). A TV job's season or disc change re-runs
-	// the episode match, so the panel shows it matching until the run reports.
+	// A fact edited in place goes through resolve (see buildResolveBody). A TV
+	// job's season or disc change re-runs the episode match, so the panel shows
+	// it matching until the run reports.
 	async function saveFact(field: EditableJobField | 'title', raw: string) {
 		if (!detail) return;
 		const job = detail.job;
-		const num = (v: string) => (v.trim() === '' ? null : Number(v));
-		if (field === 'title' && !raw.trim()) throw new Error('A title is required');
-		const body: Parameters<typeof resolveJob>[1] = {
-			title: field === 'title' ? raw.trim() : (job.title ?? ''),
-			year: field === 'year' ? num(raw) : (job.year ?? null)
-		};
-		if (field !== 'title' && field !== 'year') body[field] = num(raw);
-		const before = { season: job.season ?? null, disc: job.disc_number ?? null };
+		const body = buildResolveBody(job, field, raw);
 		const resp = await resolveJob(job.id, body);
-		const after = resp?.job;
-		const changed =
-			!!after &&
-			job.media_type === 'tv' &&
-			(before.season !== (after.season ?? null) || before.disc !== (after.disc_number ?? null));
 		await jobDetail.load();
-		if (changed) matching.start();
+		if (tvSeasonOrDiscChanged(job, resp?.job)) matching.start();
 	}
 
 	function handleSeriesApplied() {

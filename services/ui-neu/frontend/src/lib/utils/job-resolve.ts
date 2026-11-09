@@ -1,0 +1,39 @@
+// The job page's in-place fact edit: the resolve request body it sends and
+// whether the edit re-runs the episode match. Pure, so each rule is tested
+// without the page.
+import type { resolveJob } from '$lib/api/jobs';
+import type { JobView } from '$lib/types/api.gen';
+import type { EditableJobField } from '$lib/utils/job-fields';
+
+export type ResolveBody = Parameters<typeof resolveJob>[1];
+
+const num = (v: string) => (v.trim() === '' ? null : Number(v));
+
+/**
+ * The resolve body for one edited fact. Title and year restate the identity
+ * (the edited one from `raw`, the other from the job); season, disc number
+ * and disc total are classifications, where a blank `raw` clears them (null).
+ * A blank title throws before anything is sent.
+ */
+export function buildResolveBody(job: JobView, field: EditableJobField | 'title', raw: string): ResolveBody {
+	if (field === 'title' && !raw.trim()) throw new Error('A title is required');
+	const body: ResolveBody = {
+		title: field === 'title' ? raw.trim() : (job.title ?? ''),
+		year: field === 'year' ? num(raw) : (job.year ?? null)
+	};
+	if (field !== 'title' && field !== 'year') body[field] = num(raw);
+	return body;
+}
+
+/**
+ * A TV job's season or disc change re-runs the episode match. True only when
+ * `after` exists, the job is TV and its season or disc number differs, a
+ * missing value counting as null on both sides.
+ */
+export function tvSeasonOrDiscChanged(before: JobView, after: JobView | null | undefined): boolean {
+	return (
+		!!after &&
+		before.media_type === 'tv' &&
+		((before.season ?? null) !== (after.season ?? null) || (before.disc_number ?? null) !== (after.disc_number ?? null))
+	);
+}
