@@ -7,7 +7,8 @@ import {
 	orderByLastModified,
 	indexLogFiles,
 	shortJobId,
-	filterLogJobs
+	filterLogJobs,
+	logCountText
 } from './log-list';
 
 const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
@@ -107,6 +108,18 @@ describe('filterLogJobs', () => {
 	});
 	it('returns nothing when no job matches', () => {
 		expect(filterLogJobs(jobs, 'ripped', 'blade')).toEqual([]);
+	});
+});
+
+describe('logCountText', () => {
+	it('shows the total with a noun that follows it when not filtering', () => {
+		expect(logCountText(0, 0, false)).toBe('0 jobs');
+		expect(logCountText(1, 1, false)).toBe('1 job');
+		expect(logCountText(2, 2, false)).toBe('2 jobs');
+	});
+	it('shows shown of total while filtering, the noun following the total', () => {
+		expect(logCountText(1, 3, true)).toBe('1 of 3 jobs');
+		expect(logCountText(0, 1, true)).toBe('0 of 1 job');
 	});
 });
 

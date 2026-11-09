@@ -77,6 +77,15 @@ export function filterLogJobs<T extends Pick<JobView, 'id' | 'status' | 'title'>
 	});
 }
 
+/**
+ * The header's count line: `3 jobs`, or `1 of 3 jobs` while filtering. The
+ * noun follows `total`, not `shown`.
+ */
+export function logCountText(shown: number, total: number, filtering: boolean): string {
+	const noun = total === 1 ? 'job' : 'jobs';
+	return filtering ? `${shown} of ${total} ${noun}` : `${total} ${noun}`;
+}
+
 /** `job_` plus the id's last four characters, lowercased: `job_9a41`. */
 export function shortJobId(id: string): string {
 	return `job_${id.slice(-4).toLowerCase()}`;

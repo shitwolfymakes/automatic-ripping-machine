@@ -15,6 +15,7 @@
 		discPosition,
 		filterLogJobs,
 		jobTypeConfig,
+		logCountText,
 		orderByLastModified,
 		indexLogFiles,
 		shortJobId
@@ -35,8 +36,7 @@
 
 	const ordered = $derived(orderByLastModified(jobs, modified));
 	const filtered = $derived(filterLogJobs(ordered, statusFilter, search));
-	const noun = $derived(total === 1 ? 'job' : 'jobs');
-	const countText = $derived(statusFilter || search ? `${filtered.length} of ${total} ${noun}` : `${total} ${noun}`);
+	const countText = $derived(logCountText(filtered.length, total, !!(statusFilter || search)));
 
 	onMount(async () => {
 		// Every job, not one page: the list sorts by log modified time and
