@@ -1,22 +1,15 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { page } from '$app/stores';
-	import {
-		fetchDocsNav,
-		fetchDocsPage,
-		slugToId,
-		DocsNotFoundError,
-		type DocsNavSection,
-		type DocsPage
-	} from '$lib/docs/api';
+	import { fetchDocsNav, slugToId, type DocsNavSection } from '$lib/docs/api';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
+	import { HelpDoc } from '$lib/stores/helpDoc.svelte';
 	import { HelpSearch } from '$lib/stores/helpSearch.svelte';
 
 	const id = $derived(slugToId($page.params.slug));
 
 	let nav = $state<DocsNavSection[]>([]);
-	let doc = $state<DocsPage | null>(null);
-	let status = $state<'loading' | 'ready' | 'missing' | 'error'>('loading');
+	const helpDoc = new HelpDoc(() => id);
 	const helpSearch = new HelpSearch();
 	let topicsOpen = $state(false);
 
@@ -26,29 +19,19 @@
 
 	$effect(() => {
 		const current = id;
-		status = 'loading';
 		helpSearch.clear();
 		topicsOpen = false;
-		fetchDocsPage(current)
-			.then(async (p) => {
-				if (current !== id) return;
-				doc = p;
-				status = 'ready';
-				// The fragment arrives after SvelteKit's own hash scroll ran.
-				await tick();
-				if (current !== id) return;
-				scrollToFragment(fragmentId(location.hash));
-			})
-			.catch((e) => {
-				if (current !== id) return;
-				doc = null;
-				status = e instanceof DocsNotFoundError ? 'missing' : 'error';
-			});
+		helpDoc.load(current, async () => {
+			// The fragment arrives after SvelteKit's own hash scroll ran.
+			await tick();
+			if (current !== id) return;
+			scrollToFragment(fragmentId(location.hash));
+		});
 	});
 </script>
 
 <svelte:head>
-	<title>ARM - {doc && status === 'ready' ? `${doc.title} - Help` : 'Help'}</title>
+	<title>ARM - {helpDoc.doc && helpDoc.status === 'ready' ? `${helpDoc.doc.title} - Help` : 'Help'}</title>
 </svelte:head>
 
 <div class="help-layout">
@@ -101,32 +84,34 @@
 	</aside>
 
 	<div class="help-main">
-		{#if status === 'loading'}
+		{#if helpDoc.status === 'loading'}
 			<p class="help-status">Loading</p>
-		{:else if status === 'ready' && doc}
+		{:else if helpDoc.status === 'ready' && helpDoc.doc}
 			<!-- Trusted HTML: rendered at image build time by site/ from this
 			     repo's own markdown (markdown-it with raw HTML disabled, no
 			     scripts), served same-origin from /docs-data/. Never user input. -->
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted build-time HTML, see above -->
-			<article class="docs-prose">{@html doc.html}</article>
+			<article class="docs-prose">{@html helpDoc.doc.html}</article>
 			<p class="help-footer">
-				<a class="btn btn-link" href={doc.editUrl} target="_blank" rel="noopener">Edit this page on GitHub</a>
+				<a class="btn btn-link" href={helpDoc.doc.editUrl} target="_blank" rel="noopener">Edit this page on GitHub</a>
 			</p>
 		{:else}
 			<div class="alert alert-warning alert-lg">
-				<p class="alert-title">{status === 'missing' ? 'Page not found' : 'Help is unavailable'}</p>
+				<p class="alert-title">{helpDoc.status === 'missing' ? 'Page not found' : 'Help is unavailable'}</p>
 				<p class="alert-body">
-					{status === 'missing' ? 'There is no help page at this address.' : 'The help content could not be loaded.'}
+					{helpDoc.status === 'missing'
+						? 'There is no help page at this address.'
+						: 'The help content could not be loaded.'}
 					<a class="btn btn-link" href="/help">Back to Help</a>
 				</p>
 			</div>
 		{/if}
 	</div>
 
-	{#if status === 'ready' && doc && doc.toc.length > 1}
+	{#if helpDoc.status === 'ready' && helpDoc.doc && helpDoc.doc.toc.length > 1}
 		<nav class="help-toc" aria-label="On this page">
 			<p class="eyebrow">On this page</p>
-			{#each doc.toc as entry (entry.id)}
+			{#each helpDoc.doc.toc as entry (entry.id)}
 				<a class="help-toc-link" data-depth={entry.depth} href={`#${entry.id}`}>{entry.text}</a>
 			{/each}
 		</nav>
