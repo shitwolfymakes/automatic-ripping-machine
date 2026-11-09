@@ -35,7 +35,6 @@ vi.mock('$lib/api/jobs', () => ({
 	acceptIdentitySuggestion: vi.fn(),
 	updateTrack: vi.fn(),
 	updateJobTitle: vi.fn(),
-	updateTrackTitle: vi.fn(),
 	clearTrackTitle: vi.fn(),
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),

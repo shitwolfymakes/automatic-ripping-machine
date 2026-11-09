@@ -36,7 +36,6 @@ vi.mock('$lib/api/jobs', () => ({
 	searchMusicMetadata: vi.fn(),
 	fetchMusicDetail: vi.fn(),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
-	updateTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	clearTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: {} })),
 	namingPreview: vi.fn(() => Promise.resolve({ rendered: '' })),

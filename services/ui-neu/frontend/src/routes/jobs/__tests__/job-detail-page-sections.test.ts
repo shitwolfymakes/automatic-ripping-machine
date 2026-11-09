@@ -41,7 +41,6 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchJob: vi.fn(),
 	fetchNamingPreview: vi.fn(),
 	updateTrack: vi.fn(),
-	updateTrackTitle: vi.fn(),
 	clearTrackTitle: vi.fn(),
 	resolveJob: vi.fn(),
 	acceptIdentitySuggestion: vi.fn(),
@@ -100,7 +99,6 @@ import {
 	fetchJob,
 	fetchNamingPreview,
 	updateTrack,
-	updateTrackTitle,
 	resolveJob,
 	acceptIdentitySuggestion,
 	applySession,
@@ -1317,14 +1315,14 @@ describe('tracks table', () => {
 
 		it('applying a match closes it and reloads the job', async () => {
 			vi.mocked(searchMetadata).mockResolvedValue({ candidates: [picked] });
-			vi.mocked(updateTrackTitle).mockResolvedValue(undefined as never);
+			mockUpdateTrack.mockResolvedValue(undefined as never);
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
 			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
-			await waitFor(() => expect(updateTrackTitle).toHaveBeenCalled());
+			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalled());
 			await waitFor(() => expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument());
 			await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
 		});

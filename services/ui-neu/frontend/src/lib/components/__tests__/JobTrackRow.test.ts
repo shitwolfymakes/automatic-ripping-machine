@@ -3,7 +3,7 @@ import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$l
 import JobTrackRowHarness from './JobTrackRowHarness.svelte';
 import { createJob, createTrack } from '$lib/components/__fixtures__/job';
 import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
-import { searchMetadata, updateTrackTitle } from '$lib/api/jobs';
+import { searchMetadata, updateTrack } from '$lib/api/jobs';
 import * as authStore from '$lib/stores/auth';
 
 vi.mock('$lib/stores/auth', async () => {
@@ -20,7 +20,6 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
-	updateTrackTitle: vi.fn(),
 	clearTrackTitle: vi.fn(),
 	updateTrack: vi.fn()
 }));
@@ -336,7 +335,7 @@ describe('JobTrackRow', () => {
 
 		it('calls ontitleapplied on applying a match', async () => {
 			vi.mocked(searchMetadata).mockResolvedValue({ candidates: [picked] });
-			vi.mocked(updateTrackTitle).mockResolvedValue(undefined as never);
+			vi.mocked(updateTrack).mockResolvedValue(undefined as never);
 			renderRow(pilot(), { editing: true });
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));

@@ -11,23 +11,19 @@ import { createTrack } from '../__fixtures__/job';
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
-	updateTrackTitle: vi.fn(),
 	clearTrackTitle: vi.fn(),
 	updateTrack: vi.fn()
 }));
 
-import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
+import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 const mockSearch = vi.mocked(searchMetadata);
 const mockImdb = vi.mocked(fetchMediaDetail);
-const mockTitle = vi.mocked(updateTrackTitle);
 const mockClear = vi.mocked(clearTrackTitle);
 const mockUpdateTrack = vi.mocked(updateTrack);
 
 beforeEach(() => {
 	mockSearch.mockReset();
 	mockImdb.mockReset();
-	mockTitle.mockReset();
-	mockTitle.mockResolvedValue(undefined as never);
 	mockClear.mockReset();
 	mockClear.mockResolvedValue(undefined as never);
 	mockUpdateTrack.mockReset();
@@ -488,8 +484,8 @@ describe('TrackTitleSearch apply', () => {
 		await type(field('Year'), ' 1999 ');
 		await type(field('Poster URL'), '   ');
 		await fireEvent.click(applyButton());
-		await waitFor(() => expect(mockTitle).toHaveBeenCalledTimes(1));
-		expect(mockTitle.mock.calls[0]).toStrictEqual([
+		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+		expect(mockUpdateTrack.mock.calls[0]).toStrictEqual([
 			'job_1',
 			'trk_4',
 			{ title: 'Trimmed', year: 1999, role: 'main', poster_url: undefined }
@@ -502,8 +498,8 @@ describe('TrackTitleSearch apply', () => {
 		await type(field('Year'), '');
 		await type(field('Poster URL'), '  https://img.test/p.jpg  ');
 		await fireEvent.click(applyButton());
-		await waitFor(() => expect(mockTitle).toHaveBeenCalledTimes(1));
-		expect(mockTitle.mock.calls[0]).toStrictEqual([
+		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+		expect(mockUpdateTrack.mock.calls[0]).toStrictEqual([
 			'job_1',
 			'trk_4',
 			{ title: 'Show', year: undefined, role: 'episode', poster_url: 'https://img.test/p.jpg' }
@@ -518,8 +514,8 @@ describe('TrackTitleSearch apply', () => {
 		await openEditorViaImdb(cand({ title: 'Switch', kind }));
 		await fireEvent.change(screen.getByLabelText('Type'), { target: { value: next } });
 		await fireEvent.click(applyButton());
-		await waitFor(() => expect(mockTitle).toHaveBeenCalledTimes(1));
-		expect(mockTitle.mock.calls[0][2].role).toBe(role);
+		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+		expect(mockUpdateTrack.mock.calls[0][2].role).toBe(role);
 	});
 
 	it('sends no year when the year is not a number', async () => {
@@ -527,15 +523,15 @@ describe('TrackTitleSearch apply', () => {
 		await openEditorViaImdb();
 		await type(field('Year'), 'abc');
 		await fireEvent.click(applyButton());
-		await waitFor(() => expect(mockTitle).toHaveBeenCalledTimes(1));
-		expect(mockTitle.mock.calls[0][2].year).toBeUndefined();
+		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+		expect(mockUpdateTrack.mock.calls[0][2].year).toBeUndefined();
 	});
 
 	it('shows "Applying..." and disables Apply while pending', async () => {
 		show();
 		await openEditorViaImdb();
 		const d = deferred();
-		mockTitle.mockReturnValue(d.promise as never);
+		mockUpdateTrack.mockReturnValue(d.promise as never);
 		await fireEvent.click(applyButton());
 		await waitFor(() => expect(applyButton()).toHaveTextContent('Applying...'));
 		expect(applyButton()).toBeDisabled();
@@ -566,7 +562,7 @@ describe('TrackTitleSearch apply', () => {
 		const onapply = vi.fn();
 		show({ onapply });
 		await openEditorViaImdb();
-		mockTitle.mockRejectedValue(err);
+		mockUpdateTrack.mockRejectedValue(err);
 		await fireEvent.click(applyButton());
 		expect(await screen.findByText(shown)).toBeInTheDocument();
 		expect(onapply).not.toHaveBeenCalled();

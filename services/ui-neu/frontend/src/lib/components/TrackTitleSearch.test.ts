@@ -7,14 +7,12 @@ import type { MetadataCandidate } from '$lib/types/api.gen';
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn(),
-	updateTrackTitle: vi.fn(() => Promise.resolve()),
 	clearTrackTitle: vi.fn(() => Promise.resolve()),
 	updateTrack: vi.fn(() => Promise.resolve())
 }));
 
-import { searchMetadata, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
+import { searchMetadata, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 const mockSearchMetadata = vi.mocked(searchMetadata);
-const mockUpdateTrackTitle = vi.mocked(updateTrackTitle);
 const mockClearTrackTitle = vi.mocked(clearTrackTitle);
 const mockUpdateTrack = vi.mocked(updateTrack);
 
@@ -156,7 +154,7 @@ describe('TrackTitleSearch', () => {
 			await fireEvent.click(screen.getByText('Picked'));
 			await fireEvent.click(screen.getByText('Apply'));
 			await waitFor(() => {
-				expect(mockUpdateTrackTitle).toHaveBeenCalledWith(
+				expect(mockUpdateTrack).toHaveBeenCalledWith(
 					'job_3',
 					'trk_5',
 					expect.objectContaining({ title: 'Picked', year: 2021 })
@@ -176,11 +174,7 @@ describe('TrackTitleSearch', () => {
 			await fireEvent.click(screen.getByText('Picked Show'));
 			await fireEvent.click(screen.getByText('Apply'));
 			await waitFor(() => {
-				expect(mockUpdateTrackTitle).toHaveBeenCalledWith(
-					'job_3',
-					'trk_5',
-					expect.objectContaining({ role: 'episode' })
-				);
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ role: 'episode' }));
 			});
 		});
 
@@ -196,7 +190,7 @@ describe('TrackTitleSearch', () => {
 			await fireEvent.click(screen.getByText('Picked Movie'));
 			await fireEvent.click(screen.getByText('Apply'));
 			await waitFor(() => {
-				expect(mockUpdateTrackTitle).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ role: 'main' }));
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_3', 'trk_5', expect.objectContaining({ role: 'main' }));
 			});
 		});
 

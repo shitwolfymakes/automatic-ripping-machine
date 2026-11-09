@@ -8,7 +8,6 @@ function jsonResponse(data: unknown, ok = true) {
 }
 
 import {
-	updateTrackTitle,
 	clearTrackTitle,
 	updateTrack,
 	fetchNamingPreview,
@@ -25,20 +24,6 @@ beforeEach(() => mockFetch.mockReset());
 // The bulk-PATCH delta: every single-track edit is wrapped into
 //   PATCH /api/jobs/{job_id}  body: { tracks: [{ track_id, ... }] }
 // ---------------------------------------------------------------------------
-
-describe('updateTrackTitle (bulk-PATCH wrap)', () => {
-	it('PATCHes /api/jobs/{id} wrapping the track into tracks[]', async () => {
-		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
-		await updateTrackTitle('job_1', 'trk_2', { title: 'New Title', year: 1999 });
-		expect(mockFetch).toHaveBeenCalledWith(
-			'/api/jobs/job_1',
-			expect.objectContaining({
-				method: 'PATCH',
-				body: JSON.stringify({ tracks: [{ track_id: 'trk_2', title: 'New Title', year: 1999 }] })
-			})
-		);
-	});
-});
 
 describe('clearTrackTitle (bulk-PATCH wrap, title reverts to automatic sources)', () => {
 	it('PATCHes /api/jobs/{id} reverting title and clearing the other override fields', async () => {
@@ -65,6 +50,18 @@ describe('updateTrack (bulk-PATCH wrap)', () => {
 			expect.objectContaining({
 				method: 'PATCH',
 				body: JSON.stringify({ tracks: [{ track_id: 'trk_2', excluded: true, episode_number: 4 }] })
+			})
+		);
+	});
+
+	it('PATCHes /api/jobs/{id} wrapping the track into tracks[]', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
+		await updateTrack('job_1', 'trk_2', { title: 'New Title', year: 1999 });
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/jobs/job_1',
+			expect.objectContaining({
+				method: 'PATCH',
+				body: JSON.stringify({ tracks: [{ track_id: 'trk_2', title: 'New Title', year: 1999 }] })
 			})
 		);
 	});

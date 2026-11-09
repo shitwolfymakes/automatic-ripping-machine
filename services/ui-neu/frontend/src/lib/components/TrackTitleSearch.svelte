@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { TrackView, MetadataCandidate, TrackEditRequest, MediaType } from '$lib/types/api.gen';
-	import { searchMetadata, fetchMediaDetail, updateTrackTitle, clearTrackTitle, updateTrack } from '$lib/api/jobs';
+	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {
@@ -115,7 +115,7 @@
 		try {
 			const yr = editYear.trim() ? Number(editYear.trim()) : undefined;
 			const role = editType === 'series' ? 'episode' : 'main';
-			await updateTrackTitle(jobId, track.id, {
+			await updateTrack(jobId, track.id, {
 				title: editTitle.trim(),
 				year: Number.isFinite(yr) ? yr : undefined,
 				role,

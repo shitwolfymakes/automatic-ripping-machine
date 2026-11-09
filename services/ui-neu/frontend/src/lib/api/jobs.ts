@@ -118,15 +118,6 @@ export function patchJob(jobId: string, body: JobUpdateRequest): Promise<JobView
 	});
 }
 
-// Single-track title edit → wrap into the bulk-PATCH tracks array.
-export function updateTrackTitle(
-	jobId: string,
-	trackId: string,
-	data: Omit<TrackEditRequest, 'track_id'>
-): Promise<JobView> {
-	return patchJob(jobId, { tracks: [{ track_id: trackId, ...data }] });
-}
-
 // Clear the operator title override: `title` is resolver-owned, so revert it
 // (hands it back to the automatic sources) rather than pinning a manual null.
 // year / imdb_id / poster_url are plain fields and are cleared with null.
