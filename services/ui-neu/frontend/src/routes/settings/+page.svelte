@@ -17,7 +17,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT, foldSavedConfig } from '$lib/utils/settings-sections';
 	import {
 		SCREEN_TABS,
 		fieldFromHash,
@@ -289,20 +289,12 @@
 		}
 	}
 
-	// A form's saved values folded back into `settings.config`, so every other
-	// tab sees them: the Identity card's "Needs ... key" chip reads the keys
-	// from it, and a form diffs its next save against it. A saved secret is
-	// stored as the masked sentinel the backend returns for a set secret (a
-	// cleared one, sent as null, stays null).
+	// A form's saved values are folded back into `settings.config`, so every
+	// other tab sees them: the Identity card's "Needs ... key" chip reads the
+	// keys from it, and a form diffs its next save against it.
 	function foldSaved(payload: Record<string, unknown>) {
 		if (!settings) return;
-		const secret = new Set(
-			(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
-		);
-		const saved = Object.fromEntries(
-			Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
-		);
-		settings = { ...settings, config: { ...settings.config, ...saved } };
+		settings = foldSavedConfig(settings, payload);
 	}
 
 	// Keep the app-wide runtime toggle in step with a Settings save so an SPA

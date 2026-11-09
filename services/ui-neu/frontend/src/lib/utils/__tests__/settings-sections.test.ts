@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { groupBlurb, legacyTab, sectionFields, settingsFieldHref, settingsTabFor } from '../settings-sections';
+import {
+	foldSavedConfig,
+	groupBlurb,
+	legacyTab,
+	sectionFields,
+	settingsFieldHref,
+	settingsTabFor
+} from '../settings-sections';
+import type { SettingsData } from '$lib/api/settings';
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 
 const meta = (key: string, type = 'bool'): ConfigFieldMeta => ({
@@ -193,5 +201,53 @@ describe('legacyTab', () => {
 		expect(legacyTab('appearance')).toBe('themes');
 		expect(legacyTab('Ripping')).toBe('Ripping');
 		expect(legacyTab('drives')).toBe('drives');
+	});
+});
+
+describe('foldSavedConfig', () => {
+	const withSchema = (config: Record<string, unknown>): SettingsData =>
+		({
+			config,
+			schema: {
+				groups: [
+					{
+						name: 'Keys',
+						fields: [{ ...meta('tmdb_api_key', 'str'), tier: 'secret' }, { ...meta('log_level', 'str') }]
+					}
+				]
+			}
+		}) as unknown as SettingsData;
+
+	it('folds a plain value into the config', () => {
+		const out = foldSavedConfig(withSchema({ log_level: 'INFO' }), { log_level: 'DEBUG' });
+		expect(out.config).toEqual({ log_level: 'DEBUG' });
+	});
+
+	it('stores a saved secret as the masked sentinel', () => {
+		const out = foldSavedConfig(withSchema({ tmdb_api_key: null }), { tmdb_api_key: 'abc' });
+		expect(out.config.tmdb_api_key).toBe('<hidden>');
+	});
+
+	it('keeps a cleared secret as null', () => {
+		const out = foldSavedConfig(withSchema({ tmdb_api_key: '<hidden>' }), { tmdb_api_key: null });
+		expect(out.config.tmdb_api_key).toBeNull();
+	});
+
+	it('keeps config keys the payload does not name', () => {
+		const out = foldSavedConfig(withSchema({ log_level: 'INFO', other: 1 }), { log_level: 'DEBUG' });
+		expect(out.config).toEqual({ log_level: 'DEBUG', other: 1 });
+	});
+
+	it('treats nothing as secret when the settings have no schema', () => {
+		const settings = { config: { a: 1 } } as unknown as SettingsData;
+		const out = foldSavedConfig(settings, { tmdb_api_key: 'abc' });
+		expect(out.config).toEqual({ a: 1, tmdb_api_key: 'abc' });
+	});
+
+	it('returns a new object and leaves the input unchanged', () => {
+		const settings = withSchema({ log_level: 'INFO' });
+		const out = foldSavedConfig(settings, { log_level: 'DEBUG' });
+		expect(out).not.toBe(settings);
+		expect(settings.config).toEqual({ log_level: 'INFO' });
 	});
 });

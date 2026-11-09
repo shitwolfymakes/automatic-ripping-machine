@@ -1,4 +1,5 @@
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
+import type { SettingsData } from '$lib/api/settings';
 
 /** Presentation-only grouping for the schema-driven settings tabs, so they
  *  read like the Sessions / Appearance tabs: a tab description, then one
@@ -169,6 +170,20 @@ export function legacyTab(tab: string): string {
 	if (tab === 'Metadata') return 'Identification';
 	if (tab === 'appearance') return 'themes';
 	return tab;
+}
+
+/** A form's saved values folded back into `settings.config`, returned as a
+ *  new settings object (the input is not changed). A saved secret is stored
+ *  as the masked sentinel the backend returns for a set secret (a cleared
+ *  one, sent as null, stays null). */
+export function foldSavedConfig(settings: SettingsData, payload: Record<string, unknown>): SettingsData {
+	const secret = new Set(
+		(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
+	);
+	const saved = Object.fromEntries(
+		Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
+	);
+	return { ...settings, config: { ...settings.config, ...saved } };
 }
 
 /** Display names for config groups whose tab reads differently from the
