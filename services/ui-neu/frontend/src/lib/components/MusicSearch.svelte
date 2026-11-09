@@ -1,9 +1,8 @@
 <script lang="ts">
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail } from '$lib/api/jobs';
-	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
+	import { matchIndicator } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
-	import { formatMinSec } from '$lib/utils/format';
 	import type { MusicSearchOpts } from '$lib/utils/music-search';
 	import {
 		visibleTracksFor,
@@ -18,7 +17,7 @@
 	import { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
 	import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
 	import Glyph from './Glyph.svelte';
-	import MatchGlyph from './music-search/MatchGlyph.svelte';
+	import MusicMappingConfirm from './music-search/MusicMappingConfirm.svelte';
 	import MusicSearchForm from './music-search/MusicSearchForm.svelte';
 	import MusicResultCard from './music-search/MusicResultCard.svelte';
 	import MusicReleaseTracklist from './music-search/MusicReleaseTracklist.svelte';
@@ -211,46 +210,14 @@
 			{/if}
 
 			{#if release.mappingPreview}
-				<div class="stack panel-section music-search-mapping-preview">
-					<p class="music-search-mapping-title">Confirm track title mapping</p>
-					<div class="overflow-x-auto music-search-table-scroll">
-						<table class="table">
-							<tbody>
-								{#each trackMapping as p, i (i)}
-									<tr class="table-row">
-										<td class="table-cell whitespace-nowrap mono music-search-muted"
-											>Disc #{p.disc.index} ({formatMinSec(p.disc.expected_duration_seconds, 1)})</td
-										>
-										<td class="table-cell music-search-center music-search-faint"
-											><Glyph name="arrow-right" class="mx-auto h-3.5 w-3.5" /></td
-										>
-										<td class="table-cell">{p.mb.title}</td>
-										<td class="table-cell music-search-right mono music-search-muted"
-											>{formatMinSec(p.mb.length_ms, 1000)}</td
-										>
-										<td class="table-cell music-search-match" data-tone={MATCH_TONE[p.match]} title={p.match}
-											><MatchGlyph kind={p.match} /></td
-										>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-					<div class="flex items-center gap-2">
-						<button
-							onclick={() => {
-								release.acceptMapping();
-								applyRelease();
-							}}
-							class="btn music-search-success-btn music-search-action-btn"
-						>
-							Apply titles
-						</button>
-						<button onclick={() => (release.mappingPreview = false)} class="btn btn-ghost music-search-action-btn">
-							Cancel
-						</button>
-					</div>
-				</div>
+				<MusicMappingConfirm
+					pairs={trackMapping}
+					onconfirm={() => {
+						release.acceptMapping();
+						applyRelease();
+					}}
+					oncancel={() => (release.mappingPreview = false)}
+				/>
 			{/if}
 
 			<div class="flex items-center gap-2">
@@ -272,29 +239,10 @@
 </div>
 
 <style>
-	.music-search-right {
-		text-align: right;
-	}
 	.music-search-meta {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-muted);
-	}
-
-	.music-search-match {
-		text-align: center;
-	}
-	.music-search-match[data-tone='success'] {
-		color: var(--color-success);
-	}
-	.music-search-match[data-tone='warning'] {
-		color: var(--color-on-warning-soft);
-	}
-	.music-search-match[data-tone='danger'] {
-		color: var(--color-danger);
-	}
-	.music-search-match[data-tone='muted'] {
-		color: var(--color-text-faint);
 	}
 
 	/* :global: forwarded through PosterImage's class prop */
@@ -316,19 +264,6 @@
 	.music-search-catalog {
 		font-size: 10px;
 	}
-	.music-search-table-scroll {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-	}
-	.music-search-center {
-		text-align: center;
-	}
-	.music-search-muted {
-		color: var(--color-text-muted);
-	}
-	.music-search-faint {
-		color: var(--color-text-faint);
-	}
 	.music-search-field-label-sm {
 		font-size: 10px;
 	}
@@ -336,13 +271,6 @@
 		border: 0;
 		background: var(--color-danger);
 		color: var(--color-on-primary);
-	}
-	.music-search-mapping-preview {
-		border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
-	}
-	.music-search-mapping-title {
-		font-weight: 500;
-		color: var(--color-text-secondary);
 	}
 	.music-search-success-btn {
 		border: 0;
