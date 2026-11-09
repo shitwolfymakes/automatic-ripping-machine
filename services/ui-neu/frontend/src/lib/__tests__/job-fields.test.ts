@@ -175,6 +175,11 @@ describe('parkedSessionLine', () => {
 			parkedSessionLine({ status: 'ripped', parked_session_ids: ['ses_a', 'ses_0123456789abcdefXYZ'] }, names)
 		).toBe('Plex 1080p, ses_0123456789a..., waiting');
 	});
+	it('unknown ids of 15 characters or fewer are shown in full', () => {
+		expect(parkedSessionLine({ status: 'ripped', parked_session_ids: ['ses_01234567890'] }, names)).toBe(
+			'ses_01234567890, waiting'
+		);
+	});
 });
 
 describe('buildMetadataFields session', () => {
@@ -185,5 +190,19 @@ describe('buildMetadataFields session', () => {
 			new Map([['ses_a', 'Plex 1080p']])
 		);
 		expect(findField(fields, 'Session')?.value).toBe('Plex 1080p, applies when the rip finishes');
+	});
+});
+
+describe('buildMetadataFields padding', () => {
+	it('adds no empty cells when the field count is already a multiple of 4', () => {
+		const fields = buildMetadataFields(createJob({ resumed_from_crash: true, disc_number: 1, disc_total: 2 }));
+		expect(fields).toHaveLength(8);
+		expect(fields.some((f) => f.empty)).toBe(false);
+	});
+
+	it('pads with empty cells up to a multiple of 4', () => {
+		const fields = buildMetadataFields(createJob());
+		expect(fields).toHaveLength(8);
+		expect(fields.filter((f) => f.empty)).toHaveLength(3);
 	});
 });
