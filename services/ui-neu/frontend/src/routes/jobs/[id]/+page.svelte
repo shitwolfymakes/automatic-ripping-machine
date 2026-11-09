@@ -11,6 +11,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import JobTracksTable from '$lib/components/JobTracksTable.svelte';
+	import JobFingerprints from '$lib/components/JobFingerprints.svelte';
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
 	import MediaTypeSwitch from '$lib/components/episodes/MediaTypeSwitch.svelte';
@@ -417,31 +418,7 @@
 
 			<!-- Disc fingerprints (read-only) -->
 			{#if d.fingerprints && d.fingerprints.length > 0}
-				<section>
-					<h2 class="mb-3 job-detail-section-title">Disc fingerprints</h2>
-					<div class="overflow-x-auto job-detail-table-scroll">
-						<table class="table responsive-table">
-							<thead>
-								<tr>
-									<th class="table-header">Algorithm</th>
-									<th class="table-header">Value</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each d.fingerprints as fp (`${fp.algo}:${fp.value}`)}
-									<tr class="table-row">
-										<td class="table-cell job-detail-uppercase" data-label="Algorithm">{fp.algo}</td>
-										<td
-											class="truncate table-cell mono job-detail-fingerprint-value"
-											data-label="Value"
-											title={fp.value}>{fp.value}</td
-										>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</section>
+				<JobFingerprints fingerprints={d.fingerprints} />
 			{/if}
 
 			<!-- Music tracklist (CD jobs; read-only). Fallback ONLY when there are no
@@ -726,13 +703,6 @@
 	}
 	.job-detail-right {
 		text-align: right;
-	}
-	.job-detail-uppercase {
-		text-transform: uppercase;
-	}
-	.job-detail-fingerprint-value {
-		max-width: 420px;
-		color: var(--color-text-secondary);
 	}
 	.job-detail-raw-metadata {
 		border: 1px solid var(--color-border);
