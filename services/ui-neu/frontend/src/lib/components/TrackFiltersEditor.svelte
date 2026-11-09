@@ -1,12 +1,7 @@
 <script lang="ts">
 	// Ported from the TrackFiltersEditor component of the removed Vue UI.
 	// Model is the `track_filters_json` shape; all conditions are ANDed.
-	type TrackFilters = {
-		min_duration_seconds?: number | null;
-		max_duration_seconds?: number | null;
-		title_indices?: number[] | null; // allowlist
-		title_indices_exclude?: number[] | null; // blocklist
-	};
+	import { parseDuration, parseIndexList, type TrackFilters } from '$lib/utils/track-filters';
 
 	let { value, onchange }: { value: TrackFilters; onchange: (v: TrackFilters) => void } = $props();
 
@@ -14,21 +9,13 @@
 		onchange({ ...value, [key]: val });
 	}
 
-	// Parsing copied verbatim from the Vue source.
-	function parseList(v: string): number[] {
-		return v
-			.split(/[ ,]+/)
-			.map((s) => Number(s))
-			.filter((n) => Number.isInteger(n) && n > 0);
-	}
-
 	function onList(key: 'title_indices' | 'title_indices_exclude', v: string): void {
-		const parsed = parseList(v);
+		const parsed = parseIndexList(v);
 		update(key, parsed.length ? parsed : null);
 	}
 
 	function onDuration(key: 'min_duration_seconds' | 'max_duration_seconds', v: string): void {
-		update(key, v ? Number(v) : null);
+		update(key, parseDuration(v));
 	}
 
 	const allowList = $derived((value.title_indices ?? []).join(', '));
