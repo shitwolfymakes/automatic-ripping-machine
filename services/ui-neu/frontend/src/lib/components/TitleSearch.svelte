@@ -6,7 +6,8 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
-	import { SEARCH_SOURCES, chooseSource, sourceKeyed, type SearchSource } from '$lib/utils/search-providers';
+	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/utils/search-providers';
+	import TitleSourcePicker from './title-search/TitleSourcePicker.svelte';
 
 	interface Props {
 		job: JobView;
@@ -242,17 +243,7 @@
 	<!-- Search form -->
 	<div class="flex flex-wrap gap-2">
 		<div class="flex flex-1 title-search-min title-search-query">
-			<select
-				aria-label="Search with"
-				value={source}
-				onchange={(e) => (pickedSource = (e.target as HTMLSelectElement).value as SearchSource)}
-				class="field-control title-search-source"
-			>
-				{#each sourceOptions as opt (opt.id)}
-					{@const keyed = sourceKeyed(opt.id, $keyedSources)}
-					<option value={opt.id} disabled={!keyed}>{keyed ? opt.label : `${opt.label} (needs API key)`}</option>
-				{/each}
-			</select>
+			<TitleSourcePicker options={sourceOptions} {source} keyed={$keyedSources} onpick={(id) => (pickedSource = id)} />
 			<input
 				type="text"
 				bind:value={query}
@@ -364,13 +355,6 @@
 
 <style>
 	/* source picker joined to the title box as one control */
-	.title-search-source {
-		width: auto;
-		flex: none;
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-		background: var(--color-primary-tint-2);
-	}
 	.title-search-query > input {
 		min-width: 0;
 		margin-left: -1px;
