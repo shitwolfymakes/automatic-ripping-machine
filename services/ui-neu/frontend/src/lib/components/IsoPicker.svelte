@@ -148,16 +148,8 @@
 		load(entryPath(name));
 	}
 
-	function goTo(path: string): void {
-		load(path);
-	}
-
 	function goUp(): void {
 		if (listing?.parent_subpath != null) load(listing.parent_subpath);
-	}
-
-	function refresh(): void {
-		load(subpath);
 	}
 
 	function isSelected(entry: IsoLibraryEntry): boolean {
@@ -276,10 +268,6 @@
 		activeIndex = 0;
 	}
 
-	function handleClose(): void {
-		onclose();
-	}
-
 	// Loads fresh every time the picker opens (never reuses stale state from a
 	// previous open), and never fetches while closed — layouts that mount this
 	// component unconditionally (e.g. for a guest-gating check elsewhere) must
@@ -299,7 +287,7 @@
 	});
 </script>
 
-<SlideOver {open} title={isFolderMode ? 'Rip from folder' : 'Rip from ISO'} onclose={handleClose}>
+<SlideOver {open} title={isFolderMode ? 'Rip from folder' : 'Rip from ISO'} {onclose}>
 	<div class="iso-picker">
 		<div class="iso-picker-main">
 			{#if notConfigured}
@@ -331,7 +319,13 @@
 						<section class="panel stack stack-sm iso-picker-panel" aria-labelledby="iso-picker-folder-title">
 							<div class="iso-picker-panel-head">
 								<h3 id="iso-picker-folder-title" class="panel-title iso-picker-panel-title">Disc folder</h3>
-								<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
+								<button
+									type="button"
+									class="btn btn-icon"
+									onclick={() => load(subpath)}
+									title="Refresh"
+									aria-label="Refresh"
+								>
 									<Glyph name="refresh" />
 								</button>
 							</div>
@@ -377,7 +371,9 @@
 											Couldn't load the library
 										</p>
 										<p class="alert-body">{err.message}</p>
-										<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
+										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => load(subpath)}
+											>Retry</button
+										>
 									</div>
 								{/snippet}
 								{#snippet ready(data)}
@@ -449,7 +445,13 @@
 						<section class="panel stack stack-sm iso-picker-panel" aria-labelledby="iso-picker-file-title">
 							<div class="iso-picker-panel-head">
 								<h3 id="iso-picker-file-title" class="panel-title iso-picker-panel-title">ISO file</h3>
-								<button type="button" class="btn btn-icon" onclick={refresh} title="Refresh" aria-label="Refresh">
+								<button
+									type="button"
+									class="btn btn-icon"
+									onclick={() => load(subpath)}
+									title="Refresh"
+									aria-label="Refresh"
+								>
 									<Glyph name="refresh" />
 								</button>
 							</div>
@@ -462,7 +464,7 @@
 									{#if i === breadcrumbItems.length - 1}
 										<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
 									{:else}
-										<button type="button" class="iso-picker-breadcrumb-link" onclick={() => goTo(item.path)}>
+										<button type="button" class="iso-picker-breadcrumb-link" onclick={() => load(item.path)}>
 											{item.label}
 										</button>
 									{/if}
@@ -500,7 +502,9 @@
 											Couldn't load the library
 										</p>
 										<p class="alert-body">{err.message}</p>
-										<button type="button" class="btn btn-sm iso-picker-retry" onclick={refresh}>Retry</button>
+										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => load(subpath)}
+											>Retry</button
+										>
 									</div>
 								{/snippet}
 								{#snippet ready(data)}
@@ -601,7 +605,7 @@
 			{#if notConfigured}
 				<p class="iso-picker-footer-helper">Nothing to pick until the library is set up.</p>
 				<div class="flex gap-2">
-					<button type="button" class="btn" onclick={handleClose}>Close</button>
+					<button type="button" class="btn" onclick={() => onclose()}>Close</button>
 				</div>
 			{:else}
 				<p class="iso-picker-footer-helper">
@@ -612,7 +616,7 @@
 							: 'Pick an ISO to start.'}
 				</p>
 				<div class="flex gap-2">
-					<button type="button" class="btn" onclick={handleClose} disabled={starting}>Cancel</button>
+					<button type="button" class="btn" onclick={() => onclose()} disabled={starting}>Cancel</button>
 					<button type="button" class="btn btn-primary" onclick={handleStart} disabled={!selectedPath || starting}>
 						{starting ? 'Starting...' : 'Start rip'}
 					</button>
