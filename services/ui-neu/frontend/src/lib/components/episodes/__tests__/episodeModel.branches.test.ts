@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows, holdReasons, seasonAlternatives, heldSeason } from '../episodeModel';
-import type { IdentityView, JobView, MatchPreview, TrackIdentityView, TrackView } from '$lib/types/api.gen';
+import { failedSources, panelState, buildRows } from '../episodeModel';
+import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) => ({ has_series: true, media_type: 'tv', ...o }) as JobView;
 const ident = (o: Record<string, unknown> = {}) => ({ pin: {}, ...o }) as unknown as IdentityView;
 const track = (o: Partial<TrackView> = {}) => ({ id: 'trk_0', source_ref: 't00', ...o }) as TrackView;
 const preview = (match: Record<string, unknown>) =>
 	({ outcomes: [{ matches: [{ source_ref: 't00', ...match }] }] }) as unknown as MatchPreview;
-const proposing = (season: number | null, episode: number | null) =>
-	({ track_id: 't', proposals: { episodes_tmdb: { season, episode } } }) as unknown as TrackIdentityView;
 
 describe('failedSources', () => {
 	it('an identity with no sources has none failed', () => {
@@ -46,35 +44,5 @@ describe('buildRows', () => {
 	it('with neither duration the length is a dash and the seconds are null', () => {
 		const rows = buildRows([track()], ident(), null);
 		expect(rows[0]).toMatchObject({ length: '-', seconds: null });
-	});
-});
-
-describe('holdReasons', () => {
-	it('a null source has no reasons', () => {
-		expect(holdReasons(ident(), null)).toEqual([]);
-	});
-});
-
-describe('seasonAlternatives', () => {
-	it('an alternative with no matches counts 0', () => {
-		const id = ident({ sources: { episodes_tmdb: { alternatives: [{ season: 2 }] } } });
-		expect(seasonAlternatives(id, 'episodes_tmdb', 7)).toEqual([{ season: 2, matches: 0, total: 7 }]);
-	});
-});
-
-describe('heldSeason', () => {
-	it('a null source gives null', () => {
-		expect(heldSeason(ident(), null)).toBeNull();
-	});
-	it('an identity with no tracks gives null', () => {
-		expect(heldSeason(ident(), 'episodes_tmdb')).toBeNull();
-	});
-	it('a later season with fewer proposals keeps the best', () => {
-		const tracks = [proposing(1, 1), proposing(1, 2), proposing(2, 1)];
-		expect(heldSeason(ident({ tracks }), 'episodes_tmdb', 9)).toEqual({ season: 1, matches: 2, total: 9 });
-	});
-	it('a later season with equal proposals keeps the first', () => {
-		const tracks = [proposing(1, 1), proposing(2, 1)];
-		expect(heldSeason(ident({ tracks }), 'episodes_tmdb')).toEqual({ season: 1, matches: 1, total: 0 });
 	});
 });
