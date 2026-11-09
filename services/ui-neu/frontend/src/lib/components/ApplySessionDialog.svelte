@@ -6,6 +6,7 @@
 	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
+	import { explainNamingProblem } from '$lib/utils/naming-problem';
 	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
@@ -100,35 +101,6 @@
 	let preview = $state<JobNamingPreviewResponse | null>(null);
 	let previewLoading = $state(false);
 	let previewProblem = $state<string | null>(null);
-	let previewToken = $state<string | null>(null);
-
-	const TOKEN_WORDS: Record<string, string> = {
-		title: 'a title',
-		year: 'a year',
-		show: 'a show name',
-		season: 'a season',
-		episode: 'an episode number',
-		episode_title: 'an episode title',
-		artist: 'an artist',
-		album: 'an album',
-		disc: 'a disc number',
-		track_title: 'track titles',
-		transcode_slug: 'a transcode preset',
-		ext: 'a transcode preset'
-	};
-
-	function explainProblem(message: string): void {
-		const m = /token \{(\w+)\}/.exec(message);
-		previewToken = m ? m[1] : null;
-		if (previewToken === 'transcode_slug' || previewToken === 'ext') {
-			previewProblem = `This session has no transcode preset, so {${previewToken}} in its output path cannot be filled. Give the session a transcode preset or choose another session.`;
-		} else if (previewToken) {
-			const what = (TOKEN_WORDS[previewToken] ?? `a value for {${previewToken}}`).replace(/^an? /, '');
-			previewProblem = `This job has no ${what}, so {${previewToken}} in the output path cannot be filled. Add it in the job's details, or choose a session whose output path does not use it or marks it optional as {${previewToken}?}.`;
-		} else {
-			previewProblem = message;
-		}
-	}
 
 	// Only the job's id matters here. The parent hands us a fresh `job` object
 	// on every dashboard poll; depending on the object would re-run this and
@@ -140,7 +112,6 @@
 		const id = jobId;
 		preview = null;
 		previewProblem = null;
-		previewToken = null;
 		if (!sessionId) return;
 		previewLoading = true;
 		let cancelled = false;
@@ -150,7 +121,7 @@
 			})
 			.catch((e) => {
 				if (cancelled) return;
-				explainProblem(e instanceof Error ? e.message : 'Preview failed');
+				previewProblem = explainNamingProblem(e instanceof Error ? e.message : 'Preview failed');
 			})
 			.finally(() => {
 				if (!cancelled) previewLoading = false;
