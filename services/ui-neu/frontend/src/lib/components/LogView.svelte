@@ -11,7 +11,6 @@
 		followLabel,
 		formatCopyText,
 		levelTone,
-		matchLabel,
 		type LogLevelFilter,
 		type LogServiceFilter
 	} from '$lib/utils/log-view';
@@ -19,7 +18,7 @@
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
 	import { FollowScroll } from '$lib/stores/followScroll.svelte';
-	import CloseButton from '$lib/components/CloseButton.svelte';
+	import LogSearchField from '$lib/components/log-view/LogSearchField.svelte';
 	import LogSegmentGroup from '$lib/components/log-view/LogSegmentGroup.svelte';
 
 	interface Props {
@@ -58,7 +57,7 @@
 	let frameEl = $state<HTMLDivElement | null>(null);
 	let viewEl = $state<HTMLDivElement | null>(null);
 	const follow = new FollowScroll(() => viewEl);
-	let searchEl = $state<HTMLInputElement | null>(null);
+	let searchField = $state<LogSearchField | null>(null);
 
 	const wrap = $derived($uiPrefs.logWrap);
 
@@ -86,11 +85,6 @@
 		})
 	);
 
-	function clearSearch(): void {
-		searchText = '';
-		searchEl?.focus();
-	}
-
 	function copyLines(): void {
 		clip.copy(formatCopyText(filtered));
 	}
@@ -99,11 +93,11 @@
 	// already in a text field. Listened on the window (rather than the frame
 	// div) so the frame stays a plain, non-interactive container.
 	function onWindowKeydown(e: KeyboardEvent): void {
-		if (e.key !== '/' || !search || collapsed || searchEl === null || frameEl === null) return;
+		if (e.key !== '/' || !search || collapsed || searchField === null || frameEl === null) return;
 		if (isTextField(e.target as HTMLElement | null)) return;
 		if (!frameEl.contains(document.activeElement)) return;
 		e.preventDefault();
-		searchEl.focus();
+		searchField.focus();
 	}
 
 	// Tracks the line count, the filter, the bound view and following, and
@@ -146,32 +140,7 @@
 				onpick={(k) => (levelFilter = k)}
 			/>
 			{#if search}
-				<div class="log-view-search">
-					<span class="log-view-search-prompt" aria-hidden="true">/</span>
-					<input
-						type="text"
-						bind:value={searchText}
-						bind:this={searchEl}
-						placeholder="Filter lines"
-						aria-label="Filter lines"
-						data-testid="job-log-search"
-					/>
-					{#if searchText}
-						<span class="log-view-search-count" data-testid="job-log-search-count">{matchLabel(filtered.length)}</span>
-						<CloseButton label="Clear filter" class="log-view-search-clear" onclick={clearSearch} />
-					{/if}
-					<button
-						type="button"
-						class="log-view-search-case"
-						aria-pressed={matchCase}
-						aria-label="Match case"
-						title="Match case"
-						data-testid="job-log-search-case"
-						onclick={() => {
-							matchCase = !matchCase;
-						}}>Aa</button
-					>
-				</div>
+				<LogSearchField bind:this={searchField} bind:text={searchText} bind:matchCase matches={filtered.length} />
 			{/if}
 			<div class="log-view-tools">
 				<button
@@ -278,66 +247,6 @@
 		width: 1px;
 		height: 18px;
 		background: color-mix(in srgb, var(--color-terminal-ink) 12%, transparent);
-	}
-
-	/* search: a composite field that grows into the leftover toolbar space */
-	.log-view-search {
-		flex: 1 1 140px;
-		min-width: 120px;
-		height: 28px;
-		box-sizing: border-box;
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0 6px 0 9px;
-		border-radius: var(--radius-sm);
-		border: 1px solid color-mix(in srgb, var(--color-terminal-ink) 10%, transparent);
-		background: color-mix(in srgb, var(--color-terminal-ink) 4%, transparent);
-	}
-	.log-view-search:focus-within {
-		border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-	}
-	.log-view-search-prompt {
-		font: 0.75rem var(--font-mono);
-		color: color-mix(in srgb, var(--color-terminal-ink) 45%, transparent);
-	}
-	.log-view-search input {
-		flex: 1;
-		min-width: 0;
-		border: 0;
-		background: transparent;
-		outline: none;
-		padding: 0;
-		font: 0.75rem var(--font-mono);
-		color: var(--color-terminal-ink);
-	}
-	.log-view-search input::placeholder {
-		color: color-mix(in srgb, var(--color-terminal-ink) 40%, transparent);
-	}
-	.log-view-search-count {
-		font: 0.6875rem var(--font-mono);
-		color: color-mix(in srgb, var(--color-terminal-ink) 50%, transparent);
-		white-space: nowrap;
-	}
-	/* the shared CloseButton, shrunk to sit inside the 28px field */
-	.log-view-search :global(.log-view-search-clear) {
-		min-height: auto;
-		height: auto;
-		width: auto;
-		padding: 2px 3px;
-		border: 0;
-		background: none;
-		font-size: 13px;
-		color: color-mix(in srgb, var(--color-terminal-ink) 60%, transparent);
-	}
-	.log-view-search-case {
-		font: 600 0.6875rem var(--font-mono);
-		padding: 2px 5px;
-		border-radius: 3px;
-		color: color-mix(in srgb, var(--color-terminal-ink) 75%, transparent);
-	}
-	.log-view-search-case[aria-pressed='true'] {
-		background: color-mix(in srgb, var(--color-primary) 32%, transparent);
 	}
 
 	.log-view-tools {
