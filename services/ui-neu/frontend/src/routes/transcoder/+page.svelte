@@ -22,6 +22,7 @@
 	import TranscoderStatsSkeleton from '$lib/components/transcoder/TranscoderStatsSkeleton.svelte';
 	import TranscoderOfflineBanner from '$lib/components/transcoder/TranscoderOfflineBanner.svelte';
 	import WorkerPoolPanel from '$lib/components/transcoder/WorkerPoolPanel.svelte';
+	import TranscoderStatTiles from '$lib/components/transcoder/TranscoderStatTiles.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -132,34 +133,7 @@
 			<div in:fade={fadeIn} out:fade={fadeOut} class="stack">
 				<!-- Worker pool status -->
 				<WorkerPoolPanel workers={$workers} stats={s} gpus={gpus.rows} />
-				<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-					<div class="stat transcoder-page-stat">
-						<p class="stat-label">Queued</p>
-						<p class="stat-value transcoder-page-stat-value">{taskCount(s, 'queued')}</p>
-					</div>
-					<div class="stat transcoder-page-stat">
-						<p class="stat-label">In Progress</p>
-						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-progress">
-							{taskCount(s, 'in_progress')}
-						</p>
-					</div>
-					<div class="stat transcoder-page-stat">
-						<p class="stat-label">Done</p>
-						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-success">
-							{taskCount(s, 'done')}
-						</p>
-					</div>
-					<div class="stat transcoder-page-stat">
-						<p class="stat-label">Failed</p>
-						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-danger">
-							{taskCount(s, 'failed')}
-						</p>
-					</div>
-					<div class="stat transcoder-page-stat">
-						<p class="stat-label">Total</p>
-						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-muted">{s.total_tasks}</p>
-					</div>
-				</div>
+				<TranscoderStatTiles stats={s} />
 			</div>
 		{/if}
 
@@ -327,27 +301,6 @@
 		flex-shrink: 1;
 		min-width: 0;
 		text-align: center;
-	}
-	/* the original stat cards were text-3xl (1.875rem/2.25rem), taller than
-	   stat's own 1.5rem/2rem default (tuned for StatStrip) */
-	.transcoder-page-stat-value {
-		font-size: 1.875rem;
-		line-height: 2.25rem;
-	}
-	/* the original "In Progress" value used a literal indigo hue with no
-	   shared token; same transcoder-domain collapse as the worker card and
-	   progress-bar tone above */
-	.transcoder-page-stat-value-progress {
-		color: var(--color-status-transcoding);
-	}
-	.transcoder-page-stat-value-success {
-		color: var(--color-success);
-	}
-	.transcoder-page-stat-value-danger {
-		color: var(--color-danger);
-	}
-	.transcoder-page-stat-value-muted {
-		color: var(--color-text-muted);
 	}
 	.transcoder-page-section-title {
 		font-size: 1.125rem;
