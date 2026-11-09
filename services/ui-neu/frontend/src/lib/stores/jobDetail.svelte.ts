@@ -7,6 +7,7 @@ import type { JobDetailView, NamingPreviewItem } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
 import { readJobMetadata } from '$lib/utils/job-metadata';
 import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
+import { isPostRipStatus } from '$lib/utils/job-status-groups';
 import { extractMusicTracks } from '$lib/utils/music-tracks';
 import { handSetTrackCount, isSeriesTrackList } from '$lib/utils/track-fields';
 
@@ -38,6 +39,8 @@ export class JobDetail {
 	musicTracks = $derived(this.detail ? extractMusicTracks(this.detail.job.metadata_json) : []);
 	tracksAreSeries = $derived(isSeriesTrackList(this.detail?.tracks ?? [], this.detail?.job.media_type));
 	handSetCount = $derived(handSetTrackCount(this.detail?.tracks ?? []));
+	// The loaded job's rip has finished (false until a job is loaded).
+	isPostRip = $derived(this.detail ? isPostRipStatus(this.detail.job.status) : false);
 	jobMeta = $derived(this.detail ? readJobMetadata(this.detail.job.metadata_json) : {});
 	rawMetadataPairs = $derived(
 		this.detail ? Object.entries((this.detail.job.metadata_json ?? {}) as Record<string, unknown>) : []

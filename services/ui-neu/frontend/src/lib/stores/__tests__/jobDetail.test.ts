@@ -278,6 +278,19 @@ describe('JobDetail derived values', () => {
 		expect(d.rawMetadataPairs.map(([k]) => k)).toEqual(['identity', 'extra']);
 	});
 
+	it('isPostRip is false before any job loads', () => {
+		expect(newDetail().isPostRip).toBe(false);
+	});
+
+	it.each([
+		['created', false],
+		['ripping', false],
+		['ripped', true],
+		['ripped_partial', true]
+	])('isPostRip for a %s job is %s', (status, expected) => {
+		expect(detailWith({ status: status as JobView['status'] }).isPostRip).toBe(expected);
+	});
+
 	it('has no raw pairs when the job has no metadata', () => {
 		const d = detailWith({ metadata_json: null as never });
 		expect(d.rawMetadataPairs).toEqual([]);

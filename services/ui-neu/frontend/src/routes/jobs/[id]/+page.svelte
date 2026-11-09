@@ -20,7 +20,7 @@
 	import { identitySuggestionOf } from '$lib/utils/job-review';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
-	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
+	import { isAwaitingIdentity, isLive } from '$lib/utils/job-status-groups';
 	import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
@@ -78,7 +78,7 @@
 	function handleApplied(resp: ApplySessionResponse) {
 		showApply = false;
 		jobDetail.load();
-		flashNote(applyNote(resp, detail ? isPostRipStatus(detail.job.status) : false));
+		flashNote(applyNote(resp, jobDetail.isPostRip));
 	}
 
 	let sessionNames = $state(new Map<string, string>());
