@@ -1,10 +1,10 @@
 <script lang="ts">
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { fetchDashboard } from '$lib/api/dashboard';
-	import { fetchJobsPage, bulkDeleteJobs } from '$lib/api/jobs';
+	import { bulkDeleteJobs } from '$lib/api/jobs';
 	import type { JobView } from '$lib/types/api.gen';
+	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
@@ -109,97 +109,16 @@
 	}
 
 	// --- Jobs section state ---
-	// GET /api/jobs pages server-side: the body is one page of JobView[] and
-	// the filtered total rides in X-Total-Count. 48 per page fills the card
-	// grid evenly at both two and three columns.
-	let jobs = $state<JobView[] | null>(null);
-	let total = $state(0);
-	let page = $state(1);
-	const perPage = 48;
-	let pages = $derived(Math.max(1, Math.ceil(total / perPage)));
-	let jobsError = $state<Error | null>(null);
-	let jobsLoading = $state(true);
-	let pageReady = $derived(!dashLoading && !jobsLoading);
+	const jobsList = new DashboardJobs();
+	let pageReady = $derived(!dashLoading && !jobsList.loading);
 
-	let statusFilter = $state('');
 	// Opens with the Settings > Interface default; toggling here is for this
 	// visit only and does not change that default.
 	let viewMode = $state<'card' | 'table'>(get(uiPrefs).dashboardView);
 
-	// Selection
-	const selectedJobs = new SvelteSet<string>();
-
 	// Gear menu
 	let bulkBusy = $state(false);
 	let bulkFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-
-	// Derived
-	let allVisibleSelected = $derived(jobs !== null && jobs.length > 0 && jobs.every((j) => selectedJobs.has(j.id)));
-
-	// Reloads the current page only (the poll and ripper events call this too).
-	// Calls overlap (poll, events, paging), so only the latest request's
-	// response is applied; an earlier, slower one is dropped.
-	let jobsRequest = 0;
-	async function loadJobs() {
-		const request = ++jobsRequest;
-		if (!jobs) jobsLoading = true;
-		jobsError = null;
-		try {
-			const result = await fetchJobsPage({
-				status: statusFilter || undefined,
-				limit: perPage,
-				offset: (page - 1) * perPage
-			});
-			if (request !== jobsRequest) return;
-			jobs = result.jobs;
-			total = result.total;
-			// A delete (here or elsewhere) can empty the page we are on: step
-			// back to the last page that still has rows.
-			if (jobs.length === 0 && page > 1 && total > 0) {
-				page = Math.max(1, Math.ceil(total / perPage));
-				return loadJobs();
-			}
-			// Selection only ever covers rows on the visible page.
-			for (const id of [...selectedJobs]) {
-				if (!jobs.some((j) => j.id === id)) selectedJobs.delete(id);
-			}
-		} catch (e) {
-			if (request !== jobsRequest) return;
-			jobsError = e instanceof Error ? e : new Error('Failed to load jobs');
-		} finally {
-			if (request === jobsRequest) jobsLoading = false;
-		}
-	}
-
-	const setStatusFilter = (v: string) => {
-		statusFilter = v;
-		page = 1;
-		selectedJobs.clear();
-		loadJobs();
-	};
-
-	const setPage = (p: number) => {
-		page = p;
-		selectedJobs.clear();
-		loadJobs();
-	};
-
-	function toggleSelect(jobId: string, selected: boolean) {
-		if (selected) {
-			selectedJobs.add(jobId);
-		} else {
-			selectedJobs.delete(jobId);
-		}
-	}
-
-	function toggleSelectAll() {
-		if (!jobs) return;
-		const selectAll = !allVisibleSelected;
-		selectedJobs.clear();
-		if (selectAll) {
-			for (const j of jobs) selectedJobs.add(j.id);
-		}
-	}
 
 	async function handleBulkAction(
 		action: 'delete' | 'purge',
@@ -222,8 +141,8 @@
 						? `Deleted ${result.deleted_ids.length}, skipped ${skipped} in-flight job(s)`
 						: `Deleted ${result.deleted_ids.length} job(s)`
 			};
-			selectedJobs.clear();
-			await loadJobs();
+			jobsList.selected.clear();
+			await jobsList.load();
 		} catch (e) {
 			bulkFeedback = {
 				type: 'error',
@@ -235,7 +154,7 @@
 	}
 
 	function deleteSelected() {
-		const ids = [...selectedJobs];
+		const ids = [...jobsList.selected];
 		handleBulkAction('delete', { job_ids: ids }, `delete ${ids.length} selected job(s)`);
 	}
 
@@ -266,7 +185,7 @@
 		startRipperEvents();
 		const offRipperEvents = onRipperEvent(() => {
 			refreshDashboard();
-			loadJobs();
+			jobsList.load();
 		});
 
 		function poll(fn: () => Promise<void>, intervalMs: number) {
@@ -279,7 +198,7 @@
 		}
 
 		poll(refreshDashboard, 5000);
-		poll(loadJobs, 10000);
+		poll(jobsList.load, 10000);
 		return () => {
 			stopped = true;
 			offRipperEvents();
@@ -467,8 +386,8 @@
 	<section id="all-jobs" class="list-panel">
 		<div class="list-panel-header">
 			<h2 class="list-panel-title">All Jobs</h2>
-			<span class="list-panel-count">{total} {total === 1 ? 'job' : 'jobs'}</span>
-			<JobFilterBar {statusFilter} onstatusfilter={setStatusFilter} />
+			<span class="list-panel-count">{jobsList.total} {jobsList.total === 1 ? 'job' : 'jobs'}</span>
+			<JobFilterBar statusFilter={jobsList.statusFilter} onstatusfilter={jobsList.setStatusFilter} />
 			<span class="flex-1"></span>
 			<div class="dashboard-view-group">
 				<button
@@ -483,17 +402,17 @@
 				>
 			</div>
 			{#if $isAdmin}
-				<BulkActionsMenu {selectedJobs} {bulkBusy} onaction={handleBulkAction} />
+				<BulkActionsMenu selectedJobs={jobsList.selected} {bulkBusy} onaction={handleBulkAction} />
 			{/if}
 		</div>
 
-		{#if $isAdmin && selectedJobs.size > 0}
+		{#if $isAdmin && jobsList.selected.size > 0}
 			<div class="dashboard-jobs-selection" data-testid="jobs-selection-bar" transition:slide={{ duration: 120 }}>
-				<span class="dashboard-jobs-selection-count">{selectedJobs.size} selected</span>
+				<span class="dashboard-jobs-selection-count">{jobsList.selected.size} selected</span>
 				<span class="dashboard-jobs-selection-divider"></span>
 				<button onclick={deleteSelected} disabled={bulkBusy} class="btn btn-sm btn-danger">Delete selected</button>
 				<span class="flex-1"></span>
-				<button onclick={() => selectedJobs.clear()} class="btn btn-link dashboard-jobs-selection-clear"
+				<button onclick={() => jobsList.selected.clear()} class="btn btn-link dashboard-jobs-selection-clear"
 					>Clear selection</button
 				>
 			</div>
@@ -507,7 +426,12 @@
 		{/if}
 
 		<div class="list-panel-body">
-			<LoadState data={jobs} loading={jobsLoading} error={jobsError} transitionKey="dashboard-recent-jobs">
+			<LoadState
+				data={jobsList.jobs}
+				loading={jobsList.loading}
+				error={jobsList.error}
+				transitionKey="dashboard-recent-jobs"
+			>
 				{#snippet loadingSlot()}
 					{#if viewMode === 'table'}
 						<div class="overflow-x-auto">
@@ -545,8 +469,8 @@
 											{#if $isAdmin}
 												<input
 													type="checkbox"
-													checked={allVisibleSelected}
-													onchange={toggleSelectAll}
+													checked={jobsList.allVisibleSelected}
+													onchange={jobsList.toggleSelectAll}
 													class="dashboard-select-all-checkbox"
 												/>
 											{/if}
@@ -558,7 +482,12 @@
 								</thead>
 								<tbody>
 									{#each list as job (job.id)}
-										<JobRow {job} selected={selectedJobs.has(job.id)} onselect={toggleSelect} showSelect={$isAdmin} />
+										<JobRow
+											{job}
+											selected={jobsList.selected.has(job.id)}
+											onselect={jobsList.toggleSelect}
+											showSelect={$isAdmin}
+										/>
 									{/each}
 								</tbody>
 							</table>
@@ -578,7 +507,13 @@
 		</div>
 
 		<div class="dashboard-jobs-footer">
-			<JobPagination {page} {pages} {perPage} {total} onpage={setPage} />
+			<JobPagination
+				page={jobsList.page}
+				pages={jobsList.pages}
+				perPage={jobsList.perPage}
+				total={jobsList.total}
+				onpage={jobsList.setPage}
+			/>
 		</div>
 	</section>
 </div>
