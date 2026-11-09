@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
+import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
 
 vi.mock('$app/environment', () => ({ browser: false }));
 vi.mock('$lib/api/themes', () => ({
@@ -21,7 +22,7 @@ beforeEach(() => {
 
 describe('colorScheme store outside the browser', () => {
 	it('starts on the default scheme and does not subscribe or touch the DOM', async () => {
-		const { colorScheme, COLOR_SCHEMES } = await import('$lib/stores/colorScheme');
+		const { colorScheme } = await import('$lib/stores/colorScheme');
 
 		expect(get(colorScheme)).toBe(COLOR_SCHEMES[0].id);
 		expect(fetchMock).not.toHaveBeenCalled();

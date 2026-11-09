@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
+import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
 
 vi.mock('$app/environment', () => ({ browser: true }));
 
@@ -71,7 +72,7 @@ describe('applyScheme with a light-locked scheme', () => {
 describe('reapplySchemeForCurrentMode', () => {
 	it('falls back to the default scheme when the active id matches no scheme', async () => {
 		fetchTheme.mockRejectedValue(new Error('not found'));
-		const { colorScheme, reapplySchemeForCurrentMode, COLOR_SCHEMES } = await freshModule();
+		const { colorScheme, reapplySchemeForCurrentMode } = await freshModule();
 		colorScheme.set('ghost');
 		await vi.waitFor(() => expect(fetchTheme).toHaveBeenCalledWith('ghost'));
 		root.removeAttribute('style');
@@ -140,7 +141,7 @@ describe('loadThemesFromApi', () => {
 			{ id: 'blue', label: 'My Blue', swatch: '#111', tokens: { '--extra': '1' }, builtin: true },
 			{ id: 'mine', label: 'Mine', swatch: '#222', tokens: { '--only': '2' } }
 		]);
-		const { loadThemesFromApi, allSchemes, COLOR_SCHEMES } = await freshModule();
+		const { loadThemesFromApi, allSchemes } = await freshModule();
 
 		await loadThemesFromApi();
 
@@ -159,7 +160,7 @@ describe('loadThemesFromApi', () => {
 
 	it('treats a null theme list as empty', async () => {
 		fetchThemes.mockResolvedValue(null);
-		const { loadThemesFromApi, allSchemes, COLOR_SCHEMES } = await freshModule();
+		const { loadThemesFromApi, allSchemes } = await freshModule();
 
 		await loadThemesFromApi();
 
@@ -170,7 +171,7 @@ describe('loadThemesFromApi', () => {
 
 	it('keeps the built-ins when fetchThemes rejects', async () => {
 		fetchThemes.mockRejectedValue(new Error('down'));
-		const { loadThemesFromApi, allSchemes, COLOR_SCHEMES } = await freshModule();
+		const { loadThemesFromApi, allSchemes } = await freshModule();
 		const before = get(allSchemes);
 
 		await loadThemesFromApi();
