@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { isGuest } from '$lib/stores/auth';
 	import { countRipping } from '$lib/utils/job-status';
@@ -7,51 +8,53 @@
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 </script>
 
+{#snippet guestLink(href: string, cls: string, content: Snippet, title?: string)}
+	<!-- A guest sees a plain span; everyone else gets a link. -->
+	<svelte:element this={$isGuest ? 'span' : 'a'} href={$isGuest ? undefined : href} class={cls} {title}
+		>{@render content()}</svelte:element
+	>
+{/snippet}
+
+{#snippet armHealth()}
+	<span class="status-dot" data-status={$dashboard.arm_online ? 'ok' : 'error'}></span>
+	<span class="layout-health-label">ARM</span>
+{/snippet}
+
+{#snippet dbHealth()}
+	<span class="status-dot" data-status={$dashboard.db_available ? 'ok' : 'warn'}></span>
+	<span class="layout-health-label">DB</span>
+{/snippet}
+
+{#snippet keyHealth()}
+	<span class="status-dot" data-status={$dashboard.makemkv_key_valid === true ? 'ok' : 'error'}></span>
+	<span class="layout-health-label">Key</span>
+{/snippet}
+
+{#snippet driveCount()}
+	{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}
+{/snippet}
+
 <div class="layout-stats-bar hidden lg:flex items-center gap-3">
 	<!-- Service health dots -->
 	<div class="flex items-center gap-3">
-		<svelte:element
-			this={$isGuest ? 'span' : 'a'}
-			href={$isGuest ? undefined : '/settings#system'}
-			class="layout-health-link"
-		>
-			<span class="status-dot" data-status={$dashboard.arm_online ? 'ok' : 'error'}></span>
-			<span class="layout-health-label">ARM</span>
-		</svelte:element>
-		<svelte:element
-			this={$isGuest ? 'span' : 'a'}
-			href={$isGuest ? undefined : '/settings#system'}
-			class="layout-health-link"
-		>
-			<span class="status-dot" data-status={$dashboard.db_available ? 'ok' : 'warn'}></span>
-			<span class="layout-health-label">DB</span>
-		</svelte:element>
+		{@render guestLink('/settings#system', 'layout-health-link', armHealth)}
+		{@render guestLink('/settings#system', 'layout-health-link', dbHealth)}
 		<a href="/transcoder" class="layout-health-link">
 			<span class="status-dot" data-status={transcoderDotStatus($dashboard)}></span>
 			<span class="layout-health-label">Transcode</span>
 		</a>
-		<svelte:element
-			this={$isGuest ? 'span' : 'a'}
-			href={$isGuest ? undefined : '/settings#Keys/makemkv_key'}
-			class="layout-health-link"
-			title={makemkvKeyTitle($dashboard.makemkv_key_valid, $dashboard.makemkv_key_checked_at)}
-		>
-			<span class="status-dot" data-status={$dashboard.makemkv_key_valid === true ? 'ok' : 'error'}></span>
-			<span class="layout-health-label">Key</span>
-		</svelte:element>
+		{@render guestLink(
+			'/settings#Keys/makemkv_key',
+			'layout-health-link',
+			keyHealth,
+			makemkvKeyTitle($dashboard.makemkv_key_valid, $dashboard.makemkv_key_checked_at)
+		)}
 	</div>
 	<!-- Divider -->
 	<div class="layout-header-divider"></div>
 	<!-- Live activity -->
 	<div class="layout-activity-group flex items-center gap-3">
-		<svelte:element
-			this={$isGuest ? 'span' : 'a'}
-			href={$isGuest ? undefined : '/settings#drives'}
-			class="layout-activity-link"
-			>{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1
-				? 's'
-				: ''}</svelte:element
-		>
+		{@render guestLink('/settings#drives', 'layout-activity-link', driveCount)}
 		{#if rippingCount > 0}
 			<span class="layout-activity-ripping">{rippingCount} ripping</span>
 		{/if}
