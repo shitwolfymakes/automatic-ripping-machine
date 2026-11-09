@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
 	import { bulkDeleteJobs } from '$lib/api/jobs';
+	import { bulkDeleteFeedback, type BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
@@ -75,7 +76,7 @@
 
 	// Gear menu
 	let bulkBusy = $state(false);
-	let bulkFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	let bulkFeedback = $state<BulkFeedback | null>(null);
 
 	async function handleBulkAction(
 		action: 'delete' | 'purge',
@@ -87,17 +88,9 @@
 		bulkFeedback = null;
 		try {
 			// v3 only exposes bulk delete; purge has no endpoint and the menu
-			// routes both actions here. The response reports deleted_ids plus
-			// skipped_non_terminal (in-flight jobs the backend refused).
+			// routes both actions here.
 			const result = await bulkDeleteJobs(params);
-			const skipped = result.skipped_non_terminal.length;
-			bulkFeedback = {
-				type: skipped > 0 ? 'error' : 'success',
-				message:
-					skipped > 0
-						? `Deleted ${result.deleted_ids.length}, skipped ${skipped} in-flight job(s)`
-						: `Deleted ${result.deleted_ids.length} job(s)`
-			};
+			bulkFeedback = bulkDeleteFeedback(result);
 			jobsList.selected.clear();
 			await jobsList.load();
 		} catch (e) {
