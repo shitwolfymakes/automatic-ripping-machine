@@ -35,12 +35,11 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { JobDetail } from '$lib/stores/jobDetail.svelte';
+	import { JobPanels } from '$lib/stores/jobPanels.svelte';
 
 	const jobDetail = new JobDetail(() => $page.params.id ?? '');
 	let detail = $derived(jobDetail.detail);
-	let activePanel = $state<'title' | 'music' | 'episodes' | null>(null);
-	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
-	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
+	const panels = new JobPanels();
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
 	// "Matching episodes..." while the Backend re-matches after a type flip or a
@@ -78,7 +77,7 @@
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names, sessionNames) : []);
 
 	function handleTitleApply() {
-		activePanel = null;
+		panels.active = null;
 		jobDetail.load();
 	}
 
@@ -87,7 +86,7 @@
 	}
 
 	function handleSeriesApplied() {
-		activePanel = 'episodes';
+		panels.active = 'episodes';
 		matching.start();
 		jobDetail.load();
 	}
@@ -95,17 +94,12 @@
 	function handleMediaTypeChanged(type: 'movie' | 'tv') {
 		if (type === 'tv') matching.start();
 		else matching.stop();
-		activePanel = type === 'tv' ? 'episodes' : null;
+		panels.active = type === 'tv' ? 'episodes' : null;
 		jobDetail.load();
 	}
 
-	function togglePanel(panel: 'title' | 'music' | 'episodes') {
-		if (panel === 'title') titleInitialType = undefined;
-		activePanel = activePanel === panel ? null : panel;
-	}
-
 	function handleMusicApply() {
-		activePanel = null;
+		panels.active = null;
 		jobDetail.load();
 	}
 
@@ -234,16 +228,16 @@
 					<div class="flex job-detail-panel-toggle-bar">
 						<button
 							type="button"
-							onclick={() => togglePanel('title')}
+							onclick={() => panels.toggle('title')}
 							class="job-detail-panel-tab"
-							aria-pressed={activePanel === 'title'}>Poster &amp; metadata search</button
+							aria-pressed={panels.active === 'title'}>Poster &amp; metadata search</button
 						>
 						{#if job.media_type === 'tv'}
 							<button
 								type="button"
-								onclick={() => togglePanel('episodes')}
+								onclick={() => panels.toggle('episodes')}
 								class="job-detail-panel-tab"
-								aria-pressed={activePanel === 'episodes'}>Match Episodes</button
+								aria-pressed={panels.active === 'episodes'}>Match Episodes</button
 							>
 						{/if}
 					</div>
@@ -251,25 +245,25 @@
 					<div class="flex job-detail-panel-toggle-bar">
 						<button
 							type="button"
-							onclick={() => togglePanel('music')}
+							onclick={() => panels.toggle('music')}
 							class="job-detail-panel-tab"
-							aria-pressed={activePanel === 'music'}>Match CD</button
+							aria-pressed={panels.active === 'music'}>Match CD</button
 						>
 					</div>
 				{/if}
 
 				<!-- Active panel content -->
-				{#if activePanel === 'title'}
+				{#if panels.active === 'title'}
 					<div class="job-detail-panel-content">
 						<TitleSearch
 							{job}
 							onapply={handleTitleApply}
 							onseries={handleSeriesApplied}
-							initialType={titleInitialType}
+							initialType={panels.titleInitialType}
 						/>
 					</div>
 				{/if}
-				{#if activePanel === 'episodes' && jobDetail.isVideoDisc && job.media_type === 'tv'}
+				{#if panels.active === 'episodes' && jobDetail.isVideoDisc && job.media_type === 'tv'}
 					<div class="job-detail-panel-content">
 						<EpisodeMatchPanel
 							bind:this={episodePanel}
@@ -277,14 +271,11 @@
 							{tracks}
 							matching={matching.active}
 							onchanged={() => jobDetail.load()}
-							onsearchseries={() => {
-								titleInitialType = 'tv';
-								activePanel = 'title';
-							}}
+							onsearchseries={panels.searchSeries}
 						/>
 					</div>
 				{/if}
-				{#if activePanel === 'music'}
+				{#if panels.active === 'music'}
 					<div class="job-detail-panel-content">
 						<MusicSearch {job} discTracks={tracks} onapply={handleMusicApply} />
 					</div>
