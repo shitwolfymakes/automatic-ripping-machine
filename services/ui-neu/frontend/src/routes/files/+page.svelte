@@ -146,10 +146,6 @@
 		}
 	}
 
-	async function pickerNavigate(root: string, subpath: string) {
-		await loadPickerLocation(root, subpath);
-	}
-
 	async function pickerGoUp() {
 		if (!pickerCanGoUp) return;
 		if (pickerListing?.parent_subpath != null) {
@@ -875,7 +871,7 @@
 					{#each pickerFolders as folder (folder.name)}
 						<button
 							type="button"
-							onclick={() => pickerNavigate(picker.root, childSubpath(picker.subpath, folder.name))}
+							onclick={() => loadPickerLocation(picker.root, childSubpath(picker.subpath, folder.name))}
 							class="flex w-full items-center gap-3 files-page-picker-row files-page-picker-row-folder"
 						>
 							<svg
