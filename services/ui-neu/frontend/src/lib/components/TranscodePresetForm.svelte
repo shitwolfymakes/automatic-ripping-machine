@@ -235,9 +235,10 @@
 				<option value={encoder}>{encoder}</option>
 			{:else}
 				{#each GROUP_ORDER as g (g)}
-					{#if groupedEncoders.get(g)?.length}
+					{@const list = groupedEncoders.get(g)}
+					{#if list?.length}
 						<optgroup label={GROUP_LABELS[g]}>
-							{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}
+							{#each list as enc (enc.id)}
 								<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
 									{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
 								</option>

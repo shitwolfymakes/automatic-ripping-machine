@@ -5,16 +5,12 @@ import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcode
 import type { EncoderAvailabilityView, TranscodePresetView } from '$lib/types/api.gen';
 
 // Branch pins for TranscodePresetForm, beside TranscodePresetForm.test.ts.
-// Three branches cannot be reached from the rendered component, so nothing
-// here forces them:
-// - The `?? []` in `{#each groupedEncoders.get(g) ?? [] as enc (enc.id)}`: it
-//   sits inside `{#if groupedEncoders.get(g)?.length}`, so the group always
-//   has a list there.
-// - The "value unchanged" path Svelte compiles for `<option value={encoder}>`
-//   on the loading and empty-catalog placeholder options: the option's update
-//   runs only when `encoder` changes, so it never sees the same value twice.
-// - The `?? ''` Svelte adds to those two `value={encoder}` attributes:
-//   `encoder` is a string state, never null.
+// Svelte compiles two branches into the `value={encoder}` of each placeholder
+// option (loading, and an empty catalog). Neither can be reached from the
+// rendered component, so nothing here forces them:
+// - the "value unchanged" path: the option's update runs only when `encoder`
+//   changes, so it never sees the same value twice
+// - the `?? ''` fallback: `encoder` is a string state, never null
 
 vi.mock('$lib/api/transcodePresets', () => ({
 	createTranscodePreset: vi.fn(),
