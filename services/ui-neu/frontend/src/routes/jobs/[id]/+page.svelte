@@ -24,7 +24,8 @@
 	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { buildMetadataFields, readJobMetadata } from '$lib/utils/job-fields';
+	import { buildMetadataFields } from '$lib/utils/job-fields';
+	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { formatFps } from '$lib/utils/fps';
 	import { extractMusicTracks } from '$lib/utils/music-tracks';
 	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';

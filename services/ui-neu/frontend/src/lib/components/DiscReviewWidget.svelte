@@ -12,7 +12,8 @@
 	} from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { parkedSessionLine, readJobMetadata, videoTypeLabel } from '$lib/utils/job-fields';
+	import { parkedSessionLine, videoTypeLabel } from '$lib/utils/job-fields';
+	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { episodeStatus } from '$lib/utils/episode-status';
 	import {

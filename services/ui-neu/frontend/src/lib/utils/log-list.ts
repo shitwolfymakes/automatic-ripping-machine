@@ -2,7 +2,7 @@
 import type { JobLogFileView, JobView } from '$lib/types/api.gen';
 import type { IsoSourceKind } from '$lib/api/dashboard';
 import { discTypeLabel, getVideoTypeConfig, type VideoTypeConfig } from './job-type';
-import { readJobMetadata } from './job-fields';
+import { readJobMetadata } from './job-metadata';
 
 type DiscFields = Partial<Pick<JobView, 'season' | 'disc_number' | 'disc_total'>>;
 type TypeFields = Pick<JobView, 'metadata_json' | 'disc_type'> &

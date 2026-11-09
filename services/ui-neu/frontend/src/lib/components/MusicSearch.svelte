@@ -2,7 +2,7 @@
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
-	import { readJobMetadata } from '$lib/utils/job-fields';
+	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from './Glyph.svelte';
