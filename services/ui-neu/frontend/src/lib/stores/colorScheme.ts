@@ -1,22 +1,12 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { fetchThemes, fetchTheme } from '$lib/api/themes';
+import { fetchThemes } from '$lib/api/themes';
 import { COLOR_SCHEMES, DEFAULT_SCHEME, type ColorScheme } from '$lib/themes/builtinSchemes';
 import { applySchemeToDocument, applyTokensForCurrentMode } from '$lib/themes/applyScheme';
-
-/**
- * Built-in scheme ids. Their full CSS ships as static assets in the frontend
- * (static/themes/{id}.css, served same-origin by nginx) — NOT from the backend
- * theme API, which now serves only user-uploaded themes. So theme styling is a
- * pure frontend concern; only uploads round-trip the backend.
- */
-const BUILTIN_IDS = new Set(COLOR_SCHEMES.map((s) => s.id));
+import { fetchThemeCss, cacheThemeCss, cachedThemeCss } from '$lib/themes/themeCss';
 
 /** Writable store of all available schemes (built-in + API-loaded) */
 export const allSchemes = writable<ColorScheme[]>([...COLOR_SCHEMES]);
-
-/** Cache of full theme data (with CSS) fetched from the API */
-const cssCache = new Map<string, string>();
 
 /** In-flight fetch promises keyed by theme id - prevents duplicate concurrent fetches */
 const inFlight = new Map<string, Promise<void>>();
@@ -30,7 +20,7 @@ function applyScheme(id: string) {
 	if (!browser) return;
 	const schemes = get(allSchemes);
 	const scheme = schemes.find((s) => s.id === id) ?? DEFAULT_SCHEME;
-	applySchemeToDocument(scheme, scheme.css ?? cssCache.get(scheme.id) ?? '');
+	applySchemeToDocument(scheme, scheme.css ?? cachedThemeCss(scheme.id) ?? '');
 }
 
 /**
@@ -57,13 +47,6 @@ export const schemeLocksMode = derived(colorScheme, (id) => {
 	const scheme = schemes.find((s) => s.id === id);
 	return scheme?.mode != null;
 });
-
-/** Fetch a built-in theme's CSS from the frontend's own static assets. */
-async function fetchBuiltinCss(id: string): Promise<string> {
-	const res = await fetch(`/themes/${encodeURIComponent(id)}.css`);
-	if (!res.ok) return '';
-	return res.text();
-}
 
 /**
  * Merge user-uploaded themes from the API into the built-in fallback list and
@@ -116,12 +99,12 @@ export async function loadThemesFromApi(): Promise<void> {
  * handler both call this on page load.
  */
 export async function loadThemeCss(id: string): Promise<void> {
-	if (cssCache.has(id)) {
+	if (cachedThemeCss(id) !== undefined) {
 		// Already cached — update the scheme object and re-apply
 		const schemes = get(allSchemes);
 		const scheme = schemes.find((s) => s.id === id);
 		if (scheme) {
-			scheme.css = cssCache.get(id);
+			scheme.css = cachedThemeCss(id);
 			applyScheme(id);
 		}
 		return;
@@ -133,16 +116,9 @@ export async function loadThemeCss(id: string): Promise<void> {
 
 	const promise = (async () => {
 		try {
-			// Built-in themes: fetch the bundled static CSS (same-origin, no API).
-			// User-uploaded themes: fetch from the backend theme API.
-			const css = BUILTIN_IDS.has(id) ? await fetchBuiltinCss(id) : (await fetchTheme(id)).css;
+			const css = await fetchThemeCss(id);
 			if (css) {
-				cssCache.set(id, css);
-				try {
-					globalThis.window?.localStorage?.setItem(`theme-cache-v1-${id}`, css);
-				} catch {
-					// localStorage unavailable or quota exceeded - non-fatal
-				}
+				cacheThemeCss(id, css);
 				// Update the scheme in the store
 				allSchemes.update((schemes) => schemes.map((s) => (s.id === id ? { ...s, css } : s)));
 			}
