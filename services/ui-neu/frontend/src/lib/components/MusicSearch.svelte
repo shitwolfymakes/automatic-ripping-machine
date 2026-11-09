@@ -3,9 +3,8 @@
 	import { searchMusicMetadata, fetchMusicDetail } from '$lib/api/jobs';
 	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
-	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { formatMinSec } from '$lib/utils/format';
-	import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '$lib/utils/music-search';
+	import type { MusicSearchOpts } from '$lib/utils/music-search';
 	import {
 		visibleTracksFor,
 		discTotalSeconds,
@@ -20,6 +19,7 @@
 	import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
 	import Glyph from './Glyph.svelte';
 	import MatchGlyph from './music-search/MatchGlyph.svelte';
+	import MusicSearchForm from './music-search/MusicSearchForm.svelte';
 
 	interface Props {
 		job: JobView;
@@ -27,17 +27,6 @@
 		onapply?: () => void;
 	}
 	let { job, discTracks, onapply }: Props = $props();
-
-	// Seed from the typed `music` section (metadata_json.music.artist/.album) —
-	// bare top-level metadata keys are gone post-migration (see job-fields.ts).
-	const meta = readJobMetadata(job.metadata_json, job);
-	let query = $state(job.title || meta.album || '');
-	let artist = $state(meta.artist || '');
-	let filterType = $state('');
-	let filterFormat = $state('');
-	let filterCountry = $state('');
-	let filterStatus = $state('');
-	let matchCount = $state(discTracks.length > 0);
 
 	let searching = $state(false);
 	let results = $state<MetadataCandidate[]>([]);
@@ -59,26 +48,14 @@
 
 	let visibleTracks = $derived(visibleTracksFor(detail, job.disc_number));
 
-	function currentFilters(): MusicSearchFilters {
-		return {
-			artist,
-			type: filterType,
-			format: filterFormat,
-			country: filterCountry,
-			status: filterStatus,
-			matchCount
-		};
-	}
-
-	async function handleSearch() {
-		if (!query.trim()) return;
+	async function handleSearch(q: string, opts: MusicSearchOpts) {
 		searching = true;
 		results = [];
 		searchError = null;
 		detail = null;
 		flips.clear();
 		try {
-			const resp = await searchMusicMetadata(query.trim(), buildSearchOpts(currentFilters(), discTracks.length));
+			const resp = await searchMusicMetadata(q, opts);
 			results = resp.candidates;
 			if (resp.detail) searchError = resp.detail;
 			else if (results.length === 0) searchError = 'No results found.';
@@ -87,10 +64,6 @@
 		} finally {
 			searching = false;
 		}
-	}
-
-	function handleSearchKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') handleSearch();
 	}
 
 	async function openDetail(c: MetadataCandidate) {
@@ -134,108 +107,10 @@
 			onapply
 		);
 	}
-
-	let activeFilterCount = $derived(countActiveFilters(currentFilters(), discTracks.length));
-
-	function clearFilters() {
-		filterType = '';
-		filterFormat = '';
-		filterCountry = '';
-		filterStatus = '';
-		matchCount = false;
-	}
 </script>
 
 <div class="stack">
-	<!-- Search panel -->
-	<div class="panel-section">
-		<div class="flex flex-wrap items-end gap-2">
-			<label class="flex-1 field music-search-field-min">
-				<span class="eyebrow music-search-label">Album / Title</span>
-				<input
-					type="text"
-					bind:value={query}
-					onkeydown={handleSearchKeydown}
-					onfocus={(e) => (e.target as HTMLInputElement).select()}
-					placeholder="Album or title..."
-				/>
-			</label>
-			<label class="field">
-				<span class="eyebrow music-search-label">Artist</span>
-				<input
-					type="text"
-					bind:value={artist}
-					onkeydown={handleSearchKeydown}
-					placeholder="Artist (optional)"
-					class="w-36"
-				/>
-			</label>
-			<label class="field">
-				<span class="eyebrow music-search-label">Type</span>
-				<select bind:value={filterType} class="music-search-select-sm">
-					<option value="">Any</option>
-					<option value="album">Album</option>
-					<option value="single">Single</option>
-					<option value="ep">EP</option>
-					<option value="compilation">Compilation</option>
-					<option value="live">Live</option>
-					<option value="soundtrack">Soundtrack</option>
-				</select>
-			</label>
-			<label class="field">
-				<span class="eyebrow music-search-label">Format</span>
-				<select bind:value={filterFormat} class="music-search-select-sm">
-					<option value="">Any</option>
-					<option value="CD">CD</option>
-					<option value="Vinyl">Vinyl</option>
-					<option value="Digital Media">Digital</option>
-					<option value="Cassette">Cassette</option>
-					<option value="SACD">SACD</option>
-				</select>
-			</label>
-			<label class="field">
-				<span class="eyebrow music-search-label">Country</span>
-				<input
-					type="text"
-					bind:value={filterCountry}
-					onkeydown={handleSearchKeydown}
-					placeholder="US, GB..."
-					class="w-20 music-search-select-sm"
-				/>
-			</label>
-			<label class="field">
-				<span class="eyebrow music-search-label">Status</span>
-				<select bind:value={filterStatus} class="music-search-select-sm">
-					<option value="">Any</option>
-					<option value="official">Official</option>
-					<option value="promotional">Promotional</option>
-					<option value="bootleg">Bootleg</option>
-				</select>
-			</label>
-			{#if discTracks.length > 0}
-				<label class="flex items-center gap-1.5 field">
-					<span class="eyebrow music-search-label">&nbsp;</span>
-					<div class="flex items-center gap-1.5 music-search-checkbox-row">
-						<input type="checkbox" bind:checked={matchCount} class="music-search-checkbox" />
-						<span class="music-search-meta">{discTracks.length} tracks</span>
-					</div>
-				</label>
-			{/if}
-			<div class="flex items-center gap-2">
-				<span class="eyebrow music-search-label">&nbsp;</span>
-				<button
-					onclick={handleSearch}
-					disabled={searching || !query.trim()}
-					class="btn btn-primary music-search-action-btn"
-				>
-					{searching ? 'Searching...' : 'Search'}
-				</button>
-				{#if activeFilterCount > 0}
-					<button onclick={clearFilters} class="btn btn-ghost music-search-clear-btn"> Clear </button>
-				{/if}
-			</div>
-		</div>
-	</div>
+	<MusicSearchForm {job} discTrackCount={discTracks.length} {searching} onsearch={handleSearch} />
 
 	{#if searchError}
 		<p class="music-search-meta">{searchError}</p>
@@ -554,12 +429,6 @@
 </div>
 
 <style>
-	.music-search-label {
-		color: var(--color-text-muted);
-	}
-	.music-search-field-min {
-		min-width: 160px;
-	}
 	.music-search-right {
 		text-align: right;
 	}
@@ -581,26 +450,6 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-muted);
-	}
-	.music-search-checkbox-row {
-		padding: 0.3125rem 0;
-	}
-	.music-search-checkbox {
-		width: 0.875rem;
-		height: 0.875rem;
-		border-radius: var(--radius-sm);
-		accent-color: var(--color-primary);
-	}
-	.music-search-clear-btn:hover {
-		color: var(--color-danger);
-	}
-	/* select/input variants one size down from field-control's default
-	   (text-xs vs text-sm, tighter horizontal padding) */
-	.music-search-select-sm {
-		padding-left: 0.5rem;
-		padding-right: 0.5rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
 	}
 
 	.music-search-poster-scene {
@@ -812,12 +661,6 @@
 	   narrower than .btn's default */
 	.music-search-action-btn {
 		padding: 0.375rem 0.75rem;
-		border: 0;
-	}
-	.music-search-clear-btn {
-		padding: 0.375rem 0.5rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
 		border: 0;
 	}
 	.music-search-feedback {
