@@ -14,6 +14,10 @@ from arm_backend.ws.principal import Principal, PrincipalKind, ServicePrincipal
 from arm_common import Drive, Job, TranscodeTask, TranscodeTaskStatus
 
 
+# Bare topics: no scope id follows the prefix.
+_UNSCOPED_TOPICS: frozenset[str] = frozenset({"ripper.events", "transcode.events", "system.events"})
+
+
 def _split(topic: str) -> tuple[str, str | None]:
     """`ripper.progress.job_abc` → ("ripper.progress", "job_abc"). Bare topics → (topic, None)."""
     if not topic:
@@ -21,14 +25,13 @@ def _split(topic: str) -> tuple[str, str | None]:
     head, _, tail = topic.rpartition(".")
     # Untyped bare topics like "ripper.events" have no scope id — split returns ("ripper", "events")
     # which we don't want; detect by checking whether the suffix is a known scope-bearing token.
-    if topic in {"ripper.events", "transcode.events", "system.events"}:
+    if topic in _UNSCOPED_TOPICS:
         return (topic, None)
     if head:
         return (head, tail)
     return (topic, None)
 
 
-_UI_TOPIC_PREFIXES_NO_SCOPE: frozenset[str] = frozenset({"ripper.events", "transcode.events", "system.events"})
 _UI_TOPIC_PREFIXES_WITH_SCOPE: frozenset[str] = frozenset({"ripper.progress", "transcode.progress", "logs"})
 
 
@@ -70,7 +73,7 @@ def _ui_may_subscribe(topic: str, prefix: str, scope: str | None) -> bool:
     """The UI may subscribe to the bare event topics and to any scoped
     progress or log topic.
     """
-    if topic in _UI_TOPIC_PREFIXES_NO_SCOPE:
+    if topic in _UNSCOPED_TOPICS:
         return True
     return prefix in _UI_TOPIC_PREFIXES_WITH_SCOPE and scope is not None
 
