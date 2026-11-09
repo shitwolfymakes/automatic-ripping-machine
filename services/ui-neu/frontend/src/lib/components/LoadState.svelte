@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { fadeIn } from '$lib/transitions';
+	import { loadPhase } from '$lib/utils/load-state';
 
 	interface Props {
 		data: T | null | undefined;
@@ -16,11 +17,6 @@
 	}
 
 	let { data, loading, error = null, isEmpty, minDelay = 150, loadingSlot, ready, empty, errorSlot }: Props = $props();
-
-	function defaultIsEmpty(d: T): boolean {
-		if (Array.isArray(d)) return d.length === 0;
-		return false;
-	}
 
 	let delayElapsed = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
@@ -44,15 +40,7 @@
 		};
 	});
 
-	const phase = $derived.by(() => {
-		if (error) return 'error';
-		if (loading && delayElapsed) return 'loading';
-		if (loading) return 'waiting';
-		if (data == null) return 'loading';
-		const emptyCheck = isEmpty ?? defaultIsEmpty;
-		if (emptyCheck(data)) return 'empty';
-		return 'ready';
-	});
+	const phase = $derived(loadPhase({ data, loading, error, delayElapsed, isEmpty }));
 </script>
 
 {#if phase === 'error'}
