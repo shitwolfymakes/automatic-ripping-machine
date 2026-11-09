@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
+	import { PresetSave } from '$lib/stores/presetSave.svelte';
 	import { encoderGroups } from '$lib/utils/encoder-groups';
 	import type { ContainerFormat, MediaType, TranscodePresetView, TranscodeTool } from '$lib/types/api.gen';
 
@@ -75,46 +76,37 @@
 
 	let extraArgs = $state(preset?.extra_args ?? '');
 
-	let submitting = $state(false);
-	let error = $state<string | null>(null);
+	const save = new PresetSave();
 
-	const canSubmit = $derived(!submitting && name.trim().length > 0);
+	const canSubmit = $derived(!save.submitting && name.trim().length > 0);
+
+	function savePreset(): Promise<TranscodePresetView> {
+		// Custom edit: no media_type (immutable after create).
+		if (editing && preset)
+			return updateTranscodePreset(preset.id, {
+				name,
+				tool,
+				preset_ref: presetRef || null,
+				container,
+				encoder,
+				extra_args: extraArgs || null
+			});
+		return createTranscodePreset({
+			name,
+			media_type: mediaType,
+			tool,
+			preset_ref: presetRef || null,
+			container,
+			encoder,
+			extra_args: extraArgs || null
+		});
+	}
 
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		// Built-ins are read-only — no save path (Enter is a no-op too).
 		if (isBuiltin || !canSubmit) return;
-		submitting = true;
-		error = null;
-		try {
-			let result: TranscodePresetView;
-			if (editing && preset) {
-				// Custom edit: no media_type (immutable after create).
-				result = await updateTranscodePreset(preset.id, {
-					name,
-					tool,
-					preset_ref: presetRef || null,
-					container,
-					encoder,
-					extra_args: extraArgs || null
-				});
-			} else {
-				result = await createTranscodePreset({
-					name,
-					media_type: mediaType,
-					tool,
-					preset_ref: presetRef || null,
-					container,
-					encoder,
-					extra_args: extraArgs || null
-				});
-			}
-			onsaved(result);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Save failed';
-		} finally {
-			submitting = false;
-		}
+		await save.run(savePreset, (p) => onsaved(p));
 	}
 
 	// the old shared input-class constants are gone: inputs live in .field
@@ -132,8 +124,8 @@
 		</div>
 	{/if}
 
-	{#if error}
-		<p class="field-error" data-testid="tp-error">{error}</p>
+	{#if save.error}
+		<p class="field-error" data-testid="tp-error">{save.error}</p>
 	{/if}
 
 	<label class="field">
@@ -144,7 +136,7 @@
 			type="text"
 			required
 			bind:value={name}
-			disabled={submitting || isBuiltin}
+			disabled={save.submitting || isBuiltin}
 		/>
 	</label>
 
@@ -237,12 +229,12 @@
 	</label>
 
 	<div class="transcode-preset-form-actions">
-		<button type="button" onclick={oncancel} disabled={submitting} class="btn btn-ghost">
+		<button type="button" onclick={oncancel} disabled={save.submitting} class="btn btn-ghost">
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
 		{#if !isBuiltin}
 			<button type="submit" disabled={!canSubmit} data-testid="tp-submit" class="btn btn-primary">
-				{submitting ? 'Saving...' : 'Save'}
+				{save.submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
 	</div>

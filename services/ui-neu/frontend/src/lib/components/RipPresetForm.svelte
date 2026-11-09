@@ -4,6 +4,7 @@
 	// wiring, the disabled rules, and the create / custom-edit / built-in
 	// submit-body shapes follow the Vue source faithfully.
 	import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
+	import { PresetSave } from '$lib/stores/presetSave.svelte';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
 	import { trackFiltersBody, type TrackFilters } from '$lib/utils/track-filters';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
@@ -29,45 +30,36 @@
 	let outputMode = $state<OutputMode>(preset?.output_mode ?? 'tracks');
 	let filters = $state<TrackFilters>((preset?.track_filters_json as TrackFilters) ?? {});
 
-	let submitting = $state(false);
-	let error = $state<string | null>(null);
+	const save = new PresetSave();
 
 	const showFilters = $derived(trackSelection === 'custom' && !isBuiltin);
-	const canSubmit = $derived(!submitting && name.trim().length > 0);
+	const canSubmit = $derived(!save.submitting && name.trim().length > 0);
+
+	function savePreset(): Promise<RipPresetView> {
+		// Custom edit: no media_type (immutable after create).
+		if (editing && preset)
+			return updateRipPreset(preset.id, {
+				name,
+				track_selection: trackSelection,
+				identification_mode: identificationMode,
+				output_mode: outputMode,
+				track_filters_json: trackFiltersBody(trackSelection, filters)
+			});
+		return createRipPreset({
+			name,
+			media_type: mediaType,
+			track_selection: trackSelection,
+			identification_mode: identificationMode,
+			output_mode: outputMode,
+			track_filters_json: trackFiltersBody(trackSelection, filters)
+		});
+	}
 
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		// Built-ins are read-only — no save path (Enter is a no-op too).
 		if (isBuiltin || !canSubmit) return;
-		submitting = true;
-		error = null;
-		try {
-			let result: RipPresetView;
-			if (editing && preset) {
-				// Custom edit: no media_type (immutable after create).
-				result = await updateRipPreset(preset.id, {
-					name,
-					track_selection: trackSelection,
-					identification_mode: identificationMode,
-					output_mode: outputMode,
-					track_filters_json: trackFiltersBody(trackSelection, filters)
-				});
-			} else {
-				result = await createRipPreset({
-					name,
-					media_type: mediaType,
-					track_selection: trackSelection,
-					identification_mode: identificationMode,
-					output_mode: outputMode,
-					track_filters_json: trackFiltersBody(trackSelection, filters)
-				});
-			}
-			onsaved(result);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Save failed';
-		} finally {
-			submitting = false;
-		}
+		await save.run(savePreset, (p) => onsaved(p));
 	}
 
 	// the old shared input-class constants are gone: inputs live in .field
@@ -85,8 +77,8 @@
 		</div>
 	{/if}
 
-	{#if error}
-		<p class="field-error" data-testid="preset-error">{error}</p>
+	{#if save.error}
+		<p class="field-error" data-testid="preset-error">{save.error}</p>
 	{/if}
 
 	<label class="field">
@@ -97,7 +89,7 @@
 			type="text"
 			required
 			bind:value={name}
-			disabled={submitting || isBuiltin}
+			disabled={save.submitting || isBuiltin}
 		/>
 	</label>
 
@@ -156,12 +148,12 @@
 	{/if}
 
 	<div class="rip-preset-form-actions">
-		<button type="button" onclick={oncancel} disabled={submitting} class="btn btn-ghost">
+		<button type="button" onclick={oncancel} disabled={save.submitting} class="btn btn-ghost">
 			{isBuiltin ? 'Close' : 'Cancel'}
 		</button>
 		{#if !isBuiltin}
 			<button type="submit" disabled={!canSubmit} data-testid="preset-submit" class="btn btn-primary">
-				{submitting ? 'Saving...' : 'Save'}
+				{save.submitting ? 'Saving...' : 'Save'}
 			</button>
 		{/if}
 	</div>
