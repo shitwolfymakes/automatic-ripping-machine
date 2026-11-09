@@ -5,7 +5,15 @@
 	import type { DirectoryListing } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
 	import { formatBytes } from '$lib/utils/format';
-	import { parseSelectionKey, moveTargetFolders, childSubpath } from '$lib/utils/files';
+	import {
+		parseSelectionKey,
+		moveTargetFolders,
+		childSubpath,
+		orderForDelete,
+		bulkResultFeedback,
+		cleanupFeedback,
+		fixedPermissionsMessage
+	} from '$lib/utils/files';
 	import {
 		fetchOrphanFolders,
 		deleteFolder as deleteOrphanFolder,
@@ -84,7 +92,7 @@
 			const result = await fixPermissions(browser.current.root, browser.itemSubpath(entryName));
 			feedback = {
 				type: 'success',
-				message: `Fixed permissions on ${displayName} (${result.fixed} item${result.fixed !== 1 ? 's' : ''})`
+				message: fixedPermissionsMessage(displayName, result.fixed)
 			};
 			clearFeedback();
 			await browser.navigate(browser.current.root, browser.current.subpath);
@@ -176,11 +184,7 @@
 		}
 		closeMoveDialog();
 		browser.selectedKeys = new Set();
-		if (failed > 0) {
-			feedback = { type: 'error', message: `Moved ${moved}, failed ${failed}` };
-		} else {
-			feedback = { type: 'success', message: `Moved ${moved} item${moved !== 1 ? 's' : ''}` };
-		}
+		feedback = bulkResultFeedback('Moved', moved, failed);
 		clearFeedback();
 		await browser.navigate(browser.current.root, browser.current.subpath);
 	}
@@ -189,8 +193,7 @@
 	async function confirmBulkDelete() {
 		let deleted = 0;
 		let failed = 0;
-		// Sort by subpath length descending so children are deleted before parents
-		const items = [...browser.selectedKeys].map(parseSelectionKey).sort((a, b) => b.subpath.length - a.subpath.length);
+		const items = orderForDelete([...browser.selectedKeys].map(parseSelectionKey));
 		for (const item of items) {
 			try {
 				await deleteFile(item.root, item.subpath);
@@ -201,11 +204,7 @@
 		}
 		bulkDeleteOpen = false;
 		browser.selectedKeys = new Set();
-		if (failed > 0) {
-			feedback = { type: 'error', message: `Deleted ${deleted}, failed ${failed}` };
-		} else {
-			feedback = { type: 'success', message: `Deleted ${deleted} item${deleted !== 1 ? 's' : ''}` };
-		}
+		feedback = bulkResultFeedback('Deleted', deleted, failed);
 		clearFeedback();
 		await browser.navigate(browser.current.root, browser.current.subpath);
 	}
@@ -281,10 +280,7 @@
 		orphanFoldersBusy = true;
 		try {
 			const result = await bulkDeleteFolders([...orphanFoldersSelected]);
-			orphanFoldersFeedback = {
-				type: result.errors.length ? 'error' : 'success',
-				message: `Deleted ${result.removed.length} folder${result.removed.length !== 1 ? 's' : ''}${result.errors.length ? `, ${result.errors.length} error(s)` : ''}`
-			};
+			orphanFoldersFeedback = cleanupFeedback(result.removed.length, 'folder', result.errors.length);
 			orphanFoldersData = await fetchOrphanFolders();
 			orphanFoldersSelected = new Set();
 		} catch (e) {
@@ -297,10 +293,7 @@
 	async function handleCleanupTranscoder() {
 		try {
 			const result = await cleanupTranscoder();
-			feedback = {
-				type: result.errors.length ? 'error' : 'success',
-				message: `Deleted ${result.deleted} transcoder job${result.deleted !== 1 ? 's' : ''}${result.errors.length ? `, ${result.errors.length} error(s)` : ''}`
-			};
+			feedback = cleanupFeedback(result.deleted, 'transcoder job', result.errors.length);
 			clearFeedback();
 		} catch (e) {
 			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Cleanup failed' };

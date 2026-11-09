@@ -1,7 +1,9 @@
 // Pure rules for the Files page: how a directory listing is sorted, how the
-// roots are ordered, how selection keys are built and split, and which
-// folders the move picker offers.
+// roots are ordered, how selection keys are built and split, which folders
+// the move picker offers, the bulk delete order, and the wording of the
+// result banners.
 import type { FileEntry, FileRoot } from '$lib/api/files';
+import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 
 export type SortKey = 'name' | 'size' | 'modified';
 export type SortDir = 'asc' | 'desc';
@@ -68,4 +70,30 @@ export function moveTargetFolders(
 		? new Set([...selectedKeys].map((k) => parseSelectionKey(k).subpath.split('/').pop()))
 		: new Set<string | undefined>();
 	return entries.filter((e) => e.type === 'directory' && !movingNames.has(e.name));
+}
+
+// Bulk delete order: longest subpath first, so children go before their
+// parents. Returns a new array; the sort is stable.
+export function orderForDelete<T extends { subpath: string }>(items: readonly T[]): T[] {
+	return [...items].sort((a, b) => b.subpath.length - a.subpath.length);
+}
+
+// The banner after a bulk move or delete: an error naming the failures when
+// any failed, else a success with the item count.
+export function bulkResultFeedback(verb: 'Moved' | 'Deleted', done: number, failed: number): BulkFeedback {
+	if (failed > 0) return { type: 'error', message: `${verb} ${done}, failed ${failed}` };
+	return { type: 'success', message: `${verb} ${done} item${done !== 1 ? 's' : ''}` };
+}
+
+// The banner after a cleanup that removes `count` of `noun`: the error tone
+// and an error count are added when there were errors.
+export function cleanupFeedback(count: number, noun: string, errors: number): BulkFeedback {
+	return {
+		type: errors ? 'error' : 'success',
+		message: `Deleted ${count} ${noun}${count !== 1 ? 's' : ''}${errors ? `, ${errors} error(s)` : ''}`
+	};
+}
+
+export function fixedPermissionsMessage(name: string, fixed: number): string {
+	return `Fixed permissions on ${name} (${fixed} item${fixed !== 1 ? 's' : ''})`;
 }

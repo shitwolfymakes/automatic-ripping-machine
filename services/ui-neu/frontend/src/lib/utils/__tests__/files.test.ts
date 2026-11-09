@@ -6,7 +6,11 @@ import {
 	childSubpath,
 	selectionKey,
 	parseSelectionKey,
-	moveTargetFolders
+	moveTargetFolders,
+	orderForDelete,
+	bulkResultFeedback,
+	cleanupFeedback,
+	fixedPermissionsMessage
 } from '../files';
 import type { FileEntry, FileRoot } from '$lib/api/files';
 
@@ -126,5 +130,57 @@ describe('moveTargetFolders', () => {
 
 	it('hides the last segment of a nested selected path', () => {
 		expect(names(moveTargetFolders(entries, new Set(['raw::deep/er/shows']), true))).toEqual(['movies']);
+	});
+});
+
+describe('orderForDelete', () => {
+	it('puts longer subpaths first so children precede parents', () => {
+		const items = [{ subpath: 'a' }, { subpath: 'a/b/c' }, { subpath: 'a/b' }];
+		expect(orderForDelete(items).map((i) => i.subpath)).toEqual(['a/b/c', 'a/b', 'a']);
+	});
+
+	it('keeps equal-length paths in their original order and does not mutate', () => {
+		const items = [{ subpath: 'bb' }, { subpath: 'aa' }, { subpath: 'c' }];
+		const ordered = orderForDelete(items);
+		expect(ordered.map((i) => i.subpath)).toEqual(['bb', 'aa', 'c']);
+		expect(ordered).not.toBe(items);
+		expect(items[0].subpath).toBe('bb');
+	});
+});
+
+describe('bulkResultFeedback', () => {
+	it('reports failures as an error for both verbs', () => {
+		expect(bulkResultFeedback('Moved', 2, 1)).toEqual({ type: 'error', message: 'Moved 2, failed 1' });
+		expect(bulkResultFeedback('Deleted', 0, 3)).toEqual({ type: 'error', message: 'Deleted 0, failed 3' });
+	});
+
+	it('reports a singular success', () => {
+		expect(bulkResultFeedback('Deleted', 1, 0)).toEqual({ type: 'success', message: 'Deleted 1 item' });
+	});
+
+	it('reports a plural success', () => {
+		expect(bulkResultFeedback('Moved', 3, 0)).toEqual({ type: 'success', message: 'Moved 3 items' });
+		expect(bulkResultFeedback('Moved', 0, 0)).toEqual({ type: 'success', message: 'Moved 0 items' });
+	});
+});
+
+describe('cleanupFeedback', () => {
+	it('words a clean singular and plural success', () => {
+		expect(cleanupFeedback(1, 'folder', 0)).toEqual({ type: 'success', message: 'Deleted 1 folder' });
+		expect(cleanupFeedback(2, 'transcoder job', 0)).toEqual({
+			type: 'success',
+			message: 'Deleted 2 transcoder jobs'
+		});
+	});
+
+	it('adds the error count and tone when there were errors', () => {
+		expect(cleanupFeedback(1, 'folder', 2)).toEqual({ type: 'error', message: 'Deleted 1 folder, 2 error(s)' });
+	});
+});
+
+describe('fixedPermissionsMessage', () => {
+	it('words the singular and plural count', () => {
+		expect(fixedPermissionsMessage('Movie', 1)).toBe('Fixed permissions on Movie (1 item)');
+		expect(fixedPermissionsMessage('Movie', 4)).toBe('Fixed permissions on Movie (4 items)');
 	});
 });
