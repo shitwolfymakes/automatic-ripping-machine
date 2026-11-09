@@ -9,6 +9,7 @@
 	import LoadState from './LoadState.svelte';
 	import Glyph from './Glyph.svelte';
 	import IsoLibrarySetup from './iso-picker/IsoLibrarySetup.svelte';
+	import IsoPathBreadcrumb from './iso-picker/IsoPathBreadcrumb.svelte';
 	import { pathTailTruncate } from '$lib/utils/truncate';
 	import { formatBytes } from '$lib/utils/format';
 	import { pathTrail } from '$lib/utils/path';
@@ -377,20 +378,7 @@
 								</button>
 							</div>
 
-							<nav class="iso-picker-breadcrumb" aria-label="Library">
-								{#each breadcrumbItems as item, i (item.path)}
-									{#if i > 0}
-										<Glyph name="chevron-right" class="h-3 w-3 iso-picker-breadcrumb-sep" />
-									{/if}
-									{#if i === breadcrumbItems.length - 1}
-										<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
-									{:else}
-										<button type="button" class="iso-picker-breadcrumb-link" onclick={() => browseTo(item.path)}>
-											{item.label}
-										</button>
-									{/if}
-								{/each}
-							</nav>
+							<IsoPathBreadcrumb items={breadcrumbItems} onnavigate={browseTo} />
 
 							<LoadState
 								data={browser.listing}
@@ -548,29 +536,6 @@
 </SlideOver>
 
 <style>
-	.iso-picker-breadcrumb {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.875rem;
-		line-height: calc(1.25 / 0.875);
-	}
-	.iso-picker-breadcrumb-link {
-		border: 0;
-		background: none;
-		padding: 0;
-		cursor: pointer;
-		color: var(--color-primary-text);
-		text-decoration: underline;
-	}
-	.iso-picker-breadcrumb-current {
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	/* :global: forwarded through Glyph's class prop */
-	:global(.iso-picker-breadcrumb-sep) {
-		color: var(--color-text-faint);
-	}
 	/* Each section is a site panel with an eyebrow title, as in Settings. */
 	.iso-picker-panel-head {
 		display: flex;
