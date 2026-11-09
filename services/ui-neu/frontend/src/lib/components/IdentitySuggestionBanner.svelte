@@ -3,7 +3,7 @@
 	import { acceptIdentitySuggestion } from '$lib/api/jobs';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 	import { identitySuggestionOf } from '$lib/utils/job-review';
-	import { providerLabel } from '$lib/utils/job-status';
+	import { providerLabel } from '$lib/utils/provider-labels';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {

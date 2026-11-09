@@ -3,8 +3,6 @@ import {
 	effectiveJobStatus,
 	isPartialComplete,
 	hasTitleMatch,
-	providerLabel,
-	PROVIDER_LABELS,
 	isAwaitingAction,
 	countRipping
 } from '$lib/utils/job-status';
@@ -68,24 +66,6 @@ describe('hasTitleMatch', () => {
 		expect(hasTitleMatch({ title: null } as any)).toBe(false);
 		expect(hasTitleMatch({ title: '' } as any)).toBe(false);
 		expect(hasTitleMatch({ title: '   ' } as any)).toBe(false);
-	});
-});
-
-describe('PROVIDER_LABELS / providerLabel', () => {
-	it('maps every known provider', () => {
-		expect(PROVIDER_LABELS).toEqual({
-			tmdb: 'TMDb',
-			omdb: 'OMDb',
-			tvmaze: 'TVmaze',
-			tvdb: 'TVDB',
-			musicbrainz: 'MusicBrainz',
-			arm_server: 'ARM community database',
-			thediscdb: 'TheDiscDB'
-		});
-		expect(providerLabel('arm_server')).toBe('ARM community database');
-	});
-	it('falls back to the id itself', () => {
-		expect(providerLabel('somewhere_else')).toBe('somewhere_else');
 	});
 });
 
