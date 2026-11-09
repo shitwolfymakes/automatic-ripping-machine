@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
-	import { transcoderDotStatus } from '$lib/utils/header-status';
+	import { serviceRows } from '$lib/utils/header-status';
 	import { countRipping } from '$lib/utils/job-status';
 	import SidebarStats from './SidebarStats.svelte';
 
@@ -22,28 +22,7 @@
 		if ((e.target as Element).closest('a')) onnavigate?.();
 	}
 
-	const services = $derived([
-		{
-			label: 'ARM',
-			href: '/settings#system',
-			status: $dashboard.arm_online ? 'ok' : 'error'
-		},
-		{
-			label: 'DB',
-			href: '/settings#system',
-			status: $dashboard.db_available ? 'ok' : 'warn'
-		},
-		{
-			label: 'Transcode',
-			href: '/transcoder',
-			status: transcoderDotStatus($dashboard)
-		},
-		{
-			label: 'Key',
-			href: '/settings#Keys/makemkv_key',
-			status: $dashboard.makemkv_key_valid === true ? 'ok' : 'error'
-		}
-	]);
+	const services = $derived(serviceRows($dashboard));
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
