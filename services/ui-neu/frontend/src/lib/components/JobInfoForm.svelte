@@ -4,6 +4,7 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { provenanceLine } from '$lib/utils/provenance';
+	import { jobInfoText } from '$lib/utils/job-info';
 
 	interface Props {
 		job: JobView;
@@ -40,11 +41,12 @@
 	// Re-seed each field from `job` only when the operator hasn't touched it, so a
 	// background dashboard poll can't clobber in-progress edits.
 	$effect.pre(() => {
-		if (!touched.title) title = job.title ?? '';
-		if (!touched.year) year = job.year != null ? String(job.year) : '';
-		if (!touched.season) season = job.season != null ? String(job.season) : '';
-		if (!touched.discNumber) discNumber = job.disc_number != null ? String(job.disc_number) : '';
-		if (!touched.discTotal) discTotal = job.disc_total != null ? String(job.disc_total) : '';
+		const seed = jobInfoText(job);
+		if (!touched.title) title = seed.title;
+		if (!touched.year) year = seed.year;
+		if (!touched.season) season = seed.season;
+		if (!touched.discNumber) discNumber = seed.discNumber;
+		if (!touched.discTotal) discTotal = seed.discTotal;
 	});
 
 	// A cleared number input binds as null, not ''.
