@@ -100,3 +100,26 @@ const POST_RIP: Record<JobStatus, boolean> = {
 export function isPostRipStatus(status: string): boolean {
 	return POST_RIP[status as JobStatus] === true;
 }
+
+const REVIEW_CARD: Record<JobStatus, boolean> = {
+	created: false,
+	awaiting_user_id: true,
+	identified: true,
+	awaiting_review: true,
+	ripping: false,
+	ripped: false,
+	ripped_partial: false,
+	ripped_awaiting_identify: true,
+	abandoned: false,
+	failed: false
+};
+
+/**
+ * Whether a raw status puts a job on the dashboard's review card.
+ * `identified` is pre-rip (disc identified, waiting to start): it belongs on
+ * the review card (with Start rip), NOT in FINISHING. Keep it here so it
+ * shows the review widget even after a page reload, not only while sticky.
+ */
+export function isReviewCardStatus(status: string): boolean {
+	return REVIEW_CARD[status.toLowerCase() as JobStatus] === true;
+}

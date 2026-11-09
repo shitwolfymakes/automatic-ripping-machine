@@ -5,6 +5,7 @@ import {
 	isInProgress,
 	isAwaitingIdentity,
 	isPostRipStatus,
+	isReviewCardStatus,
 	lifecycleStageFor,
 	LIFECYCLE_FAILURE_STATUSES
 } from '../job-status-groups';
@@ -99,5 +100,22 @@ describe('lifecycleStageFor', () => {
 describe('isPostRipStatus', () => {
 	it.each(ALL)('%s', (s) => {
 		expect(isPostRipStatus(s)).toBe(['ripped', 'ripped_partial', 'ripped_awaiting_identify'].includes(s));
+	});
+});
+
+describe('isReviewCardStatus', () => {
+	const REVIEW = ['awaiting_user_id', 'ripped_awaiting_identify', 'awaiting_review', 'identified'];
+	it.each(REVIEW)('%s is on the review card', (s) => {
+		expect(isReviewCardStatus(s)).toBe(true);
+	});
+	it('lower-cases its argument', () => {
+		expect(isReviewCardStatus('AWAITING_REVIEW')).toBe(true);
+	});
+	it.each(ALL.filter((s) => !REVIEW.includes(s)))('%s is not on the review card', (s) => {
+		expect(isReviewCardStatus(s)).toBe(false);
+	});
+	it('is false for an unknown or empty status', () => {
+		expect(isReviewCardStatus('video_ripping')).toBe(false);
+		expect(isReviewCardStatus('')).toBe(false);
 	});
 });
