@@ -164,31 +164,33 @@ export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<
 // Identify / resolve + apply-session (EXISTS in v3)
 // ---------------------------------------------------------------------------
 
+export interface ResolveJobBody {
+	title: string;
+	year?: number | null;
+	season?: number | null;
+	disc_number?: number | null;
+	disc_total?: number | null;
+	media_type?: MediaType | null;
+	music?: MusicMeta;
+	external_ids?: ExternalIds | null;
+	match?: ResolveMatch;
+}
+
 // v3 POST /api/jobs/{id}/resolve  body: ResolveRequest { title, year?, season?, disc_number?, disc_total?, media_type?, music? }.
 // Stamps the chosen identity onto the job (status → identified). `year` defaults
 // to null; `music`/`media_type` are only sent by callers that have something
 // typed to say; `external_ids` and `match` carry a picked candidate (the free-form `metadata` bag is gone — unknown keys 422).
-//
+export function resolveJob(jobId: string, body: ResolveJobBody): Promise<ResolveResponse> {
+	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, buildResolvePayload(body));
+}
+
 // season/disc_number/disc_total are a classification like media_type on the
 // Backend, not part of the identity statement: omitted keeps whatever value
 // is already stored (a disc-hint source may have filled it before the
 // operator ever opened the identify dialog -- Review Focus 5), while an
 // explicit `null` is the operator clearing it. `!== undefined` is the only
 // way to tell "the caller didn't pass this" from "the caller passed null".
-export function resolveJob(
-	jobId: string,
-	body: {
-		title: string;
-		year?: number | null;
-		season?: number | null;
-		disc_number?: number | null;
-		disc_total?: number | null;
-		media_type?: MediaType | null;
-		music?: MusicMeta;
-		external_ids?: ExternalIds | null;
-		match?: ResolveMatch;
-	}
-): Promise<ResolveResponse> {
+function buildResolvePayload(body: ResolveJobBody): Record<string, unknown> {
 	const payload: Record<string, unknown> = {
 		title: body.title,
 		year: body.year ?? null
@@ -210,7 +212,7 @@ export function resolveJob(
 	if (body.match !== undefined) {
 		payload.match = body.match;
 	}
-	return post<ResolveResponse>(`/api/jobs/${jobId}/resolve`, payload);
+	return payload;
 }
 
 // v3 POST /api/jobs/manual  body: ManualTriggerRequest { drive_id, session_id? }.
