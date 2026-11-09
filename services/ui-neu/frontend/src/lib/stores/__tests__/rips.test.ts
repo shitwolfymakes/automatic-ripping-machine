@@ -14,14 +14,8 @@ vi.mock('$lib/api/ws', () => ({
 	}
 }));
 
-import {
-	ripProgress,
-	onProgress,
-	reconcileSubscriptions,
-	stopWS,
-	formatEta,
-	formatTransfer
-} from '$lib/stores/rips.svelte';
+import { ripProgress, onProgress, reconcileSubscriptions, stopWS } from '$lib/stores/rips.svelte';
+import { formatTransfer } from '$lib/utils/format';
 
 function progressEnv(jobId: string, trackId: string, pct: number): WSEnvelope {
 	return {
@@ -124,21 +118,6 @@ describe('rips store', () => {
 	});
 });
 
-describe('formatEta', () => {
-	it('returns "< 1m" for sub-minute', () => {
-		expect(formatEta(45)).toBe('< 1m');
-	});
-	it('returns minutes+seconds for under 5 minutes', () => {
-		expect(formatEta(150)).toBe('2m 30s');
-	});
-	it('returns whole minutes for 5+ minute ETAs', () => {
-		expect(formatEta(720)).toBe('12m');
-	});
-	it('returns hours+minutes when over an hour', () => {
-		expect(formatEta(4_350)).toBe('1h 12m');
-	});
-});
-
 describe('rips store: byte copies', () => {
 	beforeEach(() => {
 		stopWS();
@@ -184,34 +163,5 @@ describe('rips store: byte copies', () => {
 	it('formats the transfer line', () => {
 		onProgress('job_iso', copyEnv(5 * 1024 ** 3, 20 * 1024 ** 3, 50 * 1024 ** 2));
 		expect(formatTransfer(ripProgress.value['job_iso'])).toBe('5 GB of 20 GB · 50 MB/s');
-	});
-
-	it('has no transfer line for a MakeMKV rip', () => {
-		expect(formatTransfer(null)).toBeNull();
-		expect(
-			formatTransfer({
-				track_id: 't',
-				progress_pct: 10,
-				eta_seconds: null,
-				bytes_done: null,
-				bytes_total: null,
-				rate_bps: null,
-				phase: null
-			})
-		).toBeNull();
-	});
-
-	it('shows only the bytes done, with no rate, when a copy reports no total or rate', () => {
-		expect(
-			formatTransfer({
-				track_id: 't',
-				progress_pct: 10,
-				eta_seconds: null,
-				bytes_done: 3 * 1024 ** 3,
-				bytes_total: null,
-				rate_bps: 0,
-				phase: null
-			})
-		).toBe('3 GB');
 	});
 });

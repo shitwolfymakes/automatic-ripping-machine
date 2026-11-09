@@ -34,7 +34,8 @@
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
-	import { ripProgress, reconcileSubscriptions, startWS, formatEta, formatTransfer } from '$lib/stores/rips.svelte';
+	import { ripProgress, reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
+	import { formatEta, formatTransfer } from '$lib/utils/format';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';

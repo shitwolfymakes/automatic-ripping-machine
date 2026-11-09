@@ -2,7 +2,7 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { statusAccentVar } from '$lib/utils/format';
+	import { statusAccentVar, formatEta, formatTransfer } from '$lib/utils/format';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import { isInProgress } from '$lib/utils/job-status-groups';
@@ -11,7 +11,7 @@
 	import { jobPoster } from '$lib/utils/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import IsoSourceChip from './IsoSourceChip.svelte';
-	import { formatEta, formatTransfer, type RipLiveProgress } from '$lib/stores/rips.svelte';
+	import type { RipLiveProgress } from '$lib/stores/rips.svelte';
 	import { slide } from 'svelte/transition';
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';

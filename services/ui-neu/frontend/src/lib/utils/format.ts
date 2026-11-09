@@ -118,6 +118,35 @@ export function formatRemaining(remainingSec: number): string {
 	return `${s}s`;
 }
 
+/** The byte-copy fields of a live rip tick that formatTransfer reads. */
+export interface ByteTransfer {
+	bytes_done: number | null;
+	bytes_total: number | null;
+	rate_bps: number | null;
+}
+
+/** "12.3 GB of 20.9 GB · 45.1 MB/s" for a byte copy, or null when none was reported. */
+export function formatTransfer(live: ByteTransfer | null | undefined): string | null {
+	if (!live || live.bytes_done == null) return null;
+	const parts = [
+		live.bytes_total != null
+			? `${formatBytes(live.bytes_done)} of ${formatBytes(live.bytes_total)}`
+			: formatBytes(live.bytes_done)
+	];
+	if (live.rate_bps != null && live.rate_bps > 0) parts.push(`${formatBytes(live.rate_bps)}/s`);
+	return parts.join(' · ');
+}
+
+export function formatEta(seconds: number): string {
+	if (seconds < 60) return '< 1m';
+	const h = Math.floor(seconds / 3600);
+	const m = Math.floor((seconds % 3600) / 60);
+	const s = seconds % 60;
+	if (h > 0) return `${h}h ${m}m`;
+	if (m >= 5) return `${m}m`;
+	return `${m}m ${s}s`;
+}
+
 /**
  * Map a status to a themeable CSS variable reference suitable for inline
  * `style="background: ${statusAccentVar(status)}"` use. Falls back to the

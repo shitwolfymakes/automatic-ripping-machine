@@ -8,6 +8,8 @@ import {
 	elapsedTime,
 	etaTime,
 	formatRemaining,
+	formatEta,
+	formatTransfer,
 	formatDateTime,
 	formatShortDateTime,
 	calendarTimeAgo
@@ -270,5 +272,43 @@ describe('calendarTimeAgo', () => {
 	it('counts minutes across midnight before calendar days', () => {
 		const justAfterMidnight = new Date(2026, 9, 16, 0, 10);
 		expect(calendarTimeAgo(at(2026, 9, 15, 23, 50), justAfterMidnight)).toBe('20 min ago');
+	});
+});
+
+describe('formatEta', () => {
+	it('returns "< 1m" for sub-minute', () => {
+		expect(formatEta(45)).toBe('< 1m');
+	});
+	it('returns minutes+seconds for under 5 minutes', () => {
+		expect(formatEta(150)).toBe('2m 30s');
+	});
+	it('returns whole minutes for 5+ minute ETAs', () => {
+		expect(formatEta(720)).toBe('12m');
+	});
+	it('returns hours+minutes when over an hour', () => {
+		expect(formatEta(4_350)).toBe('1h 12m');
+	});
+});
+
+describe('formatTransfer', () => {
+	it('has no transfer line for a MakeMKV rip', () => {
+		expect(formatTransfer(null)).toBeNull();
+		expect(
+			formatTransfer({
+				bytes_done: null,
+				bytes_total: null,
+				rate_bps: null
+			})
+		).toBeNull();
+	});
+
+	it('shows only the bytes done, with no rate, when a copy reports no total or rate', () => {
+		expect(
+			formatTransfer({
+				bytes_done: 3 * 1024 ** 3,
+				bytes_total: null,
+				rate_bps: 0
+			})
+		).toBe('3 GB');
 	});
 });
