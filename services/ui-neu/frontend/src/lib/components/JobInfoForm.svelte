@@ -54,7 +54,6 @@
 	}
 
 	async function saveInfo() {
-		if (!title.trim()) return;
 		saving = true;
 		feedback = null;
 		try {

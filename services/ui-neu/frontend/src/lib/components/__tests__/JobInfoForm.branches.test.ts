@@ -5,12 +5,8 @@ import { resolveJob } from '$lib/api/jobs';
 import JobInfoForm from '../JobInfoForm.svelte';
 import { actionsFor } from '../__fixtures__/job';
 
-// Branch pins for JobInfoForm, beside JobInfoForm.test.ts. One branch cannot
-// be reached from the rendered component, so nothing here forces it:
-// - The blank-title return at the top of saveInfo (`if (!title.trim())
-//   return;`): the only caller is the Save button, which is disabled while
-//   the title is blank, and nothing else calls saveInfo. Save stays disabled
-//   and unclicked in "blank title keeps Save disabled" below.
+// Branch pins for JobInfoForm, beside JobInfoForm.test.ts. Every branch is
+// reachable from the rendered component.
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
