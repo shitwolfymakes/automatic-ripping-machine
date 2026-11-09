@@ -84,7 +84,13 @@ export function activeSource(identity: IdentityView): string | null {
 		}
 	}
 	let applied: string | null = null;
-	for (const [src, n] of counts) if (applied === null || n > (counts.get(applied) ?? 0)) applied = src;
+	let best = 0;
+	for (const [src, n] of counts) {
+		if (n > best) {
+			applied = src;
+			best = n;
+		}
+	}
 	return applied ?? ok.find((id) => !sources[id]?.suggestion) ?? ok[0] ?? null;
 }
 
