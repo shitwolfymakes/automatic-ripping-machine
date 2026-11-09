@@ -2,7 +2,8 @@
 	// The Match Episodes rows (design spec 2026-10-02 section 4.2): a table on
 	// desktop, stacked cards below 640px. Presentational only - the panel owns
 	// the data and the actions.
-	import { SOURCE_LABEL, type EpisodeRow } from './episodeModel';
+	import { type EpisodeRow } from './episodeModel';
+	import { SOURCE_LABEL } from '$lib/utils/episode-sources';
 	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface FileName {

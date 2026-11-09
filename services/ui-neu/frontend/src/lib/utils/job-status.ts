@@ -1,5 +1,5 @@
 import type { IdentityClaims, IdentitySuggestion, IdentityView, JobView, TrackView } from '$lib/types/api.gen';
-import { activeSource, SOURCE_LABEL } from '$lib/components/episodes/episodeModel';
+import { activeSource, SOURCE_LABEL } from '$lib/utils/episode-sources';
 import { isPostRipStatus } from './job-status-groups';
 
 type JobLike = Pick<JobView, 'status' | 'transcode_progress'>;

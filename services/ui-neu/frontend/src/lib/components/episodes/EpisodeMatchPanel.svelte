@@ -25,18 +25,17 @@
 		panelState,
 		buildRows,
 		placedCount,
-		activeSource,
 		failedSources,
 		heldSeason,
 		holdHeadline,
 		seasonAlternatives,
 		pickerOptions,
 		ROLE_OPTIONS,
-		SOURCE_LABEL,
 		type EpisodeRow,
 		type RerunForm,
 		type SeasonCandidate
 	} from './episodeModel';
+	import { activeSource, SOURCE_LABEL } from '$lib/utils/episode-sources';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
