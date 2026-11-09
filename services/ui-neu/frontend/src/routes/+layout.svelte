@@ -17,7 +17,8 @@
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/uiPrefs';
-	import { NAV_ITEMS, visibleNavItems, isActive } from '$lib/nav';
+	import { NAV_ITEMS, visibleNavItems } from '$lib/nav';
+	import NavList from '$lib/components/NavList.svelte';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
 	import { transcoderDotStatus, makemkvKeyTitle } from '$lib/utils/header-status';
@@ -165,19 +166,7 @@
 					<img src="/img/arm-logo-white.png" alt="ARM" class="layout-logo-dark" />
 				</div>
 				<hr class="layout-hr" />
-				<nav class="nav flex-1 overflow-y-auto">
-					{#each navItems as item (item.href)}
-						<a href={item.href} data-active={isActive(item.href, $page.url.pathname) || undefined} class="nav-item">
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-							</svg>
-							{item.label}
-							{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-								<span class="nav-badge">{$dashboard.notification_count}</span>
-							{/if}
-						</a>
-					{/each}
-				</nav>
+				<NavList items={navItems} pathname={$page.url.pathname} notificationCount={$dashboard.notification_count} />
 				<!-- Sidebar stats only at 2xl+, where the bottom bar (lg:flex 2xl:hidden)
 			     is hidden — the two surfaces never show at the same viewport width. -->
 				{#if $uiPrefs.showStats}
@@ -430,24 +419,12 @@
 						</div>
 						<hr class="layout-hr" />
 						{#if drawerView === 'menu'}
-							<nav class="nav flex-1 overflow-y-auto">
-								{#each navItems as item (item.href)}
-									<a
-										href={item.href}
-										onclick={() => (sidebarOpen = false)}
-										data-active={isActive(item.href, $page.url.pathname) || undefined}
-										class="nav-item"
-									>
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-										</svg>
-										{item.label}
-										{#if item.href === '/notifications' && ($dashboard.notification_count ?? 0) > 0}
-											<span class="nav-badge">{$dashboard.notification_count}</span>
-										{/if}
-									</a>
-								{/each}
-							</nav>
+							<NavList
+								items={navItems}
+								pathname={$page.url.pathname}
+								notificationCount={$dashboard.notification_count}
+								onnavigate={() => (sidebarOpen = false)}
+							/>
 						{:else}
 							<MobileStatsPanel onnavigate={() => (sidebarOpen = false)} />
 						{/if}
