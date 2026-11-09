@@ -17,6 +17,7 @@
 	} from '$lib/utils/log-view';
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
+	import { FollowScroll } from '$lib/stores/followScroll.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 
 	interface Props {
@@ -51,11 +52,10 @@
 	let levelFilter = $state<LogLevelFilter>('all');
 	let searchText = $state('');
 	let matchCase = $state(false);
-	let following = $state(true);
-	let newWhilePaused = $state(0);
 	const clip = new ClipboardCopy();
 	let frameEl = $state<HTMLDivElement | null>(null);
 	let viewEl = $state<HTMLDivElement | null>(null);
+	const follow = new FollowScroll(() => viewEl);
 	let searchEl = $state<HTMLInputElement | null>(null);
 
 	const wrap = $derived($uiPrefs.logWrap);
@@ -84,25 +84,6 @@
 		})
 	);
 
-	function isAtBottom(): boolean {
-		if (viewEl === null) return true;
-		return viewEl.scrollHeight - viewEl.scrollTop - viewEl.clientHeight < 24;
-	}
-
-	function onScroll(): void {
-		following = isAtBottom();
-	}
-
-	function jumpToLatest(): void {
-		following = true;
-		scrollToBottom();
-	}
-
-	function scrollToBottom(): void {
-		if (viewEl === null) return;
-		viewEl.scrollTop = viewEl.scrollHeight;
-	}
-
 	function clearSearch(): void {
 		searchText = '';
 		searchEl?.focus();
@@ -124,36 +105,14 @@
 		searchEl.focus();
 	}
 
-	// Follow new lines while the user hasn't scrolled up; while paused, count
-	// the lines that arrived so the status bar can say how many are waiting.
-	// The terminal div unmounts while collapsed, so a newly bound one (first
-	// render or expand) starts following again at the latest line.
-	let seen = 0;
-	let boundView: HTMLDivElement | null = null;
+	// Tracks the line count, the filter, the bound view and following, and
+	// hands them to follow.sync.
 	$effect(() => {
 		const total = appended ?? entries.length;
 		void filtered.length;
 		const view = viewEl;
-		const follow = following;
-		untrack(() => {
-			seen = Math.min(seen, total);
-			if (view !== boundView) {
-				boundView = view;
-				if (view !== null && !follow) {
-					// re-runs this effect with follow on, which scrolls
-					following = true;
-					seen = total;
-					return;
-				}
-			}
-			if (follow) {
-				newWhilePaused = 0;
-				scrollToBottom();
-			} else if (total > seen) {
-				newWhilePaused += total - seen;
-			}
-			seen = total;
-		});
+		const following = follow.following;
+		untrack(() => follow.sync(total, view, following));
 	});
 </script>
 
@@ -244,7 +203,7 @@
 		<div class="relative">
 			<div
 				bind:this={viewEl}
-				onscroll={onScroll}
+				onscroll={follow.onScroll}
 				data-testid="job-log-view"
 				data-wrap={wrap}
 				class="{maxHeightClass} log-view-terminal"
@@ -272,10 +231,10 @@
 					{/each}
 				{/if}
 			</div>
-			{#if !following}
+			{#if !follow.following}
 				<button
 					type="button"
-					onclick={jumpToLatest}
+					onclick={follow.jumpToLatest}
 					data-testid="job-log-jump"
 					class="btn btn-primary btn-sm log-view-jump"
 				>
@@ -287,7 +246,7 @@
 		<div class="log-view-status">
 			<span data-testid="job-log-count">{countLabel(filtered.length, entries.length)}</span>
 			<span aria-hidden="true">·</span>
-			<span data-testid="job-log-follow">{followLabel(following, newWhilePaused)}</span>
+			<span data-testid="job-log-follow">{followLabel(follow.following, follow.newWhilePaused)}</span>
 		</div>
 	{/if}
 </div>
