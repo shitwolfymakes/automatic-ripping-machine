@@ -17,6 +17,7 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { MusicFlipCards } from '$lib/stores/musicFlipCards.svelte';
 	import { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
+	import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
 	import Glyph from './Glyph.svelte';
 	import MatchGlyph from './music-search/MatchGlyph.svelte';
 
@@ -47,24 +48,13 @@
 
 	// Cards flipped to show their tracklist on the back face.
 	const flips = new MusicFlipCards();
-	let editArtist = $state('');
-	let editAlbum = $state('');
-	let editYear = $state('');
-	let discNumber = $state(job.disc_number != null ? String(job.disc_number) : '');
-	let discTotal = $state(job.disc_total != null ? String(job.disc_total) : '');
+	const fields = new MusicReleaseFields(job);
 
 	const release = new MusicReleaseApply();
 
 	$effect(() => {
 		release.reset();
-		if (detail) {
-			editArtist = detail.artist ?? '';
-			editAlbum = detail.title;
-			editYear = detail.year != null ? String(detail.year) : '';
-			if (detail.disc_count != null && detail.disc_count > 1 && !discTotal) {
-				discTotal = String(detail.disc_count);
-			}
-		}
+		if (detail) fields.seed(detail);
 	});
 
 	let visibleTracks = $derived(visibleTracksFor(detail, job.disc_number));
@@ -128,16 +118,13 @@
 	let trackMapping = $derived(pairTracks(audioDiscTracks, visibleTracks));
 
 	async function applyRelease() {
-		if (!editAlbum.trim() || !detail) return;
+		if (!fields.album.trim() || !detail) return;
 		return release.apply(
 			{
 				jobId: job.id,
 				totalMismatch: discTracks.length > 0 && matchIndicator(mbTotalMs, discTotalSec) === 'mismatch',
 				needsMapping: audioDiscTracks.length > 0 && visibleTracks.length > 0,
-				resolveBody: musicReleaseBody(
-					{ album: editAlbum, artist: editArtist, year: editYear, discNumber, discTotal },
-					visibleTracks
-				),
+				resolveBody: musicReleaseBody(fields, visibleTracks),
 				// Persist the release cover + any track-title mappings in one PATCH so
 				// the cover art shows on the job's cards/rows (resolve doesn't set it).
 				// The body is built after the resolve, from whatever release is open
@@ -461,23 +448,25 @@
 			<!-- Editable fields -->
 			<div class="grid grid-cols-2 gap-2">
 				<label class="field col-span-2"
-					><span class="field-label music-search-field-label-sm">Album</span><input bind:value={editAlbum} /></label
+					><span class="field-label music-search-field-label-sm">Album</span><input bind:value={fields.album} /></label
 				>
 				<label class="field"
-					><span class="field-label music-search-field-label-sm">Artist</span><input bind:value={editArtist} /></label
+					><span class="field-label music-search-field-label-sm">Artist</span><input
+						bind:value={fields.artist}
+					/></label
 				>
 				<label class="field"
-					><span class="field-label music-search-field-label-sm">Year</span><input bind:value={editYear} /></label
+					><span class="field-label music-search-field-label-sm">Year</span><input bind:value={fields.year} /></label
 				>
 				<label class="field"
 					><span class="field-label music-search-field-label-sm">Disc #</span><input
-						bind:value={discNumber}
+						bind:value={fields.discNumber}
 						placeholder="-"
 					/></label
 				>
 				<label class="field"
 					><span class="field-label music-search-field-label-sm">Disc total</span><input
-						bind:value={discTotal}
+						bind:value={fields.discTotal}
 						placeholder="-"
 					/></label
 				>
@@ -550,7 +539,7 @@
 				{#if $isAdmin}
 					<button
 						onclick={applyRelease}
-						disabled={release.applying || !editAlbum.trim()}
+						disabled={release.applying || !fields.album.trim()}
 						class="btn music-search-success-btn music-search-action-btn"
 					>
 						{release.applying ? 'Applying...' : 'Apply'}
