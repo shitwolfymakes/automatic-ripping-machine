@@ -6,8 +6,7 @@
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { fetchSettings, saveArmConfig } from '$lib/api/settings';
-	import type { SettingsData } from '$lib/api/settings';
+	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
 	import type {
 		DriveView as Drive,
 		DriveDiagnosticResponse,
@@ -17,7 +16,7 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT, foldSavedConfig } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
 	import {
 		SCREEN_TABS,
 		fieldFromHash,
@@ -53,16 +52,14 @@
 	import SessionRoutesCard from '$lib/components/settings/SessionRoutesCard.svelte';
 	import GpusCard from '$lib/components/settings/GpusCard.svelte';
 
-	let settings = $state<SettingsData | null>(null);
-	let settingsLoading = $state(true);
-	let settingsError = $state<Error | null>(null);
+	const loaded = new LoadedSettings();
 	// A getter, not a value: the schema arrives after mount and context is set
 	// once. Field widgets use it to deep-link to another tab's field.
-	setContext(SETTINGS_SCHEMA_CONTEXT, () => settings?.schema?.groups);
+	setContext(SETTINGS_SCHEMA_CONTEXT, () => loaded.settings?.schema?.groups);
 
 	// --- Tab state ---
 	type Tab = string;
-	const configGroups = $derived(orderedConfigGroups(settings?.schema?.groups ?? []));
+	const configGroups = $derived(orderedConfigGroups(loaded.settings?.schema?.groups ?? []));
 	// Full visible-tab list: config groups first, then screen-tabs. The
 	// Transcoding tab always shows (even on a ripper-only, not-capable
 	// deployment) so the locked toggle + hint below is reachable; see the
@@ -71,7 +68,7 @@
 
 	// Schema groups by name, for the template tab bodies.
 	function group(name: string): SettingsGroup | undefined {
-		return (settings?.schema?.groups ?? []).find((g) => g.name === name);
+		return (loaded.settings?.schema?.groups ?? []).find((g) => g.name === name);
 	}
 	const identificationGroup = $derived(group('Identification'));
 	const keysGroup = $derived(group('Keys'));
@@ -90,8 +87,8 @@
 
 	$effect(() => {
 		const key = pendingField;
-		if (!key || !settings) return;
-		const home = fieldTab(settings?.schema?.groups, key, visibleTabs);
+		if (!key || !loaded.settings) return;
+		const home = fieldTab(loaded.settings?.schema?.groups, key, visibleTabs);
 		if (home && home !== activeTab) {
 			activeTab = home;
 			return; // re-runs once the field's tab has rendered
@@ -235,7 +232,7 @@
 		rescanDrives()
 			.catch(() => {})
 			.then(() => drives.start());
-		loadSettings();
+		loaded.load();
 		// Handle initial hash tab (trigger side effects)
 		if (activeTab === 'interface') loadCacheStats();
 		if (activeTab === 'drives') loadDriveSessions();
@@ -259,44 +256,6 @@
 		};
 	});
 
-	async function loadSettings() {
-		settingsLoading = true;
-		settingsError = null;
-		try {
-			settings = await fetchSettings();
-		} catch (e) {
-			settingsError = e instanceof Error ? e : new Error('Failed to load settings');
-		} finally {
-			settingsLoading = false;
-		}
-	}
-
-	// The notifications master toggle auto-saves on change (no Save button): PATCH
-	// immediately, optimistically flip settings.config so the channels UI shows/
-	// hides at once, and roll back on failure.
-	let notifSaving = $state(false);
-	async function toggleNotifications(next: boolean) {
-		if (!settings || notifSaving) return;
-		const prev = Boolean(settings.config?.notifications_enabled);
-		settings = { ...settings, config: { ...settings.config, notifications_enabled: next } };
-		notifSaving = true;
-		try {
-			await saveArmConfig({ notifications_enabled: next });
-		} catch {
-			settings = { ...settings, config: { ...settings.config, notifications_enabled: prev } };
-		} finally {
-			notifSaving = false;
-		}
-	}
-
-	// A form's saved values are folded back into `settings.config`, so every
-	// other tab sees them: the Identity card's "Needs ... key" chip reads the
-	// keys from it, and a form diffs its next save against it.
-	function foldSaved(payload: Record<string, unknown>) {
-		if (!settings) return;
-		settings = foldSavedConfig(settings, payload);
-	}
-
 	// Keep the app-wide runtime toggle in step with a Settings save so an SPA
 	// navigation to /transcoder (banner) or an apply dialog (passthrough-only
 	// filter) reflects the new value without a reload. The saved values are
@@ -305,7 +264,7 @@
 	// disable-then-re-enable in one visit would diff against the stale
 	// original value and never send the re-enable.
 	function onTranscodingSaved(payload: Record<string, unknown>) {
-		foldSaved(payload);
+		loaded.foldSaved(payload);
 		if ('transcode_enabled' in payload) {
 			setTranscodeRuntimeEnabled(Boolean(payload.transcode_enabled));
 		}
@@ -319,7 +278,7 @@
 <div class="stack stack-lg settings-page">
 	<h1 class="page-title">Settings</h1>
 
-	<LoadState data={settings} loading={settingsLoading} error={settingsError}>
+	<LoadState data={loaded.settings} loading={loaded.loading} error={loaded.error}>
 		{#snippet loadingSlot()}
 			<div class="space-y-4">
 				<SkeletonCard lines={5} />
@@ -363,7 +322,7 @@
 			 data-page-section-title heading. -->
 			{#each [identificationGroup, keysGroup, rippingGroup].filter((g) => g !== undefined) as g (g.name)}
 				<div hidden={activeTab !== g.name} data-page-section>
-					<SchemaConfigForm group={g} config={settings.config} onsaved={foldSaved} />
+					<SchemaConfigForm group={g} config={settings.config} onsaved={loaded.foldSaved} />
 				</div>
 			{/each}
 
@@ -415,7 +374,7 @@
 						<Toggle
 							checked={Boolean(settings.config?.notifications_enabled)}
 							label="Enable notifications"
-							onchange={toggleNotifications}
+							onchange={loaded.toggleNotifications}
 						/>
 						<span class="field-label">Enable notifications</span>
 						<span class="settings-page-inline-hint">(changes save automatically)</span>
