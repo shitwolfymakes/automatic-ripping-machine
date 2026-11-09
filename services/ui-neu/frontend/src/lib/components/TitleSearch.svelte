@@ -1,9 +1,7 @@
 <script lang="ts">
 	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
-	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
-	import { titleMatchBody, titleResolveBody } from '$lib/utils/job-resolve';
+	import { searchMetadata, fetchMediaDetail } from '$lib/api/jobs';
 	import MatchPicker from './match/MatchPicker.svelte';
-	import { isSeriesKind } from '$lib/utils/match';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
@@ -11,6 +9,7 @@
 	import TitleSourcePicker from './title-search/TitleSourcePicker.svelte';
 	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
 	import { TitleEditDraft } from '$lib/stores/titleEditDraft.svelte';
+	import { TitleMatchApply } from '$lib/stores/titleMatchApply.svelte';
 
 	interface Props {
 		job: JobView;
@@ -62,10 +61,7 @@
 	const search = new MetadataSearch();
 	let results = $state<MetadataCandidate[]>([]);
 
-	let applying = $state(false);
-	// Tagged with the row and result list a Use started on, so a result that
-	// lands after the operator moved on is not shown under another row.
-	let feedback = $state<{ type: 'success' | 'error'; message: string; row: number; list: number } | null>(null);
+	const titleApply = new TitleMatchApply();
 	let listGen = $state(0);
 
 	const draft = new TitleEditDraft();
@@ -112,47 +108,25 @@
 	// On a resolvable job, Apply identifies the movie via resolveJob (title/year
 	// + status promotion) and saves the poster via updateJobTitle (best-effort);
 	// on a non-resolvable job it falls back to poster-only (resolve would 409).
-	async function applyResult(c: MetadataCandidate) {
-		const at = { row: selectedIndex, list: listGen };
+	function applyResult(c: MetadataCandidate) {
 		const values = draft.values(c);
-		if (!values.title) {
-			feedback = { type: 'error', message: 'Title is required', ...at };
-			return;
-		}
-		applying = true;
-		feedback = null;
-		// The candidate's ids name a title of its own kind; after a type edit they don't apply.
-		const idsApply = isSeriesKind(c.kind) === values.isSeries;
-		let resolved: ResolveResponse | undefined;
-		try {
-			if (canResolve && idsApply && c.provider) {
-				resolved = await resolveJob(job.id, titleMatchBody(c, values, draft.posterIsManual));
-				feedback = { type: 'success', message: 'Identified', ...at };
-			} else if (canResolve) {
-				resolved = await resolveJob(job.id, titleResolveBody(values));
-				let message = 'Identified';
-				if (values.poster !== (job.poster_url_manual ?? null)) {
-					try {
-						await updateJobTitle(job.id, { poster_url_manual: values.poster });
-					} catch {
-						message = 'Identified; poster not saved';
-					}
-				}
-				feedback = { type: 'success', message, ...at };
-			} else {
-				// Non-resolvable status (created/ripping/failed/abandoned): poster only.
-				await updateJobTitle(job.id, { poster_url_manual: values.poster });
-				feedback = { type: 'success', message: 'Poster updated', ...at };
-			}
-			if (resolved) onresolved?.(resolved);
-			// Episode matching only starts after a resolve; a poster-only save is a plain apply.
-			if (values.isSeries && canResolve) onseries?.();
-			else onapply?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed', ...at };
-		} finally {
-			applying = false;
-		}
+		return titleApply.apply(
+			{
+				job: () => job,
+				candidate: c,
+				values,
+				posterIsManual: draft.posterIsManual,
+				at: { row: selectedIndex, list: listGen }
+			},
+			(resolved) => afterApply(resolved, values.isSeries)
+		);
+	}
+
+	function afterApply(resolved: ResolveResponse | undefined, isSeries: boolean) {
+		if (resolved) onresolved?.(resolved);
+		// Episode matching only starts after a resolve; a poster-only save is a plain apply.
+		if (isSeries && canResolve) onseries?.();
+		else onapply?.();
 	}
 
 	function handleSearchKeydown(e: KeyboardEvent) {
@@ -222,7 +196,7 @@
 			{providerLabel}
 			canUse={$isAdmin}
 			useLabel={canResolve ? 'Use this match' : 'Use poster'}
-			{applying}
+			applying={titleApply.applying}
 			onclose={closeResults}
 			onselect={handlePickerSelect}
 			onuse={applyResult}
@@ -266,8 +240,10 @@
 						</div>
 					{/if}
 				{/if}
-				{#if feedback && feedback.row === selectedIndex && feedback.list === listGen}
-					<span in:reveal class="title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
+				{#if titleApply.feedback && titleApply.feedback.row === selectedIndex && titleApply.feedback.list === listGen}
+					<span in:reveal class="title-search-feedback" data-tone={titleApply.feedback.type}
+						>{titleApply.feedback.message}</span
+					>
 				{/if}
 			{/snippet}
 		</MatchPicker>
