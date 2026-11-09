@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { fade } from 'svelte/transition';
-	import { fetchTranscoderStats, retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
+	import { fetchTranscoderStats } from '$lib/api/transcoder';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
@@ -14,6 +14,7 @@
 	import { transcoderStats, transcoderWorkers, getJobsCache } from '$lib/stores/transcoder';
 	import { GpuInventory } from '$lib/stores/gpuInventory.svelte';
 	import { TranscodeJobs } from '$lib/stores/transcodeJobs.svelte';
+	import { TranscodeTaskActions } from '$lib/stores/transcodeTaskActions.svelte';
 	import { taskCount } from '$lib/utils/transcode-stats';
 	import { isAdmin } from '$lib/stores/auth';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
@@ -29,29 +30,7 @@
 
 	let s = $derived($stats);
 
-	let actionError = $state<string | null>(null);
-
-	// A failed action (409 retry of a task no longer failed, 503 delete with
-	// the dispatcher down, a network error) shows in the feedback banner, and
-	// the list refreshes either way since the failure usually means it is stale.
-	async function runAction(action: () => Promise<unknown>, verb: string) {
-		actionError = null;
-		try {
-			await action();
-		} catch (e) {
-			actionError = e instanceof Error ? e.message : `${verb} failed`;
-		}
-		transcodeJobs.load();
-	}
-
-	function handleRetry(id: string) {
-		return runAction(() => retryTranscoderJob(id), 'Retry');
-	}
-
-	function handleDelete(id: string) {
-		if (!confirm('Delete this transcode task?')) return;
-		return runAction(() => deleteTranscoderJob(id), 'Delete');
-	}
+	const taskActions = new TranscodeTaskActions(() => transcodeJobs.load());
 
 	// Auto-refresh jobs when any are queued or in progress.
 	$effect(() => {
@@ -279,10 +258,10 @@
 		<section class="space-y-4" data-page-section>
 			<h2 class="transcoder-page-section-title" data-page-section-title>Transcode Jobs</h2>
 
-			{#if actionError}
+			{#if taskActions.error}
 				<div class="alert alert-danger">
-					{actionError}
-					<button onclick={() => (actionError = null)} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
+					{taskActions.error}
+					<button onclick={taskActions.dismiss} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
 				</div>
 			{/if}
 
@@ -341,12 +320,12 @@
 											<div class="flex shrink-0 gap-2">
 												{#if job.status === 'failed'}
 													<button
-														onclick={() => handleRetry(job.id)}
+														onclick={() => taskActions.retry(job.id)}
 														class="btn btn-primary transcoder-page-job-action-btn">Retry</button
 													>
 												{/if}
 												<button
-													onclick={() => handleDelete(job.id)}
+													onclick={() => taskActions.remove(job.id)}
 													class="btn transcoder-page-job-action-btn transcoder-page-job-delete-btn">Delete</button
 												>
 											</div>
