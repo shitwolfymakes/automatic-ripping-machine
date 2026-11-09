@@ -3,6 +3,7 @@
 	import { updateTrack } from '$lib/api/jobs';
 	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/utils/review-rows';
 	import { formatTrackDuration } from '$lib/utils/format';
+	import { parseEpisodeNumber } from '$lib/utils/track-edit';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {
@@ -38,9 +39,7 @@
 	}
 
 	function handleEpisodeNumberInput(trackId: string, raw: string) {
-		const trimmed = raw.trim();
-		const n = trimmed === '' ? null : Number(trimmed);
-		handleTrackFieldUpdate(trackId, 'episode_number', Number.isFinite(n) ? n : null);
+		handleTrackFieldUpdate(trackId, 'episode_number', parseEpisodeNumber(raw));
 	}
 
 	function toggleTrackSearch(trackId: string) {

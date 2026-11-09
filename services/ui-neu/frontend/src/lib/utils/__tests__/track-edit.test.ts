@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { trackOptionsBody, trackTitleBody } from '../track-edit';
+import { parseEpisodeNumber, trackOptionsBody, trackTitleBody } from '../track-edit';
+
+describe('parseEpisodeNumber', () => {
+	it.each([
+		['3', 3],
+		[' 4 ', 4],
+		['1e2', 100],
+		['0', 0],
+		['-2', -2]
+	])('parses %j as the number %d', (raw, expected) => {
+		expect(parseEpisodeNumber(raw)).toBe(expected);
+	});
+
+	it.each([[''], ['   ']])('gives null for the blank %j', (raw) => {
+		expect(parseEpisodeNumber(raw)).toBeNull();
+	});
+
+	it.each([['abc'], ['Infinity'], ['-Infinity']])('gives null for the non-finite %j', (raw) => {
+		expect(parseEpisodeNumber(raw)).toBeNull();
+	});
+});
 
 const opts = { filename: '', episodeNumber: '', episodeName: '' };
 

@@ -5,6 +5,16 @@ import type { TrackEditRequest } from '$lib/types/api.gen';
 export type TrackEdit = Omit<TrackEditRequest, 'track_id'>;
 
 /**
+ * The typed episode number: a number, or null when blank or not a finite
+ * number.
+ */
+export function parseEpisodeNumber(raw: string): number | null {
+	const trimmed = raw.trim();
+	const n = trimmed === '' ? null : Number(trimmed);
+	return Number.isFinite(n) ? n : null;
+}
+
+/**
  * The trimmed custom filename, null when blank; on a series track also the
  * episode number (null when blank or not a number) and the trimmed episode
  * name (null when blank); no episode keys otherwise.
