@@ -6,6 +6,7 @@
 	import { parkedSessionLine } from '$lib/utils/parked-session';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { episodeStatus } from '$lib/utils/episode-status';
+	import { handSetTrackCount } from '$lib/utils/track-fields';
 	import { identitySuggestionOf, previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-review';
 	import { appliedSessionName, reviewSourceRow, reviewStatusLabel } from '$lib/utils/review-card';
 	import DiscReviewActions from './disc-review/DiscReviewActions.svelte';
@@ -71,10 +72,7 @@
 	const actions = new DiscReviewJobActions({ dismiss: () => ondismiss?.(), refresh: () => onrefresh?.() });
 
 	let tracks = $derived<TrackView[]>(reviewData.detail?.tracks ?? []);
-	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
-	let handSetCount = $derived(
-		tracks.filter((t) => ['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')).length
-	);
+	let handSetCount = $derived(handSetTrackCount(tracks));
 	let scanTitles = $derived(
 		(reviewData.detail?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles ?? []
 	);
