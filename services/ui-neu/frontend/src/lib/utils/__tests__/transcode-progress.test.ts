@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { liveSample } from '../transcode-progress';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { etaTime, formatRemaining } from '../format';
+import { formatFps } from '../fps';
+import { etaLabel, fpsLabel, liveSample, type TranscodeLiveSample } from '../transcode-progress';
+
+function sample(values: Partial<TranscodeLiveSample>): TranscodeLiveSample {
+	return { taskId: 't1', eta: null, fps: null, avgFps: null, ...values };
+}
 
 describe('liveSample', () => {
 	it('carries all three values when they are numbers', () => {
@@ -49,5 +55,80 @@ describe('liveSample', () => {
 
 	it("uses the task id passed in, not the payload's task_id", () => {
 		expect(liveSample('mine', { task_id: 'other' }).taskId).toBe('mine');
+	});
+});
+
+describe('etaLabel', () => {
+	const NOW = new Date('2026-01-01T01:00:00Z');
+	const STARTED = '2026-01-01T00:00:00Z';
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(NOW);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("prefers the sample's ETA over the task's eta_seconds", () => {
+		const task = { eta_seconds: 600, started_at: STARTED, progress_pct: 50 };
+		expect(etaLabel(task, sample({ eta: 90 }))).toBe(formatRemaining(90));
+	});
+
+	it('uses a sample ETA of 0', () => {
+		const task = { eta_seconds: 600, started_at: null, progress_pct: 0 };
+		expect(etaLabel(task, sample({ eta: 0 }))).toBe(formatRemaining(0));
+	});
+
+	it.each([
+		['a null sample', null],
+		['a sample with a null ETA', sample({ eta: null })]
+	])("falls back to the task's eta_seconds for %s", (_name, live) => {
+		const task = { eta_seconds: 600, started_at: null, progress_pct: 0 };
+		expect(etaLabel(task, live)).toBe(formatRemaining(600));
+	});
+
+	it('estimates from started_at when neither the sample nor the task has an ETA', () => {
+		const task = { eta_seconds: null, started_at: STARTED, progress_pct: 50 };
+		expect(etaLabel(task, null)).toBe(etaTime(STARTED, 50));
+		expect(etaLabel(task, null)).toBe(formatRemaining(3600));
+	});
+
+	it('is null when the estimate has no progress to go on', () => {
+		const task = { eta_seconds: null, started_at: STARTED, progress_pct: 0 };
+		expect(etaLabel(task, null)).toBeNull();
+	});
+
+	it('is null without a started_at', () => {
+		const task = { eta_seconds: null, started_at: null, progress_pct: 50 };
+		expect(etaLabel(task, null)).toBeNull();
+	});
+});
+
+describe('fpsLabel', () => {
+	const task = { fps: 10, avg_fps: 9 };
+
+	it("uses the sample's fps with its average", () => {
+		expect(fpsLabel(task, sample({ fps: 24.5, avgFps: 23 }))).toBe(formatFps(24.5, 23));
+	});
+
+	it('uses the sample fps alone when its average is null', () => {
+		expect(fpsLabel(task, sample({ fps: 24.5, avgFps: null }))).toBe(formatFps(24.5, null));
+	});
+
+	it('uses a sample fps of 0', () => {
+		expect(fpsLabel(task, sample({ fps: 0, avgFps: 0 }))).toBe(formatFps(0, 0));
+	});
+
+	it.each([
+		['a null sample', null],
+		['a sample with a null fps', sample({ fps: null, avgFps: 5 })]
+	])("falls back to the task's fps and avg_fps for %s", (_name, live) => {
+		expect(fpsLabel(task, live)).toBe(formatFps(10, 9));
+	});
+
+	it('is null when neither the sample nor the task has an fps', () => {
+		expect(fpsLabel({ fps: null, avg_fps: null }, null)).toBeNull();
 	});
 });

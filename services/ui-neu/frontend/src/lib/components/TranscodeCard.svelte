@@ -2,8 +2,8 @@
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { elapsedTime, etaTime, formatRemaining, statusAccentVar } from '$lib/utils/format';
-	import { formatFps } from '$lib/utils/fps';
+	import { elapsedTime, statusAccentVar } from '$lib/utils/format';
+	import { etaLabel, fpsLabel } from '$lib/utils/transcode-progress';
 	import { TranscodeLive } from '$lib/stores/transcodeLive.svelte';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
@@ -23,12 +23,6 @@
 	let hasError = $derived(!!job?.last_error);
 	let isActive = $derived(job?.status === 'in_progress');
 	let accentVar = $derived(statusAccentVar(job?.status));
-	// The transcoder publishes the encoder's own ETA and frame rate on
-	// transcode.progress.{id}; prefer them. Before the first tick (a card that
-	// mounts mid-encode, a socket that is down) the task row carries the
-	// values from the last REST heartbeat. For the ETA alone, extrapolate as a
-	// last resort from when the task was claimed, never from created_at, which
-	// would count the time it sat queued as encode time.
 	const live = new TranscodeLive();
 	let taskId = $derived(isActive ? job?.id : undefined);
 	$effect(() => {
@@ -37,16 +31,8 @@
 		return live.follow(id);
 	});
 	let liveForJob = $derived(live.sampleFor(job?.id));
-	let etaDisplay = $derived.by(() => {
-		if (!isActive || !job) return null;
-		const eta = liveForJob?.eta ?? job.eta_seconds;
-		if (typeof eta === 'number') return formatRemaining(eta);
-		return job.started_at ? etaTime(job.started_at, job.progress_pct) : null;
-	});
-	let fpsDisplay = $derived.by(() => {
-		if (!isActive || !job) return null;
-		return liveForJob?.fps != null ? formatFps(liveForJob.fps, liveForJob.avgFps) : formatFps(job.fps, job.avg_fps);
-	});
+	let etaDisplay = $derived(isActive && job ? etaLabel(job, liveForJob) : null);
+	let fpsDisplay = $derived(isActive && job ? fpsLabel(job, liveForJob) : null);
 
 	function toggle(e: MouseEvent) {
 		if ((e.target as HTMLElement).closest('a, button:not(.row-toggle)')) return;
