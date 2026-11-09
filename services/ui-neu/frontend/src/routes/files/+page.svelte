@@ -5,6 +5,7 @@
 	import type { DirectoryListing } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
 	import { formatBytes } from '$lib/utils/format';
+	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
 		moveTargetFolders,
@@ -75,31 +76,36 @@
 		setTimeout(() => (feedback = null), 3000);
 	}
 
-	async function handleRename(entryName: string, newName: string) {
+	function showFeedback(next: BulkFeedback) {
+		feedback = next;
+		clearFeedback();
+	}
+
+	async function runWithFeedback(action: () => Promise<void>, fallback: string) {
 		try {
-			await renameFile(browser.current.root, browser.itemSubpath(entryName), newName);
-			feedback = { type: 'success', message: `Renamed to ${newName}` };
-			clearFeedback();
-			await browser.navigate(browser.current.root, browser.current.subpath);
+			await action();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Rename failed' };
-			clearFeedback();
+			showFeedback({ type: 'error', message: e instanceof Error ? e.message : fallback });
 		}
 	}
 
+	async function handleRename(entryName: string, newName: string) {
+		await runWithFeedback(async () => {
+			await renameFile(browser.current.root, browser.itemSubpath(entryName), newName);
+			showFeedback({ type: 'success', message: `Renamed to ${newName}` });
+			await browser.navigate(browser.current.root, browser.current.subpath);
+		}, 'Rename failed');
+	}
+
 	async function handleFixPermissions(entryName: string, displayName: string) {
-		try {
+		await runWithFeedback(async () => {
 			const result = await fixPermissions(browser.current.root, browser.itemSubpath(entryName));
-			feedback = {
+			showFeedback({
 				type: 'success',
 				message: fixedPermissionsMessage(displayName, result.fixed)
-			};
-			clearFeedback();
+			});
 			await browser.navigate(browser.current.root, browser.current.subpath);
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to fix permissions' };
-			clearFeedback();
-		}
+		}, 'Failed to fix permissions');
 	}
 
 	function handleDeleteRequest(entryName: string, displayName: string) {
@@ -112,16 +118,12 @@
 	}
 
 	async function confirmDelete() {
-		try {
+		await runWithFeedback(async () => {
 			await deleteFile(deleteDialog.root, deleteDialog.subpath);
-			feedback = { type: 'success', message: `Deleted ${deleteDialog.name}` };
-			clearFeedback();
+			showFeedback({ type: 'success', message: `Deleted ${deleteDialog.name}` });
 			deleteDialog = { open: false, root: '', subpath: '', name: '' };
 			await browser.navigate(browser.current.root, browser.current.subpath);
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
-			clearFeedback();
-		}
+		}, 'Delete failed');
 	}
 
 	// --- Bulk move with browsable picker ---
@@ -184,8 +186,7 @@
 		}
 		closeMoveDialog();
 		browser.selectedKeys = new Set();
-		feedback = bulkResultFeedback('Moved', moved, failed);
-		clearFeedback();
+		showFeedback(bulkResultFeedback('Moved', moved, failed));
 		await browser.navigate(browser.current.root, browser.current.subpath);
 	}
 
@@ -204,8 +205,7 @@
 		}
 		bulkDeleteOpen = false;
 		browser.selectedKeys = new Set();
-		feedback = bulkResultFeedback('Deleted', deleted, failed);
-		clearFeedback();
+		showFeedback(bulkResultFeedback('Deleted', deleted, failed));
 		await browser.navigate(browser.current.root, browser.current.subpath);
 	}
 
@@ -217,17 +217,13 @@
 
 	async function confirmNewFolder() {
 		if (!newFolderName.trim() || !browser.current.root) return;
-		try {
+		await runWithFeedback(async () => {
 			await createDirectory(browser.current.root, browser.current.subpath, newFolderName.trim());
-			feedback = { type: 'success', message: `Created folder "${newFolderName.trim()}"` };
-			clearFeedback();
+			showFeedback({ type: 'success', message: `Created folder "${newFolderName.trim()}"` });
 			creatingFolder = false;
 			newFolderName = '';
 			await browser.navigate(browser.current.root, browser.current.subpath);
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to create folder' };
-			clearFeedback();
-		}
+		}, 'Failed to create folder');
 	}
 
 	function cancelNewFolder() {
@@ -291,14 +287,10 @@
 
 	// --- Transcoder cleanup ---
 	async function handleCleanupTranscoder() {
-		try {
+		await runWithFeedback(async () => {
 			const result = await cleanupTranscoder();
-			feedback = cleanupFeedback(result.deleted, 'transcoder job', result.errors.length);
-			clearFeedback();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Cleanup failed' };
-			clearFeedback();
-		}
+			showFeedback(cleanupFeedback(result.deleted, 'transcoder job', result.errors.length));
+		}, 'Cleanup failed');
 		transcoderCleanupOpen = false;
 	}
 
