@@ -118,10 +118,6 @@ export function videoTypeLabel(vt: string | null | undefined): string {
 	return VIDEO_TYPE_LABELS[vt.toLowerCase()] ?? vt;
 }
 
-// v3 JobView exposes only a small set of fields. The rich BFF metadata
-// (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
-// tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
-// v3 equivalent, so those fields are dropped here rather than synthesized.
 function shortSessionId(id: string): string {
 	return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 }
@@ -146,80 +142,75 @@ export function parkedSessionLine(
 	return `${label}, ${parkedSuffix(job.status)}`;
 }
 
-export function buildMetadataFields(
-	job: JobView,
-	driveNames?: Record<string, string> | null,
-	sessionNames?: Map<string, string>
-): MetadataField[] {
-	const fields: MetadataField[] = [];
+const FIELD_GRID_WIDTH = 4;
 
-	// --- Always-present base fields ---
-	fields.push({ label: 'Disc Type', value: discTypeLabel(job.disc_type) });
-	fields.push({ label: 'Status', value: statusLabel(job.status) });
-	fields.push({
-		label: 'Year',
-		value: job.year != null ? String(job.year) : '-',
-		edit: 'year',
-		raw: job.year != null ? String(job.year) : ''
-	});
-	fields.push({ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true });
+/** An in-place-editable number cell: shows the number or '-', edits from the number or ''. */
+function editableNumberField(label: string, edit: EditableJobField, value: number | null | undefined): MetadataField {
+	return {
+		label,
+		value: value != null ? String(value) : '-',
+		edit,
+		raw: value != null ? String(value) : ''
+	};
+}
+
+function baseFields(job: JobView, driveNames?: Record<string, string> | null): MetadataField[] {
+	const fields: MetadataField[] = [
+		{ label: 'Disc Type', value: discTypeLabel(job.disc_type) },
+		{ label: 'Status', value: statusLabel(job.status) },
+		editableNumberField('Year', 'year', job.year),
+		{ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true }
+	];
 	if (job.resumed_from_crash) {
 		fields.push({ label: 'Recovery', value: 'Resumed from crash' });
 	}
-
-	// --- Rip progress when present ---
 	if (job.rip_progress) {
 		const { tracks_done, tracks_total } = job.rip_progress;
 		fields.push({ label: 'Tracks', value: `${tracks_done} / ${tracks_total}` });
 	}
+	return fields;
+}
 
-	// --- Time field based on job state ---
+function stateLabel(job: JobView, parked: string | null): string {
+	if (isInProgress(job)) return 'In progress';
+	if (!isLive(job)) return 'Finished';
+	if (isAwaitingIdentity(job.status)) return 'Waiting for identity';
+	return parked ? 'Waiting' : 'Waiting for session';
+}
+
+function stateFields(job: JobView, sessionNames?: Map<string, string>): MetadataField[] {
 	// A ripped job that is waiting for the operator is live (it can still change)
 	// but nothing is running, so it is neither "In progress" nor "Finished". A
 	// job with a parked session is not waiting for one: the Session row below
 	// names the session that is waiting.
 	const parked = parkedSessionLine(job, sessionNames ?? new Map());
-	let stateLabel = 'Finished';
-	if (isInProgress(job)) stateLabel = 'In progress';
-	else if (isLive(job)) {
-		if (isAwaitingIdentity(job.status)) stateLabel = 'Waiting for identity';
-		else stateLabel = parked ? 'Waiting' : 'Waiting for session';
-	}
-	fields.push({ label: 'State', value: stateLabel });
+	const fields: MetadataField[] = [{ label: 'State', value: stateLabel(job, parked) }];
 	if (parked) fields.push({ label: 'Session', value: parked });
+	return fields;
+}
 
-	// --- Promoted real JobView columns ---
+function discPositionFields(job: JobView, tv: boolean): MetadataField[] {
 	// A TV job always offers its disc position and season, set in place; any
 	// other job shows them once something set them.
-	const tv = job.media_type === 'tv';
+	const fields: MetadataField[] = [];
 	if (tv || job.disc_number != null) {
-		fields.push({
-			label: 'Disc #',
-			value: job.disc_number != null ? String(job.disc_number) : '-',
-			edit: 'disc_number',
-			raw: job.disc_number != null ? String(job.disc_number) : ''
-		});
+		fields.push(editableNumberField('Disc #', 'disc_number', job.disc_number));
 	}
 	if (tv || job.disc_total != null) {
-		fields.push({
-			label: 'Disc total',
-			value: job.disc_total != null ? String(job.disc_total) : '-',
-			edit: 'disc_total',
-			raw: job.disc_total != null ? String(job.disc_total) : ''
-		});
+		fields.push(editableNumberField('Disc total', 'disc_total', job.disc_total));
 	}
-	if (job.poster_url_manual) {
-		fields.push({ label: 'Poster', value: 'Manual' });
-	} else if (job.poster_url) {
-		fields.push({ label: 'Poster', value: 'Auto' });
-	}
+	return fields;
+}
 
-	// --- Promoted metadata_json known scalars ---
-	const md = readJobMetadata(job.metadata_json, job);
-	if (md.video_type) {
-		fields.push({ label: 'Type', value: videoTypeLabel(md.video_type) });
-	}
-	if (md.imdb_id && job.disc_type !== 'cd') {
+function posterFields(job: JobView): MetadataField[] {
+	if (job.poster_url_manual) return [{ label: 'Poster', value: 'Manual' }];
+	if (job.poster_url) return [{ label: 'Poster', value: 'Auto' }];
+	return [];
+}
+
+function externalIdFields(md: JobMetadata, discType: JobView['disc_type']): MetadataField[] {
+	const fields: MetadataField[] = [];
+	if (md.imdb_id && discType !== 'cd') {
 		fields.push({ label: 'IMDb', value: md.imdb_id, link: `https://www.imdb.com/title/${md.imdb_id}` });
 	}
 	if (md.tmdb_id) {
@@ -228,6 +219,16 @@ export function buildMetadataFields(
 	if (md.tvdb_id) {
 		fields.push({ label: 'TVDB', value: md.tvdb_id, link: `https://www.thetvdb.com/dereferrer/series/${md.tvdb_id}` });
 	}
+	return fields;
+}
+
+function metadataJsonFields(job: JobView, tv: boolean): MetadataField[] {
+	const md = readJobMetadata(job.metadata_json, job);
+	const fields: MetadataField[] = [];
+	if (md.video_type) {
+		fields.push({ label: 'Type', value: videoTypeLabel(md.video_type) });
+	}
+	fields.push(...externalIdFields(md, job.disc_type));
 	if (tv || md.season) {
 		fields.push({
 			label: 'Season',
@@ -246,15 +247,37 @@ export function buildMetadataFields(
 	if (!job.rip_progress && md.titleCount != null) {
 		fields.push({ label: 'Titles', value: String(md.titleCount) });
 	}
-
-	// --- Pad to multiple of 4 ---
-	const remainder = fields.length % 4;
-	if (remainder !== 0) {
-		const padding = 4 - remainder;
-		for (let i = 0; i < padding; i++) {
-			fields.push({ label: '', value: '', empty: true });
-		}
-	}
-
 	return fields;
+}
+
+/** Fill the last grid row with empty cells so the rows are always full. */
+function padToRow(fields: MetadataField[], width: number): MetadataField[] {
+	const remainder = fields.length % width;
+	if (remainder === 0) return fields;
+	const padding: MetadataField[] = Array.from({ length: width - remainder }, () => ({
+		label: '',
+		value: '',
+		empty: true
+	}));
+	return [...fields, ...padding];
+}
+
+// v3 JobView exposes only a small set of fields. The rich BFF metadata
+// (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
+// tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
+// v3 equivalent, so those fields are dropped here rather than synthesized.
+export function buildMetadataFields(
+	job: JobView,
+	driveNames?: Record<string, string> | null,
+	sessionNames?: Map<string, string>
+): MetadataField[] {
+	const tv = job.media_type === 'tv';
+	const fields = [
+		...baseFields(job, driveNames),
+		...stateFields(job, sessionNames),
+		...discPositionFields(job, tv),
+		...posterFields(job),
+		...metadataJsonFields(job, tv)
+	];
+	return padToRow(fields, FIELD_GRID_WIDTH);
 }
