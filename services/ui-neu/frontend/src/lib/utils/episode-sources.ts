@@ -1,6 +1,7 @@
 // The episode sources in an identity's claims: their ids, their display
 // names, and which one the resolver applied.
 import type { IdentityView } from '$lib/types/api.gen';
+import type { EpisodeSource } from '$lib/api/identity';
 
 export const SOURCE_LABEL: Record<string, string> = {
 	episodes_tmdb: 'TMDb',
@@ -32,4 +33,50 @@ export function activeSource(identity: IdentityView): string | null {
 		}
 	}
 	return applied ?? ok.find((id) => !sources[id]?.suggestion) ?? ok[0] ?? null;
+}
+
+/** The episode sources the panel can run, by their short ids, in the
+ * order it offers them. */
+export const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
+
+/** One choice of the Fix match form's source select. */
+export interface EpisodeSourceOption {
+	id: EpisodeSource;
+	label: string;
+	/** Skipped as not configured: the source can't run. */
+	disabled: boolean;
+}
+
+/** The Fix match form's source choices, in EPISODE_SOURCES order. A
+ * source the identity records as skipped for not being configured is
+ * off. */
+export function episodeSourceOptions(identity: IdentityView | null): EpisodeSourceOption[] {
+	return EPISODE_SOURCES.map((id) => {
+		const s = identity?.sources?.[`episodes_${id}`];
+		const off = s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '');
+		return { id, label: SOURCE_LABEL[`episodes_${id}`], disabled: off };
+	});
+}
+
+/** A short source id's label ("tmdb" is "TMDb"). An id with no label is
+ * its own label, and no id is ''. */
+export function shortSourceLabel(id: string | null | undefined): string {
+	return SOURCE_LABEL[`episodes_${id}`] ?? id ?? '';
+}
+
+/** A source claim's id without its `episodes_` prefix. */
+export function shortSourceId(id: string | null): EpisodeSource {
+	return (id ?? '').replace(/^episodes_/, '') as EpisodeSource;
+}
+
+/** The source the per-row picker lists episodes from: the active source,
+ * else the first of EPISODE_SOURCES that ran and could answer (ok or
+ * miss); null when none did. */
+export function pickerSourceFor(identity: IdentityView | null, active: string | null): EpisodeSource | null {
+	if (active) return shortSourceId(active);
+	const ran = EPISODE_SOURCES.find((id) => {
+		const st = identity?.sources?.[`episodes_${id}`]?.status;
+		return st === 'ok' || st === 'miss';
+	});
+	return ran ?? null;
 }

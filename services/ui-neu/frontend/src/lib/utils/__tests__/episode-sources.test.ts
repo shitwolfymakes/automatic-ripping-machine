@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { activeSource } from '../episode-sources';
+import {
+	activeSource,
+	episodeSourceOptions,
+	pickerSourceFor,
+	shortSourceId,
+	shortSourceLabel
+} from '../episode-sources';
 import { panelState } from '$lib/components/episodes/episodeModel';
 import type { IdentityView, TrackIdentityView, JobView } from '$lib/types/api.gen';
 
@@ -94,5 +100,98 @@ describe('activeSource agrees with the resolver', () => {
 	it('falls back to an ok suggestion when nothing else is ok', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
 		expect(activeSource(id)).toBe('episodes_tmdb');
+	});
+});
+
+describe('episodeSourceOptions', () => {
+	const withSource = (s: Record<string, unknown>) => ({ sources: { episodes_tvmaze: s } }) as unknown as IdentityView;
+	const tvmaze = (i: IdentityView | null) => episodeSourceOptions(i).find((o) => o.id === 'tvmaze');
+
+	it('lists the three sources in order with their labels', () => {
+		expect(episodeSourceOptions(null).map((o) => [o.id, o.label])).toEqual([
+			['tmdb', 'TMDb'],
+			['tvmaze', 'TVmaze'],
+			['tvdb', 'TVDB']
+		]);
+	});
+
+	it('turns a source off when it was skipped as not configured', () => {
+		expect(tvmaze(withSource({ status: 'skipped', detail: 'API key Not Configured' }))?.disabled).toBe(true);
+	});
+
+	it('keeps a source on when it was skipped for another reason', () => {
+		expect(tvmaze(withSource({ status: 'skipped', detail: 'rate limited' }))?.disabled).toBe(false);
+	});
+
+	it('keeps a source on when it was skipped with no detail', () => {
+		expect(tvmaze(withSource({ status: 'skipped' }))?.disabled).toBe(false);
+	});
+
+	it('keeps a source on for another status', () => {
+		expect(tvmaze(withSource({ status: 'ok', detail: 'not configured' }))?.disabled).toBe(false);
+	});
+
+	it('keeps every source on with no identity', () => {
+		expect(episodeSourceOptions(null).map((o) => o.disabled)).toEqual([false, false, false]);
+	});
+});
+
+describe('shortSourceLabel', () => {
+	it('names a known source', () => {
+		expect(shortSourceLabel('tmdb')).toBe('TMDb');
+	});
+
+	it('uses an id with no label as its own label', () => {
+		expect(shortSourceLabel('other')).toBe('other');
+	});
+
+	it('gives "" for no id', () => {
+		expect(shortSourceLabel(null)).toBe('');
+		expect(shortSourceLabel(undefined)).toBe('');
+	});
+});
+
+describe('shortSourceId', () => {
+	it('drops the episodes_ prefix', () => {
+		expect(shortSourceId('episodes_tvdb')).toBe('tvdb');
+	});
+
+	it('keeps a bare id', () => {
+		expect(shortSourceId('tvdb')).toBe('tvdb');
+	});
+
+	it('gives "" for null', () => {
+		expect(shortSourceId(null)).toBe('');
+	});
+});
+
+describe('pickerSourceFor', () => {
+	const ran = (s: Record<string, string>) =>
+		({
+			sources: Object.fromEntries(Object.entries(s).map(([k, v]) => [`episodes_${k}`, { status: v }]))
+		}) as unknown as IdentityView;
+
+	it('uses the active source', () => {
+		expect(pickerSourceFor(ran({ tmdb: 'ok' }), 'episodes_tvdb')).toBe('tvdb');
+	});
+
+	it('takes the first source that ran ok', () => {
+		expect(pickerSourceFor(ran({ tvmaze: 'ok', tvdb: 'ok' }), null)).toBe('tvmaze');
+	});
+
+	it('takes the first source that ran miss', () => {
+		expect(pickerSourceFor(ran({ tvdb: 'miss' }), null)).toBe('tvdb');
+	});
+
+	it('passes over error and skipped', () => {
+		expect(pickerSourceFor(ran({ tmdb: 'error', tvmaze: 'skipped', tvdb: 'ok' }), null)).toBe('tvdb');
+	});
+
+	it('gives null when none ran', () => {
+		expect(pickerSourceFor(ran({ tmdb: 'error' }), null)).toBeNull();
+	});
+
+	it('gives null with no identity', () => {
+		expect(pickerSourceFor(null, null)).toBeNull();
 	});
 });

@@ -31,7 +31,15 @@
 		type EpisodeRow,
 		type RerunForm
 	} from './episodeModel';
-	import { activeSource, SOURCE_LABEL } from '$lib/utils/episode-sources';
+	import {
+		activeSource,
+		EPISODE_SOURCES,
+		episodeSourceOptions,
+		pickerSourceFor,
+		shortSourceId,
+		shortSourceLabel,
+		SOURCE_LABEL
+	} from '$lib/utils/episode-sources';
 	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/utils/episode-hold';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
@@ -58,7 +66,6 @@
 	let loadedFor: string | null = null;
 	const phoneQuery = new MediaQuery('(max-width: 639px)', false);
 
-	const EPISODE_SOURCES: EpisodeSource[] = ['tmdb', 'tvmaze', 'tvdb'];
 	let rerunOpen = $state(false);
 	// No season or disc is assumed: unknown stays empty until the operator picks.
 	const NO_RERUN: RerunForm = { source: 'tmdb', season: null, disc: null, tolerance: null };
@@ -157,22 +164,14 @@
 	const failed = $derived(identity ? failedSources(identity) : []);
 	const showRows = $derived(!loading && view !== 'noseries' && view !== 'unavailable');
 	const canAct = $derived($isAdmin && !loading && view !== 'noseries' && view !== 'matching' && view !== 'unavailable');
-	const sourceOptions = $derived(
-		EPISODE_SOURCES.map((id) => {
-			const s = identity?.sources?.[`episodes_${id}`];
-			const off = s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '');
-			return { id, label: SOURCE_LABEL[`episodes_${id}`], disabled: off };
-		})
-	);
-	const labelOf = (id: string | null | undefined) => SOURCE_LABEL[`episodes_${id}`] ?? id ?? '';
-	const shortId = (id: string | null) => (id ?? '').replace(/^episodes_/, '') as EpisodeSource;
+	const sourceOptions = $derived(episodeSourceOptions(identity));
 
 	// Fix match: the one control for changing a match. Opens the form seeded
 	// with the current source and, for a guess, the season it guessed.
 	function fixMatch() {
 		rerunOpen = !rerunOpen;
 		if (!rerunOpen) return;
-		const current = source ? shortId(source) : null;
+		const current = source ? shortSourceId(source) : null;
 		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
 		rerun = {
 			source: current && EPISODE_SOURCES.includes(current) ? current : first,
@@ -239,7 +238,7 @@
 		busy = true;
 		actionError = null;
 		lastRequest = req;
-		const label = labelOf(req.source);
+		const label = shortSourceLabel(req.source);
 		const jobId = job.id;
 		const seq = ++previewSeq;
 		// A preview is stale once the form (or the job) changed while it ran.
@@ -281,14 +280,7 @@
 
 	// The episode list behind the per-row picker: the active source's, else the
 	// first source that ran and could answer (a nomatch disc still gets a list).
-	const pickerSource = $derived.by((): EpisodeSource | null => {
-		if (source) return shortId(source);
-		const ran = sourceOptions.find((o) => {
-			const st = identity?.sources?.[`episodes_${o.id}`]?.status;
-			return st === 'ok' || st === 'miss';
-		});
-		return ran?.id ?? null;
-	});
+	const pickerSource = $derived(pickerSourceFor(identity, source));
 
 	// The season list follows the re-run form's source while the form is open,
 	// else the picker's source. Tracked on identity so a reload retries a list
@@ -611,7 +603,7 @@
 				{seasons}
 				{busy}
 				preview={preview && previewSource
-					? { changed: rows.filter((r) => r.changed).length, label: labelOf(previewSource) }
+					? { changed: rows.filter((r) => r.changed).length, label: shortSourceLabel(previewSource) }
 					: null}
 				onfieldchange={dropPreview}
 				onpreview={() => run(request(false))}
@@ -630,7 +622,7 @@
 				{fileNames}
 				matching={view === 'matching'}
 				phone={phoneQuery.current}
-				proposedLabel={preview && previewSource ? labelOf(previewSource) : null}
+				proposedLabel={preview && previewSource ? shortSourceLabel(previewSource) : null}
 				optionsFor={canAct && !preview ? optionsFor : null}
 				{seasons}
 				panelSeason={discSeason}

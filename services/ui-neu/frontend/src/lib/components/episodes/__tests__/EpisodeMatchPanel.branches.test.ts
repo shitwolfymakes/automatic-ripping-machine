@@ -5,9 +5,6 @@ import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$l
 // loading, the match actions, the season and episode lists, and the by-hand
 // saves. These branches and lines cannot be reached from the rendered
 // panel, so nothing here forces them:
-// - labelOf's two fallbacks (`?? id ?? ''`): every label it is asked for is
-//   one of the three sources.
-// - shortId's `?? ''`: it is only called with a source, never null.
 // - failed's `: []`: only the no-match alert reads it, and that state needs an
 //   identity.
 // - `req.source ?? null` in run: every request the panel sends has a source.
