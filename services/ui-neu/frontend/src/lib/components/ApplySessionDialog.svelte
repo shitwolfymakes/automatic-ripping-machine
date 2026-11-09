@@ -3,15 +3,14 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { fetchRipPresets } from '$lib/api/ripPresets';
 	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-	import { applySession, fetchNamingPreview } from '$lib/api/jobs';
+	import { applySession } from '$lib/api/jobs';
 	import { ApiError } from '$lib/api/client';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
-	import { explainNamingProblem } from '$lib/utils/naming-problem';
+	import { NamingPreview } from '$lib/stores/namingPreview.svelte';
 	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
-		JobNamingPreviewResponse,
 		JobView,
 		RipPresetView,
 		SessionView,
@@ -94,42 +93,18 @@
 			? (tcById.get(selectedSession.transcode_preset_id) ?? null)
 			: null
 	);
-	// Real output paths for THIS job with the chosen session, from the same
-	// resolver the apply path uses. A missing token (e.g. the job has no year)
-	// comes back as a 422 naming it; explain it and block Apply, since apply
-	// would fail the same way.
-	let preview = $state<JobNamingPreviewResponse | null>(null);
-	let previewLoading = $state(false);
-	let previewProblem = $state<string | null>(null);
+	// The real output paths for this job with the chosen session. A missing
+	// token (for example, the job has no year) comes back as a 422 naming it,
+	// and the dialog explains it and blocks Apply, since apply would fail the
+	// same way.
+	const namingPreview = new NamingPreview();
 
 	// Only the job's id matters here. The parent hands us a fresh `job` object
 	// on every dashboard poll; depending on the object would re-run this and
 	// flash "Resolving..." every tick.
 	const jobId = $derived(job.id);
 
-	$effect(() => {
-		const sessionId = selected;
-		const id = jobId;
-		preview = null;
-		previewProblem = null;
-		if (!sessionId) return;
-		previewLoading = true;
-		let cancelled = false;
-		fetchNamingPreview(id, sessionId)
-			.then((p) => {
-				if (!cancelled) preview = p;
-			})
-			.catch((e) => {
-				if (cancelled) return;
-				previewProblem = explainNamingProblem(e instanceof Error ? e.message : 'Preview failed');
-			})
-			.finally(() => {
-				if (!cancelled) previewLoading = false;
-			});
-		return () => {
-			cancelled = true;
-		};
-	});
+	$effect(() => namingPreview.load(jobId, selected));
 
 	onMount(() => {
 		// Sessions drive the picker; the rip/transcode preset lists enrich the
@@ -244,15 +219,15 @@
 						<div class="apply-session-recipe-row apply-session-recipe-row-col">
 							<dt class="apply-session-recipe-dt">Output:</dt>
 							<dd data-testid="recipe-output-path" class="apply-session-recipe-dd apply-session-recipe-output">
-								{#if previewLoading}
+								{#if namingPreview.loading}
 									<span class="apply-session-recipe-faint">Resolving...</span>
-								{:else if preview}
+								{:else if namingPreview.preview}
 									<ul class="apply-session-recipe-output-list">
-										{#each preview.items as item (item.track_id)}
+										{#each namingPreview.preview.items as item (item.track_id)}
 											<li class="apply-session-recipe-output-item" title={item.output_path}>{item.output_path}</li>
 										{/each}
 									</ul>
-									{#if preview.items.length === 0}
+									{#if namingPreview.preview.items.length === 0}
 										<span class="apply-session-recipe-faint">No tracks to transcode with this session.</span>
 									{/if}
 								{/if}
@@ -260,7 +235,7 @@
 						</div>
 					</dl>
 				</div>
-				{#if previewProblem}
+				{#if namingPreview.problem}
 					<p data-testid="recipe-output-problem" class="apply-session-problem">
 						<svg class="apply-session-problem-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -270,7 +245,7 @@
 								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
 							/>
 						</svg>
-						<span>{previewProblem}</span>
+						<span>{namingPreview.problem}</span>
 					</p>
 				{/if}
 			{/if}
@@ -280,7 +255,7 @@
 				<button
 					type="button"
 					data-testid="apply-session-apply"
-					disabled={!selected || submitting || previewLoading || previewProblem !== null}
+					disabled={!selected || submitting || namingPreview.loading || namingPreview.problem !== null}
 					onclick={() => applyOnce(false)}
 					class="btn btn-primary"
 				>
