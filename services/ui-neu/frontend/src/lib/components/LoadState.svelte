@@ -82,7 +82,7 @@
 			{@render loadingSlot()}
 		{/if}
 	</div>
-{:else if phase === 'ready'}
+{:else}
 	<div in:fade|local={fadeIn}>
 		{@render ready(data!)}
 	</div>
