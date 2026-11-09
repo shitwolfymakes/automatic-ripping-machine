@@ -7,25 +7,8 @@
 	import { onMount } from 'svelte';
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
-	import type {
-		ContainerFormat,
-		EncoderAvailabilityView,
-		MediaType,
-		TranscodePresetView,
-		TranscodeTool
-	} from '$lib/types/api.gen';
-
-	// Encoder optgroup order and headings; a group is only rendered when the
-	// catalog response has an entry for it.
-	const GROUP_ORDER: EncoderAvailabilityView['group'][] = ['preset', 'cpu', 'any', 'qsv', 'nvenc', 'vaapi'];
-	const GROUP_LABELS: Record<EncoderAvailabilityView['group'], string> = {
-		preset: "HandBrake preset's own",
-		cpu: 'CPU',
-		any: 'Any GPU',
-		qsv: 'Intel QSV',
-		nvenc: 'NVIDIA NVENC',
-		vaapi: 'AMD VAAPI'
-	};
+	import { encoderGroups } from '$lib/utils/encoder-groups';
+	import type { ContainerFormat, MediaType, TranscodePresetView, TranscodeTool } from '$lib/types/api.gen';
 
 	// A HandBrake preset name that names a hardware encoder (a common
 	// convention in preset libraries) does nothing on its own. HandBrake
@@ -62,18 +45,7 @@
 	let encodersLoading = $derived(encodersStore.loading);
 	let encodersError = $derived(encodersStore.error);
 
-	let groupedEncoders = $derived(
-		(() => {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built fresh inside $derived and never mutated afterwards
-			const groups = new Map<string, EncoderAvailabilityView[]>();
-			for (const enc of encoders) {
-				const list = groups.get(enc.group);
-				if (list) list.push(enc);
-				else groups.set(enc.group, [enc]);
-			}
-			return groups;
-		})()
-	);
+	let optgroups = $derived(encoderGroups(encoders));
 
 	// abcde/none presets can't carry a codec encoder (only handbrake presets
 	// can); force it back to the tool's own encoder so saving never 422s.
@@ -234,17 +206,14 @@
 			{:else if encoders.length === 0}
 				<option value={encoder}>{encoder}</option>
 			{:else}
-				{#each GROUP_ORDER as g (g)}
-					{@const list = groupedEncoders.get(g)}
-					{#if list?.length}
-						<optgroup label={GROUP_LABELS[g]}>
-							{#each list as enc (enc.id)}
-								<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
-									{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
-								</option>
-							{/each}
-						</optgroup>
-					{/if}
+				{#each optgroups as grp (grp.group)}
+					<optgroup label={grp.label}>
+						{#each grp.encoders as enc (enc.id)}
+							<option value={enc.id} disabled={!enc.available} title={enc.reason ?? undefined}>
+								{enc.label}{enc.reason ? ` (${enc.reason})` : ''}
+							</option>
+						{/each}
+					</optgroup>
 				{/each}
 			{/if}
 		</select>
