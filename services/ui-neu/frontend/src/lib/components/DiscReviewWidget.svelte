@@ -1,17 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { JobView, JobDetailView, TrackView, ScanResult, SessionView } from '$lib/types/api.gen';
-	import {
-		abandonJob,
-		deleteJob,
-		fetchJob,
-		fetchNamingPreview,
-		startWaitingJob,
-		pauseWaitingJob,
-		resolveJob
-	} from '$lib/api/jobs';
+	import type { JobView, TrackView, ScanResult } from '$lib/types/api.gen';
+	import { abandonJob, deleteJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
-	import { fetchSessions } from '$lib/api/sessions';
+	import { DiscReviewData } from '$lib/stores/discReviewData.svelte';
 	import { parkedSessionLine } from '$lib/utils/parked-session';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { episodeStatus } from '$lib/utils/episode-status';
@@ -84,11 +76,7 @@
 	// The countdown is frozen by the global pause OR this disc's own pause.
 	let countdownPaused = $derived(paused || !!job?.manual_pause);
 
-	let data = $state<JobDetailView | null>(null);
-	// The generated file name per track (the applied session's naming), for the
-	// Info table's Episode column; empty until a session names the tracks.
-	let fileNames = $state(new Map<string, string>());
-	let initialLoading = $state(true);
+	const reviewData = new DiscReviewData(() => job?.id);
 	const sections = new ReviewSections();
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 	// "Matching episodes..." while the Backend re-matches after a series pick or a
@@ -100,12 +88,14 @@
 	let confirmDelete = $state(false);
 	let errorMessage = $state<string | null>(null);
 
-	let tracks = $derived<TrackView[]>(data?.tracks ?? []);
+	let tracks = $derived<TrackView[]>(reviewData.detail?.tracks ?? []);
 	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
 	let handSetCount = $derived(
 		tracks.filter((t) => ['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')).length
 	);
-	let scanTitles = $derived((data?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles ?? []);
+	let scanTitles = $derived(
+		(reviewData.detail?.job?.metadata_json?.scan_result as ScanResult | undefined)?.titles ?? []
+	);
 
 	// v3 classifies disc kind via disc_type. cd → music, data → data, the rest
 	// are video.
@@ -117,19 +107,19 @@
 	// removes the way to start the rip. Cancel still abandons.
 	let canStart = $derived(
 		['awaiting_user_id', 'awaiting_review', 'ripped_awaiting_identify', 'identified'].includes(
-			data?.job?.status ?? job?.status ?? ''
+			reviewData.detail?.job?.status ?? job?.status ?? ''
 		)
 	);
 	// Post-rip phase: the disc already ripped and is awaiting a transcode session.
 	// The card comes back so the operator can apply a session (which starts the
 	// transcode) and fix metadata. No countdown, and "Apply session" is primary.
-	let isPostRip = $derived(['ripped', 'ripped_partial'].includes(data?.job?.status ?? job?.status ?? ''));
+	let isPostRip = $derived(['ripped', 'ripped_partial'].includes(reviewData.detail?.job?.status ?? job?.status ?? ''));
 
 	// Prefer the reloaded detail (fresh after an apply/resolve) over the list-level
 	// `job` prop, so the poster/title update immediately without a full dashboard
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
-	let displayJob = $derived((data?.job ?? job) as JobView);
+	let displayJob = $derived((reviewData.detail?.job ?? job) as JobView);
 	// Episode matching is for TV video discs only, as on the job page.
 	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
 	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
@@ -139,15 +129,12 @@
 	// card leaving the dashboard.
 	let isoName = $derived(displayJob.drive_id ? (isoSources?.[displayJob.drive_id] ?? null) : null);
 
-	let sessions = $state<SessionView[]>([]);
-	let sessionNameById = $derived(new Map(sessions.map((s) => [s.id, s.name])));
-
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json, displayJob));
 
 	// on_previously_ripped = hold: this disc matched an earlier rip. No
 	// countdown runs; the operator chooses Rip again (Start) or Discard (Cancel).
 	let previousId = $derived(isReviewGate ? previouslyRippedJobId(displayJob) : null);
-	let previous = $derived(data?.previous_rip ?? null);
+	let previous = $derived(reviewData.detail?.previous_rip ?? null);
 	// A confident match identify held for confirmation (auto-apply off).
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
@@ -162,13 +149,15 @@
 	// A missed identify's title is the disc's own, so it is not a match yet.
 	let isMiss = $derived(isIdentifyMiss(displayJob));
 	// Null off a TV video disc and after the rip; the Episodes button follows it.
-	let episodeRow = $derived(isTv ? episodeStatus(displayJob, data ? tracks : null, matching.active) : null);
+	let episodeRow = $derived(
+		isTv ? episodeStatus(displayJob, reviewData.detail ? tracks : null, matching.active) : null
+	);
 	let matchDetail = $derived(matchDetailLine(displayJob, isTv, jobMeta.video_type));
 	let showProvider = $derived(matchProviderLabel(displayJob));
 	let discLine = $derived(discFactsLine(displayJob, jobMeta.titleCount));
 	let sourceRow = $derived(reviewSourceRow(displayJob, isoName, isoSourceKinds, driveNames));
-	let parkedLine = $derived(parkedSessionLine(displayJob, sessionNameById));
-	let appliedSession = $derived(appliedSessionName(parkedLine, jobMeta.pending_session_id, sessionNameById));
+	let parkedLine = $derived(parkedSessionLine(displayJob, reviewData.sessionNames));
+	let appliedSession = $derived(appliedSessionName(parkedLine, jobMeta.pending_session_id, reviewData.sessionNames));
 
 	// Header phase pill. For a post-rip job that already HAS a session pending but
 	// is missing a title, switch the label to NEEDS TITLE; otherwise use the
@@ -184,27 +173,9 @@
 	// generic phrase — never the bare "Untitled".
 	let displayTitle = $derived(displayJob.title?.trim() || 'Unidentified disc');
 
-	async function loadDetail() {
-		if (!job) return;
-		try {
-			data = await fetchJob(job.id);
-		} catch {
-			// A failed refresh keeps the last detail (and its tracks) on the card.
-		} finally {
-			initialLoading = false;
-		}
-		try {
-			const preview = await fetchNamingPreview(job.id);
-			fileNames = new Map((preview.items ?? []).map((i) => [i.track_id, i.output_name]));
-		} catch {
-			// No session routed yet (409) or a nicety that failed: the table shows the episode instead.
-			fileNames = new Map();
-		}
-	}
-
 	function handleTitleApply() {
 		onrefresh?.();
-		loadDetail();
+		reviewData.loadDetail();
 	}
 
 	// Picking a show in the match picker goes straight to episode matching.
@@ -228,7 +199,7 @@
 	function handleSessionApplied() {
 		showApplySession = false;
 		onrefresh?.();
-		loadDetail();
+		reviewData.loadDetail();
 	}
 
 	async function handleCancel() {
@@ -275,7 +246,7 @@
 	// it via rip-start-review. Then dismiss the card; the disc is on its way.
 	async function handleStartRip() {
 		if (!job) return;
-		const j = data?.job ?? job;
+		const j = reviewData.detail?.job ?? job;
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
 			errorMessage = 'A title is required to start. Open Info or Search to set one.';
@@ -316,24 +287,16 @@
 		}
 	}
 
-	async function loadSessions() {
-		try {
-			sessions = await fetchSessions();
-		} catch {
-			sessions = [];
-		}
-	}
-
 	onMount(() => {
-		loadDetail();
-		loadSessions();
+		reviewData.loadDetail();
+		reviewData.loadSessions();
 		// The dashboard refreshes the job prop on every event; the card's own
 		// detail (tracks) and the episode panel refresh only for this job.
 		const offJobEvents = watchEpisodeMatching(
 			() => job?.id,
 			matching,
 			async () => {
-				await loadDetail();
+				await reviewData.loadDetail();
 				await episodePanel?.reload();
 			}
 		);
@@ -547,7 +510,7 @@
 								? 'Some of its files are no longer in the library.'
 								: 'It has no transcoded files.'}
 					</p>
-				{:else if !initialLoading}
+				{:else if !reviewData.initialLoading}
 					<p>ARM ripped this disc before, but that job has since been deleted.</p>
 				{/if}
 			</div>
@@ -559,7 +522,7 @@
 					job={displayJob}
 					canAct={$isAdmin}
 					onaccepted={() => {
-						loadDetail();
+						reviewData.loadDetail();
 						onrefresh?.();
 					}}
 					onsearch={() => {
@@ -661,7 +624,7 @@
 					job={displayJob}
 					{tracks}
 					matching={matching.active}
-					onchanged={() => loadDetail()}
+					onchanged={() => reviewData.loadDetail()}
 					onsearchseries={sections.searchSeries}
 				/>
 			</div>
@@ -682,12 +645,12 @@
 				}}
 				onrefresh={() => {
 					onrefresh?.();
-					loadDetail();
+					reviewData.loadDetail();
 				}}
 			/>
 			<!-- Scanned titles (pre-rip) / tracks (post-rip) live at the bottom of the Info tab -->
 			<div class="disc-review-widget-panel-top">
-				{#if initialLoading}
+				{#if reviewData.initialLoading}
 					<p class="disc-review-widget-loading">Loading...</p>
 				{:else}
 					<ReviewTracksTable
@@ -696,10 +659,10 @@
 						{scanTitles}
 						{isVideo}
 						{isMusic}
-						{fileNames}
+						fileNames={reviewData.fileNames}
 						onrefresh={() => {
 							onrefresh?.();
-							loadDetail();
+							reviewData.loadDetail();
 						}}
 					/>
 				{/if}
