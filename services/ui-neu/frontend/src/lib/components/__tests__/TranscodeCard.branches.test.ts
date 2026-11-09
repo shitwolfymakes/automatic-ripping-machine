@@ -4,11 +4,8 @@ import TranscodeCard from '../TranscodeCard.svelte';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 
-// Branch pins for TranscodeCard, beside TranscodeCard.test.ts. Two branches
-// cannot be reached from the rendered component, so nothing here forces them:
-// the false side of the `isActive && job` guard in etaDisplay and fpsDisplay.
-// Both are read only inside `{#if isActive}`, which sits in the `{:else}` of
-// `{#if !job}`, so `isActive` is true and `job` is set whenever they run.
+// Branch pins for TranscodeCard, beside TranscodeCard.test.ts. Every branch is
+// reachable from the rendered component.
 
 const wsHandlers = new Map<string, (env: WSEnvelope) => void>();
 const unsubscribed: string[] = [];
