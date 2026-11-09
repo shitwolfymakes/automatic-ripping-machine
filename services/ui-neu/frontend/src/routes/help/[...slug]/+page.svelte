@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { fetchDocsNav, slugToId, type DocsNavSection } from '$lib/docs/api';
 	import HelpSearchBox from '$lib/components/help/HelpSearchBox.svelte';
+	import HelpToc from '$lib/components/help/HelpToc.svelte';
 	import HelpTopics from '$lib/components/help/HelpTopics.svelte';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
 	import { HelpDoc } from '$lib/stores/helpDoc.svelte';
@@ -68,12 +69,7 @@
 	</div>
 
 	{#if helpDoc.status === 'ready' && helpDoc.doc && helpDoc.doc.toc.length > 1}
-		<nav class="help-toc" aria-label="On this page">
-			<p class="eyebrow">On this page</p>
-			{#each helpDoc.doc.toc as entry (entry.id)}
-				<a class="help-toc-link" data-depth={entry.depth} href={`#${entry.id}`}>{entry.text}</a>
-			{/each}
-		</nav>
+		<HelpToc toc={helpDoc.doc.toc} />
 	{/if}
 </div>
 
@@ -84,8 +80,7 @@
 		gap: 2rem;
 		align-items: start;
 	}
-	.help-nav,
-	.help-toc {
+	.help-nav {
 		position: sticky;
 		top: 0;
 		/* the viewport less the shell around main's scroll area: the header
@@ -111,30 +106,10 @@
 		padding-top: 1rem;
 		border-top: 1px solid var(--color-border);
 	}
-	.help-toc {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-	.help-toc-link {
-		padding: 0.125rem 0 0.125rem 0.75rem;
-		border-left: 2px solid var(--color-border);
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-	}
-	.help-toc-link[data-depth='3'] {
-		padding-left: 1.5rem;
-	}
-	.help-toc-link:hover {
-		color: var(--color-text);
-	}
 
 	@media (max-width: 80rem) {
 		.help-layout {
 			grid-template-columns: 15rem minmax(0, 1fr);
-		}
-		.help-toc {
-			display: none;
 		}
 	}
 	@media (max-width: 64rem) {
