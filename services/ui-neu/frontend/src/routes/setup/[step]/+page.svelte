@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, type Component } from 'svelte';
 	import { goto } from '$app/navigation';
-	import type { SetupStep, SetupView } from '$lib/types/api.gen';
+	import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 	import SetupShell from '$lib/components/setup/SetupShell.svelte';
 	import SetupStepper from '$lib/components/setup/SetupStepper.svelte';
 	import SetupFooter from '$lib/components/setup/SetupFooter.svelte';
@@ -66,38 +66,46 @@
 		if (step) goto(`/setup/${step}`);
 	}
 
-	async function onContinue() {
-		if (!stepRef || busy) return;
+	// Run an action while busy, showing its failure message (or the fallback).
+	async function withBusy(failure: string, action: () => Promise<void>): Promise<void> {
 		busy = true;
-		error = null;
 		try {
-			const result = await stepRef.commit();
-			if (result === false) return;
-			if (data.step === 'finish') {
-				await completeSetup();
-				goto('/');
-				return;
-			}
-			await markStep(data.step, result === 'skip' ? 'skipped' : result);
-			go(nextStep(data.step));
+			await action();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Saving this step failed';
+			error = e instanceof Error ? e.message : failure;
 		} finally {
 			busy = false;
 		}
 	}
 
+	// Record the step's state and move on to the next step.
+	async function advance(state: SetupStepState): Promise<void> {
+		await markStep(data.step, state);
+		go(nextStep(data.step));
+	}
+
+	// Commit the step, then finish setup or advance to the next step.
+	async function commitStep(ref: SetupStepComponent): Promise<void> {
+		const result = await ref.commit();
+		if (result === false) return;
+		if (data.step === 'finish') {
+			await completeSetup();
+			goto('/');
+			return;
+		}
+		await advance(result === 'skip' ? 'skipped' : result);
+	}
+
+	async function onContinue() {
+		if (!stepRef || busy) return;
+		const ref = stepRef;
+		error = null;
+		await withBusy('Saving this step failed', () => commitStep(ref));
+	}
+
 	async function onSkip() {
 		if (busy) return;
-		busy = true;
-		try {
-			await markStep(data.step, 'skipped');
-			go(nextStep(data.step));
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Skipping this step failed';
-		} finally {
-			busy = false;
-		}
+		await withBusy('Skipping this step failed', () => advance('skipped'));
 	}
 </script>
 
