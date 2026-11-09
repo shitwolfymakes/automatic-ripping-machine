@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
-	import { MATCH_TONE, matchIndicator, type MatchKind } from '$lib/utils/track-match';
+	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { formatMinSec } from '$lib/utils/format';
@@ -16,6 +16,7 @@
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from './Glyph.svelte';
+	import MatchGlyph from './music-search/MatchGlyph.svelte';
 
 	interface Props {
 		job: JobView;
@@ -210,18 +211,6 @@
 	}
 </script>
 
-{#snippet matchGlyph(kind: MatchKind)}
-	{#if kind === 'match'}
-		<Glyph name="check" class="mx-auto h-3.5 w-3.5" />
-	{:else if kind === 'mismatch'}
-		<Glyph name="x" class="mx-auto h-3.5 w-3.5" />
-	{:else if kind === 'close'}
-		~
-	{:else}
-		-
-	{/if}
-{/snippet}
-
 <div class="stack">
 	<!-- Search panel -->
 	<div class="panel-section">
@@ -413,7 +402,7 @@
 													{#if kind}<td
 															class="w-4 py-0.5 pr-1 music-search-match"
 															data-tone={MATCH_TONE[kind]}
-															title={kind}>{@render matchGlyph(kind)}</td
+															title={kind}><MatchGlyph {kind} /></td
 														>{/if}
 												</tr>
 											{/each}
@@ -499,7 +488,7 @@
 								{#if discTracks.length > 0}<td
 										class="table-cell music-search-match"
 										data-tone={MATCH_TONE[kind]}
-										title={kind}>{@render matchGlyph(kind)}</td
+										title={kind}><MatchGlyph {kind} /></td
 									>{/if}
 							</tr>
 						{/each}
@@ -513,7 +502,7 @@
 								<td class="table-cell mono music-search-right">{formatMinSec(discTotalSec, 1)}</td>
 								<td class="table-cell mono music-search-right">{formatMinSec(mbTotalMs, 1000)}</td>
 								<td class="table-cell music-search-match" data-tone={MATCH_TONE[totalKind]} title={totalKind}
-									>{@render matchGlyph(totalKind)}</td
+									><MatchGlyph kind={totalKind} /></td
 								>
 							</tr>
 						</tfoot>
@@ -586,7 +575,7 @@
 											>{formatMinSec(p.mb.length_ms, 1000)}</td
 										>
 										<td class="table-cell music-search-match" data-tone={MATCH_TONE[p.match]} title={p.match}
-											>{@render matchGlyph(p.match)}</td
+											><MatchGlyph kind={p.match} /></td
 										>
 									</tr>
 								{/each}
