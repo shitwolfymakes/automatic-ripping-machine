@@ -46,6 +46,7 @@
 	import EpisodeMatchPanel from './episodes/EpisodeMatchPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { ReviewSections } from '$lib/stores/reviewSections.svelte';
 
 	interface Props {
 		job?: JobView;
@@ -88,14 +89,7 @@
 	// Info table's Episode column; empty until a session names the tracks.
 	let fileNames = $state(new Map<string, string>());
 	let initialLoading = $state(true);
-	let showInfo = $state(false);
-	let showTitleSearch = $state(false);
-	let showMusicSearch = $state(false);
-	let showEpisodes = $state(false);
-	// The Info field to put the cursor in when the card opens Info itself (the Season row's link).
-	let infoFocus = $state<'season' | null>(null);
-	// Search type TitleSearch opens with; set when the episode panel asks for a series search.
-	let titleInitialType = $state<'movie' | 'tv' | undefined>(undefined);
+	const sections = new ReviewSections();
 	let episodePanel = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 	// "Matching episodes..." while the Backend re-matches after a series pick or a
 	// flip to TV; job.identity_updated for this job (or a timeout) ends it.
@@ -215,18 +209,18 @@
 
 	// Picking a show in the match picker goes straight to episode matching.
 	function handleSeriesApplied() {
-		openSection('episodes');
+		sections.open('episodes');
 		matching.start();
 		handleTitleApply();
 	}
 
 	function handleMediaTypeChanged(type: 'movie' | 'tv') {
 		if (type === 'tv') {
-			openSection('episodes');
+			sections.open('episodes');
 			matching.start();
 		} else {
 			matching.stop();
-			showEpisodes = false;
+			sections.close('episodes');
 		}
 		handleTitleApply();
 	}
@@ -320,31 +314,6 @@
 		} finally {
 			pauseBusy = false;
 		}
-	}
-
-	type Section = 'info' | 'title' | 'music' | 'episodes';
-
-	// One section open at a time.
-	function openSection(section: Section | null) {
-		if (section !== 'info') infoFocus = null;
-		showInfo = section === 'info';
-		showTitleSearch = section === 'title';
-		showMusicSearch = section === 'music';
-		showEpisodes = section === 'episodes';
-	}
-
-	function isOpen(section: Section): boolean {
-		return { info: showInfo, title: showTitleSearch, music: showMusicSearch, episodes: showEpisodes }[section];
-	}
-
-	function toggleSection(section: Section) {
-		if (section === 'title') titleInitialType = undefined;
-		openSection(isOpen(section) ? null : section);
-	}
-	// "Season not set" on the Season row: Info with the cursor in Season.
-	function openSeason() {
-		infoFocus = 'season';
-		openSection('info');
 	}
 
 	async function loadSessions() {
@@ -470,7 +439,9 @@
 								{#if jobMeta.season}
 									<span>Season {Number(jobMeta.season)}</span>
 								{:else}
-									<button type="button" class="disc-review-widget-link" onclick={openSeason}>Season not set</button>
+									<button type="button" class="disc-review-widget-link" onclick={sections.openSeason}
+										>Season not set</button
+									>
 								{/if}
 							</dd>
 						</div>
@@ -480,14 +451,14 @@
 							<dt>Episodes</dt>
 							<dd data-testid="episode-status" data-state={episodeRow.state}>
 								{#if episodeRow.state === 'matched'}
-									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
+									<button type="button" class="disc-review-widget-link" onclick={() => sections.open('episodes')}
 										>Episodes matched{episodeRow.source ? ` from ${episodeRow.source}` : ''}</button
 									>
 								{:else if episodeRow.state === 'guess'}
 									<span class="disc-review-widget-attention">Episodes placed, a guess</span><span
 										class="disc-review-widget-muted">,</span
 									>
-									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
+									<button type="button" class="disc-review-widget-link" onclick={() => sections.open('episodes')}
 										>Review</button
 									>
 								{:else if episodeRow.state === 'attention'}
@@ -495,7 +466,7 @@
 									>{#if episodeRow.unmatched && episodeRow.total}<span class="disc-review-widget-muted"
 											>, {episodeRow.unmatched} of {episodeRow.total} titles unmatched</span
 										>{/if}<span class="disc-review-widget-muted">,</span>
-									<button type="button" class="disc-review-widget-link" onclick={() => openSection('episodes')}
+									<button type="button" class="disc-review-widget-link" onclick={() => sections.open('episodes')}
 										>Review</button
 									>
 								{:else if episodeRow.state === 'matching'}
@@ -592,7 +563,7 @@
 						onrefresh?.();
 					}}
 					onsearch={() => {
-						openSection(isMusic ? 'music' : 'title');
+						sections.open(isMusic ? 'music' : 'title');
 					}}
 				/>
 			</div>
@@ -608,28 +579,32 @@
 
 		<!-- Action buttons -->
 		<div class="flex flex-wrap items-center gap-1.5 disc-review-widget-actions">
-			<button onclick={() => toggleSection('info')} class="btn disc-review-widget-action-btn" aria-pressed={showInfo}>
+			<button
+				onclick={() => sections.toggle('info')}
+				class="btn disc-review-widget-action-btn"
+				aria-pressed={sections.isOpen('info')}
+			>
 				Info
 			</button>
 			{#if isVideo}
 				<button
-					onclick={() => toggleSection('title')}
+					onclick={() => sections.toggle('title')}
 					class="btn disc-review-widget-action-btn"
-					aria-pressed={showTitleSearch}>Search</button
+					aria-pressed={sections.isOpen('title')}>Search</button
 				>
 			{/if}
-			{#if episodeRow && (episodeRow.state !== 'matched' || showEpisodes)}
+			{#if episodeRow && (episodeRow.state !== 'matched' || sections.isOpen('episodes'))}
 				<button
-					onclick={() => toggleSection('episodes')}
+					onclick={() => sections.toggle('episodes')}
 					class="btn disc-review-widget-action-btn"
-					aria-pressed={showEpisodes}>Episodes</button
+					aria-pressed={sections.isOpen('episodes')}>Episodes</button
 				>
 			{/if}
 			{#if isMusic}
 				<button
-					onclick={() => toggleSection('music')}
+					onclick={() => sections.toggle('music')}
 					class="btn disc-review-widget-action-btn"
-					aria-pressed={showMusicSearch}>Search</button
+					aria-pressed={sections.isOpen('music')}>Search</button
 				>
 			{/if}
 			{#if $isAdmin && displayJob.actions.can_apply}
@@ -668,18 +643,18 @@
 		</div>
 
 		<!-- Expanded sections -->
-		{#if showTitleSearch && isVideo}
+		{#if sections.isOpen('title') && isVideo}
 			<div class="disc-review-widget-panel">
 				<TitleSearch
 					job={displayJob}
 					onapply={handleTitleApply}
 					onseries={handleSeriesApplied}
-					initialType={titleInitialType}
+					initialType={sections.titleInitialType}
 				/>
 			</div>
 		{/if}
 
-		{#if showEpisodes && isTv}
+		{#if sections.isOpen('episodes') && isTv}
 			<div class="disc-review-widget-panel" data-testid="episode-panel">
 				<EpisodeMatchPanel
 					bind:this={episodePanel}
@@ -687,24 +662,21 @@
 					{tracks}
 					matching={matching.active}
 					onchanged={() => loadDetail()}
-					onsearchseries={() => {
-						openSection('title');
-						titleInitialType = 'tv';
-					}}
+					onsearchseries={sections.searchSeries}
 				/>
 			</div>
 		{/if}
 
-		{#if showMusicSearch && isMusic}
+		{#if sections.isOpen('music') && isMusic}
 			<div class="disc-review-widget-panel">
 				<MusicSearch {job} discTracks={tracks} onapply={handleTitleApply} />
 			</div>
 		{/if}
 
-		{#if showInfo}
+		{#if sections.isOpen('info')}
 			<JobInfoForm
 				{job}
-				focusField={infoFocus}
+				focusField={sections.infoFocus}
 				onsaved={(c) => {
 					if (isTv && (c.season || c.disc)) matching.start();
 				}}
