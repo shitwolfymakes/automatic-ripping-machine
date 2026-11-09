@@ -7,9 +7,6 @@ import { createJob, createTrack } from '../__fixtures__/job';
 
 // Branch pins for MusicSearch, beside MusicSearch.test.ts. The branches below
 // cannot be reached from the rendered component, so nothing here forces them:
-// - The `detail == null ? []` arm of `visibleTracks`: the derived is read only
-//   by the open-release markup and by applyRelease, and both need `detail`
-//   set, so it is never evaluated with `detail` null.
 // - The `?? null` fallback on `track_count` in toggleFlip's failure face: the
 //   flip button renders only for a card with a truthy `track_count`, so the
 //   fallback never sees a missing one.

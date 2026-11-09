@@ -4,6 +4,13 @@
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '$lib/utils/music-search';
+	import {
+		visibleTracksFor,
+		discTotalSeconds,
+		releaseTotalMs,
+		pairTracks,
+		releasePatchBody
+	} from '$lib/utils/music-release';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from './Glyph.svelte';
@@ -63,14 +70,7 @@
 		}
 	});
 
-	// When the job knows its disc, scope a multi-disc release's tracklist to it.
-	let visibleTracks = $derived(
-		detail == null
-			? []
-			: detail.disc_count != null && detail.disc_count > 1 && job.disc_number != null
-				? (detail.tracks ?? []).filter((t) => t.disc_number === job.disc_number)
-				: (detail.tracks ?? [])
-	);
+	let visibleTracks = $derived(visibleTracksFor(detail, job.disc_number));
 
 	function currentFilters(): MusicSearchFilters {
 		return {
@@ -173,24 +173,11 @@
 		unknown: 'muted'
 	};
 
-	let discTotalSec = $derived(
-		discTracks.some((t) => t.expected_duration_seconds != null)
-			? discTracks.reduce((sum, t) => sum + (t.expected_duration_seconds ?? 0), 0)
-			: null
-	);
-	let mbTotalMs = $derived(visibleTracks.reduce((sum, t) => sum + (t.length_ms ?? 0), 0));
+	let discTotalSec = $derived(discTotalSeconds(discTracks));
+	let mbTotalMs = $derived(releaseTotalMs(visibleTracks));
 
 	let audioDiscTracks = $derived(discTracks.filter((t) => t.kind === 'audio_track'));
-	let trackMapping = $derived.by(() => {
-		const n = Math.min(audioDiscTracks.length, visibleTracks.length);
-		const pairs = [];
-		for (let i = 0; i < n; i++) {
-			const disc = audioDiscTracks[i];
-			const mb = visibleTracks[i];
-			pairs.push({ disc, mb, match: matchIndicator(mb.length_ms, disc.expected_duration_seconds) });
-		}
-		return pairs;
-	});
+	let trackMapping = $derived(pairTracks(audioDiscTracks, visibleTracks));
 
 	async function applyRelease() {
 		if (!editAlbum.trim() || !detail) return;
@@ -225,14 +212,10 @@
 			feedback = { type: 'success', message: 'Release applied' };
 			// Persist the release cover + any track-title mappings in one PATCH so
 			// the cover art shows on the job's cards/rows (resolve doesn't set it).
-			const cover = detail.poster_url ?? null;
-			const trackEdits = trackMapping.map((p) => ({ track_id: p.disc.id, title: p.mb.title }));
-			if (cover !== null || trackEdits.length > 0) {
+			const patch = releasePatchBody(detail.poster_url ?? null, trackMapping);
+			if (patch) {
 				try {
-					await patchJob(job.id, {
-						...(cover !== null ? { poster_url_manual: cover } : {}),
-						...(trackEdits.length > 0 ? { tracks: trackEdits } : {})
-					});
+					await patchJob(job.id, patch);
 				} catch {
 					feedback = { type: 'success', message: 'Identified; cover/track titles not saved' };
 				}
