@@ -37,12 +37,37 @@ export function toLogEntry(raw: Record<string, unknown>): LogEntry {
 	};
 }
 
+function parseNdjsonLine(line: string): Record<string, unknown> | null {
+	const trimmed = line.trim();
+	if (!trimmed) return null;
+	let raw: Record<string, unknown>;
+	try {
+		raw = JSON.parse(trimmed) as Record<string, unknown>;
+	} catch {
+		return null; // skip a mangled line rather than blank the whole view
+	}
+	if (raw === null || typeof raw !== 'object') return null;
+	return raw;
+}
+
+/**
+ * Parse an NDJSON body into log entries, in order. Blank / unparseable lines
+ * are skipped defensively (the backend reads with errors="replace" and can
+ * emit a mangled line).
+ */
+function parseNdjson(body: string): LogEntry[] {
+	const entries: LogEntry[] = [];
+	for (const line of body.split('\n')) {
+		const raw = parseNdjsonLine(line);
+		if (raw) entries.push(toLogEntry(raw));
+	}
+	return entries;
+}
+
 /**
  * Fetch one job's aggregated log as parsed NDJSON entries.
  * The endpoint is JWT-gated and returns text/NDJSON (not JSON), so this uses a
  * raw fetch with a manual bearer header rather than apiFetch (which assumes JSON).
- * Blank / unparseable lines are skipped defensively (the backend reads with
- * errors="replace" and can emit a mangled line).
  */
 export async function fetchJobLog(jobId: string, limit?: number): Promise<LogEntry[]> {
 	const qs = limit != null ? `?limit=${limit}` : '';
@@ -57,21 +82,7 @@ export async function fetchJobLog(jobId: string, limit?: number): Promise<LogEnt
 	if (!res.ok) {
 		throw new ApiError(res.status, `API ${res.status}: ${res.statusText}`, null);
 	}
-	const body = await res.text();
-	const entries: LogEntry[] = [];
-	for (const line of body.split('\n')) {
-		const trimmed = line.trim();
-		if (!trimmed) continue;
-		let raw: Record<string, unknown>;
-		try {
-			raw = JSON.parse(trimmed) as Record<string, unknown>;
-		} catch {
-			continue; // skip a mangled line rather than blank the whole view
-		}
-		if (raw === null || typeof raw !== 'object') continue;
-		entries.push(toLogEntry(raw));
-	}
-	return entries;
+	return parseNdjson(await res.text());
 }
 
 /** Per-job bug-report zip URL (used by a download link). */
