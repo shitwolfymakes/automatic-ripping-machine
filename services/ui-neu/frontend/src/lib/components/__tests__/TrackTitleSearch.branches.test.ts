@@ -4,19 +4,9 @@ import type { MediaType, MetadataCandidate, TrackView } from '$lib/types/api.gen
 import TrackTitleSearch from '../TrackTitleSearch.svelte';
 import { createTrack } from '../__fixtures__/job';
 
-// Branch pins for TrackTitleSearch, beside TrackTitleSearch.test.ts. Three
-// branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - The `{#if loadingDetail}` arm: nothing ever sets `loadingDetail` to true,
-//   so the "Loading..." line never renders and the `{:else if detail}` arm is
-//   the only one the editor can take.
-// - The third arm of `role` in applyFromDetail (`undefined`): `editType` is
-//   only ever 'movie' or 'series' (the Type select offers just those two and
-//   the seeding effect only assigns those two), so a type that is neither
-//   cannot reach it.
-// - The blank-title early return in applyFromDetail (`!editTitle.trim()`):
-//   the Apply button is disabled while the title is blank, so the handler
-//   never runs with one; the disabled state is what is pinned.
+// Branch pins for TrackTitleSearch, beside TrackTitleSearch.test.ts. Every
+// branch of the component is reachable from the rendered component, so
+// nothing is left unpinned.
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),

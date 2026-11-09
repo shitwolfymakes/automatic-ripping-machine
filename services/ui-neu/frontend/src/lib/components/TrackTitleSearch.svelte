@@ -24,7 +24,6 @@
 	let searchError = $state<string | null>(null);
 
 	let detail = $state<MetadataCandidate | null>(null);
-	let loadingDetail = $state(false);
 
 	let applying = $state(false);
 	let clearing = $state(false);
@@ -111,12 +110,11 @@
 	}
 
 	async function applyFromDetail() {
-		if (!editTitle.trim()) return;
 		applying = true;
 		feedback = null;
 		try {
 			const yr = editYear.trim() ? Number(editYear.trim()) : undefined;
-			const role = editType === 'series' ? 'episode' : editType === 'movie' ? 'main' : undefined;
+			const role = editType === 'series' ? 'episode' : 'main';
 			await updateTrackTitle(jobId, track.id, {
 				title: editTitle.trim(),
 				year: Number.isFinite(yr) ? yr : undefined,
@@ -266,9 +264,7 @@
 	{/if}
 
 	<!-- Detail / Edit -->
-	{#if loadingDetail}
-		<p class="field-help">Loading...</p>
-	{:else if detail}
+	{#if detail}
 		<div class="stack-sm stack">
 			<div class="grid grid-cols-2 gap-2">
 				<label class="field col-span-2">
