@@ -15,6 +15,7 @@
 		type LogLevelFilter,
 		type LogServiceFilter
 	} from '$lib/utils/log-view';
+	import { isTextField } from '$lib/utils/text-field';
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
 	import { FollowScroll } from '$lib/stores/followScroll.svelte';
@@ -98,8 +99,7 @@
 	// div) so the frame stays a plain, non-interactive container.
 	function onWindowKeydown(e: KeyboardEvent): void {
 		if (e.key !== '/' || !search || collapsed || searchEl === null || frameEl === null) return;
-		const target = e.target as HTMLElement | null;
-		if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+		if (isTextField(e.target as HTMLElement | null)) return;
 		if (!frameEl.contains(document.activeElement)) return;
 		e.preventDefault();
 		searchEl.focus();
