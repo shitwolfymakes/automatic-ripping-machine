@@ -237,13 +237,17 @@
 	}
 
 	// --- Orphan folders ---
+	async function reloadOrphanFolders() {
+		orphanFoldersData = await fetchOrphanFolders();
+		orphanFoldersSelected = new Set();
+	}
+
 	async function openOrphanFoldersModal() {
 		orphanFoldersOpen = true;
 		orphanFoldersLoading = true;
 		orphanFoldersFeedback = null;
 		try {
-			orphanFoldersData = await fetchOrphanFolders();
-			orphanFoldersSelected = new Set();
+			await reloadOrphanFolders();
 		} catch {
 			orphanFoldersData = null;
 		}
@@ -264,8 +268,7 @@
 		try {
 			await deleteOrphanFolder(path);
 			orphanFoldersFeedback = { type: 'success', message: `Folder "${name}" deleted` };
-			orphanFoldersData = await fetchOrphanFolders();
-			orphanFoldersSelected = new Set();
+			await reloadOrphanFolders();
 		} catch (e) {
 			orphanFoldersFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
 		}
@@ -277,8 +280,7 @@
 		try {
 			const result = await bulkDeleteFolders([...orphanFoldersSelected]);
 			orphanFoldersFeedback = cleanupFeedback(result.removed.length, 'folder', result.errors.length);
-			orphanFoldersData = await fetchOrphanFolders();
-			orphanFoldersSelected = new Set();
+			await reloadOrphanFolders();
 		} catch (e) {
 			orphanFoldersFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Bulk delete failed' };
 		}
