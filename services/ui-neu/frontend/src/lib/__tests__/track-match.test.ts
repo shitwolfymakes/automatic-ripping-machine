@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { matchIndicator } from '../utils/track-match';
+import { MATCH_TONE, matchIndicator } from '../utils/track-match';
+
+describe('MATCH_TONE', () => {
+	it('maps each match kind to its tone', () => {
+		expect(MATCH_TONE).toEqual({
+			match: 'success',
+			close: 'warning',
+			mismatch: 'danger',
+			unknown: 'muted'
+		});
+	});
+});
 
 describe('matchIndicator', () => {
 	it('match when within 3s', () => {

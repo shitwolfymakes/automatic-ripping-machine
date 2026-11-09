@@ -12,3 +12,11 @@ export function matchIndicator(
 	if (diff <= 10) return 'close';
 	return 'mismatch';
 }
+
+// The tone (a data-tone value) each match kind is drawn in.
+export const MATCH_TONE: Record<MatchKind, string> = {
+	match: 'success',
+	close: 'warning',
+	mismatch: 'danger',
+	unknown: 'muted'
+};

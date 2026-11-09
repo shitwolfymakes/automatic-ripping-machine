@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
-	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
+	import { MATCH_TONE, matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { formatMinSec } from '$lib/utils/format';
@@ -155,13 +155,6 @@
 			} as MetadataReleaseDetail);
 		}
 	}
-
-	const MATCH_TONE: Record<MatchKind, string> = {
-		match: 'success',
-		close: 'warning',
-		mismatch: 'danger',
-		unknown: 'muted'
-	};
 
 	let discTotalSec = $derived(discTotalSeconds(discTracks));
 	let mbTotalMs = $derived(releaseTotalMs(visibleTracks));
