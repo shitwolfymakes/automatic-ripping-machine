@@ -54,6 +54,21 @@ describe('trackOptionsBody', () => {
 		const body = trackOptionsBody({ ...opts, episodeNumber: 'abc' }, true);
 		expect(body).toEqual({ custom_filename: null, episode_number: null, episode_name: null });
 	});
+
+	it('sends a null episode number when it is Infinity', () => {
+		const body = trackOptionsBody({ ...opts, episodeNumber: 'Infinity' }, true);
+		expect(body).toEqual({ custom_filename: null, episode_number: null, episode_name: null });
+	});
+
+	it('sends an exponent episode number as a number', () => {
+		const body = trackOptionsBody({ ...opts, episodeNumber: '1e2' }, true);
+		expect(body).toEqual({ custom_filename: null, episode_number: 100, episode_name: null });
+	});
+
+	it('sends a padded episode number as a number', () => {
+		const body = trackOptionsBody({ ...opts, episodeNumber: ' 7 ' }, true);
+		expect(body).toEqual({ custom_filename: null, episode_number: 7, episode_name: null });
+	});
 });
 
 describe('trackTitleBody', () => {

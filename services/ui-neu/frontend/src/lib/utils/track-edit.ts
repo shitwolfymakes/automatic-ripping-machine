@@ -23,11 +23,10 @@ export function trackOptionsBody(
 	f: { filename: string; episodeNumber: string; episodeName: string },
 	isSeries: boolean
 ): TrackEdit {
-	const episodeNum = f.episodeNumber.trim() ? Number(f.episodeNumber.trim()) : null;
 	return {
 		custom_filename: f.filename.trim() || null,
 		...(isSeries && {
-			episode_number: Number.isFinite(episodeNum as number) ? episodeNum : null,
+			episode_number: parseEpisodeNumber(f.episodeNumber),
 			episode_name: f.episodeName.trim() || null
 		})
 	};
