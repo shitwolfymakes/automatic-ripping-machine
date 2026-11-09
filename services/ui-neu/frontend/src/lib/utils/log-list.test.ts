@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { discPosition, discKindLabel, jobTypeConfig, orderByLastModified, indexLogFiles, shortJobId } from './log-list';
+import type { JobView } from '$lib/types/api.gen';
+import {
+	discPosition,
+	discKindLabel,
+	jobTypeConfig,
+	orderByLastModified,
+	indexLogFiles,
+	shortJobId,
+	filterLogJobs
+} from './log-list';
 
 const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
 
@@ -63,6 +72,41 @@ describe('orderByLastModified', () => {
 			['d', '2026-10-16T10:00:00Z']
 		]);
 		expect(orderByLastModified(jobs, mod).map((j) => j.id)).toEqual(['d', 'b', 'a', 'c']);
+	});
+});
+
+describe('filterLogJobs', () => {
+	const jobs: Pick<JobView, 'id' | 'status' | 'title'>[] = [
+		{ id: 'job_AAA1', status: 'ripped', title: 'Alien' },
+		{ id: 'job_BBB2', status: 'failed', title: 'Blade Runner' },
+		{ id: 'job_CCC3', status: 'ripped', title: null },
+		{ id: 'job_DDD4', status: 'failed', title: 'Alien Nation' }
+	];
+	const ids = (list: { id: string }[]) => list.map((j) => j.id);
+
+	it('keeps every job, in order, with no filter and no search', () => {
+		expect(ids(filterLogJobs(jobs, '', ''))).toEqual(['job_AAA1', 'job_BBB2', 'job_CCC3', 'job_DDD4']);
+	});
+	it('keeps only the jobs with the filtered status', () => {
+		expect(ids(filterLogJobs(jobs, 'failed', ''))).toEqual(['job_BBB2', 'job_DDD4']);
+	});
+	it('matches the search against the title', () => {
+		expect(ids(filterLogJobs(jobs, '', 'runner'))).toEqual(['job_BBB2']);
+	});
+	it('matches the search against the id', () => {
+		expect(ids(filterLogJobs(jobs, '', 'bbb2'))).toEqual(['job_BBB2']);
+	});
+	it('ignores case in the search', () => {
+		expect(ids(filterLogJobs(jobs, '', 'ALIEN'))).toEqual(['job_AAA1', 'job_DDD4']);
+	});
+	it('finds a job with no title by its id', () => {
+		expect(ids(filterLogJobs(jobs, '', 'ccc3'))).toEqual(['job_CCC3']);
+	});
+	it('applies the status filter and the search together', () => {
+		expect(ids(filterLogJobs(jobs, 'failed', 'alien'))).toEqual(['job_DDD4']);
+	});
+	it('returns nothing when no job matches', () => {
+		expect(filterLogJobs(jobs, 'ripped', 'blade')).toEqual([]);
 	});
 });
 

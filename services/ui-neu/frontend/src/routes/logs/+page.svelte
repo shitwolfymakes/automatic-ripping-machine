@@ -13,6 +13,7 @@
 	import {
 		discKindLabel,
 		discPosition,
+		filterLogJobs,
 		jobTypeConfig,
 		orderByLastModified,
 		indexLogFiles,
@@ -33,17 +34,7 @@
 	let search = $state('');
 
 	const ordered = $derived(orderByLastModified(jobs, modified));
-	const filtered = $derived(
-		ordered.filter((j) => {
-			if (statusFilter && j.status !== statusFilter) return false;
-			if (search) {
-				const q = search.toLowerCase();
-				const hay = `${j.title ?? ''} ${j.id}`.toLowerCase();
-				if (!hay.includes(q)) return false;
-			}
-			return true;
-		})
-	);
+	const filtered = $derived(filterLogJobs(ordered, statusFilter, search));
 	const noun = $derived(total === 1 ? 'job' : 'jobs');
 	const countText = $derived(statusFilter || search ? `${filtered.length} of ${total} ${noun}` : `${total} ${noun}`);
 

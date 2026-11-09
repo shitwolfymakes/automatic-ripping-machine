@@ -56,6 +56,27 @@ export function orderByLastModified<T extends { id: string }>(jobs: T[], modifie
 	return [...withLog, ...withoutLog];
 }
 
+/**
+ * The jobs matching the status filter and the search. An empty filter or
+ * search matches everything; the search is case-insensitive over the title
+ * and the id.
+ */
+export function filterLogJobs<T extends Pick<JobView, 'id' | 'status' | 'title'>>(
+	jobs: T[],
+	statusFilter: string,
+	search: string
+): T[] {
+	return jobs.filter((j) => {
+		if (statusFilter && j.status !== statusFilter) return false;
+		if (search) {
+			const q = search.toLowerCase();
+			const hay = `${j.title ?? ''} ${j.id}`.toLowerCase();
+			if (!hay.includes(q)) return false;
+		}
+		return true;
+	});
+}
+
 /** `job_` plus the id's last four characters, lowercased: `job_9a41`. */
 export function shortJobId(id: string): string {
 	return `job_${id.slice(-4).toLowerCase()}`;
