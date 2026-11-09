@@ -21,7 +21,7 @@
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { fade, slide } from 'svelte/transition';
-	import { groupActiveJobs, newReviewIds } from '$lib/utils/dashboard-groups';
+	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -40,23 +40,10 @@
 	let dashError = $state<Error | null>(null);
 
 	let dismissedJobIds = $state(new Set<string>());
-	// Jobs that have entered review (awaiting_user_id/ripped_awaiting_identify).
-	// Applying a metadata match promotes a job to `identified`, which would
-	// otherwise drop its review card mid-review. Keep showing the card for any
-	// job that was in review until the operator explicitly dismisses it.
-	let stickyReviewIds = $state(new Set<string>());
 	let activeJobs = $derived(dash.active_jobs ?? []);
 
-	// Record jobs seen in review so they stick through a post-apply `identified`.
-	$effect(() => {
-		const toAdd = newReviewIds(activeJobs, stickyReviewIds);
-		if (toAdd.length > 0) {
-			stickyReviewIds = new Set([...stickyReviewIds, ...toAdd]);
-		}
-	});
-
 	let preparingRips = $derived(dash.preparing ?? []);
-	const groups = $derived(groupActiveJobs(activeJobs, dismissedJobIds, stickyReviewIds));
+	const groups = $derived(groupActiveJobs(activeJobs, dismissedJobIds));
 	let scanningJobs = $derived(groups.scanning);
 	let waitingJobs = $derived(groups.waiting);
 	let nonWaitingActiveJobs = $derived(groups.ripping);
@@ -64,13 +51,6 @@
 
 	function dismissJob(jobId: string) {
 		dismissedJobIds = new Set([...dismissedJobIds, jobId]);
-		// Drop from sticky so a later poll can't re-show the card.
-		if (stickyReviewIds.has(jobId)) {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const next = new Set(stickyReviewIds);
-			next.delete(jobId);
-			stickyReviewIds = next;
-		}
 	}
 
 	async function refreshDashboard() {

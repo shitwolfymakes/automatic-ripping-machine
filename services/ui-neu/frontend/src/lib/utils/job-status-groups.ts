@@ -117,8 +117,9 @@ const REVIEW_CARD: Record<JobStatus, boolean> = {
 /**
  * Whether a raw status puts a job on the dashboard's review card.
  * `identified` is pre-rip (disc identified, waiting to start): it belongs on
- * the review card (with Start rip), NOT in FINISHING. Keep it here so it
- * shows the review widget even after a page reload, not only while sticky.
+ * the review card (with Start rip), NOT in FINISHING. Keeping it here keeps
+ * the card up when applying a metadata match promotes a job to identified,
+ * and after a page reload.
  */
 export function isReviewCardStatus(status: string): boolean {
 	return REVIEW_CARD[status.toLowerCase() as JobStatus] === true;
