@@ -18,9 +18,7 @@
 	import { formatElapsed } from '$lib/utils/format';
 	import { pathBasename } from '$lib/utils/path';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
-	import { fetchGpus } from '$lib/api/gpus';
-	import { wsClient } from '$lib/api/ws';
-	import type { GpuView } from '$lib/types/api.gen';
+	import { GpuInventory } from '$lib/stores/gpuInventory.svelte';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
 	import { taskCount } from '$lib/utils/transcode-stats';
 	import { isAdmin } from '$lib/stores/auth';
@@ -123,18 +121,7 @@
 		}
 	});
 
-	let gpuRows = $state<GpuView[]>([]);
-
-	const GPU_RELOAD_DEBOUNCE_MS = 300;
-
-	async function loadGpus() {
-		try {
-			gpuRows = await fetchGpus();
-		} catch {
-			// The summary counts still render; the per-device rows just stay hidden.
-			gpuRows = [];
-		}
-	}
+	const gpus = new GpuInventory();
 
 	// Ripper-only: encode tasks queued before the box lost transcoding are
 	// held by the backend with nothing to run them; say how many.
@@ -158,24 +145,12 @@
 		}
 		stats.start();
 		workers.start();
-		loadGpus();
-		// Claims, releases and probes all land on transcode.events; reload the
-		// per-device rows so they agree with the polled summary count. A burst
-		// of task events (a batch finishing) coalesces into one reload.
-		wsClient.start();
-		let gpuReload: ReturnType<typeof setTimeout> | null = null;
-		const unsubscribeGpus = wsClient.subscribe('transcode.events', () => {
-			if (gpuReload !== null) clearTimeout(gpuReload);
-			gpuReload = setTimeout(() => {
-				gpuReload = null;
-				loadGpus();
-			}, GPU_RELOAD_DEBOUNCE_MS);
-		});
+		gpus.load();
+		const stopWatchingGpus = gpus.watch();
 		// Skeleton only when we have nothing cached for the current tab.
 		loadJobs(getJobsCache(activeTab) == null);
 		return () => {
-			unsubscribeGpus();
-			if (gpuReload !== null) clearTimeout(gpuReload);
+			stopWatchingGpus();
 			stats.stop();
 			workers.stop();
 			stopJobsPolling();
@@ -288,11 +263,11 @@
 							GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {taskCount(s, 'queued')} queued
 						</span>
 					</div>
-					{#if gpuRows.length > 0}
+					{#if gpus.rows.length > 0}
 						<!-- Per-device inventory rows (G-30 awareness): live status per GPU,
 				     with the management card one link away in Settings. -->
 						<div class="stack stack-sm transcoder-page-gpu-rows" data-testid="gpu-rows">
-							{#each gpuRows as g (g.id)}
+							{#each gpus.rows as g (g.id)}
 								<GpuInventoryRow gpu={g} />
 							{/each}
 							<a href="/settings#transcoding" class="transcoder-page-gpu-manage">Manage GPUs in Settings</a>
