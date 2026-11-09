@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
-	import { titleMatchBody, titleResolveBody, type TitleApplyValues } from '$lib/utils/job-resolve';
+	import { titleMatchBody, titleResolveBody } from '$lib/utils/job-resolve';
 	import MatchPicker from './match/MatchPicker.svelte';
 	import { isSeriesKind } from '$lib/utils/match';
 	import { reveal } from '$lib/transitions';
@@ -10,6 +10,7 @@
 	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/utils/search-providers';
 	import TitleSourcePicker from './title-search/TitleSourcePicker.svelte';
 	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
+	import { TitleEditDraft } from '$lib/stores/titleEditDraft.svelte';
 
 	interface Props {
 		job: JobView;
@@ -67,53 +68,24 @@
 	let feedback = $state<{ type: 'success' | 'error'; message: string; row: number; list: number } | null>(null);
 	let listGen = $state(0);
 
-	// Editable metadata fields, populated from the selected candidate. On a
-	// resolvable job, Apply identifies the movie via resolveJob (title/year +
-	// status promotion) and saves the poster via updateJobTitle (best-effort);
-	// on a non-resolvable job it falls back to poster-only (resolve would 409).
-	let editTitle = $state('');
-	let editYear = $state('');
-	let editType = $state<'movie' | 'series'>('movie');
-	let editPosterUrl = $state('');
+	const draft = new TitleEditDraft();
 
 	let canResolve = $derived(job.actions.can_resolve);
 
-	// "Edit before using": the edit fields start from the selected match and,
-	// once opened, are what Use applies (spec 4.2).
-	let editing = $state(false);
 	// The picker owns the selection; this only spots a row change.
 	let selectedIndex = $state(-1);
-	// True once the operator typed in the poster field; only then is the poster theirs.
-	let posterEdited = $state(false);
-
-	function fillEdit(c: MetadataCandidate) {
-		editTitle = c.title;
-		editYear = c.year != null ? String(c.year) : '';
-		editType = isSeriesKind(c.kind) ? 'series' : 'movie';
-		editPosterUrl = c.poster_url ?? '';
-		posterEdited = false;
-	}
 
 	function handlePickerSelect(_c: MetadataCandidate, index: number) {
 		// Feedback is kept: it shows again only under the row it is for.
-		if (index !== selectedIndex) {
-			editing = false;
-			posterEdited = false;
-		}
+		if (index !== selectedIndex) draft.close();
 		selectedIndex = index;
-	}
-
-	function toggleEdit(c: MetadataCandidate) {
-		if (!editing) fillEdit(c);
-		editing = !editing;
 	}
 
 	function closeResults() {
 		results = [];
 		listGen++;
 		selectedIndex = -1;
-		editing = false;
-		posterEdited = false;
+		draft.close();
 	}
 
 	let providerLabel = $derived(sourceOptions.find((o) => o.id === source)?.label ?? '');
@@ -137,21 +109,12 @@
 		results = await search.run(() => searchMetadata(query.trim(), searchType, source, parsedSearchYear), TEXT_SEARCH);
 	}
 
+	// On a resolvable job, Apply identifies the movie via resolveJob (title/year
+	// + status promotion) and saves the poster via updateJobTitle (best-effort);
+	// on a non-resolvable job it falls back to poster-only (resolve would 409).
 	async function applyResult(c: MetadataCandidate) {
 		const at = { row: selectedIndex, list: listGen };
-		const values: TitleApplyValues = editing
-			? {
-					title: editTitle.trim(),
-					year: editYear.trim(),
-					isSeries: editType === 'series',
-					poster: posterEdited ? editPosterUrl.trim() || null : (c.poster_url ?? null)
-				}
-			: {
-					title: c.title,
-					year: c.year != null ? String(c.year) : '',
-					isSeries: isSeriesKind(c.kind),
-					poster: c.poster_url ?? null
-				};
+		const values = draft.values(c);
 		if (!values.title) {
 			feedback = { type: 'error', message: 'Title is required', ...at };
 			return;
@@ -163,7 +126,7 @@
 		let resolved: ResolveResponse | undefined;
 		try {
 			if (canResolve && idsApply && c.provider) {
-				resolved = await resolveJob(job.id, titleMatchBody(c, values, editing && posterEdited));
+				resolved = await resolveJob(job.id, titleMatchBody(c, values, draft.posterIsManual));
 				feedback = { type: 'success', message: 'Identified', ...at };
 			} else if (canResolve) {
 				resolved = await resolveJob(job.id, titleResolveBody(values));
@@ -269,24 +232,24 @@
 					<button
 						type="button"
 						class="title-search-edit-toggle"
-						aria-expanded={editing}
-						onclick={() => toggleEdit(current)}
+						aria-expanded={draft.editing}
+						onclick={() => draft.toggle(current)}
 					>
 						Edit before using
 					</button>
-					{#if editing}
+					{#if draft.editing}
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="field sm:col-span-2">
 								<span class="field-label">Title</span>
-								<input type="text" bind:value={editTitle} />
+								<input type="text" bind:value={draft.title} />
 							</label>
 							<label class="field">
 								<span class="field-label">Year</span>
-								<input type="text" bind:value={editYear} />
+								<input type="text" bind:value={draft.year} />
 							</label>
 							<label class="field">
 								<span class="field-label">Type</span>
-								<select bind:value={editType}>
+								<select bind:value={draft.type}>
 									<option value="movie">Movie</option>
 									<option value="series">Series</option>
 								</select>
@@ -295,8 +258,8 @@
 								<span class="field-label">Poster URL</span>
 								<input
 									type="text"
-									bind:value={editPosterUrl}
-									oninput={() => (posterEdited = true)}
+									bind:value={draft.posterUrl}
+									oninput={() => (draft.posterEdited = true)}
 									placeholder="https://..."
 								/>
 							</label>
