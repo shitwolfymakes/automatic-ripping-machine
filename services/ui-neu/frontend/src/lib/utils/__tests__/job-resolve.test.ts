@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildResolveBody, cdIdentifyBody, tvSeasonOrDiscChanged, videoIdentifyBody } from '$lib/utils/job-resolve';
+import {
+	buildResolveBody,
+	cdIdentifyBody,
+	musicReleaseBody,
+	tvSeasonOrDiscChanged,
+	videoIdentifyBody
+} from '$lib/utils/job-resolve';
 
 const job = (over: Record<string, unknown> = {}) =>
 	({ id: 'j1', title: 'Show', year: 2020, media_type: 'tv', season: 1, disc_number: 2, ...over }) as any;
@@ -116,5 +122,55 @@ describe('tvSeasonOrDiscChanged', () => {
 		expect(tvSeasonOrDiscChanged(job(bare), job({ season: 1 }))).toBe(true);
 		expect(tvSeasonOrDiscChanged(job({ season: null, disc_number: null }), job(bare))).toBe(false);
 		expect(tvSeasonOrDiscChanged(job({ season: null, disc_number: null }), job({ disc_number: 1 }))).toBe(true);
+	});
+});
+
+describe('musicReleaseBody', () => {
+	const fields = (over: Record<string, string> = {}) => ({
+		album: ' Album ',
+		artist: ' Artist ',
+		year: '1999',
+		discNumber: '1',
+		discTotal: '2',
+		...over
+	});
+
+	it('trims the album as title and music.album, and the artist', () => {
+		const body = musicReleaseBody(fields(), []);
+		expect(body.title).toBe('Album');
+		expect(body.music).toEqual({ artist: 'Artist', album: 'Album', tracks: [] });
+	});
+
+	it.each([
+		['1999', 1999],
+		[' 7 ', 7],
+		['', null],
+		['   ', null],
+		['abc', null],
+		['Infinity', null]
+	])('parses the year, disc number and disc total from %j to %j', (raw, want) => {
+		expect(musicReleaseBody(fields({ year: raw, discNumber: raw, discTotal: raw }), [])).toMatchObject({
+			year: want,
+			disc_number: want,
+			disc_total: want
+		});
+	});
+
+	it('maps each track, with a missing position, length and disc number null', () => {
+		const body = musicReleaseBody(fields(), [
+			{ position: 1, title: 'One', length_ms: 1000, disc_number: 2 },
+			{ title: 'Two' }
+		]);
+		expect(body.music?.tracks).toEqual([
+			{ position: 1, title: 'One', length_ms: 1000, disc_number: 2 },
+			{ position: undefined, title: 'Two', length_ms: null, disc_number: null }
+		]);
+	});
+
+	it('keeps the keys in order', () => {
+		const body = musicReleaseBody(fields(), [{ position: 1, title: 'One' }]);
+		expect(Object.keys(body)).toEqual(['title', 'year', 'disc_number', 'disc_total', 'music']);
+		expect(Object.keys(body.music!)).toEqual(['artist', 'album', 'tracks']);
+		expect(Object.keys(body.music!.tracks![0])).toEqual(['position', 'title', 'length_ms', 'disc_number']);
 	});
 });

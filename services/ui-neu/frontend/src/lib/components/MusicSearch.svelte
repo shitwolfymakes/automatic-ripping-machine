@@ -2,6 +2,7 @@
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
+	import { musicReleaseBody } from '$lib/utils/job-resolve';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '$lib/utils/music-search';
 	import {
@@ -193,22 +194,10 @@
 		applying = true;
 		feedback = null;
 		try {
-			const yr = editYear.trim() ? Number(editYear.trim()) : null;
-			const dn = discNumber.trim() ? Number(discNumber.trim()) : null;
-			const dt = discTotal.trim() ? Number(discTotal.trim()) : null;
-			const tracks = visibleTracks.map((t) => ({
-				position: t.position,
-				title: t.title,
-				length_ms: t.length_ms ?? null,
-				disc_number: t.disc_number ?? null
-			}));
-			await resolveJob(job.id, {
-				title: editAlbum.trim(),
-				year: Number.isFinite(yr as number) ? yr : null,
-				disc_number: Number.isFinite(dn as number) ? dn : null,
-				disc_total: Number.isFinite(dt as number) ? dt : null,
-				music: { artist: editArtist.trim(), album: editAlbum.trim(), tracks }
-			});
+			await resolveJob(
+				job.id,
+				musicReleaseBody({ album: editAlbum, artist: editArtist, year: editYear, discNumber, discTotal }, visibleTracks)
+			);
 			feedback = { type: 'success', message: 'Release applied' };
 			// Persist the release cover + any track-title mappings in one PATCH so
 			// the cover art shows on the job's cards/rows (resolve doesn't set it).

@@ -1,14 +1,20 @@
 // The resolve request bodies the UI sends, for the job page's in-place fact
-// edit and the identify dialog's manual entry, and whether a fact edit re-runs
-// the episode match. Pure, so each rule is tested without the page or the
-// dialog.
+// edit, the identify dialog's manual entry and the music search's release
+// apply, and whether a fact edit re-runs the episode match. Pure, so each rule
+// is tested without the page or the dialog.
 import type { resolveJob } from '$lib/api/jobs';
-import type { JobView } from '$lib/types/api.gen';
+import type { JobView, MetadataReleaseTrack } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
 
 export type ResolveBody = Parameters<typeof resolveJob>[1];
 
 const num = (v: string) => (v.trim() === '' ? null : Number(v));
+
+// Unlike `num`, a non-finite number (NaN, Infinity) also becomes null.
+const finiteNum = (v: string) => {
+	const n = num(v);
+	return Number.isFinite(n) ? n : null;
+};
 
 /**
  * The resolve body for one edited fact. Title and year restate the identity
@@ -53,6 +59,35 @@ export function cdIdentifyBody(f: {
  */
 export function videoIdentifyBody(f: { title: string; year: number | null }): ResolveBody {
 	return { title: f.title.trim(), year: f.year ?? null };
+}
+
+/**
+ * The music search's resolve body for the chosen release, with the trimmed
+ * album as the title, the year, disc number and disc total parsed from their
+ * fields (null when blank or not a finite number), and `music` holding the
+ * trimmed artist and album and each track with its position, title, length
+ * and disc number (the length and disc number null when missing).
+ */
+export function musicReleaseBody(
+	f: { album: string; artist: string; year: string; discNumber: string; discTotal: string },
+	tracks: MetadataReleaseTrack[]
+): ResolveBody {
+	return {
+		title: f.album.trim(),
+		year: finiteNum(f.year),
+		disc_number: finiteNum(f.discNumber),
+		disc_total: finiteNum(f.discTotal),
+		music: {
+			artist: f.artist.trim(),
+			album: f.album.trim(),
+			tracks: tracks.map((t) => ({
+				position: t.position,
+				title: t.title,
+				length_ms: t.length_ms ?? null,
+				disc_number: t.disc_number ?? null
+			}))
+		}
+	};
 }
 
 /**
