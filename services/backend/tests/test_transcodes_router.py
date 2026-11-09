@@ -528,12 +528,12 @@ def test_log_requires_jwt(signing_key: bytes, tmp_path: Path, monkeypatch: pytes
     assert r.status_code == 404
 
 
-def test_log_zip_respects_hard_cap(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_zip_respects_entry_line_cap(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import io
     import zipfile
 
     monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(settings, "ARM_LOG_PER_FILE_HARD_CAP", 2)  # cheap cap for the test
+    monkeypatch.setattr(settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 2)  # cheap cap for the test
     db = FakeSession()
     db.rows["transcode_tasks"] = [_task("txt_zipcap000001", status=TranscodeTaskStatus.DONE)]
     _write_task_log(tmp_path, "txt_zipcap000001", ["x1", "x2", "x3", "x4"])
@@ -543,7 +543,89 @@ def test_log_zip_respects_hard_cap(signing_key: bytes, tmp_path: Path, monkeypat
     assert r.status_code == 200, r.text
     zf = zipfile.ZipFile(io.BytesIO(r.content))
     content = zf.read("arm-transcode-zipcap000001.log").decode()
-    assert content.count("\n") == 2  # capped at ARM_LOG_PER_FILE_HARD_CAP lines
+    assert content.count("\n") == 2  # capped at ARM_LOG_ZIP_PER_ENTRY_LINE_CAP lines
+
+
+def test_log_zip_respects_entry_byte_cap(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import zipfile
+
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(settings, "ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP", 3)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zipbyte00001", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_zipbyte00001", ["ab", "cd"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zipbyte00001/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert zf.read("arm-transcode-zipbyte00001.log").decode() == "ab\n"
+
+
+def test_log_zip_terminates_the_last_line(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import zipfile
+
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zipterm00001", status=TranscodeTaskStatus.DONE)]
+    (tmp_path / "arm-transcode-zipterm00001.log").write_text("one\ntwo", encoding="utf-8")
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zipterm00001/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert zf.read("arm-transcode-zipterm00001.log").decode() == "one\ntwo\n"
+
+
+class _UnopenableFile:
+    name = "arm-transcode-unopenable1.log"
+
+    def is_file(self) -> bool:
+        return True
+
+    def open(self, *_a: object, **_k: object) -> object:
+        raise OSError("permission denied")
+
+
+def test_log_limit_zero_streams_nothing(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_limzero00001", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_limzero00001", ["a", "b"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_limzero00001/log?limit=0", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.text == ""
+
+
+def test_log_open_error_streams_nothing(signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tx_router, "_transcode_log_path", lambda _tid: _UnopenableFile())
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_openerr00001", status=TranscodeTaskStatus.DONE)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_openerr00001/log", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.text == ""
+
+
+def test_log_zip_open_error_writes_an_empty_entry(signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import zipfile
+
+    monkeypatch.setattr(tx_router, "_transcode_log_path", lambda _tid: _UnopenableFile())
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zipopenerr01", status=TranscodeTaskStatus.DONE)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zipopenerr01/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert zf.namelist() == ["arm-transcode-unopenable1.log"]
+    assert zf.read("arm-transcode-unopenable1.log") == b""
 
 
 def test_log_zip_unknown_task_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

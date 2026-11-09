@@ -12,7 +12,6 @@ removes the row immediately.
 import asyncio
 import io
 import zipfile
-from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -21,11 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
-from arm_backend.config import settings
 from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.transcode_queue import count_queued_encode_tasks, max_parallel_transcodes
 from arm_backend.db import get_session
-from arm_backend.log_reader import LOG_DIR, effective_cap
+from arm_backend.log_reader import LOG_DIR, effective_cap, file_log_lines, file_log_slice
 from arm_common import Gpu, GpuStatus, SessionApplication, TranscodeTaskStatus, User
 from arm_common.encoders import gpu_is_usable
 from arm_common.models import TranscodeTask
@@ -167,12 +165,7 @@ async def download_transcode_log_zip(
     path = _transcode_log_path(task_id)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
-    lines: list[str] = []
-    with path.open("r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            lines.append(line)
-            if len(lines) >= settings.ARM_LOG_PER_FILE_HARD_CAP:
-                break
+    lines = file_log_slice(path)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(path.name, "".join(lines))
@@ -198,19 +191,7 @@ async def stream_transcode_log(
     path = _transcode_log_path(task_id)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
-    cap = effective_cap(limit)
-
-    def gen() -> Iterator[bytes]:
-        yielded = 0
-        with path.open("r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                out = line if line.endswith("\n") else line + "\n"
-                yield out.encode("utf-8")
-                yielded += 1
-                if yielded >= cap:
-                    return
-
-    return StreamingResponse(gen(), media_type="application/x-ndjson")
+    return StreamingResponse(file_log_lines(path, effective_cap(limit)), media_type="application/x-ndjson")
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
