@@ -12,6 +12,7 @@
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import JobTracksTable from '$lib/components/JobTracksTable.svelte';
 	import JobFingerprints from '$lib/components/JobFingerprints.svelte';
+	import JobMusicTracklist from '$lib/components/JobMusicTracklist.svelte';
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
 	import MediaTypeSwitch from '$lib/components/episodes/MediaTypeSwitch.svelte';
@@ -426,32 +427,7 @@
 		     song titles), the Tracks table above is authoritative and this would
 		     just duplicate it. Mirrors neu's single-section behavior. -->
 			{#if tracks.length === 0 && jobDetail.musicTracks.length > 0}
-				<section>
-					<h2 class="mb-3 job-detail-section-title">
-						Tracklist
-						<span class="job-detail-section-subtitle">({jobDetail.musicTracks.length} tracks via MusicBrainz)</span>
-					</h2>
-					<div class="overflow-x-auto job-detail-table-scroll">
-						<table class="table responsive-table">
-							<thead>
-								<tr>
-									<th class="table-header">#</th>
-									<th class="table-header">Title</th>
-									<th class="table-header job-detail-right">Duration</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each jobDetail.musicTracks as mt (mt.number)}
-									<tr class="table-row">
-										<td class="table-cell" data-label="#">{mt.number}</td>
-										<td class="table-cell" data-label="Title">{mt.title}</td>
-										<td class="table-cell job-detail-right" data-label="Duration">{mt.durationLabel}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</section>
+				<JobMusicTracklist tracks={jobDetail.musicTracks} />
 			{/if}
 
 			<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
@@ -690,19 +666,6 @@
 	}
 	.job-detail-section-title[aria-expanded='true'] .chevron {
 		transform: rotate(90deg);
-	}
-	.job-detail-section-subtitle {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		font-weight: 400;
-		color: var(--color-text-muted);
-	}
-	.job-detail-table-scroll {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-	}
-	.job-detail-right {
-		text-align: right;
 	}
 	.job-detail-raw-metadata {
 		border: 1px solid var(--color-border);
