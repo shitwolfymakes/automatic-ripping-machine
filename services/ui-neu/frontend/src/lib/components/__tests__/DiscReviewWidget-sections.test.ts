@@ -9,8 +9,6 @@
 //   handlers: their buttons render only once the job is set
 // - the empty-string status fallbacks in the start-rip and post-rip checks: a
 //   job always has a status, and both checks are read only while the job is set
-// - the missing-row guard in the running-match detail: it is read only inside
-//   the block that renders the Episodes row
 // - the empty Disc row: the disc type label is never empty ("Unknown" stands
 //   in for a missing type), so the row always shows
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

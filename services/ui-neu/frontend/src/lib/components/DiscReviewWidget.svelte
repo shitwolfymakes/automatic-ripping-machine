@@ -12,7 +12,6 @@
 	} from '$lib/api/jobs';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { videoTypeLabel } from '$lib/utils/job-fields';
 	import { parkedSessionLine } from '$lib/utils/parked-session';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { driveLabel } from '$lib/utils/drive-name';
@@ -24,8 +23,12 @@
 		previouslyRippedJobId,
 		reviewPhaseBadge
 	} from '$lib/utils/job-review';
-	import { providerLabel } from '$lib/utils/provider-labels';
-	import { reviewStatusLabel } from '$lib/utils/review-card';
+	import {
+		episodeMatchingDetail,
+		matchDetailLine,
+		matchProviderLabel,
+		reviewStatusLabel
+	} from '$lib/utils/review-card';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -165,31 +168,8 @@
 	let isMiss = $derived(isIdentifyMiss(displayJob));
 	// Null off a TV video disc and after the rip; the Episodes button follows it.
 	let episodeRow = $derived(isTv ? episodeStatus(displayJob, data ? tracks : null, matching.active) : null);
-	// "TMDb, 4 of 6 titles" under a running match; parts it doesn't know yet are left out.
-	let matchingDetail = $derived.by(() => {
-		if (!episodeRow) return null;
-		const { source, total, unmatched } = episodeRow;
-		const counts = total && unmatched != null ? `${total - unmatched} of ${total} titles` : null;
-		return [source, counts].filter(Boolean).join(', ') || null;
-	});
-	// The SHOW / MATCH row's trailing detail: "TV Series, 1974-1975" or "Movie, 1999".
-	// Off TV the type is jobMeta's video_type: media_type, else the provider's own.
-	let matchDetail = $derived.by(() => {
-		const facts = (displayJob.metadata_json?.identity as { facts?: { end_year?: number | null } } | undefined)?.facts;
-		const end = facts?.end_year;
-		const years = displayJob.year
-			? end && end !== displayJob.year
-				? `${displayJob.year}-${end}`
-				: `${displayJob.year}`
-			: null;
-		const parts = isTv ? ['TV Series', years] : [jobMeta.video_type ? videoTypeLabel(jobMeta.video_type) : null, years];
-		return parts.filter(Boolean).join(', ');
-	});
-	// A match without an IMDb id names the provider that made it; a hand-set title has none.
-	let showProvider = $derived.by(() => {
-		const p = (displayJob.metadata_json?.identity as { provider?: string } | undefined)?.provider;
-		return p && p !== 'manual' ? providerLabel(p) : null;
-	});
+	let matchDetail = $derived(matchDetailLine(displayJob, isTv, jobMeta.video_type));
+	let showProvider = $derived(matchProviderLabel(displayJob));
 	// "Blu-ray, Disc 1/4, 6 titles", leaving out the parts that are empty.
 	let discLine = $derived(
 		[
@@ -542,6 +522,7 @@
 										>Review</button
 									>
 								{:else if episodeRow.state === 'matching'}
+									{@const matchingDetail = episodeMatchingDetail(episodeRow)}
 									<span class="disc-review-widget-matching">Matching episodes...</span>
 									{#if matchingDetail}<span class="disc-review-widget-muted">{matchingDetail}</span>{/if}
 								{:else}
