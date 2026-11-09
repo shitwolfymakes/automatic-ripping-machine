@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchAllJobs } from '$lib/api/jobs';
-	import { fetchJobLogIndex } from '$lib/api/logs';
 	import type { JobView } from '$lib/types/api.gen';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -17,44 +15,24 @@
 		jobTypeConfig,
 		logCountText,
 		orderByLastModified,
-		indexLogFiles,
 		shortJobId
 	} from '$lib/utils/log-list';
 	import { calendarTimeAgo, formatShortDateTime } from '$lib/utils/format';
 	import { dashboard } from '$lib/stores/dashboard';
+	import { LogListing } from '$lib/stores/logListing.svelte';
 
 	const COLUMNS = ['Title', 'Status', 'Type', 'Disc', 'Drive', 'Last modified'];
 
-	let jobs = $state<JobView[]>([]);
-	let total = $state(0);
-	// job id -> the log file's modified_at; a job missing here has no log yet
-	let modified = $state(new Map<string, string>());
-	let loading = $state(true);
-	let error = $state<Error | null>(null);
+	const listing = new LogListing();
 	let statusFilter = $state('');
 	let search = $state('');
 
-	const ordered = $derived(orderByLastModified(jobs, modified));
+	const ordered = $derived(orderByLastModified(listing.jobs, listing.modified));
 	const filtered = $derived(filterLogJobs(ordered, statusFilter, search));
-	const countText = $derived(logCountText(filtered.length, total, !!(statusFilter || search)));
+	const countText = $derived(logCountText(filtered.length, listing.total, !!(statusFilter || search)));
 
-	onMount(async () => {
-		// Every job, not one page: the list sorts by log modified time and
-		// filters client-side, which a server page would cut short. The log
-		// index is best-effort: if it fails the jobs still list, each showing
-		// "No log yet".
-		const [page, index] = await Promise.allSettled([fetchAllJobs(), fetchJobLogIndex()]);
-		if (page.status === 'fulfilled') {
-			jobs = page.value.jobs;
-			total = page.value.total;
-		} else {
-			const e = page.reason;
-			error = e instanceof Error ? e : new Error(String(e));
-		}
-		if (index.status === 'fulfilled') {
-			modified = indexLogFiles(index.value);
-		}
-		loading = false;
+	onMount(() => {
+		listing.load();
 	});
 </script>
 
@@ -80,7 +58,7 @@
 	</div>
 
 	<div class="list-panel-body">
-		<LoadState data={jobs} {loading} {error}>
+		<LoadState data={listing.jobs} loading={listing.loading} error={listing.error}>
 			{#snippet loadingSlot()}
 				<p class="logs-panel-muted logs-panel-message">Loading jobs...</p>
 			{/snippet}
@@ -105,7 +83,7 @@
 								{#each filtered as job (job.id)}
 									{@const type = jobTypeConfig(job)}
 									{@const drive = driveLabel(job.drive_id, $dashboard.drive_names)}
-									{@const logAt = modified.get(job.id)}
+									{@const logAt = listing.modified.get(job.id)}
 									<tr class="table-row">
 										<td class="table-cell" data-label="Title">
 											<div class="logs-panel-title-cell">
