@@ -15,7 +15,6 @@ Wire shape:
 
 import asyncio
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Header, WebSocket, WebSocketDisconnect, status
 from pydantic import TypeAdapter, ValidationError
@@ -34,6 +33,7 @@ from arm_backend.ws.principal import (
     UIPrincipal,
     resolve_principal,
 )
+from arm_backend.ws.topics import is_progress_topic, progress_scope
 from arm_common import User
 from arm_common.schemas import (
     WSAck,
@@ -289,25 +289,6 @@ async def _handle_unsubscribe(websocket: WebSocket, hub: WSHub, msg: WSUnsubscri
     await websocket.send_json(WSAck(topic=msg.topic).model_dump())
 
 
-def _is_progress_topic(topic: str) -> bool:
-    """Whether the topic is a ripper or transcode progress stream, which is
-    never persisted."""
-    return topic.startswith("ripper.progress.") or topic.startswith("transcode.progress.")
-
-
-def _progress_scope(topic: str, payload: dict[str, Any]) -> tuple[str | None, str | None]:
-    """The job id a published topic carries, and its throttle scope: the
-    payload's track id, else the transcode task id."""
-    job_id = _extract_id(topic, "ripper.progress.")
-    # transcode.progress.{task_id} → use the task_id as the throttle scope (same role as track_id).
-    track_id: str | None = None
-    if isinstance(payload, dict):  # pragma: no branch — WSPublishRequest.payload is schema-constrained to dict
-        track_id = payload.get("track_id")
-    if track_id is None:
-        track_id = _extract_id(topic, "transcode.progress.")
-    return job_id, track_id
-
-
 async def _handle_publish(
     websocket: WebSocket,
     hub: WSHub,
@@ -321,8 +302,8 @@ async def _handle_publish(
         await _send_error(websocket, CLOSE_FORBIDDEN, f"cannot publish to {msg.topic}")
         return
     # Service-published progress is fire-and-forget — never persisted, never blocks the publisher.
-    is_progress = _is_progress_topic(msg.topic)
-    job_id, track_id = _progress_scope(msg.topic, msg.payload)
+    is_progress = is_progress_topic(msg.topic)
+    job_id, track_id = progress_scope(msg.topic, msg.payload)
     await hub.emit(
         topic=msg.topic,
         event_type=msg.event_type,
@@ -337,12 +318,6 @@ async def _handle_publish(
     # persisted publishable topic is ever added to the authz surface.
     if not is_progress:  # pragma: no cover
         await session.commit()
-
-
-def _extract_id(topic: str, prefix: str) -> str | None:
-    if topic.startswith(prefix):
-        return topic[len(prefix) :] or None
-    return None
 
 
 async def _send_error(websocket: WebSocket, code: int, reason: str) -> None:

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arm_backend.ws.topics import is_progress_topic
 from arm_common import Event, new_id
 from arm_common.schemas import WSEnvelope
 
@@ -71,7 +72,7 @@ class WSHub:
         track_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> None:
-        is_progress = topic.startswith("ripper.progress.") or topic.startswith("transcode.progress.")
+        is_progress = is_progress_topic(topic)
         if is_progress and not self._allow_progress_tick(topic, track_id):
             return
 
