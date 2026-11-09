@@ -105,7 +105,8 @@ vi.mock('$lib/stores/dashboard', async () => {
 	};
 });
 
-vi.mock('$lib/api/dashboard', () => ({
+vi.mock('$lib/api/config', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/api/config')>()),
 	setRippingEnabled: vi.fn(() => Promise.resolve())
 }));
 

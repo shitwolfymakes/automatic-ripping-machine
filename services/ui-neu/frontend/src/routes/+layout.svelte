@@ -5,7 +5,7 @@
 	import { schemeLocksMode, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { setRippingEnabled } from '$lib/api/dashboard';
+	import { setRippingEnabled } from '$lib/api/config';
 	import { goto } from '$app/navigation';
 	import { isoPickerMode, showIsoPicker } from '$lib/stores/isoPicker';
 	import IsoPicker from '$lib/components/IsoPicker.svelte';

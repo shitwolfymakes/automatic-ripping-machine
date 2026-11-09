@@ -1,5 +1,4 @@
-import type { JobView, JobStatus, TranscodeTaskView, ConfigView, IsoPrepareView } from '$lib/types/api.gen';
-import { apiFetch } from './client';
+import type { JobView, JobStatus, TranscodeTaskView, IsoPrepareView } from '$lib/types/api.gen';
 import { fetchConfigView } from './config';
 import { fetchDrives } from './drives';
 import { fetchIsoPreparing } from './iso';
@@ -225,17 +224,4 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 		transcoder_stats: transcoderStatsRes.status === 'fulfilled' ? {} : null,
 		active_transcodes: activeTranscodesOf(transcodes)
 	};
-}
-
-// The Pause toggle means "hold discs for review": pausing lets discs scan +
-// identify and then parks each in AWAITING_REVIEW indefinitely. The backend
-// only PARKS (rather than rejecting with 409) when BOTH ripping_paused AND
-// hold_for_review are set — see ripper.py identify(). Un-pausing clears both
-// and resumes straight-through ripping; config.py gives held discs a fresh
-// countdown on the ripping_paused ON->OFF transition so they don't stampede.
-export function setRippingEnabled(enabled: boolean): Promise<ConfigView> {
-	return apiFetch<ConfigView>('/api/config', {
-		method: 'PATCH',
-		body: JSON.stringify({ ripping_paused: !enabled, hold_for_review: !enabled })
-	});
 }

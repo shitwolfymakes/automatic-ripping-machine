@@ -5,7 +5,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { apiFetch } from '$lib/api/client';
-import { setRippingEnabled } from '../api/dashboard';
+import { setRippingEnabled } from '../api/config';
 
 const mockApiFetch = vi.mocked(apiFetch);
 
