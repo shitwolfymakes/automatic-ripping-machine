@@ -4,9 +4,9 @@
 // and the confirm dialog render for real.
 //
 // Branches the card cannot reach, so they are not forced here:
-// - the `if (!drive) return;` guards in savePrescanField, saveSpeed,
-//   saveDefaultSession, confirmUnenroll, saveEdit, toggleUhd and setMode:
-//   every control that calls them renders only once `drive` is set
+// - the `if (!drive) return;` guards in confirmUnenroll, saveEdit, toggleUhd
+//   and setMode: every control that calls them renders only once `drive` is
+//   set
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
