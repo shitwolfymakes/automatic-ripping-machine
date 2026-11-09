@@ -2,10 +2,8 @@
 // leaves open: the disc-type filter, recipe-box fallbacks, the naming-preview
 // failure text, stale previews, and the failure paths of load and apply.
 //
-// The branches below cannot be reached from the rendered dialog, so nothing
-// here forces them:
-// - the no-session arm of selectedRipPreset: it is only read inside
-//   {#if selectedSession}, so it never runs with no session selected.
+// The branch below cannot be reached from the rendered dialog, so nothing
+// here forces it:
 // - the `value={s.id}` option guard: its unchanged-value arm needs an option
 //   to re-render with the same id, but sessions load once in onMount into a
 //   keyed each block, and the runtime-enabled store flipping re-filters the
