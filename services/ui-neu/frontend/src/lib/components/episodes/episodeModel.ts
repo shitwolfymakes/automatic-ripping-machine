@@ -32,16 +32,6 @@ export interface EpisodeRow {
 	pickValue: string;
 }
 
-/** The Re-run form. An empty season or disc is null (unknown); a season of
- * 'scan' asks the source to try every season. */
-export interface RerunForm {
-	source: 'tmdb' | 'tvmaze' | 'tvdb';
-	season: number | 'scan' | null;
-	disc: number | null;
-	/** Empty means the backend's default. */
-	tolerance: number | null;
-}
-
 const RAN = new Set(['ok', 'miss', 'skipped', 'error']);
 const NON_EPISODE: Record<string, string> = { extra: 'Extra', trailer: 'Trailer', other: 'Other' };
 

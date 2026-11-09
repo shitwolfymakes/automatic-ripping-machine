@@ -28,8 +28,7 @@
 		failedSources,
 		pickerOptions,
 		ROLE_OPTIONS,
-		type EpisodeRow,
-		type RerunForm
+		type EpisodeRow
 	} from './episodeModel';
 	import {
 		activeSource,
@@ -41,6 +40,7 @@
 		SOURCE_LABEL
 	} from '$lib/utils/episode-sources';
 	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/utils/episode-hold';
+	import { rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
@@ -188,15 +188,6 @@
 		preview = null;
 		previewSource = null;
 		actionError = null;
-	}
-
-	function request(apply: boolean): MatchRequest {
-		const req: MatchRequest = { source: rerun.source, apply };
-		if (rerun.season === 'scan') req.scan_seasons = true;
-		else if (rerun.season != null) req.season = rerun.season;
-		if (rerun.disc != null) req.disc_number = rerun.disc;
-		if (rerun.tolerance != null) req.tolerance = rerun.tolerance;
-		return req;
 	}
 
 	// A guess: the season the source guessed and the other seasons the scan
@@ -606,7 +597,7 @@
 					? { changed: rows.filter((r) => r.changed).length, label: shortSourceLabel(previewSource) }
 					: null}
 				onfieldchange={dropPreview}
-				onpreview={() => run(request(false))}
+				onpreview={() => run(rerunRequest(rerun, false))}
 				ondiscard={dropPreview}
 				onapply={applyPreview}
 			>
