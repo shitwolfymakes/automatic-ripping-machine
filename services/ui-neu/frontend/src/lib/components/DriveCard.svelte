@@ -2,7 +2,7 @@
 	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 	import { updateDrive, unenrollDrive } from '$lib/api/drives';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { isPassthroughSession, presetToolMap } from '$lib/utils/sessions';
+	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/utils/sessions';
 	import { triggerManual } from '$lib/api/jobs';
 	import {
 		connectionLabel,
@@ -54,19 +54,10 @@
 		globalAutoRip = true
 	}: Props = $props();
 
-	// A ripper-only deployment (not transcode-capable) can never run an encode
-	// session, so both session pickers offer only passthrough ones. An
-	// encode session already saved as the default for this drive stays listed in
-	// the default picker so the select still shows the real value.
-	const passthroughSessions = $derived(
-		sessions.filter((s) => isPassthroughSession(s, presetToolMap(transcodePresets)))
+	const pickerSessions = $derived(manualRipSessionChoices(sessions, transcodePresets, $transcoderEnabled));
+	const defaultPickerSessions = $derived(
+		defaultSessionChoices(sessions, transcodePresets, $transcoderEnabled, drive?.default_session_id)
 	);
-	const pickerSessions = $derived($transcoderEnabled ? sessions : passthroughSessions);
-	const defaultPickerSessions = $derived.by(() => {
-		if ($transcoderEnabled) return sessions;
-		const current = sessions.find((s) => s.id === drive?.default_session_id);
-		return current && !passthroughSessions.includes(current) ? [...passthroughSessions, current] : passthroughSessions;
-	});
 
 	let editing = $state(false);
 	let editName = $state('');

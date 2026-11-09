@@ -26,6 +26,38 @@ export function presetToolMap(presets: ReadonlyArray<{ id: string; tool: string 
 	return new Map(presets.map((p) => [p.id, p.tool]));
 }
 
+/**
+ * The sessions the manual-rip picker offers. A ripper-only deployment (not
+ * transcode-capable) can never run an encode session, so the picker offers
+ * only passthrough ones; with the transcoder on, every session is offered.
+ */
+export function manualRipSessionChoices<S extends { transcode_preset_id: string | null }>(
+	sessions: S[],
+	presets: ReadonlyArray<{ id: string; tool: string }>,
+	transcoderEnabled: boolean
+): S[] {
+	if (transcoderEnabled) return sessions;
+	const toolById = presetToolMap(presets);
+	return sessions.filter((s) => isPassthroughSession(s, toolById));
+}
+
+/**
+ * The sessions the default-session picker offers: the manual-rip choices, plus
+ * an encode session already saved as the drive's default, which stays listed
+ * so the select still shows the real value.
+ */
+export function defaultSessionChoices<S extends { id: string; transcode_preset_id: string | null }>(
+	sessions: S[],
+	presets: ReadonlyArray<{ id: string; tool: string }>,
+	transcoderEnabled: boolean,
+	defaultSessionId: string | null | undefined
+): S[] {
+	if (transcoderEnabled) return sessions;
+	const passthrough = manualRipSessionChoices(sessions, presets, false);
+	const current = sessions.find((s) => s.id === defaultSessionId);
+	return current && !passthrough.includes(current) ? [...passthrough, current] : passthrough;
+}
+
 const VIDEO_MEDIA_TYPES: ReadonlySet<string> = new Set(['movie', 'tv']);
 
 /**
