@@ -13,13 +13,16 @@ export class MovePicker {
 	listing = $state<DirectoryListing | null>(null);
 	loading = $state(false);
 
+	// Is the picker browsing the same folder the files are being moved from?
+	atSource = $derived(
+		this.location.root === this.#browser.current.root && this.location.subpath === this.#browser.current.subpath
+	);
+
 	// Subfolders in the picker (excluding items being moved)
 	folders = $derived.by(() => {
 		if (!this.listing) return [];
 		// Only exclude selected folders when the picker is browsing the same dir as the source.
-		const sameDir =
-			this.location.root === this.#browser.current.root && this.location.subpath === this.#browser.current.subpath;
-		return moveTargetFolders(this.listing.entries, this.#browser.selectedKeys, sameDir);
+		return moveTargetFolders(this.listing.entries, this.#browser.selectedKeys, this.atSource);
 	});
 
 	// Can we go up from picker?

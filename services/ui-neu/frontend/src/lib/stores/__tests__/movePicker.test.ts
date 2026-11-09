@@ -108,6 +108,26 @@ describe('MovePicker folders', () => {
 	});
 });
 
+describe('MovePicker atSource', () => {
+	it('is true at the browser location', () => {
+		const { picker } = setup();
+		picker.location = { root: 'raw', subpath: 'src' };
+		expect(picker.atSource).toBe(true);
+	});
+
+	it('is false at another subpath of the same root', () => {
+		const { picker } = setup();
+		picker.location = { root: 'raw', subpath: 'src/deeper' };
+		expect(picker.atSource).toBe(false);
+	});
+
+	it('is false at another root', () => {
+		const { picker } = setup();
+		picker.location = { root: 'music', subpath: 'src' };
+		expect(picker.atSource).toBe(false);
+	});
+});
+
 describe('MovePicker canGoUp', () => {
 	it('is false at the top of the source root', () => {
 		const { browser, picker } = setup();

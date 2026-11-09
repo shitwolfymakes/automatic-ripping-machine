@@ -780,7 +780,7 @@
 						/>
 					</svg>
 					<span class="files-page-picker-path">{movePicker.displayPath()}</span>
-					{#if movePicker.location.root === browser.current.root && movePicker.location.subpath === browser.current.subpath}
+					{#if movePicker.atSource}
 						<span class="badge files-page-current-badge">current</span>
 					{/if}
 				</div>
@@ -848,13 +848,9 @@
 					<button
 						type="button"
 						onclick={confirmBulkMove}
-						disabled={movePicker.location.root === browser.current.root &&
-							movePicker.location.subpath === browser.current.subpath}
+						disabled={movePicker.atSource}
 						class="btn btn-primary"
-						title={movePicker.location.root === browser.current.root &&
-						movePicker.location.subpath === browser.current.subpath
-							? 'Navigate to a different folder first'
-							: ''}
+						title={movePicker.atSource ? 'Navigate to a different folder first' : ''}
 					>
 						Move here
 					</button>
