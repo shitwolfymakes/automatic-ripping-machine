@@ -17,13 +17,12 @@
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FileRow from '$lib/components/FileRow.svelte';
+	import FilesTable from '$lib/components/FilesTable.svelte';
 	import FilesToolbar from '$lib/components/FilesToolbar.svelte';
 	import FileMoveDialog from '$lib/components/FileMoveDialog.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import OrphanFoldersModal from '$lib/components/OrphanFoldersModal.svelte';
-	import { isAdmin } from '$lib/stores/auth';
 	import { features } from '$lib/features';
-	import SortIndicator from '$lib/components/SortIndicator.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 
 	const browser = new FilesBrowser();
@@ -204,10 +203,6 @@
 	});
 </script>
 
-{#snippet sortIcon(key: string)}
-	<SortIndicator dir={browser.sortIconDir(key)} />
-{/snippet}
-
 <svelte:head>
 	<title>ARM - Files</title>
 </svelte:head>
@@ -374,55 +369,12 @@
 				{:else if browser.sortedEntries.length === 0 && !creatingFolder}
 					<div class="files-page-empty">This directory is empty</div>
 				{:else if browser.sortedEntries.length > 0}
-					<table class="table">
-						<thead>
-							<tr>
-								<th class="table-header w-10">
-									{#if $isAdmin}
-										<input
-											type="checkbox"
-											checked={browser.allSelected}
-											onchange={browser.toggleSelectAll}
-											class="files-page-select-all"
-										/>
-									{/if}
-								</th>
-								<th class="table-header">
-									<button type="button" onclick={() => browser.toggleSort('name')} class="files-page-sort-btn">
-										Name {@render sortIcon('name')}
-									</button>
-								</th>
-								<th class="table-header files-page-cell-lg">Permissions</th>
-								<th class="table-header table-right">
-									<button type="button" onclick={() => browser.toggleSort('size')} class="files-page-sort-btn">
-										Size {@render sortIcon('size')}
-									</button>
-								</th>
-								<th class="table-header files-page-cell-md">
-									<button type="button" onclick={() => browser.toggleSort('modified')} class="files-page-sort-btn">
-										Modified {@render sortIcon('modified')}
-									</button>
-								</th>
-								<th class="table-header table-right">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each browser.sortedEntries as entry (entry.name)}
-								<FileRow
-									{entry}
-									currentPath={browser.current.subpath}
-									selected={browser.selectedKeys.has(browser.selectionKey(entry.name))}
-									readonly={browser.isReadonly}
-									showActions={$isAdmin}
-									onnavigate={() => browser.navigate(browser.current.root, browser.itemSubpath(entry.name))}
-									onrename={(_, newName) => handleRename(entry.name, newName)}
-									ondelete={(_, name) => handleDeleteRequest(entry.name, name)}
-									ontoggle={() => browser.toggleSelect(entry.name)}
-									onfixpermissions={(_, name) => handleFixPermissions(entry.name, name)}
-								/>
-							{/each}
-						</tbody>
-					</table>
+					<FilesTable
+						{browser}
+						onrename={handleRename}
+						ondelete={handleDeleteRequest}
+						onfixpermissions={handleFixPermissions}
+					/>
 				{/if}
 			</div>
 		{/snippet}
@@ -555,18 +507,5 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
-	}
-	.files-page-select-all {
-		height: 1rem;
-		width: 1rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--color-border-strong);
-		accent-color: var(--color-primary);
-	}
-	.files-page-sort-btn {
-		color: inherit;
-	}
-	.files-page-sort-btn:hover {
-		color: var(--color-text-secondary);
 	}
 </style>
