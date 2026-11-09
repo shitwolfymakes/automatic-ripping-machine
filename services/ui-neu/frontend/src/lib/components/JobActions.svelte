@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
+	import { isRipped } from '$lib/utils/job-status-groups';
 
 	interface Props {
 		job: JobView;
@@ -18,7 +19,7 @@
 	let canDelete = $derived(job.actions.can_delete);
 	// A ripped disc that the previously-ripped setting would hold or reject
 	// on its next insert: let it through (or start the copy already held).
-	let canRipAgain = $derived(['ripped', 'ripped_partial', 'ripped_awaiting_identify'].includes(job.status));
+	let canRipAgain = $derived(isRipped(job.status));
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);

@@ -57,6 +57,28 @@ export function isAwaitingIdentity(status: string): boolean {
 	return AWAITING_IDENTITY[status as JobStatus] === true;
 }
 
+// Raw statuses of a job whose disc has been ripped, in full or in part.
+const RIPPED: Record<JobStatus, boolean> = {
+	created: false,
+	awaiting_user_id: false,
+	identified: false,
+	awaiting_review: false,
+	ripping: false,
+	ripped: true,
+	ripped_partial: true,
+	ripped_awaiting_identify: true,
+	abandoned: false,
+	failed: false
+};
+
+/**
+ * The disc has been ripped: in full, in part, or still waiting on its
+ * identity.
+ */
+export function isRipped(status: string): boolean {
+	return RIPPED[status as JobStatus] === true;
+}
+
 const STAGE_BY_STATUS: Record<JobStatus, LifecycleStageId | null> = {
 	created: 'identifying',
 	awaiting_user_id: 'identifying',

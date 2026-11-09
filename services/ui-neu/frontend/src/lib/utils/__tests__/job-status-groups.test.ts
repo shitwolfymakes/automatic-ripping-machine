@@ -6,6 +6,7 @@ import {
 	isAwaitingIdentity,
 	isPostRipStatus,
 	isReviewCardStatus,
+	isRipped,
 	lifecycleStageFor,
 	LIFECYCLE_FAILURE_STATUSES
 } from '../job-status-groups';
@@ -74,6 +75,19 @@ describe('isLive', () => {
 describe('isAwaitingIdentity', () => {
 	it.each(ALL)('%s', (s) => {
 		expect(isAwaitingIdentity(s)).toBe(s === 'awaiting_user_id' || s === 'ripped_awaiting_identify');
+	});
+});
+
+describe('isRipped', () => {
+	const RIPPED = ['ripped', 'ripped_partial', 'ripped_awaiting_identify'];
+	it.each(RIPPED)('%s is ripped', (s) => {
+		expect(isRipped(s)).toBe(true);
+	});
+	it.each(ALL.filter((s) => !RIPPED.includes(s)))('%s is not ripped', (s) => {
+		expect(isRipped(s)).toBe(false);
+	});
+	it.each(['RIPPED', '', 'unknown', 'constructor'])('is false for %j', (s) => {
+		expect(isRipped(s)).toBe(false);
 	});
 });
 
