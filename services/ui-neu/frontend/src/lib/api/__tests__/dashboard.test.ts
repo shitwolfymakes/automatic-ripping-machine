@@ -27,11 +27,14 @@ vi.mock('$lib/api/notifications', () => ({
 	fetchNotificationCount: vi.fn(() => Promise.resolve({ unseen: 0 }))
 }));
 
+import { apiFetch } from '$lib/api/client';
 import { fetchDrives } from '$lib/api/drives';
 import { fetchIsoPreparing } from '$lib/api/iso';
 import { fetchJobs } from '$lib/api/jobs';
+import { fetchNotificationCount } from '$lib/api/notifications';
+import { fetchTranscoderJobs, fetchTranscoderStats } from '$lib/api/transcoder';
 import type { DriveView, IsoPrepareView, JobView } from '$lib/types/api.gen';
-import { fetchDashboard, fetchDashboardSnapshot } from '../dashboard';
+import { fetchDashboard, fetchDashboardSnapshot, setRippingEnabled } from '../dashboard';
 
 const mockFetchDrives = vi.mocked(fetchDrives);
 
@@ -163,5 +166,157 @@ describe('fetchDashboard', () => {
 
 		expect(dash.drive_source_kinds).toEqual({ drv_live: 'iso', drv_done: 'folder', drv_gone: 'iso' });
 		expect(dash.iso_source_kinds).toEqual({ drv_live: 'iso' });
+	});
+});
+
+describe('fetchDashboardSnapshot endpoint failures', () => {
+	beforeEach(() => {
+		mockFetchDrives.mockReset();
+		mockFetchDrives.mockResolvedValue([] as DriveView[]);
+	});
+
+	it('reports the config fields as null and db_available false when config fails', async () => {
+		vi.mocked(apiFetch).mockRejectedValueOnce(new Error('boom'));
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.db_available).toBe(false);
+		expect(snap.arm_online).toBe(false);
+		expect(snap.ripping_enabled).toBeNull();
+		expect(snap.makemkv_key_valid).toBeNull();
+		expect(snap.makemkv_key_checked_at).toBeNull();
+		expect(snap.active_jobs).toEqual([]);
+	});
+
+	it('reports arm offline and active_jobs null when the jobs fetch fails', async () => {
+		vi.mocked(fetchJobs).mockRejectedValueOnce(new Error('boom'));
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.arm_online).toBe(false);
+		expect(snap.db_available).toBe(true);
+		expect(snap.active_jobs).toBeNull();
+	});
+
+	it('reports the transcoder offline with no active transcodes when its list fails', async () => {
+		vi.mocked(fetchTranscoderJobs).mockRejectedValueOnce(new Error('boom'));
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.transcoder_online).toBe(false);
+		expect(snap.active_transcodes).toEqual([]);
+	});
+
+	it('keeps only queued and in-progress transcodes', async () => {
+		vi.mocked(fetchTranscoderJobs).mockResolvedValueOnce([
+			{ id: 't1', status: 'queued' },
+			{ id: 't2', status: 'in_progress' },
+			{ id: 't3', status: 'completed' }
+		] as never);
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.transcoder_online).toBe(true);
+		expect(snap.active_transcodes.map((t) => t.id)).toEqual(['t1', 't2']);
+	});
+
+	it('reports transcoder_stats null when the stats fetch fails and an empty object otherwise', async () => {
+		vi.mocked(fetchTranscoderStats).mockRejectedValueOnce(new Error('boom'));
+		expect((await fetchDashboardSnapshot()).transcoder_stats).toBeNull();
+
+		expect((await fetchDashboardSnapshot()).transcoder_stats).toEqual({});
+	});
+
+	it('reports notification_count null when the count fetch fails', async () => {
+		vi.mocked(fetchNotificationCount).mockRejectedValueOnce(new Error('boom'));
+
+		expect((await fetchDashboardSnapshot()).notification_count).toBeNull();
+	});
+
+	it('counts zero notifications when the response has no unseen field', async () => {
+		vi.mocked(fetchNotificationCount).mockResolvedValueOnce({} as never);
+
+		expect((await fetchDashboardSnapshot()).notification_count).toBe(0);
+	});
+
+	it('reports ripping_enabled from the config ripping_paused flag', async () => {
+		vi.mocked(apiFetch).mockResolvedValueOnce({ ripping_paused: true });
+
+		expect((await fetchDashboardSnapshot()).ripping_enabled).toBe(false);
+	});
+
+	it('drops terminal jobs from active_jobs but keeps ripped ones', async () => {
+		vi.mocked(fetchJobs).mockResolvedValueOnce([
+			{ id: 'j1', drive_id: 'd', status: 'ripping' },
+			{ id: 'j2', drive_id: 'd', status: 'ripped' },
+			{ id: 'j3', drive_id: 'd', status: 'failed' },
+			{ id: 'j4', drive_id: 'd', status: 'abandoned' }
+		] as JobView[]);
+
+		const snap = await fetchDashboardSnapshot();
+
+		expect(snap.active_jobs?.map((j) => j.id)).toEqual(['j1', 'j2']);
+	});
+
+	it('names a drive by device_path when it has no display_name', async () => {
+		mockFetchDrives.mockResolvedValue([{ id: 'drv_1', kind: 'optical', device_path: '/dev/sr0' }] as DriveView[]);
+
+		expect((await fetchDashboardSnapshot()).drive_names).toEqual({ drv_1: '/dev/sr0' });
+	});
+
+	it('labels a virtual drive from the last segment of source_path when display_name is missing', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_v', kind: 'virtual', lifecycle: 'enrolled', device_path: '/dev/v', source_path: '/isos/a/Movie.iso' }
+		] as DriveView[]);
+
+		expect((await fetchDashboardSnapshot()).iso_sources).toEqual({ drv_v: 'Movie.iso' });
+	});
+
+	it('labels a virtual drive by device_path when display_name and source_path are both missing', async () => {
+		mockFetchDrives.mockResolvedValue([
+			{ id: 'drv_v', kind: 'virtual', lifecycle: 'enrolled', device_path: '/dev/v' }
+		] as DriveView[]);
+
+		expect((await fetchDashboardSnapshot()).iso_sources).toEqual({ drv_v: '/dev/v' });
+	});
+
+	it('leaves a preparing row out when its drive has no ISO source', async () => {
+		mockFetchDrives.mockResolvedValue([{ id: 'drv_opt', kind: 'optical', display_name: 'sr0' }] as DriveView[]);
+		vi.mocked(fetchIsoPreparing).mockResolvedValueOnce([
+			{ drive_id: 'drv_opt', phase: 'scanning', updated_at: '2026-10-02T14:00:00Z' }
+		] as IsoPrepareView[]);
+
+		expect((await fetchDashboardSnapshot()).preparing).toEqual([]);
+	});
+});
+
+describe('fetchDashboard defaults for failed reads', () => {
+	it('fills every null snapshot field with its empty default', async () => {
+		mockFetchDrives.mockRejectedValueOnce(new Error('boom'));
+		vi.mocked(fetchJobs).mockRejectedValueOnce(new Error('boom'));
+		vi.mocked(fetchNotificationCount).mockRejectedValueOnce(new Error('boom'));
+		vi.mocked(apiFetch).mockRejectedValueOnce(new Error('boom'));
+
+		const dash = await fetchDashboard();
+
+		expect(dash.active_jobs).toEqual([]);
+		expect(dash.drives_online).toBe(0);
+		expect(dash.drive_names).toEqual({});
+		expect(dash.iso_sources).toEqual({});
+		expect(dash.iso_source_kinds).toEqual({});
+		expect(dash.drive_source_kinds).toEqual({});
+		expect(dash.notification_count).toBe(0);
+		expect(dash.ripping_enabled).toBe(true);
+	});
+});
+
+describe('setRippingEnabled', () => {
+	it.each([
+		[true, { ripping_paused: false, hold_for_review: false }],
+		[false, { ripping_paused: true, hold_for_review: true }]
+	])('patches the config for enabled=%s', async (enabled, body) => {
+		await setRippingEnabled(enabled);
+
+		expect(apiFetch).toHaveBeenLastCalledWith('/api/config', { method: 'PATCH', body: JSON.stringify(body) });
 	});
 });
