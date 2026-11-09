@@ -32,7 +32,7 @@
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { ripProgress, reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
-	import { formatEta, formatTransfer } from '$lib/utils/format';
+	import { formatEta, formatTransfer, formatTrackLength } from '$lib/utils/format';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
@@ -120,13 +120,6 @@
 	function handleMusicApply() {
 		activePanel = null;
 		jobDetail.load();
-	}
-
-	function formatDuration(seconds: number | null | undefined): string {
-		if (seconds == null) return '';
-		const m = Math.floor(seconds / 60);
-		const s = seconds % 60;
-		return `${m}:${String(s).padStart(2, '0')}`;
 	}
 
 	// Client-side navigation from one job page to another keeps this component
@@ -556,9 +549,10 @@
 										</td>
 										<td class="table-cell" data-label="Length">
 											{#if track.duration_seconds != null}
-												{formatDuration(track.duration_seconds)}
+												{formatTrackLength(track.duration_seconds)}
 											{:else if track.expected_duration_seconds != null}
-												<span class="job-detail-track-faint">~{formatDuration(track.expected_duration_seconds)}</span>
+												<span class="job-detail-track-faint">~{formatTrackLength(track.expected_duration_seconds)}</span
+												>
 											{:else}-{/if}
 										</td>
 										<td class="table-cell job-detail-track-kind" data-label="Size">{trackSizeLabel(track)}</td>
