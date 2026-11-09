@@ -14,6 +14,7 @@ import arm_ripper.eject as eject_module
 import arm_ripper.disc_scan as disc_scan_module
 import arm_ripper.disc_rip as disc_rip_module
 import arm_ripper.job_controller as jc_module
+import arm_ripper.raw_dir as raw_dir_module
 import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
 from arm_common import MediaType, DiscType, Job, JobStatus
@@ -161,7 +162,7 @@ def fast_polls(monkeypatch, tmp_path):
     """Don't wait 5+ seconds between polls; write under tmp_path, not /raw."""
     monkeypatch.setattr(resolution_wait_module, "POLL_MAX_SECONDS", 0.01)
     monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
-    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     # WS-driven resolution path: collapse the boot-race grace window so
     # tests fall straight through to the REST fallback path that the
     # FakeClient feeds.
@@ -1395,7 +1396,7 @@ async def test_run_command_replaces_invalid_utf8_in_stderr(monkeypatch):
 async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
     """D-175: the raw-dir wipe runs in a thread via a spawned task, so the
     WS handler returns before a multi-GB rmtree finishes."""
-    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)
     raw = tmp_path / "job_test"
     (raw / "sub").mkdir(parents=True)
@@ -1420,7 +1421,7 @@ async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monke
 
 
 async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, tmp_path, caplog):
-    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
     with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
@@ -1780,7 +1781,7 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
         ejector=controller._ejector,
         device=controller._device,
         default_min_length_seconds=controller._default_min_length_seconds,
-        output_dir=jc_module.RAW_ROOT / "job_x",
+        output_dir=raw_dir_module.RAW_ROOT / "job_x",
         job_id="job_x",
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",

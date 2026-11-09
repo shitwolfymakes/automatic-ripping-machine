@@ -17,7 +17,7 @@ import pytest
 
 import arm_ripper.eject as eject_module
 import arm_ripper.disc_rip as disc_rip_module
-import arm_ripper.job_controller as jc_module
+import arm_ripper.raw_dir as raw_dir_module
 from arm_common import DiscType, JobStatus
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import JobView, RipStartResponse, TrackView
@@ -77,7 +77,7 @@ class _Client:
 
 @pytest.fixture
 def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
-    monkeypatch.setattr(jc_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
     monkeypatch.setattr(disc_rip_module, "DEVICE_WATCH_INTERVAL_SECONDS", 0.005)
     monkeypatch.setattr(disc_rip_module, "DEVICE_RETURN_WAIT_SECONDS", 2.0)
@@ -506,7 +506,7 @@ def _disc_rip(controller: JobController) -> disc_rip_module.DiscRip:
         ejector=controller._ejector,
         device=controller._device,
         default_min_length_seconds=controller._default_min_length_seconds,
-        output_dir=jc_module.RAW_ROOT / _JOB,
+        output_dir=raw_dir_module.RAW_ROOT / _JOB,
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",

@@ -11,10 +11,7 @@ the orphaned RIPPING row stays visible in the UI with the
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import shutil
-from pathlib import Path
 
 import httpx
 
@@ -22,20 +19,9 @@ from arm_common.schemas import HeldJobView, JobView
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.job_controller import JobController
+from arm_ripper.raw_dir import wipe_raw_dir
 
 logger = logging.getLogger("arm_ripper.recovery")
-
-RAW_ROOT = Path("/raw")
-
-
-async def wipe_raw_dir(job_id: str) -> None:
-    """Remove /raw/<job_id>/ and its contents. No-op if the directory
-    does not exist. Safe to call repeatedly. Runs in a thread so a large
-    raw dir does not block the event loop.
-    """
-    target = RAW_ROOT / job_id
-    await asyncio.to_thread(shutil.rmtree, target, ignore_errors=True)
-    logger.info("wiped raw dir job_id=%s path=%s", job_id, target)
 
 
 async def boot_probe(

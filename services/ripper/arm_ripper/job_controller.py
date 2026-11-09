@@ -3,13 +3,13 @@ import contextlib
 import logging
 import shutil
 from collections.abc import AsyncIterator, Callable
-from pathlib import Path
 from typing import Any
 
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
+from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.background_tasks import spawn_tracked
 from arm_ripper.backend_retry import BackendRetry
@@ -26,8 +26,6 @@ from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
-
-RAW_ROOT = Path("/raw")
 
 
 def _command_payload(envelope: WSEnvelope) -> dict[str, Any]:
@@ -245,7 +243,7 @@ class JobController:
 
     async def _wipe_raw(self, job_id: str) -> None:
         """Delete `/raw/<job_id>/` off the event loop."""
-        target = RAW_ROOT / job_id
+        target = raw_dir.RAW_ROOT / job_id
         try:
             await asyncio.to_thread(shutil.rmtree, target)
             logger.info("wiped raw dir job_id=%s path=%s", job_id, target)
@@ -477,7 +475,7 @@ class JobController:
             ejector=self._ejector,
             device=self._device,
             default_min_length_seconds=self._default_min_length_seconds,
-            output_dir=RAW_ROOT / job_id,
+            output_dir=raw_dir.RAW_ROOT / job_id,
             job_id=job_id,
             disc_type=disc_type,
             device_path=device_path,

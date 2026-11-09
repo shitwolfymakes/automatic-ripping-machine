@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+import arm_ripper.raw_dir as raw_dir_module
 import arm_ripper.recovery as recovery_module
 from arm_common import DiscType, JobStatus
 from arm_common.schemas import HeldJobView, JobView, RipStartResponse
@@ -21,8 +22,8 @@ from arm_ripper.recovery import (
     _repark_held_job,
     _resume_in_flight_job,
     boot_probe,
-    wipe_raw_dir,
 )
+from arm_ripper.raw_dir import wipe_raw_dir
 
 
 def _make_view(status: JobStatus = JobStatus.RIPPING, *, job_id: str = "job_resume") -> JobView:
@@ -104,7 +105,7 @@ class FakeController:
 
 @pytest.fixture(autouse=True)
 def patch_raw_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(recovery_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
 
 
 @pytest.fixture
