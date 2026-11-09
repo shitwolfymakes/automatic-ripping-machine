@@ -13,6 +13,7 @@
 		type DocsPage,
 		type DocsSearchHit
 	} from '$lib/docs/api';
+	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
 
 	const id = $derived(slugToId($page.params.slug));
 
@@ -42,18 +43,7 @@
 				// The fragment arrives after SvelteKit's own hash scroll ran.
 				await tick();
 				if (current !== id) return;
-				const raw = location.hash.slice(1);
-				let hash = raw;
-				try {
-					hash = decodeURIComponent(raw);
-				} catch {
-					// Malformed percent-encoding: fall back to the raw hash rather
-					// than failing the whole page load.
-				}
-				if (hash) document.getElementById(hash)?.scrollIntoView();
-				// The app scrolls inside <main>, not the window, so a plain
-				// navigation (no hash) needs its own scroll-to-top.
-				else document.querySelector('main')?.scrollTo(0, 0);
+				scrollToFragment(fragmentId(location.hash));
 			})
 			.catch((e) => {
 				if (current !== id) return;
