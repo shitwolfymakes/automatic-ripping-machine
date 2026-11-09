@@ -20,6 +20,7 @@
 	import { NAV_ITEMS, visibleNavItems, isActive } from '$lib/nav';
 	import { logout as apiLogout } from '$lib/api/auth';
 	import { countRipping } from '$lib/utils/job-status';
+	import { transcoderDotStatus, makemkvKeyTitle } from '$lib/utils/header-status';
 	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
 	import LiveUpdatesBanner from '$lib/components/LiveUpdatesBanner.svelte';
 	import SidebarStats from '$lib/components/SidebarStats.svelte';
@@ -222,25 +223,14 @@
 							<span class="layout-health-label">DB</span>
 						</svelte:element>
 						<a href="/transcoder" class="layout-health-link">
-							<span
-								class="status-dot"
-								data-status={$dashboard.transcoder_online && ($dashboard.transcoder_stats?.worker_running ?? true)
-									? 'ok'
-									: $dashboard.transcoder_online
-										? 'warn'
-										: 'off'}
-							></span>
+							<span class="status-dot" data-status={transcoderDotStatus($dashboard)}></span>
 							<span class="layout-health-label">Transcode</span>
 						</a>
 						<svelte:element
 							this={$isGuest ? 'span' : 'a'}
 							href={$isGuest ? undefined : '/settings#Keys/makemkv_key'}
 							class="layout-health-link"
-							title={$dashboard.makemkv_key_valid === true
-								? `MakeMKV key valid${$dashboard.makemkv_key_checked_at ? ' - checked ' + new Date($dashboard.makemkv_key_checked_at).toLocaleString() : ''}`
-								: $dashboard.makemkv_key_valid === false
-									? 'MakeMKV key invalid - click to update'
-									: 'MakeMKV key not checked yet'}
+							title={makemkvKeyTitle($dashboard.makemkv_key_valid, $dashboard.makemkv_key_checked_at)}
 						>
 							<span class="status-dot" data-status={$dashboard.makemkv_key_valid === true ? 'ok' : 'error'}></span>
 							<span class="layout-health-label">Key</span>
