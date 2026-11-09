@@ -12,6 +12,11 @@ import { extractMusicTracks } from '$lib/utils/music-tracks';
 // so a route added elsewhere still shows up; explicit reloads always ask.
 const PREVIEW_UNROUTED_EVERY_N_POLLS = 6;
 
+// The check reads the error message for '404'; #536 covers it.
+function isNotFound(e: unknown): boolean {
+	return e instanceof Error && e.message.includes('404');
+}
+
 export class JobDetail {
 	detail = $state<JobDetailView | null>(null);
 	loading = $state(true);
@@ -59,6 +64,25 @@ export class JobDetail {
 		}
 	};
 
+	#loadPreview = async (id: string, poll: boolean): Promise<void> => {
+		// Rendered filename preview is a best-effort SECOND fetch — never block
+		// or fail the job render on it. Excluded tracks may be absent from items[].
+		const skipPreview =
+			poll && this.#previewUnrouted && ++this.#previewSkippedPolls % PREVIEW_UNROUTED_EVERY_N_POLLS !== 0;
+		if (skipPreview) {
+			return;
+		}
+		try {
+			const preview = await fetchNamingPreview(id);
+			this.previewItems = preview.items;
+			this.#previewUnrouted = false;
+		} catch (e) {
+			this.previewItems = [];
+			this.#previewUnrouted = e instanceof ApiError && e.status === 409;
+			this.#previewSkippedPolls = 0;
+		}
+	};
+
 	load = async ({ poll = false } = {}): Promise<void> => {
 		const id = this.#jobId();
 		// Only flip into the loading state on the FIRST load. The 5s poll
@@ -73,23 +97,9 @@ export class JobDetail {
 		this.error = null;
 		try {
 			this.detail = await fetchJob(id);
-			// Rendered filename preview is a best-effort SECOND fetch — never block
-			// or fail the job render on it. Excluded tracks may be absent from items[].
-			const skipPreview =
-				poll && this.#previewUnrouted && ++this.#previewSkippedPolls % PREVIEW_UNROUTED_EVERY_N_POLLS !== 0;
-			if (!skipPreview) {
-				try {
-					const preview = await fetchNamingPreview(id);
-					this.previewItems = preview.items;
-					this.#previewUnrouted = false;
-				} catch (e) {
-					this.previewItems = [];
-					this.#previewUnrouted = e instanceof ApiError && e.status === 409;
-					this.#previewSkippedPolls = 0;
-				}
-			}
+			await this.#loadPreview(id, poll);
 		} catch (e) {
-			if (e instanceof Error && e.message.includes('404')) {
+			if (isNotFound(e)) {
 				goto('/');
 				return;
 			}
