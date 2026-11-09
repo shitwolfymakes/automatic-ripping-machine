@@ -20,6 +20,7 @@
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import TranscoderUnavailable from '$lib/components/transcoder/TranscoderUnavailable.svelte';
+	import TranscoderStatsSkeleton from '$lib/components/transcoder/TranscoderStatsSkeleton.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -121,24 +122,7 @@
 	     layout shift; only show the "offline" banner once a poll has actually
 	     confirmed the service is down, never while still loading. -->
 		{#if !$statsInitialized && !$statsError}
-			<div class="stack">
-				<div class="panel">
-					<!-- Same box as the real header row (mb-3 + text-sm line) so the card
-				     is the same height before and after the first poll. -->
-					<div class="mb-3 flex items-center justify-between">
-						<div class="skeleton skeleton-text transcoder-page-skeleton-title"></div>
-						<div class="skeleton skeleton-text transcoder-page-skeleton-subtitle"></div>
-					</div>
-				</div>
-				<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-					{#each Array(5) as _unused, i (i)}
-						<div class="panel">
-							<div class="skeleton skeleton-text transcoder-page-skeleton-label"></div>
-							<div class="skeleton skeleton-text transcoder-page-skeleton-value"></div>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<TranscoderStatsSkeleton />
 		{:else if $statsError}
 			<!-- Offline banner -->
 			<div
@@ -406,23 +390,6 @@
 		flex-shrink: 1;
 		min-width: 0;
 		text-align: center;
-	}
-	.transcoder-page-skeleton-title {
-		height: 1.5rem;
-		width: 14rem;
-	}
-	.transcoder-page-skeleton-subtitle {
-		height: 1rem;
-		width: 12rem;
-	}
-	.transcoder-page-skeleton-label {
-		height: 1rem;
-		width: 4rem;
-	}
-	.transcoder-page-skeleton-value {
-		margin-top: 0.5rem;
-		height: 2rem;
-		width: 3rem;
 	}
 	.transcoder-page-offline-dot {
 		height: 0.75rem;
