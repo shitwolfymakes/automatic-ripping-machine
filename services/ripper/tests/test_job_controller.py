@@ -3,6 +3,7 @@
 import asyncio
 import errno
 import logging
+import os
 from collections import deque
 from datetime import datetime, timedelta, timezone
 
@@ -1402,13 +1403,13 @@ async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monke
     (raw / "sub").mkdir(parents=True)
     (raw / "sub" / "title_t00.mkv").write_bytes(b"x")
     threads: list[object] = []
-    real_to_thread = jc_module.asyncio.to_thread
+    real_to_thread = raw_dir_module.asyncio.to_thread
 
     async def spy_to_thread(fn, *a, **kw):
         threads.append(fn)
         return await real_to_thread(fn, *a, **kw)
 
-    monkeypatch.setattr(jc_module.asyncio, "to_thread", spy_to_thread)
+    monkeypatch.setattr(raw_dir_module.asyncio, "to_thread", spy_to_thread)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
     controller._handle_abandon("job_test", delete_raw=True)
@@ -1416,7 +1417,7 @@ async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monke
     await asyncio.gather(*controller._wipe_tasks)
 
     assert not raw.exists()
-    assert threads == [jc_module.shutil.rmtree]
+    assert threads == [raw_dir_module.shutil.rmtree]
     assert controller._wipe_tasks == set()
 
 
@@ -1424,14 +1425,14 @@ async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, 
     monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
-    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+    with caplog.at_level(logging.INFO, logger="arm_ripper.raw_dir"):
         await controller._wipe_raw("never_existed")
     assert "already absent" in caplog.text
 
-    def denied(_p):
-        raise PermissionError("read-only mount")
+    def denied(path, *, onexc):
+        onexc(os.unlink, str(path), PermissionError("read-only mount"))
 
-    monkeypatch.setattr(jc_module.shutil, "rmtree", denied)
+    monkeypatch.setattr(raw_dir_module.shutil, "rmtree", denied)
     await controller._wipe_raw("job_x")
     assert "raw-dir cleanup failed" in caplog.text
 

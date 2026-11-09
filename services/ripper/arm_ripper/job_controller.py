@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import logging
-import shutil
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
@@ -243,14 +242,7 @@ class JobController:
 
     async def _wipe_raw(self, job_id: str) -> None:
         """Delete `/raw/<job_id>/` off the event loop."""
-        target = raw_dir.RAW_ROOT / job_id
-        try:
-            await asyncio.to_thread(shutil.rmtree, target)
-            logger.info("wiped raw dir job_id=%s path=%s", job_id, target)
-        except FileNotFoundError:
-            logger.info("raw dir already absent job_id=%s path=%s", job_id, target)
-        except OSError as exc:
-            logger.warning("raw-dir cleanup failed job_id=%s path=%s: %s", job_id, target, exc)
+        await raw_dir.wipe_raw_dir(job_id)
 
     def _disc_seated(self) -> bool:
         """True when the drive currently reports a seated disc (DISC_OK) —
