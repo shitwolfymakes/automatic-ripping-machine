@@ -200,4 +200,18 @@ describe('rips store: byte copies', () => {
 			})
 		).toBeNull();
 	});
+
+	it('shows only the bytes done, with no rate, when a copy reports no total or rate', () => {
+		expect(
+			formatTransfer({
+				track_id: 't',
+				progress_pct: 10,
+				eta_seconds: null,
+				bytes_done: 3 * 1024 ** 3,
+				bytes_total: null,
+				rate_bps: 0,
+				phase: null
+			})
+		).toBe('3 GB');
+	});
 });
