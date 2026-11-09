@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { fetchDirectory, renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
-	import type { DirectoryListing } from '$lib/api/files';
+	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
+	import { MovePicker } from '$lib/stores/movePicker.svelte';
 	import { formatBytes } from '$lib/utils/format';
 	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
-		moveTargetFolders,
 		childSubpath,
 		orderForDelete,
 		bulkResultFeedback,
@@ -32,6 +31,7 @@
 	import Glyph from '$lib/components/Glyph.svelte';
 
 	const browser = new FilesBrowser();
+	const movePicker = new MovePicker(browser);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
 	// Delete confirmation (single item)
@@ -39,12 +39,6 @@
 
 	// Bulk delete confirmation
 	let bulkDeleteOpen = $state(false);
-
-	// Move dialog — browsable directory picker
-	let moveDialogOpen = $state(false);
-	let picker = $state<{ root: string; subpath: string }>({ root: '', subpath: '' });
-	let pickerListing = $state<DirectoryListing | null>(null);
-	let pickerLoading = $state(false);
 
 	// New folder
 	let creatingFolder = $state(false);
@@ -60,17 +54,6 @@
 
 	// Transcoder cleanup
 	let transcoderCleanupOpen = $state(false);
-
-	// Subfolders in the picker (excluding items being moved)
-	let pickerFolders = $derived.by(() => {
-		if (!pickerListing) return [];
-		// Only exclude selected folders when the picker is browsing the same dir as the source.
-		const sameDir = picker.root === browser.current.root && picker.subpath === browser.current.subpath;
-		return moveTargetFolders(pickerListing.entries, browser.selectedKeys, sameDir);
-	});
-
-	// Can we go up from picker?
-	let pickerCanGoUp = $derived(picker.subpath !== '' || picker.root !== browser.current.root);
 
 	function clearFeedback() {
 		setTimeout(() => (feedback = null), 3000);
@@ -127,59 +110,19 @@
 	}
 
 	// --- Bulk move with browsable picker ---
-	async function openMoveDialog() {
-		if (browser.selectedKeys.size === 0) return;
-		picker = { root: browser.current.root, subpath: browser.current.subpath };
-		moveDialogOpen = true;
-		await loadPickerLocation(browser.current.root, browser.current.subpath);
-	}
-
-	async function loadPickerLocation(root: string, subpath: string) {
-		pickerLoading = true;
-		try {
-			pickerListing = await fetchDirectory(root, subpath);
-			picker = { root, subpath };
-		} catch {
-			// stay on current listing
-		} finally {
-			pickerLoading = false;
-		}
-	}
-
-	async function pickerGoUp() {
-		if (!pickerCanGoUp) return;
-		// Go up within the same root. At the top of a root there is nowhere to
-		// go, since the picker does not switch roots.
-		if (pickerListing?.parent_subpath != null) {
-			await loadPickerLocation(picker.root, pickerListing.parent_subpath);
-		}
-	}
-
-	function closeMoveDialog() {
-		moveDialogOpen = false;
-		pickerListing = null;
-	}
-
-	function pickerDisplayPath(): string {
-		const rootObj = browser.roots.find((r) => r.key === picker.root);
-		const rootLabel = rootObj?.label ?? picker.root;
-		if (!picker.subpath) return rootLabel;
-		return `${rootLabel}/${picker.subpath}`;
-	}
-
 	async function confirmBulkMove() {
 		let moved = 0;
 		let failed = 0;
 		for (const key of browser.selectedKeys) {
 			const { root: srcRoot, subpath: srcSubpath } = parseSelectionKey(key);
 			try {
-				await moveFile(srcRoot, srcSubpath, picker.root, picker.subpath);
+				await moveFile(srcRoot, srcSubpath, movePicker.location.root, movePicker.location.subpath);
 				moved++;
 			} catch {
 				failed++;
 			}
 		}
-		closeMoveDialog();
+		movePicker.close();
 		browser.selectedKeys = new Set();
 		showFeedback(bulkResultFeedback('Moved', moved, failed));
 		await browser.navigate(browser.current.root, browser.current.subpath);
@@ -403,7 +346,7 @@
 				{#if browser.selectedKeys.size > 0 && $isAdmin}
 					<button
 						type="button"
-						onclick={openMoveDialog}
+						onclick={movePicker.open}
 						disabled={browser.isReadonly}
 						class="btn btn-primary files-page-bulk-btn"
 					>
@@ -808,13 +751,13 @@
 {/if}
 
 <!-- Bulk move dialog — browsable directory picker -->
-{#if moveDialogOpen}
+{#if movePicker.isOpen}
 	<div class="modal">
 		<button
 			type="button"
 			class="modal-backdrop files-page-modal-backdrop"
 			aria-label="Close dialog"
-			onclick={closeMoveDialog}
+			onclick={movePicker.close}
 		></button>
 		<div class="modal-panel files-page-orphan-panel">
 			<!-- Header -->
@@ -836,8 +779,8 @@
 							d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
 						/>
 					</svg>
-					<span class="files-page-picker-path">{pickerDisplayPath()}</span>
-					{#if picker.root === browser.current.root && picker.subpath === browser.current.subpath}
+					<span class="files-page-picker-path">{movePicker.displayPath()}</span>
+					{#if movePicker.location.root === browser.current.root && movePicker.location.subpath === browser.current.subpath}
 						<span class="badge files-page-current-badge">current</span>
 					{/if}
 				</div>
@@ -845,7 +788,7 @@
 
 			<!-- Folder list (scrollable) -->
 			<div class="min-h-0 flex-1 overflow-y-auto">
-				{#if pickerLoading}
+				{#if movePicker.loading}
 					<div class="flex items-center justify-center p-8">
 						<svg class="mr-2 h-5 w-5 spin files-page-spinner" viewBox="0 0 24 24">
 							<circle class="spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
@@ -854,8 +797,12 @@
 					</div>
 				{:else}
 					<!-- Go up -->
-					{#if pickerCanGoUp}
-						<button type="button" onclick={pickerGoUp} class="flex w-full items-center gap-3 files-page-picker-row">
+					{#if movePicker.canGoUp}
+						<button
+							type="button"
+							onclick={movePicker.goUp}
+							class="flex w-full items-center gap-3 files-page-picker-row"
+						>
 							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
 							</svg>
@@ -863,14 +810,15 @@
 						</button>
 					{/if}
 
-					{#if pickerFolders.length === 0 && !pickerCanGoUp}
+					{#if movePicker.folders.length === 0 && !movePicker.canGoUp}
 						<div class="files-page-picker-empty">No subfolders</div>
 					{/if}
 
-					{#each pickerFolders as folder (folder.name)}
+					{#each movePicker.folders as folder (folder.name)}
 						<button
 							type="button"
-							onclick={() => loadPickerLocation(picker.root, childSubpath(picker.subpath, folder.name))}
+							onclick={() =>
+								movePicker.load(movePicker.location.root, childSubpath(movePicker.location.subpath, folder.name))}
 							class="flex w-full items-center gap-3 files-page-picker-row files-page-picker-row-folder"
 						>
 							<svg
@@ -896,13 +844,15 @@
 			<!-- Footer -->
 			<div class="shrink-0 files-page-modal-footer">
 				<div class="flex justify-end gap-3">
-					<button type="button" onclick={closeMoveDialog} class="btn"> Cancel </button>
+					<button type="button" onclick={movePicker.close} class="btn"> Cancel </button>
 					<button
 						type="button"
 						onclick={confirmBulkMove}
-						disabled={picker.root === browser.current.root && picker.subpath === browser.current.subpath}
+						disabled={movePicker.location.root === browser.current.root &&
+							movePicker.location.subpath === browser.current.subpath}
 						class="btn btn-primary"
-						title={picker.root === browser.current.root && picker.subpath === browser.current.subpath
+						title={movePicker.location.root === browser.current.root &&
+						movePicker.location.subpath === browser.current.subpath
 							? 'Navigate to a different folder first'
 							: ''}
 					>
