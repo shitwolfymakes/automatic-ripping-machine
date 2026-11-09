@@ -4,14 +4,11 @@ import TranscodeCard from '../TranscodeCard.svelte';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 
-// Branch pins for TranscodeCard, beside TranscodeCard.test.ts. Three branches
+// Branch pins for TranscodeCard, beside TranscodeCard.test.ts. Two branches
 // cannot be reached from the rendered component, so nothing here forces them:
-// - The `return null` of etaDisplay (line 49) and of fpsDisplay (line 55):
-//   both are read only inside `{#if isActive}`, which sits in the `{:else}` of
-//   `{#if !job}`, so `isActive` is true and `job` is set whenever they run.
-// - The `?? ''` fallback of the error icon's `title={job.last_error ?? ''}`
-//   (line 107): the icon renders only while `hasError` (`!!job.last_error`)
-//   holds, so `last_error` is never null there.
+// the `return null` of etaDisplay (line 49) and of fpsDisplay (line 55). Both
+// are read only inside `{#if isActive}`, which sits in the `{:else}` of
+// `{#if !job}`, so `isActive` is true and `job` is set whenever they run.
 
 const wsHandlers = new Map<string, (env: WSEnvelope) => void>();
 const unsubscribed: string[] = [];

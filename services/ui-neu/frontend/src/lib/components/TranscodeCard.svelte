@@ -104,7 +104,7 @@
 
 				<!-- Error indicator -->
 				{#if hasError}
-					<span class="shrink-0 transcode-card-error-icon" title={job.last_error ?? ''}>
+					<span class="shrink-0 transcode-card-error-icon" title={job.last_error}>
 						<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
 							<path
 								fill-rule="evenodd"
