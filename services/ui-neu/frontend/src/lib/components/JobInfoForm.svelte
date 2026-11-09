@@ -4,7 +4,7 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { provenanceLine } from '$lib/utils/provenance';
-	import { jobInfoText, jobInfoResolveBody } from '$lib/utils/job-info';
+	import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/utils/job-info';
 
 	interface Props {
 		job: JobView;
@@ -53,19 +53,12 @@
 		saving = true;
 		feedback = null;
 		try {
-			const before = { season: job.season ?? null, disc: job.disc_number ?? null };
+			const before = savedFacts(job);
 			const resp = await resolveJob(
 				job.id,
 				jobInfoResolveBody({ title, year, season, discNumber, discTotal }, touched.season === true)
 			);
-			// What the save changed, read from the saved job: a cleared value the
-			// backend re-resolves to the same one changed nothing, and the disc
-			// total never re-runs the episode match.
-			const after = resp?.job;
-			const changed = {
-				season: !!after && before.season !== (after.season ?? null),
-				disc: !!after && before.disc !== (after.disc_number ?? null)
-			};
+			const changed = savedChanges(before, resp?.job);
 			touched = {};
 			feedback = { type: 'success', message: 'Saved' };
 			onrefresh?.();

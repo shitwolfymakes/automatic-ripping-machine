@@ -46,3 +46,29 @@ export function jobInfoResolveBody(fields: JobInfoText, seasonTouched: boolean):
 		disc_total: num(fields.discTotal)
 	};
 }
+
+/** The season and disc number a save can change. */
+export interface SavedFacts {
+	season: number | null;
+	disc: number | null;
+}
+
+/** The job's season and disc number, null when missing. */
+export function savedFacts(job: Pick<JobView, 'season' | 'disc_number'>): SavedFacts {
+	return { season: job.season ?? null, disc: job.disc_number ?? null };
+}
+
+/**
+ * What the save changed, read from the saved job: a cleared value the
+ * backend re-resolves to the same one changed nothing, and the disc
+ * total never re-runs the episode match.
+ */
+export function savedChanges(
+	before: SavedFacts,
+	after: Pick<JobView, 'season' | 'disc_number'> | null | undefined
+): { season: boolean; disc: boolean } {
+	return {
+		season: !!after && before.season !== (after.season ?? null),
+		disc: !!after && before.disc !== (after.disc_number ?? null)
+	};
+}
