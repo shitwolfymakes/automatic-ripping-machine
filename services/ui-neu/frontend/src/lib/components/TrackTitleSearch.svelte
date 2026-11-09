@@ -3,6 +3,7 @@
 	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 	import { isSeriesKind } from '$lib/utils/match';
+	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
 
 	interface Props {
 		jobId: string;
@@ -20,9 +21,8 @@
 	let query = $state(track.title || (track.source_ref?.replace(/\.\w+$/, '') ?? ''));
 	let yearInput = $state(track.year != null ? String(track.year) : '');
 	let imdbInput = $state('');
-	let searching = $state(false);
+	const search = new MetadataSearch();
 	let results = $state<MetadataCandidate[]>([]);
-	let searchError = $state<string | null>(null);
 
 	let detail = $state<MetadataCandidate | null>(null);
 
@@ -73,37 +73,27 @@
 		}
 	});
 
+	const TEXT_SEARCH: SearchMessages = { empty: 'No results found.', failed: 'Search failed' };
+
 	async function handleSearch() {
 		const imdb = imdbInput.trim();
 		if (imdb) {
-			searching = true;
-			searchError = null;
 			results = [];
 			detail = null;
-			try {
-				const resp = await fetchMediaDetail(imdb);
-				detail = resp.candidates[0] ?? null;
-				if (!detail) searchError = 'No match found for that IMDb ID.';
-			} catch (e) {
-				searchError = e instanceof Error ? e.message : 'IMDb lookup failed';
-			} finally {
-				searching = false;
-			}
+			await search.run(
+				() => fetchMediaDetail(imdb),
+				IMDB_LOOKUP,
+				(found) => (detail = found[0] ?? null)
+			);
 			return;
 		}
 		if (!query.trim()) return;
-		searching = true;
-		searchError = null;
 		detail = null;
-		try {
-			const resp = await searchMetadata(query.trim());
-			results = resp.candidates;
-			if (results.length === 0) searchError = 'No results found.';
-		} catch (e) {
-			searchError = e instanceof Error ? e.message : 'Search failed';
-		} finally {
-			searching = false;
-		}
+		await search.run(
+			() => searchMetadata(query.trim()),
+			TEXT_SEARCH,
+			(found) => (results = found)
+		);
 	}
 
 	function handleSelect(result: MetadataCandidate) {
@@ -198,10 +188,10 @@
 		/>
 		<button
 			onclick={handleSearch}
-			disabled={searching || (!query.trim() && !imdbInput.trim())}
+			disabled={search.searching || (!query.trim() && !imdbInput.trim())}
 			class="btn btn-primary track-title-search-btn track-title-search-action-btn"
 		>
-			{searching ? '...' : 'Search'}
+			{search.searching ? '...' : 'Search'}
 		</button>
 	</div>
 
@@ -228,17 +218,17 @@
 		</div>
 	</div>
 
-	{#if searchError}
-		{#if searchError.toLowerCase().includes('api key')}
+	{#if search.error}
+		{#if search.error.toLowerCase().includes('api key')}
 			<div class="alert alert-warning">
-				<p>{searchError}</p>
+				<p>{search.error}</p>
 				<p class="mt-0.5 track-title-search-alert-hint">
 					Configure API keys in <a href="/settings" class="track-title-search-alert-link">Settings</a>.
 				</p>
 			</div>
 		{:else}
 			<div class="flex items-center gap-3">
-				<p class="field-help">{searchError}</p>
+				<p class="field-help">{search.error}</p>
 			</div>
 		{/if}
 	{/if}
