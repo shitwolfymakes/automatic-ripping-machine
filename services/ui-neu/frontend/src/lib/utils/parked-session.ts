@@ -6,6 +6,11 @@ function shortSessionId(id: string): string {
 	return id.length > 15 ? `${id.slice(0, 15)}...` : id;
 }
 
+/** A session's name, else its id shortened. */
+export function sessionDisplayName(id: string, names: Map<string, string>): string {
+	return names.get(id) ?? shortSessionId(id);
+}
+
 function parkedSuffix(status: JobView['status']): string {
 	if (status === 'failed') return 'not applied, the rip failed';
 	if (status === 'abandoned') return 'not applied, the job was abandoned';
@@ -22,6 +27,6 @@ export function parkedSessionLine(
 ): string | null {
 	const ids = job.parked_session_ids ?? [];
 	if (ids.length === 0) return null;
-	const label = ids.map((id) => names.get(id) ?? shortSessionId(id)).join(', ');
+	const label = ids.map((id) => sessionDisplayName(id, names)).join(', ');
 	return `${label}, ${parkedSuffix(job.status)}`;
 }

@@ -14,7 +14,6 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { parkedSessionLine } from '$lib/utils/parked-session';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
-	import { driveLabel } from '$lib/utils/drive-name';
 	import { episodeStatus } from '$lib/utils/episode-status';
 	import {
 		identitySuggestionOf,
@@ -24,14 +23,16 @@
 		reviewPhaseBadge
 	} from '$lib/utils/job-review';
 	import {
+		appliedSessionName,
+		discFactsLine,
 		episodeMatchingDetail,
 		matchDetailLine,
 		matchProviderLabel,
+		reviewSourceRow,
 		reviewStatusLabel
 	} from '$lib/utils/review-card';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
-	import { discTypeLabel } from '$lib/utils/job-type';
 	import PosterImage from './PosterImage.svelte';
 	import TitleSearch from './TitleSearch.svelte';
 	import MusicSearch from './MusicSearch.svelte';
@@ -170,34 +171,10 @@
 	let episodeRow = $derived(isTv ? episodeStatus(displayJob, data ? tracks : null, matching.active) : null);
 	let matchDetail = $derived(matchDetailLine(displayJob, isTv, jobMeta.video_type));
 	let showProvider = $derived(matchProviderLabel(displayJob));
-	// "Blu-ray, Disc 1/4, 6 titles", leaving out the parts that are empty.
-	let discLine = $derived(
-		[
-			discTypeLabel(displayJob.disc_type),
-			displayJob.disc_number != null
-				? `Disc ${displayJob.disc_number}${displayJob.disc_total != null ? `/${displayJob.disc_total}` : ''}`
-				: null,
-			jobMeta.titleCount ? `${jobMeta.titleCount} titles` : null
-		]
-			.filter(Boolean)
-			.join(', ')
-	);
-	// The source row names what the disc came from: a folder, an ISO, or a drive.
-	// isoName is only set when drive_id is.
-	let sourceKind = $derived(isoName ? (isoSourceKinds?.[displayJob.drive_id!] ?? 'iso') : null);
-	let sourceLabel = $derived(sourceKind === 'folder' ? 'Folder' : sourceKind === 'iso' ? 'ISO' : 'Drive');
-	let sourceValue = $derived(isoName ?? driveLabel(displayJob.drive_id, driveNames));
-
-	function shortId(id: string): string {
-		return id.length > 15 ? `${id.slice(0, 15)}...` : id;
-	}
+	let discLine = $derived(discFactsLine(displayJob, jobMeta.titleCount));
+	let sourceRow = $derived(reviewSourceRow(displayJob, isoName, isoSourceKinds, driveNames));
 	let parkedLine = $derived(parkedSessionLine(displayJob, sessionNameById));
-	let appliedSession = $derived(
-		parkedLine ??
-			(jobMeta.pending_session_id
-				? (sessionNameById.get(jobMeta.pending_session_id) ?? shortId(jobMeta.pending_session_id))
-				: null)
-	);
+	let appliedSession = $derived(appliedSessionName(parkedLine, jobMeta.pending_session_id, sessionNameById));
 
 	// Header phase pill. For a post-rip job that already HAS a session pending but
 	// is missing a title, switch the label to NEEDS TITLE; otherwise use the
@@ -561,9 +538,11 @@
 						</div>
 					{/if}
 					<div class="disc-review-widget-row">
-						<dt>{sourceLabel}</dt>
+						<dt>{sourceRow.label}</dt>
 						<dd>
-							<span class="disc-review-widget-value disc-review-widget-source" title={sourceValue}>{sourceValue}</span>
+							<span class="disc-review-widget-value disc-review-widget-source" title={sourceRow.value}
+								>{sourceRow.value}</span
+							>
 						</dd>
 					</div>
 					{#if appliedSession}

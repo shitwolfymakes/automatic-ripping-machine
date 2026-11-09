@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { JobView } from '$lib/types/api.gen';
 import {
+	appliedSessionName,
+	discFactsLine,
 	episodeMatchingDetail,
 	matchDetailLine,
 	matchProviderLabel,
+	reviewSourceRow,
 	reviewStatusLabel,
 	type StatusLabelFlags
 } from './review-card';
@@ -113,5 +116,75 @@ describe('matchProviderLabel', () => {
 	});
 	it('shows an unknown provider as itself', () => {
 		expect(matchProviderLabel(withIdentity({ provider: 'acme' }))).toBe('acme');
+	});
+});
+
+describe('discFactsLine', () => {
+	const disc = { disc_type: 'bluray', disc_number: null, disc_total: null } as const;
+	it('joins the type, the disc number with its total and the title count', () => {
+		expect(discFactsLine({ ...disc, disc_number: 1, disc_total: 4 }, 6)).toBe('Blu-ray, Disc 1/4, 6 titles');
+	});
+	it('shows a disc number with no total as "Disc n"', () => {
+		expect(discFactsLine({ ...disc, disc_number: 2 }, 6)).toBe('Blu-ray, Disc 2, 6 titles');
+	});
+	it('leaves out the disc number when there is none', () => {
+		expect(discFactsLine({ ...disc, disc_total: 4 }, 6)).toBe('Blu-ray, 6 titles');
+	});
+	it('leaves out the titles part for a count of 0', () => {
+		expect(discFactsLine({ ...disc, disc_number: 1, disc_total: 4 }, 0)).toBe('Blu-ray, Disc 1/4');
+	});
+	it('leaves out the titles part when the count is undefined', () => {
+		expect(discFactsLine(disc, undefined)).toBe('Blu-ray');
+	});
+	it('says Unknown with no disc type', () => {
+		expect(discFactsLine({ ...disc, disc_type: undefined } as unknown as typeof disc, undefined)).toBe('Unknown');
+	});
+});
+
+describe('reviewSourceRow', () => {
+	const drive = { drive_id: 'drv_1' };
+	const names = { drv_1: 'Drive A' };
+	it('names the drive when there is no ISO', () => {
+		expect(reviewSourceRow(drive, null, null, names)).toEqual({ label: 'Drive', value: 'Drive A' });
+	});
+	it('gives an empty value with no ISO and no drive id', () => {
+		expect(reviewSourceRow({ drive_id: null }, null, null, names)).toEqual({ label: 'Drive', value: '' });
+	});
+	it('labels an ISO source of kind iso as ISO', () => {
+		expect(reviewSourceRow(drive, 'a.iso', { drv_1: 'iso' }, names)).toEqual({ label: 'ISO', value: 'a.iso' });
+	});
+	it('labels an ISO source of kind folder as Folder', () => {
+		expect(reviewSourceRow(drive, 'movie', { drv_1: 'folder' }, names)).toEqual({ label: 'Folder', value: 'movie' });
+	});
+	it('labels an ISO with no kind entry as ISO', () => {
+		expect(reviewSourceRow(drive, 'a.iso', { other: 'folder' }, names)).toEqual({ label: 'ISO', value: 'a.iso' });
+	});
+	it('labels an ISO with no kinds map as ISO', () => {
+		expect(reviewSourceRow(drive, 'a.iso', undefined, names)).toEqual({ label: 'ISO', value: 'a.iso' });
+	});
+	it('shows an empty ISO name as itself under Drive', () => {
+		expect(reviewSourceRow(drive, '', null, names)).toEqual({ label: 'Drive', value: '' });
+	});
+	it('shows an ISO name with no drive id under Drive', () => {
+		expect(reviewSourceRow({ drive_id: null }, 'a.iso', null, names)).toEqual({ label: 'Drive', value: 'a.iso' });
+	});
+});
+
+describe('appliedSessionName', () => {
+	const names = new Map([['ses_a', 'Plex 1080p']]);
+	it('prefers the parked line over a pending id', () => {
+		expect(appliedSessionName('Plex 1080p, waiting', 'ses_a', names)).toBe('Plex 1080p, waiting');
+	});
+	it('gives null with no parked line and no pending id', () => {
+		expect(appliedSessionName(null, undefined, names)).toBeNull();
+	});
+	it('gives the name of a known pending session', () => {
+		expect(appliedSessionName(null, 'ses_a', names)).toBe('Plex 1080p');
+	});
+	it('shows an unknown short pending id as itself', () => {
+		expect(appliedSessionName(null, 'ses_b', names)).toBe('ses_b');
+	});
+	it('shortens an unknown pending id longer than 15 characters', () => {
+		expect(appliedSessionName(null, 'ses_0123456789abcdef', names)).toBe('ses_0123456789a...');
 	});
 });

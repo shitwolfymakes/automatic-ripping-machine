@@ -3,6 +3,9 @@ import type { JobView } from '$lib/types/api.gen';
 import type { EpisodeStatus } from '$lib/utils/episode-status';
 import { videoTypeLabel } from '$lib/utils/job-fields';
 import { providerLabel } from '$lib/utils/provider-labels';
+import { driveLabel } from '$lib/utils/drive-name';
+import { discTypeLabel } from '$lib/utils/job-type';
+import { sessionDisplayName } from '$lib/utils/parked-session';
 
 /** The job states that decide the review card's status label. */
 export interface StatusLabelFlags {
@@ -71,4 +74,62 @@ export function matchProviderLabel(job: Pick<JobView, 'metadata_json'>): string 
 	const provider = (job.metadata_json?.identity as { provider?: string } | undefined)?.provider;
 	if (!provider || provider === 'manual') return null;
 	return providerLabel(provider);
+}
+
+/** "Disc 1/4", "Disc 2" with no total, or null with no disc number. */
+function discNumberText(discNumber: JobView['disc_number'], discTotal: JobView['disc_total']): string | null {
+	if (discNumber == null) return null;
+	if (discTotal == null) return `Disc ${discNumber}`;
+	return `Disc ${discNumber}/${discTotal}`;
+}
+
+/**
+ * The disc facts row's text, like "Blu-ray, Disc 1/4, 6 titles", leaving out
+ * the parts that are empty.
+ */
+export function discFactsLine(
+	job: Pick<JobView, 'disc_type' | 'disc_number' | 'disc_total'>,
+	titleCount: number | undefined
+): string {
+	return [
+		discTypeLabel(job.disc_type),
+		discNumberText(job.disc_number, job.disc_total),
+		titleCount ? `${titleCount} titles` : null
+	]
+		.filter(Boolean)
+		.join(', ');
+}
+
+/** The source row: what the disc came from, and its name. */
+export interface SourceRow {
+	label: string;
+	value: string;
+}
+
+const SOURCE_KIND_LABEL: Record<'iso' | 'folder', string> = { iso: 'ISO', folder: 'Folder' };
+
+/**
+ * The source row names what the disc came from: a folder, an ISO, or a drive.
+ * An ISO name needs a drive id to look its kind up; without one it is a drive.
+ */
+export function reviewSourceRow(
+	job: Pick<JobView, 'drive_id'>,
+	isoName: string | null,
+	isoSourceKinds: Record<string, 'iso' | 'folder'> | null | undefined,
+	driveNames: Record<string, string> | null | undefined
+): SourceRow {
+	const value = isoName ?? driveLabel(job.drive_id, driveNames);
+	if (!isoName || !job.drive_id) return { label: 'Drive', value };
+	return { label: SOURCE_KIND_LABEL[isoSourceKinds?.[job.drive_id] ?? 'iso'], value };
+}
+
+/** The applied session's text: the parked line, else the pending session's name. */
+export function appliedSessionName(
+	parkedLine: string | null,
+	pendingSessionId: string | undefined,
+	names: Map<string, string>
+): string | null {
+	if (parkedLine != null) return parkedLine;
+	if (!pendingSessionId) return null;
+	return sessionDisplayName(pendingSessionId, names);
 }
