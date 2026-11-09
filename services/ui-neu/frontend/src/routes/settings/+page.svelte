@@ -103,6 +103,12 @@
 	// --- Image cache state ---
 	const imageCache = new ImageCache();
 
+	// Fetch what the opened tab shows.
+	function loadTabData(tab: Tab) {
+		if (tab === 'interface') imageCache.load();
+		if (tab === 'drives') driveSessionOptions.load();
+	}
+
 	// Set to true while we are mutating window.location.hash ourselves,
 	// so the hashchange listener can skip the work setTab already did
 	// (otherwise tab clicks scroll twice — once here, once in the listener).
@@ -112,8 +118,7 @@
 		activeTab = tab;
 		programmaticHashChange = true;
 		window.location.hash = tab;
-		if (tab === 'interface') imageCache.load();
-		if (tab === 'drives') driveSessionOptions.load();
+		loadTabData(tab);
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
 	}
@@ -128,8 +133,7 @@
 			.then(() => drives.start());
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
-		if (activeTab === 'interface') imageCache.load();
-		if (activeTab === 'drives') driveSessionOptions.load();
+		loadTabData(activeTab);
 		function onHashChange() {
 			if (programmaticHashChange) {
 				programmaticHashChange = false;
@@ -138,8 +142,7 @@
 			const tab = tabFromHash(window.location.hash);
 			activeTab = tab;
 			pendingField = fieldFromHash(window.location.hash);
-			if (tab === 'interface') imageCache.load();
-			if (tab === 'drives') driveSessionOptions.load();
+			loadTabData(tab);
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
 		}
