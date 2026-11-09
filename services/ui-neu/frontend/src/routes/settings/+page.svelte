@@ -19,8 +19,8 @@
 		tabFromHash
 	} from '$lib/utils/settings-tabs';
 	import { theme, toggleTheme } from '$lib/stores/theme';
-	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
-	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
+	import { colorScheme, schemeLocksMode, allSchemes } from '$lib/stores/colorScheme';
+	import { UserThemes } from '$lib/stores/userThemes.svelte';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, rescanDrives } from '$lib/api/drives';
 	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
@@ -104,23 +104,10 @@
 	const driveDiagnostics = new DriveDiagnostics();
 
 	// --- Theme management ---
-	let themeFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const userThemes = new UserThemes();
 
 	// --- Image cache state ---
 	const imageCache = new ImageCache();
-
-	async function handleThemeDelete(id: string, label: string) {
-		if (!confirm(`Delete user theme "${label}"?`)) return;
-		themeFeedback = null;
-		try {
-			await deleteThemeApi(id);
-			await loadThemesFromApi();
-			if ($colorScheme === id) $colorScheme = 'blue';
-			themeFeedback = { type: 'success', message: `Theme "${label}" deleted` };
-		} catch (e) {
-			themeFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
-		}
-	}
 
 	// Set to true while we are mutating window.location.hash ourselves,
 	// so the hashchange listener can skip the work setTab already did
@@ -379,9 +366,9 @@
 					<h2 class="settings-page-section-title mb-4" data-page-section-title>Themes</h2>
 					<section class="stack stack-lg">
 						<!-- Feedback toast -->
-						{#if themeFeedback}
-							<div class="alert {themeFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-								{themeFeedback.message}
+						{#if userThemes.feedback}
+							<div class="alert {userThemes.feedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
+								{userThemes.feedback.message}
 							</div>
 						{/if}
 
@@ -434,7 +421,7 @@
 											<div class="absolute -right-1 -top-1 flex gap-0.5">
 												<button
 													type="button"
-													onclick={() => handleThemeDelete(scheme.id, scheme.label)}
+													onclick={() => userThemes.deleteTheme(scheme.id, scheme.label)}
 													class="btn btn-icon scheme-swatch-delete"
 													title="Delete"
 												>
@@ -444,9 +431,9 @@
 										</div>
 									{/each}
 								</div>
-								{#if themeFeedback}
-									<p class="mt-3 settings-page-feedback" data-error={themeFeedback.type !== 'success'}>
-										{themeFeedback.message}
+								{#if userThemes.feedback}
+									<p class="mt-3 settings-page-feedback" data-error={userThemes.feedback.type !== 'success'}>
+										{userThemes.feedback.message}
 									</p>
 								{/if}
 							</div>
