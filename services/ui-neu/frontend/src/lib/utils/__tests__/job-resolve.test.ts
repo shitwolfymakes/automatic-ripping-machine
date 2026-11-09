@@ -3,6 +3,8 @@ import {
 	buildResolveBody,
 	cdIdentifyBody,
 	musicReleaseBody,
+	titleMatchBody,
+	titleResolveBody,
 	tvSeasonOrDiscChanged,
 	videoIdentifyBody
 } from '$lib/utils/job-resolve';
@@ -172,5 +174,123 @@ describe('musicReleaseBody', () => {
 		expect(Object.keys(body)).toEqual(['title', 'year', 'disc_number', 'disc_total', 'music']);
 		expect(Object.keys(body.music!)).toEqual(['artist', 'album', 'tracks']);
 		expect(Object.keys(body.music!.tracks![0])).toEqual(['position', 'title', 'length_ms', 'disc_number']);
+	});
+});
+
+const values = (over: Record<string, unknown> = {}) =>
+	({ title: 'Heat', year: '1995', isSeries: false, poster: null, ...over }) as any;
+
+const candidate = (over: Record<string, unknown> = {}) =>
+	({ title: 'Heat', kind: 'movie', provider: 'tmdb', ...over }) as any;
+
+describe('titleMatchBody', () => {
+	it('states the whole show: every id, the provider, the poster and the facts', () => {
+		const facts = { runtime: 170 };
+		const c = candidate({
+			external_ids: { imdb: 'tt0113277', tmdb: 949, tmdb_kind: 'movie', tvdb: 1, tvmaze: 2 },
+			poster_url: 'https://img/p.jpg',
+			facts
+		});
+		const body = titleMatchBody(c, values(), false);
+		expect(body).toEqual({
+			title: 'Heat',
+			year: 1995,
+			media_type: 'movie',
+			external_ids: { imdb: 'tt0113277', tmdb: 949, tmdb_kind: 'movie', tvdb: 1, tvmaze: 2 },
+			match: {
+				provider: 'tmdb',
+				poster_url: 'https://img/p.jpg',
+				poster_is_manual: false,
+				poster_url_manual: null,
+				facts
+			}
+		});
+		expect(Object.keys(body)).toEqual(['title', 'year', 'media_type', 'external_ids', 'match']);
+		expect(Object.keys(body.external_ids!)).toEqual(['imdb', 'tmdb', 'tmdb_kind', 'tvdb', 'tvmaze']);
+		expect(Object.keys(body.match!)).toEqual([
+			'provider',
+			'poster_url',
+			'poster_is_manual',
+			'poster_url_manual',
+			'facts'
+		]);
+	});
+
+	it('sends a null for each show id the match lacks', () => {
+		const body = titleMatchBody(candidate({ external_ids: { tmdb: 949 } }), values(), false);
+		expect(body.external_ids).toEqual({ imdb: null, tmdb: 949, tmdb_kind: null, tvdb: null, tvmaze: null });
+	});
+
+	it('sends every id null when external_ids is missing', () => {
+		const body = titleMatchBody(candidate(), values(), false);
+		expect(body.external_ids).toEqual({ imdb: null, tmdb: null, tmdb_kind: null, tvdb: null, tvmaze: null });
+	});
+
+	it('sends a null poster_url and null facts when the match lacks them', () => {
+		const body = titleMatchBody(candidate(), values({ poster: 'https://edit/p.jpg' }), false);
+		expect(body.match).toEqual({
+			provider: 'tmdb',
+			poster_url: null,
+			poster_is_manual: false,
+			poster_url_manual: null,
+			facts: null
+		});
+	});
+
+	it('sends the edited poster as the manual one, beside the row own poster', () => {
+		const body = titleMatchBody(
+			candidate({ poster_url: 'https://img/p.jpg' }),
+			values({ poster: 'https://edit/p.jpg' }),
+			true
+		);
+		expect(body.match).toMatchObject({
+			poster_url: 'https://img/p.jpg',
+			poster_is_manual: true,
+			poster_url_manual: 'https://edit/p.jpg'
+		});
+	});
+
+	it('sends a null manual poster when the edit cleared it', () => {
+		const body = titleMatchBody(candidate(), values({ poster: null }), true);
+		expect(body.match).toMatchObject({ poster_is_manual: true, poster_url_manual: null });
+	});
+
+	it.each([
+		['', null],
+		['abc', null],
+		['Infinity', null],
+		['1995', 1995]
+	])('parses the year %j to %j', (year, want) => {
+		expect(titleMatchBody(candidate(), values({ year }), false).year).toBe(want);
+	});
+
+	it.each([
+		[true, 'tv'],
+		[false, 'movie']
+	])('sends the media type for isSeries %s as %s', (isSeries, want) => {
+		expect(titleMatchBody(candidate(), values({ isSeries }), false).media_type).toBe(want);
+	});
+});
+
+describe('titleResolveBody', () => {
+	it('sends the title, the year and the media type in that order', () => {
+		const body = titleResolveBody(values());
+		expect(body).toEqual({ title: 'Heat', year: 1995, media_type: 'movie' });
+		expect(Object.keys(body)).toEqual(['title', 'year', 'media_type']);
+	});
+
+	it.each([
+		['', null],
+		['abc', null],
+		['1995', 1995]
+	])('parses the year %j to %j', (year, want) => {
+		expect(titleResolveBody(values({ year })).year).toBe(want);
+	});
+
+	it.each([
+		[true, 'tv'],
+		[false, 'movie']
+	])('sends the media type for isSeries %s as %s', (isSeries, want) => {
+		expect(titleResolveBody(values({ isSeries })).media_type).toBe(want);
 	});
 });

@@ -1,9 +1,9 @@
 // The resolve request bodies the UI sends, for the job page's in-place fact
 // edit, the identify dialog's manual entry and the music search's release
-// apply, and whether a fact edit re-runs the episode match. Pure, so each rule
-// is tested without the page or the dialog.
-import type { resolveJob } from '$lib/api/jobs';
-import type { JobView, MetadataReleaseTrack } from '$lib/types/api.gen';
+// apply, the title search's apply, and whether a fact edit re-runs the episode
+// match. Pure, so each rule is tested without the page or the dialog.
+import type { MatchProvider, resolveJob } from '$lib/api/jobs';
+import type { ExternalIds, JobView, MetadataCandidate, MetadataReleaseTrack } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
 
 export type ResolveBody = Parameters<typeof resolveJob>[1];
@@ -88,6 +88,60 @@ export function musicReleaseBody(
 			}))
 		}
 	};
+}
+
+/** The values Use applies: the match's own, or the edited ones. */
+export interface TitleApplyValues {
+	title: string;
+	/**
+	 * The year as text, already trimmed: blank, the edit field's trimmed text,
+	 * or the match's year.
+	 */
+	year: string;
+	isSeries: boolean;
+	poster: string | null;
+}
+
+// Every show id, null when missing.
+function externalIdsFrom(ids: ExternalIds | null | undefined): ExternalIds {
+	const given = ids ?? {};
+	return {
+		imdb: given.imdb ?? null,
+		tmdb: given.tmdb ?? null,
+		tmdb_kind: given.tmdb_kind ?? null,
+		tvdb: given.tvdb ?? null,
+		tvmaze: given.tvmaze ?? null
+	};
+}
+
+/**
+ * The title search's resolve body for a picked match. A picked match states
+ * the whole show (spec 3.6): every show id, nulls included, plus provider,
+ * poster and facts in one call.
+ */
+export function titleMatchBody(c: MetadataCandidate, values: TitleApplyValues, posterIsManual: boolean): ResolveBody {
+	return {
+		title: values.title,
+		year: finiteNum(values.year),
+		media_type: values.isSeries ? 'tv' : 'movie',
+		external_ids: externalIdsFrom(c.external_ids),
+		match: {
+			provider: c.provider as MatchProvider,
+			// The candidate's own poster stays the automatic one; an edit is the override.
+			poster_url: c.poster_url ?? null,
+			poster_is_manual: posterIsManual,
+			poster_url_manual: posterIsManual ? values.poster : null,
+			facts: c.facts ?? null
+		}
+	};
+}
+
+/**
+ * The title search's plain resolve body: the title, the year and the media
+ * type.
+ */
+export function titleResolveBody(values: TitleApplyValues): ResolveBody {
+	return { title: values.title, year: finiteNum(values.year), media_type: values.isSeries ? 'tv' : 'movie' };
 }
 
 /**

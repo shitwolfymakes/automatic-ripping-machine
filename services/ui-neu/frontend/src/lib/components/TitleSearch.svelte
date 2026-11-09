@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { ExternalIds, JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
-	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob, type MatchProvider } from '$lib/api/jobs';
+	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
+	import { searchMetadata, fetchMediaDetail, updateJobTitle, resolveJob } from '$lib/api/jobs';
+	import { titleMatchBody, titleResolveBody, type TitleApplyValues } from '$lib/utils/job-resolve';
 	import MatchPicker from './match/MatchPicker.svelte';
 	import { isSeriesKind } from '$lib/utils/match';
 	import { reveal } from '$lib/transitions';
@@ -138,7 +139,7 @@
 
 	async function applyResult(c: MetadataCandidate) {
 		const at = { row: selectedIndex, list: listGen };
-		const values = editing
+		const values: TitleApplyValues = editing
 			? {
 					title: editTitle.trim(),
 					year: editYear.trim(),
@@ -157,41 +158,15 @@
 		}
 		applying = true;
 		feedback = null;
-		const parsedYear = values.year ? Number(values.year) : null;
-		const year = Number.isFinite(parsedYear as number) ? parsedYear : null;
-		const mediaType = values.isSeries ? 'tv' : 'movie';
 		// The candidate's ids name a title of its own kind; after a type edit they don't apply.
 		const idsApply = isSeriesKind(c.kind) === values.isSeries;
 		let resolved: ResolveResponse | undefined;
 		try {
 			if (canResolve && idsApply && c.provider) {
-				// A picked match states the whole show (spec 3.6): every show id,
-				// nulls included, plus provider, poster and facts in one call.
-				const ids = c.external_ids ?? {};
-				const externalIds: ExternalIds = {
-					imdb: ids.imdb ?? null,
-					tmdb: ids.tmdb ?? null,
-					tmdb_kind: ids.tmdb_kind ?? null,
-					tvdb: ids.tvdb ?? null,
-					tvmaze: ids.tvmaze ?? null
-				};
-				resolved = await resolveJob(job.id, {
-					title: values.title,
-					year,
-					media_type: mediaType,
-					external_ids: externalIds,
-					match: {
-						provider: c.provider as MatchProvider,
-						// The candidate's own poster stays the automatic one; an edit is the override.
-						poster_url: c.poster_url ?? null,
-						poster_is_manual: editing && posterEdited,
-						poster_url_manual: editing && posterEdited ? values.poster : null,
-						facts: c.facts ?? null
-					}
-				});
+				resolved = await resolveJob(job.id, titleMatchBody(c, values, editing && posterEdited));
 				feedback = { type: 'success', message: 'Identified', ...at };
 			} else if (canResolve) {
-				resolved = await resolveJob(job.id, { title: values.title, year, media_type: mediaType });
+				resolved = await resolveJob(job.id, titleResolveBody(values));
 				let message = 'Identified';
 				if (values.poster !== (job.poster_url_manual ?? null)) {
 					try {
