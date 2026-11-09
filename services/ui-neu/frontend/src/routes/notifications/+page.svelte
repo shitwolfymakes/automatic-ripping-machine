@@ -1,98 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		fetchNotifications,
-		fetchNotificationCount,
-		dismissNotification,
-		dismissAllNotifications,
-		purgeNotifications
-	} from '$lib/api/notifications';
-	import type { NotificationInboxView } from '$lib/types/api.gen';
 	import { formatDateTime, timeAgo } from '$lib/utils/format';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { NotificationInbox } from '$lib/stores/notificationInbox.svelte';
 
-	let notifications = $state<NotificationInboxView[]>([]);
-	let notifsLoading = $state(true);
-	let notifsError = $state<Error | null>(null);
-	let dismissing = $state<Set<string>>(new Set());
+	const inbox = new NotificationInbox();
 	let showCleared = $state(false);
-	let purging = $state(false);
 	let purgeConfirmOpen = $state(false);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	// Purge deletes cleared rows, which the inbox list omits, so this comes from the count endpoint.
-	let clearedCount = $state(0);
 
-	let filtered = $derived(showCleared ? notifications : notifications.filter((n) => !n.seen));
+	let filtered = $derived(showCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
 
-	async function load() {
-		notifsLoading = true;
-		notifsError = null;
-		try {
-			const [rows, counts] = await Promise.all([fetchNotifications(), fetchNotificationCount().catch(() => null)]);
-			notifications = rows;
-			clearedCount = counts?.cleared ?? 0;
-		} catch (e) {
-			notifsError = e instanceof Error ? e : new Error('Failed to load notifications');
-		} finally {
-			notifsLoading = false;
-		}
-	}
-
-	async function dismiss(id: string) {
-		dismissing = new Set([...dismissing, id]);
-		try {
-			await dismissNotification(id);
-			if (notifications.some((n) => n.id === id && !n.cleared)) clearedCount += 1;
-			notifications = notifications.map((n) => (n.id === id ? { ...n, seen: true, cleared: true } : n));
-		} catch {
-			// next refresh will reconcile
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const next = new Set(dismissing);
-			next.delete(id);
-			dismissing = next;
-		}
-	}
-
-	async function dismissAll() {
-		const ids = notifications.filter((n) => !n.seen).map((n) => n.id);
-		if (ids.length === 0) return;
-		dismissing = new Set(ids);
-		try {
-			const result = await dismissAllNotifications();
-			// Like a per-row dismiss: every not-yet-cleared row ends up seen and cleared.
-			clearedCount += result.updated;
-			notifications = notifications.map((n) => (n.cleared ? n : { ...n, seen: true, cleared: true }));
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Dismiss all failed' };
-		} finally {
-			dismissing = new Set();
-		}
-	}
-
-	let unseenCount = $derived(notifications.filter((n) => !n.seen).length);
-
-	async function handlePurge() {
-		purging = true;
+	function handlePurge() {
 		purgeConfirmOpen = false;
-		try {
-			const result = await purgeNotifications();
-			feedback = {
-				type: 'success',
-				message: `Purged ${result.deleted} cleared notification${result.deleted !== 1 ? 's' : ''}`
-			};
-			await load();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Purge failed' };
-		}
-		purging = false;
+		inbox.purge();
 	}
 
 	onMount(() => {
-		load();
+		inbox.load();
 	});
 </script>
 
@@ -101,23 +28,20 @@
 </svelte:head>
 
 <div class="stack notifications-page">
-	{#if feedback}
-		<div class="alert notifications-page-feedback {feedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-			{feedback.message}
-			<button
-				onclick={() => {
-					feedback = null;
-				}}
-				class="notifications-page-feedback-close">&times;</button
-			>
+	{#if inbox.feedback}
+		<div
+			class="alert notifications-page-feedback {inbox.feedback.type === 'success' ? 'alert-success' : 'alert-danger'}"
+		>
+			{inbox.feedback.message}
+			<button onclick={inbox.clearFeedback} class="notifications-page-feedback-close">&times;</button>
 		</div>
 	{/if}
 
 	<div class="notifications-page-header">
 		<div class="notifications-page-header-title">
 			<h1 class="page-title">Notifications</h1>
-			{#if unseenCount > 0}
-				<span class="badge badge-warning notifications-page-unseen-badge">{unseenCount} new</span>
+			{#if inbox.unseenCount > 0}
+				<span class="badge badge-warning notifications-page-unseen-badge">{inbox.unseenCount} new</span>
 			{/if}
 		</div>
 		<div class="notifications-page-header-actions">
@@ -125,23 +49,23 @@
 				<input type="checkbox" bind:checked={showCleared} class="notifications-page-show-cleared-checkbox" />
 				Show dismissed
 			</label>
-			{#if clearedCount > 0 && $isAdmin}
+			{#if inbox.clearedCount > 0 && $isAdmin}
 				<button
 					type="button"
 					onclick={() => (purgeConfirmOpen = true)}
-					disabled={purging}
+					disabled={inbox.purging}
 					class="btn btn-danger notifications-page-purge-btn"
 				>
-					{purging ? 'Purging...' : 'Purge Cleared'}
+					{inbox.purging ? 'Purging...' : 'Purge Cleared'}
 				</button>
 			{/if}
-			{#if unseenCount > 0 && $isAdmin}
-				<button onclick={dismissAll} class="btn notifications-page-dismiss-all-btn"> Dismiss All </button>
+			{#if inbox.unseenCount > 0 && $isAdmin}
+				<button onclick={inbox.dismissAll} class="btn notifications-page-dismiss-all-btn"> Dismiss All </button>
 			{/if}
 		</div>
 	</div>
 
-	<LoadState data={notifications} loading={notifsLoading} error={notifsError} isEmpty={() => false}>
+	<LoadState data={inbox.rows} loading={inbox.loading} error={inbox.error} isEmpty={() => false}>
 		{#snippet loadingSlot()}
 			<div class="stack stack-sm">
 				{#each Array(4) as _, i (i)}
@@ -192,11 +116,11 @@
 								</div>
 								{#if !notif.seen && $isAdmin}
 									<button
-										onclick={() => dismiss(notif.id)}
-										disabled={dismissing.has(notif.id)}
+										onclick={() => inbox.dismiss(notif.id)}
+										disabled={inbox.dismissing.has(notif.id)}
 										class="btn notifications-page-dismiss-btn"
 									>
-										{dismissing.has(notif.id) ? '...' : 'Dismiss'}
+										{inbox.dismissing.has(notif.id) ? '...' : 'Dismiss'}
 									</button>
 								{/if}
 							</div>
