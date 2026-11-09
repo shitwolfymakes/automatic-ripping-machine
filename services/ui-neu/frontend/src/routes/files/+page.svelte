@@ -306,16 +306,10 @@
 				return { root: r, subpath: sp };
 			})
 			.sort((a, b) => b.subpath.length - a.subpath.length);
-		const deletedSubpaths: string[] = [];
 		for (const item of items) {
-			if (deletedSubpaths.some((dp) => item.subpath.startsWith(dp + '/'))) {
-				deleted++;
-				continue;
-			}
 			try {
 				await deleteFile(item.root, item.subpath);
 				deleted++;
-				deletedSubpaths.push(item.subpath);
 			} catch {
 				failed++;
 			}
@@ -644,13 +638,7 @@
 	{/if}
 
 	<!-- File listing -->
-	<LoadState
-		data={listing}
-		loading={loading && !listing}
-		error={filesError}
-		isEmpty={() => false}
-		transitionKey={`files-${current.root}-${current.subpath}`}
-	>
+	<LoadState data={listing} loading={loading && !listing} error={filesError} isEmpty={() => false}>
 		{#snippet loadingSlot()}
 			<div class="files-page-listing">
 				<table class="table">
@@ -776,11 +764,6 @@
 						</tbody>
 					</table>
 				{/if}
-			</div>
-		{/snippet}
-		{#snippet empty()}
-			<div class="panel files-page-empty-panel">
-				<p class="files-page-empty-panel-text">No media directories configured</p>
 			</div>
 		{/snippet}
 	</LoadState>
@@ -1171,13 +1154,6 @@
 		text-align: center;
 		font-size: 0.875rem;
 		line-height: 1.25rem;
-		color: var(--color-text-muted);
-	}
-	.files-page-empty-panel {
-		padding: 2rem;
-		text-align: center;
-	}
-	.files-page-empty-panel-text {
 		color: var(--color-text-muted);
 	}
 	.files-page-select-all {
