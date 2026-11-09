@@ -28,7 +28,7 @@
 	import { buildMetadataFields } from '$lib/utils/job-fields';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import JsonTree from '$lib/components/JsonTree.svelte';
+	import JobRawMetadata from '$lib/components/JobRawMetadata.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
 	import { reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
@@ -81,7 +81,6 @@
 
 	let sessionNames = $state(new Map<string, string>());
 	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names, sessionNames) : []);
-	let showRawMetadata = $state(false);
 
 	function handleTitleApply() {
 		activePanel = null;
@@ -435,28 +434,7 @@
 
 			<!-- Raw metadata (collapsible): the full metadata_json as a JSON tree, nothing hidden -->
 			{#if jobDetail.rawMetadataPairs.length > 0}
-				<section>
-					<button
-						type="button"
-						onclick={() => {
-							showRawMetadata = !showRawMetadata;
-						}}
-						class="flex w-full items-center gap-2 job-detail-section-title"
-						aria-expanded={showRawMetadata}
-					>
-						<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-						</svg>
-						Raw metadata
-					</button>
-					{#if showRawMetadata}
-						<div class="mt-3 overflow-x-auto job-detail-raw-metadata">
-							{#each jobDetail.rawMetadataPairs as [key, value] (key)}
-								<JsonTree {value} name={key} depth={0} />
-							{/each}
-						</div>
-					{/if}
-				</section>
+				<JobRawMetadata pairs={jobDetail.rawMetadataPairs} />
 			{/if}
 		</div>
 
@@ -654,22 +632,5 @@
 		background: var(--color-surface);
 		padding: 0.75rem 1rem;
 		box-shadow: var(--shadow-1);
-	}
-	.job-detail-section-title {
-		font-size: 1.125rem;
-		line-height: 1.75rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.job-detail-section-title .chevron {
-		transition: transform var(--motion-fast) var(--ease);
-	}
-	.job-detail-section-title[aria-expanded='true'] .chevron {
-		transform: rotate(90deg);
-	}
-	.job-detail-raw-metadata {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 0.75rem;
 	}
 </style>
