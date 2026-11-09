@@ -2,7 +2,8 @@
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import { acceptIdentitySuggestion } from '$lib/api/jobs';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
-	import { identitySuggestionOf, providerLabel } from '$lib/utils/job-status';
+	import { identitySuggestionOf } from '$lib/utils/job-review';
+	import { providerLabel } from '$lib/utils/job-status';
 	import PosterImage from './PosterImage.svelte';
 
 	interface Props {

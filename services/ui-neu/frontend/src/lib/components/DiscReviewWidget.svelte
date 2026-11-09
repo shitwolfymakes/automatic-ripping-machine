@@ -20,9 +20,9 @@
 		isIdentifyMiss,
 		missReason,
 		previouslyRippedJobId,
-		providerLabel,
 		reviewPhaseBadge
-	} from '$lib/utils/job-status';
+	} from '$lib/utils/job-review';
+	import { providerLabel } from '$lib/utils/job-status';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
