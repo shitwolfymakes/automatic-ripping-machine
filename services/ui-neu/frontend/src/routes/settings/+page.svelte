@@ -112,7 +112,6 @@
 	}
 
 	function parseHash(): Tab {
-		if (typeof window === 'undefined') return 'Identification';
 		const hash = window.location.hash.replace('#', '');
 		// Retired names (#Metadata, #appearance) open the tab that replaced them.
 		const tabPart = legacyTab(hash.split('/')[0]);
@@ -133,7 +132,6 @@
 	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
 	// still lands on the tab that now holds the field.
 	function parseHashField(): string | null {
-		if (typeof window === 'undefined') return null;
 		const part = window.location.hash.replace('#', '').split('/')[1];
 		return part ? decodeURIComponent(part) : null;
 	}
