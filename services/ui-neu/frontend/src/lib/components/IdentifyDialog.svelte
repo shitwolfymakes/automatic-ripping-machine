@@ -5,6 +5,7 @@
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
+	import { cdIdentifyBody, videoIdentifyBody } from '$lib/utils/job-resolve';
 
 	let {
 		job,
@@ -73,18 +74,8 @@
 		submitting = true;
 		error = null;
 		try {
-			const music = isCd
-				? {
-						artist: artist.trim(),
-						album: album.trim(),
-						tracks: trackTitles.map((t) => ({ title: t.trim() }))
-					}
-				: undefined;
-			const resp = await resolveJob(job.id, {
-				title: isCd ? album.trim() : title.trim(),
-				year: year ?? null,
-				music
-			});
+			const body = isCd ? cdIdentifyBody({ album, artist, year, trackTitles }) : videoIdentifyBody({ title, year });
+			const resp = await resolveJob(job.id, body);
 			onidentified(resp);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Identify failed';

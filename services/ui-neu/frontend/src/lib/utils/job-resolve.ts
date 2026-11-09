@@ -1,6 +1,7 @@
-// The job page's in-place fact edit: the resolve request body it sends and
-// whether the edit re-runs the episode match. Pure, so each rule is tested
-// without the page.
+// The resolve request bodies the UI sends, for the job page's in-place fact
+// edit and the identify dialog's manual entry, and whether a fact edit re-runs
+// the episode match. Pure, so each rule is tested without the page or the
+// dialog.
 import type { resolveJob } from '$lib/api/jobs';
 import type { JobView } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
@@ -23,6 +24,35 @@ export function buildResolveBody(job: JobView, field: EditableJobField | 'title'
 	};
 	if (field !== 'title' && field !== 'year') body[field] = num(raw);
 	return body;
+}
+
+/**
+ * The identify dialog's resolve body for a CD: the trimmed album as the title,
+ * and `music` holding the trimmed artist, album and one track per title.
+ */
+export function cdIdentifyBody(f: {
+	album: string;
+	artist: string;
+	year: number | null;
+	trackTitles: string[];
+}): ResolveBody {
+	return {
+		title: f.album.trim(),
+		year: f.year ?? null,
+		music: {
+			artist: f.artist.trim(),
+			album: f.album.trim(),
+			tracks: f.trackTitles.map((t) => ({ title: t.trim() }))
+		}
+	};
+}
+
+/**
+ * The identify dialog's resolve body for anything but a CD: the trimmed title
+ * and the year, with no `music` key.
+ */
+export function videoIdentifyBody(f: { title: string; year: number | null }): ResolveBody {
+	return { title: f.title.trim(), year: f.year ?? null };
 }
 
 /**
