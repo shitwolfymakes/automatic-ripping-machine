@@ -16,7 +16,15 @@
 		prescanOverrideCount,
 		startRipBlockedReason
 	} from '$lib/utils/drives';
-	import { numberInputText, parsePrescanInput, parseRipSpeed } from '$lib/utils/drive-settings';
+	import {
+		numberInputText,
+		parsePrescanInput,
+		parseRipSpeed,
+		PRESCAN_FIELDS,
+		prescanInputTexts,
+		type PrescanField,
+		type PrescanKey
+	} from '$lib/utils/drive-settings';
 	import StatusStrip from './StatusStrip.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
@@ -32,12 +40,7 @@
 		// Transcode presets, used only to tell passthrough sessions apart
 		// from encode ones on a ripper-only deployment (see pickerSessions).
 		transcodePresets?: TranscodePresetView[];
-		globalDefaults?: {
-			prescan_cache_mb?: number;
-			prescan_timeout?: number;
-			prescan_retries?: number;
-			disc_enum_timeout?: number;
-		};
+		globalDefaults?: Partial<Record<PrescanKey, number>>;
 		/** 'essentials': name + 4K only, for the setup walkthrough (setup spec §5.4). */
 		variant?: 'full' | 'essentials';
 		/** The global auto-rip default a drive with no mode of its own follows (setup spec D1). */
@@ -75,93 +78,26 @@
 	let savingPrescan = $state(false);
 
 	// Prescan override inputs - empty string means "use global default"
-	let prescanCacheInput = $state('');
-	let prescanTimeoutInput = $state('');
-	let prescanRetriesInput = $state('');
-	let discEnumTimeoutInput = $state('');
+	let prescanInputs = $state<Record<PrescanKey, string>>(prescanInputTexts(undefined));
 
 	// Sync server values to inputs when settings panel closes
 	$effect.pre(() => {
-		if (!showSettings) {
-			prescanCacheInput = numberInputText(drive?.prescan_cache_mb);
-			prescanTimeoutInput = numberInputText(drive?.prescan_timeout);
-			prescanRetriesInput = numberInputText(drive?.prescan_retries);
-			discEnumTimeoutInput = numberInputText(drive?.disc_enum_timeout);
-		}
+		if (!showSettings) prescanInputs = prescanInputTexts(drive);
 	});
 
-	const PRESCAN_FIELDS = [
-		{
-			key: 'prescan_cache_mb' as const,
-			label: 'Pre-scan Cache',
-			unit: 'MB',
-			min: 1,
-			max: 1024,
-			input: () => prescanCacheInput,
-			setInput: (v: string) => {
-				prescanCacheInput = v;
-			},
-			current: () => drive?.prescan_cache_mb,
-			globalDefault: () => globalDefaults.prescan_cache_mb,
-			tooltip: 'Community recommends 64-128 for scratched or damaged discs'
-		},
-		{
-			key: 'prescan_timeout' as const,
-			label: 'Pre-scan Timeout',
-			unit: 's',
-			min: 30,
-			max: 3600,
-			input: () => prescanTimeoutInput,
-			setInput: (v: string) => {
-				prescanTimeoutInput = v;
-			},
-			current: () => drive?.prescan_timeout,
-			globalDefault: () => globalDefaults.prescan_timeout,
-			tooltip: 'Community recommends 600 for slow or damaged DVD/BD media'
-		},
-		{
-			key: 'prescan_retries' as const,
-			label: 'Pre-scan Retries',
-			unit: '',
-			min: 1,
-			max: 10,
-			input: () => prescanRetriesInput,
-			setInput: (v: string) => {
-				prescanRetriesInput = v;
-			},
-			current: () => drive?.prescan_retries,
-			globalDefault: () => globalDefaults.prescan_retries,
-			tooltip: 'Community recommends 3-5 retries for problematic drives'
-		},
-		{
-			key: 'disc_enum_timeout' as const,
-			label: 'Enum Timeout',
-			unit: 's',
-			min: 10,
-			max: 600,
-			input: () => discEnumTimeoutInput,
-			setInput: (v: string) => {
-				discEnumTimeoutInput = v;
-			},
-			current: () => drive?.disc_enum_timeout,
-			globalDefault: () => globalDefaults.disc_enum_timeout,
-			tooltip: 'Community recommends 120 for drives that are slow to spin up'
-		}
-	] as const;
-
-	async function savePrescanField(field: (typeof PRESCAN_FIELDS)[number]) {
-		const parsed = parsePrescanInput(field.input(), field, field.globalDefault());
-		if (!parsed) return;
-		if (parsed.matchesDefault) field.setInput('');
-		if (parsed.value === (field.current() ?? null)) return;
-
+	async function savePrescanField(field: PrescanField) {
 		if (!drive) return;
+		const parsed = parsePrescanInput(prescanInputs[field.key], field, globalDefaults[field.key]);
+		if (!parsed) return;
+		if (parsed.matchesDefault) prescanInputs[field.key] = '';
+		if (parsed.value === (drive[field.key] ?? null)) return;
+
 		savingPrescan = true;
 		try {
 			await updateDrive(drive.id, { [field.key]: parsed.value });
 			onupdate?.();
 		} catch {
-			field.setInput(numberInputText(field.current()));
+			prescanInputs[field.key] = numberInputText(drive[field.key]);
 		} finally {
 			savingPrescan = false;
 		}
@@ -657,14 +593,14 @@
 									type="number"
 									min={field.min}
 									max={field.max}
-									placeholder={numberInputText(field.globalDefault())}
-									value={field.input()}
-									oninput={(e) => field.setInput((e.target as HTMLInputElement).value)}
+									placeholder={numberInputText(globalDefaults[field.key])}
+									value={prescanInputs[field.key]}
+									oninput={(e) => (prescanInputs[field.key] = (e.target as HTMLInputElement).value)}
 									onblur={() => savePrescanField(field)}
 									onkeydown={(e) => {
 										if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
 										if (e.key === 'Escape') {
-											field.setInput(numberInputText(field.current()));
+											prescanInputs[field.key] = numberInputText(drive[field.key]);
 											showSettings = false;
 										}
 									}}

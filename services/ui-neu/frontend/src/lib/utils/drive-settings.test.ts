@@ -1,5 +1,56 @@
 import { describe, it, expect } from 'vitest';
-import { numberInputText, parsePrescanInput, parseRipSpeed } from './drive-settings';
+import { numberInputText, parsePrescanInput, parseRipSpeed, PRESCAN_FIELDS, prescanInputTexts } from './drive-settings';
+
+describe('prescanInputTexts', () => {
+	it('shows four blank inputs when there is no drive', () => {
+		expect(prescanInputTexts(undefined)).toEqual({
+			prescan_cache_mb: '',
+			prescan_timeout: '',
+			prescan_retries: '',
+			disc_enum_timeout: ''
+		});
+	});
+
+	it('shows each override as text', () => {
+		expect(
+			prescanInputTexts({
+				prescan_cache_mb: 64,
+				prescan_timeout: 600,
+				prescan_retries: 3,
+				disc_enum_timeout: 120
+			})
+		).toEqual({
+			prescan_cache_mb: '64',
+			prescan_timeout: '600',
+			prescan_retries: '3',
+			disc_enum_timeout: '120'
+		});
+	});
+
+	it('shows null as blank and 0 as 0', () => {
+		expect(prescanInputTexts({ prescan_cache_mb: null, prescan_retries: 0 })).toEqual({
+			prescan_cache_mb: '',
+			prescan_timeout: '',
+			prescan_retries: '0',
+			disc_enum_timeout: ''
+		});
+	});
+});
+
+describe('PRESCAN_FIELDS', () => {
+	it('lists the four fields in display order', () => {
+		expect(PRESCAN_FIELDS.map((f) => f.key)).toEqual([
+			'prescan_cache_mb',
+			'prescan_timeout',
+			'prescan_retries',
+			'disc_enum_timeout'
+		]);
+	});
+
+	it('gives each field a min below its max', () => {
+		for (const f of PRESCAN_FIELDS) expect(f.min).toBeLessThan(f.max);
+	});
+});
 
 describe('parseRipSpeed', () => {
 	it.each([[''], ['   '], [null], [undefined]])('reads %j as null (clear the speed)', (raw) => {

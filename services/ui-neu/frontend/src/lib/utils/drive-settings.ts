@@ -56,3 +56,65 @@ export function parsePrescanInput(
 export function numberInputText(value: number | null | undefined): string {
 	return value != null ? String(value) : '';
 }
+
+/** The drive fields that hold a prescan override. */
+export type PrescanKey = 'prescan_cache_mb' | 'prescan_timeout' | 'prescan_retries' | 'disc_enum_timeout';
+
+/** One prescan override input: the drive field it edits and how it is shown. */
+export interface PrescanField {
+	key: PrescanKey;
+	label: string;
+	unit: string;
+	min: number;
+	max: number;
+	tooltip: string;
+}
+
+/**
+ * The prescan override inputs, in display order. An empty input means the
+ * drive follows the global default.
+ */
+export const PRESCAN_FIELDS: readonly PrescanField[] = [
+	{
+		key: 'prescan_cache_mb',
+		label: 'Pre-scan Cache',
+		unit: 'MB',
+		min: 1,
+		max: 1024,
+		tooltip: 'Community recommends 64-128 for scratched or damaged discs'
+	},
+	{
+		key: 'prescan_timeout',
+		label: 'Pre-scan Timeout',
+		unit: 's',
+		min: 30,
+		max: 3600,
+		tooltip: 'Community recommends 600 for slow or damaged DVD/BD media'
+	},
+	{
+		key: 'prescan_retries',
+		label: 'Pre-scan Retries',
+		unit: '',
+		min: 1,
+		max: 10,
+		tooltip: 'Community recommends 3-5 retries for problematic drives'
+	},
+	{
+		key: 'disc_enum_timeout',
+		label: 'Enum Timeout',
+		unit: 's',
+		min: 10,
+		max: 600,
+		tooltip: 'Community recommends 120 for drives that are slow to spin up'
+	}
+];
+
+/** The text each prescan input shows for a drive: blank when it has no override. */
+export function prescanInputTexts(d: { [K in PrescanKey]?: number | null } | undefined): Record<PrescanKey, string> {
+	return {
+		prescan_cache_mb: numberInputText(d?.prescan_cache_mb),
+		prescan_timeout: numberInputText(d?.prescan_timeout),
+		prescan_retries: numberInputText(d?.prescan_retries),
+		disc_enum_timeout: numberInputText(d?.disc_enum_timeout)
+	};
+}
