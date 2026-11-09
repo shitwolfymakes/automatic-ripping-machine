@@ -205,9 +205,6 @@
 				</div>
 			{/if}
 		{/snippet}
-		{#snippet empty()}
-			<p class="notifications-page-empty-fallback">No notifications.</p>
-		{/snippet}
 	</LoadState>
 </div>
 
@@ -321,13 +318,6 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		font-weight: 500;
-		color: var(--color-text-muted);
-	}
-	.notifications-page-empty-fallback {
-		padding: 2rem 0;
-		text-align: center;
-		font-size: 0.875rem;
-		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
 	/* space-y-3 (0.75rem), the original's per-card gap. */

@@ -1,9 +1,7 @@
 // Pins the notifications page's remaining branches ahead of its split into a
-// class and components. These stay uncovered because they cannot be reached:
-// - `if (ids.length === 0) return;` in dismissAll (line 62): the Dismiss All
-//   button only shows while a row is unseen, so the list is never empty there.
-// - the LoadState `empty` snippet (line 209): `isEmpty` always returns false,
-//   so the snippet never renders.
+// class and components. One line stays uncovered because it cannot be
+// reached: `if (ids.length === 0) return;` in dismissAll: the Dismiss All
+// button only shows while a row is unseen, so the list is never empty there.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import NotificationsPage from '../+page.svelte';
