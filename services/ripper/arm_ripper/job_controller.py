@@ -223,7 +223,7 @@ class JobController:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
             active.cancel()
         if delete_raw:
-            spawn_tracked(self._wipe_raw(job_id), self._wipe_tasks)
+            spawn_tracked(raw_dir.wipe_raw_dir(job_id), self._wipe_tasks)
         if self._abandon_ejects(owns):
             self._spawn_eject()
 
@@ -239,10 +239,6 @@ class JobController:
         active = self._active_task
         idle = active is None or active.done()
         return owns or (idle and self._disc_seated())
-
-    async def _wipe_raw(self, job_id: str) -> None:
-        """Delete `/raw/<job_id>/` off the event loop."""
-        await raw_dir.wipe_raw_dir(job_id)
 
     def _disc_seated(self) -> bool:
         """True when the drive currently reports a seated disc (DISC_OK) —

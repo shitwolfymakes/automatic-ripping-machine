@@ -1423,17 +1423,20 @@ async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monke
 
 async def test_abandon_wipe_tolerates_missing_and_unremovable_dirs(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
+    monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
 
     with caplog.at_level(logging.INFO, logger="arm_ripper.raw_dir"):
-        await controller._wipe_raw("never_existed")
+        controller._handle_abandon("never_existed", delete_raw=True)
+        await asyncio.gather(*controller._wipe_tasks)
     assert "already absent" in caplog.text
 
     def denied(path, *, onexc):
         onexc(os.unlink, str(path), PermissionError("read-only mount"))
 
     monkeypatch.setattr(raw_dir_module.shutil, "rmtree", denied)
-    await controller._wipe_raw("job_x")
+    controller._handle_abandon("job_x", delete_raw=True)
+    await asyncio.gather(*controller._wipe_tasks)
     assert "raw-dir cleanup failed" in caplog.text
 
 
