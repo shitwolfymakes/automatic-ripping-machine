@@ -78,6 +78,53 @@ def _render_input(key: str, value: str, context: dict[str, str]) -> str:
     return rendered
 
 
+def _resolve_one_input(
+    spec: ScriptInput,
+    channel_inputs: dict[str, str],
+    event_inputs: dict[str, str],
+    secret_keys: frozenset[str],
+) -> str:
+    """The value one declared input takes before rendering: the script
+    default, then a non-empty channel value, then a non-empty per-event value
+    unless the key is secret.
+    """
+    key = spec.key
+    value = spec.default
+    if key in channel_inputs and channel_inputs[key] != "":
+        value = channel_inputs[key]
+    if key not in secret_keys and key in event_inputs and event_inputs[key] != "":
+        value = event_inputs[key]
+    return value
+
+
+def _check_input(spec: ScriptInput, value: str) -> None:
+    """Raise HookError when a rendered input breaks its header's rules:
+    required, or one of a fixed set.
+    """
+    if spec.required and value == "":
+        raise HookError(f"input {spec.key} is required")
+    if spec.values and value != "" and value not in spec.values:
+        raise HookError(f"input {spec.key} must be one of {', '.join(spec.values)}")
+
+
+def _resolve_inputs(
+    declared: list[ScriptInput],
+    channel_inputs: dict[str, str],
+    event_inputs: dict[str, str],
+    secret_keys: frozenset[str],
+    context: dict[str, str],
+) -> dict[str, str]:
+    """Resolve, render and check every input the script header declares."""
+    # Only keys the script header declares reach the child: an undeclared stored
+    # or per-event key is ignored, so a script with no header gets no inputs.
+    resolved: dict[str, str] = {}
+    for spec in declared:
+        value = _render_input(spec.key, _resolve_one_input(spec, channel_inputs, event_inputs, secret_keys), context)
+        _check_input(spec, value)
+        resolved[spec.key] = value
+    return resolved
+
+
 def prepare_run(
     *,
     config: dict[str, Any],
@@ -111,22 +158,7 @@ def prepare_run(
     channel_inputs = _clean_inputs(config.get("inputs"))
     event_inputs = _clean_inputs((template or {}).get("inputs"))
 
-    # Only keys the script header declares reach the child: an undeclared stored
-    # or per-event key is ignored, so a script with no header gets no inputs.
-    resolved: dict[str, str] = {}
-    for spec in declared:
-        key = spec.key
-        value = spec.default
-        if key in channel_inputs and channel_inputs[key] != "":
-            value = channel_inputs[key]
-        if key not in secret_keys and key in event_inputs and event_inputs[key] != "":
-            value = event_inputs[key]
-        value = _render_input(key, value, context)
-        if spec.required and value == "":
-            raise HookError(f"input {key} is required")
-        if spec.values and value != "" and value not in spec.values:
-            raise HookError(f"input {key} must be one of {', '.join(spec.values)}")
-        resolved[key] = value
+    resolved = _resolve_inputs(declared, channel_inputs, event_inputs, secret_keys, context)
 
     env = build_env(context, title=title, body=body, inputs=resolved, media_root=media_root, raw_root=raw_root)
     timeout = int(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
