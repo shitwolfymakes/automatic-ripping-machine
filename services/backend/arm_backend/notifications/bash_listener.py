@@ -12,13 +12,12 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from arm_backend.notification_format import context_from_message
 from arm_backend.notifications.bash_hook import HookError, prepare_run, redact_secrets
 from arm_backend.notifications.bash_runner import run_script
+from arm_backend.notifications.delivery import record_outcome, select_channels
 from arm_backend.notifications.message import Message
-from arm_common import NotificationChannel, NotificationDispatchLog
 
 logger = logging.getLogger("arm_backend.notifications.bash_listener")
 
@@ -32,10 +31,7 @@ class BashListener:
     async def handle(self, db: AsyncSession, message: Message) -> None:
         if not message.apprise_enabled:
             return
-        channels = (await db.execute(select(NotificationChannel))).scalars().all()
-        targets = [
-            c for c in channels if c.enabled and c.type == "bash" and message.event_type in (c.subscribed_events or [])
-        ]
+        targets = await select_channels(db, "bash", message.event_type)
         if not targets:
             return
         ctx = context_from_message(
@@ -72,20 +68,4 @@ class BashListener:
                 err = str(exc)
             if err is not None:
                 logger.warning("bash hook failed: event_id=%s channel=%s %s", message.event_id, channel.id, err)
-            channel.last_fired_at = fire_now
-            if err is None:
-                channel.last_success_at = fire_now
-                channel.last_error = None
-            else:
-                channel.last_error = err
-            db.add(
-                NotificationDispatchLog(
-                    channel_id=channel.id,
-                    event_id=message.event_id,
-                    event_type=message.event_type,
-                    title=title,
-                    body=body,
-                    success=err is None,
-                    error=err,
-                )
-            )
+            record_outcome(db, channel, message, fired_at=fire_now, title=title, body=body, error=err)

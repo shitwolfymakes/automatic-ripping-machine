@@ -13,13 +13,12 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from arm_backend.notification_format import TemplateRenderError, context_from_message, resolve_title_body
 from arm_backend.notifications.apprise_notifier import AppriseNotifier
+from arm_backend.notifications.delivery import record_outcome, select_channels
 from arm_backend.notifications.message import Message
 from arm_backend.notifications.url_composer import redact_apprise_url
-from arm_common import NotificationChannel, NotificationDispatchLog
 
 logger = logging.getLogger("arm_backend.notifications.apprise_listener")
 
@@ -33,12 +32,7 @@ class AppriseListener:
             # Global notifications toggle is off: external delivery is gated
             # here (the inbox listener still runs — see Message.apprise_enabled).
             return
-        channels = (await db.execute(select(NotificationChannel))).scalars().all()
-        targets = [
-            c
-            for c in channels
-            if c.enabled and c.type == "apprise" and message.event_type in (c.subscribed_events or [])
-        ]
+        targets = await select_channels(db, "apprise", message.event_type)
         _ctx = context_from_message(
             event_type=message.event_type,
             job=message.job,
@@ -57,28 +51,14 @@ class AppriseListener:
                     context=_ctx,
                 )
             except TemplateRenderError as exc:
-                channel.last_fired_at = datetime.now(UTC)
-                channel.last_error = str(exc)
-                db.add(
-                    NotificationDispatchLog(
-                        channel_id=channel.id,
-                        event_id=message.event_id,
-                        event_type=message.event_type,
-                        title="",
-                        body="",
-                        success=False,
-                        error=str(exc),
-                    )
-                )
+                record_outcome(db, channel, message, fired_at=datetime.now(UTC), title="", body="", error=str(exc))
                 logger.warning("template render failed: channel=%s %s", channel.id, exc)
                 continue
             fire_now = datetime.now(UTC)
-            ok = True
             err: str | None = None
             try:
                 await self._notifier.notify([url], title, body)
             except Exception as exc:
-                ok = False
                 err = str(exc)
                 logger.exception(
                     "notification failed: event_id=%s channel=%s url=%s",
@@ -86,20 +66,4 @@ class AppriseListener:
                     channel.id,
                     redact_apprise_url(url),
                 )
-            channel.last_fired_at = fire_now
-            if ok:
-                channel.last_success_at = fire_now
-                channel.last_error = None
-            else:
-                channel.last_error = err
-            db.add(
-                NotificationDispatchLog(
-                    channel_id=channel.id,
-                    event_id=message.event_id,
-                    event_type=message.event_type,
-                    title=title,
-                    body=body,
-                    success=ok,
-                    error=err,
-                )
-            )
+            record_outcome(db, channel, message, fired_at=fire_now, title=title, body=body, error=err)
