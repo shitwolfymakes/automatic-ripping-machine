@@ -2,6 +2,7 @@
 	import type { TrackView, MetadataCandidate, TrackEditRequest, MediaType } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
+	import { isSeriesKind } from '$lib/utils/match';
 
 	interface Props {
 		jobId: string;
@@ -67,7 +68,7 @@
 		if (detail) {
 			editTitle = detail.title;
 			editYear = detail.year != null ? String(detail.year) : '';
-			editType = detail.kind === 'series' || detail.kind === 'tv' ? 'series' : 'movie';
+			editType = isSeriesKind(detail.kind) ? 'series' : 'movie';
 			editPosterUrl = detail.poster_url ?? '';
 		}
 	});
