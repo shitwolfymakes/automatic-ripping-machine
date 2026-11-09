@@ -5,8 +5,6 @@
 // tracks table and the music search render for real.
 //
 // Branches the card cannot reach, so they are not forced here:
-// - the missing-job guards in the cancel, delete, start rip and pause
-//   handlers: their buttons render only once the job is set
 // - the empty-string status fallbacks in the start-rip and post-rip checks: a
 //   job always has a status, and both checks are read only while the job is set
 // - the empty Disc row: the disc type label is never empty ("Unknown" stands
