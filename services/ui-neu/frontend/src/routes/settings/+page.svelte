@@ -17,7 +17,15 @@
 	} from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT, groupLabel, legacyTab, settingsTabFor } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
+	import {
+		SCREEN_TABS,
+		fieldFromHash,
+		fieldTab,
+		orderedConfigGroups,
+		settingsTabLabel,
+		tabFromHash
+	} from '$lib/utils/settings-tabs';
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
@@ -54,37 +62,12 @@
 
 	// --- Tab state ---
 	type Tab = string;
-	// Non-config screen-tabs (their own bespoke UI).
-	const screenTabs = [
-		'sessions',
-		'transcoding',
-		'notifications',
-		'interface',
-		'themes',
-		'drives',
-		'users',
-		'system'
-	] as const;
-	// Config-group tabs derived from the backend schema. Identification, Keys and
-	// Ripping have no bespoke screen-tab home → render as their own tabs. (Transcoding/
-	// Notifications single toggles fold into the existing transcoding/notifications
-	// tabs; System read-only rows fold into the system tab — see template.)
-	const configGroupNames = ['Keys', 'Identification', 'Ripping'] as const;
-	const configGroups = $derived(
-		(settings?.schema?.groups ?? [])
-			.filter((g) => (configGroupNames as readonly string[]).includes(g.name))
-			// Tab order is this page's, not the schema's (API Keys first).
-			.sort(
-				(a, b) =>
-					(configGroupNames as readonly string[]).indexOf(a.name) -
-					(configGroupNames as readonly string[]).indexOf(b.name)
-			)
-	);
+	const configGroups = $derived(orderedConfigGroups(settings?.schema?.groups ?? []));
 	// Full visible-tab list: config groups first, then screen-tabs. The
 	// Transcoding tab always shows (even on a ripper-only, not-capable
 	// deployment) so the locked toggle + hint below is reachable; see the
 	// 'transcoding' tab body for the capable-vs-not split.
-	const visibleTabs = $derived([...configGroups.map((g) => g.name), ...screenTabs]);
+	const visibleTabs = $derived([...configGroups.map((g) => g.name), ...SCREEN_TABS]);
 
 	// Schema groups by name, for the template tab bodies.
 	function group(name: string): SettingsGroup | undefined {
@@ -96,58 +79,19 @@
 	const transcodingGroup = $derived(group('Transcoding'));
 	const systemGroup = $derived(group('System'));
 
-	// Nicer labels for the screen-tab ids; config-group tabs use their group name.
-	const TAB_LABELS: Record<string, string> = {
-		sessions: 'Sessions',
-		transcoding: 'Transcoding',
-		notifications: 'Notifications',
-		interface: 'Interface',
-		themes: 'Themes',
-		drives: 'Drives',
-		users: 'Users',
-		system: 'System'
-	};
-	function tabLabel(id: string): string {
-		return TAB_LABELS[id] ?? groupLabel(id);
-	}
-
-	function parseHash(): Tab {
-		const hash = window.location.hash.replace('#', '');
-		// Retired names (#Metadata, #appearance) open the tab that replaced them.
-		const tabPart = legacyTab(hash.split('/')[0]);
-		// Validate the hash tab against the known-valid set: the static
-		// config-group tabs (group names, not knowable from the schema at parse
-		// time but fixed in this file) plus the bespoke screen-tabs. A stale or
-		// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
-		// 'Identification' instead of leaving the content pane blank.
-		const allowed = [...configGroupNames, ...screenTabs] as readonly string[];
-		return allowed.includes(tabPart) ? tabPart : 'Identification';
-	}
-
-	let activeTab = $state<Tab>(parseHash());
+	let activeTab = $state<Tab>(tabFromHash(window.location.hash));
 
 	// Deep link: `#<tab>/<field key>` (e.g. the header's Key dot points at
 	// #Keys/makemkv_key). The field is scrolled into view, focused and
 	// briefly highlighted once its tab has rendered. The field's own schema
 	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
 	// still lands on the tab that now holds the field.
-	function parseHashField(): string | null {
-		const part = window.location.hash.replace('#', '').split('/')[1];
-		return part ? decodeURIComponent(part) : null;
-	}
-	let pendingField = $state<string | null>(parseHashField());
-
-	/** The visible tab that renders `key`'s schema group, if any. */
-	function fieldTab(key: string): Tab | undefined {
-		const owner = settings?.schema?.groups?.find((g) => g.fields.some((f) => f.key === key));
-		const tab = owner && settingsTabFor(owner.name);
-		return tab && visibleTabs.includes(tab) ? tab : undefined;
-	}
+	let pendingField = $state<string | null>(fieldFromHash(window.location.hash));
 
 	$effect(() => {
 		const key = pendingField;
 		if (!key || !settings) return;
-		const home = fieldTab(key);
+		const home = fieldTab(settings?.schema?.groups, key, visibleTabs);
 		if (home && home !== activeTab) {
 			activeTab = home;
 			return; // re-runs once the field's tab has rendered
@@ -300,9 +244,9 @@
 				programmaticHashChange = false;
 				return;
 			}
-			const tab = parseHash();
+			const tab = tabFromHash(window.location.hash);
 			activeTab = tab;
-			pendingField = parseHashField();
+			pendingField = fieldFromHash(window.location.hash);
 			if (tab === 'interface') loadCacheStats();
 			if (tab === 'drives') loadDriveSessions();
 			// Reset scroll to top when switching tabs
@@ -412,7 +356,7 @@
 							role="tab"
 							onclick={() => setTab(tab)}
 							class="tabs-tab"
-							aria-selected={activeTab === tab}>{tabLabel(tab)}</button
+							aria-selected={activeTab === tab}>{settingsTabLabel(tab)}</button
 						>
 					{/each}
 				</div>
