@@ -4,7 +4,7 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { provenanceLine } from '$lib/utils/provenance';
-	import { jobInfoText } from '$lib/utils/job-info';
+	import { jobInfoText, jobInfoResolveBody } from '$lib/utils/job-info';
 
 	interface Props {
 		job: JobView;
@@ -49,25 +49,15 @@
 		if (!touched.discTotal) discTotal = seed.discTotal;
 	});
 
-	// A cleared number input binds as null, not ''.
-	function num(v: string | null | undefined): number | null {
-		const t = String(v ?? '').trim();
-		return t === '' ? null : Number(t);
-	}
-
 	async function saveInfo() {
 		saving = true;
 		feedback = null;
 		try {
-			// Season is sent only when touched: omitted keeps the stored value, null forgets it.
 			const before = { season: job.season ?? null, disc: job.disc_number ?? null };
-			const resp = await resolveJob(job.id, {
-				title: title.trim(),
-				year: num(year),
-				...(touched.season ? { season: num(season) } : {}),
-				disc_number: num(discNumber),
-				disc_total: num(discTotal)
-			});
+			const resp = await resolveJob(
+				job.id,
+				jobInfoResolveBody({ title, year, season, discNumber, discTotal }, touched.season === true)
+			);
 			// What the save changed, read from the saved job: a cleared value the
 			// backend re-resolves to the same one changed nothing, and the disc
 			// total never re-runs the episode match.
