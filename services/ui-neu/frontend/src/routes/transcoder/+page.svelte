@@ -3,8 +3,6 @@
 	import { get } from 'svelte/store';
 	import { fade } from 'svelte/transition';
 	import { fetchTranscoderStats } from '$lib/api/transcoder';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache } from '$lib/stores/transcoder';
 	import { GpuInventory } from '$lib/stores/gpuInventory.svelte';
@@ -17,7 +15,7 @@
 	import TranscoderOfflineBanner from '$lib/components/transcoder/TranscoderOfflineBanner.svelte';
 	import WorkerPoolPanel from '$lib/components/transcoder/WorkerPoolPanel.svelte';
 	import TranscoderStatTiles from '$lib/components/transcoder/TranscoderStatTiles.svelte';
-	import TranscodeJobCard from '$lib/components/transcoder/TranscodeJobCard.svelte';
+	import TranscodeJobList from '$lib/components/transcoder/TranscodeJobList.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -157,32 +155,14 @@
 			</div>
 
 			<!-- Jobs list -->
-			<LoadState
-				data={transcodeJobs.sorted}
+			<TranscodeJobList
+				jobs={transcodeJobs.sorted}
 				loading={transcodeJobs.loading}
 				error={transcodeJobs.error}
-				isEmpty={(d) => d.length === 0}
-			>
-				{#snippet loadingSlot()}
-					<!-- As many placeholders as the stats poll says there are tasks (it
-				     lands first), so the list does not grow when the jobs arrive. -->
-					<div class="stack stack-sm">
-						{#each Array(Math.min(s.total_tasks || 3, 6)) as _unused, i (i)}
-							<SkeletonCard lines={4} class="pb-3" />
-						{/each}
-					</div>
-				{/snippet}
-				{#snippet empty()}
-					<p class="transcoder-page-empty">No transcode tasks found.</p>
-				{/snippet}
-				{#snippet ready(jobList)}
-					<div class="stack stack-sm">
-						{#each jobList as job (job.id)}
-							<TranscodeJobCard {job} onretry={taskActions.retry} ondelete={taskActions.remove} />
-						{/each}
-					</div>
-				{/snippet}
-			</LoadState>
+				totalTasks={s.total_tasks}
+				onretry={taskActions.retry}
+				ondelete={taskActions.remove}
+			/>
 		</section>
 	</div>
 {/if}
@@ -221,10 +201,5 @@
 	}
 	.transcoder-page-dismiss:hover {
 		opacity: 0.75;
-	}
-	.transcoder-page-empty {
-		padding: 2rem 0;
-		text-align: center;
-		color: var(--color-text-faint);
 	}
 </style>
