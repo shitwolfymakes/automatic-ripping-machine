@@ -28,60 +28,52 @@
 		return job.title || job.id;
 	}
 
-	async function handleAbandon() {
-		if (!confirm(`Abandon job "${jobLabel()}"?`)) return;
-		loading = 'abandon';
+	// Runs one action: the busy flag, the feedback line and its 3-second
+	// clear. `act` sends the request and returns the success line, or null
+	// when the action handed off and shows no line (a delete with ondelete).
+	async function runAction(name: string, failed: string, act: () => Promise<string | null>): Promise<void> {
+		loading = name;
 		feedback = null;
 		try {
-			await abandonJob(job.id);
-			feedback = { type: 'success', message: 'Job abandoned' };
+			const message = await act();
+			if (message === null) return;
+			feedback = { type: 'success', message };
 			onaction?.();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to abandon' };
+			feedback = { type: 'error', message: e instanceof Error ? e.message : failed };
 		} finally {
 			loading = null;
 			clearFeedback();
 		}
 	}
 
+	async function handleAbandon() {
+		if (!confirm(`Abandon job "${jobLabel()}"?`)) return;
+		await runAction('abandon', 'Failed to abandon', async () => {
+			await abandonJob(job.id);
+			return 'Job abandoned';
+		});
+	}
+
 	async function handleRipAgain() {
-		loading = 'rip-again';
-		feedback = null;
-		try {
+		await runAction('rip-again', 'Failed to rip again', async () => {
 			const out = await ripAgain(job.id);
-			feedback = {
-				type: 'success',
-				message: out.started_job_id
-					? 'Started ripping the copy waiting in the drive'
-					: 'The next time this disc goes in, ARM rips it again'
-			};
-			onaction?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to rip again' };
-		} finally {
-			loading = null;
-			clearFeedback();
-		}
+			return out.started_job_id
+				? 'Started ripping the copy waiting in the drive'
+				: 'The next time this disc goes in, ARM rips it again';
+		});
 	}
 
 	async function handleDelete() {
 		if (!confirm(`Delete job "${jobLabel()}"? This cannot be undone.`)) return;
-		loading = 'delete';
-		feedback = null;
-		try {
+		await runAction('delete', 'Failed to delete', async () => {
 			await deleteJob(job.id);
 			if (ondelete) {
 				ondelete();
-				return;
+				return null;
 			}
-			feedback = { type: 'success', message: 'Job deleted' };
-			onaction?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to delete' };
-		} finally {
-			loading = null;
-			clearFeedback();
-		}
+			return 'Job deleted';
+		});
 	}
 </script>
 
