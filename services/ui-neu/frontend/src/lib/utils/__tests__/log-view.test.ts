@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '$lib/api/logs';
-import { countLabel, filterEntries, followLabel, matchLabel, type LogFilter } from '../log-view';
+import {
+	chipBackground,
+	chipText,
+	countLabel,
+	entryTimeLabel,
+	filterEntries,
+	followLabel,
+	levelTone,
+	matchLabel,
+	type LogFilter
+} from '../log-view';
 
 function entry(over: Partial<LogEntry> = {}): LogEntry {
 	return { level: 'info', logger: 'log', event: 'evt', service: 'arm-backend', ...over };
@@ -155,5 +165,88 @@ describe('followLabel', () => {
 
 	it('says Paused with N new lines', () => {
 		expect(followLabel(false, 2)).toBe('Paused · 2 new lines');
+	});
+});
+
+describe('chipBackground', () => {
+	it('tints backend from primary', () => {
+		expect(chipBackground('backend')).toBe('color-mix(in srgb, var(--color-primary) 26%, transparent)');
+	});
+
+	it('tints ripper from accent-1', () => {
+		expect(chipBackground('ripper')).toBe('color-mix(in srgb, var(--color-accent-1) 28%, transparent)');
+	});
+
+	it('tints transcode from accent-3', () => {
+		expect(chipBackground('transcode')).toBe('color-mix(in srgb, var(--color-accent-3) 22%, transparent)');
+	});
+
+	it('tints other from the terminal ink', () => {
+		expect(chipBackground('other')).toBe('color-mix(in srgb, var(--color-terminal-ink) 10%, transparent)');
+	});
+});
+
+describe('chipText', () => {
+	it('mixes backend primary towards the ink', () => {
+		expect(chipText('backend')).toBe('color-mix(in srgb, var(--color-primary) 45%, var(--color-terminal-ink))');
+	});
+
+	it('mixes ripper accent-1 towards the ink', () => {
+		expect(chipText('ripper')).toBe('color-mix(in srgb, var(--color-accent-1) 60%, var(--color-terminal-ink))');
+	});
+
+	it('mixes transcode accent-3 towards the ink', () => {
+		expect(chipText('transcode')).toBe('color-mix(in srgb, var(--color-accent-3) 45%, var(--color-terminal-ink))');
+	});
+
+	it('fades other from the terminal ink', () => {
+		expect(chipText('other')).toBe('color-mix(in srgb, var(--color-terminal-ink) 70%, transparent)');
+	});
+});
+
+describe('levelTone', () => {
+	it('maps warning to warning', () => {
+		expect(levelTone('warning')).toBe('warning');
+	});
+
+	it('maps error and critical to danger', () => {
+		expect(levelTone('error')).toBe('danger');
+		expect(levelTone('critical')).toBe('danger');
+	});
+
+	it('maps debug to debug', () => {
+		expect(levelTone('debug')).toBe('debug');
+	});
+
+	it('gives info no tone', () => {
+		expect(levelTone('info')).toBeNull();
+	});
+
+	it('matches case-insensitively', () => {
+		expect(levelTone('Error')).toBe('danger');
+		expect(levelTone('DEBUG')).toBe('debug');
+	});
+
+	it('gives a null level no tone', () => {
+		expect(levelTone(null as never)).toBeNull();
+	});
+});
+
+describe('entryTimeLabel', () => {
+	it('formats a valid timestamp as local time without AM or PM', () => {
+		const ts = '2026-01-02T03:04:05Z';
+		expect(entryTimeLabel(entry({ timestamp: ts }))).toBe(new Date(ts).toLocaleTimeString([], { hour12: false }));
+	});
+
+	it('is empty when the timestamp is missing', () => {
+		expect(entryTimeLabel(entry({ timestamp: undefined }))).toBe('');
+	});
+
+	it('is empty when the timestamp is null', () => {
+		expect(entryTimeLabel(entry({ timestamp: null as never }))).toBe('');
+	});
+
+	it('is empty when the timestamp does not parse', () => {
+		expect(entryTimeLabel(entry({ timestamp: 'not a date' }))).toBe('');
 	});
 });

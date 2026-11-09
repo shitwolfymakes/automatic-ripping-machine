@@ -52,3 +52,67 @@ export function followLabel(following: boolean, waiting: number): string {
 			? 'Paused'
 			: `Paused · ${waiting} new ${waiting === 1 ? 'line' : 'lines'}`;
 }
+
+/** What a log line's `data-tone` can be: a tone, or null for none. */
+export type LogTone = 'warning' | 'danger' | 'debug' | null;
+
+// The well is a fixed dark surface in both modes (see the --color-terminal-*
+// tokens), so the chips take fixed-dark recipes mixed towards the ink rather
+// than the mode-flipping tone tokens. Backend tints from primary, ripper
+// from accent-1 (amber) and transcode from accent-3 (violet).
+/** The service chip's background colour. */
+export function chipBackground(service: LogService): string {
+	switch (service) {
+		case 'backend':
+			return 'color-mix(in srgb, var(--color-primary) 26%, transparent)';
+		case 'ripper':
+			return 'color-mix(in srgb, var(--color-accent-1) 28%, transparent)';
+		case 'transcode':
+			return 'color-mix(in srgb, var(--color-accent-3) 22%, transparent)';
+		default:
+			return 'color-mix(in srgb, var(--color-terminal-ink) 10%, transparent)';
+	}
+}
+
+/** The chip's text colour, the partner of `chipBackground`. */
+export function chipText(service: LogService): string {
+	switch (service) {
+		case 'backend':
+			return 'color-mix(in srgb, var(--color-primary) 45%, var(--color-terminal-ink))';
+		case 'ripper':
+			return 'color-mix(in srgb, var(--color-accent-1) 60%, var(--color-terminal-ink))';
+		case 'transcode':
+			return 'color-mix(in srgb, var(--color-accent-3) 45%, var(--color-terminal-ink))';
+		default:
+			return 'color-mix(in srgb, var(--color-terminal-ink) 70%, transparent)';
+	}
+}
+
+/**
+ * A line's `data-tone` from its level, matched case-insensitively; null for
+ * none.
+ */
+export function levelTone(level: string): LogTone {
+	switch ((level ?? '').toLowerCase()) {
+		case 'warning':
+			return 'warning';
+		case 'error':
+		case 'critical':
+			return 'danger';
+		case 'debug':
+			return 'debug';
+		default:
+			return null;
+	}
+}
+
+/**
+ * The entry's local time with no AM or PM, or '' when it has none or it does
+ * not parse.
+ */
+export function entryTimeLabel(entry: LogEntry): string {
+	if (!entry.timestamp) return '';
+	const d = new Date(entry.timestamp);
+	if (Number.isNaN(d.getTime())) return '';
+	return d.toLocaleTimeString([], { hour12: false });
+}

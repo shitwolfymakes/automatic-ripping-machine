@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
 	import type { LogEntry } from '$lib/api/logs';
-	import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
+	import { logService, serviceLabel } from '$lib/utils/log-service';
 	import {
+		chipBackground,
+		chipText,
 		countLabel,
+		entryTimeLabel,
 		filterEntries,
 		followLabel,
+		levelTone,
 		matchLabel,
 		type LogLevelFilter,
 		type LogServiceFilter
@@ -40,8 +44,6 @@
 		collapsed = false,
 		appended = undefined
 	}: Props = $props();
-
-	type Tone = 'warning' | 'danger' | 'debug' | null;
 
 	let serviceFilter = $state<LogServiceFilter>('all');
 	let levelFilter = $state<LogLevelFilter>('all');
@@ -81,57 +83,6 @@
 		})
 	);
 
-	// The well is a fixed dark surface in both modes (see the --color-terminal-*
-	// tokens), so the chips take fixed-dark recipes mixed towards the ink rather
-	// than the mode-flipping tone tokens. Backend tints from primary, ripper
-	// from accent-1 (amber) and transcode from accent-3 (violet).
-	function chipVar(service: LogService): string {
-		switch (service) {
-			case 'backend':
-				return 'color-mix(in srgb, var(--color-primary) 26%, transparent)';
-			case 'ripper':
-				return 'color-mix(in srgb, var(--color-accent-1) 28%, transparent)';
-			case 'transcode':
-				return 'color-mix(in srgb, var(--color-accent-3) 22%, transparent)';
-			default:
-				return 'color-mix(in srgb, var(--color-terminal-ink) 10%, transparent)';
-		}
-	}
-
-	function chipTextVar(service: LogService): string {
-		switch (service) {
-			case 'backend':
-				return 'color-mix(in srgb, var(--color-primary) 45%, var(--color-terminal-ink))';
-			case 'ripper':
-				return 'color-mix(in srgb, var(--color-accent-1) 60%, var(--color-terminal-ink))';
-			case 'transcode':
-				return 'color-mix(in srgb, var(--color-accent-3) 45%, var(--color-terminal-ink))';
-			default:
-				return 'color-mix(in srgb, var(--color-terminal-ink) 70%, transparent)';
-		}
-	}
-
-	function levelTone(level: string): Tone {
-		switch ((level ?? '').toLowerCase()) {
-			case 'warning':
-				return 'warning';
-			case 'error':
-			case 'critical':
-				return 'danger';
-			case 'debug':
-				return 'debug';
-			default:
-				return null;
-		}
-	}
-
-	function timeLabel(entry: LogEntry): string {
-		if (!entry.timestamp) return '';
-		const d = new Date(entry.timestamp);
-		if (Number.isNaN(d.getTime())) return '';
-		return d.toLocaleTimeString([], { hour12: false });
-	}
-
 	function isAtBottom(): boolean {
 		if (viewEl === null) return true;
 		return viewEl.scrollHeight - viewEl.scrollTop - viewEl.clientHeight < 24;
@@ -158,7 +109,7 @@
 
 	function copyLines(): void {
 		const text = filtered
-			.map((e) => `${timeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.event ?? ''}`)
+			.map((e) => `${entryTimeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.event ?? ''}`)
 			.join('\n');
 		const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
 		if (!clipboard) return;
@@ -321,8 +272,12 @@
 					{#each filtered as entry, i (i)}
 						{@const svc = logService(entry.service)}
 						<div class="flex items-start gap-2 py-0.5" data-testid="job-log-line" data-service={svc}>
-							<span class="shrink-0 log-view-time">{timeLabel(entry)}</span>
-							<span class="shrink-0 log-view-chip" style:--chip-bg={chipVar(svc)} style:--chip-text={chipTextVar(svc)}>
+							<span class="shrink-0 log-view-time">{entryTimeLabel(entry)}</span>
+							<span
+								class="shrink-0 log-view-chip"
+								style:--chip-bg={chipBackground(svc)}
+								style:--chip-text={chipText(svc)}
+							>
 								{serviceLabel(svc)}
 							</span>
 							<span class="log-view-line" data-tone={levelTone(entry.level)}>{entry.event}</span>
