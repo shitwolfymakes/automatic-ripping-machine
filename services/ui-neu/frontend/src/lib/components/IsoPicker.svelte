@@ -16,6 +16,7 @@
 	import Glyph from './Glyph.svelte';
 	import { pathTailTruncate } from '$lib/utils/truncate';
 	import { formatBytes } from '$lib/utils/format';
+	import { pathTrail } from '$lib/utils/path';
 	import { isListboxNavKey, nextRowIndex } from '$lib/utils/listbox-nav';
 
 	interface Props {
@@ -75,16 +76,7 @@
 	// in-flight response) so it updates the instant a folder is opened, before
 	// the fetch resolves — the loading skeleton then renders under the
 	// destination folder's own breadcrumb, not the one being left.
-	const breadcrumbItems = $derived.by(() => {
-		const segments = subpath ? subpath.split('/') : [];
-		const items: { label: string; path: string }[] = [{ label: 'Library', path: '' }];
-		let acc = '';
-		for (const seg of segments) {
-			acc = acc ? `${acc}/${seg}` : seg;
-			items.push({ label: seg, path: acc });
-		}
-		return items;
-	});
+	const breadcrumbItems = $derived([{ label: 'Library', path: '' }, ...pathTrail(subpath)]);
 	const currentLabel = $derived(breadcrumbItems[breadcrumbItems.length - 1].label);
 
 	// Built from the server's own `listing.subpath`, not the optimistic

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { FileRoot } from '$lib/api/files';
+	import { pathTrail } from '$lib/utils/path';
 	interface Props {
 		root: string;
 		subpath: string;
@@ -14,18 +15,10 @@
 		const rootLabel = rootObj?.label ?? root;
 
 		// First crumb: the root itself (subpath='')
-		const result: { label: string; root: string; subpath: string }[] = [{ label: rootLabel, root, subpath: '' }];
-
-		if (subpath) {
-			const parts = subpath.split('/').filter(Boolean);
-			let accumulated = '';
-			for (const part of parts) {
-				accumulated = accumulated ? `${accumulated}/${part}` : part;
-				result.push({ label: part, root, subpath: accumulated });
-			}
-		}
-
-		return result;
+		return [
+			{ label: rootLabel, root, subpath: '' },
+			...pathTrail(subpath).map((s) => ({ label: s.label, root, subpath: s.path }))
+		];
 	});
 </script>
 

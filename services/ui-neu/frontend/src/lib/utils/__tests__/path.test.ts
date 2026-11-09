@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pathBasename } from '../path';
+import { pathBasename, pathTrail } from '../path';
 
 describe('pathBasename', () => {
 	it('returns an empty string for null, undefined and an empty path', () => {
@@ -39,5 +39,49 @@ describe('pathBasename', () => {
 		['a//b', 'b']
 	])('returns the same basename for %j as before the rewrite', (input, expected) => {
 		expect(pathBasename(input)).toBe(expected);
+	});
+});
+
+describe('pathTrail', () => {
+	it('returns an empty trail for an empty path', () => {
+		expect(pathTrail('')).toEqual([]);
+	});
+
+	it('returns one entry for a single segment', () => {
+		expect(pathTrail('a')).toEqual([{ label: 'a', path: 'a' }]);
+	});
+
+	it('pairs each of three segments with the path accumulated up to it', () => {
+		expect(pathTrail('a/b/c')).toEqual([
+			{ label: 'a', path: 'a' },
+			{ label: 'b', path: 'a/b' },
+			{ label: 'c', path: 'a/b/c' }
+		]);
+	});
+
+	it.each([
+		[
+			'/a/b',
+			[
+				{ label: 'a', path: 'a' },
+				{ label: 'b', path: 'a/b' }
+			]
+		],
+		[
+			'a/b/',
+			[
+				{ label: 'a', path: 'a' },
+				{ label: 'b', path: 'a/b' }
+			]
+		],
+		[
+			'a//b',
+			[
+				{ label: 'a', path: 'a' },
+				{ label: 'b', path: 'a/b' }
+			]
+		]
+	])('drops the empty segments of %j', (input, expected) => {
+		expect(pathTrail(input)).toEqual(expected);
 	});
 });
