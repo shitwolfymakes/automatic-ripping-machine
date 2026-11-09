@@ -6,6 +6,7 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { addToast } from '$lib/stores/toast.svelte';
+	import { isoPhaseLabel } from '$lib/utils/iso-phase';
 
 	/**
 	 * An ISO rip before its job exists: the ripper is scanning the image, or
@@ -19,17 +20,8 @@
 
 	let { prepare }: Props = $props();
 
-	const PHASE_LABELS: Record<string, string> = {
-		scanning: 'Scanning image',
-		extracting: 'Unpacking image'
-	};
-	const FOLDER_PHASE_LABELS: Record<string, string> = { scanning: 'Scanning disc folder' };
-
 	let cancelling = $state(false);
-	let isFolder = $derived(prepare.iso_kind === 'folder');
-	let phaseLabel = $derived(
-		(isFolder ? FOLDER_PHASE_LABELS[prepare.phase] : undefined) ?? PHASE_LABELS[prepare.phase] ?? prepare.phase
-	);
+	let phaseLabel = $derived(isoPhaseLabel(prepare.phase, prepare.iso_kind));
 	const accentVar = 'var(--color-status-scanning)';
 
 	async function handleCancel() {
