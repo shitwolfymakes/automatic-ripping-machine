@@ -1,4 +1,6 @@
-"""Finding and reading the per-job and legacy service log files under `LOG_DIR`, capped by line and byte limits."""
+"""Finding and reading the log files under `LOG_DIR` (per-job, legacy
+service, or any one file), capped by line and byte limits.
+"""
 
 from __future__ import annotations
 
@@ -84,9 +86,20 @@ def job_log_lines(job_id: str, cap: int) -> Iterator[bytes]:
         return
     per_job = per_job_log_path(job_id)
     if per_job.is_file():
-        yield from _iter_lines(per_job, lambda _: True, cap)
+        yield from file_log_lines(per_job, cap)
     else:
         yield from _iter_legacy(job_id, cap)
+
+
+def file_log_lines(path: Path, cap: int) -> Iterator[bytes]:
+    """Every line of the log file at `path`, newline-terminated, up to `cap`
+    lines; nothing for a zero cap or a file that cannot be opened.
+    """
+    # `_iter_lines` checks the cap only after yielding, so a zero cap
+    # would still emit one line.
+    if cap == 0:
+        return
+    yield from _iter_lines(path, lambda _: True, cap)
 
 
 def job_log_files() -> list[JobLogFileView]:
@@ -119,7 +132,7 @@ def job_log_files() -> list[JobLogFileView]:
 def job_log_slices(job_id: str) -> Iterator[tuple[str, list[str]]]:
     per_job = per_job_log_path(job_id)
     if per_job.is_file():
-        lines = _read_capped_lines(per_job, lambda _: True)
+        lines = file_log_slice(per_job)
         if lines:
             yield per_job.name, lines
         return
@@ -127,6 +140,14 @@ def job_log_slices(job_id: str) -> Iterator[tuple[str, list[str]]]:
         lines = _read_capped_lines(path, lambda line: _line_matches_job(line, job_id))
         if lines:
             yield path.name, lines
+
+
+def file_log_slice(path: Path) -> list[str]:
+    """The lines of the log file at `path` for a zip entry, newline-terminated
+    and capped by the zip line and byte limits; empty when it cannot be
+    opened.
+    """
+    return _read_capped_lines(path, lambda _: True)
 
 
 def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str]:
