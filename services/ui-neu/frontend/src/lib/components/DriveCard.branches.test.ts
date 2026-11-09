@@ -8,8 +8,6 @@
 //   saveDefaultSession, confirmUnenroll, saveEdit, toggleUhd, setMode and
 //   saveEssentialUhd, and the `!drive` half of the guard in saveEssentialName:
 //   every control that calls them renders only once `drive` is set
-// - the `!drive` arms of startRipBlocked and statusText: they are read only by
-//   markup inside the drive-set branch (the skeleton never reads them)
 // - `field.input() ?? ''` in savePrescanField: each input getter returns a
 //   string, never null or undefined
 // - the isNaN half of the range check in savePrescanField and saveSpeed: a

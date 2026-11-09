@@ -4,10 +4,14 @@ import {
 	DETACHED_LABEL,
 	NO_SERIAL_LABEL,
 	driveStatusLabel,
+	isDriveDetached,
+	isRipperOfflinePresent,
 	isRipping,
 	opticalOnly,
 	partitionDrives,
-	serialLabel
+	prescanOverrideCount,
+	serialLabel,
+	startRipBlockedReason
 } from '$lib/utils/drives';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
@@ -82,5 +86,88 @@ describe('utils/drives', () => {
 	it('isRipping reads the current job', () => {
 		expect(isRipping(drive({ current_job: { id: 'job_1', title: null, status: 'ripping' } }))).toBe(true);
 		expect(isRipping(drive())).toBe(false);
+	});
+});
+
+describe('isDriveDetached', () => {
+	it('is true when the media status is detached', () => {
+		expect(isDriveDetached(drive({ media_status: 'detached' }))).toBe(true);
+	});
+	it('is true when the drive is offline and not present', () => {
+		expect(isDriveDetached(drive({ status: 'offline', present: false }))).toBe(true);
+	});
+	it('is false for an online drive', () => {
+		expect(isDriveDetached(drive())).toBe(false);
+	});
+	it('is false for an error drive, even with detached media', () => {
+		expect(isDriveDetached(drive({ status: 'error', media_status: 'detached' }))).toBe(false);
+	});
+});
+
+describe('isRipperOfflinePresent', () => {
+	it('is true when the drive is offline and present', () => {
+		expect(isRipperOfflinePresent(drive({ status: 'offline', present: true }))).toBe(true);
+	});
+	it('is false when the drive is offline and not present', () => {
+		expect(isRipperOfflinePresent(drive({ status: 'offline', present: false }))).toBe(false);
+	});
+	it('is false when the drive is offline, present and its media is detached', () => {
+		expect(isRipperOfflinePresent(drive({ status: 'offline', present: true, media_status: 'detached' }))).toBe(false);
+	});
+	it('is false for an online drive', () => {
+		expect(isRipperOfflinePresent(drive())).toBe(false);
+	});
+	it('is false for an error drive', () => {
+		expect(isRipperOfflinePresent(drive({ status: 'error' }))).toBe(false);
+	});
+});
+
+describe('startRipBlockedReason', () => {
+	const job = { id: 'job_1', title: null, status: 'ripping' } as const;
+
+	it('puts a live job ahead of every other reason', () => {
+		const d = drive({ current_job: job, status: 'offline', present: false, media_status: 'no_disc' });
+		expect(startRipBlockedReason(d)).toBe('The drive already has a job in progress');
+	});
+	it('puts a detached drive ahead of an offline ripper and the media status', () => {
+		expect(startRipBlockedReason(drive({ status: 'offline', present: false, media_status: 'no_disc' }))).toBe(
+			'The drive is not connected'
+		);
+	});
+	it('puts an offline ripper ahead of the media status', () => {
+		expect(startRipBlockedReason(drive({ status: 'offline', present: true, media_status: 'no_disc' }))).toBe(
+			"The drive's ripper is offline"
+		);
+	});
+	it.each([
+		['no_disc', 'No disc in the drive'],
+		['tray_open', 'The tray is open'],
+		['not_ready', 'The drive is not ready yet'],
+		['unavailable', 'The drive cannot be opened: check its permissions']
+	] as const)('blocks on media status %s', (media_status, reason) => {
+		expect(startRipBlockedReason(drive({ media_status }))).toBe(reason);
+	});
+	it.each(['loaded', 'unknown', null] as const)('lets media status %s through', (media_status) => {
+		expect(startRipBlockedReason(drive({ media_status }))).toBeNull();
+	});
+	it('reports a detached media status as not connected, not as a media reason', () => {
+		expect(startRipBlockedReason(drive({ media_status: 'detached' }))).toBe('The drive is not connected');
+	});
+});
+
+describe('prescanOverrideCount', () => {
+	it('is 0 when no field is set', () => {
+		expect(prescanOverrideCount(drive())).toBe(0);
+	});
+	it.each(['prescan_cache_mb', 'prescan_timeout', 'prescan_retries', 'disc_enum_timeout'] as const)(
+		'counts %s alone',
+		(field) => {
+			expect(prescanOverrideCount(drive({ [field]: 0 }))).toBe(1);
+		}
+	);
+	it('is 4 when all fields are set', () => {
+		expect(
+			prescanOverrideCount(drive({ prescan_cache_mb: 1, prescan_timeout: 2, prescan_retries: 3, disc_enum_timeout: 4 }))
+		).toBe(4);
 	});
 });
