@@ -148,11 +148,10 @@
 
 	async function pickerGoUp() {
 		if (!pickerCanGoUp) return;
+		// Go up within the same root. At the top of a root there is nowhere to
+		// go, since the picker does not switch roots.
 		if (pickerListing?.parent_subpath != null) {
-			// go up within the same root
 			await loadPickerLocation(picker.root, pickerListing.parent_subpath);
-		} else if (picker.subpath === '') {
-			// already at root of this root key — nothing to do (root switching not in picker)
 		}
 	}
 
