@@ -7,13 +7,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
-	import type {
-		DriveView as Drive,
-		DriveDiagnosticResponse,
-		SessionView,
-		SettingsGroup,
-		TranscodePresetView
-	} from '$lib/types/api.gen';
+	import type { DriveView as Drive, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
@@ -29,7 +23,8 @@
 	import { colorScheme, schemeLocksMode, allSchemes, loadThemesFromApi } from '$lib/stores/colorScheme';
 	import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
 	import { createPollingStore } from '$lib/stores/polling';
-	import { fetchDrives, fetchDriveDiagnostic, rescanDrives } from '$lib/api/drives';
+	import { fetchDrives, rescanDrives } from '$lib/api/drives';
+	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
 	import { partitionDrives } from '$lib/utils/drives';
 	import { formatDateTime } from '$lib/utils/format';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -128,27 +123,7 @@
 	}
 
 	// --- Drive diagnostics ---
-	let diagRunning = $state(false);
-	let diagResult = $state<DriveDiagnosticResponse | null>(null);
-	let diagError = $state<string | null>(null);
-	let diagOpen = $state(false);
-	let diagLastRun = $state<string | null>(null);
-
-	async function runDiagnostic() {
-		if (diagRunning) return;
-		diagRunning = true;
-		diagError = null;
-		try {
-			diagResult = await fetchDriveDiagnostic();
-			diagLastRun = new Date().toLocaleTimeString();
-			diagOpen = true;
-		} catch (e) {
-			diagError = e instanceof Error ? e.message : 'Diagnostic failed';
-			diagResult = null;
-		} finally {
-			diagRunning = false;
-		}
-	}
+	const driveDiagnostics = new DriveDiagnostics();
 
 	// --- Theme management ---
 	let themeFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -575,10 +550,8 @@
 						<hr class="settings-page-diag-divider" />
 						<div data-diag>
 							<button
-								onclick={() => {
-									diagOpen = !diagOpen;
-								}}
-								aria-expanded={diagOpen}
+								onclick={driveDiagnostics.toggle}
+								aria-expanded={driveDiagnostics.open}
 								class="btn settings-page-diag-toggle"
 							>
 								<Glyph name="shield-check" />
@@ -586,30 +559,30 @@
 								<Glyph name="chevron-down" class="chevron ml-auto" />
 							</button>
 
-							{#if diagOpen}
+							{#if driveDiagnostics.open}
 								<div class="panel-section settings-page-diag-panel" transition:slide={{ duration: 200 }}>
 									<div class="mb-2.5 flex items-center justify-between">
 										<button
-											onclick={runDiagnostic}
-											disabled={diagRunning}
-											data-busy={diagRunning}
+											onclick={driveDiagnostics.run}
+											disabled={driveDiagnostics.running}
+											data-busy={driveDiagnostics.running}
 											class="btn settings-page-diag-run"
 										>
 											<Glyph name="refresh" class="settings-page-diag-run-icon" />
-											{diagRunning ? 'Running...' : 'Run Check'}
+											{driveDiagnostics.running ? 'Running...' : 'Run Check'}
 										</button>
-										{#if diagLastRun}
-											<span class="settings-page-diag-last-run">Last run: {diagLastRun}</span>
+										{#if driveDiagnostics.lastRun}
+											<span class="settings-page-diag-last-run">Last run: {driveDiagnostics.lastRun}</span>
 										{/if}
-										{#if diagError}
-											<span class="settings-page-diag-error">{diagError}</span>
+										{#if driveDiagnostics.error}
+											<span class="settings-page-diag-error">{driveDiagnostics.error}</span>
 										{/if}
 									</div>
 
-									{#if diagResult}
-										{@const system = diagResult.system ?? []}
+									{#if driveDiagnostics.result}
+										{@const system = driveDiagnostics.result.system ?? []}
 										<!-- The backend decides which drives are unhealthy; a healthy drive's notes are informational. -->
-										{@const unhealthy = diagResult.drives.filter((d) => !d.healthy)}
+										{@const unhealthy = driveDiagnostics.result.drives.filter((d) => !d.healthy)}
 										{#if system.length > 0}
 											<div class="alert alert-warning mb-2 settings-page-diag-system" data-testid="diag-system">
 												{#each system as note, i (i)}
@@ -625,7 +598,9 @@
 												: 'alert-success'} mb-2 flex flex-wrap items-center gap-3"
 										>
 											<span class="settings-page-diag-count">
-												{diagResult.drives.length} drive{diagResult.drives.length !== 1 ? 's' : ''}
+												{driveDiagnostics.result.drives.length} drive{driveDiagnostics.result.drives.length !== 1
+													? 's'
+													: ''}
 											</span>
 											<span class="alert-title">
 												{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}
@@ -633,7 +608,7 @@
 										</div>
 
 										<!-- Every drive, healthy or not -->
-										{#each diagResult.drives as diag (diag.id)}
+										{#each driveDiagnostics.result.drives as diag (diag.id)}
 											{@const flagged = unhealthy.includes(diag)}
 											<div data-testid="diag-drive-{diag.id}" class="settings-page-diag-drive" data-flagged={flagged}>
 												<div class="flex flex-wrap items-center gap-x-2 gap-y-1 settings-page-diag-drive-row">
@@ -668,7 +643,7 @@
 												{/if}
 											</div>
 										{/each}
-									{:else if !diagRunning}
+									{:else if !driveDiagnostics.running}
 										<p class="settings-page-diag-empty">Click "Run Check" to scan drives and udev configuration.</p>
 									{/if}
 								</div>
