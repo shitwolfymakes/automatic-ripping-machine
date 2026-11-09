@@ -9,6 +9,7 @@
 		entryTimeLabel,
 		filterEntries,
 		followLabel,
+		formatCopyText,
 		levelTone,
 		matchLabel,
 		type LogLevelFilter,
@@ -108,9 +109,7 @@
 	}
 
 	function copyLines(): void {
-		const text = filtered
-			.map((e) => `${entryTimeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.event ?? ''}`)
-			.join('\n');
+		const text = formatCopyText(filtered);
 		const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
 		if (!clipboard) return;
 		clipboard

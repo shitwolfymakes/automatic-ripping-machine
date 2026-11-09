@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '$lib/api/logs';
+import { logService, serviceLabel } from '$lib/utils/log-service';
 import {
 	chipBackground,
 	chipText,
@@ -7,6 +8,7 @@ import {
 	entryTimeLabel,
 	filterEntries,
 	followLabel,
+	formatCopyText,
 	levelTone,
 	matchLabel,
 	type LogFilter
@@ -254,5 +256,33 @@ describe('entryTimeLabel', () => {
 
 	it('is empty when the timestamp does not parse', () => {
 		expect(entryTimeLabel(entry({ timestamp: 'not a date' }))).toBe('');
+	});
+});
+
+describe('formatCopyText', () => {
+	it('writes one time, service and event line per entry, joined by newlines', () => {
+		const ts = '2026-01-02T03:04:05Z';
+		const time = new Date(ts).toLocaleTimeString([], { hour12: false });
+		const text = formatCopyText([
+			entry({ event: 'b', service: 'arm-backend', timestamp: ts }),
+			entry({ event: 'r', service: 'arm-ripper-SER1', timestamp: ts }),
+			entry({ event: 't', service: 'arm-transcode-task_1', timestamp: ts }),
+			entry({ event: 'o', service: 'mystery', timestamp: ts })
+		]);
+		const lines = text.split('\n');
+		expect(lines).toHaveLength(4);
+		expect(lines[0]).toBe(`${time} [${serviceLabel(logService('arm-backend'))}] b`);
+		expect(lines[1]).toBe(`${time} [${serviceLabel(logService('arm-ripper-SER1'))}] r`);
+		expect(lines[2]).toBe(`${time} [${serviceLabel(logService('arm-transcode-task_1'))}] t`);
+		expect(lines[3]).toBe(`${time} [${serviceLabel(logService('mystery'))}] o`);
+	});
+
+	it('leaves the event and the time blank when an entry has neither', () => {
+		const text = formatCopyText([entry({ event: null as never, timestamp: null as never })]);
+		expect(text).toBe(` [${serviceLabel(logService('arm-backend'))}] `);
+	});
+
+	it('is empty for an empty list', () => {
+		expect(formatCopyText([])).toBe('');
 	});
 });

@@ -1,6 +1,6 @@
 // Pure helpers for the LogView log terminal.
 import type { LogEntry } from '$lib/api/logs';
-import { logService, type LogService } from '$lib/utils/log-service';
+import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
 
 /** A level filter: one level, or every line. */
 export type LogLevelFilter = 'all' | 'error' | 'warning' | 'info' | 'debug';
@@ -115,4 +115,14 @@ export function entryTimeLabel(entry: LogEntry): string {
 	const d = new Date(entry.timestamp);
 	if (Number.isNaN(d.getTime())) return '';
 	return d.toLocaleTimeString([], { hour12: false });
+}
+
+/**
+ * The plain text Copy writes: one "<time> [<service>] <event>" line per
+ * entry.
+ */
+export function formatCopyText(entries: LogEntry[]): string {
+	return entries
+		.map((e) => `${entryTimeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.event ?? ''}`)
+		.join('\n');
 }
