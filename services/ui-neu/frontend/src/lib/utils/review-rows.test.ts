@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trackToRow, scanTitleToRow } from './review-rows';
+import { trackToRow, scanTitleToRow, nonEpisode } from './review-rows';
 
 describe('review-rows mappers', () => {
 	it('trackToRow carries the id + editable fields', () => {
@@ -73,5 +73,24 @@ describe('review-rows mappers', () => {
 	it('scanTitleToRow tolerates a missing source_file', () => {
 		const r = scanTitleToRow({ index: 0, duration_seconds: 10 } as any);
 		expect(r.sourceLabel).toBeNull();
+	});
+});
+
+describe('nonEpisode', () => {
+	it.each([
+		['extra', 'Extra'],
+		['trailer', 'Trailer'],
+		['other', 'Other']
+	])('labels a %s without an episode number', (role, label) => {
+		expect(nonEpisode({ role, episodeNumber: null })).toBe(label);
+	});
+	it.each(['extra', 'trailer', 'other'])('gives null for %s with an episode number', (role) => {
+		expect(nonEpisode({ role, episodeNumber: 3 })).toBeNull();
+	});
+	it('gives null for a null role', () => {
+		expect(nonEpisode({ role: null, episodeNumber: null })).toBeNull();
+	});
+	it.each(['main', 'episode'])('gives null for %s without an episode number', (role) => {
+		expect(nonEpisode({ role, episodeNumber: null })).toBeNull();
 	});
 });

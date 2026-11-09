@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
-	import { trackToRow, scanTitleToRow } from '$lib/utils/review-rows';
+	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/utils/review-rows';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {
@@ -55,11 +55,6 @@
 		onrefresh?.();
 	}
 
-	// A title a source or the operator placed as something other than an episode.
-	const NON_EPISODE: Record<string, string> = { extra: 'Extra', trailer: 'Trailer', other: 'Other' };
-	function nonEpisode(row: { role: string | null; episodeNumber: number | null }): string | null {
-		return row.episodeNumber == null && row.role ? (NON_EPISODE[row.role] ?? null) : null;
-	}
 	function formatLength(secs: number | null | undefined): string {
 		if (!secs) return '--';
 		const h = Math.floor(secs / 3600);

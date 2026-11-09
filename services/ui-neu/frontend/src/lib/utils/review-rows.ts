@@ -48,3 +48,11 @@ export function scanTitleToRow(s: ScanTitle): ReviewRow {
 		excluded: false
 	};
 }
+
+// A title a source or the operator placed as something other than an episode.
+const NON_EPISODE: Record<string, string> = { extra: 'Extra', trailer: 'Trailer', other: 'Other' };
+
+/** The role's label for a row placed without an episode number, else null. */
+export function nonEpisode(row: { role: string | null; episodeNumber: number | null }): string | null {
+	return row.episodeNumber == null && row.role ? (NON_EPISODE[row.role] ?? null) : null;
+}
