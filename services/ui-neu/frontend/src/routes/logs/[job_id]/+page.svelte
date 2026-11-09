@@ -21,10 +21,6 @@
 
 	const truncated = $derived(entries.length >= DEFAULT_LIMIT);
 
-	async function load() {
-		await log.load();
-	}
-
 	let liveJobId: string | null = null;
 	$effect(() => {
 		// Rebuild the store whenever the route param changes (SvelteKit reuses
@@ -57,7 +53,7 @@
 	<div class="cluster panel-section log-detail-page-actions">
 		<span class="eyebrow">Actions</span>
 		<div class="cluster">
-			<button onclick={load} class="btn log-detail-page-action-btn"> Refresh </button>
+			<button onclick={() => log.load()} class="btn log-detail-page-action-btn"> Refresh </button>
 			<a href={jobLogDownloadUrl(jobId)} class="btn log-detail-page-action-btn" aria-disabled={entries.length === 0}>
 				Download .zip
 			</a>
