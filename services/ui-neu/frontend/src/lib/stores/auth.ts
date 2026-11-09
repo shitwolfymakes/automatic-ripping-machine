@@ -6,7 +6,7 @@ import type { LoginResult } from '$lib/api/auth';
 // layout's guest guard (`isGuest && /settings -> goto('/')`) runs on first
 // render, before onMount, so a store that starts "unauthenticated" bounces a
 // logged-in operator to the dashboard on every hard refresh of /settings.
-function persistedRole(): string | null {
+export function persistedRole(): string | null {
 	try {
 		return localStorage.getItem('arm_role');
 	} catch {

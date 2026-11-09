@@ -200,6 +200,22 @@ describe('+layout.ts load guard', () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
+	// persistedRole guards its own read; the session check's try is for
+	// getToken, which has no guard of its own. Storage that turns unreadable
+	// after an anonymous visit was let in (and cached) reaches it.
+	it('a token read that throws during the setup check counts as a non-admin', async () => {
+		getTokenMock.mockReturnValue(null);
+		const fetchImpl = statusFetch({ first_run: true });
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		getTokenMock.mockImplementation(() => {
+			throw new Error('storage blocked');
+		});
+		vi.mocked(fetchImpl).mockClear();
+		expect(await load(loadArgs('/jobs', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it('a non-ok setup status neither redirects nor caches, so the next navigation checks again', async () => {
 		asAdmin();
 		const fetchImpl = statusFetch({ first_run: true }, false);

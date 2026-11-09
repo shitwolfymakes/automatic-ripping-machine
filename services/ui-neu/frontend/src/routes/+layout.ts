@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 import { hydrateConfig } from '$lib/stores/config';
 import { getToken } from '$lib/api/client';
+import { persistedRole } from '$lib/stores/auth';
 import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 
 export const prerender = false;
@@ -35,7 +36,7 @@ async function anonymousVisitAllowed(fetchFn: typeof fetch): Promise<boolean> {
 
 function isAdminSession(): boolean {
 	try {
-		return getToken() !== null && localStorage.getItem('arm_role') === 'admin';
+		return getToken() !== null && persistedRole() === 'admin';
 	} catch {
 		return false;
 	}
