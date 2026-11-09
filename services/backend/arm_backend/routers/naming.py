@@ -19,8 +19,8 @@ from arm_backend.path_template import (
     expand_template,
     synthetic_context,
     tokens_for_media,
-    validate_template_or_http,
 )
+from arm_backend.routers._template_validation import validate_template_or_http
 from arm_backend.transcode_apply import ResolvedTask, compute_outputs
 from arm_common import Job, Session, Track, User
 from arm_common.enums import MediaType

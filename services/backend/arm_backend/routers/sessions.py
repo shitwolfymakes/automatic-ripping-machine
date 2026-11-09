@@ -16,8 +16,8 @@ from arm_backend.path_template import (
     TemplateValidationError,
     expand_without_optional,
     validate_template,
-    validate_template_or_http,
 )
+from arm_backend.routers._template_validation import validate_template_or_http
 from arm_common import Drive, RipPreset, Session, SessionApplication, TranscodePreset, User
 from arm_common.schemas import (
     SessionCloneRequest,

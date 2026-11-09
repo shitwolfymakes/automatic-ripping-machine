@@ -93,7 +93,7 @@ def test_validate_music_template() -> None:
 
 
 def test_validate_template_or_http_passes_through_expansion() -> None:
-    from arm_backend.path_template import validate_template_or_http
+    from arm_backend.routers._template_validation import validate_template_or_http
     from arm_common.enums import MediaType
 
     out = validate_template_or_http("{title} ({year})/{title}.mkv", MediaType.MOVIE, True)
@@ -104,7 +104,7 @@ def test_validate_template_or_http_raises_http_422_on_bad_token() -> None:
     import pytest
     from fastapi import HTTPException
 
-    from arm_backend.path_template import validate_template_or_http
+    from arm_backend.routers._template_validation import validate_template_or_http
     from arm_common.enums import MediaType
 
     with pytest.raises(HTTPException) as exc:
