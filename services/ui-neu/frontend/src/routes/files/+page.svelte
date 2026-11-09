@@ -4,6 +4,7 @@
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
 	import { MovePicker } from '$lib/stores/movePicker.svelte';
+	import { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
 	import { formatBytes } from '$lib/utils/format';
 	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 	import {
@@ -13,13 +14,7 @@
 		cleanupFeedback,
 		fixedPermissionsMessage
 	} from '$lib/utils/files';
-	import {
-		fetchOrphanFolders,
-		deleteFolder as deleteOrphanFolder,
-		bulkDeleteFolders,
-		cleanupTranscoder
-	} from '$lib/api/maintenance';
-	import type { OrphanFoldersResponse } from '$lib/api/maintenance';
+	import { cleanupTranscoder } from '$lib/api/maintenance';
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FileRow from '$lib/components/FileRow.svelte';
@@ -45,12 +40,7 @@
 	let newFolderName = $state('');
 
 	// Orphan folders modal
-	let orphanFoldersOpen = $state(false);
-	let orphanFoldersData = $state<OrphanFoldersResponse | null>(null);
-	let orphanFoldersLoading = $state(false);
-	let orphanFoldersSelected = $state<Set<string>>(new Set());
-	let orphanFoldersBusy = $state(false);
-	let orphanFoldersFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const orphans = new OrphanFolders();
 
 	// Transcoder cleanup
 	let transcoderCleanupOpen = $state(false);
@@ -172,57 +162,6 @@
 	function handleNewFolderKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') confirmNewFolder();
 		if (e.key === 'Escape') cancelNewFolder();
-	}
-
-	// --- Orphan folders ---
-	async function reloadOrphanFolders() {
-		orphanFoldersData = await fetchOrphanFolders();
-		orphanFoldersSelected = new Set();
-	}
-
-	async function openOrphanFoldersModal() {
-		orphanFoldersOpen = true;
-		orphanFoldersLoading = true;
-		orphanFoldersFeedback = null;
-		try {
-			await reloadOrphanFolders();
-		} catch {
-			orphanFoldersData = null;
-		}
-		orphanFoldersLoading = false;
-	}
-
-	function toggleOrphanFolderSelect(path: string) {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		const next = new Set(orphanFoldersSelected);
-		if (next.has(path)) next.delete(path);
-		else next.add(path);
-		orphanFoldersSelected = next;
-	}
-
-	async function handleDeleteOrphanFolder(path: string) {
-		const name = path.split('/').pop();
-		orphanFoldersBusy = true;
-		try {
-			await deleteOrphanFolder(path);
-			orphanFoldersFeedback = { type: 'success', message: `Folder "${name}" deleted` };
-			await reloadOrphanFolders();
-		} catch (e) {
-			orphanFoldersFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
-		}
-		orphanFoldersBusy = false;
-	}
-
-	async function handleBulkDeleteOrphanFolders() {
-		orphanFoldersBusy = true;
-		try {
-			const result = await bulkDeleteFolders([...orphanFoldersSelected]);
-			orphanFoldersFeedback = cleanupFeedback(result.removed.length, 'folder', result.errors.length);
-			await reloadOrphanFolders();
-		} catch (e) {
-			orphanFoldersFeedback = { type: 'error', message: e instanceof Error ? e.message : 'Bulk delete failed' };
-		}
-		orphanFoldersBusy = false;
 	}
 
 	// --- Transcoder cleanup ---
@@ -381,7 +320,7 @@
 					<!-- Orphan folders -->
 					<button
 						type="button"
-						onclick={openOrphanFoldersModal}
+						onclick={orphans.open}
 						class="btn btn-icon files-page-toolbar-btn"
 						title="Orphan folders"
 					>
@@ -627,13 +566,13 @@
 {/if}
 
 <!-- Orphan folders modal -->
-{#if features.maintenance && orphanFoldersOpen}
+{#if features.maintenance && orphans.isOpen}
 	<div class="modal">
 		<button
 			type="button"
 			class="modal-backdrop files-page-modal-backdrop"
 			aria-label="Close dialog"
-			onclick={() => (orphanFoldersOpen = false)}
+			onclick={() => (orphans.isOpen = false)}
 		></button>
 		<div class="modal-panel files-page-orphan-panel">
 			<!-- Header -->
@@ -643,21 +582,21 @@
 			</div>
 
 			<!-- Feedback -->
-			{#if orphanFoldersFeedback}
+			{#if orphans.feedback}
 				<div class="shrink-0 files-page-modal-feedback-row">
 					<div
-						class="alert files-page-orphan-feedback {orphanFoldersFeedback.type === 'success'
+						class="alert files-page-orphan-feedback {orphans.feedback.type === 'success'
 							? 'alert-success'
 							: 'alert-danger'}"
 					>
-						{orphanFoldersFeedback.message}
+						{orphans.feedback.message}
 					</div>
 				</div>
 			{/if}
 
 			<!-- Content (scrollable) -->
 			<div class="min-h-0 flex-1 overflow-y-auto">
-				{#if orphanFoldersLoading}
+				{#if orphans.loading}
 					<div class="flex items-center justify-center p-8">
 						<svg class="mr-2 h-5 w-5 spin files-page-spinner" viewBox="0 0 24 24">
 							<circle class="spinner-track" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
@@ -665,14 +604,14 @@
 						</svg>
 						<span class="files-page-loading-text">Loading...</span>
 					</div>
-				{:else if orphanFoldersData && orphanFoldersData.folders.length > 0}
-					{#each orphanFoldersData.folders as folder (folder.path)}
+				{:else if orphans.data && orphans.data.folders.length > 0}
+					{#each orphans.data.folders as folder (folder.path)}
 						<div class="list-row files-page-orphan-row">
 							<input
 								type="checkbox"
-								checked={orphanFoldersSelected.has(folder.path)}
-								onchange={() => toggleOrphanFolderSelect(folder.path)}
-								disabled={orphanFoldersBusy}
+								checked={orphans.selected.has(folder.path)}
+								onchange={() => orphans.toggle(folder.path)}
+								disabled={orphans.busy}
 								class="files-page-select-all"
 							/>
 							<svg
@@ -697,8 +636,8 @@
 							</span>
 							<button
 								type="button"
-								onclick={() => handleDeleteOrphanFolder(folder.path)}
-								disabled={orphanFoldersBusy}
+								onclick={() => orphans.deleteOne(folder.path)}
+								disabled={orphans.busy}
 								class="btn btn-icon files-page-orphan-delete"
 								title="Delete folder"
 							>
@@ -713,7 +652,7 @@
 							</button>
 						</div>
 					{/each}
-				{:else if orphanFoldersData}
+				{:else if orphans.data}
 					<div class="files-page-empty">No orphan folders found</div>
 				{:else}
 					<div class="files-page-empty files-page-empty-error">Failed to load orphan folders</div>
@@ -724,11 +663,11 @@
 			<div class="shrink-0 files-page-modal-footer">
 				<div class="flex items-center justify-between">
 					<div>
-						{#if orphanFoldersSelected.size > 0}
+						{#if orphans.selected.size > 0}
 							<button
 								type="button"
-								onclick={handleBulkDeleteOrphanFolders}
-								disabled={orphanFoldersBusy}
+								onclick={orphans.deleteSelected}
+								disabled={orphans.busy}
 								class="btn files-page-bulk-btn files-page-bulk-btn-danger"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -739,11 +678,11 @@
 										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
 									/>
 								</svg>
-								Delete {orphanFoldersSelected.size} selected
+								Delete {orphans.selected.size} selected
 							</button>
 						{/if}
 					</div>
-					<button type="button" onclick={() => (orphanFoldersOpen = false)} class="btn"> Close </button>
+					<button type="button" onclick={() => (orphans.isOpen = false)} class="btn"> Close </button>
 				</div>
 			</div>
 		</div>
