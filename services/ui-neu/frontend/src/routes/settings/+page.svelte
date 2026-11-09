@@ -6,7 +6,6 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
 	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
-	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
 	import {
@@ -27,12 +26,11 @@
 	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
 	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
+	import SystemSettings from '$lib/components/settings/SystemSettings.svelte';
 	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
-	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import ThemesSettings from '$lib/components/settings/ThemesSettings.svelte';
@@ -296,47 +294,7 @@
 
 			<!-- System Info Tab -->
 			{#if activeTab === 'system'}
-				<div class="stack stack-lg" data-page-section>
-					<div class="stack stack-lg">
-						<h2 class="settings-page-section-title" data-page-section-title>System</h2>
-
-						<!-- Health check (API keys + path permissions) -->
-						<!-- First-run walkthrough re-entry (setup spec §5.11) -->
-						<section class="panel settings-page-setup-again" data-testid="run-setup-again">
-							<div>
-								<h3 class="settings-page-section-title">Setup walkthrough</h3>
-								<p class="settings-page-setup-again-help">
-									Walk through drives, keys and defaults again. Your current values are kept.
-								</p>
-							</div>
-							<button type="button" class="btn" onclick={setupRestart.run} disabled={setupRestart.running}>
-								{setupRestart.running ? 'Opening...' : 'Run setup again'}
-							</button>
-						</section>
-
-						<SystemHealth grouped />
-
-						<!-- Read-only infra configuration (schema-driven) -->
-						{#if systemGroup}
-							<section class="stack">
-								<h3 class="settings-page-section-title">Configuration (read-only)</h3>
-								<div class="panel stack">
-									{#each systemGroup.fields as f (f.key)}
-										<ConfigSchemaField
-											field={f}
-											value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
-										/>
-									{/each}
-								</div>
-							</section>
-						{/if}
-					</div>
-
-					<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
-					<section class="mt-6">
-						<DiagnosticsSection />
-					</section>
-				</div>
+				<SystemSettings {settings} group={systemGroup} setup={setupRestart} />
 			{/if}
 
 			<!-- Appearance Tab -->
@@ -432,17 +390,5 @@
 		box-shadow:
 			0 0 0 2px var(--color-page),
 			0 0 0 4px var(--color-primary);
-	}
-	.settings-page-setup-again {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 1.25rem;
-	}
-	.settings-page-setup-again-help {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
 	}
 </style>
