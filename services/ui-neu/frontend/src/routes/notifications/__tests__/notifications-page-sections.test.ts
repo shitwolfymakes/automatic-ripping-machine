@@ -1,7 +1,7 @@
 // Pins the notifications page's remaining branches ahead of its split into a
-// class and components. One line stays uncovered because it cannot be
-// reached: `if (ids.length === 0) return;` in dismissAll: the Dismiss All
-// button only shows while a row is unseen, so the list is never empty there.
+// class and components. Dismiss all's empty-list guard is not reached from
+// here: the Dismiss All button only shows while a row is unseen. The guard
+// now lives in NotificationInbox, whose own tests cover it.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import NotificationsPage from '../+page.svelte';
