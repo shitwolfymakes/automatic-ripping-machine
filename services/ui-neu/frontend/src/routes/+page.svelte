@@ -22,6 +22,7 @@
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { fade, slide } from 'svelte/transition';
 	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
+	import { isoSourceFor, isoKindFor } from '$lib/utils/iso-source';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -251,8 +252,8 @@
 						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
 							<ActiveJobRow
 								{job}
-								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
-								isoKind={job.drive_id ? (dash.iso_source_kinds?.[job.drive_id] ?? 'iso') : 'iso'}
+								isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
+								isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
 							/>
 						</div>
 					{/each}
@@ -277,8 +278,8 @@
 								progress={ripProgress.value[job.id]?.progress_pct ?? null}
 								eta={ripProgress.value[job.id]?.eta_seconds ?? null}
 								live={ripProgress.value[job.id] ?? null}
-								isoSource={job.drive_id ? (dash.iso_sources?.[job.drive_id] ?? null) : null}
-								isoKind={job.drive_id ? (dash.iso_source_kinds?.[job.drive_id] ?? 'iso') : 'iso'}
+								isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
+								isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
 							/>
 						</div>
 					{/each}
