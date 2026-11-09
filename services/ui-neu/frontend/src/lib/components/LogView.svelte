@@ -2,6 +2,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import type { LogEntry } from '$lib/api/logs';
 	import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
+	import { filterEntries, type LogLevelFilter, type LogServiceFilter } from '$lib/utils/log-view';
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 
@@ -33,11 +34,10 @@
 		appended = undefined
 	}: Props = $props();
 
-	type Level = 'all' | 'error' | 'warning' | 'info' | 'debug';
 	type Tone = 'warning' | 'danger' | 'debug' | null;
 
-	let serviceFilter = $state<'all' | LogService>('all');
-	let levelFilter = $state<Level>('all');
+	let serviceFilter = $state<LogServiceFilter>('all');
+	let levelFilter = $state<LogLevelFilter>('all');
 	let searchText = $state('');
 	let matchCase = $state(false);
 	let following = $state(true);
@@ -50,14 +50,14 @@
 
 	const wrap = $derived($uiPrefs.logWrap);
 
-	const SERVICE_FILTERS: { key: 'all' | LogService; label: string }[] = [
+	const SERVICE_FILTERS: { key: LogServiceFilter; label: string }[] = [
 		{ key: 'all', label: 'All' },
 		{ key: 'backend', label: 'Backend' },
 		{ key: 'ripper', label: 'Ripper' },
 		{ key: 'transcode', label: 'Transcode' }
 	];
 
-	const LEVEL_FILTERS: { key: Level; label: string }[] = [
+	const LEVEL_FILTERS: { key: LogLevelFilter; label: string }[] = [
 		{ key: 'all', label: 'All' },
 		{ key: 'error', label: 'Error' },
 		{ key: 'warning', label: 'Warning' },
@@ -65,22 +65,12 @@
 		{ key: 'debug', label: 'Debug' }
 	];
 
-	function levelOf(entry: LogEntry): string {
-		return (entry.level ?? '').toLowerCase();
-	}
-
-	function matchesSearch(entry: LogEntry): boolean {
-		if (!search || !searchText) return true;
-		const hay = `${entry.event ?? ''} ${entry.logger ?? ''}`;
-		return matchCase ? hay.includes(searchText) : hay.toLowerCase().includes(searchText.toLowerCase());
-	}
-
 	const filtered = $derived(
-		entries.filter((e) => {
-			if (serviceFilter !== 'all' && logService(e.service) !== serviceFilter) return false;
-			if (levelFilter !== 'all' && levelOf(e) !== levelFilter) return false;
-			if (!matchesSearch(e)) return false;
-			return true;
+		filterEntries(entries, {
+			service: serviceFilter,
+			level: levelFilter,
+			query: search ? searchText : '',
+			matchCase
 		})
 	);
 
