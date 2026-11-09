@@ -9,10 +9,10 @@
 	import IsoPreparingRow from '$lib/components/IsoPreparingRow.svelte';
 	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
 	import TranscodeCard from '$lib/components/TranscodeCard.svelte';
-	import SectionFrame from '$lib/components/SectionFrame.svelte';
+	import DashboardSection from '$lib/components/DashboardSection.svelte';
 	import AllJobsPanel from '$lib/components/AllJobsPanel.svelte';
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { fadeIn } from '$lib/transitions';
 	import { fade } from 'svelte/transition';
 	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
 	import { isoSourceFor, isoKindFor } from '$lib/utils/iso-source';
@@ -128,138 +128,97 @@
 	{/if}
 
 	<!-- Disc review (waiting jobs) -->
-	{#if waitingJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-primary)"
-				emphasis
-				label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
-			>
-				<div class="grid grid-cols-1 gap-4">
-					{#each waitingJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<DiscReviewWidget
-								{job}
-								driveNames={dash.drive_names}
-								isoSources={dash.iso_sources}
-								isoSourceKinds={dash.iso_source_kinds}
-								paused={!dash.ripping_enabled}
-								onrefresh={refreshDashboard}
-								ondismiss={() => dismissJob(job.id)}
-							/>
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={waitingJobs}
+		key={(job) => job.id}
+		accent="var(--color-primary)"
+		emphasis
+		listClass="grid grid-cols-1 gap-4"
+		label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
+	>
+		{#snippet row(job)}
+			<DiscReviewWidget
+				{job}
+				driveNames={dash.drive_names}
+				isoSources={dash.iso_sources}
+				isoSourceKinds={dash.iso_source_kinds}
+				paused={!dash.ripping_enabled}
+				onrefresh={refreshDashboard}
+				ondismiss={() => dismissJob(job.id)}
+			/>
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Preparing: ISO rips scanning / unpacking their image, no job yet -->
-	{#if preparingRips.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-accent-4)"
-				label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
-			>
-				<div class="space-y-2">
-					{#each preparingRips as prepare (prepare.drive_id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<IsoPreparingRow {prepare} />
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={preparingRips}
+		key={(prepare) => prepare.drive_id}
+		accent="var(--color-accent-4)"
+		label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
+	>
+		{#snippet row(prepare)}
+			<IsoPreparingRow {prepare} />
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Scanning -->
-	{#if scanningJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-accent-4)"
-				label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}"
-			>
-				<div class="space-y-2">
-					{#each scanningJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow
-								{job}
-								isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-								isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-							/>
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={scanningJobs}
+		key={(job) => job.id}
+		accent="var(--color-accent-4)"
+		label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}"
+	>
+		{#snippet row(job)}
+			<ActiveJobRow
+				{job}
+				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
+				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
+			/>
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Active rips -->
-	{#if nonWaitingActiveJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-primary)"
-				label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
-			>
-				<div class="space-y-2">
-					{#each nonWaitingActiveJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow
-								{job}
-								progress={ripProgress.value[job.id]?.progress_pct ?? null}
-								eta={ripProgress.value[job.id]?.eta_seconds ?? null}
-								live={ripProgress.value[job.id] ?? null}
-								isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-								isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-							/>
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={nonWaitingActiveJobs}
+		key={(job) => job.id}
+		accent="var(--color-primary)"
+		label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
+	>
+		{#snippet row(job)}
+			<ActiveJobRow
+				{job}
+				progress={ripProgress.value[job.id]?.progress_pct ?? null}
+				eta={ripProgress.value[job.id]?.eta_seconds ?? null}
+				live={ripProgress.value[job.id] ?? null}
+				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
+				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
+			/>
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Finishing (identified / ripped / ripped_partial) -->
-	{#if finishingJobs.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-accent-1)"
-				label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}"
-			>
-				<div class="space-y-2">
-					{#each finishingJobs as job (job.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<ActiveJobRow {job} />
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={finishingJobs}
+		key={(job) => job.id}
+		accent="var(--color-accent-1)"
+		label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}"
+	>
+		{#snippet row(job)}
+			<ActiveJobRow {job} />
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Active transcodes -->
-	{#if $transcoderEnabled && dash.active_transcodes.length > 0}
-		<section in:fade={fadeIn} out:fade={fadeOut}>
-			<SectionFrame
-				variant="full"
-				accent="var(--color-primary)"
-				label="TRANSCODING - {dash.active_transcodes.length} ACTIVE"
-			>
-				<div class="space-y-2">
-					{#each dash.active_transcodes as tc (tc.id)}
-						<div in:fade|local={fadeIn} out:fade|local={fadeOut}>
-							<TranscodeCard job={tc} />
-						</div>
-					{/each}
-				</div>
-			</SectionFrame>
-		</section>
-	{/if}
+	<DashboardSection
+		items={$transcoderEnabled ? dash.active_transcodes : []}
+		key={(tc) => tc.id}
+		accent="var(--color-primary)"
+		label="TRANSCODING - {dash.active_transcodes.length} ACTIVE"
+	>
+		{#snippet row(tc)}
+			<TranscodeCard job={tc} />
+		{/snippet}
+	</DashboardSection>
 
 	<!-- Idle state -->
 	{#if pageReady && preparingRips.length === 0 && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
