@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { TrackView, MetadataCandidate, TrackEditRequest, MediaType } from '$lib/types/api.gen';
+	import type { TrackView, MetadataCandidate, MediaType } from '$lib/types/api.gen';
+	import { trackOptionsBody, trackTitleBody } from '$lib/utils/track-edit';
 	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import PosterImage from './PosterImage.svelte';
 	import { isSeriesKind } from '$lib/utils/match';
@@ -40,15 +41,14 @@
 		savingOptions = true;
 		feedback = null;
 		try {
-			const episodeNum = editEpisodeNum.trim() ? Number(editEpisodeNum.trim()) : null;
-			const data: Omit<TrackEditRequest, 'track_id'> = {
-				custom_filename: editFilename.trim() || null,
-				...(isSeries && {
-					episode_number: Number.isFinite(episodeNum as number) ? episodeNum : null,
-					episode_name: editEpisodeName.trim() || null
-				})
-			};
-			await updateTrack(jobId, track.id, data);
+			await updateTrack(
+				jobId,
+				track.id,
+				trackOptionsBody(
+					{ filename: editFilename, episodeNumber: editEpisodeNum, episodeName: editEpisodeName },
+					isSeries
+				)
+			);
 			feedback = { type: 'success', message: 'Track options saved' };
 			onapply?.();
 		} catch (e) {
@@ -104,14 +104,16 @@
 		applying = true;
 		feedback = null;
 		try {
-			const yr = editYear.trim() ? Number(editYear.trim()) : undefined;
-			const role = editType === 'series' ? 'episode' : 'main';
-			await updateTrack(jobId, track.id, {
-				title: editTitle.trim(),
-				year: Number.isFinite(yr) ? yr : undefined,
-				role,
-				poster_url: editPosterUrl.trim() || undefined
-			});
+			await updateTrack(
+				jobId,
+				track.id,
+				trackTitleBody({
+					title: editTitle,
+					year: editYear,
+					type: editType,
+					posterUrl: editPosterUrl
+				})
+			);
 			feedback = { type: 'success', message: 'Track title updated' };
 			onapply?.();
 		} catch (e) {
