@@ -301,3 +301,13 @@ export function formatTrackLength(seconds: number | null | undefined): string {
 	const s = seconds % 60;
 	return `${m}:${String(s).padStart(2, '0')}`;
 }
+
+/**
+ * A length as m:ss, rounded to the nearest second, and `-` when missing.
+ * `unitsPerSecond` is 1000 for milliseconds and 1 for seconds.
+ */
+export function formatMinSec(value: number | null | undefined, unitsPerSecond: number): string {
+	if (value == null) return '-';
+	const total = Math.round(value / unitsPerSecond);
+	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}

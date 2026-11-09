@@ -15,6 +15,7 @@ import {
 	formatShortDateTime,
 	calendarTimeAgo,
 	formatTrackLength,
+	formatMinSec,
 	formatElapsed
 } from '../utils/format';
 
@@ -380,5 +381,29 @@ describe('formatElapsed', () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2025-01-01T00:01:05Z'));
 		expect(formatElapsed(START)).toBe('1m 5s');
+	});
+});
+
+describe('formatMinSec', () => {
+	it('returns a dash for null and undefined in both units', () => {
+		expect(formatMinSec(null, 1000)).toBe('-');
+		expect(formatMinSec(undefined, 1000)).toBe('-');
+		expect(formatMinSec(null, 1)).toBe('-');
+		expect(formatMinSec(undefined, 1)).toBe('-');
+	});
+
+	it('formats milliseconds rounded to the nearest second', () => {
+		expect(formatMinSec(0, 1000)).toBe('0:00');
+		expect(formatMinSec(59_499, 1000)).toBe('0:59');
+		expect(formatMinSec(59_500, 1000)).toBe('1:00');
+		expect(formatMinSec(213_000, 1000)).toBe('3:33');
+		expect(formatMinSec(3_600_000, 1000)).toBe('60:00');
+	});
+
+	it('formats seconds rounded to the nearest second', () => {
+		expect(formatMinSec(0, 1)).toBe('0:00');
+		expect(formatMinSec(9.4, 1)).toBe('0:09');
+		expect(formatMinSec(9.5, 1)).toBe('0:10');
+		expect(formatMinSec(245, 1)).toBe('4:05');
 	});
 });

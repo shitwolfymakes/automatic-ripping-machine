@@ -4,6 +4,7 @@
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
+	import { formatMinSec } from '$lib/utils/format';
 	import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '$lib/utils/music-search';
 	import {
 		visibleTracksFor,
@@ -153,18 +154,6 @@
 				tracks: []
 			} as MetadataReleaseDetail);
 		}
-	}
-
-	function fmtMs(ms: number | null | undefined): string {
-		if (ms == null) return '-';
-		const total = Math.round(ms / 1000);
-		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-	}
-
-	function fmtSec(secs: number | null | undefined): string {
-		if (secs == null) return '-';
-		const total = Math.round(secs);
-		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 	}
 
 	const MATCH_TONE: Record<MatchKind, string> = {
@@ -426,7 +415,7 @@
 													>
 													<td class="max-w-0 truncate py-0.5 pr-1 music-search-back-track-title">{track.title}</td>
 													<td class="w-10 whitespace-nowrap py-0.5 pr-1 mono music-search-back-dim music-search-right"
-														>{fmtMs(track.length_ms)}</td
+														>{formatMinSec(track.length_ms, 1000)}</td
 													>
 													{#if kind}<td
 															class="w-4 py-0.5 pr-1 music-search-match"
@@ -511,9 +500,9 @@
 								<td class="table-cell">{t.position ?? i + 1}</td>
 								<td class="table-cell">{t.title}</td>
 								{#if discTracks.length > 0}<td class="table-cell mono music-search-right music-search-muted"
-										>{fmtSec(discTracks[i]?.expected_duration_seconds)}</td
+										>{formatMinSec(discTracks[i]?.expected_duration_seconds, 1)}</td
 									>{/if}
-								<td class="table-cell music-search-right">{fmtMs(t.length_ms)}</td>
+								<td class="table-cell music-search-right">{formatMinSec(t.length_ms, 1000)}</td>
 								{#if discTracks.length > 0}<td
 										class="table-cell music-search-match"
 										data-tone={MATCH_TONE[kind]}
@@ -528,8 +517,8 @@
 							<tr>
 								<td class="table-cell">Total</td>
 								<td class="table-cell"></td>
-								<td class="table-cell mono music-search-right">{fmtSec(discTotalSec)}</td>
-								<td class="table-cell mono music-search-right">{fmtMs(mbTotalMs)}</td>
+								<td class="table-cell mono music-search-right">{formatMinSec(discTotalSec, 1)}</td>
+								<td class="table-cell mono music-search-right">{formatMinSec(mbTotalMs, 1000)}</td>
 								<td class="table-cell music-search-match" data-tone={MATCH_TONE[totalKind]} title={totalKind}
 									>{@render matchGlyph(totalKind)}</td
 								>
@@ -594,13 +583,15 @@
 								{#each trackMapping as p, i (i)}
 									<tr class="table-row">
 										<td class="table-cell whitespace-nowrap mono music-search-muted"
-											>Disc #{p.disc.index} ({fmtSec(p.disc.expected_duration_seconds)})</td
+											>Disc #{p.disc.index} ({formatMinSec(p.disc.expected_duration_seconds, 1)})</td
 										>
 										<td class="table-cell music-search-center music-search-faint"
 											><Glyph name="arrow-right" class="mx-auto h-3.5 w-3.5" /></td
 										>
 										<td class="table-cell">{p.mb.title}</td>
-										<td class="table-cell music-search-right mono music-search-muted">{fmtMs(p.mb.length_ms)}</td>
+										<td class="table-cell music-search-right mono music-search-muted"
+											>{formatMinSec(p.mb.length_ms, 1000)}</td
+										>
 										<td class="table-cell music-search-match" data-tone={MATCH_TONE[p.match]} title={p.match}
 											>{@render matchGlyph(p.match)}</td
 										>
