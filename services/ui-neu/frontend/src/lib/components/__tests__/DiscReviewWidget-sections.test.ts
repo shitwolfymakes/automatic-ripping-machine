@@ -7,8 +7,6 @@
 // Branches the card cannot reach, so they are not forced here:
 // - the empty-string status fallbacks in the start-rip and post-rip checks: a
 //   job always has a status, and both checks are read only while the job is set
-// - the empty Disc row: the disc type label is never empty ("Unknown" stands
-//   in for a missing type), so the row always shows
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
