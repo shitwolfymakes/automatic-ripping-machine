@@ -6,6 +6,7 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
+	import { SEARCH_SOURCES, chooseSource, sourceKeyed, type SearchSource } from '$lib/utils/search-providers';
 
 	interface Props {
 		job: JobView;
@@ -27,36 +28,16 @@
 	// Source picker: the provider for this search. Defaults to the Settings
 	// choice for the search type (until the operator picks one); a type change
 	// drops the pick. A keyed source without a saved key is disabled.
-	type Source = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
-	const SOURCES: Record<'movie' | 'tv', { id: Source; label: string }[]> = {
-		movie: [
-			{ id: 'tmdb', label: 'TMDb' },
-			{ id: 'omdb', label: 'OMDb' }
-		],
-		tv: [
-			{ id: 'tmdb', label: 'TMDb' },
-			{ id: 'omdb', label: 'OMDb' },
-			{ id: 'tvmaze', label: 'TVmaze' },
-			{ id: 'tvdb', label: 'TVDB' }
-		]
-	};
-	let pickedSource = $state<Source | null>(null);
-	let sourceOptions = $derived(SOURCES[searchType]);
-	let source = $derived.by<Source | undefined>(() => {
-		if (pickedSource && sourceOptions.some((o) => o.id === pickedSource)) return pickedSource;
-		const fromSettings = searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie;
-		const settingsSource = sourceOptions.find((o) => o.id === fromSettings)?.id;
-		// The default's key was removed after it was chosen: start on the first
-		// usable source; with none usable keep the default (the backend's 400 shows).
-		if (settingsSource && !sourceKeyed(settingsSource)) {
-			return sourceOptions.find((o) => sourceKeyed(o.id))?.id ?? settingsSource;
-		}
-		return settingsSource;
-	});
-
-	function sourceKeyed(id: Source): boolean {
-		return id === 'tvmaze' || $keyedSources[id];
-	}
+	let pickedSource = $state<SearchSource | null>(null);
+	let sourceOptions = $derived(SEARCH_SOURCES[searchType]);
+	let source = $derived(
+		chooseSource(
+			sourceOptions,
+			pickedSource,
+			searchType === 'tv' ? $searchProviders.tv : $searchProviders.movie,
+			$keyedSources
+		)
+	);
 
 	// The job's type changed (Movie/TV switch): the old pick and results belong
 	// to the other type.
@@ -264,11 +245,11 @@
 			<select
 				aria-label="Search with"
 				value={source}
-				onchange={(e) => (pickedSource = (e.target as HTMLSelectElement).value as Source)}
+				onchange={(e) => (pickedSource = (e.target as HTMLSelectElement).value as SearchSource)}
 				class="field-control title-search-source"
 			>
 				{#each sourceOptions as opt (opt.id)}
-					{@const keyed = sourceKeyed(opt.id)}
+					{@const keyed = sourceKeyed(opt.id, $keyedSources)}
 					<option value={opt.id} disabled={!keyed}>{keyed ? opt.label : `${opt.label} (needs API key)`}</option>
 				{/each}
 			</select>
