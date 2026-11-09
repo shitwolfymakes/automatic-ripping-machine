@@ -401,13 +401,7 @@
 			</div>
 
 			<!-- Jobs list -->
-			<LoadState
-				data={sortedJobs}
-				loading={loadingJobs}
-				error={jobsError}
-				isEmpty={(d) => d.length === 0}
-				transitionKey="transcoder-jobs"
-			>
+			<LoadState data={sortedJobs} loading={loadingJobs} error={jobsError} isEmpty={(d) => d.length === 0}>
 				{#snippet loadingSlot()}
 					<!-- As many placeholders as the stats poll says there are tasks (it
 				     lands first), so the list does not grow when the jobs arrive. -->

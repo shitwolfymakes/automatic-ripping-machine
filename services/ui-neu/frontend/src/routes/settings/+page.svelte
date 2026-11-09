@@ -385,7 +385,7 @@
 <div class="stack stack-lg settings-page">
 	<h1 class="page-title">Settings</h1>
 
-	<LoadState data={settings} loading={settingsLoading} error={settingsError} transitionKey={`settings-${activeTab}`}>
+	<LoadState data={settings} loading={settingsLoading} error={settingsError}>
 		{#snippet loadingSlot()}
 			<div class="space-y-4">
 				<SkeletonCard lines={5} />

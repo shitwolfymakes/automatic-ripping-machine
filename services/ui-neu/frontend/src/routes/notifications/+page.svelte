@@ -141,13 +141,7 @@
 		</div>
 	</div>
 
-	<LoadState
-		data={notifications}
-		loading={notifsLoading}
-		error={notifsError}
-		isEmpty={() => false}
-		transitionKey="notifications-list"
-	>
+	<LoadState data={notifications} loading={notifsLoading} error={notifsError} isEmpty={() => false}>
 		{#snippet loadingSlot()}
 			<div class="stack stack-sm">
 				{#each Array(4) as _, i (i)}

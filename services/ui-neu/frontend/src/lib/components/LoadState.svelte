@@ -13,8 +13,6 @@
 		ready: Snippet<[T]>;
 		empty?: Snippet;
 		errorSlot?: Snippet<[Error]>;
-		// Kept for call-site compatibility; phases used to crossfade by key.
-		transitionKey?: string;
 	}
 
 	let { data, loading, error = null, isEmpty, minDelay = 150, loadingSlot, ready, empty, errorSlot }: Props = $props();

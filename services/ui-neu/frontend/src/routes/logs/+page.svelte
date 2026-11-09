@@ -89,7 +89,7 @@
 	</div>
 
 	<div class="list-panel-body">
-		<LoadState data={jobs} {loading} {error} transitionKey="logs-job-list">
+		<LoadState data={jobs} {loading} {error}>
 			{#snippet loadingSlot()}
 				<p class="logs-panel-muted logs-panel-message">Loading jobs...</p>
 			{/snippet}

@@ -165,7 +165,7 @@
 	<title>ARM - {detail?.job.title || 'Job Detail'}</title>
 </svelte:head>
 
-<LoadState data={jobDetail.detail} loading={jobDetail.loading} error={jobDetail.error} transitionKey="job-detail-main">
+<LoadState data={jobDetail.detail} loading={jobDetail.loading} error={jobDetail.error}>
 	{#snippet loadingSlot()}
 		<SkeletonCard lines={6} />
 	{/snippet}

@@ -23,8 +23,7 @@ describe('LoadState', () => {
 				data: null,
 				loading: true,
 				loadingSlot: textSnippet('LOADING'),
-				ready: valueSnippet(),
-				transitionKey: 'test-1'
+				ready: valueSnippet()
 			}
 		});
 		// Before minDelay the skeleton is in flow (space reserved) but hidden.
@@ -40,8 +39,7 @@ describe('LoadState', () => {
 				data: [1, 2, 3],
 				loading: false,
 				loadingSlot: textSnippet('LOADING'),
-				ready: valueSnippet(),
-				transitionKey: 'test-2'
+				ready: valueSnippet()
 			}
 		});
 		expect(screen.getByText(/^ready:/)).toBeInTheDocument();
@@ -54,8 +52,7 @@ describe('LoadState', () => {
 				loading: false,
 				loadingSlot: textSnippet('LOADING'),
 				ready: valueSnippet(),
-				empty: textSnippet('EMPTY'),
-				transitionKey: 'test-3'
+				empty: textSnippet('EMPTY')
 			}
 		});
 		expect(screen.getByText('EMPTY')).toBeInTheDocument();
@@ -69,8 +66,7 @@ describe('LoadState', () => {
 				isEmpty: (d: { items: unknown[] }) => d.items.length === 0,
 				loadingSlot: textSnippet('LOADING'),
 				ready: valueSnippet(),
-				empty: textSnippet('CUSTOM_EMPTY'),
-				transitionKey: 'test-4'
+				empty: textSnippet('CUSTOM_EMPTY')
 			}
 		});
 		expect(screen.getByText('CUSTOM_EMPTY')).toBeInTheDocument();
@@ -86,8 +82,7 @@ describe('LoadState', () => {
 				ready: valueSnippet(),
 				errorSlot: createRawSnippet((get: () => Error) => ({
 					render: () => `<span>ERR:${get().message}</span>`
-				})),
-				transitionKey: 'test-5'
+				}))
 			}
 		});
 		expect(screen.getByText('ERR:boom')).toBeInTheDocument();
@@ -100,8 +95,7 @@ describe('LoadState', () => {
 				loading: false,
 				error: new Error('fatal'),
 				loadingSlot: textSnippet('LOADING'),
-				ready: valueSnippet(),
-				transitionKey: 'test-6'
+				ready: valueSnippet()
 			}
 		});
 		expect(screen.getByText(/fatal/)).toBeInTheDocument();
@@ -115,8 +109,7 @@ describe('LoadState', () => {
 				loading: true,
 				minDelay: 500,
 				loadingSlot: textSnippet('LOADING'),
-				ready: valueSnippet(),
-				transitionKey: 'test-7'
+				ready: valueSnippet()
 			}
 		});
 		await vi.advanceTimersByTimeAsync(300);
@@ -133,8 +126,7 @@ describe('LoadState', () => {
 				loading: true,
 				minDelay: 0,
 				loadingSlot: textSnippet('INSTANT'),
-				ready: valueSnippet(),
-				transitionKey: 'test-8'
+				ready: valueSnippet()
 			}
 		});
 		expect(screen.getByText('INSTANT')).toBeInTheDocument();

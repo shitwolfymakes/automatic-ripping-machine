@@ -111,12 +111,7 @@
 	{/if}
 
 	<div class="list-panel-body">
-		<LoadState
-			data={jobsList.jobs}
-			loading={jobsList.loading}
-			error={jobsList.error}
-			transitionKey="dashboard-recent-jobs"
-		>
+		<LoadState data={jobsList.jobs} loading={jobsList.loading} error={jobsList.error}>
 			{#snippet loadingSlot()}
 				{#if viewMode === 'table'}
 					<div class="overflow-x-auto">
