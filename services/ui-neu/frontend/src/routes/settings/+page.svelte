@@ -24,15 +24,11 @@
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, rescanDrives } from '$lib/api/drives';
 	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
-	import { partitionDrives } from '$lib/utils/drives';
 	import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
-	import DriveCard from '$lib/components/DriveCard.svelte';
-	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
-	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
 	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
 	import { ImageCache } from '$lib/stores/imageCache.svelte';
 	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
-	import DriveDiagnosticsPanel from '$lib/components/settings/DriveDiagnosticsPanel.svelte';
+	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
@@ -101,7 +97,6 @@
 	// --- Drives polling store ---
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
-	let parts = $derived(partitionDrives($drives));
 
 	const driveSessionOptions = new DriveSessionOptions();
 
@@ -492,47 +487,14 @@
 			{/if}
 
 			{#if activeTab === 'drives'}
-				<div class="stack stack-lg" data-page-section>
-					<div class="mb-4 flex items-start justify-between gap-3">
-						<h2 class="settings-page-section-title" data-page-section-title>Drives</h2>
-						<DriveMaintenance onrescanned={() => drives.refresh()} />
-					</div>
-					<section class="stack stack-lg">
-						{#if $driveError}
-							<div class="alert alert-danger">
-								{$driveError}
-							</div>
-						{:else}
-							{#if parts.enrolled.length > 0}
-								<div class="grid-2 settings-page-drive-grid">
-									{#each parts.enrolled as drive (drive.id)}
-										<DriveCard
-											{drive}
-											sessions={driveSessionOptions.sessions}
-											transcodePresets={driveSessionOptions.transcodePresets}
-											globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
-											onupdate={() => drives.refresh()}
-											globalDefaults={{
-												prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
-												prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
-												prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
-												disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60
-											}}
-										/>
-									{/each}
-								</div>
-							{/if}
-							<DriveLifecycleLists
-								detected={parts.detected}
-								ignored={parts.ignored}
-								onchanged={() => drives.refresh()}
-							/>
-						{/if}
-
-						<!-- Diagnostics -->
-						<DriveDiagnosticsPanel diagnostics={driveDiagnostics} />
-					</section>
-				</div>
+				<DrivesSettings
+					drives={$drives}
+					error={$driveError}
+					onrefresh={() => drives.refresh()}
+					options={driveSessionOptions}
+					{settings}
+					diagnostics={driveDiagnostics}
+				/>
 			{/if}
 		{/snippet}
 	</LoadState>
@@ -697,22 +659,6 @@
 	}
 	.scheme-swatch-delete {
 		position: absolute;
-	}
-
-	/* Drive cards grid: 2 columns at md, matching the original's md:2/xl:3
-	   step (grid-2's own responsive breaks at sm, so xl needs its own rule). */
-	.settings-page-drive-grid {
-		grid-template-columns: 1fr;
-	}
-	@media (min-width: 768px) {
-		.settings-page-drive-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	@media (min-width: 1280px) {
-		.settings-page-drive-grid {
-			grid-template-columns: repeat(3, 1fr);
-		}
 	}
 
 	/* :global below: applied/removed via classList in the $effect above (deep
