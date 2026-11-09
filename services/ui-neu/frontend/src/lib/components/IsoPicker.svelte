@@ -1,16 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { fetchIsoFolders, fetchIsoLibrary, startIsoRip } from '$lib/api/iso';
+	import { startIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { ApiError } from '$lib/api/client';
 	import { addToast } from '$lib/stores/toast.svelte';
-	import type {
-		IsoFolderEntry,
-		IsoFolderListing,
-		IsoLibraryEntry,
-		IsoLibraryListing,
-		SessionView
-	} from '$lib/types/api.gen';
+	import { IsoLibraryBrowser } from '$lib/stores/isoLibraryBrowser.svelte';
+	import type { IsoFolderEntry, IsoLibraryEntry, SessionView } from '$lib/types/api.gen';
 	import SlideOver from './SlideOver.svelte';
 	import LoadState from './LoadState.svelte';
 	import Glyph from './Glyph.svelte';
@@ -31,26 +25,15 @@
 	let { open, mode = 'iso', onclose, onstarted }: Props = $props();
 
 	const isFolderMode = $derived(mode === 'folder');
-	let folderListing = $state<IsoFolderListing | null>(null);
+	const browser = new IsoLibraryBrowser();
 	let filter = $state('');
 	// Matches anywhere in the library path, so "rings" finds every disc of a set.
 	const folderRows = $derived.by(() => {
 		const needle = filter.trim().toLowerCase();
-		const entries = folderListing?.entries ?? [];
+		const entries = browser.folderListing?.entries ?? [];
 		return needle ? entries.filter((f) => f.path.toLowerCase().includes(needle)) : entries;
 	});
 
-	let subpath = $state('');
-	let listing = $state<IsoLibraryListing | null>(null);
-	let hostPath = $state('');
-	let loading = $state(false);
-	let notConfigured = $state(false);
-	let loadError = $state<Error | null>(null);
-	// Monotonic request counter: a load's own response is applied only if it
-	// is still the most recently started one — an older, slower-resolving
-	// request (e.g. a folder navigated away from) is discarded instead of
-	// clobbering the newer listing.
-	let loadSeq = 0;
 	// False only for the very first load after the picker opens, so that
 	// initial render never steals focus; every subsequent load (a folder
 	// open, Up, or refresh) restores it to the first row once the new data
@@ -67,26 +50,16 @@
 	let starting = $state(false);
 
 	let announcement = $state('');
-	let activeIndex = $state(0);
 
-	const rows = $derived(listing?.entries ?? []);
+	const rows = $derived(browser.listing?.entries ?? []);
 	const rowId = (index: number) => `iso-picker-row-${index}`;
 
 	// The breadcrumb trail is derived from `subpath` alone (never from the
 	// in-flight response) so it updates the instant a folder is opened, before
 	// the fetch resolves — the loading skeleton then renders under the
 	// destination folder's own breadcrumb, not the one being left.
-	const breadcrumbItems = $derived([{ label: 'Library', path: '' }, ...pathTrail(subpath)]);
+	const breadcrumbItems = $derived([{ label: 'Library', path: '' }, ...pathTrail(browser.subpath)]);
 	const currentLabel = $derived(breadcrumbItems[breadcrumbItems.length - 1].label);
-
-	// Built from the server's own `listing.subpath`, not the optimistic
-	// `subpath` state — the two can briefly disagree while a navigation is
-	// in flight, and this is what decides the path sent to startIsoRip, so it
-	// must always match whichever listing is actually on screen.
-	function entryPath(name: string): string {
-		const base = listing?.subpath ?? '';
-		return base ? `${base}/${name}` : name;
-	}
 
 	function formatSize(bytes: number | null | undefined): string {
 		return bytes == null ? '--' : formatBytes(bytes);
@@ -96,69 +69,37 @@
 		return modified ? new Date(modified).toLocaleDateString() : '--';
 	}
 
-	async function load(path: string): Promise<void> {
-		subpath = path;
-		loading = true;
-		notConfigured = false;
-		loadError = null;
-		const seq = ++loadSeq;
-		try {
-			if (isFolderMode) {
-				const folders = await fetchIsoFolders();
-				if (seq !== loadSeq) return;
-				folderListing = folders;
-				hostPath = folders.host_path;
-				activeIndex = 0;
-				loading = false;
-				return;
-			}
-			const result = await fetchIsoLibrary(path);
-			if (seq !== loadSeq) return; // a newer navigation has since started; discard this stale response
-			listing = result;
-			hostPath = result.host_path;
-			activeIndex = 0;
-			// Clear loading BEFORE the refocus wait below, not in a trailing
-			// `finally` — LoadState only mounts the ready rows once `loading`
-			// goes false, so focusRow() would still find the skeleton (no row
-			// with that id yet) if it ran first.
-			loading = false;
-			const shouldRefocus = loadedOnce;
-			loadedOnce = true;
-			if (shouldRefocus) {
-				// The row that held focus just unmounted (LoadState swapped the
-				// skeleton in while this load was pending) — bring focus back
-				// into the list rather than stranding it on the body.
-				await tick();
-				focusRow(0);
-			}
-		} catch (e) {
-			if (seq !== loadSeq) return;
-			listing = null;
-			folderListing = null;
-			loading = false;
-			if (e instanceof ApiError && e.status === 503) {
-				notConfigured = true;
-			} else {
-				loadError = e instanceof Error ? e : new Error('Could not load the library.');
-			}
+	// Every load but the first after the picker opens puts focus back on the
+	// first row once the rows are shown, because LoadState's skeleton swap
+	// unmounts whatever row held it.
+	async function browseTo(path: string): Promise<void> {
+		if (!(await browser.loadLibrary(path))) return;
+		const shouldRefocus = loadedOnce;
+		loadedOnce = true;
+		if (shouldRefocus) {
+			// The row that held focus just unmounted (LoadState swapped the
+			// skeleton in while this load was pending) — bring focus back
+			// into the list rather than stranding it on the body.
+			await tick();
+			focusRow(0);
 		}
 	}
 
 	function openFolder(name: string): void {
-		load(entryPath(name));
+		browseTo(browser.entryPath(name));
 	}
 
 	function goUp(): void {
-		if (listing?.parent_subpath != null) load(listing.parent_subpath);
+		if (browser.listing?.parent_subpath != null) browseTo(browser.listing.parent_subpath);
 	}
 
 	function isSelected(entry: IsoLibraryEntry): boolean {
-		return entry.kind === 'iso' && selectedPath === entryPath(entry.name);
+		return entry.kind === 'iso' && selectedPath === browser.entryPath(entry.name);
 	}
 
 	async function selectIso(entry: IsoLibraryEntry): Promise<void> {
 		if (entry.ripping) return;
-		selectedPath = entryPath(entry.name);
+		selectedPath = browser.entryPath(entry.name);
 		selectedName = entry.name;
 		startError = null;
 		// Clear first: reassigning to identical wording is a DOM no-op for the
@@ -170,7 +111,7 @@
 	}
 
 	function activate(entry: IsoLibraryEntry, index: number): void {
-		activeIndex = index;
+		browser.activeIndex = index;
 		if (entry.kind === 'folder') {
 			openFolder(entry.name);
 		} else {
@@ -179,7 +120,7 @@
 	}
 
 	async function selectFolder(entry: IsoFolderEntry, index: number): Promise<void> {
-		activeIndex = index;
+		browser.activeIndex = index;
 		if (entry.ripping) return;
 		selectedPath = entry.path;
 		selectedName = entry.name;
@@ -202,7 +143,7 @@
 	}
 
 	function focusRow(index: number): void {
-		activeIndex = index;
+		browser.activeIndex = index;
 		(document.getElementById(rowId(index)) as HTMLElement | null)?.focus();
 	}
 
@@ -252,20 +193,14 @@
 	}
 
 	function reset(): void {
-		subpath = '';
-		listing = null;
-		folderListing = null;
+		browser.reset();
 		filter = '';
-		hostPath = '';
-		notConfigured = false;
-		loadError = null;
 		loadedOnce = false;
 		sessionId = '';
 		selectedPath = null;
 		selectedName = null;
 		startError = null;
 		announcement = '';
-		activeIndex = 0;
 	}
 
 	// Loads fresh every time the picker opens (never reuses stale state from a
@@ -275,7 +210,11 @@
 	$effect(() => {
 		if (open) {
 			reset();
-			load('');
+			if (isFolderMode) {
+				browser.loadFolders();
+			} else {
+				browseTo('');
+			}
 			fetchSessions()
 				.then((s) => {
 					sessions = s;
@@ -290,7 +229,7 @@
 <SlideOver {open} title={isFolderMode ? 'Rip from folder' : 'Rip from ISO'} {onclose}>
 	<div class="iso-picker">
 		<div class="iso-picker-main">
-			{#if notConfigured}
+			{#if browser.notConfigured}
 				<div class="alert alert-info iso-picker-setup">
 					<p class="alert-title flex items-center gap-2">
 						<Glyph name="info" />
@@ -322,7 +261,7 @@
 								<button
 									type="button"
 									class="btn btn-icon"
-									onclick={() => load(subpath)}
+									onclick={() => browser.loadFolders()}
 									title="Refresh"
 									aria-label="Refresh"
 								>
@@ -339,9 +278,9 @@
 							/>
 
 							<LoadState
-								data={folderListing}
-								{loading}
-								error={loadError}
+								data={browser.folderListing}
+								loading={browser.loading}
+								error={browser.loadError}
 								minDelay={0}
 								isEmpty={(d) => d.entries.length === 0}
 							>
@@ -371,7 +310,7 @@
 											Couldn't load the library
 										</p>
 										<p class="alert-body">{err.message}</p>
-										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => load(subpath)}
+										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => browser.loadFolders()}
 											>Retry</button
 										>
 									</div>
@@ -399,7 +338,7 @@
 													aria-disabled={entry.ripping || undefined}
 													data-state={entry.ripping ? 'ripping' : undefined}
 													aria-label={entry.name}
-													tabindex={i === activeIndex ? 0 : -1}
+													tabindex={i === browser.activeIndex ? 0 : -1}
 													onclick={() => selectFolder(entry, i)}
 													onkeydown={(e) => handleFolderKeydown(e, entry, i)}
 												>
@@ -434,9 +373,11 @@
 							<div class="iso-picker-hostpath">
 								<Glyph name="folder" class="iso-picker-hostpath-icon" />
 								<div>
-									<p class="mono iso-picker-hostpath-path">{hostPath}</p>
+									<p class="mono iso-picker-hostpath-path">{browser.hostPath}</p>
 									<p class="iso-picker-hostpath-note">
-										{loading ? 'Searching the library...' : 'Read-only. Only folders with BDMV or VIDEO_TS are listed.'}
+										{browser.loading
+											? 'Searching the library...'
+											: 'Read-only. Only folders with BDMV or VIDEO_TS are listed.'}
 									</p>
 								</div>
 							</div>
@@ -448,7 +389,7 @@
 								<button
 									type="button"
 									class="btn btn-icon"
-									onclick={() => load(subpath)}
+									onclick={() => browseTo(browser.subpath)}
 									title="Refresh"
 									aria-label="Refresh"
 								>
@@ -464,7 +405,7 @@
 									{#if i === breadcrumbItems.length - 1}
 										<span class="iso-picker-breadcrumb-current" aria-current="page">{item.label}</span>
 									{:else}
-										<button type="button" class="iso-picker-breadcrumb-link" onclick={() => load(item.path)}>
+										<button type="button" class="iso-picker-breadcrumb-link" onclick={() => browseTo(item.path)}>
 											{item.label}
 										</button>
 									{/if}
@@ -472,9 +413,9 @@
 							</nav>
 
 							<LoadState
-								data={listing}
-								{loading}
-								error={loadError}
+								data={browser.listing}
+								loading={browser.loading}
+								error={browser.loadError}
 								minDelay={0}
 								isEmpty={(d) => d.entries.length === 0}
 							>
@@ -502,7 +443,7 @@
 											Couldn't load the library
 										</p>
 										<p class="alert-body">{err.message}</p>
-										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => load(subpath)}
+										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => browseTo(browser.subpath)}
 											>Retry</button
 										>
 									</div>
@@ -521,7 +462,7 @@
 												aria-disabled={disabled || undefined}
 												data-state={disabled ? 'ripping' : undefined}
 												aria-label={entry.name}
-												tabindex={i === activeIndex ? 0 : -1}
+												tabindex={i === browser.activeIndex ? 0 : -1}
 												onclick={() => activate(entry, i)}
 												onkeydown={(e) => handleRowKeydown(e, entry, i)}
 											>
@@ -560,8 +501,8 @@
 							<div class="iso-picker-hostpath">
 								<Glyph name="folder" class="iso-picker-hostpath-icon" />
 								<div>
-									<p class="mono iso-picker-hostpath-path">{hostPath}</p>
-									{#if loading}
+									<p class="mono iso-picker-hostpath-path">{browser.hostPath}</p>
+									{#if browser.loading}
 										<p class="iso-picker-hostpath-note">Loading {currentLabel}...</p>
 									{:else}
 										<p class="iso-picker-hostpath-note">Read-only. Only .iso files are listed.</p>
@@ -602,7 +543,7 @@
 		</div>
 
 		<div class="iso-picker-footer">
-			{#if notConfigured}
+			{#if browser.notConfigured}
 				<p class="iso-picker-footer-helper">Nothing to pick until the library is set up.</p>
 				<div class="flex gap-2">
 					<button type="button" class="btn" onclick={() => onclose()}>Close</button>

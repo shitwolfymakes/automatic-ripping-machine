@@ -6,9 +6,8 @@ import IsoPicker from '../IsoPicker.svelte';
 // Branch pins for IsoPicker, beside IsoPicker.test.ts and
 // IsoPickerFolders.test.ts. The branches below cannot be reached from the
 // rendered picker, so nothing here forces them:
-// - The `?? []` fallback behind the ISO rows and the `?? ''` fallback behind
-//   an entry's path: both read `listing`, which is always set once a row
-//   exists to be clicked or keyed.
+// - The `?? []` fallback behind the ISO rows: it reads `listing`, which is
+//   always set once a row exists to be clicked or keyed.
 // - The `?? []` fallback behind the filtered folder rows: it is only read from
 //   the ready snippet and a row's key handler, and both need a loaded folder
 //   listing.
