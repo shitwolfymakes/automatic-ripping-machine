@@ -5,11 +5,8 @@ import MusicSearch from '../MusicSearch.svelte';
 import { GLYPH_PATHS } from '../glyph-names';
 import { createJob, createTrack } from '../__fixtures__/job';
 
-// Branch pins for MusicSearch, beside MusicSearch.test.ts. The branches below
-// cannot be reached from the rendered component, so nothing here forces them:
-// - The `?? null` fallback on `track_count` in toggleFlip's failure face: the
-//   flip button renders only for a card with a truthy `track_count`, so the
-//   fallback never sees a missing one.
+// Branch pins for MusicSearch, beside MusicSearch.test.ts. One branch cannot
+// be reached from the rendered component, so nothing here forces it:
 // - The `!detail` half of applyRelease's guard: every caller sits inside the
 //   open-release block (Apply, "Apply anyway" and "Apply titles"), which
 //   renders only while `detail` is set, and applyRelease runs synchronously

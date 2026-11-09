@@ -15,6 +15,7 @@
 	} from '$lib/utils/music-release';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
+	import { MusicFlipCards } from '$lib/stores/musicFlipCards.svelte';
 	import Glyph from './Glyph.svelte';
 	import MatchGlyph from './music-search/MatchGlyph.svelte';
 
@@ -44,7 +45,7 @@
 	let loadingDetail = $state(false);
 
 	// Cards flipped to show their tracklist on the back face.
-	let flippedCards = $state(new Map<string, MetadataReleaseDetail | 'loading'>());
+	const flips = new MusicFlipCards();
 	let editArtist = $state('');
 	let editAlbum = $state('');
 	let editYear = $state('');
@@ -92,7 +93,7 @@
 		results = [];
 		searchError = null;
 		detail = null;
-		flippedCards = new Map();
+		flips.clear();
 		try {
 			const resp = await searchMusicMetadata(query.trim(), buildSearchOpts(currentFilters(), discTracks.length));
 			results = resp.candidates;
@@ -122,39 +123,9 @@
 		}
 	}
 
-	async function toggleFlip(e: MouseEvent, c: MetadataCandidate) {
+	function toggleFlip(e: MouseEvent, c: MetadataCandidate) {
 		e.stopPropagation();
-		if (!c.provider_id) return;
-		const id = c.provider_id;
-		if (flippedCards.has(id)) {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const next = new Map(flippedCards);
-			next.delete(id);
-			flippedCards = next;
-			return;
-		}
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		flippedCards = new Map(flippedCards).set(id, 'loading');
-		try {
-			const d = await fetchMusicDetail(id);
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			flippedCards = new Map(flippedCards).set(id, d);
-		} catch {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			flippedCards = new Map(flippedCards).set(id, {
-				release_id: id,
-				title: c.title,
-				artist: null,
-				year: c.year ?? null,
-				poster_url: c.poster_url ?? null,
-				disc_count: null,
-				track_count: c.track_count ?? null,
-				catalog_number: null,
-				barcode: null,
-				status: null,
-				tracks: []
-			} as MetadataReleaseDetail);
-		}
+		flips.toggle(c);
 	}
 
 	let discTotalSec = $derived(discTotalSeconds(discTracks));
@@ -311,8 +282,8 @@
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
 			{#each results as c, i (i)}
 				{@const flipKey = c.provider_id ?? ''}
-				{@const flipData = flippedCards.get(flipKey)}
-				{@const isFlipped = flippedCards.has(flipKey)}
+				{@const flipData = flips.get(flipKey)}
+				{@const isFlipped = flips.isFlipped(flipKey)}
 				<div class="music-search-poster-scene">
 					<div class="music-search-poster-card" data-flipped={isFlipped}>
 						<!-- FRONT FACE -->
