@@ -43,13 +43,18 @@
 
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 
-	function handleQuickAction(action: string) {
-		if (action === 'rip-iso' || action === 'rip-folder') {
-			isoPickerMode.set(action === 'rip-folder' ? 'folder' : 'iso');
-			showIsoPicker.set(true);
-		} else if (action === 'settings') {
-			goto('/settings');
-		}
+	function ripFromIso() {
+		isoPickerMode.set('iso');
+		showIsoPicker.set(true);
+	}
+
+	function ripFromFolder() {
+		isoPickerMode.set('folder');
+		showIsoPicker.set(true);
+	}
+
+	function openSettings() {
+		goto('/settings');
 	}
 
 	let isSetupPage = $derived($page.url.pathname.startsWith('/setup'));
@@ -363,7 +368,7 @@
 								{#if $isAdmin}
 									<FlyoutItem
 										onclick={() => {
-											handleQuickAction('rip-iso');
+											ripFromIso();
 											close();
 										}}
 									>
@@ -374,7 +379,7 @@
 									</FlyoutItem>
 									<FlyoutItem
 										onclick={() => {
-											handleQuickAction('rip-folder');
+											ripFromFolder();
 											close();
 										}}
 									>
@@ -387,7 +392,7 @@
 								{/if}
 								<FlyoutItem
 									onclick={() => {
-										handleQuickAction('settings');
+										openSettings();
 										close();
 									}}
 								>
