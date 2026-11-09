@@ -6,9 +6,9 @@ import type { WSEnvelope } from '$lib/api/ws';
 
 // Branch pins for TranscodeCard, beside TranscodeCard.test.ts. Two branches
 // cannot be reached from the rendered component, so nothing here forces them:
-// the `return null` of etaDisplay (line 49) and of fpsDisplay (line 55). Both
-// are read only inside `{#if isActive}`, which sits in the `{:else}` of
-// `{#if !job}`, so `isActive` is true and `job` is set whenever they run.
+// the `return null` of etaDisplay and of fpsDisplay. Both are read only inside
+// `{#if isActive}`, which sits in the `{:else}` of `{#if !job}`, so `isActive`
+// is true and `job` is set whenever they run.
 
 const wsHandlers = new Map<string, (env: WSEnvelope) => void>();
 const unsubscribed: string[] = [];
