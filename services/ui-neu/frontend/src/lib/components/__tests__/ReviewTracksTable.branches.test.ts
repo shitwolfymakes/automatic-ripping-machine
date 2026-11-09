@@ -4,12 +4,8 @@ import type { MetadataCandidate, ScanTitle, TrackView } from '$lib/types/api.gen
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import { createJob } from '../__fixtures__/job';
 
-// Branch pins for ReviewTracksTable, beside ReviewTracksTable.test.ts. One
-// branch cannot be reached from the rendered component, so nothing here
-// forces it:
-// - handleTrackTitleApply's `else` (no track id, which closes every search):
-//   its only caller passes `row.trackId!` from inside a block that renders
-//   only when `row.trackId` is set, so the id is always present.
+// Branch pins for ReviewTracksTable, beside ReviewTracksTable.test.ts. Every
+// branch is reachable from the rendered component.
 
 const { adminStore } = await vi.hoisted(async () => {
 	const { writable } = await import('svelte/store');

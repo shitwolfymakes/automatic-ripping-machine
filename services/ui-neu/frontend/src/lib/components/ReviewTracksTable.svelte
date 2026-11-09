@@ -50,12 +50,8 @@
 		openSearchTrackIds = next;
 	}
 
-	function handleTrackTitleApply(trackId?: string) {
-		if (trackId != null) {
-			openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
-		} else {
-			openSearchTrackIds = new Set();
-		}
+	function handleTrackTitleApply(trackId: string) {
+		openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
 		onrefresh?.();
 	}
 
