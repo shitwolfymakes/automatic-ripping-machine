@@ -97,17 +97,17 @@
 		loadJobs(getJobsCache(tab) == null);
 	}
 
-	let actionFeedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	let actionError = $state<string | null>(null);
 
 	// A failed action (409 retry of a task no longer failed, 503 delete with
 	// the dispatcher down, a network error) shows in the feedback banner, and
 	// the list refreshes either way since the failure usually means it is stale.
 	async function runAction(action: () => Promise<unknown>, verb: string) {
-		actionFeedback = null;
+		actionError = null;
 		try {
 			await action();
 		} catch (e) {
-			actionFeedback = { type: 'error', message: e instanceof Error ? e.message : `${verb} failed` };
+			actionError = e instanceof Error ? e.message : `${verb} failed`;
 		}
 		loadJobs();
 	}
@@ -384,10 +384,10 @@
 		<section class="space-y-4" data-page-section>
 			<h2 class="transcoder-page-section-title" data-page-section-title>Transcode Jobs</h2>
 
-			{#if actionFeedback}
-				<div class="alert {actionFeedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-					{actionFeedback.message}
-					<button onclick={() => (actionFeedback = null)} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
+			{#if actionError}
+				<div class="alert alert-danger">
+					{actionError}
+					<button onclick={() => (actionError = null)} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
 				</div>
 			{/if}
 

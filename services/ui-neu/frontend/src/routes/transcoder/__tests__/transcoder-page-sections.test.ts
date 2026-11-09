@@ -2,13 +2,12 @@
 // into helpers, classes and components. transcoder-page.test.ts covers the
 // happy paths; this file covers the gaps it leaves.
 //
-// Four branches of +page.svelte cannot be reached and stay uncovered:
+// Three branches of +page.svelte cannot be reached and stay uncovered:
 // - `if (!startISO) return null` in formatDuration: both callers check the
 //   start before calling it.
 // - `TAB_LABELS[tab] ?? tab`: every tab has a label.
 // - `parts[parts.length - 1] ?? ''` in sourceBasename: a split never returns
 //   an empty list.
-// - `actionFeedback.type === 'success'`: only error feedback is ever set.
 //
 // State isolation: `transcoderStats`, `transcoderWorkers` and the jobs cache
 // are module-level, so every test calls vi.resetModules() and dynamically
