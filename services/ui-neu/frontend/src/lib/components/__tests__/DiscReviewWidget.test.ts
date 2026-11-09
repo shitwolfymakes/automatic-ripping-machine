@@ -28,7 +28,6 @@ vi.mock('$lib/api/jobs', () => ({
 	acceptIdentitySuggestion: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] })),
 	updateTrack: vi.fn(() => Promise.resolve(createJob())),
 	updateJobTitle: vi.fn(() => Promise.resolve(createJob())),
-	updateJobConfig: vi.fn(() => Promise.resolve(createJob())),
 	updateTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	clearTrackTitle: vi.fn(() => Promise.resolve(createJob())),
 	searchMetadata: vi.fn(),
@@ -38,10 +37,6 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchNamingVariables: vi.fn(() => Promise.resolve({ variables: {} })),
 	namingPreview: vi.fn(() => Promise.resolve({ rendered: '' })),
 	validatePattern: vi.fn(() => Promise.resolve({ valid: true }))
-}));
-
-vi.mock('$lib/api/settings', () => ({
-	fetchTranscoderPresets: vi.fn(() => Promise.resolve(null))
 }));
 
 vi.mock('$lib/api/sessions', () => ({

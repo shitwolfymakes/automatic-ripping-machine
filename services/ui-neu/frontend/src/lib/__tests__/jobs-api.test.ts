@@ -20,10 +20,10 @@ import {
 	searchMusicMetadata,
 	fetchMusicDetail,
 	updateJobTitle,
-	updateJobConfig,
 	triggerManual,
 	startWaitingJob,
-	pauseWaitingJob
+	pauseWaitingJob,
+	ripAgain
 } from '../api/jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);
@@ -140,13 +140,12 @@ describe('job/track edits via bulk-PATCH (EXISTS in v3)', () => {
 			body: JSON.stringify({ poster_url_manual: 'http://x/p.jpg' })
 		});
 	});
+});
 
-	it('updateJobConfig PATCHes /api/jobs/{id}', async () => {
-		await updateJobConfig('job_1', { poster_url_manual: null });
-		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1', {
-			method: 'PATCH',
-			body: JSON.stringify({ poster_url_manual: null })
-		});
+describe('ripAgain', () => {
+	it('POSTs /api/jobs/{id}/rip-again', async () => {
+		await ripAgain('job_1');
+		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1/rip-again', { method: 'POST' });
 	});
 });
 

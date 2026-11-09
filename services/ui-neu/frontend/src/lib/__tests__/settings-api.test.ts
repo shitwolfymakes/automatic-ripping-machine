@@ -9,7 +9,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get, post, patch } from '$lib/api/client';
-import { fetchSettings, saveArmConfig, checkApiKey, fetchTranscoderPresets, createCustomPreset } from '../api/settings';
+import { fetchSettings, saveArmConfig, checkApiKey } from '../api/settings';
 
 const mockGet = vi.mocked(get);
 const mockPost = vi.mocked(post);
@@ -62,30 +62,5 @@ describe('checkApiKey (v3 POST /api/config/keys/{name}/check)', () => {
 		mockPost.mockResolvedValue({ name: 'makemkv', status: 'unknown', detail: 'not checked yet', checked_at: null });
 		await checkApiKey('makemkv');
 		expect(mockPost).toHaveBeenCalledWith('/api/config/keys/makemkv/check', { value: undefined });
-	});
-});
-
-describe('fetchTranscoderPresets (v3 GET /api/transcode-presets)', () => {
-	it('GETs the transcode-presets array', async () => {
-		mockGet.mockResolvedValue([{ id: 'p1', name: 'Fast' }]);
-		const presets = await fetchTranscoderPresets();
-		expect(mockGet).toHaveBeenCalledWith('/api/transcode-presets');
-		expect(presets).toHaveLength(1);
-		expect(presets[0].name).toBe('Fast');
-	});
-});
-
-describe('createCustomPreset (v3 POST /api/transcode-presets)', () => {
-	it('POSTs the v3 create body', async () => {
-		mockPost.mockResolvedValue({ id: 'p2', name: 'Custom' });
-		const body = {
-			name: 'Custom',
-			media_type: 'movie' as const,
-			tool: 'handbrake' as const,
-			container: 'mkv' as const
-		};
-		const result = await createCustomPreset(body);
-		expect(mockPost).toHaveBeenCalledWith('/api/transcode-presets', body);
-		expect(result.id).toBe('p2');
 	});
 });

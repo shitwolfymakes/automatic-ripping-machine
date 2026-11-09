@@ -7,14 +7,7 @@
 //
 // Function names are kept stable so consumers compile; return shapes are
 // adapted to v3 and retyped at the call sites.
-import type {
-	ConfigView,
-	ConfigUpdateRequest,
-	SettingsSchemaResponse,
-	KeyCheckResponse,
-	TranscodePresetView,
-	TranscodePresetCreateRequest
-} from '$lib/types/api.gen';
+import type { ConfigView, ConfigUpdateRequest, SettingsSchemaResponse, KeyCheckResponse } from '$lib/types/api.gen';
 import { get, post, patch } from './client';
 
 // ---------------------------------------------------------------------------
@@ -92,15 +85,4 @@ export async function saveArmConfig(config: ConfigUpdateRequest): Promise<{ succ
 // ---------------------------------------------------------------------------
 export function checkApiKey(name: 'tmdb' | 'omdb' | 'tvdb' | 'makemkv', value?: string): Promise<KeyCheckResponse> {
 	return post<KeyCheckResponse>(`/api/config/keys/${name}/check`, { value });
-}
-
-// ---------------------------------------------------------------------------
-// Transcode presets — EXISTS in v3 (CRUD under /api/transcode-presets).
-// ---------------------------------------------------------------------------
-export function fetchTranscoderPresets(): Promise<TranscodePresetView[]> {
-	return get<TranscodePresetView[]>('/api/transcode-presets');
-}
-
-export function createCustomPreset(body: TranscodePresetCreateRequest): Promise<TranscodePresetView> {
-	return post<TranscodePresetView>('/api/transcode-presets', body);
 }

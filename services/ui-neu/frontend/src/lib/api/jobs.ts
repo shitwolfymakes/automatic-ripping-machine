@@ -156,10 +156,6 @@ export function setJobMediaType(jobId: string, mediaType: 'movie' | 'tv'): Promi
 	return patchJob(jobId, { media_type: mediaType });
 }
 
-export function updateJobConfig(jobId: string, data: JobUpdateRequest): Promise<JobView> {
-	return patchJob(jobId, data);
-}
-
 // ---------------------------------------------------------------------------
 // Identify / resolve + apply-session (EXISTS in v3)
 // ---------------------------------------------------------------------------
@@ -341,8 +337,6 @@ export function fetchNamingVariables(): Promise<NamingVariablesResponse> {
 	return apiFetch<NamingVariablesResponse>('/api/naming/variables');
 }
 
-// Timed review gate: operator Start for a disc held in awaiting_review.
-// Transitions AWAITING_REVIEW -> RIPPING and unblocks the parked ripper.
 // on_previously_ripped: rip a ripped job's disc again. Starts a held copy of
 // the disc if one is waiting, otherwise lets the next insert through once.
 export function ripAgain(id: string): Promise<RipAgainResponse> {
@@ -355,6 +349,8 @@ export function acceptIdentitySuggestion(jobId: string): Promise<ResolveResponse
 	return post<ResolveResponse>(`/api/jobs/${jobId}/identity/accept`);
 }
 
+// Timed review gate: operator Start for a disc held in awaiting_review.
+// Transitions AWAITING_REVIEW -> RIPPING and unblocks the parked ripper.
 export function startWaitingJob(id: string): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${id}/rip-start-review`, { method: 'POST' });
 }

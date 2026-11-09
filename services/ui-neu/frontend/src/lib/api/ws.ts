@@ -102,7 +102,6 @@ class WSConnection {
 	}
 
 	private connect(): void {
-		if (this.stopping) return;
 		// Tokenless requests act as guest backend-side (same as REST) — send
 		// the stored token if present, or an empty string when browsing
 		// anonymously. Either way the socket opens; the backend's auth ack
