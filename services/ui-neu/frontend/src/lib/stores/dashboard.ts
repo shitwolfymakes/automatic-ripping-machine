@@ -1,6 +1,6 @@
 import { createPollingStore } from './polling';
 import { fetchDashboardSnapshot, STICKY_FIELDS } from '$lib/api/dashboard';
-import type { DashboardData } from '$lib/api/dashboard';
+import type { DashboardData, DashboardSnapshot } from '$lib/api/dashboard';
 const emptyDashboard: DashboardData = {
 	db_available: true,
 	arm_online: false,
@@ -32,32 +32,51 @@ const consecutiveFalse: Record<(typeof TWO_STRIKE_FIELDS)[number], number> = {
 	transcoder_online: 0
 };
 
-async function fetchDashboardSticky(): Promise<DashboardData> {
-	// A sticky field comes back `null` when its endpoint blipped on this
-	// poll; hold the previous value so a transient timeout doesn't flicker
-	// badges/counts to zero.
-	const fresh = await fetchDashboardSnapshot();
+// A sticky field comes back `null` when its endpoint blipped on this
+// poll; hold the previous value so a transient timeout doesn't flicker
+// badges/counts to zero.
+function holdStickyFields(fresh: DashboardSnapshot, previous: DashboardData): DashboardData {
 	const merged = { ...fresh } as DashboardData;
 	for (const key of STICKY_FIELDS) {
 		if (fresh[key] === null || fresh[key] === undefined) {
-			(merged[key] as unknown) = lastGood[key];
+			(merged[key] as unknown) = previous[key];
 		}
 	}
+	return merged;
+}
+
+function countFalseStreaks(data: DashboardSnapshot): void {
 	for (const key of TWO_STRIKE_FIELDS) {
-		if (fresh[key] === false) {
+		if (data[key] === false) {
 			consecutiveFalse[key]++;
-			// First `false` after a `true` — keep showing online (debounce
-			// a single-poll blip). A second consecutive `false` surfaces
-			// the real outage on the next poll, ~5s later.
-			if (consecutiveFalse[key] < 2) {
-				(merged[key] as unknown) = true;
-			}
 		} else {
 			consecutiveFalse[key] = 0;
 		}
 	}
-	lastGood = merged;
-	return merged;
+}
+
+// First `false` after a `true` — keep showing online (debounce
+// a single-poll blip). A second consecutive `false` surfaces
+// the real outage on the next poll, ~5s later.
+function debounceOffline(
+	data: DashboardData,
+	streaks: Record<(typeof TWO_STRIKE_FIELDS)[number], number>
+): DashboardData {
+	const debounced = { ...data } as DashboardData;
+	for (const key of TWO_STRIKE_FIELDS) {
+		if (streaks[key] === 1) {
+			(debounced[key] as unknown) = true;
+		}
+	}
+	return debounced;
+}
+
+async function fetchDashboardSticky(): Promise<DashboardData> {
+	const fresh = await fetchDashboardSnapshot();
+	const merged = holdStickyFields(fresh, lastGood);
+	countFalseStreaks(fresh);
+	lastGood = debounceOffline(merged, consecutiveFalse);
+	return lastGood;
 }
 
 /** Singleton dashboard store — survives page navigations, retains last-known data. */
