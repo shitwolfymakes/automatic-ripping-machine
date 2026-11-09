@@ -3,6 +3,7 @@
 	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
 	import { matchIndicator, type MatchKind } from '$lib/utils/track-match';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
+	import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '$lib/utils/music-search';
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from './Glyph.svelte';
@@ -71,6 +72,17 @@
 				: (detail.tracks ?? [])
 	);
 
+	function currentFilters(): MusicSearchFilters {
+		return {
+			artist,
+			type: filterType,
+			format: filterFormat,
+			country: filterCountry,
+			status: filterStatus,
+			matchCount
+		};
+	}
+
 	async function handleSearch() {
 		if (!query.trim()) return;
 		searching = true;
@@ -79,21 +91,7 @@
 		detail = null;
 		flippedCards = new Map();
 		try {
-			const opts: {
-				artist?: string;
-				track_count?: number;
-				release_type?: string;
-				format?: string;
-				country?: string;
-				status?: string;
-			} = {};
-			if (artist.trim()) opts.artist = artist.trim();
-			if (matchCount && discTracks.length > 0) opts.track_count = discTracks.length;
-			if (filterType) opts.release_type = filterType;
-			if (filterFormat) opts.format = filterFormat;
-			if (filterCountry.trim()) opts.country = filterCountry.trim();
-			if (filterStatus) opts.status = filterStatus;
-			const resp = await searchMusicMetadata(query.trim(), opts);
+			const resp = await searchMusicMetadata(query.trim(), buildSearchOpts(currentFilters(), discTracks.length));
 			results = resp.candidates;
 			if (resp.detail) searchError = resp.detail;
 			else if (results.length === 0) searchError = 'No results found.';
@@ -247,15 +245,7 @@
 		}
 	}
 
-	let activeFilterCount = $derived(
-		[
-			filterType,
-			filterFormat,
-			filterCountry.trim(),
-			filterStatus,
-			matchCount && discTracks.length > 0 ? 'x' : ''
-		].filter(Boolean).length
-	);
+	let activeFilterCount = $derived(countActiveFilters(currentFilters(), discTracks.length));
 
 	function clearFilters() {
 		filterType = '';
