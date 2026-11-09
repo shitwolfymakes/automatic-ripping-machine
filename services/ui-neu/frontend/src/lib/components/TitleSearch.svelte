@@ -8,6 +8,7 @@
 	import { searchProviders, keyedSources } from '$lib/stores/config';
 	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/utils/search-providers';
 	import TitleSourcePicker from './title-search/TitleSourcePicker.svelte';
+	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
 
 	interface Props {
 		job: JobView;
@@ -48,7 +49,7 @@
 		if (lastSearchType !== undefined && t !== lastSearchType) {
 			pickedSource = null;
 			closeResults();
-			searchError = null;
+			search.error = null;
 		}
 		lastSearchType = t;
 	});
@@ -56,9 +57,8 @@
 	let query = $state(job.title || '');
 	let yearInput = $state(job.year != null ? String(job.year) : '');
 	let imdbInput = $state('');
-	let searching = $state(false);
+	const search = new MetadataSearch();
 	let results = $state<MetadataCandidate[]>([]);
-	let searchError = $state<string | null>(null);
 
 	let applying = $state(false);
 	// Tagged with the row and result list a Use started on, so a result that
@@ -118,39 +118,22 @@
 	let providerLabel = $derived(sourceOptions.find((o) => o.id === source)?.label ?? '');
 	let parsedSearchYear = $derived(/^\d{4}$/.test(yearInput.trim()) ? Number(yearInput.trim()) : null);
 
+	const TEXT_SEARCH: SearchMessages = {
+		empty: 'No results found. Try a different search term.',
+		failed: 'Search failed'
+	};
+
 	async function handleSearch() {
 		const imdb = imdbInput.trim();
 		if (imdb) {
 			// Direct IMDb ID lookup — skip search
-			searching = true;
-			searchError = null;
 			closeResults();
-			try {
-				const resp = await fetchMediaDetail(imdb);
-				results = resp.candidates.slice(0, 1);
-				if (!results.length) searchError = 'No match found for that IMDb ID.';
-			} catch (e) {
-				searchError = e instanceof Error ? e.message : 'IMDb lookup failed';
-			} finally {
-				searching = false;
-			}
+			results = (await search.run(() => fetchMediaDetail(imdb), IMDB_LOOKUP)).slice(0, 1);
 			return;
 		}
 		if (!query.trim()) return;
-		searching = true;
-		searchError = null;
 		closeResults();
-		try {
-			const resp = await searchMetadata(query.trim(), searchType, source, parsedSearchYear);
-			results = resp.candidates;
-			if (results.length === 0) {
-				searchError = 'No results found. Try a different search term.';
-			}
-		} catch (e) {
-			searchError = e instanceof Error ? e.message : 'Search failed';
-		} finally {
-			searching = false;
-		}
+		results = await search.run(() => searchMetadata(query.trim(), searchType, source, parsedSearchYear), TEXT_SEARCH);
 	}
 
 	async function applyResult(c: MetadataCandidate) {
@@ -271,24 +254,24 @@
 		<button
 			type="button"
 			onclick={handleSearch}
-			disabled={searching || (!query.trim() && !imdbInput.trim())}
+			disabled={search.searching || (!query.trim() && !imdbInput.trim())}
 			class="btn btn-primary"
 		>
-			{searching ? 'Searching...' : 'Search'}
+			{search.searching ? 'Searching...' : 'Search'}
 		</button>
 	</div>
 
-	{#if searchError}
-		{#if searchError.toLowerCase().includes('api key')}
+	{#if search.error}
+		{#if search.error.toLowerCase().includes('api key')}
 			<div class="alert alert-warning">
-				<p class="title-search-alert-title">{searchError}</p>
+				<p class="title-search-alert-title">{search.error}</p>
 				<p class="mt-1 title-search-alert-hint">
 					Configure API keys in <a href="/settings" class="title-search-alert-link">Settings</a>.
 				</p>
 			</div>
 		{:else}
 			<div class="flex items-center gap-3">
-				<p class="field-help">{searchError}</p>
+				<p class="field-help">{search.error}</p>
 			</div>
 		{/if}
 	{/if}
