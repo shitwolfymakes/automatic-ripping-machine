@@ -3,6 +3,7 @@
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import TitleSearch from './TitleSearch.svelte';
 	import IdentifyCdForm from './identify/IdentifyCdForm.svelte';
+	import IdentifyVideoForm from './identify/IdentifyVideoForm.svelte';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
@@ -124,30 +125,7 @@
 			{#if isCd}
 				<IdentifyCdForm bind:album bind:year bind:artist bind:trackTitles {scanTrackCount} {submitting} />
 			{:else}
-				<div class="mb-3 flex gap-3">
-					<label class="field identify-dialog-field-wide">
-						<span class="field-label">Title</span>
-						<input
-							bind:value={title}
-							oninput={() => (confirmNoMatch = false)}
-							type="text"
-							required
-							data-testid="identify-title"
-							disabled={submitting}
-						/>
-					</label>
-					<label class="field flex-1">
-						<span class="field-label">Year</span>
-						<input
-							bind:value={year}
-							type="number"
-							min="1888"
-							max="2100"
-							data-testid="identify-year"
-							disabled={submitting}
-						/>
-					</label>
-				</div>
+				<IdentifyVideoForm bind:title bind:year {submitting} ontitleinput={() => (confirmNoMatch = false)} />
 			{/if}
 
 			{#if confirmNoMatch}
@@ -172,8 +150,5 @@
 	.identify-dialog-backdrop {
 		position: absolute;
 		inset: 0;
-	}
-	.identify-dialog-field-wide {
-		flex: 2 1 0%;
 	}
 </style>
