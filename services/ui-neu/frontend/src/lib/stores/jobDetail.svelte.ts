@@ -8,6 +8,7 @@ import type { EditableJobField } from '$lib/utils/job-fields';
 import { readJobMetadata } from '$lib/utils/job-metadata';
 import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
 import { extractMusicTracks } from '$lib/utils/music-tracks';
+import { handSetTrackCount, isSeriesTrackList } from '$lib/utils/track-fields';
 
 // The last preview answered 409 (no routed session, so no template). The
 // 5s poll then asks again only every PREVIEW_UNROUTED_EVERY_N_POLLS polls,
@@ -35,18 +36,8 @@ export class JobDetail {
 	isVideoDisc = $derived(this.detail?.job.disc_type === 'dvd' || this.detail?.job.disc_type === 'bluray');
 	isCdDisc = $derived(this.detail?.job.disc_type === 'cd');
 	musicTracks = $derived(this.detail ? extractMusicTracks(this.detail.job.metadata_json) : []);
-	tracksAreSeries = $derived(
-		(this.detail?.tracks ?? []).some(
-			(t) =>
-				t.role === 'episode' || t.episode_number != null || (t.role == null && this.detail?.job.media_type === 'tv')
-		)
-	);
-	// Tracks whose episode or role the user set by hand (switching to Movie drops them).
-	handSetCount = $derived(
-		(this.detail?.tracks ?? []).filter((t) =>
-			['episode_number', 'role'].some((k) => t.identity_provenance?.[k] === 'manual')
-		).length
-	);
+	tracksAreSeries = $derived(isSeriesTrackList(this.detail?.tracks ?? [], this.detail?.job.media_type));
+	handSetCount = $derived(handSetTrackCount(this.detail?.tracks ?? []));
 	jobMeta = $derived(this.detail ? readJobMetadata(this.detail.job.metadata_json) : {});
 	rawMetadataPairs = $derived(
 		this.detail ? Object.entries((this.detail.job.metadata_json ?? {}) as Record<string, unknown>) : []
