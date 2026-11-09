@@ -16,6 +16,7 @@
 	import Glyph from './Glyph.svelte';
 	import { pathTailTruncate } from '$lib/utils/truncate';
 	import { formatBytes } from '$lib/utils/format';
+	import { isListboxNavKey, nextRowIndex } from '$lib/utils/listbox-nav';
 
 	interface Props {
 		open: boolean;
@@ -205,18 +206,8 @@
 	}
 
 	function handleFolderKeydown(e: KeyboardEvent, entry: IsoFolderEntry, index: number): void {
-		const last = folderRows.length - 1;
-		const go: Record<string, number | undefined> = {
-			ArrowDown: index < last ? index + 1 : undefined,
-			ArrowUp: index > 0 ? index - 1 : undefined,
-			Home: last >= 0 ? 0 : undefined,
-			End: last >= 0 ? last : undefined
-		};
-		if (e.key in go) {
-			e.preventDefault();
-			const target = go[e.key];
-			if (target !== undefined) focusRow(target);
-		} else if (e.key === 'Enter' || e.key === ' ') {
+		if (moveFocus(e, index, folderRows.length)) return;
+		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
 			selectFolder(entry, index);
 		}
@@ -231,24 +222,18 @@
 		(document.getElementById(rowId(index)) as HTMLElement | null)?.focus();
 	}
 
+	/** Moves focus for a navigation key; false when the key is not one. */
+	function moveFocus(e: KeyboardEvent, index: number, count: number): boolean {
+		if (!isListboxNavKey(e.key)) return false;
+		e.preventDefault();
+		const target = nextRowIndex(e.key, index, count);
+		if (target !== null) focusRow(target);
+		return true;
+	}
+
 	function handleRowKeydown(e: KeyboardEvent, entry: IsoLibraryEntry, index: number): void {
+		if (moveFocus(e, index, rows.length)) return;
 		switch (e.key) {
-			case 'ArrowDown':
-				e.preventDefault();
-				if (index < rows.length - 1) focusRow(index + 1);
-				break;
-			case 'ArrowUp':
-				e.preventDefault();
-				if (index > 0) focusRow(index - 1);
-				break;
-			case 'Home':
-				e.preventDefault();
-				if (rows.length > 0) focusRow(0);
-				break;
-			case 'End':
-				e.preventDefault();
-				if (rows.length > 0) focusRow(rows.length - 1);
-				break;
 			case 'Enter':
 			case ' ':
 				e.preventDefault();

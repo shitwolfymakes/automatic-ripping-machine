@@ -12,8 +12,6 @@ import IsoPicker from '../IsoPicker.svelte';
 // - The `?? []` fallback behind the filtered folder rows: it is only read from
 //   the ready snippet and a row's key handler, and both need a loaded folder
 //   listing.
-// - Home and End on an empty list, in either mode: the handlers run from a row,
-//   so the list always has at least one row when they fire.
 // - Start's guard on an unset selected path: the Start button is disabled until
 //   something is selected, and a disabled button never calls the handler. Only
 //   the in-flight half of the guard is reachable (two clicks before the DOM
