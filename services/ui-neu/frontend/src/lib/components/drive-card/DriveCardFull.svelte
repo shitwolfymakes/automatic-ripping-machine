@@ -1,9 +1,8 @@
 <script lang="ts">
 	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
-	import { updateDrive, unenrollDrive } from '$lib/api/drives';
 	import { transcoderEnabled } from '$lib/stores/config';
+	import { DriveCardActions } from '$lib/stores/driveCardActions.svelte';
 	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/utils/sessions';
-	import { triggerManual } from '$lib/api/jobs';
 	import { hasLiveJob, isDriveDetached, prescanOverrideCount, startRipBlockedReason } from '$lib/utils/drives';
 	import type { PrescanKey } from '$lib/utils/drive-settings';
 	import DriveSettingsPanel from './DriveSettingsPanel.svelte';
@@ -42,73 +41,10 @@
 		defaultSessionChoices(sessions, transcodePresets, $transcoderEnabled, drive.default_session_id)
 	);
 
-	let togglingUhd = $state(false);
-	let togglingMode = $state(false);
-	let selectedSessionId = $state('');
-	let triggering = $state(false);
-	let manualError = $state<string | null>(null);
+	const actions = new DriveCardActions(() => onupdate?.());
 	let showSettings = $state(false);
 
-	async function startManualRip() {
-		if (triggering) return;
-		triggering = true;
-		manualError = null;
-		try {
-			await triggerManual({ drive_id: drive.id, session_id: selectedSessionId || null });
-			selectedSessionId = '';
-			onupdate?.();
-		} catch (e) {
-			manualError = e instanceof Error ? e.message : 'Manual rip failed';
-		} finally {
-			triggering = false;
-		}
-	}
-
-	let unenrolling = $state(false);
-	let unenrollError = $state<string | null>(null);
-	let confirmUnenrollOpen = $state(false);
 	const unenrollName = $derived(drive.display_name || drive.model || drive.hostname);
-	function handleUnenroll() {
-		unenrollError = null;
-		confirmUnenrollOpen = true;
-	}
-	async function confirmUnenroll() {
-		confirmUnenrollOpen = false;
-		unenrolling = true;
-		try {
-			await unenrollDrive(drive.id);
-			await onupdate?.();
-		} catch (e) {
-			unenrollError = e instanceof Error ? e.message : 'Unenroll failed';
-		} finally {
-			unenrolling = false;
-		}
-	}
-
-	async function toggleUhd() {
-		togglingUhd = true;
-		try {
-			await updateDrive(drive.id, { uhd_capable: !drive.uhd_capable });
-			onupdate?.();
-		} catch {
-			// ignore
-		} finally {
-			togglingUhd = false;
-		}
-	}
-
-	// '' = no mode of its own: follow the global auto-rip default (null on the wire).
-	async function setMode(next: string) {
-		togglingMode = true;
-		try {
-			await updateDrive(drive.id, { drive_mode: next === '' ? null : (next as 'auto' | 'manual') });
-			onupdate?.();
-		} catch {
-			// ignore
-		} finally {
-			togglingMode = false;
-		}
-	}
 </script>
 
 <!-- Plain `card`, deliberately NOT `card card-status`: the original card shell
@@ -167,8 +103,8 @@
 			<input
 				type="checkbox"
 				checked={drive.uhd_capable ?? false}
-				disabled={togglingUhd}
-				onchange={toggleUhd}
+				disabled={actions.togglingUhd}
+				onchange={() => actions.toggleUhd(drive)}
 				class="drive-card-uhd-checkbox"
 			/>
 			4K
@@ -182,10 +118,10 @@
 			class="drive-card-mode-btn"
 			aria-label="Rip mode"
 			title="Rip on insert (Auto), wait for Start (Manual), or follow the global default"
-			disabled={togglingMode}
+			disabled={actions.togglingMode}
 			data-manual={drive.drive_mode === 'manual' || (drive.drive_mode == null && !globalAutoRip)}
 			value={drive.drive_mode ?? ''}
-			onchange={(e) => setMode((e.currentTarget as HTMLSelectElement).value)}
+			onchange={(e) => actions.setMode(drive.id, (e.currentTarget as HTMLSelectElement).value)}
 		>
 			<option value="">Default ({globalAutoRip ? 'Auto' : 'Manual'})</option>
 			<option value="auto">Auto</option>
@@ -193,9 +129,9 @@
 		</select>
 
 		<select
-			bind:value={selectedSessionId}
+			bind:value={actions.selectedSessionId}
 			data-testid="drive-session-select"
-			disabled={triggering}
+			disabled={actions.triggering}
 			title="Optional session - auto-applies when the rip completes"
 			class="min-w-0 flex-1 drive-card-session-select"
 		>
@@ -205,13 +141,13 @@
 			{/each}
 		</select>
 		<button
-			onclick={startManualRip}
-			disabled={triggering || startRipBlocked !== null}
+			onclick={() => actions.startManualRip(drive.id)}
+			disabled={actions.triggering || startRipBlocked !== null}
 			data-testid="drive-start-rip"
 			class="flex items-center justify-center gap-1 btn btn-primary btn-sm drive-card-start-btn"
 			title={startRipBlocked ?? 'Start a manual rip on this drive'}
 		>
-			{triggering ? 'Starting...' : 'Start rip'}
+			{actions.triggering ? 'Starting...' : 'Start rip'}
 		</button>
 
 		<div class="drive-card-action-divider"></div>
@@ -227,21 +163,22 @@
 
 		<button
 			data-testid="drive-unenroll"
-			onclick={handleUnenroll}
-			disabled={unenrolling || hasLiveJob(drive)}
+			onclick={actions.requestUnenroll}
+			disabled={actions.unenrolling || hasLiveJob(drive)}
 			title={hasLiveJob(drive)
 				? 'Cannot unenroll while the drive has a job in progress'
 				: "Stop and remove this drive's ripper"}
-			class="btn btn-danger btn-sm drive-card-unenroll-btn">{unenrolling ? 'Unenrolling...' : 'Unenroll'}</button
+			class="btn btn-danger btn-sm drive-card-unenroll-btn"
+			>{actions.unenrolling ? 'Unenrolling...' : 'Unenroll'}</button
 		>
 	</div>
 
-	{#if manualError}
-		<p class="field-error mt-1 drive-card-error" data-testid="drive-manual-error">{manualError}</p>
+	{#if actions.manualError}
+		<p class="field-error mt-1 drive-card-error" data-testid="drive-manual-error">{actions.manualError}</p>
 	{/if}
 
-	{#if unenrollError}
-		<p class="field-error mt-1 drive-card-error" data-testid="drive-unenroll-error">{unenrollError}</p>
+	{#if actions.unenrollError}
+		<p class="field-error mt-1 drive-card-error" data-testid="drive-unenroll-error">{actions.unenrollError}</p>
 	{/if}
 
 	<!-- Current rip -->
@@ -259,13 +196,13 @@
 </div>
 
 <ConfirmDialog
-	open={confirmUnenrollOpen}
+	open={actions.confirmUnenrollOpen}
 	title="Unenroll {unenrollName}?"
 	message="Its ripper container is stopped and removed. If the drive is still connected it reappears under Detected on the next scan."
 	confirmLabel="Unenroll"
 	variant="danger"
-	onconfirm={confirmUnenroll}
-	oncancel={() => (confirmUnenrollOpen = false)}
+	onconfirm={() => actions.confirmUnenroll(drive.id)}
+	oncancel={actions.cancelUnenroll}
 />
 
 <style>
