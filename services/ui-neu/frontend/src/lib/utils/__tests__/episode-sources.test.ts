@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
 	activeSource,
 	episodeSourceOptions,
+	notConfigured,
 	pickerSourceFor,
 	shortSourceId,
 	shortSourceLabel
 } from '../episode-sources';
 import { panelState } from '$lib/components/episodes/episodeModel';
-import type { IdentityView, TrackIdentityView, JobView } from '$lib/types/api.gen';
+import type { IdentityView, SourceSummary, TrackIdentityView, JobView } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
 	({ has_series: true, looks_episodic: true, media_type: 'tv', ...o }) as JobView;
@@ -193,5 +194,29 @@ describe('pickerSourceFor', () => {
 
 	it('gives null with no identity', () => {
 		expect(pickerSourceFor(null, null)).toBeNull();
+	});
+});
+
+describe('notConfigured', () => {
+	const claim = (o: Partial<SourceSummary>) => ({ status: 'ok', ...o }) as SourceSummary;
+
+	it('is true for a skipped claim whose detail says not configured, in any case', () => {
+		expect(notConfigured(claim({ status: 'skipped', detail: 'Not configured: no API key' }))).toBe(true);
+	});
+
+	it('is false for a skipped claim with another detail', () => {
+		expect(notConfigured(claim({ status: 'skipped', detail: 'rate limited' }))).toBe(false);
+	});
+
+	it('is false for a skipped claim with no detail', () => {
+		expect(notConfigured(claim({ status: 'skipped' }))).toBe(false);
+	});
+
+	it('is false for another status even with a not configured detail', () => {
+		expect(notConfigured(claim({ status: 'ok', detail: 'not configured' }))).toBe(false);
+	});
+
+	it('is false with no claim', () => {
+		expect(notConfigured(undefined)).toBe(false);
 	});
 });

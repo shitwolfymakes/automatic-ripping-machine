@@ -6,7 +6,7 @@ import type {
 	TrackIdentityView,
 	TrackView
 } from '$lib/types/api.gen';
-import { activeSource, EPISODE_PREFIX, SOURCE_LABEL } from '$lib/utils/episode-sources';
+import { activeSource, EPISODE_PREFIX, notConfigured, SOURCE_LABEL } from '$lib/utils/episode-sources';
 
 export type PanelState = 'noseries' | 'matching' | 'unavailable' | 'nomatch' | 'unsure' | 'applied';
 /** `guess`: placed by a source whose result was held; shown amber, never auto-started. */
@@ -81,7 +81,7 @@ export function panelState(job: JobView, identity: IdentityView | null, matching
 	// Every episode source skipped as not configured: nothing can ever place
 	// these tracks. No episode source at all (cleared, or not yet run) is a
 	// plain no match, so Fix match is at hand.
-	const configured = ran.filter((s) => !(s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '')));
+	const configured = ran.filter((s) => !notConfigured(s));
 	if (ran.length > 0 && configured.length === 0) return 'unavailable';
 	if (!ran.some((s) => (s?.status ?? 'ok') === 'ok')) return 'nomatch';
 	// The resolver's own word: the winning placement came from a held result.

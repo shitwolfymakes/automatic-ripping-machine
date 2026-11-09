@@ -1,6 +1,6 @@
 // The episode sources in an identity's claims: their ids, their display
 // names, and which one the resolver applied.
-import type { IdentityView } from '$lib/types/api.gen';
+import type { IdentityView, SourceSummary } from '$lib/types/api.gen';
 import type { EpisodeSource } from '$lib/api/identity';
 
 export const SOURCE_LABEL: Record<string, string> = {
@@ -47,13 +47,19 @@ export interface EpisodeSourceOption {
 	disabled: boolean;
 }
 
+/** A source the resolver skipped because it is not configured: it can't
+ * run until it is set up in Settings. */
+export function notConfigured(claim: SourceSummary | undefined): boolean {
+	return claim?.status === 'skipped' && /not configured/i.test(claim?.detail ?? '');
+}
+
 /** The Fix match form's source choices, in EPISODE_SOURCES order. A
  * source the identity records as skipped for not being configured is
  * off. */
 export function episodeSourceOptions(identity: IdentityView | null): EpisodeSourceOption[] {
 	return EPISODE_SOURCES.map((id) => {
 		const s = identity?.sources?.[`episodes_${id}`];
-		const off = s?.status === 'skipped' && /not configured/i.test(s?.detail ?? '');
+		const off = notConfigured(s);
 		return { id, label: SOURCE_LABEL[`episodes_${id}`], disabled: off };
 	});
 }
