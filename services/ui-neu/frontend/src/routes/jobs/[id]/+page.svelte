@@ -21,6 +21,7 @@
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
 	import { isAwaitingIdentity, isLive, isPostRipStatus } from '$lib/utils/job-status-groups';
+	import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
 	import { formatFps } from '$lib/utils/fps';
@@ -70,25 +71,14 @@
 	function handleIdentified(resp: ResolveResponse) {
 		showIdentify = false;
 		jobDetail.load();
-		if (resp.fan_out?.length) {
-			const n = resp.fan_out.length;
-			flashNote(`${n} session${n === 1 ? '' : 's'} resumed`);
-		}
+		const note = identifyNote(resp);
+		if (note) flashNote(note);
 	}
 
 	function handleApplied(resp: ApplySessionResponse) {
 		showApply = false;
 		jobDetail.load();
-		if (resp.session_application?.status === 'waiting_identify') {
-			// Pre-rip applies park until rip-complete. A post-rip park (identity
-			// still pending, or no title resolved an output) has no such
-			// promise; the skip reason is not persisted, so just say waiting.
-			const postRip = detail ? isPostRipStatus(detail.job.status) : false;
-			flashNote(postRip ? 'Session parked; waiting' : 'Session parked; applies when the rip finishes');
-			return;
-		}
-		const n = resp.tasks?.length ?? 0;
-		flashNote(`${n} transcode task${n === 1 ? '' : 's'} queued`);
+		flashNote(applyNote(resp, detail ? isPostRipStatus(detail.job.status) : false));
 	}
 
 	let sessionNames = $state(new Map<string, string>());
