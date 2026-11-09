@@ -47,14 +47,21 @@
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 
-	const canSubmit = $derived(
-		submitting ? false : isCd ? album.trim().length > 0 && artist.trim().length > 0 : title.trim().length > 0
-	);
+	// A CD needs its album and artist; anything else needs a title.
+	const cdFieldsFilled = $derived(album.trim().length > 0 && artist.trim().length > 0);
+	const videoFieldsFilled = $derived(title.trim().length > 0);
+	const canSubmit = $derived(!submitting && (isCd ? cdFieldsFilled : videoFieldsFilled));
 
 	// A TV disc saved by hand has no show id, so episodes cannot be matched
 	// automatically; the operator confirms that with a second click.
 	const isEpisodic = $derived(!isCd && (job.looks_episodic || job.media_type === 'tv') && !job.has_series);
 	let confirmNoMatch = $state(false);
+
+	const submitLabel = $derived.by(() => {
+		if (submitting) return 'Saving...';
+		if (confirmNoMatch) return 'Save without a match';
+		return isEditMode ? 'Edit identity' : 'Identify disc';
+	});
 
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
@@ -205,13 +212,7 @@
 			<div class="modal-actions">
 				<button type="button" onclick={onclose} disabled={submitting} class="btn"> Cancel </button>
 				<button type="submit" disabled={!canSubmit} data-testid="identify-submit" class="btn btn-primary">
-					{submitting
-						? 'Saving...'
-						: confirmNoMatch
-							? 'Save without a match'
-							: isEditMode
-								? 'Edit identity'
-								: 'Identify disc'}
+					{submitLabel}
 				</button>
 			</div>
 		</form>
