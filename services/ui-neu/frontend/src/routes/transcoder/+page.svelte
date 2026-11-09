@@ -16,6 +16,7 @@
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { formatElapsed } from '$lib/utils/format';
+	import { pathBasename } from '$lib/utils/path';
 	import { transcoderStats, transcoderWorkers, getJobsCache, setJobsCache } from '$lib/stores/transcoder';
 	import { fetchGpus } from '$lib/api/gpus';
 	import { wsClient } from '$lib/api/ws';
@@ -54,12 +55,6 @@
 	let s = $derived($stats);
 	function statusCount(status: string): number {
 		return s.tasks_by_status?.[status] ?? 0;
-	}
-
-	function sourceBasename(path: string | null | undefined): string {
-		if (!path) return '';
-		const parts = path.replace(/\/+$/, '').split('/');
-		return parts[parts.length - 1] ?? '';
 	}
 
 	async function loadJobs(showLoading = true) {
@@ -403,7 +398,7 @@
 				{#snippet ready(jobList)}
 					<div class="stack stack-sm">
 						{#each jobList as job (job.id)}
-							{@const sourceFile = sourceBasename(job.output_path)}
+							{@const sourceFile = pathBasename(job.output_path)}
 							<div
 								in:fade={fadeIn}
 								out:fade={fadeOut}

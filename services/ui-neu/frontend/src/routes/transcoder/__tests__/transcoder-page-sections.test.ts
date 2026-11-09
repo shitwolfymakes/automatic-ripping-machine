@@ -2,12 +2,6 @@
 // into helpers, classes and components. transcoder-page.test.ts covers the
 // happy paths; this file covers the gaps it leaves.
 //
-// Two branches of +page.svelte cannot be reached and stay uncovered:
-// - `if (!startISO) return null` in formatDuration: both callers check the
-//   start before calling it.
-// - `parts[parts.length - 1] ?? ''` in sourceBasename: a split never returns
-//   an empty list.
-//
 // State isolation: `transcoderStats`, `transcoderWorkers` and the jobs cache
 // are module-level, so every test calls vi.resetModules() and dynamically
 // imports the page, the stores and the mocked API again (see `harness`).
