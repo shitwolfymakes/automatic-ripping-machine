@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/transitions';
 	import { login } from '$lib/api/auth';
@@ -23,18 +24,8 @@
 	// guest browsing (it's off until setup), and send the admin into setup.
 	let firstRun = $state(false);
 	onMount(async () => {
-		try {
-			const res = await fetch('/api/system/version');
-			guestEnabled = res.ok;
-		} catch {
-			guestEnabled = false;
-		}
-		try {
-			const res = await fetch('/api/setup/status');
-			firstRun = res.ok && (await res.json()).first_run === true;
-		} catch {
-			firstRun = false;
-		}
+		guestEnabled = (await probeGuestAccess(fetch)) === 'open';
+		firstRun = (await probeFirstRun(fetch)) === true;
 	});
 
 	async function onSubmit(e: Event) {

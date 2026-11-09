@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 import { hydrateConfig } from '$lib/stores/config';
 import { getToken } from '$lib/api/client';
+import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 
 export const prerender = false;
 export const ssr = false;
@@ -27,12 +28,7 @@ let anonymousVisitAllowedCached = false;
 // fetch, not the API client, whose 401 handler must not fire for a probe.
 async function anonymousVisitAllowed(fetchFn: typeof fetch): Promise<boolean> {
 	if (anonymousVisitAllowedCached || getToken() !== null) return true;
-	try {
-		const resp = await fetchFn('/api/system/version');
-		if (resp.status === 401) return false;
-	} catch {
-		// ARM unreachable - let the normal UI handle it
-	}
+	if ((await probeGuestAccess(fetchFn)) === 'closed') return false;
 	anonymousVisitAllowedCached = true;
 	return true;
 }
@@ -66,22 +62,12 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 	// server-wide: the status endpoint then reports first_run=false.
 	if (!isAdminSession()) return {};
 
-	try {
-		const resp = await fetch('/api/setup/status');
-		if (resp.ok) {
-			const status = await resp.json();
-			if (status.first_run === true) {
-				redirect(307, '/setup');
-			}
-			// Setup is complete or deferred - cache this so we don't re-check on every click
-			setupConfirmedComplete = true;
-		}
-		// Non-ok response (503, etc.) - ARM unreachable, don't redirect
-	} catch (e) {
-		// Re-throw SvelteKit redirects (they use throw internally)
-		if (e && typeof e === 'object' && 'status' in e && 'location' in e) throw e;
-		// ARM unreachable - don't redirect, let the normal UI handle it
-	}
+	// null = ARM unreachable or erroring (503, etc.): don't redirect, let the
+	// normal UI handle it.
+	const firstRun = await probeFirstRun(fetch);
+	if (firstRun === true) redirect(307, '/setup');
+	// Setup is complete or deferred - cache this so we don't re-check on every click
+	if (firstRun === false) setupConfirmedComplete = true;
 
 	return {};
 };
