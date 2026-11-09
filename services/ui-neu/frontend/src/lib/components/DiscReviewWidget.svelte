@@ -22,8 +22,8 @@
 		reviewSourceRow,
 		reviewStatusLabel
 	} from '$lib/utils/review-card';
-	import { formatDateTime } from '$lib/utils/format';
 	import DiscReviewStatusBar from './disc-review/DiscReviewStatusBar.svelte';
+	import PreviouslyRippedNotice from './disc-review/PreviouslyRippedNotice.svelte';
 	import PosterImage from './PosterImage.svelte';
 	import TitleSearch from './TitleSearch.svelte';
 	import MusicSearch from './MusicSearch.svelte';
@@ -386,28 +386,7 @@
 		</div>
 
 		{#if previousId}
-			<div class="disc-review-widget-previous" data-testid="previously-ripped">
-				{#if previous}
-					<p>
-						ARM already ripped this disc as
-						<a href="/jobs/{previous.job_id}" class="disc-review-widget-previous-link"
-							>{previous.title?.trim() || 'an untitled disc'}</a
-						>{#if previous.ripped_at}&nbsp;on {formatDateTime(previous.ripped_at)}{/if}{previous.status ===
-						'ripped_partial'
-							? ', partially.'
-							: '.'}
-					</p>
-					<p class="disc-review-widget-previous-sub">
-						{previous.outputs_present === true
-							? 'Its files are still in the library.'
-							: previous.outputs_present === false
-								? 'Some of its files are no longer in the library.'
-								: 'It has no transcoded files.'}
-					</p>
-				{:else if !reviewData.initialLoading}
-					<p>ARM ripped this disc before, but that job has since been deleted.</p>
-				{/if}
-			</div>
+			<PreviouslyRippedNotice {previous} loading={reviewData.initialLoading} />
 		{/if}
 
 		{#if suggestion}
@@ -597,25 +576,6 @@
 	}
 	.disc-review-widget-suggestion {
 		margin: 0 1rem 0.75rem;
-	}
-	/* mixed from text + surface rather than --color-surface-raised, which
-	   most schemes leave unset (the box used to show the default navy) */
-	.disc-review-widget-previous {
-		margin: 0 1rem 0.75rem;
-		border-radius: var(--radius-md);
-		border: 1px solid var(--color-border);
-		background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
-		padding: 0.625rem 0.75rem;
-		font-size: 0.875rem;
-	}
-	.disc-review-widget-previous-link {
-		font-weight: 600;
-		color: var(--color-primary);
-		text-decoration: underline;
-	}
-	.disc-review-widget-previous-sub {
-		margin-top: 0.25rem;
-		color: var(--color-text-muted);
 	}
 	/* :global: forwarded through PosterImage's class prop onto its own img */
 	/* Same width as a CD's square cover, at the poster's 2:3. */
