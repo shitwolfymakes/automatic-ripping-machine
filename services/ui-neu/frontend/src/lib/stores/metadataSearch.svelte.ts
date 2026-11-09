@@ -18,20 +18,24 @@ export class MetadataSearch {
 	/** The line under the form: no match, or why the request failed. */
 	error = $state<string | null>(null);
 
-	/** Runs one request and returns its candidates, or none after a failure. */
+	/**
+	 * Runs one request. On success, hands its candidates to `onfound` (even
+	 * when there are none) before setting the no-match line; after a failure,
+	 * sets the failure line and leaves the caller's results alone.
+	 */
 	run = async (
 		request: () => Promise<{ candidates: MetadataCandidate[] }>,
-		messages: SearchMessages
-	): Promise<MetadataCandidate[]> => {
+		messages: SearchMessages,
+		onfound: (candidates: MetadataCandidate[]) => void
+	): Promise<void> => {
 		this.searching = true;
 		this.error = null;
 		try {
 			const resp = await request();
+			onfound(resp.candidates);
 			if (resp.candidates.length === 0) this.error = messages.empty;
-			return resp.candidates;
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : messages.failed;
-			return [];
 		} finally {
 			this.searching = false;
 		}

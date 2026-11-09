@@ -317,6 +317,35 @@ describe('TitleSearch branches', () => {
 			await search();
 			expect(screen.queryByRole('heading', { name: 'Old' })).toBeNull();
 		});
+
+		it('a text search that fails after a later one answered keeps the later results', async () => {
+			let failFirst!: (e: Error) => void;
+			mockSearch.mockReturnValueOnce(new Promise((_, reject) => (failFirst = reject)));
+			mockSearch.mockResolvedValueOnce({ candidates: [cand({ title: 'Later' })] });
+			renderComponent(TitleSearch, { props: { job: resolvable() } });
+			await fireEvent.keyDown(titleBox(), { key: 'Enter' });
+			await fireEvent.keyDown(titleBox(), { key: 'Enter' });
+			await screen.findByRole('heading', { name: 'Later' });
+			failFirst(new Error('First failed'));
+			expect(await screen.findByText('First failed')).toBeInTheDocument();
+			await new Promise((r) => setTimeout(r, 20));
+			expect(screen.getByRole('heading', { name: 'Later' })).toBeInTheDocument();
+		});
+
+		it('an IMDb lookup that fails after a later one answered keeps the later results', async () => {
+			let failFirst!: (e: Error) => void;
+			mockFetchDetail.mockReturnValueOnce(new Promise((_, reject) => (failFirst = reject)));
+			mockFetchDetail.mockResolvedValueOnce({ candidates: [cand({ title: 'Later' })] });
+			renderComponent(TitleSearch, { props: { job: resolvable() } });
+			await typeInto(imdbBox(), 'tt1');
+			await fireEvent.keyDown(imdbBox(), { key: 'Enter' });
+			await fireEvent.keyDown(imdbBox(), { key: 'Enter' });
+			await screen.findByRole('heading', { name: 'Later' });
+			failFirst(new Error('First failed'));
+			expect(await screen.findByText('First failed')).toBeInTheDocument();
+			await new Promise((r) => setTimeout(r, 20));
+			expect(screen.getByRole('heading', { name: 'Later' })).toBeInTheDocument();
+		});
 	});
 
 	describe('search controls', () => {

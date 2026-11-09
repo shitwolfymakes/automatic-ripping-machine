@@ -97,12 +97,20 @@
 		if (imdb) {
 			// Direct IMDb ID lookup — skip search
 			closeResults();
-			results = (await search.run(() => fetchMediaDetail(imdb), IMDB_LOOKUP)).slice(0, 1);
+			await search.run(
+				() => fetchMediaDetail(imdb),
+				IMDB_LOOKUP,
+				(found) => (results = found.slice(0, 1))
+			);
 			return;
 		}
 		if (!query.trim()) return;
 		closeResults();
-		results = await search.run(() => searchMetadata(query.trim(), searchType, source, parsedSearchYear), TEXT_SEARCH);
+		await search.run(
+			() => searchMetadata(query.trim(), searchType, source, parsedSearchYear),
+			TEXT_SEARCH,
+			(found) => (results = found)
+		);
 	}
 
 	// On a resolvable job, Apply identifies the movie via resolveJob (title/year
