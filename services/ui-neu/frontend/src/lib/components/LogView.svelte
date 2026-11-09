@@ -16,6 +16,7 @@
 		type LogServiceFilter
 	} from '$lib/utils/log-view';
 	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
+	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 
 	interface Props {
@@ -52,11 +53,10 @@
 	let matchCase = $state(false);
 	let following = $state(true);
 	let newWhilePaused = $state(0);
-	let copied = $state(false);
+	const clip = new ClipboardCopy();
 	let frameEl = $state<HTMLDivElement | null>(null);
 	let viewEl = $state<HTMLDivElement | null>(null);
 	let searchEl = $state<HTMLInputElement | null>(null);
-	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const wrap = $derived($uiPrefs.logWrap);
 
@@ -109,19 +109,7 @@
 	}
 
 	function copyLines(): void {
-		const text = formatCopyText(filtered);
-		const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-		if (!clipboard) return;
-		clipboard
-			.writeText(text)
-			.then(() => {
-				copied = true;
-				if (copyTimer) clearTimeout(copyTimer);
-				copyTimer = setTimeout(() => (copied = false), 1500);
-			})
-			.catch(() => {
-				/* no clipboard access (http, permissions): the label just stays "Copy" */
-			});
+		clip.copy(formatCopyText(filtered));
 	}
 
 	// "/" focuses the search while focus is somewhere inside the frame and not
@@ -248,7 +236,7 @@
 					onclick={() => setUiPref('logWrap', !wrap)}>Wrap</button
 				>
 				<button type="button" class="log-view-tool" data-testid="job-log-copy" onclick={copyLines}>
-					<span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+					<span aria-live="polite">{clip.copied ? 'Copied' : 'Copy'}</span>
 				</button>
 			</div>
 		</div>
