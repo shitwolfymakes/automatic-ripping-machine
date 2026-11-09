@@ -2,11 +2,6 @@
 // paths that DriveCard.test.ts and the other tests rendering it leave out. The
 // API modules are mocked the same way as in DriveCard.test.ts; the slide-over
 // and the confirm dialog render for real.
-//
-// Branches the card cannot reach, so they are not forced here:
-// - the `if (!drive) return;` guards in confirmUnenroll, saveEdit, toggleUhd
-//   and setMode: every control that calls them renders only once `drive` is
-//   set
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DriveCard from './DriveCard.svelte';
