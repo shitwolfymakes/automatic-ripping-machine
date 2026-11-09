@@ -423,10 +423,7 @@
 		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
 		rerunOpen = true;
 		dropPreview();
-		const req: MatchRequest = { source: src, apply: false };
-		if (season != null) req.season = season;
-		if (job.disc_number != null) req.disc_number = job.disc_number;
-		return run(req);
+		return run(rerunRequest(rerun, false));
 	}
 
 	async function revert(trackId: string) {
