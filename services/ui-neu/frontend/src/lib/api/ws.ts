@@ -101,16 +101,19 @@ class WSConnection {
 		};
 	}
 
+	private socketUrl(): string {
+		const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+		// Same-origin: nginx proxies /ws to the backend, like /api/*.
+		return `${proto}//${window.location.host}/ws`;
+	}
+
 	private connect(): void {
 		// Tokenless requests act as guest backend-side (same as REST) — send
 		// the stored token if present, or an empty string when browsing
 		// anonymously. Either way the socket opens; the backend's auth ack
 		// determines the effective identity.
 		const token = getToken() ?? '';
-		const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		// Same-origin: nginx proxies /ws to the backend, like /api/*.
-		const url = `${proto}//${window.location.host}/ws`;
-		const ws = new WebSocket(url);
+		const ws = new WebSocket(this.socketUrl());
 		this.ws = ws;
 		ws.addEventListener('open', () => {
 			ws.send(JSON.stringify({ op: 'auth', token }));
@@ -118,28 +121,40 @@ class WSConnection {
 		ws.addEventListener('message', (ev) => {
 			this.onMessage(ev.data);
 		});
-		ws.addEventListener('close', (ev: CloseEvent) => {
-			this.connected = false;
-			this.ws = null;
-			if (!this.stopping && (ev.code === CLOSE_UNAUTHORIZED || ev.code === CLOSE_FORBIDDEN)) {
-				this.stop();
-				if (ev.code === CLOSE_UNAUTHORIZED) notifyUnauthorized();
-				else goto('/change-password');
-				return;
-			}
-			if (!this.stopping) {
-				const delay = RECONNECT_DELAYS[Math.min(this.retryIdx, RECONNECT_DELAYS.length - 1)];
-				this.retryIdx += 1;
-				statusStore.set(this.retryIdx >= OFFLINE_AFTER_FAILURES ? 'offline' : 'connecting');
-				this.reconnectTimer = setTimeout(() => {
-					this.reconnectTimer = null;
-					this.connect();
-				}, delay);
-			}
-		});
+		ws.addEventListener('close', (ev: CloseEvent) => this.handleClose(ev));
 		ws.addEventListener('error', () => {
 			// The close handler runs the reconnect.
 		});
+	}
+
+	private handleClose(ev: CloseEvent): void {
+		this.connected = false;
+		this.ws = null;
+		if (!this.stopping && this.isAuthRefusal(ev.code)) {
+			this.handleAuthRefusal(ev.code);
+			return;
+		}
+		if (!this.stopping) this.scheduleReconnect();
+	}
+
+	private isAuthRefusal(code: number): boolean {
+		return code === CLOSE_UNAUTHORIZED || code === CLOSE_FORBIDDEN;
+	}
+
+	private handleAuthRefusal(code: number): void {
+		this.stop();
+		if (code === CLOSE_UNAUTHORIZED) notifyUnauthorized();
+		else goto('/change-password');
+	}
+
+	private scheduleReconnect(): void {
+		const delay = RECONNECT_DELAYS[Math.min(this.retryIdx, RECONNECT_DELAYS.length - 1)];
+		this.retryIdx += 1;
+		statusStore.set(this.retryIdx >= OFFLINE_AFTER_FAILURES ? 'offline' : 'connecting');
+		this.reconnectTimer = setTimeout(() => {
+			this.reconnectTimer = null;
+			this.connect();
+		}, delay);
 	}
 
 	private onMessage(raw: unknown): void {

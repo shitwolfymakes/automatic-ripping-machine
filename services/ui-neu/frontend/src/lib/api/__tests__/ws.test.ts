@@ -72,6 +72,14 @@ describe('wsClient', () => {
 		expect(JSON.parse(ws.sent[0])).toEqual({ op: 'auth', token: 'aaa.bbb.ccc' });
 	});
 
+	it('connects over plain ws:// when the page is served over http', () => {
+		vi.stubGlobal('window', {
+			location: { protocol: 'http:', host: 'localhost:8888' }
+		} as unknown as Window & typeof globalThis);
+		wsClient.start();
+		expect(FakeWS.instances[0].url).toBe('ws://localhost:8888/ws');
+	});
+
 	it('connects and sends an empty-string token when tokenless (guest)', () => {
 		getTokenMock.mockReturnValue(null);
 		wsClient.start();
