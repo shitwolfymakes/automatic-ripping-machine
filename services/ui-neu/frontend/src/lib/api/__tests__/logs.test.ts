@@ -4,10 +4,13 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 // getToken is read inside fetchJobLog; stub the client module's token.
-const { notifyUnauthorized } = vi.hoisted(() => ({ notifyUnauthorized: vi.fn() }));
+const { notifyUnauthorized, stored } = vi.hoisted(() => ({
+	notifyUnauthorized: vi.fn(),
+	stored: { token: 'tok-123' as string | null }
+}));
 vi.mock('../client', async (orig) => {
 	const actual = (await orig()) as Record<string, unknown>;
-	return { ...actual, getToken: () => 'tok-123', notifyUnauthorized };
+	return { ...actual, getToken: () => stored.token, notifyUnauthorized };
 });
 
 function textResponse(body: string, ok = true, status = 200) {
@@ -19,6 +22,7 @@ import { fetchJobLog, fetchJobLogIndex, jobLogDownloadUrl, toLogEntry } from '..
 beforeEach(() => {
 	mockFetch.mockReset();
 	notifyUnauthorized.mockReset();
+	stored.token = 'tok-123';
 });
 
 describe('fetchJobLog', () => {
@@ -76,6 +80,20 @@ describe('fetchJobLog', () => {
 				service: 'x'
 			}
 		]);
+	});
+
+	it('skips a line that parses to null or to a non-object value', async () => {
+		const ndjson = 'null\n42\n"text"\n{"level":"info","service":"x","msg":"ok"}\n';
+		mockFetch.mockResolvedValue(textResponse(ndjson));
+		const entries = await fetchJobLog('job_x');
+		expect(entries.map((e) => e.event)).toEqual(['ok']);
+	});
+
+	it('sends no Authorization header when no token is stored', async () => {
+		stored.token = null;
+		mockFetch.mockResolvedValue(textResponse(''));
+		await fetchJobLog('job_x');
+		expect(mockFetch).toHaveBeenCalledWith('/api/logs/job_x', { headers: {} });
 	});
 
 	it('falls back to service when extra.logger is absent', async () => {

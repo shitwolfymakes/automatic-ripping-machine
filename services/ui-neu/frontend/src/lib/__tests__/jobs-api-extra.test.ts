@@ -202,6 +202,32 @@ describe('resolveJob', () => {
 	});
 });
 
+describe('resolveJob picked candidate', () => {
+	it('sends external_ids and match after the classification keys when the caller passes them', async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_6' }, fan_out: [] }));
+		await resolveJob('job_6', {
+			title: 'Lost',
+			year: 2004,
+			media_type: 'tv',
+			external_ids: { tvdb: '73739' },
+			match: { provider: 'tvdb', poster_url: 'https://img/lost.jpg' }
+		});
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/jobs/job_6/resolve',
+			expect.objectContaining({
+				method: 'POST',
+				body: JSON.stringify({
+					title: 'Lost',
+					year: 2004,
+					media_type: 'tv',
+					external_ids: { tvdb: '73739' },
+					match: { provider: 'tvdb', poster_url: 'https://img/lost.jpg' }
+				})
+			})
+		);
+	});
+});
+
 describe('resolveJob season', () => {
 	it('sends season only when the caller passes it, null included', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ job: { id: 'job_5' }, fan_out: [] }));
