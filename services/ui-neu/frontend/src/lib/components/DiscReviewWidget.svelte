@@ -25,6 +25,7 @@
 		reviewPhaseBadge
 	} from '$lib/utils/job-review';
 	import { providerLabel } from '$lib/utils/provider-labels';
+	import { reviewStatusLabel } from '$lib/utils/review-card';
 	import { formatDateTime } from '$lib/utils/format';
 	import CountdownTimer from './CountdownTimer.svelte';
 	import { discTypeLabel } from '$lib/utils/job-type';
@@ -152,6 +153,14 @@
 	// A confident match identify held for confirmation (auto-apply off).
 	let suggestion = $derived(identitySuggestionOf(displayJob));
 	let missLine = $derived(missReason(displayJob));
+	let statusLabel = $derived(
+		reviewStatusLabel({
+			previouslyRipped: !!previousId,
+			suggestion: !!suggestion,
+			reviewGate: isReviewGate,
+			postRip: isPostRip
+		})
+	);
 	// A missed identify's title is the disc's own, so it is not a match yet.
 	let isMiss = $derived(isIdentifyMiss(displayJob));
 	// Null off a TV video disc and after the rip; the Episodes button follows it.
@@ -418,15 +427,7 @@
 			<div class="flex items-center gap-2">
 				<div class="disc-review-widget-status-dot"></div>
 				<span class="disc-review-widget-status-label">
-					{previousId
-						? 'Already ripped: Rip again or Discard'
-						: suggestion
-							? 'Confirm the title: use it or search'
-							: isReviewGate
-								? 'Ready: Review & Start'
-								: isPostRip
-									? 'Ripped: Apply Session'
-									: 'Awaiting Review'}
+					{statusLabel}
 				</span>
 			</div>
 			<!-- Timed review gate: cosmetic countdown to auto-start (the ripper owns the
