@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { fetchThemes } from '$lib/api/themes';
+import { fetchThemes, type ThemeMeta } from '$lib/api/themes';
 import { COLOR_SCHEMES, DEFAULT_SCHEME, type ColorScheme } from '$lib/themes/builtinSchemes';
 import { applySchemeToDocument, applyTokensForCurrentMode } from '$lib/themes/applyScheme';
 import { fetchThemeCss, cacheThemeCss, cachedThemeCss } from '$lib/themes/themeCss';
@@ -49,6 +49,36 @@ export const schemeLocksMode = derived(colorScheme, (id) => {
 });
 
 /**
+ * Overlay the API themes on the built-in fallbacks. Built-ins come first with
+ * builtin: true; an API theme replaces the built-in of the same id.
+ */
+function mergeThemes(builtins: ColorScheme[], apiThemes: ThemeMeta[]): ColorScheme[] {
+	const merged = new Map<string, ColorScheme>();
+
+	// Start with built-in fallbacks
+	for (const s of builtins) {
+		merged.set(s.id, { ...s, builtin: true });
+	}
+
+	// Overlay API themes (merge tokens so built-in defaults like --radius aren't lost)
+	for (const t of apiThemes) {
+		const existing = merged.get(t.id);
+		merged.set(t.id, {
+			id: t.id,
+			label: t.label,
+			swatch: t.swatch,
+			mode: t.mode,
+			tokens: { ...(existing?.tokens ?? {}), ...t.tokens },
+			author: t.author,
+			description: t.description,
+			builtin: t.builtin ?? false
+		});
+	}
+
+	return Array.from(merged.values());
+}
+
+/**
  * Merge user-uploaded themes from the API into the built-in fallback list and
  * load the active theme's CSS. Built-ins always come from the compiled-in
  * COLOR_SCHEMES (tokens) + static CSS; the API contributes only user themes.
@@ -59,30 +89,7 @@ export async function loadThemesFromApi(): Promise<void> {
 	try {
 		const apiThemes = (await fetchThemes()) ?? [];
 
-		// Build merged list: API (user) themes overlay the built-in fallbacks.
-		const merged = new Map<string, ColorScheme>();
-
-		// Start with built-in fallbacks
-		for (const s of COLOR_SCHEMES) {
-			merged.set(s.id, { ...s, builtin: true });
-		}
-
-		// Overlay API themes (merge tokens so built-in defaults like --radius aren't lost)
-		for (const t of apiThemes) {
-			const existing = merged.get(t.id);
-			merged.set(t.id, {
-				id: t.id,
-				label: t.label,
-				swatch: t.swatch,
-				mode: t.mode,
-				tokens: { ...(existing?.tokens ?? {}), ...t.tokens },
-				author: t.author,
-				description: t.description,
-				builtin: t.builtin ?? false
-			});
-		}
-
-		allSchemes.set(Array.from(merged.values()));
+		allSchemes.set(mergeThemes(COLOR_SCHEMES, apiThemes));
 	} catch {
 		// Backend unreachable — built-in themes are already loaded.
 	}
