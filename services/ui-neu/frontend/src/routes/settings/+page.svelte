@@ -6,7 +6,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
 	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
-	import type { DriveView as Drive, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
+	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
@@ -25,8 +25,7 @@
 	import { fetchDrives, rescanDrives } from '$lib/api/drives';
 	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
 	import { partitionDrives } from '$lib/utils/drives';
-	import { fetchSessions } from '$lib/api/sessions';
-	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
+	import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
@@ -104,22 +103,7 @@
 	const driveError = drives.error;
 	let parts = $derived(partitionDrives($drives));
 
-	let driveSessions = $state<SessionView[]>([]);
-	// Only consulted on a ripper-only deployment, where DriveCard's session
-	// pickers drop encode sessions (it needs each preset's tool to tell).
-	let driveTranscodePresets = $state<TranscodePresetView[]>([]);
-
-	async function loadDriveSessions() {
-		if (driveSessions.length > 0) return;
-		// Fetched together so the passthrough filter never sees sessions
-		// without their presets. A preset-fetch failure is independent and
-		// non-fatal: preset-backed sessions just stay hidden on a ripper-only
-		// box (never mis-offered as passthrough).
-		const [sessionsResult, presetsResult] = await Promise.allSettled([fetchSessions(), fetchTranscodePresets()]);
-		if (presetsResult.status === 'fulfilled') driveTranscodePresets = presetsResult.value;
-		// non-fatal on rejection: the Start-rip session picker just stays empty
-		if (sessionsResult.status === 'fulfilled') driveSessions = sessionsResult.value;
-	}
+	const driveSessionOptions = new DriveSessionOptions();
 
 	// --- Drive diagnostics ---
 	const driveDiagnostics = new DriveDiagnostics();
@@ -153,7 +137,7 @@
 		programmaticHashChange = true;
 		window.location.hash = tab;
 		if (tab === 'interface') imageCache.load();
-		if (tab === 'drives') loadDriveSessions();
+		if (tab === 'drives') driveSessionOptions.load();
 		// Reset scroll to top when switching tabs
 		document.querySelector('main')?.scrollTo(0, 0);
 	}
@@ -178,7 +162,7 @@
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
 		if (activeTab === 'interface') imageCache.load();
-		if (activeTab === 'drives') loadDriveSessions();
+		if (activeTab === 'drives') driveSessionOptions.load();
 		function onHashChange() {
 			if (programmaticHashChange) {
 				programmaticHashChange = false;
@@ -188,7 +172,7 @@
 			activeTab = tab;
 			pendingField = fieldFromHash(window.location.hash);
 			if (tab === 'interface') imageCache.load();
-			if (tab === 'drives') loadDriveSessions();
+			if (tab === 'drives') driveSessionOptions.load();
 			// Reset scroll to top when switching tabs
 			document.querySelector('main')?.scrollTo(0, 0);
 		}
@@ -524,8 +508,8 @@
 									{#each parts.enrolled as drive (drive.id)}
 										<DriveCard
 											{drive}
-											sessions={driveSessions}
-											transcodePresets={driveTranscodePresets}
+											sessions={driveSessionOptions.sessions}
+											transcodePresets={driveSessionOptions.transcodePresets}
 											globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
 											onupdate={() => drives.refresh()}
 											globalDefaults={{
