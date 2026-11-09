@@ -206,6 +206,38 @@ describe('activeSource agrees with the resolver', () => {
 		const id = { ...tvmazeApplied(), tracks: [] };
 		expect(activeSource(id)).toBe('episodes_tvmaze');
 	});
+	it('without a tracks list a non-suggestion ok source is still chosen', () => {
+		const id = { ...tvmazeApplied(), tracks: undefined };
+		expect(activeSource(id)).toBe('episodes_tvmaze');
+	});
+	const withProvenance = (provenance: (string | null)[]): IdentityView => {
+		const base = identity();
+		return {
+			...base,
+			sources: { episodes_tmdb: { status: 'ok' }, episodes_tvmaze: { status: 'ok' } },
+			tracks: provenance.map((src, i) => ({
+				...(base.tracks ?? [])[i],
+				identity_provenance: (src ? { episode_number: src } : {}) as Record<string, string>
+			}))
+		};
+	};
+	it('the source with more provenance counts wins over one counted first', () => {
+		expect(activeSource(withProvenance(['episodes_tmdb', 'episodes_tvmaze', 'episodes_tvmaze']))).toBe(
+			'episodes_tvmaze'
+		);
+	});
+	it('the source counted first keeps the win when the later one has fewer or equal counts', () => {
+		expect(activeSource(withProvenance(['episodes_tmdb', 'episodes_tmdb', 'episodes_tvmaze']))).toBe('episodes_tmdb');
+		expect(activeSource(withProvenance(['episodes_tmdb', 'episodes_tvmaze']))).toBe('episodes_tmdb');
+	});
+	it('an identity without sources has no active source', () => {
+		expect(activeSource(identity({ sources: undefined, tracks: [] }))).toBeNull();
+	});
+	it('a track without provenance counts for no source', () => {
+		const base = identity();
+		const bare = (base.tracks ?? []).map((t) => ({ ...t, identity_provenance: undefined }));
+		expect(activeSource({ ...base, tracks: bare })).toBe('episodes_tmdb');
+	});
 	it('falls back to an ok suggestion when nothing else is ok', () => {
 		const id = identity({ sources: { episodes_tmdb: { status: 'ok', suggestion: true } }, tracks: [] });
 		expect(activeSource(id)).toBe('episodes_tmdb');

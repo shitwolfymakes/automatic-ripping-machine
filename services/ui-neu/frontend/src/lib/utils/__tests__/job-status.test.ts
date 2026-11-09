@@ -9,7 +9,9 @@ import {
 	missReason,
 	episodeStatus,
 	providerLabel,
-	PROVIDER_LABELS
+	PROVIDER_LABELS,
+	isAwaitingAction,
+	countRipping
 } from '$lib/utils/job-status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
@@ -396,5 +398,50 @@ describe('episodeStatus', () => {
 		expect(episodeStatus(tv({ media_type: 'movie' }))).toBeNull();
 		expect(episodeStatus(tv({ status: 'ripped' }))).toBeNull();
 		expect(episodeStatus(tv({ status: 'ripped_partial' }))).toBeNull();
+	});
+});
+
+describe('missing or unknown values', () => {
+	it('effectiveJobStatus of a job without a status is an empty string', () => {
+		expect(effectiveJobStatus({ status: undefined, transcode_progress: null } as any)).toBe('');
+	});
+	it('isAwaitingAction is false without a status, true for a ripped job with no session', () => {
+		expect(isAwaitingAction({ status: undefined, transcode_progress: null } as any)).toBe(false);
+		expect(isAwaitingAction(job('ripped', null))).toBe(true);
+	});
+	it('missReason names this disc when there is no searched title and no job title', () => {
+		const attempts = [{ source: 'tmdb', step: 'title', outcome: 'miss', detail: null }];
+		const noTitle = { status: 'awaiting_user_id', title: null, metadata_json: { identify_attempts: attempts } } as any;
+		expect(missReason(noTitle)).toBe(
+			'No source found a close match for "this disc". Try another source in the search below.'
+		);
+	});
+	it('episodeStatus of a re-match with no episode source has no source name', () => {
+		const tvJob = { status: 'awaiting_review', media_type: 'tv', has_series: true, metadata_json: {} } as any;
+		expect(episodeStatus(tvJob, null, true)).toEqual({ state: 'matching', source: null, total: null, unmatched: null });
+	});
+	it('reviewPhaseBadge of a job without a status has an empty label', () => {
+		expect(reviewPhaseBadge({ status: undefined, title: null, transcode_progress: null } as any)).toEqual({
+			label: '',
+			accent: 'var(--color-primary)'
+		});
+	});
+	it('transcodeColumnStatus of an unknown transcode state is null', () => {
+		expect(transcodeColumnStatus(tp('mystery', 4, 1, 0))).toBeNull();
+	});
+	it('isAwaitingAction is true for a ripped_partial job with no session', () => {
+		expect(isAwaitingAction(job('ripped_partial', null))).toBe(true);
+	});
+	it('countRipping counts only jobs in the ripping status', () => {
+		expect(countRipping([job('ripping'), job('ripped'), job('ripping'), job('complete')])).toBe(2);
+	});
+	it('episodeStatus of a re-match names an unknown source by its id', () => {
+		const tvJob = {
+			status: 'awaiting_review',
+			media_type: 'tv',
+			has_series: true,
+			metadata_json: { identity_claims: { sources: { episodes_other: { status: 'error' } } } }
+		} as any;
+		expect(episodeStatus(tvJob, null, true)?.source).toBe('episodes_other');
 	});
 });
