@@ -22,6 +22,7 @@
 	import { wsClient } from '$lib/api/ws';
 	import type { GpuView } from '$lib/types/api.gen';
 	import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
+	import { taskCount } from '$lib/utils/transcode-stats';
 	import { isAdmin } from '$lib/stores/auth';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
@@ -53,9 +54,6 @@
 	};
 
 	let s = $derived($stats);
-	function statusCount(status: string): number {
-		return s.tasks_by_status?.[status] ?? 0;
-	}
 
 	async function loadJobs(showLoading = true) {
 		if (showLoading) loadingJobs = true;
@@ -118,7 +116,7 @@
 
 	// Auto-refresh jobs when any are queued or in progress.
 	$effect(() => {
-		if (statusCount('in_progress') > 0 || statusCount('queued') > 0) {
+		if (taskCount(s, 'in_progress') > 0 || taskCount(s, 'queued') > 0) {
 			startJobsPolling();
 		} else {
 			stopJobsPolling();
@@ -287,7 +285,7 @@
 							</span>
 						</div>
 						<span class="transcoder-page-worker-summary">
-							GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {statusCount('queued')} queued
+							GPUs: {s.gpus_available}/{s.gpus_total} available &middot; Queue: {taskCount(s, 'queued')} queued
 						</span>
 					</div>
 					{#if gpuRows.length > 0}
@@ -333,24 +331,24 @@
 				<div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
 					<div class="stat transcoder-page-stat">
 						<p class="stat-label">Queued</p>
-						<p class="stat-value transcoder-page-stat-value">{statusCount('queued')}</p>
+						<p class="stat-value transcoder-page-stat-value">{taskCount(s, 'queued')}</p>
 					</div>
 					<div class="stat transcoder-page-stat">
 						<p class="stat-label">In Progress</p>
 						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-progress">
-							{statusCount('in_progress')}
+							{taskCount(s, 'in_progress')}
 						</p>
 					</div>
 					<div class="stat transcoder-page-stat">
 						<p class="stat-label">Done</p>
 						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-success">
-							{statusCount('done')}
+							{taskCount(s, 'done')}
 						</p>
 					</div>
 					<div class="stat transcoder-page-stat">
 						<p class="stat-label">Failed</p>
 						<p class="stat-value transcoder-page-stat-value transcoder-page-stat-value-danger">
-							{statusCount('failed')}
+							{taskCount(s, 'failed')}
 						</p>
 					</div>
 					<div class="stat transcoder-page-stat">
