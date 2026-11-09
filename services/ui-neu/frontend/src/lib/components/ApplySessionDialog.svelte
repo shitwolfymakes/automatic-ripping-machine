@@ -4,9 +4,9 @@
 	import { fetchRipPresets } from '$lib/api/ripPresets';
 	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
 	import { applySession } from '$lib/api/jobs';
-	import { ApiError } from '$lib/api/client';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
 	import { NamingPreview } from '$lib/stores/namingPreview.svelte';
+	import { collisionsFromApplyError } from '$lib/utils/apply-collisions';
 	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/utils/sessions';
 	import type {
 		ApplySessionResponse,
@@ -143,12 +143,10 @@
 			const resp = await applySession(job.id, { session_id: selected, overwrite });
 			onapplied(resp);
 		} catch (e) {
-			if (e instanceof ApiError && e.status === 409 && e.body && typeof e.body === 'object') {
-				const detail = (e.body as { detail?: { collisions?: CollisionInfo[] } }).detail;
-				if (detail?.collisions) {
-					collisions = detail.collisions;
-					return;
-				}
+			const found = collisionsFromApplyError(e);
+			if (found) {
+				collisions = found;
+				return;
 			}
 			error = e instanceof Error ? e.message : 'Apply failed';
 		} finally {
