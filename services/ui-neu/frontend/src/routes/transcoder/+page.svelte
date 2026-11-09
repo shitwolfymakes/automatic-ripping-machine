@@ -19,6 +19,7 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
+	import TranscoderUnavailable from '$lib/components/transcoder/TranscoderUnavailable.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -95,20 +96,7 @@
 {#if !$transcoderEnabled}
 	<!-- Ripper-only deployment: nav hides /transcoder, but the URL still
 	     resolves as a deep link. Only the held-task count is fetched (see onMount). -->
-	<div class="stack stack-lg">
-		<h1 class="page-title">Transcoder</h1>
-		{#if heldEncodeTasks > 0}
-			<div class="alert alert-warning" role="status" data-testid="transcoder-held-encode-tasks">
-				{heldEncodeTasks === 1 ? '1 encode task is' : `${heldEncodeTasks} encode tasks are`} held. Re-run setup without --ripper-only
-				to resume them.
-			</div>
-		{/if}
-		<div class="panel transcoder-page-unavailable" data-testid="transcoder-unavailable">
-			<p class="transcoder-page-unavailable-text">
-				Transcoding is not available on this deployment (ripper-only install).
-			</p>
-		</div>
-	</div>
+	<TranscoderUnavailable heldTasks={heldEncodeTasks} />
 {:else}
 	<div class="stack stack-lg">
 		<h1 class="page-title">Transcoder</h1>
@@ -552,16 +540,6 @@
 	.transcoder-page-empty {
 		padding: 2rem 0;
 		text-align: center;
-		color: var(--color-text-faint);
-	}
-	/* Full-page ripper-only empty state - same centered-muted-text idiom as
-	   .transcoder-page-empty / the dashboard's "No jobs found.", inside a
-	   .panel since it stands alone rather than sitting under a section title. */
-	.transcoder-page-unavailable {
-		padding: 2rem;
-		text-align: center;
-	}
-	.transcoder-page-unavailable-text {
 		color: var(--color-text-faint);
 	}
 	/* card-status colours its left accent from data-status, but this card
