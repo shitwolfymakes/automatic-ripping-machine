@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
-	import { searchMusicMetadata, fetchMusicDetail, resolveJob, patchJob } from '$lib/api/jobs';
+	import { searchMusicMetadata, fetchMusicDetail } from '$lib/api/jobs';
 	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
 	import { musicReleaseBody } from '$lib/utils/job-resolve';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
@@ -16,6 +16,7 @@
 	import PosterImage from './PosterImage.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { MusicFlipCards } from '$lib/stores/musicFlipCards.svelte';
+	import { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
 	import Glyph from './Glyph.svelte';
 	import MatchGlyph from './music-search/MatchGlyph.svelte';
 
@@ -52,18 +53,10 @@
 	let discNumber = $state(job.disc_number != null ? String(job.disc_number) : '');
 	let discTotal = $state(job.disc_total != null ? String(job.disc_total) : '');
 
-	let applying = $state(false);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
-	let confirmMismatch = $state(false);
-	let mismatchConfirmed = $state(false);
-	let mappingPreview = $state(false);
-	let mappingConfirmed = $state(false);
+	const release = new MusicReleaseApply();
 
 	$effect(() => {
-		confirmMismatch = false;
-		mismatchConfirmed = false;
-		mappingPreview = false;
-		mappingConfirmed = false;
+		release.reset();
 		if (detail) {
 			editArtist = detail.artist ?? '';
 			editAlbum = detail.title;
@@ -113,11 +106,11 @@
 	async function openDetail(c: MetadataCandidate) {
 		if (!c.provider_id) return;
 		loadingDetail = true;
-		feedback = null;
+		release.feedback = null;
 		try {
 			detail = await fetchMusicDetail(c.provider_id);
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+			release.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Load failed' };
 		} finally {
 			loadingDetail = false;
 		}
@@ -136,39 +129,23 @@
 
 	async function applyRelease() {
 		if (!editAlbum.trim() || !detail) return;
-		const totalMatch = matchIndicator(mbTotalMs, discTotalSec);
-		if (discTracks.length > 0 && totalMatch === 'mismatch' && !mismatchConfirmed) {
-			confirmMismatch = true;
-			return;
-		}
-		if (audioDiscTracks.length > 0 && visibleTracks.length > 0 && !mappingConfirmed) {
-			mappingPreview = true;
-			return;
-		}
-		applying = true;
-		feedback = null;
-		try {
-			await resolveJob(
-				job.id,
-				musicReleaseBody({ album: editAlbum, artist: editArtist, year: editYear, discNumber, discTotal }, visibleTracks)
-			);
-			feedback = { type: 'success', message: 'Release applied' };
-			// Persist the release cover + any track-title mappings in one PATCH so
-			// the cover art shows on the job's cards/rows (resolve doesn't set it).
-			const patch = releasePatchBody(detail.poster_url ?? null, trackMapping);
-			if (patch) {
-				try {
-					await patchJob(job.id, patch);
-				} catch {
-					feedback = { type: 'success', message: 'Identified; cover/track titles not saved' };
-				}
-			}
-			onapply?.();
-		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };
-		} finally {
-			applying = false;
-		}
+		return release.apply(
+			{
+				jobId: job.id,
+				totalMismatch: discTracks.length > 0 && matchIndicator(mbTotalMs, discTotalSec) === 'mismatch',
+				needsMapping: audioDiscTracks.length > 0 && visibleTracks.length > 0,
+				resolveBody: musicReleaseBody(
+					{ album: editAlbum, artist: editArtist, year: editYear, discNumber, discTotal },
+					visibleTracks
+				),
+				// Persist the release cover + any track-title mappings in one PATCH so
+				// the cover art shows on the job's cards/rows (resolve doesn't set it).
+				// The body is built after the resolve, from whatever release is open
+				// then (#595).
+				patchBody: () => releasePatchBody(detail!.poster_url ?? null, trackMapping)
+			},
+			onapply
+		);
 	}
 
 	let activeFilterCount = $derived(countActiveFilters(currentFilters(), discTracks.length));
@@ -506,28 +483,27 @@
 				>
 			</div>
 
-			{#if confirmMismatch}
+			{#if release.confirmMismatch}
 				<div class="flex flex-wrap items-center gap-2 alert alert-danger">
 					<span class="flex flex-1 items-center gap-1"
 						><Glyph name="warning" /> Total length differs, likely the wrong release</span
 					>
 					<button
 						onclick={() => {
-							mismatchConfirmed = true;
-							confirmMismatch = false;
+							release.acceptMismatch();
 							applyRelease();
 						}}
 						class="btn music-search-solid-danger music-search-action-btn"
 					>
 						Apply anyway
 					</button>
-					<button onclick={() => (confirmMismatch = false)} class="btn btn-ghost music-search-action-btn">
+					<button onclick={() => (release.confirmMismatch = false)} class="btn btn-ghost music-search-action-btn">
 						Cancel
 					</button>
 				</div>
 			{/if}
 
-			{#if mappingPreview}
+			{#if release.mappingPreview}
 				<div class="stack panel-section music-search-mapping-preview">
 					<p class="music-search-mapping-title">Confirm track title mapping</p>
 					<div class="overflow-x-auto music-search-table-scroll">
@@ -556,15 +532,14 @@
 					<div class="flex items-center gap-2">
 						<button
 							onclick={() => {
-								mappingConfirmed = true;
-								mappingPreview = false;
+								release.acceptMapping();
 								applyRelease();
 							}}
 							class="btn music-search-success-btn music-search-action-btn"
 						>
 							Apply titles
 						</button>
-						<button onclick={() => (mappingPreview = false)} class="btn btn-ghost music-search-action-btn">
+						<button onclick={() => (release.mappingPreview = false)} class="btn btn-ghost music-search-action-btn">
 							Cancel
 						</button>
 					</div>
@@ -575,14 +550,14 @@
 				{#if $isAdmin}
 					<button
 						onclick={applyRelease}
-						disabled={applying || !editAlbum.trim()}
+						disabled={release.applying || !editAlbum.trim()}
 						class="btn music-search-success-btn music-search-action-btn"
 					>
-						{applying ? 'Applying...' : 'Apply'}
+						{release.applying ? 'Applying...' : 'Apply'}
 					</button>
 				{/if}
-				{#if feedback}
-					<span class="music-search-feedback" data-tone={feedback.type}>{feedback.message}</span>
+				{#if release.feedback}
+					<span class="music-search-feedback" data-tone={release.feedback.type}>{release.feedback.message}</span>
 				{/if}
 			</div>
 		</div>
