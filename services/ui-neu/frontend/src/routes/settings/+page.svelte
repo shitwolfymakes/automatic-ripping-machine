@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { restartSetup } from '$lib/api/setup';
+	import { SetupRestart } from '$lib/stores/setupRestart.svelte';
 	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -122,16 +121,7 @@
 		document.querySelector('main')?.scrollTo(0, 0);
 	}
 
-	let restartingSetup = $state(false);
-	async function runSetupAgain() {
-		restartingSetup = true;
-		try {
-			await restartSetup();
-			goto('/setup/system');
-		} finally {
-			restartingSetup = false;
-		}
-	}
+	const setupRestart = new SetupRestart();
 
 	onMount(() => {
 		// Rescan drives to pick up hardware info (model, serial) that
@@ -319,8 +309,8 @@
 									Walk through drives, keys and defaults again. Your current values are kept.
 								</p>
 							</div>
-							<button type="button" class="btn" onclick={runSetupAgain} disabled={restartingSetup}>
-								{restartingSetup ? 'Opening...' : 'Run setup again'}
+							<button type="button" class="btn" onclick={setupRestart.run} disabled={setupRestart.running}>
+								{setupRestart.running ? 'Opening...' : 'Run setup again'}
 							</button>
 						</section>
 
