@@ -43,31 +43,49 @@ def disc_type(folder: Path) -> DiscType | None:
     return None
 
 
-def find(root: Path, *, max_depth: int = MAX_DEPTH, max_dirs: int = MAX_DIRS) -> tuple[list[DiscFolder], bool]:
-    """Every disc folder below `root`, sorted by path, and whether the walk
-    stopped early (the `max_dirs` budget ran out)."""
+def _subdirs(current: str) -> list[tuple[str, str]]:
+    """The visible, non-symlinked subfolders of `current` as (name, path)
+    pairs sorted by name; an unreadable folder is logged and has none."""
+    try:
+        return sorted(
+            (e.name, e.path) for e in os.scandir(current) if e.is_dir(follow_symlinks=False) and e.name[:1] != "."
+        )
+    except OSError as exc:
+        logger.warning("disc folders: cannot read %s: %s", current, exc)
+        return []
+
+
+def _child_rel(rel: str, name: str) -> str:
+    """A child folder's library-relative path."""
+    return str(PurePosixPath(rel) / name) if rel else name
+
+
+def _walk(root: Path, *, max_depth: int, max_dirs: int) -> tuple[list[DiscFolder], bool]:
+    """Walk the library below `root` depth-first, collecting disc folders
+    unsorted; True when the `max_dirs` budget ran out."""
     found: list[DiscFolder] = []
     visited = 0
     # (absolute dir, relative path, depth); depth 1 = a direct child of root.
     stack: list[tuple[str, str, int]] = [(str(root), "", 0)]
     while stack:
         current, rel, depth = stack.pop()
-        try:
-            children = sorted(
-                (e.name, e.path) for e in os.scandir(current) if e.is_dir(follow_symlinks=False) and e.name[:1] != "."
-            )
-        except OSError as exc:
-            logger.warning("disc folders: cannot read %s: %s", current, exc)
-            continue
+        children = _subdirs(current)
         for name, path in children:
             visited += 1
             if visited > max_dirs:
                 logger.warning("disc folders: stopped after %d folders under %s", max_dirs, root)
-                return sorted(found, key=lambda f: f.path), True
-            child_rel = str(PurePosixPath(rel) / name) if rel else name
+                return found, True
+            child_rel = _child_rel(rel, name)
             kind = disc_type(Path(path))
             if kind is not None:
                 found.append(DiscFolder(path=child_rel, disc_type=kind))
             elif depth + 1 < max_depth:
                 stack.append((path, child_rel, depth + 1))
-    return sorted(found, key=lambda f: f.path), False
+    return found, False
+
+
+def find(root: Path, *, max_depth: int = MAX_DEPTH, max_dirs: int = MAX_DIRS) -> tuple[list[DiscFolder], bool]:
+    """Every disc folder below `root`, sorted by path, and whether the walk
+    stopped early (the `max_dirs` budget ran out)."""
+    found, partial = _walk(root, max_depth=max_depth, max_dirs=max_dirs)
+    return sorted(found, key=lambda f: f.path), partial
