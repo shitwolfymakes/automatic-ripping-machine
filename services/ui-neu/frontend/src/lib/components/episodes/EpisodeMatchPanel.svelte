@@ -32,15 +32,13 @@
 	} from './episodeModel';
 	import {
 		activeSource,
-		EPISODE_SOURCES,
 		episodeSourceOptions,
 		pickerSourceFor,
-		shortSourceId,
 		shortSourceLabel,
 		SOURCE_LABEL
 	} from '$lib/utils/episode-sources';
 	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/utils/episode-hold';
-	import { rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
+	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import RerunPanel from './RerunPanel.svelte';
@@ -171,14 +169,7 @@
 	function fixMatch() {
 		rerunOpen = !rerunOpen;
 		if (!rerunOpen) return;
-		const current = source ? shortSourceId(source) : null;
-		const first = sourceOptions.find((o) => !o.disabled)?.id ?? 'tmdb';
-		rerun = {
-			source: current && EPISODE_SOURCES.includes(current) ? current : first,
-			season: ownSeason?.season ?? altSeasons[0]?.season ?? job.season ?? null,
-			disc: job.disc_number ?? null,
-			tolerance: null
-		};
+		rerun = fixMatchForm(source, sourceOptions, ownSeason?.season ?? altSeasons[0]?.season ?? null, job);
 		dropPreview();
 	}
 
@@ -408,19 +399,10 @@
 	// re-run form so its Apply is at hand. Offered once a track is set by hand
 	// and another is not, however the others were placed.
 	const canFill = $derived(!!pickerSource && rows.some((r) => r.handSet) && rows.some((r) => !r.handSet));
-	// The season to fill in: the job's, else the one season every hand-set row
-	// was saved in; null (no season sent) when they disagree or none is known.
-	function fillSeason(): number | null {
-		if (job.season != null) return job.season;
-		const held = new Set(rows.filter((r) => r.handSet).map((r) => r.season));
-		const [only] = held;
-		return held.size === 1 && only != null ? only : null;
-	}
 	function fillTheRest() {
 		const src = pickerSource;
 		if (!src) return;
-		const season = fillSeason();
-		rerun = { source: src, season, disc: job.disc_number ?? null, tolerance: null };
+		rerun = fillRestForm(src, job, rows);
 		rerunOpen = true;
 		dropPreview();
 		return run(rerunRequest(rerun, false));
