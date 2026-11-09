@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { fetchDocsNav, slugToId, type DocsNavSection } from '$lib/docs/api';
 	import HelpSearchBox from '$lib/components/help/HelpSearchBox.svelte';
+	import HelpTopics from '$lib/components/help/HelpTopics.svelte';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
 	import { HelpDoc } from '$lib/stores/helpDoc.svelte';
 	import { HelpSearch } from '$lib/stores/helpSearch.svelte';
@@ -38,33 +39,7 @@
 <div class="help-layout">
 	<aside class="help-nav stack">
 		<HelpSearchBox query={helpSearch.query} hits={helpSearch.hits} onsearch={helpSearch.run} />
-		<button
-			type="button"
-			class="btn btn-sm help-topics-toggle"
-			aria-expanded={topicsOpen}
-			aria-controls="help-topics"
-			onclick={() => (topicsOpen = !topicsOpen)}
-		>
-			Topics
-		</button>
-		<nav id="help-topics" class="nav help-topics" data-open={topicsOpen} aria-label="Help topics">
-			{#each nav as section (section.id)}
-				<p class="eyebrow help-section">{section.label}</p>
-				{#each section.groups as group, gi (gi)}
-					{#if group.label}<p class="help-group">{group.label}</p>{/if}
-					{#each group.items as item, ii (ii)}
-						<a
-							class="nav-item"
-							href={item.href}
-							data-active={item.pageId === id ? 'true' : undefined}
-							aria-current={item.pageId === id ? 'page' : undefined}
-							target={item.external ? '_blank' : undefined}
-							rel={item.external ? 'noopener' : undefined}>{item.label}</a
-						>
-					{/each}
-				{/each}
-			{/each}
-		</nav>
+		<HelpTopics {nav} activeId={id} bind:open={topicsOpen} />
 	</aside>
 
 	<div class="help-main">
@@ -120,23 +95,6 @@
 		max-height: calc(100dvh - var(--shell-header-height, 3.5rem) - var(--shell-footer-height, 0px) - 3rem);
 		overflow-y: auto;
 	}
-	.help-topics {
-		padding: 0;
-	}
-	.help-topics-toggle {
-		display: none;
-	}
-	.help-section {
-		margin-top: 0.75rem;
-		padding: 0 0.75rem;
-	}
-	.help-group {
-		margin: 0.5rem 0 0;
-		padding: 0 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--color-text-muted);
-	}
 	.help-status {
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
@@ -188,12 +146,6 @@
 			position: static;
 			max-height: none;
 			overflow-y: visible;
-		}
-		.help-topics-toggle {
-			display: inline-flex;
-		}
-		.help-topics:not([data-open='true']) {
-			display: none;
 		}
 	}
 </style>
