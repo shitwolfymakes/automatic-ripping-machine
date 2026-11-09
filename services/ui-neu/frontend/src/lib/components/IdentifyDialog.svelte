@@ -4,6 +4,7 @@
 	import TitleSearch from './TitleSearch.svelte';
 	import { driveLabel } from '$lib/utils/drive-name';
 	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
+	import { readJobMetadata } from '$lib/utils/job-metadata';
 
 	let {
 		job,
@@ -32,11 +33,7 @@
 	// CD-only: per-track count comes from the preserved scan_result on the
 	// job's metadata_json. If it's absent we skip the per-track inputs and
 	// show a helper line; the resolve still succeeds.
-	const scanTrackCount = $derived(
-		Array.isArray((job.metadata_json?.scan_result as { titles?: unknown[] } | undefined)?.titles)
-			? ((job.metadata_json.scan_result as { titles: unknown[] }).titles.length as number)
-			: 0
-	);
+	const scanTrackCount = $derived(readJobMetadata(job.metadata_json).titleCount ?? 0);
 
 	// Video / DVD / BD / data fields.
 	let title = $state(job.title ?? '');
