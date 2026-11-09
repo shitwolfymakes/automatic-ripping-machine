@@ -23,7 +23,7 @@
 	import LoadState from '$lib/components/LoadState.svelte';
 	import OrphanFoldersModal from '$lib/components/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import NewFolderRow from '$lib/components/NewFolderRow.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
@@ -157,11 +157,6 @@
 	function cancelNewFolder() {
 		creatingFolder = false;
 		newFolderName = '';
-	}
-
-	function handleNewFolderKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') confirmNewFolder();
-		if (e.key === 'Escape') cancelNewFolder();
 	}
 
 	// --- Transcoder cleanup ---
@@ -333,35 +328,7 @@
 
 				<!-- Inline new folder row -->
 				{#if creatingFolder}
-					<div class="flex items-center gap-2 files-page-nav-row files-page-new-folder-row">
-						<span class="w-10"></span>
-						<svg class="h-5 w-5 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.5"
-								d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-							/>
-						</svg>
-						<input
-							type="text"
-							bind:value={newFolderName}
-							onkeydown={handleNewFolderKeydown}
-							placeholder="Folder name"
-							class="field-control flex-1 files-page-new-folder-input"
-						/>
-						<button
-							type="button"
-							onclick={confirmNewFolder}
-							class="btn btn-icon files-page-new-folder-confirm"
-							title="Create"
-						>
-							<Glyph name="check" />
-						</button>
-						<button type="button" onclick={cancelNewFolder} class="btn btn-icon" title="Cancel">
-							<Glyph name="x" />
-						</button>
-					</div>
+					<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
 				{/if}
 
 				{#if browser.listing?.unavailable}
@@ -482,24 +449,6 @@
 	}
 	.files-page-nav-row:hover {
 		background: var(--color-primary-tint-1);
-	}
-	.files-page-new-folder-row {
-		background: var(--color-primary-tint-1);
-	}
-	.files-page-new-folder-input {
-		width: auto;
-		min-height: auto;
-		padding: 0.25rem 0.5rem;
-	}
-	.files-page-folder-icon {
-		color: var(--color-warning);
-	}
-	.files-page-new-folder-confirm {
-		color: var(--color-success);
-	}
-	.files-page-new-folder-confirm:hover {
-		background: var(--color-success-soft);
-		color: var(--color-success);
 	}
 	.files-page-empty {
 		padding: 2rem;
