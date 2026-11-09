@@ -10,6 +10,11 @@ import {
 import type { NotificationInboxView } from '$lib/types/api.gen';
 import { SvelteSet } from 'svelte/reactivity';
 
+/** A row as a dismiss leaves it: seen and cleared. */
+function markCleared(n: NotificationInboxView): NotificationInboxView {
+	return { ...n, seen: true, cleared: true };
+}
+
 export class NotificationInbox {
 	rows = $state<NotificationInboxView[]>([]);
 	loading = $state(true);
@@ -40,7 +45,7 @@ export class NotificationInbox {
 		try {
 			await dismissNotification(id);
 			if (this.rows.some((n) => n.id === id && !n.cleared)) this.clearedCount += 1;
-			this.rows = this.rows.map((n) => (n.id === id ? { ...n, seen: true, cleared: true } : n));
+			this.rows = this.rows.map((n) => (n.id === id ? markCleared(n) : n));
 		} catch {
 			// next refresh will reconcile
 		} finally {
@@ -59,7 +64,7 @@ export class NotificationInbox {
 			const result = await dismissAllNotifications();
 			// Like a per-row dismiss: every not-yet-cleared row ends up seen and cleared.
 			this.clearedCount += result.updated;
-			this.rows = this.rows.map((n) => (n.cleared ? n : { ...n, seen: true, cleared: true }));
+			this.rows = this.rows.map((n) => (n.cleared ? n : markCleared(n)));
 		} catch (e) {
 			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Dismiss all failed' };
 		} finally {
