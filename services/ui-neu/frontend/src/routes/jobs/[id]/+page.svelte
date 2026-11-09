@@ -31,9 +31,9 @@
 	import JsonTree from '$lib/components/JsonTree.svelte';
 	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
-	import { ripProgress, reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
-	import { formatEta, formatTransfer, formatTrackLength } from '$lib/utils/format';
-	import ProgressBar from '$lib/components/ProgressBar.svelte';
+	import { reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
+	import { formatTrackLength } from '$lib/utils/format';
+	import JobRipProgress from '$lib/components/JobRipProgress.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { JobDetail } from '$lib/stores/jobDetail.svelte';
@@ -137,8 +137,6 @@
 	// Live rip progress for this job (the same ripper.progress feed the
 	// dashboard uses): subscribed only while the job is ripping.
 	let ripping = $derived(detail?.job.status === 'ripping');
-	let liveProgress = $derived(detail ? (ripProgress.value[detail.job.id] ?? null) : null);
-	let liveTransfer = $derived(formatTransfer(liveProgress));
 	$effect(() => {
 		const id = detail?.job.id;
 		reconcileSubscriptions(ripping && id ? [id] : []);
@@ -411,26 +409,7 @@
 			</div>
 
 			{#if ripping}
-				<section class="job-detail-lifecycle-card stack job-detail-rip" data-testid="job-rip-progress">
-					<div class="flex items-center justify-between gap-2">
-						<h2 class="job-detail-section-title">
-							{liveProgress?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
-						</h2>
-						{#if liveProgress?.eta_seconds != null}
-							<span class="job-detail-rip-meta">{formatEta(liveProgress.eta_seconds)} left</span>
-						{/if}
-					</div>
-					{#if liveProgress}
-						<div class="flex items-center gap-2">
-							<div class="flex-1"><ProgressBar value={liveProgress.progress_pct} /></div>
-						</div>
-						{#if liveTransfer}
-							<div class="job-detail-rip-meta mono">{liveTransfer}</div>
-						{/if}
-					{:else}
-						<p class="job-detail-rip-meta">Waiting for the first progress report from the ripper.</p>
-					{/if}
-				</section>
+				<JobRipProgress jobId={job.id} />
 			{/if}
 
 			<!-- Tracks -->
@@ -904,10 +883,6 @@
 	.job-detail-panel-content {
 		border-top: 1px solid var(--color-border);
 		padding: 1.25rem;
-	}
-	.job-detail-rip-meta {
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
 	}
 	.job-detail-lifecycle-card {
 		border: 1px solid var(--color-border);
