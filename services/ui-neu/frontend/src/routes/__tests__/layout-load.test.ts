@@ -3,7 +3,7 @@
 // valid browsing state (guest, backend-side) — the load guard does not acquire
 // a session; it probes once whether anonymous visits are allowed (sending the
 // rest to /login), hydrates config and runs the first-run setup check.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isRedirect } from '@sveltejs/kit';
 import type { LayoutLoad } from '../$types';
 
@@ -32,6 +32,10 @@ describe('+layout.ts load guard', () => {
 		hydrateConfigMock.mockClear();
 		localStorage.clear();
 		sessionStorage.clear();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('no token + non-auth route: hydrates config and does not redirect', async () => {
@@ -183,5 +187,26 @@ describe('+layout.ts load guard', () => {
 		expect(await load(loadArgs('/setup/drives', fetchImpl))).toEqual({});
 		expect(await load(loadArgs('/change-password', fetchImpl))).toEqual({});
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('an admin whose role cannot be read is treated as a non-admin: no setup check', async () => {
+		asAdmin();
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new Error('storage blocked');
+		});
+		const fetchImpl = statusFetch({ first_run: true });
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('a non-ok setup status neither redirects nor caches, so the next navigation checks again', async () => {
+		asAdmin();
+		const fetchImpl = statusFetch({ first_run: true }, false);
+		const { load } = await import('../+layout');
+		expect(await load(loadArgs('/', fetchImpl))).toEqual({});
+		expect(await load(loadArgs('/jobs', fetchImpl))).toEqual({});
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+		expect(fetchImpl).toHaveBeenCalledWith('/api/setup/status');
 	});
 });

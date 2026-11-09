@@ -159,4 +159,92 @@ describe('Login page on first run (setup spec §5.1)', () => {
 		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/change-password'));
 		expect(screen.queryByTestId('login-first-run')).toBeNull();
 	});
+
+	it('hides the first-run notice when the status probe throws', async () => {
+		fetchMock.mockRejectedValue(new Error('network'));
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setAuthenticated: (a: boolean) => void };
+		auth.__setAuthenticated(false);
+		renderComponent(LoginPage);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/setup/status'));
+		await waitFor(() => expect(screen.queryByTestId('login-first-run')).toBeNull());
+		expect(screen.queryByText('Continue as Guest')).not.toBeInTheDocument();
+	});
+
+	it('hides the first-run notice when the status probe is not ok', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 503 });
+		renderComponent(LoginPage);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/setup/status'));
+		expect(screen.queryByTestId('login-first-run')).toBeNull();
+	});
+
+	it('does not send a non-admin into setup on first run', async () => {
+		firstRunFetch(true);
+		const { login } = await import('$lib/api/auth');
+		vi.mocked(login).mockResolvedValue({
+			access_token: 't',
+			expires_at: '',
+			password_must_change: false,
+			role: 'viewer'
+		});
+		renderComponent(LoginPage);
+		await screen.findByTestId('login-first-run');
+		await fireEvent.input(screen.getByLabelText(/username/i), { target: { value: 'u' } });
+		await fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'p' } });
+		await fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/'));
+		expect(gotoMock).not.toHaveBeenCalledWith('/setup');
+	});
+});
+
+describe('Login page submit', () => {
+	afterEach(() => {
+		cleanup();
+		gotoMock.mockClear();
+		fetchMock.mockReset();
+		vi.unstubAllGlobals();
+	});
+
+	it('ignores a second submit while one is in flight', async () => {
+		const { login } = await import('$lib/api/auth');
+		let finish: (v: Awaited<ReturnType<typeof login>>) => void = () => {};
+		vi.mocked(login).mockReset();
+		vi.mocked(login).mockReturnValue(
+			new Promise((resolve) => {
+				finish = resolve;
+			})
+		);
+		renderComponent(LoginPage);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/setup/status'));
+		await fireEvent.input(screen.getByLabelText(/username/i), { target: { value: 'a' } });
+		await fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'b' } });
+		const form = screen.getByRole('button', { name: /^sign in$/i }).closest('form') as HTMLFormElement;
+		await fireEvent.submit(form);
+		await fireEvent.submit(form);
+		expect(login).toHaveBeenCalledTimes(1);
+		finish({ access_token: 't', expires_at: '', password_must_change: false, role: 'admin' });
+		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/'));
+	});
+
+	async function submitWith(rejection: unknown) {
+		const { login } = await import('$lib/api/auth');
+		vi.mocked(login).mockReset();
+		vi.mocked(login).mockRejectedValue(rejection);
+		renderComponent(LoginPage);
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/setup/status'));
+		await fireEvent.input(screen.getByLabelText(/username/i), { target: { value: 'a' } });
+		await fireEvent.input(screen.getByLabelText(/password/i), { target: { value: 'b' } });
+		await fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+	}
+
+	it('shows the error message when sign-in fails with an Error', async () => {
+		await submitWith(new Error('Bad credentials'));
+		expect(await screen.findByText('Bad credentials')).toBeInTheDocument();
+		expect(gotoMock).not.toHaveBeenCalled();
+	});
+
+	it('shows "Login failed" when sign-in rejects with a non-Error', async () => {
+		await submitWith('nope');
+		expect(await screen.findByText('Login failed')).toBeInTheDocument();
+		expect(gotoMock).not.toHaveBeenCalled();
+	});
 });

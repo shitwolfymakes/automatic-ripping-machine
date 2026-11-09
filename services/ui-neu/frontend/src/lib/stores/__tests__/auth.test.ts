@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
 	isAuthenticated,
@@ -83,5 +83,22 @@ describe('auth store', () => {
 		expect(get(fresh.isAuthenticated)).toBe(true);
 		expect(get(fresh.isGuest)).toBe(false);
 		expect(get(fresh.isAdmin)).toBe(true);
+	});
+});
+
+describe('auth store with unreadable storage', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+	});
+
+	it('loads with a null role when localStorage.getItem throws at module load', async () => {
+		vi.resetModules();
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new Error('storage blocked');
+		});
+		const fresh = await import('../auth');
+		expect(get(fresh.role)).toBeNull();
+		expect(get(fresh.isAdmin)).toBe(false);
 	});
 });
