@@ -9,6 +9,7 @@ import {
 	etaTime,
 	formatRemaining,
 	formatEta,
+	formatRipStage,
 	formatTransfer,
 	formatDateTime,
 	formatShortDateTime,
@@ -289,6 +290,18 @@ describe('formatEta', () => {
 	});
 	it('returns hours+minutes when over an hour', () => {
 		expect(formatEta(4_350)).toBe('1h 12m');
+	});
+});
+
+describe('formatRipStage', () => {
+	it('words the scratch-to-media copy stage plainly', () => {
+		expect(formatRipStage('scratch-to-media')).toBe('Copying to shared storage');
+	});
+	it('words the work-to-completed move stage plainly', () => {
+		expect(formatRipStage('work-to-completed')).toBe('Moving to completed');
+	});
+	it('shows any other stage as the ripper named it', () => {
+		expect(formatRipStage('ripping')).toBe('ripping');
 	});
 });
 
