@@ -27,15 +27,14 @@
 	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemSettings from '$lib/components/settings/SystemSettings.svelte';
-	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
+	import { setTranscodeRuntimeEnabled } from '$lib/stores/config';
 	import NotificationsSettings from '$lib/components/settings/NotificationsSettings.svelte';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import TranscodingSettings from '$lib/components/settings/TranscodingSettings.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import ThemesSettings from '$lib/components/settings/ThemesSettings.svelte';
 	import SessionRoutesCard from '$lib/components/settings/SessionRoutesCard.svelte';
-	import GpusCard from '$lib/components/settings/GpusCard.svelte';
 
 	const loaded = new LoadedSettings();
 	// A getter, not a value: the schema arrives after mount and context is set
@@ -228,25 +227,7 @@
 			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
 			 stay hidden. -->
 			{#if activeTab === 'transcoding'}
-				<div data-page-section>
-					{#if $transcoderEnabled && transcodingGroup}
-						<SchemaConfigForm group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved}>
-							{#snippet beforeSections()}
-								<GpusCard />
-							{/snippet}
-						</SchemaConfigForm>
-					{:else}
-						<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
-							<label class="field field-row settings-page-notif-toggle-row">
-								<!-- Always rendered off: on a ripper-only box the backend column
-								 still defaults to true, but it has no effect without capability. -->
-								<Toggle checked={false} label="Enable transcoding" disabled />
-								<span class="field-label">Enable transcoding</span>
-							</label>
-							<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
-						</div>
-					{/if}
-				</div>
+				<TranscodingSettings group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved} />
 			{/if}
 
 			{#if activeTab === 'sessions'}
@@ -329,11 +310,6 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original toggle row was gap-3 (0.75rem), not field-row's 0.5rem. */
-	.settings-page-notif-toggle-row {
-		gap: 0.75rem;
-	}
-
 	/* mb-2 keeps the tab strip from feeling cramped against the page title
 	   above the outer .stack gap. */
 	.settings-page-tabs {
