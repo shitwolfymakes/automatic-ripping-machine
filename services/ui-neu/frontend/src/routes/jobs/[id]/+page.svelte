@@ -8,7 +8,7 @@
 	import InlineField from '$lib/components/InlineField.svelte';
 	import JobFactsGrid from '$lib/components/JobFactsGrid.svelte';
 	import type { EditableJobField } from '$lib/utils/job-fields';
-	import JobActions from '$lib/components/JobActions.svelte';
+	import JobHeaderActions from '$lib/components/JobHeaderActions.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TitleSearch from '$lib/components/TitleSearch.svelte';
 	import JobTracksTable from '$lib/components/JobTracksTable.svelte';
@@ -16,14 +16,13 @@
 	import JobMusicTracklist from '$lib/components/JobMusicTracklist.svelte';
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
-	import MediaTypeSwitch from '$lib/components/episodes/MediaTypeSwitch.svelte';
 	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { identitySuggestionOf } from '$lib/utils/job-review';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
-	import { isAwaitingIdentity, isLive } from '$lib/utils/job-status-groups';
+	import { isLive } from '$lib/utils/job-status-groups';
 	import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/utils/job-fields';
@@ -54,10 +53,6 @@
 	let showApply = $state(false);
 	let actionNote = $state<string | null>(null);
 	let noteTimer: ReturnType<typeof setTimeout> | null = null;
-
-	// Identify is "Edit identity" once an identity already exists (post-rip /
-	// identified), otherwise "Identify disc" for the auto-id-failed case.
-	let identifyLabel = $derived(detail && isAwaitingIdentity(detail.job.status) ? 'Identify disc' : 'Edit identity');
 
 	function flashNote(message: string) {
 		actionNote = message;
@@ -234,38 +229,14 @@
 					{/if}
 
 					<!-- Action buttons pushed right -->
-					<div class="flex flex-wrap items-center gap-2 ml-auto">
-						<!-- The type is part of the identity, so its switch sits beside Edit identity. -->
-						{#if jobDetail.isVideoDisc && $isAdmin}
-							<MediaTypeSwitch {job} handSetCount={jobDetail.handSetCount} onchanged={handleMediaTypeChanged} />
-						{/if}
-						<!-- A video job with an identity edits it in place on the facts grid and
-						     searches from the tab below; the dialog stays for a disc still waiting
-						     for an identity, and for CDs (album, artist, track titles). -->
-						{#if jobDetail.canResolve && $isAdmin && (jobDetail.isCdDisc || isAwaitingIdentity(job.status))}
-							<button
-								type="button"
-								data-testid="identify-open"
-								onclick={() => (showIdentify = true)}
-								class="btn job-detail-header-btn"
-							>
-								{identifyLabel}
-							</button>
-						{/if}
-						{#if jobDetail.canApply && $isAdmin}
-							<button
-								type="button"
-								data-testid="apply-open"
-								onclick={() => (showApply = true)}
-								class="btn job-detail-header-btn"
-							>
-								Apply session
-							</button>
-						{/if}
-						{#if $isAdmin}
-							<JobActions {job} onaction={jobDetail.load} ondelete={() => goto('/')} />
-						{/if}
-					</div>
+					<JobHeaderActions
+						{job}
+						{jobDetail}
+						onmediatypechanged={handleMediaTypeChanged}
+						onidentify={() => (showIdentify = true)}
+						onapply={() => (showApply = true)}
+						ondelete={() => goto('/')}
+					/>
 				</div>
 
 				<!-- A confident match identify held for confirmation (auto-apply off). -->
@@ -452,14 +423,6 @@
 	.job-detail-suggestion {
 		border-bottom: 1px solid var(--color-border);
 		padding: 0.75rem 1.25rem;
-	}
-	/* the original header buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
-	   0.875rem) - between .btn's default and .btn-sm */
-	.job-detail-header-btn {
-		min-height: auto;
-		padding: 0.375rem 0.75rem;
-		font-size: 0.875rem;
-		line-height: 1.25rem;
 	}
 	.job-detail-title {
 		font-size: 1.25rem;
