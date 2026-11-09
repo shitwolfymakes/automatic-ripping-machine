@@ -27,4 +27,17 @@ describe('pathBasename', () => {
 	it('returns an empty string for the root path', () => {
 		expect(pathBasename('/')).toBe('');
 	});
+
+	it.each([
+		['a', 'a'],
+		['a/b', 'b'],
+		['/a/b/', 'b'],
+		['a//', 'a'],
+		['//', ''],
+		['/', ''],
+		['/a', 'a'],
+		['a//b', 'b']
+	])('returns the same basename for %j as before the rewrite', (input, expected) => {
+		expect(pathBasename(input)).toBe(expected);
+	});
 });
