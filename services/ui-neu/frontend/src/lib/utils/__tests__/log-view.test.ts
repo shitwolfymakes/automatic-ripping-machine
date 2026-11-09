@@ -230,6 +230,12 @@ describe('levelTone', () => {
 	it('gives a null level no tone', () => {
 		expect(levelTone(null as never)).toBeNull();
 	});
+
+	it('gives inherited object keys no tone', () => {
+		expect(levelTone('constructor')).toBeNull();
+		expect(levelTone('toString')).toBeNull();
+		expect(levelTone('__proto__')).toBeNull();
+	});
 });
 
 describe('entryTimeLabel', () => {
