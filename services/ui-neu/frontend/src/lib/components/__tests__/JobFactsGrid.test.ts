@@ -44,13 +44,6 @@ describe('JobFactsGrid', () => {
 		expect(within(cell).getByRole('spinbutton')).toBeInTheDocument();
 	});
 
-	it('edits another kind of field with a text input', async () => {
-		render([{ label: 'Field', value: 'x', edit: 'other' as never, raw: 'x' }]);
-		const cell = screen.getByTestId('fact-other');
-		await fireEvent.click(within(cell).getByRole('button'));
-		expect(within(cell).getByRole('textbox')).toBeInTheDocument();
-	});
-
 	it('starts the editor from raw when set', async () => {
 		render([{ label: 'Year', value: '1979', edit: 'year', raw: '1979' }]);
 		const cell = screen.getByTestId('fact-year');

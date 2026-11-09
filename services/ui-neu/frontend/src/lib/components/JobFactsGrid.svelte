@@ -30,12 +30,7 @@
 						<InlineField
 							label={field.label}
 							value={field.raw ?? ''}
-							type={field.edit === 'season' ||
-							field.edit === 'disc_number' ||
-							field.edit === 'disc_total' ||
-							field.edit === 'year'
-								? 'number'
-								: 'text'}
+							type="number"
 							{canEdit}
 							onsave={(raw) => onsave(field.edit!, raw)}
 						/>
