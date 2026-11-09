@@ -161,6 +161,25 @@ describe('Logs job-list page', () => {
 		await waitFor(() => expect(screen.getByText(/Failed to load: jobs down/)).toBeInTheDocument());
 	});
 
+	it('shows the error state with the string when the jobs fail with a non-Error', async () => {
+		const { fetchAllJobs } = await import('$lib/api/jobs');
+		vi.mocked(fetchAllJobs).mockRejectedValueOnce('plain string failure');
+		renderComponent(LogsPage);
+		await waitFor(() => expect(screen.getByText(/Failed to load: plain string failure/)).toBeInTheDocument());
+	});
+
+	it('gives a CD job a square poster and other discs the default one', async () => {
+		const { fetchAllJobs } = await import('$lib/api/jobs');
+		const cd = { ...JOBS[1], id: 'job_cd', disc_type: 'cd', title: 'Charlie' };
+		vi.mocked(fetchAllJobs).mockResolvedValueOnce({ jobs: [cd, JOBS[0]], total: 2 } as never);
+		renderComponent(LogsPage);
+		await waitFor(() => expect(screen.getByText('Charlie')).toBeInTheDocument());
+		const posterOf = (name: string) =>
+			screen.getByRole('link', { name }).closest('.logs-panel-title-cell')?.querySelector('.logs-panel-poster');
+		expect(posterOf('Charlie')).toHaveClass('logs-panel-poster-square');
+		expect(posterOf('Alpha')).not.toHaveClass('logs-panel-poster-square');
+	});
+
 	it('filters by free text over title and id, showing the shown count', async () => {
 		await ready();
 		const search = screen.getByPlaceholderText('Search title or id');
