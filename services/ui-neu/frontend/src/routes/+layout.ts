@@ -41,26 +41,37 @@ function isAdminSession(): boolean {
 	}
 }
 
-export const load: LayoutLoad = async ({ url, fetch }) => {
-	// The sign-in pages need neither the config nor a session.
-	if (url.pathname.startsWith('/login') || url.pathname.startsWith('/change-password')) return {};
+// The sign-in pages need neither the config nor a session.
+function isSignInPage(url: URL): boolean {
+	return url.pathname.startsWith('/login') || url.pathname.startsWith('/change-password');
+}
 
-	if (!(await anonymousVisitAllowed(fetch))) redirect(307, '/login');
+async function hydrateConfigOnce(): Promise<void> {
+	if (configHydrated) return;
+	await hydrateConfig();
+	configHydrated = true;
+}
 
-	if (!configHydrated) {
-		await hydrateConfig();
-		configHydrated = true;
-	}
-
+function skipsSetupCheck(url: URL): boolean {
 	// The walkthrough itself.
-	if (url.pathname.startsWith('/setup')) return {};
+	if (url.pathname.startsWith('/setup')) return true;
 
 	// Skip if we already know setup is done (cached from a previous navigation)
-	if (setupConfirmedComplete) return {};
+	if (setupConfirmedComplete) return true;
 
 	// Only the admin runs setup; guests browse normally. "Finish later" is
 	// server-wide: the status endpoint then reports first_run=false.
-	if (!isAdminSession()) return {};
+	return !isAdminSession();
+}
+
+export const load: LayoutLoad = async ({ url, fetch }) => {
+	if (isSignInPage(url)) return {};
+
+	if (!(await anonymousVisitAllowed(fetch))) redirect(307, '/login');
+
+	await hydrateConfigOnce();
+
+	if (skipsSetupCheck(url)) return {};
 
 	// null = ARM unreachable or erroring (503, etc.): don't redirect, let the
 	// normal UI handle it.
