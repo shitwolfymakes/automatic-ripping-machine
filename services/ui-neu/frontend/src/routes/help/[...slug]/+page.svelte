@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { fetchDocsNav, slugToId, type DocsNavSection } from '$lib/docs/api';
+	import HelpSearchBox from '$lib/components/help/HelpSearchBox.svelte';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
 	import { HelpDoc } from '$lib/stores/helpDoc.svelte';
 	import { HelpSearch } from '$lib/stores/helpSearch.svelte';
@@ -36,24 +37,7 @@
 
 <div class="help-layout">
 	<aside class="help-nav stack">
-		<input
-			type="search"
-			class="field-control"
-			placeholder="Search help"
-			aria-label="Search help"
-			autocomplete="off"
-			value={helpSearch.query}
-			oninput={(e) => helpSearch.run(e.currentTarget.value)}
-		/>
-		{#if helpSearch.query.trim()}
-			<div class="panel panel-compact help-results">
-				{#each helpSearch.hits as hit (hit.id)}
-					<a class="nav-item" href={hit.href}>{hit.title}</a>
-				{:else}
-					<p class="help-empty">No matches</p>
-				{/each}
-			</div>
-		{/if}
+		<HelpSearchBox query={helpSearch.query} hits={helpSearch.hits} onsearch={helpSearch.run} />
 		<button
 			type="button"
 			class="btn btn-sm help-topics-toggle"
@@ -153,7 +137,6 @@
 		font-weight: 600;
 		color: var(--color-text-muted);
 	}
-	.help-empty,
 	.help-status {
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
