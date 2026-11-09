@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { DriveView } from '$lib/types/api.gen';
-	import { enrollDrive, ignoreDrive, unignoreDrive } from '$lib/api/drives';
+	import { DriveLifecycleActions } from '$lib/stores/driveLifecycleActions.svelte';
 	import { connectionLabel, driveTitle, mediaLabel, serialLabel } from '$lib/utils/drives';
 	import { formatDateTime } from '$lib/utils/format';
 	import Glyph from '$lib/components/Glyph.svelte';
@@ -20,8 +20,7 @@
 	let { detected, ignored, onchanged, enrollDisabledReason = null }: Props = $props();
 
 	let ignoredOpen = $state(false);
-	let busy = $state<Record<string, 'enroll' | 'other'>>({});
-	let errors = $state<Record<string, string>>({});
+	const actions = new DriveLifecycleActions(() => onchanged());
 	// Ids present at first render; anything detected later is flagged New.
 	let firstSeen = $state<Set<string> | null>(null);
 
@@ -30,27 +29,12 @@
 	});
 
 	const isNew = (d: DriveView) => firstSeen !== null && !firstSeen.has(d.id);
-
-	async function run(id: string, kind: 'enroll' | 'other', action: () => Promise<unknown>) {
-		busy = { ...busy, [id]: kind };
-		const { [id]: _drop, ...rest } = errors;
-		errors = rest;
-		try {
-			await action();
-			onchanged();
-		} catch (e) {
-			errors = { ...errors, [id]: e instanceof Error ? e.message : 'Action failed' };
-		} finally {
-			const { [id]: _done, ...left } = busy;
-			busy = left;
-		}
-	}
 </script>
 
 {#snippet row(d: DriveView, ignoredRow: boolean)}
 	{@const serial = serialLabel(d)}
 	{@const conn = connectionLabel(d)}
-	{@const failure = errors[d.id] ?? (ignoredRow ? null : d.last_error)}
+	{@const failure = actions.errors[d.id] ?? (ignoredRow ? null : d.last_error)}
 	<!-- The backend refuses to enroll an unplugged drive (409), so don't offer it. -->
 	{@const absent = d.present === false}
 	<div
@@ -78,30 +62,30 @@
 				{#if ignoredRow}
 					<button
 						data-testid={`unignore-${d.id}`}
-						disabled={!!busy[d.id]}
-						onclick={() => run(d.id, 'other', () => unignoreDrive(d.id))}
+						disabled={!!actions.busy[d.id]}
+						onclick={() => actions.unignore(d.id)}
 						class="btn btn-sm">Un-ignore</button
 					>
 				{:else}
 					<button
 						data-testid={`ignore-${d.id}`}
-						disabled={!!busy[d.id]}
-						onclick={() => run(d.id, 'other', () => ignoreDrive(d.id))}
+						disabled={!!actions.busy[d.id]}
+						onclick={() => actions.ignore(d.id)}
 						class="btn btn-sm">Ignore</button
 					>
 				{/if}
 				<button
 					data-testid={`enroll-${d.id}`}
-					disabled={!!busy[d.id] || !!enrollDisabledReason || absent}
+					disabled={!!actions.busy[d.id] || !!enrollDisabledReason || absent}
 					title={absent ? 'Not connected; plug the drive in to enroll it' : undefined}
-					onclick={() => run(d.id, 'enroll', () => enrollDrive(d.id))}
+					onclick={() => actions.enroll(d.id)}
 					class="btn btn-primary btn-sm"
 				>
 					{#if failure && !ignoredRow}<Glyph name="refresh" class="h-3.5 w-3.5" /> Retry{:else}Enroll{/if}
 				</button>
 			</span>
 		</div>
-		{#if busy[d.id] === 'enroll'}
+		{#if actions.busy[d.id] === 'enroll'}
 			<StatusStrip tone="busy" title="Starting ripper..." detail="Usually under 10 seconds" progress />
 		{:else if failure}
 			<div data-testid={`lifecycle-error-${d.id}`}>
