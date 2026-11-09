@@ -39,6 +39,7 @@
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
 	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
 	import { ImageCache } from '$lib/stores/imageCache.svelte';
+	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import { transcoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
@@ -416,35 +417,7 @@
 					<InterfaceSettings />
 
 					<!-- Image Cache -->
-					<div class="panel settings-page-panel-wide">
-						<div class="flex items-center justify-between">
-							<div>
-								<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
-								<p class="settings-page-description mt-1">
-									{#if imageCache.loading}Loading...
-									{:else if imageCache.stats}{imageCache.stats.count} cached image{imageCache.stats.count !== 1
-											? 's'
-											: ''} ({imageCache.stats.size_mb}
-										MB)
-									{:else}Unable to load cache stats
-									{/if}
-								</p>
-							</div>
-							<button
-								type="button"
-								onclick={() => (imageCache.confirmOpen = true)}
-								disabled={imageCache.busy || !imageCache.stats?.count}
-								class="btn btn-danger btn-sm settings-page-clear-cache-btn"
-							>
-								Clear Cache
-							</button>
-						</div>
-						{#if imageCache.feedback}
-							<p class="mt-2 settings-page-feedback" data-error={imageCache.feedback.type !== 'success'}>
-								{imageCache.feedback.message}
-							</p>
-						{/if}
-					</div>
+					<ImageCacheCard cache={imageCache} />
 				</div>
 			{/if}
 
@@ -745,14 +718,6 @@
 	   Color Scheme's and User Themes' did). */
 	.settings-page-panel-title-flush {
 		margin-bottom: 0;
-	}
-	/* the original Clear Cache button had no border at all
-	   (text-red-600 hover:bg-red-500/10), not btn-danger's outlined look. */
-	.settings-page-clear-cache-btn {
-		border-color: transparent;
-	}
-	.settings-page-clear-cache-btn:hover {
-		background: var(--color-danger-soft);
 	}
 	/* most "muted description under a heading" paragraphs on this page were
 	   text-sm (0.875rem/1.25rem), not panel-hint's 0.75rem - panel-hint is
