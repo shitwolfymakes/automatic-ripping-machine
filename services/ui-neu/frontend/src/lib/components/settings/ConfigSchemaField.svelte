@@ -63,119 +63,106 @@
 		<MakemkvKeyField {field} bind:value {onclear} />
 	{:else if field.widget === 'disc_handling' && field.editable}
 		<DiscHandlingField values={config} {context} />
+	{:else if !field.editable}
+		<!-- A read-only field is a plain muted value under the label, not a
+		     disabled control, so every non-editable field in this
+		     schema-driven form reads the same regardless of type. -->
+		<div class="field-label">{field.label}</div>
+		<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
 	{:else if field.type === 'bool'}
-		{#if !field.editable}
-			<!-- Same read-only idiom as the string/enum branch below (a plain
-			     muted value under the label, no interactive control) rather than
-			     a disabled checkbox, so every non-editable field in this
-			     schema-driven form reads consistently regardless of type. -->
-			<div class="field-label">{field.label}</div>
-			<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
-		{:else}
-			<label class="field field-row">
-				<input
-					type="checkbox"
-					aria-label={field.label}
-					checked={boolValue}
-					{disabled}
-					onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
-				/>
-				<span class="field-label">{field.label}</span>
-			</label>
-		{/if}
+		<label class="field field-row">
+			<input
+				type="checkbox"
+				aria-label={field.label}
+				checked={boolValue}
+				{disabled}
+				onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
+			/>
+			<span class="field-label">{field.label}</span>
+		</label>
 	{:else if field.type === 'ranked'}
 		<div class="field-label">{field.label}</div>
-		{#if field.editable}
-			<RankedListField {field} bind:value {config} {helpId} {keyTab} {disabled} />
-		{:else}
-			<div class="mono config-schema-field-value">
-				{readOnlyValue(field, value)}
-			</div>
-		{/if}
+		<RankedListField {field} bind:value {config} {helpId} {keyTab} {disabled} />
 	{:else}
 		<div class="field-label">{field.label}</div>
-		{#if !field.editable}
-			<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
-		{:else}
-			<!-- The control and an optional trailing action (e.g. a Check button)
-			     share one row so they align regardless of the help text below. -->
-			<div class="flex items-center gap-2">
-				{#if field.type === 'enum'}
-					<select
-						aria-label={field.label}
-						aria-describedby={describedBy}
-						value={value ?? ''}
-						{disabled}
-						onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
-						class="field-control w-full"
+		<!-- The control and an optional trailing action (e.g. a Check button)
+		     share one row so they align regardless of the help text below. -->
+		<div class="flex items-center gap-2">
+			{#if field.type === 'enum'}
+				<select
+					aria-label={field.label}
+					aria-describedby={describedBy}
+					value={value ?? ''}
+					{disabled}
+					onchange={(e) => (value = (e.currentTarget as HTMLSelectElement).value)}
+					class="field-control w-full"
+				>
+					{#each field.enum_values ?? [] as opt (opt)}
+						<option value={opt}>{field.enum_labels?.[opt] ?? opt}</option>
+					{/each}
+				</select>
+			{:else if field.type === 'int'}
+				<!-- Compact: an int field reads as a short number, not a full-width
+				     text box. Emits a number (or null when emptied), never a string -
+				     no min/max here, the backend's 400 on an out-of-range value is
+				     the validation (see SchemaConfigForm's save-error alert). -->
+				<input
+					type="number"
+					step="1"
+					inputmode="numeric"
+					aria-label={field.label}
+					aria-describedby={describedBy}
+					value={value ?? ''}
+					{disabled}
+					oninput={(e) => {
+						const raw = (e.currentTarget as HTMLInputElement).value;
+						value = raw === '' ? null : Number(raw);
+					}}
+					class="field-control config-schema-field-number"
+				/>
+			{:else}
+				<input
+					type={isSecret && !reveal ? 'password' : 'text'}
+					aria-label={field.label}
+					aria-describedby={describedBy}
+					value={displayValue}
+					{placeholder}
+					oninput={(e) => {
+						value = (e.currentTarget as HTMLInputElement).value;
+						removed = false;
+					}}
+					class="field-control w-full"
+				/>
+				{#if isSecret}
+					<button
+						type="button"
+						class="btn btn-icon"
+						aria-label="Show hidden value"
+						aria-pressed={reveal}
+						onclick={() => (reveal = !reveal)}
 					>
-						{#each field.enum_values ?? [] as opt (opt)}
-							<option value={opt}>{field.enum_labels?.[opt] ?? opt}</option>
-						{/each}
-					</select>
-				{:else if field.type === 'int'}
-					<!-- Compact: an int field reads as a short number, not a full-width
-					     text box. Emits a number (or null when emptied), never a string -
-					     no min/max here, the backend's 400 on an out-of-range value is
-					     the validation (see SchemaConfigForm's save-error alert). -->
-					<input
-						type="number"
-						step="1"
-						inputmode="numeric"
-						aria-label={field.label}
-						aria-describedby={describedBy}
-						value={value ?? ''}
-						{disabled}
-						oninput={(e) => {
-							const raw = (e.currentTarget as HTMLInputElement).value;
-							value = raw === '' ? null : Number(raw);
-						}}
-						class="field-control config-schema-field-number"
-					/>
-				{:else}
-					<input
-						type={isSecret && !reveal ? 'password' : 'text'}
-						aria-label={field.label}
-						aria-describedby={describedBy}
-						value={displayValue}
-						{placeholder}
-						oninput={(e) => {
-							value = (e.currentTarget as HTMLInputElement).value;
-							removed = false;
-						}}
-						class="field-control w-full"
-					/>
-					{#if isSecret}
-						<button
-							type="button"
-							class="btn btn-icon"
-							aria-label="Show hidden value"
-							aria-pressed={reveal}
-							onclick={() => (reveal = !reveal)}
-						>
-							<Glyph name={reveal ? 'eye-off' : 'eye'} />
-						</button>
-					{/if}
+						<Glyph name={reveal ? 'eye-off' : 'eye'} />
+					</button>
 				{/if}
-				{#if action}{@render action()}{/if}
+			{/if}
+			{#if action}{@render action()}{/if}
+		</div>
+		{#if field.signup_url}
+			<a class="config-schema-field-signup" href={field.signup_url} target="_blank" rel="noopener noreferrer">
+				Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
+			</a>
+		{/if}
+		{#if isHiddenSecret}
+			<div class="config-schema-field-saved">
+				<span class="chip chip-sm chip-success"><Glyph name="check" class="h-3 w-3" /> Saved</span>
+				<span class="config-schema-field-saved-note">Type a new key to replace it.</span>
+				<button type="button" class="btn btn-link btn-sm" onclick={removeSecret}>Remove</button>
 			</div>
-			{#if field.signup_url}
-				<a class="config-schema-field-signup" href={field.signup_url} target="_blank" rel="noopener noreferrer">
-					Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
-				</a>
-			{/if}
-			{#if isHiddenSecret}
-				<div class="config-schema-field-saved">
-					<span class="chip chip-sm chip-success"><Glyph name="check" class="h-3 w-3" /> Saved</span>
-					<span class="config-schema-field-saved-note">Type a new key to replace it.</span>
-					<button type="button" class="btn btn-link btn-sm" onclick={removeSecret}>Remove</button>
-				</div>
-			{:else if removed}
-				<div class="config-schema-field-saved">
-					<span class="chip chip-sm chip-warning"><Glyph name="minus-circle" class="h-3 w-3" /> Will be removed</span>
-					<span class="config-schema-field-saved-note">The key is cleared when you save.</span>
-				</div>
-			{/if}
+		{:else if removed}
+			<div class="config-schema-field-saved">
+				<span class="chip chip-sm chip-warning"><Glyph name="minus-circle" class="h-3 w-3" /> Will be removed</span>
+				<span class="config-schema-field-saved-note">The key is cleared when you save.</span>
+			</div>
 		{/if}
 	{/if}
 	{#if field.help && field.widget == null && !hideHelp}
