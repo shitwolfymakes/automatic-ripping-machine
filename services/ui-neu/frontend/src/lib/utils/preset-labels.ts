@@ -1,103 +1,84 @@
 // The labels the sessions screens show for a session's or preset's settings,
 // shared by SessionCard and PresetRow. Each shows an unknown value as it is,
 // and a missing one as -.
-export function humanizeOutputMode(v: string | null | undefined): string {
-	switch (v) {
-		case 'tracks':
-			return 'Tracks';
-		case 'iso':
-			return 'ISO image';
-		case 'data_copy':
-			return 'File copy';
-		case 'folder':
-			return 'Disc backup (folder)';
-		default:
-			return v ?? '-';
-	}
+
+/** A value's label from `labels`. A value the table doesn't list shows
+ * as itself, and no value as "-". */
+function labelFrom(labels: ReadonlyMap<string, string>, v: string | null | undefined): string {
+	return v == null ? '-' : (labels.get(v) ?? v);
 }
+
+const OUTPUT_MODE_LABELS: ReadonlyMap<string, string> = new Map([
+	['tracks', 'Tracks'],
+	['iso', 'ISO image'],
+	['data_copy', 'File copy'],
+	['folder', 'Disc backup (folder)']
+]);
+
+/** An output mode's label. */
+export function humanizeOutputMode(v: string | null | undefined): string {
+	return labelFrom(OUTPUT_MODE_LABELS, v);
+}
+
+const MEDIA_TYPE_LABELS: ReadonlyMap<string, string> = new Map([
+	['movie', 'Movie'],
+	['tv', 'TV'],
+	['music', 'Music'],
+	['data', 'Data'],
+	['iso', 'ISO']
+]);
 
 /** A media type's label. */
 export function humanizeMediaType(v: string | null | undefined): string {
-	switch (v) {
-		case 'movie':
-			return 'Movie';
-		case 'tv':
-			return 'TV';
-		case 'music':
-			return 'Music';
-		case 'data':
-			return 'Data';
-		case 'iso':
-			return 'ISO';
-		default:
-			return v ?? '-';
-	}
+	return labelFrom(MEDIA_TYPE_LABELS, v);
 }
+
+const TRACK_SELECTION_LABELS: ReadonlyMap<string, string> = new Map([
+	['main_feature', 'Main feature'],
+	['all_tracks', 'All tracks'],
+	['archive', 'Archive'],
+	['custom', 'Custom']
+]);
 
 /** A track selection's label. */
 export function humanizeTrackSelection(v: string | null | undefined): string {
-	switch (v) {
-		case 'main_feature':
-			return 'Main feature';
-		case 'all_tracks':
-			return 'All tracks';
-		case 'archive':
-			return 'Archive';
-		case 'custom':
-			return 'Custom';
-		default:
-			return v ?? '-';
-	}
+	return labelFrom(TRACK_SELECTION_LABELS, v);
 }
+
+const IDENTIFICATION_MODE_LABELS: ReadonlyMap<string, string> = new Map([
+	['required', 'ID required'],
+	['skip', 'ID skip'],
+	['deferred_placeholder', 'ID deferred']
+]);
 
 /** An identification mode's label. */
 export function humanizeIdentificationMode(v: string | null | undefined): string {
-	switch (v) {
-		case 'required':
-			return 'ID required';
-		case 'skip':
-			return 'ID skip';
-		case 'deferred_placeholder':
-			return 'ID deferred';
-		default:
-			return v ?? '-';
-	}
+	return labelFrom(IDENTIFICATION_MODE_LABELS, v);
 }
+
+const TOOL_LABELS: ReadonlyMap<string, string> = new Map([
+	['handbrake', 'HandBrake'],
+	['abcde', 'abcde'],
+	['none', 'None']
+]);
 
 /** A transcode tool's label. */
 export function humanizeTool(v: string | null | undefined): string {
-	switch (v) {
-		case 'handbrake':
-			return 'HandBrake';
-		case 'abcde':
-			return 'abcde';
-		case 'none':
-			return 'None';
-		default:
-			return v ?? '-';
-	}
+	return labelFrom(TOOL_LABELS, v);
 }
+
+const CONTAINER_LABELS: ReadonlyMap<string, string> = new Map([
+	['mkv', 'MKV'],
+	['mp4', 'MP4'],
+	['webm', 'WebM'],
+	['flac', 'FLAC'],
+	['mp3', 'MP3'],
+	['ogg', 'OGG'],
+	['iso', 'ISO'],
+	['none', 'None']
+]);
 
 /** A container's label. */
 export function humanizeContainer(v: string | null | undefined): string {
-	switch (v) {
-		case 'mkv':
-			return 'MKV';
-		case 'mp4':
-			return 'MP4';
-		case 'webm':
-			return 'WebM';
-		case 'flac':
-			return 'FLAC';
-		case 'mp3':
-			return 'MP3';
-		case 'ogg':
-			return 'OGG';
-		case 'iso':
-			return 'ISO';
-		case 'none':
-			return 'None';
-		default:
-			return v ?? '-';
-	}
+	return labelFrom(CONTAINER_LABELS, v);
 }

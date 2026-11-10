@@ -106,3 +106,20 @@ describe('humanizeContainer', () => {
 		expect(humanizeContainer(null)).toBe('-');
 	});
 });
+
+describe('labelFrom fallbacks', () => {
+	it('shows - for undefined', () => {
+		expect(humanizeOutputMode(undefined)).toBe('-');
+		expect(humanizeContainer(undefined)).toBe('-');
+	});
+
+	it('gives an empty value back as it is', () => {
+		expect(humanizeMediaType('')).toBe('');
+		expect(humanizeTool('')).toBe('');
+	});
+
+	it('gives a value named like an Object prototype member back as itself', () => {
+		expect(humanizeTrackSelection('constructor')).toBe('constructor');
+		expect(humanizeIdentificationMode('toString')).toBe('toString');
+	});
+});
