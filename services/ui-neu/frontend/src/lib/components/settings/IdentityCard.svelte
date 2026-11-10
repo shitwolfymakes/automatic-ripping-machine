@@ -1,8 +1,14 @@
 <script lang="ts">
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import {
+		DISC_DATABASES,
 		DISC_KIND_LABELS,
+		DISC_KINDS,
+		IGNORE_OPTIONS,
+		SOURCE_LISTS,
+		TRUST_OPTIONS,
 		hintIgnored,
+		isEmptyList,
 		withHintIgnored,
 		type DiscHint,
 		type DiscKind
@@ -29,7 +35,6 @@
 	} = $props();
 
 	let kind = $state<DiscKind>('bluray');
-	const KINDS: DiscKind[] = ['bluray', 'dvd', 'cd'];
 
 	const meta = (key: string) => fields.find((f) => f.key === key);
 	const off = (key: string) => disabled || !meta(key)?.editable;
@@ -37,41 +42,8 @@
 	// merged under the live values (a key typed on another tab is not here).
 	const keyConfig = $derived({ ...config, ...values });
 
-	const DISC_DB = [
-		{
-			key: 'thediscdb_enabled',
-			label: 'TheDiscDB disc map',
-			chips: ['Blu-ray', 'UHD', 'DVD'],
-			description:
-				"Matches the disc itself and names its titles before any online lookup. When it matches, it wins over the disc's labels, and ARM confirms the title with the first online source below."
-		},
-		{ key: 'crc64service_enabled', label: 'ARM community database (CRC64)', chips: ['DVD'], description: null }
-	];
-	const LISTS = [
-		{ key: 'movie_sources', heading: 'Movies' },
-		{ key: 'episode_sources', heading: 'TV shows' }
-	];
-	const TRUST = [
-		{ key: 'movie_auto_apply', label: 'Apply confident matches · Movies' },
-		{ key: 'episode_auto_apply', label: 'Apply confident matches · TV shows' },
-		{ key: 'music_auto_apply', label: 'Apply confident matches · Music' }
-	];
-	const IGNORE: { hint: DiscHint; label: string; help: string }[] = [
-		{
-			hint: 'bd_title',
-			label: 'Ignore the disc title metadata',
-			help: "Blu-ray and UHD only. ARM won't use the title stored on the disc and identifies it from the volume label, TheDiscDB and online lookup instead."
-		},
-		{
-			hint: 'label',
-			label: 'Ignore the volume label',
-			help: "ARM won't use the volume label and identifies the disc from its title metadata, TheDiscDB and online lookup instead. A DVD with no title metadata then gets no automatic title search."
-		}
-	];
-
 	const hasHints = $derived(meta('disc_hint_sources') !== undefined);
 	const isIgnored = (hint: DiscHint) => hasHints && hintIgnored(values, hint);
-	const isEmpty = (key: string) => Array.isArray(values[key]) && (values[key] as unknown[]).length === 0;
 </script>
 
 {#snippet heading(title: string)}
@@ -82,7 +54,7 @@
 	<div class="identity-card-step stack" data-step="preview">
 		<span class="identity-card-caption">Preview</span>
 		<div class="identity-card-segment" role="radiogroup" aria-label="Disc kind">
-			{#each KINDS as k (k)}
+			{#each DISC_KINDS as k (k)}
 				<button
 					type="button"
 					role="radio"
@@ -97,7 +69,7 @@
 
 	<div class="identity-card-step stack" data-step="2">
 		{@render heading('Disc database')}
-		{#each DISC_DB as db (db.key)}
+		{#each DISC_DATABASES as db (db.key)}
 			{@const field = meta(db.key)}
 			{#if field}
 				<div class="identity-card-option" id="setting-{db.key}" data-testid="setting-{db.key}">
@@ -125,12 +97,12 @@
 		{@render heading('Online lookup')}
 		<p class="identity-card-note" id="identity-help-lookup">Tried top to bottom; the first confident match wins.</p>
 		<div class="identity-card-columns">
-			{#each LISTS as list (list.key)}
+			{#each SOURCE_LISTS as list (list.key)}
 				{@const field = meta(list.key)}
 				{#if field}
 					<div class="stack identity-card-column" id="setting-{list.key}" data-testid="setting-{list.key}">
 						<h5 class="field-label">{list.heading}</h5>
-						{#if isEmpty(list.key)}
+						{#if isEmptyList(values, list.key)}
 							<p class="identity-card-note">No sources on</p>
 						{/if}
 						<RankedListField
@@ -160,7 +132,7 @@
 	<div class="identity-card-step stack" data-step="4">
 		{@render heading('Trust')}
 		<div class="identity-card-trust">
-			{#each TRUST as t (t.key)}
+			{#each TRUST_OPTIONS as t (t.key)}
 				{#if meta(t.key)}
 					<div class="identity-card-option" id="setting-{t.key}" data-testid="setting-{t.key}">
 						<label class="field field-row">
@@ -188,7 +160,7 @@
 	{#if hasHints}
 		<div class="identity-card-step stack" data-step="advanced" id="setting-disc_hint_sources">
 			<span class="label-caps">Advanced</span>
-			{#each IGNORE as box (box.hint)}
+			{#each IGNORE_OPTIONS as box (box.hint)}
 				<div class="identity-card-option">
 					<label class="field field-row">
 						<input

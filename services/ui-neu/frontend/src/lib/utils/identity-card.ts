@@ -1,8 +1,10 @@
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
 /** Pure helpers behind Settings › Identification › Identity: the Preview panel
- *  rows per disc kind and the two Advanced "Ignore" boxes over
- *  `disc_hint_sources` (set semantics, default order on re-enable). */
+ *  rows per disc kind, the two Advanced "Ignore" boxes over
+ *  `disc_hint_sources` (set semantics, default order on re-enable), and the
+ *  tables that drive the card's numbered steps (disc databases, source lists,
+ *  trust boxes). */
 
 export type DiscKind = 'bluray' | 'dvd' | 'cd';
 export type DiscHint = 'bd_title' | 'label';
@@ -10,6 +12,59 @@ export type DiscHint = 'bd_title' | 'label';
 export const DISC_KIND_LABELS: Record<DiscKind, string> = { bluray: 'Blu-ray', dvd: 'DVD', cd: 'CD' };
 export const HINT_LABELS = { bd_title: 'Disc title metadata', label: 'Volume label' } as const;
 export const HINT_DEFAULT_ORDER = ['bd_title', 'label'] as const;
+
+/** The Preview's disc-kind control: the kinds it offers, in order. */
+export const DISC_KINDS: readonly DiscKind[] = ['bluray', 'dvd', 'cd'];
+
+export interface DiscDatabaseOption {
+	key: string;
+	label: string;
+	chips: string[];
+	description: string | null;
+}
+/** Step 2's disc databases: one checkbox row each. */
+export const DISC_DATABASES: DiscDatabaseOption[] = [
+	{
+		key: 'thediscdb_enabled',
+		label: 'TheDiscDB disc map',
+		chips: ['Blu-ray', 'UHD', 'DVD'],
+		description:
+			"Matches the disc itself and names its titles before any online lookup. When it matches, it wins over the disc's labels, and ARM confirms the title with the first online source below."
+	},
+	{ key: 'crc64service_enabled', label: 'ARM community database (CRC64)', chips: ['DVD'], description: null }
+];
+
+/** Step 3's source lists: one ranked list per media kind. */
+export const SOURCE_LISTS: { key: string; heading: string }[] = [
+	{ key: 'movie_sources', heading: 'Movies' },
+	{ key: 'episode_sources', heading: 'TV shows' }
+];
+
+/** Step 4's trust boxes: one auto-apply checkbox per media kind. */
+export const TRUST_OPTIONS: { key: string; label: string }[] = [
+	{ key: 'movie_auto_apply', label: 'Apply confident matches · Movies' },
+	{ key: 'episode_auto_apply', label: 'Apply confident matches · TV shows' },
+	{ key: 'music_auto_apply', label: 'Apply confident matches · Music' }
+];
+
+/** The Advanced ignore boxes: one per disc hint the card can switch off. */
+export const IGNORE_OPTIONS: { hint: DiscHint; label: string; help: string }[] = [
+	{
+		hint: 'bd_title',
+		label: 'Ignore the disc title metadata',
+		help: "Blu-ray and UHD only. ARM won't use the title stored on the disc and identifies it from the volume label, TheDiscDB and online lookup instead."
+	},
+	{
+		hint: 'label',
+		label: 'Ignore the volume label',
+		help: "ARM won't use the volume label and identifies the disc from its title metadata, TheDiscDB and online lookup instead. A DVD with no title metadata then gets no automatic title search."
+	}
+];
+
+/** Step 3's "No sources on" note: true when the list at `key` is an empty array. */
+export function isEmptyList(values: Record<string, unknown>, key: string): boolean {
+	return Array.isArray(values[key]) && (values[key] as unknown[]).length === 0;
+}
 
 const NO_SOURCES = 'No sources on';
 

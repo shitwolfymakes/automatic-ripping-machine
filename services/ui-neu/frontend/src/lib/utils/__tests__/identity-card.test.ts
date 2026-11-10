@@ -1,8 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { hintIgnored, withHintIgnored, enabledLabels, previewRows } from '../identity-card';
+import { hintIgnored, withHintIgnored, enabledLabels, previewRows, isEmptyList } from '../identity-card';
 import { IDENTITY_METAS, IDENTITY_DEFAULTS } from './fixtures/identity-metas';
 
 const v = (over: Record<string, unknown> = {}) => ({ ...IDENTITY_DEFAULTS, ...over });
+
+describe('isEmptyList', () => {
+	it('an empty array is empty', () => {
+		expect(isEmptyList({ movie_sources: [] }, 'movie_sources')).toBe(true);
+	});
+
+	it('a non-empty array is not empty', () => {
+		expect(isEmptyList({ movie_sources: ['tmdb'] }, 'movie_sources')).toBe(false);
+	});
+
+	it('a missing key is not empty', () => {
+		expect(isEmptyList({}, 'movie_sources')).toBe(false);
+	});
+
+	it('a non-array value is not empty', () => {
+		expect(isEmptyList({ movie_sources: '' }, 'movie_sources')).toBe(false);
+	});
+});
 
 describe('withHintIgnored', () => {
 	it('ignoring label keeps bd_title; un-ignoring restores the default order', () => {
@@ -41,6 +59,10 @@ describe('enabledLabels', () => {
 			'TMDb'
 		]);
 		expect(enabledLabels(v({ movie_sources: 'x' }), 'movie_sources', IDENTITY_METAS)).toEqual([]);
+	});
+
+	it('falls back to the raw entry when the key has no field to label it', () => {
+		expect(enabledLabels({ movie_sources: ['tmdb'] }, 'movie_sources', [])).toEqual(['tmdb']);
 	});
 });
 
