@@ -18,6 +18,7 @@
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import { PendingKeys } from './pendingKeys.svelte';
+	import { ProbeTimers } from './probeTimers.svelte';
 
 	// Shared by Settings > Transcoding and the setup walkthrough's Transcoding
 	// step. A probe is a real test encode run in a container (10-60 s); its
@@ -25,39 +26,13 @@
 	// in-progress state until that event (or a 2-minute timeout).
 	let { location = null }: { location?: { label: string } | null } = $props();
 
-	const PROBE_TIMEOUT_MS = 120_000;
-
 	let gpus = $state<GpuView[]>([]);
 	let loaded = $state(false);
 	let error = $state<string | null>(null);
 	const pending = new PendingKeys();
 	let probingAll = $state(false);
 	let confirmTarget = $state<GpuView | null>(null);
-	let probing = $state<Record<string, ReturnType<typeof setTimeout>>>({});
-	let probeTimedOut = $state<Record<string, boolean>>({});
-
-	function startProbing(ids: string[]) {
-		const next = { ...probing };
-		const timedOut = { ...probeTimedOut };
-		for (const id of ids) {
-			if (next[id]) clearTimeout(next[id]);
-			delete timedOut[id];
-			next[id] = setTimeout(() => {
-				const { [id]: _t, ...rest } = probing;
-				probing = rest;
-				probeTimedOut = { ...probeTimedOut, [id]: true };
-			}, PROBE_TIMEOUT_MS);
-		}
-		probing = next;
-		probeTimedOut = timedOut;
-	}
-
-	function stopProbing(id: string) {
-		if (!probing[id]) return;
-		clearTimeout(probing[id]);
-		const { [id]: _t, ...rest } = probing;
-		probing = rest;
-	}
+	const probes = new ProbeTimers();
 
 	async function load() {
 		try {
@@ -74,7 +49,7 @@
 		await pending.run(g.id, async () => {
 			try {
 				await probeGpu(g.id);
-				startProbing([g.id]);
+				probes.start([g.id]);
 				error = null;
 			} catch (e) {
 				error = e instanceof Error ? e.message : 'Re-probe failed.';
@@ -86,7 +61,7 @@
 		probingAll = true;
 		try {
 			await probeAllGpus();
-			startProbing(gpus.filter((g) => g.enabled).map((g) => g.id));
+			probes.start(gpus.filter((g) => g.enabled).map((g) => g.id));
 			error = null;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Re-probe failed.';
@@ -136,12 +111,12 @@
 			// The encoders store follows gpu.probed itself.
 			if (env.event_type !== 'gpu.probed') return;
 			const id = (env.payload as { gpu_id?: string }).gpu_id;
-			if (id) stopProbing(id);
+			if (id) probes.stop(id);
 			load();
 		});
 		return () => {
 			unsubscribe?.();
-			for (const t of Object.values(probing)) clearTimeout(t);
+			probes.dispose();
 		};
 	});
 </script>
@@ -218,9 +193,9 @@
 							{/if}
 						{/snippet}
 					</GpuInventoryRow>
-					{#if probing[g.id]}
+					{#if probes.isProbing(g.id)}
 						<StatusStrip tone="busy" title="Testing encoders..." detail="Takes 10 to 60 seconds" progress />
-					{:else if probeTimedOut[g.id]}
+					{:else if probes.timedOut(g.id)}
 						<StatusStrip tone="danger" title="Couldn't test" detail="No result after 2 minutes. Try Re-probe." />
 					{/if}
 					{#if g.probe_error}
