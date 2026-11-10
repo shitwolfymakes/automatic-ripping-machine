@@ -45,6 +45,11 @@
 		return matchesFilters(p, { type: typeFilter, source: sourceFilter, search });
 	}
 
+	/** The preset's usage count, from the active kind's usage function. */
+	function usage(id: string): number {
+		return kind === 'rip' ? ripUsage(id) : transcodeUsage(id);
+	}
+
 	const MEDIA_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
 		{ key: 'all', label: 'All' },
 		{ key: 'movie', label: 'Movie' },
@@ -54,13 +59,16 @@
 		{ key: 'iso', label: 'ISO' }
 	];
 
-	// Derive preset counts per media type for the active kind only
-	const presetTypeCounts = $derived(countByMediaType(kind === 'rip' ? ripPresets : transcodePresets));
+	// The active kind's presets
+	const presets = $derived(kind === 'rip' ? ripPresets : transcodePresets);
 
-	// Filtered preset lists
-	const visibleRip = $derived(ripPresets.filter(matches));
-	const visibleTranscode = $derived(transcodePresets.filter(matches));
+	// Derive preset counts per media type for the active kind only
+	const presetTypeCounts = $derived(countByMediaType(presets));
+
+	// Filtered preset list
+	const visible = $derived(presets.filter(matches));
 	const noun = $derived(kind === 'rip' ? 'rip presets' : 'transcode presets');
+	const heading = $derived(kind === 'rip' ? 'Rip presets' : 'Transcode presets');
 
 	const SKELETON_COUNT = 3;
 </script>
@@ -123,14 +131,11 @@
 				</button>
 			{/each}
 
-			{#if kind === 'rip'}
-				<button type="button" onclick={onnewrip} class="btn btn-primary preset-library-new-btn">+ New rip preset</button
-				>
-			{:else}
-				<button type="button" onclick={onnewtranscode} class="btn btn-primary preset-library-new-btn"
-					>+ New transcode preset</button
-				>
-			{/if}
+			<button
+				type="button"
+				onclick={kind === 'rip' ? onnewrip : onnewtranscode}
+				class="btn btn-primary preset-library-new-btn">+ New {kind} preset</button
+			>
 		</div>
 	</div>
 
@@ -141,43 +146,20 @@
 				<div data-testid="preset-skeleton" class="skeleton preset-library-skeleton"></div>
 			{/each}
 		</div>
-	{:else if kind === 'rip'}
-		<!-- ── Rip presets section ─────────────────────────────────────────── -->
-		<section>
-			<h3 class="sr-only">Rip presets</h3>
-
-			{#if visibleRip.length === 0}
-				<p class="preset-library-empty">No rip presets match the current filters.</p>
-			{:else}
-				<div class="stack stack-sm">
-					{#each visibleRip as preset (preset.id)}
-						<PresetRow
-							kind="rip"
-							{preset}
-							usedBy={ripUsage(preset.id)}
-							onview={() => onview(preset)}
-							onedit={() => onedit(preset)}
-							onclone={() => onclone(preset)}
-							ondelete={() => ondelete(preset)}
-						/>
-					{/each}
-				</div>
-			{/if}
-		</section>
 	{:else}
-		<!-- ── Transcode presets section ──────────────────────────────────── -->
+		<!-- ── Preset list ─────────────────────────────────────────────────── -->
 		<section>
-			<h3 class="sr-only">Transcode presets</h3>
+			<h3 class="sr-only">{heading}</h3>
 
-			{#if visibleTranscode.length === 0}
-				<p class="preset-library-empty">No transcode presets match the current filters.</p>
+			{#if visible.length === 0}
+				<p class="preset-library-empty">No {noun} match the current filters.</p>
 			{:else}
 				<div class="stack stack-sm">
-					{#each visibleTranscode as preset (preset.id)}
+					{#each visible as preset (preset.id)}
 						<PresetRow
-							kind="transcode"
+							{kind}
 							{preset}
-							usedBy={transcodeUsage(preset.id)}
+							usedBy={usage(preset.id)}
 							onview={() => onview(preset)}
 							onedit={() => onedit(preset)}
 							onclone={() => onclone(preset)}
