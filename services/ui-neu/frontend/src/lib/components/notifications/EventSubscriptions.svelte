@@ -42,6 +42,21 @@
 	function rememberCaret(key: string, field: TemplateField, el: HTMLInputElement | HTMLTextAreaElement) {
 		active = { key, field, el, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length };
 	}
+	// The handlers of an event's title or body: an edit writes the field,
+	// null when blank, and every edit, focus, key and click remembers
+	// where the caret is.
+	function fieldHandlers(key: string, field: TemplateField) {
+		const caret = (e: Event) => rememberCaret(key, field, e.currentTarget as HTMLInputElement | HTMLTextAreaElement);
+		return {
+			oninput: (e: Event) => {
+				ensure(key)[field] = (e.currentTarget as HTMLInputElement | HTMLTextAreaElement).value || null;
+				caret(e);
+			},
+			onfocus: caret,
+			onkeyup: caret,
+			onclick: caret
+		};
+	}
 	function setInput(key: string, inputKey: string, value: string) {
 		const t = ensure(key);
 		t.inputs = withInput(t.inputs, inputKey, value);
@@ -92,13 +107,7 @@
 							aria-label={`${et.key} title`}
 							placeholder={et.default_title}
 							value={templates[et.key]?.title ?? ''}
-							oninput={(e) => {
-								ensure(et.key).title = (e.currentTarget as HTMLInputElement).value || null;
-								rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement);
-							}}
-							onfocus={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
-							onkeyup={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
-							onclick={(e) => rememberCaret(et.key, 'title', e.currentTarget as HTMLInputElement)}
+							{...fieldHandlers(et.key, 'title')}
 						/>
 					</label>
 					<label class="field">
@@ -108,13 +117,7 @@
 							rows="2"
 							placeholder={et.default_body}
 							value={templates[et.key]?.body ?? ''}
-							oninput={(e) => {
-								ensure(et.key).body = (e.currentTarget as HTMLTextAreaElement).value || null;
-								rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement);
-							}}
-							onfocus={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}
-							onkeyup={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}
-							onclick={(e) => rememberCaret(et.key, 'body', e.currentTarget as HTMLTextAreaElement)}></textarea>
+							{...fieldHandlers(et.key, 'body')}></textarea>
 					</label>
 					{#each overridable as i (i.key)}
 						<label class="field">
