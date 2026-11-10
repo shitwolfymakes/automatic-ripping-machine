@@ -5,14 +5,13 @@
 	import type { SystemDiagnosticsResponse, StorageRoot } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
 	import {
-		SERVICE_CHECKS,
-		STORAGE_LABELS,
 		checkDetail,
 		checkLabel,
 		healthTally,
-		inScope,
+		otherChecks,
 		pathDetail,
-		pathState
+		pathState,
+		serviceChecks
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
@@ -41,15 +40,6 @@
 	let lastRun = $state<string | null>(null);
 
 	let storage = $state<StorageRoot[] | null>(null);
-
-	const services = $derived(result ? result.checks.filter((c) => SERVICE_CHECKS.includes(c.name)) : []);
-	const otherChecks = $derived(
-		result
-			? result.checks.filter(
-					(c) => !SERVICE_CHECKS.includes(c.name) && !(c.name in STORAGE_LABELS) && inScope(scope, c.name)
-				)
-			: []
-	);
 
 	async function runChecks(): Promise<void> {
 		loading = true;
@@ -98,6 +88,8 @@
 			<p class="alert alert-danger" data-testid="system-health-error">{error}</p>
 		{:else if result}
 			{@const tally = healthTally(result, scope)}
+			{@const services = serviceChecks(result.checks)}
+			{@const others = otherChecks(result.checks, scope)}
 			{#if tally.allOk}
 				<div class="alert alert-success flex items-center gap-2" data-testid="system-health-summary">
 					<Glyph name="check-circle" />
@@ -134,11 +126,11 @@
 				</div>
 			</section>
 
-			{#if otherChecks.length > 0 && (scope === 'all' || otherChecks.some((c) => c.status !== 'ok'))}
+			{#if others.length > 0 && (scope === 'all' || others.some((c) => c.status !== 'ok'))}
 				<section class="panel system-health-group" aria-labelledby="system-health-other">
 					<h3 id="system-health-other" class="system-health-title">Other checks</h3>
 					<ul class="mt-2">
-						{#each otherChecks as check (check.name)}
+						{#each others as check (check.name)}
 							<HealthCheckRow testid="system-health-check" status={check.status} label={checkLabel(check.name)}
 								>{checkDetail(check)}</HealthCheckRow
 							>

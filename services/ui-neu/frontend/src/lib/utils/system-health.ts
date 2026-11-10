@@ -56,6 +56,22 @@ export function healthTally(result: SystemDiagnosticsResponse, scope: 'all' | 's
 	};
 }
 
+/** The checks that report a service, in the order they came. */
+export function serviceChecks(checks: readonly SystemDiagnosticCheck[]): SystemDiagnosticCheck[] {
+	return checks.filter((c) => SERVICE_CHECKS.includes(c.name));
+}
+
+/** The checks in `scope` that are neither a service nor a storage root,
+ * in the order they came. */
+export function otherChecks(
+	checks: readonly SystemDiagnosticCheck[],
+	scope: 'all' | 'system'
+): SystemDiagnosticCheck[] {
+	return checks.filter(
+		(c) => !SERVICE_CHECKS.includes(c.name) && !(c.name in STORAGE_LABELS) && inScope(scope, c.name)
+	);
+}
+
 // Operator-facing names for the backend's check keys.
 const CHECK_LABELS: Record<string, string> = {
 	config: 'Configuration',

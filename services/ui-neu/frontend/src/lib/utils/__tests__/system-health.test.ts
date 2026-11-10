@@ -7,9 +7,11 @@ import {
 	healthTally,
 	inScope,
 	locationLabel,
+	otherChecks,
 	pathDetail,
 	pathState,
 	serviceBadge,
+	serviceChecks,
 	serviceDescription,
 	serviceHost,
 	serviceLabel,
@@ -281,6 +283,31 @@ describe('freeLabel', () => {
 
 	it('says Measuring... when no root has that name', () => {
 		expect(freeLabel([root('RAW_ROOT', 1)], 'MEDIA_ROOT')).toBe('Measuring...');
+	});
+});
+
+const names = (checks: SystemDiagnosticCheck[]): string[] => checks.map((c) => c.name);
+const everyCheck = [
+	check({ name: 'ripper_manager' }),
+	check({ name: 'config' }),
+	check({ name: 'MEDIA_ROOT' }),
+	check({ name: 'drives' }),
+	check({ name: 'transcoder' })
+];
+
+describe('serviceChecks', () => {
+	it('keeps the ripper manager and the transcoder in order and drops the rest', () => {
+		expect(names(serviceChecks(everyCheck))).toEqual(['ripper_manager', 'transcoder']);
+	});
+});
+
+describe('otherChecks', () => {
+	it('keeps drives and config for all, and drops services and storage roots', () => {
+		expect(names(otherChecks(everyCheck, 'all'))).toEqual(['config', 'drives']);
+	});
+
+	it('keeps config and drops drives for system', () => {
+		expect(names(otherChecks(everyCheck, 'system'))).toEqual(['config']);
 	});
 });
 
