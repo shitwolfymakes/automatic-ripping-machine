@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
-	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
-	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
+	import type { SettingsGroup, ConfigFieldMeta } from '$lib/types/api.gen';
+	import { saveArmConfig } from '$lib/api/settings';
 	import { saveErrorMessage } from '$lib/api/client';
-	import { HIDDEN_SECRET } from '$lib/api/config';
 	import {
 		groupBlurb,
 		groupLabel,
@@ -14,6 +13,7 @@
 	} from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
 	import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '$lib/utils/config-payload';
+	import { KeyChecks, keyToTest } from './keyChecks.svelte';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
@@ -128,39 +128,9 @@
 
 	// -------------------------------------------------------------------
 	// Per-key API key check (Settings > Metadata > API keys). Fields in
-	// KEY_CHECK_NAMES get a Check/Status button + inline result line.
+	// KEY_CHECK_NAMES get a Test button and an inline result line.
 	// -------------------------------------------------------------------
-	let keyCheckRunning = $state<Record<string, boolean>>({});
-	let keyCheckResult = $state<Record<string, KeyCheckResponse | null>>({});
-
-	function unsavedValueFor(fieldKey: string): string | undefined {
-		const v = values[fieldKey];
-		if (typeof v !== 'string' || v === '' || v === HIDDEN_SECRET) return undefined;
-		if (v === config[fieldKey]) return undefined;
-		return v;
-	}
-
-	async function runKeyCheck(fieldKey: string) {
-		const name = KEY_CHECK_NAMES[fieldKey];
-		if (!name) return;
-		keyCheckRunning = { ...keyCheckRunning, [fieldKey]: true };
-		try {
-			const result = await checkApiKey(name, unsavedValueFor(fieldKey));
-			keyCheckResult = { ...keyCheckResult, [fieldKey]: result };
-		} catch (e) {
-			keyCheckResult = {
-				...keyCheckResult,
-				[fieldKey]: {
-					name,
-					status: 'error',
-					detail: e instanceof Error ? e.message : 'check failed',
-					checked_at: null
-				}
-			};
-		} finally {
-			keyCheckRunning = { ...keyCheckRunning, [fieldKey]: false };
-		}
-	}
+	const keyChecks = new KeyChecks();
 </script>
 
 {#snippet fieldRow(field: ConfigFieldMeta, noteId?: string)}
@@ -177,21 +147,21 @@
 			{#snippet action()}
 				<button
 					type="button"
-					onclick={() => runKeyCheck(field.key)}
-					disabled={keyCheckRunning[field.key] || !isSet(field.key)}
+					onclick={() => keyChecks.run(field.key, keyToTest(values[field.key], config[field.key]))}
+					disabled={keyChecks.running[field.key] || !isSet(field.key)}
 					class="btn schema-config-form-key-check-btn"
 				>
-					{keyCheckRunning[field.key] ? 'Testing...' : 'Test'}
+					{keyChecks.running[field.key] ? 'Testing...' : 'Test'}
 				</button>
 			{/snippet}
 		</ConfigSchemaField>
 		<div
 			class="schema-config-form-key-check"
 			data-testid="key-check-{field.key}"
-			data-empty={!keyCheckResult[field.key]}
+			data-empty={!keyChecks.results[field.key]}
 		>
-			{#if keyCheckResult[field.key]}
-				{@const result = keyCheckResult[field.key]}
+			{#if keyChecks.results[field.key]}
+				{@const result = keyChecks.results[field.key]}
 				{#if result?.status === 'ok'}
 					<span class="flex items-center gap-1.5 schema-config-form-key-check-success">
 						<Glyph name="check-circle" class="shrink-0" />

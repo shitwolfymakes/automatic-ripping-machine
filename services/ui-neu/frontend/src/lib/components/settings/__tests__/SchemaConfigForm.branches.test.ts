@@ -6,13 +6,10 @@ import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
 // Branch pins for SchemaConfigForm, beside SchemaConfigForm.test.ts. These
 // branches cannot be reached from the rendered component, so nothing here
 // forces them:
-// - runKeyCheck's `!name` guard: the Test button that calls it is rendered
-//   only for a field listed in KEY_CHECK_NAMES, so the lookup always finds a
-//   service name and the early return never runs.
 // - The null-result halves of the result line's `result?.status` checks and of
 //   its final `{:else if result}`: the whole line renders inside an
-//   `{#if keyCheckResult[field.key]}` block, and the `result` const reads that
-//   same value, so it is never null there.
+//   `{#if keyChecks.results[field.key]}` block, and the `result` const reads
+//   that same value, so it is never null there.
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
