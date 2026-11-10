@@ -11,10 +11,10 @@
 		KEY_CHECK_NAMES,
 		KEY_SERVICE_LABEL
 	} from '$lib/utils/settings-sections';
-	import { formatDateTime } from '$lib/utils/format';
 	import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '$lib/utils/config-payload';
 	import { KeyChecks, keyToTest } from './keyChecks.svelte';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
+	import KeyCheckResult from './KeyCheckResult.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
 
@@ -135,6 +135,7 @@
 
 {#snippet fieldRow(field: ConfigFieldMeta, noteId?: string)}
 	{#if field.key in KEY_CHECK_NAMES && field.widget == null}
+		{@const result = keyChecks.results[field.key]}
 		<ConfigSchemaField
 			{field}
 			bind:value={values[field.key]}
@@ -155,43 +156,9 @@
 				</button>
 			{/snippet}
 		</ConfigSchemaField>
-		<div
-			class="schema-config-form-key-check"
-			data-testid="key-check-{field.key}"
-			data-empty={!keyChecks.results[field.key]}
-		>
-			{#if keyChecks.results[field.key]}
-				{@const result = keyChecks.results[field.key]}
-				{#if result?.status === 'ok'}
-					<span class="flex items-center gap-1.5 schema-config-form-key-check-success">
-						<Glyph name="check-circle" class="shrink-0" />
-						<strong>Works</strong>{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1"
-								>&middot;</span
-							>checked {formatDateTime(result.checked_at)}{/if}
-					</span>
-				{:else if result?.status === 'invalid'}
-					<span class="flex items-center gap-1.5 schema-config-form-key-check-danger">
-						<Glyph name="x-circle" class="shrink-0" />
-						<strong>Key rejected</strong>
-					</span>
-					{#if result.detail}<p class="mono schema-config-form-key-check-detail">{result.detail}</p>{/if}
-				{:else if result?.status === 'missing'}
-					<span class="flex items-center gap-1.5 schema-config-form-key-check-muted">
-						<Glyph name="info" class="shrink-0" />
-						No key set
-					</span>
-				{:else if result?.status === 'unknown'}
-					<span class="flex items-center gap-1.5 schema-config-form-key-check-warning">
-						<Glyph name="question-circle" class="shrink-0" />
-						{result.detail}
-					</span>
-				{:else if result}
-					<span class="flex items-center gap-1.5 schema-config-form-key-check-warning">
-						<Glyph name="warning" class="shrink-0" />
-						<strong>Couldn't reach {KEY_SERVICE_LABEL[KEY_CHECK_NAMES[field.key]]}</strong>
-					</span>
-					{#if result.detail}<p class="mono schema-config-form-key-check-detail">{result.detail}</p>{/if}
-				{/if}
+		<div class="schema-config-form-key-check" data-testid="key-check-{field.key}" data-empty={!result}>
+			{#if result}
+				<KeyCheckResult {result} service={KEY_SERVICE_LABEL[KEY_CHECK_NAMES[field.key]]} />
 			{/if}
 		</div>
 	{:else}
@@ -358,26 +325,8 @@
 	.schema-config-form-key-check[data-empty='true'] {
 		display: none;
 	}
-	.schema-config-form-key-check-success {
-		color: var(--color-success);
-	}
-	.schema-config-form-key-check-danger {
-		color: var(--color-danger);
-	}
-	.schema-config-form-key-check-warning {
-		color: var(--color-on-warning-soft);
-	}
-	.schema-config-form-key-check-detail {
-		margin-top: 0.25rem;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-		overflow-wrap: anywhere;
-	}
 	.schema-config-form-bare {
 		gap: 1.25rem;
-	}
-	.schema-config-form-key-check-muted {
-		color: var(--color-text-muted);
 	}
 	/* success only now - a rejected save renders the alert-danger block above
 	   instead. */

@@ -3,13 +3,8 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
 
-// Branch pins for SchemaConfigForm, beside SchemaConfigForm.test.ts. These
-// branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - The null-result halves of the result line's `result?.status` checks and of
-//   its final `{:else if result}`: the whole line renders inside an
-//   `{#if keyChecks.results[field.key]}` block, and the `result` const reads
-//   that same value, so it is never null there.
+// Branch pins for SchemaConfigForm, beside SchemaConfigForm.test.ts. No
+// branch is left open: every one is reached from the rendered component.
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
