@@ -27,3 +27,27 @@ export function buildConfigPayload(
 	}
 	return out;
 }
+
+/** The form's overrides and values once `payload` is saved. A saved
+ * secret becomes the mask in both, as an untouched one is on load, so
+ * the raw secret is kept neither as a baseline nor on screen. Any other
+ * key is kept as an override with its saved value. */
+export function mergeSavedPayload(
+	payload: Record<string, unknown>,
+	fields: readonly ConfigFieldMeta[],
+	overrides: Record<string, unknown>,
+	values: Record<string, unknown>
+): { overrides: Record<string, unknown>; values: Record<string, unknown> } {
+	const mergedOverrides = { ...overrides };
+	const mergedValues = { ...values };
+	for (const key of Object.keys(payload)) {
+		const field = fields.find((f) => f.key === key);
+		if (field?.tier === 'secret') {
+			mergedOverrides[key] = HIDDEN_SECRET;
+			mergedValues[key] = HIDDEN_SECRET;
+		} else {
+			mergedOverrides[key] = payload[key];
+		}
+	}
+	return { overrides: mergedOverrides, values: mergedValues };
+}

@@ -14,7 +14,7 @@
 	} from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
 	import { unchanged } from '$lib/utils/unchanged';
-	import { buildConfigPayload } from '$lib/utils/config-payload';
+	import { buildConfigPayload, mergeSavedPayload } from '$lib/utils/config-payload';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
@@ -107,22 +107,9 @@
 		try {
 			const payload = buildConfigPayload(editable, values, baseline(), cleared);
 			await saveArmConfig(payload as never);
-			const mergedOverrides = { ...savedOverrides };
-			const mergedValues = { ...values };
-			for (const key of Object.keys(payload)) {
-				const field = group.fields.find((f) => f.key === key);
-				if (field?.tier === 'secret') {
-					// Never keep the raw secret around as a comparison baseline (or
-					// on screen) once it is saved - both fall back to the masked
-					// sentinel, same as an untouched secret on load.
-					mergedOverrides[key] = HIDDEN_SECRET;
-					mergedValues[key] = HIDDEN_SECRET;
-				} else {
-					mergedOverrides[key] = payload[key];
-				}
-			}
-			savedOverrides = mergedOverrides;
-			values = mergedValues;
+			const merged = mergeSavedPayload(payload, group.fields, savedOverrides, values);
+			savedOverrides = merged.overrides;
+			values = merged.values;
 			cleared = {};
 			feedback = { type: 'success', message: 'Saved' };
 			onsaved?.(payload);
