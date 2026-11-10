@@ -99,7 +99,8 @@
 </div>
 
 <style>
-	/* These match the list layout's rules of the same names in SystemHealth. */
+	/* The title, last-run, description and placeholder rules match
+	   SystemHealthList's. */
 	.system-health-grouped-title {
 		font-size: 1rem;
 		line-height: 1.5rem;
