@@ -2,6 +2,7 @@
 	import { reveal } from '$lib/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import { PASSWORD_MIN_LENGTH, passwordProblem } from '$lib/utils/password';
 
 	// Shared by /change-password, Settings > Users and the setup walkthrough's
 	// first step. `currentPasswordDefault` hides the current-password field and
@@ -20,8 +21,6 @@
 		onvalidchange?: (valid: boolean) => void;
 	} = $props();
 
-	const MIN_LENGTH = 8;
-
 	let current = $state('');
 	let next = $state('');
 	let confirm = $state('');
@@ -31,10 +30,10 @@
 
 	const uid = $props.id();
 	const currentValue = $derived(currentPasswordDefault ?? current);
-	const longEnough = $derived(next.length >= MIN_LENGTH);
+	const longEnough = $derived(next.length >= PASSWORD_MIN_LENGTH);
 	const matches = $derived(confirm.length > 0 && next === confirm);
 
-	const valid = $derived(longEnough && matches && next !== currentValue);
+	const valid = $derived(passwordProblem(currentValue, next, confirm) === null);
 
 	$effect(() => {
 		onvalidchange?.(valid);
@@ -48,16 +47,9 @@
 	export async function submit(): Promise<boolean> {
 		if (submitting) return false;
 		error = '';
-		if (next === currentValue) {
-			error = 'New password must differ from the current password';
-			return false;
-		}
-		if (!longEnough) {
-			error = `New password must be at least ${MIN_LENGTH} characters`;
-			return false;
-		}
-		if (next !== confirm) {
-			error = 'Passwords do not match';
+		const problem = passwordProblem(currentValue, next, confirm);
+		if (problem) {
+			error = problem;
 			return false;
 		}
 		submitting = true;
@@ -140,7 +132,9 @@
 	{@render passwordField('next', 'New password', 'new-password', `${uid}-rule`)}
 	<p id="{uid}-rule" class="change-password-form-check" data-met={longEnough}>
 		<Glyph name={longEnough ? 'check' : 'x'} />
-		<span>At least {MIN_LENGTH} characters<span class="sr-only"> ({longEnough ? 'met' : 'not met'})</span></span>
+		<span
+			>At least {PASSWORD_MIN_LENGTH} characters<span class="sr-only"> ({longEnough ? 'met' : 'not met'})</span></span
+		>
 	</p>
 	{@render passwordField('confirm', 'Confirm new password', 'new-password', `${uid}-match`)}
 	{#if confirm.length > 0}
