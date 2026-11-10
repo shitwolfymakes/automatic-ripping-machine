@@ -2,8 +2,20 @@
 	import { onMount } from 'svelte';
 	import { fetchSystemDiagnostics } from '$lib/api/system';
 	import { fetchResources } from '$lib/api/resources';
-	import type { SystemDiagnosticsResponse, SystemDiagnosticCheck, PathStatus, StorageRoot } from '$lib/types/api.gen';
+	import type { SystemDiagnosticsResponse, StorageRoot } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
+	import {
+		SERVICE_CHECKS,
+		SERVICE_LABELS,
+		STORAGE_HELP,
+		STORAGE_LABELS,
+		checkLabel,
+		freeLabel,
+		locationLabel,
+		pathDetail,
+		pathState,
+		serviceBadge
+	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
 
@@ -23,30 +35,7 @@
 		onresult?: (r: SystemDiagnosticsResponse) => void;
 	} = $props();
 
-	const STORAGE_LABELS: Record<string, string> = { MEDIA_ROOT: 'Media library', RAW_ROOT: 'Raw rips', LOG_DIR: 'Logs' };
-	const STORAGE_HELP: Record<string, string> = {
-		MEDIA_ROOT: 'Finished files are filed here.',
-		RAW_ROOT: 'Rips land here before they are named and moved.',
-		LOG_DIR: 'Rip and system logs.'
-	};
-	const SERVICE_CHECKS = ['ripper_manager', 'transcoder'];
 	const SYSTEM_STEP_CHECKS = new Set(['config', 'MEDIA_ROOT', 'RAW_ROOT', 'LOG_DIR', ...SERVICE_CHECKS]);
-
-	// Operator-facing names for the backend's check keys.
-	const CHECK_LABELS: Record<string, string> = {
-		config: 'Configuration',
-		MEDIA_ROOT: 'Media root',
-		RAW_ROOT: 'Raw root',
-		LOG_DIR: 'Log directory',
-		drives: 'Drives',
-		makemkv_key: 'MakeMKV key',
-		community_keydb: 'Community keydb',
-		makemkv_sdf: 'MakeMKV SDF',
-		transcoder: 'Transcoder',
-		ripper_manager: 'Ripper manager'
-	};
-	const label = (name: string) => CHECK_LABELS[name] ?? name;
-	const SERVICE_LABELS: Record<string, string> = { ripper_manager: 'Ripper service', transcoder: 'Transcoder' };
 
 	let result = $state<SystemDiagnosticsResponse | null>(null);
 	let loading = $state(false);
@@ -93,37 +82,6 @@
 	onMount(() => {
 		if (autorun) void runChecks();
 	});
-
-	function freeLabel(name: string): string {
-		const root = storage?.find((r) => r.name === name);
-		return root ? `${Math.round(root.free_gb)} GB free` : 'Measuring...';
-	}
-	function serviceBadge(status: string): {
-		text: string;
-		tone: string;
-		glyph: 'check-circle' | 'x-circle' | 'warning';
-	} {
-		if (status === 'ok') return { text: 'OK', tone: 'success', glyph: 'check-circle' };
-		if (status === 'error') return { text: 'Problem', tone: 'danger', glyph: 'x-circle' };
-		return { text: 'Problem', tone: 'warning', glyph: 'warning' };
-	}
-	function locationLabel(c: SystemDiagnosticCheck): string | null {
-		if (c.location === 'local') return 'This server';
-		if (c.location === 'remote') return `Remote host ${c.remote_host ?? ''}`.trim();
-		if (c.location === 'none') return 'Ripper only';
-		return null;
-	}
-
-	function pathState(p: PathStatus): SystemDiagnosticCheck['status'] {
-		if (!p.exists) return 'error';
-		if (!p.writable) return 'warning';
-		return 'ok';
-	}
-	function pathDetail(p: PathStatus): string {
-		if (!p.exists) return 'missing';
-		if (!p.writable) return 'not writable';
-		return 'writable';
-	}
 </script>
 
 {#if grouped}
@@ -181,7 +139,7 @@
 								<span class="chip chip-sm {p.writable ? 'chip-success' : 'chip-danger'}">
 									<Glyph name={p.writable ? 'check' : 'x'} class="h-3 w-3" />{p.writable ? 'Writable' : 'Not writable'}
 								</span>
-								<span class="chip chip-sm">{freeLabel(p.name)}</span>
+								<span class="chip chip-sm">{freeLabel(storage, p.name)}</span>
 							</div>
 							{#if st !== 'ok'}
 								{#if p.host_path}
@@ -255,7 +213,7 @@
 								data-status={check.status}
 							>
 								<span class="status-dot" data-status={check.status}></span>
-								<span class="system-health-row-label">{label(check.name)}</span>
+								<span class="system-health-row-label">{checkLabel(check.name)}</span>
 								<span class="system-health-row-detail"
 									>{check.detail ?? (check.status === 'ok' ? 'OK' : check.status)}</span
 								>
@@ -318,7 +276,7 @@
 						data-status={check.status}
 					>
 						<span class="status-dot" data-status={check.status}></span>
-						<span class="system-health-row-label">{label(check.name)}</span>
+						<span class="system-health-row-label">{checkLabel(check.name)}</span>
 						<span class="system-health-row-detail">{check.detail ?? (check.status === 'ok' ? 'OK' : check.status)}</span
 						>
 					</li>
