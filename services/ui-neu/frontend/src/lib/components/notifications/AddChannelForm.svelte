@@ -6,6 +6,7 @@
 	import LabelEnabledRow from './sections/LabelEnabledRow.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
 	import ChannelTypePicker from './ChannelTypePicker.svelte';
+	import AddChannelFooter from './AddChannelFooter.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from './channelHelpers';
@@ -124,26 +125,15 @@
 		{/if}
 	</div>
 
-	<div class="add-channel-form-footer">
-		<span class="add-channel-form-ready" data-ready={ready}>
-			{#if ready}<Glyph name="check" class="h-3.5 w-3.5" /> Ready to save{:else}Needs: {missing.join(', ')}{/if}
-		</span>
-		<div class="cluster">
-			{#if variant === 'full'}
-				<button type="button" onclick={() => oncancel?.()} class="btn btn-ghost">Cancel</button>
-			{/if}
-			{#if type !== 'bash'}
-				<button type="button" onclick={() => ontest(body())} disabled={variant === 'compact' && !ready} class="btn"
-					>Send test</button
-				>
-			{/if}
-			{#if variant === 'full'}
-				<button type="button" disabled={!ready} onclick={() => onsave?.(body())} class="btn btn-primary"
-					>Save channel</button
-				>
-			{/if}
-		</div>
-	</div>
+	<AddChannelFooter
+		{ready}
+		{missing}
+		{variant}
+		testable={type !== 'bash'}
+		{oncancel}
+		ontest={() => ontest(body())}
+		onsave={() => onsave?.(body())}
+	/>
 </div>
 
 <style>
@@ -177,23 +167,5 @@
 	.add-channel-form-body {
 		padding: 1.25rem;
 		gap: 1.25rem;
-	}
-	.add-channel-form-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.875rem 1.25rem;
-		border-top: 1px solid var(--color-border);
-	}
-	.add-channel-form-ready {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-muted);
-	}
-	.add-channel-form-ready[data-ready='true'] {
-		color: var(--color-status-success);
 	}
 </style>
