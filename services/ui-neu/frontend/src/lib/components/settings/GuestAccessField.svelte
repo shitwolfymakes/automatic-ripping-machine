@@ -1,41 +1,27 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
-	import { fetchUsers, setUserDisabled } from '$lib/api/users';
+	import { setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
 	// Guest access on/off for Settings > Users: an immediate-effect Toggle.
-	// Pass `guest` when the parent already has the users list; otherwise the
-	// field loads it.
+	// The parent passes the guest account, or null when there is none.
 	let {
-		guest: guestProp,
+		guest,
 		onsaved,
 		onerror
 	}: {
-		guest?: UserView | null;
+		guest: UserView | null;
 		onsaved?: (enabled: boolean) => void;
 		onerror?: (message: string) => void;
 	} = $props();
 
-	let loaded = $state<UserView | null>(null);
-	const guest = $derived(guestProp !== undefined ? guestProp : loaded);
 	let saving = $state(false);
-
-	onMount(async () => {
-		if (guestProp !== undefined) return;
-		try {
-			loaded = (await fetchUsers()).find((u) => u.role === 'guest') ?? null;
-		} catch {
-			loaded = null;
-		}
-	});
 
 	async function apply(enabled: boolean): Promise<void> {
 		if (!guest) return;
 		saving = true;
 		try {
 			await setUserDisabled(guest.id, !enabled);
-			if (guestProp === undefined) loaded = { ...guest, disabled: !enabled };
 			onsaved?.(enabled);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Failed to update guest access';
