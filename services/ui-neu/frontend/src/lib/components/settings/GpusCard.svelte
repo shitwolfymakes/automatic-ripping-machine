@@ -15,6 +15,7 @@
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import GpuEncoderChips from './GpuEncoderChips.svelte';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import { PendingKeys } from './pendingKeys.svelte';
@@ -151,19 +152,7 @@
 				<div class="panel-section gpus-card-row-wrap" data-testid="gpu-row-{g.id}">
 					<GpuInventoryRow gpu={g}>
 						{#snippet kinds()}
-							<span class="gpus-card-kinds">
-								{#if !g.probed_at}
-									<span class="chip chip-sm"><Glyph name="clock" class="h-3 w-3" />Not tested</span>
-								{:else if g.encoder_kinds.length === 0}
-									<span class="chip chip-sm chip-danger"><Glyph name="x" class="h-3 w-3" />Nothing verified</span>
-								{:else}
-									{#each g.encoder_kinds as kind (kind)}
-										<span class="chip chip-sm chip-success"
-											><Glyph name="check" class="h-3 w-3" />{kind.toUpperCase()} available</span
-										>
-									{/each}
-								{/if}
-							</span>
+							<GpuEncoderChips gpu={g} />
 						{/snippet}
 						{#snippet controls()}
 							{#if $isAdmin}
@@ -237,12 +226,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.375rem;
-	}
-	.gpus-card-kinds {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-		flex-shrink: 0;
 	}
 	.gpus-card-location {
 		display: flex;
