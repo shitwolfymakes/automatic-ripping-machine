@@ -3,6 +3,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
 	import OutputPathField from './OutputPathField.svelte';
+	import { parseOverrides } from './sessionForm';
 
 	interface Props {
 		session?: JoinedSession | null;
@@ -102,14 +103,12 @@
 		jsonError = null;
 		submitError = null;
 
-		let parsedOverrides: Record<string, unknown> | null = null;
-		if (overridesJson.trim()) {
-			try {
-				parsedOverrides = JSON.parse(overridesJson);
-			} catch {
-				jsonError = 'Invalid JSON in overrides field';
-				return;
-			}
+		let parsedOverrides: Record<string, unknown> | null;
+		try {
+			parsedOverrides = parseOverrides(overridesJson);
+		} catch {
+			jsonError = 'Invalid JSON in overrides field';
+			return;
 		}
 
 		submitting = true;
