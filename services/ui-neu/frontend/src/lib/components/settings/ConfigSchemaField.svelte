@@ -3,6 +3,7 @@
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { HIDDEN_SECRET } from '$lib/api/config';
+	import { readOnlyValue } from '$lib/utils/config-field';
 	import RankedListField from './RankedListField.svelte';
 	import MakemkvKeyField from './MakemkvKeyField.svelte';
 	import DiscHandlingField from './DiscHandlingField.svelte';
@@ -69,7 +70,7 @@
 			     a disabled checkbox, so every non-editable field in this
 			     schema-driven form reads consistently regardless of type. -->
 			<div class="field-label">{field.label}</div>
-			<div class="mono config-schema-field-value">{boolValue ? 'True' : 'False'}</div>
+			<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
 		{:else}
 			<label class="field field-row">
 				<input
@@ -88,13 +89,13 @@
 			<RankedListField {field} bind:value {config} {helpId} {keyTab} {disabled} />
 		{:else}
 			<div class="mono config-schema-field-value">
-				{(Array.isArray(value) ? (value as string[]) : []).map((v) => field.enum_labels?.[v] ?? v).join(', ') || '-'}
+				{readOnlyValue(field, value)}
 			</div>
 		{/if}
 	{:else}
 		<div class="field-label">{field.label}</div>
 		{#if !field.editable}
-			<div class="mono config-schema-field-value">{value ?? '-'}</div>
+			<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
 		{:else}
 			<!-- The control and an optional trailing action (e.g. a Check button)
 			     share one row so they align regardless of the help text below. -->
