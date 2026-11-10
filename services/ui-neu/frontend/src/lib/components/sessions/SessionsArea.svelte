@@ -4,11 +4,10 @@
 	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
-	import SessionBuilder from './SessionBuilder.svelte';
+	import SessionBuilderSlideOver from './SessionBuilderSlideOver.svelte';
 	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
 	import TranscodePresetForm from '$lib/components/TranscodePresetForm.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
 	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
 	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcodePresets';
@@ -268,36 +267,17 @@
 
 <!-- ── Builder slide-over ──────────────────────────────────────────────────── -->
 {#if builderOpen}
-	<div class="slide-over">
-		<!-- Backdrop: a button (not a click handler on the flex container),
-			 same pattern as ConfirmDialog.svelte - the panel sits in its own
-			 stacking context via z-index so it never needs a stopPropagation
-			 click guard, which a11y flags on non-interactive elements. -->
-		<button type="button" class="sessions-area-scrim" aria-label="Close panel" onclick={handleBuilderCancel}></button>
-
-		<div class="slide-over-panel sessions-area-slide-over-panel">
-			<div class="slide-over-header">
-				<h2 class="sessions-area-dialog-title">
-					{editing?.is_builtin ? 'View session' : editing ? 'Edit session' : 'Create a session'}
-				</h2>
-				<CloseButton onclick={handleBuilderCancel} />
-			</div>
-
-			<div class="sessions-area-builder-body">
-				<SessionBuilder
-					session={editing}
-					ripPresets={data.ripPresets()}
-					transcodePresets={shownTranscodePresets}
-					oncreaterip={() => openNewPreset('rip')}
-					oncreatetranscode={() => openNewPreset('transcode')}
-					onsaved={handleBuilderSaved}
-					oncancel={handleBuilderCancel}
-					{preselectRipId}
-					{preselectTranscodeId}
-				/>
-			</div>
-		</div>
-	</div>
+	<SessionBuilderSlideOver
+		session={editing}
+		ripPresets={data.ripPresets()}
+		transcodePresets={shownTranscodePresets}
+		oncreaterip={() => openNewPreset('rip')}
+		oncreatetranscode={() => openNewPreset('transcode')}
+		onsaved={handleBuilderSaved}
+		oncancel={handleBuilderCancel}
+		{preselectRipId}
+		{preselectTranscodeId}
+	/>
 {/if}
 
 <!-- ── Inline-create / inline-edit stacked dialog ────────────────────── -->
@@ -395,17 +375,6 @@
 	.sessions-area-tabs :global(.tabs-tab) {
 		padding: 0.375rem 0.75rem;
 	}
-	.sessions-area-dialog-title {
-		font-size: 1.125rem;
-		line-height: 1.75rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.sessions-area-builder-body {
-		flex: 1;
-		overflow-y: auto;
-		padding: 1.5rem;
-	}
 	/* the inline create/edit dialog stacks above the builder slide-over
 	   (both are z-index: 50 in their block files); bump this one layer
 	   higher so it wins the stacking contest the original's z-60/z-70
@@ -424,10 +393,6 @@
 		border: 0;
 		padding: 0;
 		cursor: default;
-	}
-	.sessions-area-slide-over-panel {
-		position: relative;
-		z-index: 1;
 	}
 	.sessions-area-inline-panel {
 		position: relative;
