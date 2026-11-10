@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
-	import { fetchMatchDetails, type MatchProvider } from '$lib/api/jobs';
-	import { candidateKey, detailsId, isSeriesKind, mergeCandidate } from '$lib/utils/match';
+	import { candidateKey, mergeCandidate } from '$lib/utils/match';
+	import { MatchDetailsCache } from './matchDetails.svelte';
 	import MatchResultRow from './MatchResultRow.svelte';
 	import MatchDetailPane from './MatchDetailPane.svelte';
 
@@ -25,30 +25,17 @@
 		$props();
 
 	let selectedIndex = $state(0);
-	// Fetched details by candidate key; errors by key. Kept for the life of
-	// this result list, so going back to a row costs no second call.
-	let details = $state<Record<string, MetadataCandidate>>({});
-	let errors = $state<Record<string, string>>({});
-	let loading = $state<Record<string, boolean>>({});
+	const cache = new MatchDetailsCache();
 
 	let selectedRow = $derived(results[selectedIndex] ?? null);
 	let selectedKey = $derived(selectedRow ? candidateKey(selectedRow) : null);
-	let merged = $derived(
-		selectedRow && selectedKey && details[selectedKey] ? mergeCandidate(selectedRow, details[selectedKey]) : selectedRow
-	);
-
-	// Bumped whenever the result list changes; a fetch started for an older list
-	// must not write into the new list's state. Plain let: it is never rendered.
-	let generation = 0;
+	let merged = $derived(selectedRow ? cache.merged(selectedRow) : null);
 
 	// A new result list starts on its first row.
 	$effect(() => {
 		const list = results;
 		untrack(() => {
-			generation++;
-			details = {};
-			errors = {};
-			loading = {};
+			cache.reset();
 			if (list.length) select(0);
 		});
 	});
@@ -57,31 +44,10 @@
 		const row = results[index];
 		if (!row) return;
 		selectedIndex = index;
-		const key = candidateKey(row);
-		onselect?.(details[key] ? mergeCandidate(row, details[key]) : row, index);
-		const id = detailsId(row);
-		if (!row.provider || !id || details[key] || loading[key]) return;
-		const gen = generation;
-		loading = { ...loading, [key]: true };
-		const { [key]: _drop, ...rest } = errors;
-		errors = rest;
-		try {
-			const resp = await fetchMatchDetails(row.provider as MatchProvider, isSeriesKind(row.kind) ? 'tv' : 'movie', id);
-			if (gen !== generation) return;
-			const found = resp.candidates[0];
-			if (found) {
-				details = { ...details, [key]: found };
-				// Report the details only if this row is still the one shown.
-				if (selectedIndex === index && results[index] === row) onselect?.(mergeCandidate(row, found), index);
-			} else {
-				errors = { ...errors, [key]: resp.detail ?? 'No details found.' };
-			}
-		} catch (e) {
-			if (gen !== generation) return;
-			errors = { ...errors, [key]: e instanceof Error ? e.message : 'Could not load details' };
-		} finally {
-			if (gen === generation) loading = { ...loading, [key]: false };
-		}
+		onselect?.(cache.merged(row), index);
+		const found = await cache.load(row);
+		// Report the details only if this row is still the one shown.
+		if (found && selectedIndex === index && results[index] === row) onselect?.(mergeCandidate(row, found), index);
 	}
 </script>
 
@@ -101,8 +67,8 @@
 			<div class="match-picker-pane">
 				<MatchDetailPane
 					candidate={merged}
-					loading={!!loading[selectedKey]}
-					error={errors[selectedKey] ?? null}
+					loading={!!cache.loading[selectedKey]}
+					error={cache.errors[selectedKey] ?? null}
 					{canUse}
 					{useLabel}
 					{applying}

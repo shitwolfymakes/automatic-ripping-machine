@@ -5,11 +5,11 @@ import MatchPicker from './MatchPicker.svelte';
 
 // Branch pins for MatchPicker, beside MatchPicker.test.ts. Two branches cannot
 // be reached from the rendered component, so nothing here forces them:
-// - The `: null` side of selectedKey's ternary: selectedKey is only read after
-//   `selectedRow &&` (in merged) and `merged &&` (in the template), both of
-//   which short-circuit when selectedRow is null. That holds for an empty
-//   first list and for a list that empties (the empty-list tests render both),
-//   so selectedKey is never evaluated with a null row.
+// - The `: null` side of selectedKey's ternary: selectedKey is only read in
+//   the template, after `merged &&`, and merged is null whenever selectedRow
+//   is. That holds for an empty first list and for a list that empties (the
+//   empty-list tests render both), so selectedKey is never evaluated with a
+//   null row.
 // - select's `if (!row) return;` guard: select is only called with the index of
 //   a rendered row, or with 0 when the list is non-empty, so `results[index]`
 //   is always set when it runs.
