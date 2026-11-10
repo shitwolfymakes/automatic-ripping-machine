@@ -17,6 +17,7 @@
 	import KeyCheckResult from './KeyCheckResult.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
+	import SchemaFormSection from './SchemaFormSection.svelte';
 
 	let {
 		group,
@@ -42,11 +43,6 @@
 
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
-	/** Id of a section's note; set only when the section hides its fields' own help. */
-	const noteId = (section: { title: string; note?: string; hideFieldHelp?: boolean }) =>
-		section.note && section.hideFieldHelp
-			? `section-note-${section.title.toLowerCase().replace(/\W+/g, '-')}`
-			: undefined;
 	const blurb = $derived(groupBlurb(group.name));
 	// A required key's field lives in this form's group when it has one; otherwise
 	// the chip falls back to Settings' schema context, or the field's own anchor.
@@ -175,6 +171,10 @@
 	{/if}
 {/snippet}
 
+{#snippet identityCard()}
+	<IdentityCard bind:values fields={group.fields} {config} {keyTab} disabled={!editable.length} />
+{/snippet}
+
 <div class="flex flex-col gap-6">
 	{#if bare}
 		<div class="stack schema-config-form-bare">
@@ -199,45 +199,7 @@
 		<section class="stack stack-lg">
 			{#if beforeSections}{@render beforeSections()}{/if}
 			{#each sections as section (section.title)}
-				<div data-testid="settings-section" class="panel schema-config-form-panel">
-					<h3 class="schema-config-form-section-title">{section.title}</h3>
-					{#if section.blurb}
-						<p class="schema-config-form-description schema-config-form-section-blurb">{section.blurb}</p>
-					{:else}
-						<div class="schema-config-form-section-blurb"></div>
-					{/if}
-					{#if section.custom === 'identity'}
-						<IdentityCard bind:values fields={group.fields} {config} {keyTab} disabled={!editable.length} />
-					{/if}
-					{#if section.columns.length > 0}
-						<div class="schema-config-form-columns" data-testid="settings-section-columns">
-							{#each section.columns as columnFields, i (i)}
-								<div class="stack">
-									{#each columnFields as field (field.key)}
-										{@render fieldRow(field, noteId(section))}
-									{/each}
-								</div>
-							{/each}
-						</div>
-					{/if}
-					<div class="stack">
-						{#each section.fields as field (field.key)}
-							{@render fieldRow(field, noteId(section))}
-						{/each}
-					</div>
-					{#if section.note}
-						<p class="schema-config-form-description" id={noteId(section)}>{section.note}</p>
-					{/if}
-					{#if section.advanced.length > 0}
-						<hr class="schema-config-form-advanced-divider" />
-						<span class="label-caps schema-config-form-advanced-label">Advanced</span>
-						<div class="stack">
-							{#each section.advanced as field (field.key)}
-								{@render fieldRow(field, noteId(section))}
-							{/each}
-						</div>
-					{/if}
-				</div>
+				<SchemaFormSection {section} {fieldRow} {identityCard} />
 			{/each}
 		</section>
 	{/if}
@@ -271,11 +233,6 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original settings-section panel was p-6 (1.5rem), not .panel's
-	   own p-4 (1rem) default. */
-	.schema-config-form-panel {
-		padding: 1.5rem;
-	}
 	/* the original group/section blurbs were text-sm (0.875rem/1.25rem),
 	   not panel-hint's 0.75rem - panel-hint is sized for a note under a
 	   form control, a visibly smaller role. */
@@ -283,34 +240,6 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
-	}
-	.schema-config-form-section-title {
-		margin-bottom: 0.25rem;
-		font-size: 1rem;
-		line-height: 1.5rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.schema-config-form-section-blurb {
-		margin-bottom: 1rem;
-	}
-	/* columns: side by side on desktop, stacked on mobile - the fit-width
-	   minimum (18rem) is what collapses the grid to one column on a narrow
-	   panel without a media query. */
-	.schema-config-form-columns {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
-		gap: 1.5rem;
-		margin-bottom: 1rem;
-	}
-	.schema-config-form-advanced-divider {
-		margin: 0.5rem 0 1rem;
-		border: none;
-		border-top: 1px solid var(--color-border);
-	}
-	.schema-config-form-advanced-label {
-		display: block;
-		margin-bottom: 0.5rem;
 	}
 	.schema-config-form-key-check {
 		font-size: 0.875rem;
