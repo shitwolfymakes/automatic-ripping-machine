@@ -2,6 +2,7 @@
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 	import { serviceGroups, matchingServices } from './serviceCatalog';
+	import { onOutsideClick } from '$lib/utils/outside-click';
 
 	let { catalog, selectedId, onpick }: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } =
 		$props();
@@ -24,11 +25,11 @@
 
 	$effect(() => {
 		if (!open) return;
-		function onDocClick(ev: MouseEvent) {
-			if (rootEl && !rootEl.contains(ev.target as Node)) open = false;
-		}
-		document.addEventListener('mousedown', onDocClick, true);
-		return () => document.removeEventListener('mousedown', onDocClick, true);
+		return onOutsideClick(
+			'mousedown',
+			() => [rootEl],
+			() => (open = false)
+		);
 	});
 </script>
 

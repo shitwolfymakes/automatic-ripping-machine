@@ -3,12 +3,8 @@ import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-u
 import ServiceDropdown from '../ServiceDropdown.svelte';
 import type { Catalog, CatalogService } from '$lib/types/notifications';
 
-// Branch pins for ServiceDropdown, beside ServiceDropdown.test.ts. One branch
-// cannot be reached from the rendered component, so nothing here forces it:
-// - The `rootEl` half of the outside-click listener's guard: the listener is
-//   added only while the panel is open, and the panel opens from the trigger,
-//   which sits inside the bound root element, so `rootEl` is always set by
-//   then. Only its true outcome is reachable.
+// Branch pins for ServiceDropdown, beside ServiceDropdown.test.ts. Every
+// branch is reachable, so none is left open.
 
 function svc(id: string, name: string): CatalogService {
 	return { id, name, docs_url: '', url_scheme: id, required_fields: [], advanced_fields: [] };

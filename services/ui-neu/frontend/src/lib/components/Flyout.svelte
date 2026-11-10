@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { tick } from 'svelte';
+	import { onOutsideClick } from '$lib/utils/outside-click';
 
 	interface Props {
 		/** Trigger content. Receives `toggle` (flip open/closed) and the current `open` state. */
@@ -74,12 +75,6 @@
 		// Re-measure after the panel mounts (so its own size is known if needed).
 		tick().then(place);
 
-		function onPointerDown(e: MouseEvent) {
-			const t = e.target as Node;
-			if (root && root.contains(t)) return;
-			if (panel && panel.contains(t)) return;
-			close();
-		}
 		function onKeydown(e: KeyboardEvent) {
 			if (e.key === 'Escape') close();
 		}
@@ -87,12 +82,12 @@
 			place();
 		}
 
-		document.addEventListener('click', onPointerDown, true);
+		const stopOutsideClick = onOutsideClick('click', () => [root, panel], close);
 		document.addEventListener('keydown', onKeydown);
 		window.addEventListener('scroll', reposition, true);
 		window.addEventListener('resize', reposition);
 		return () => {
-			document.removeEventListener('click', onPointerDown, true);
+			stopOutsideClick();
 			document.removeEventListener('keydown', onKeydown);
 			window.removeEventListener('scroll', reposition, true);
 			window.removeEventListener('resize', reposition);
