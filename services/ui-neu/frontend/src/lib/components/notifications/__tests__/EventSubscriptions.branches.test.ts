@@ -8,11 +8,6 @@ import EventSubscriptions from '../EventSubscriptions.svelte';
 // Branch pins for EventSubscriptions, beside EventSubscriptions.svelte.test.ts.
 // Some branches cannot be reached from the rendered component, so nothing here
 // forces them:
-// - defaultsFor's blank fallback (`: { title: '', body: '' }`): it is only
-//   called with the key of an event type taken from the rendered list, so the
-//   lookup always finds it.
-// - varsFor's `?? []`: the same lookup always finds the event type, and every
-//   event type carries `variables`.
 // - insertVariable's two `next || null` (the title's and the body's): the
 //   spliced text always holds the token, so it is never empty.
 // - each option's `value={v}` in the values select: Svelte compiles in a check

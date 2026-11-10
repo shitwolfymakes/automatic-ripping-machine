@@ -39,13 +39,6 @@
 		if (!templates[key]) templates[key] = { title: null, body: null };
 		return templates[key];
 	}
-	function varsFor(key: string): string[] {
-		return eventTypes.find((e) => e.key === key)?.variables ?? [];
-	}
-	function defaultsFor(key: string): { title: string; body: string } {
-		const et = eventTypes.find((e) => e.key === key);
-		return et ? { title: et.default_title, body: et.default_body } : { title: '', body: '' };
-	}
 	function rememberCaret(key: string, field: FieldName, el: HTMLInputElement | HTMLTextAreaElement) {
 		active = { key, field, el, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length };
 	}
@@ -109,7 +102,7 @@
 						<span class="field-label event-subscriptions-sublabel">Title</span>
 						<input
 							aria-label={`${et.key} title`}
-							placeholder={defaultsFor(et.key).title}
+							placeholder={et.default_title}
 							value={templates[et.key]?.title ?? ''}
 							oninput={(e) => {
 								ensure(et.key).title = (e.currentTarget as HTMLInputElement).value || null;
@@ -125,7 +118,7 @@
 						<textarea
 							aria-label={`${et.key} body`}
 							rows="2"
-							placeholder={defaultsFor(et.key).body}
+							placeholder={et.default_body}
 							value={templates[et.key]?.body ?? ''}
 							oninput={(e) => {
 								ensure(et.key).body = (e.currentTarget as HTMLTextAreaElement).value || null;
@@ -161,7 +154,7 @@
 						Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}
 					</p>
 					<div class="cluster event-subscriptions-vars">
-						{#each varsFor(et.key) as v (v)}
+						{#each et.variables as v (v)}
 							<button type="button" aria-label={`Insert {${v}}`} onclick={() => insertVariable(et.key, v)} class="chip"
 								><code>{`{${v}}`}</code></button
 							>
