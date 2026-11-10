@@ -2,7 +2,7 @@
 	import { getContext, tick } from 'svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
-	import { missingKey } from '$lib/utils/ranked-list';
+	import { missingKey, rankedRows, rankedSelected, swapRank, type RankDirection } from '$lib/utils/ranked-list';
 	import { SETTINGS_SCHEMA_CONTEXT, settingsFieldHref } from '$lib/utils/settings-sections';
 
 	let {
@@ -41,14 +41,12 @@
 			.find((f) => f.key === key)?.label ?? `${key} key`;
 
 	const known = $derived(field.enum_values ?? []);
-	const selected = $derived(
-		Array.isArray(value) ? (value as string[]).filter((v, i, all) => known.includes(v) && all.indexOf(v) === i) : []
-	);
-	const rows = $derived([...selected, ...known.filter((v) => !selected.includes(v))]);
+	const selected = $derived(rankedSelected(value, known));
+	const rows = $derived(rankedRows(selected, known));
 	let announcement = $state('');
 
 	const labelOf = (v: string) => field.enum_labels?.[v] ?? v;
-	const buttonId = (v: string, dir: 'up' | 'down') => `ranked-${field.key}-${v}-${dir}`;
+	const buttonId = (v: string, dir: RankDirection) => `ranked-${field.key}-${v}-${dir}`;
 	const rankId = (v: string) => `ranked-${field.key}-${v}-rank`;
 	const useId = (v: string) => `ranked-${field.key}-${v}-use`;
 
@@ -66,19 +64,16 @@
 		(document.getElementById(useId(v)) as HTMLInputElement | null)?.focus();
 	}
 
-	async function move(v: string, dir: 'up' | 'down') {
-		const i = selected.indexOf(v);
-		const j = dir === 'up' ? i - 1 : i + 1;
-		if (i < 0 || j < 0 || j >= selected.length) return;
-		const next = [...selected];
-		[next[i], next[j]] = [next[j], next[i]];
+	async function move(v: string, dir: RankDirection) {
+		const next = swapRank(selected, v, dir);
+		if (!next) return;
 		value = next;
 		// Clear first: reassigning $state to an identical string is a no-op
 		// as far as the DOM text node is concerned, so back-to-back moves that
 		// land on the same wording would otherwise go unannounced.
 		announcement = '';
 		await tick();
-		announcement = `${labelOf(v)} moved to rank ${j + 1}`;
+		announcement = `${labelOf(v)} moved to rank ${next.indexOf(v) + 1}`;
 		await tick();
 		const same = document.getElementById(buttonId(v, dir)) as HTMLButtonElement | null;
 		const other = document.getElementById(buttonId(v, dir === 'up' ? 'down' : 'up')) as HTMLButtonElement | null;
