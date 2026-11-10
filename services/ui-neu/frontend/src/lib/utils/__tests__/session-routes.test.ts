@@ -8,7 +8,8 @@ import {
 	routeFor,
 	rowKey,
 	sessionNameFor,
-	sessionsFor
+	sessionsFor,
+	withRoute
 } from '../session-routes';
 
 function route(over: Partial<SessionRouteView>): SessionRouteView {
@@ -63,6 +64,29 @@ describe('routeFor', () => {
 
 	it('returns undefined when there is none', () => {
 		expect(routeFor(routes, 'tv', 'dvd')).toBeUndefined();
+	});
+});
+
+describe('withRoute', () => {
+	it('puts the saved route last in place of the one for its row', () => {
+		const old = route({ id: 'old' });
+		const other = route({ id: 'other', media_type: 'tv' });
+		const saved = route({ id: 'new', session_id: 's2' });
+		expect(withRoute([old, other], 'movie', 'dvd', saved)).toEqual([other, saved]);
+	});
+
+	it('keeps the other routes in order, the wildcard included', () => {
+		const a = route({ id: 'a', disc_type: null });
+		const old = route({ id: 'old' });
+		const b = route({ id: 'b', disc_type: 'bluray' });
+		const saved = route({ id: 'new' });
+		expect(withRoute([a, old, b], 'movie', 'dvd', saved)).toEqual([a, b, saved]);
+	});
+
+	it('just adds the saved route when its row had none', () => {
+		const a = route({ id: 'a', media_type: 'tv' });
+		const saved = route({ id: 'new' });
+		expect(withRoute([a], 'movie', 'dvd', saved)).toEqual([a, saved]);
 	});
 });
 

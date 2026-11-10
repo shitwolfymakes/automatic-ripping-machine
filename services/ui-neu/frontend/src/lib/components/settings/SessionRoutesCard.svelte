@@ -13,7 +13,8 @@
 		routeFor,
 		rowKey,
 		sessionNameFor,
-		sessionsFor
+		sessionsFor,
+		withRoute
 	} from '$lib/utils/session-routes';
 	import { PendingKeys } from './pendingKeys.svelte';
 
@@ -59,8 +60,7 @@
 		await pending.run(key, async () => {
 			try {
 				const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
-				const others = routes.filter((r) => !(r.media_type === mediaType && r.disc_type === discType));
-				routes = [...others, saved];
+				routes = withRoute(routes, mediaType, discType, saved);
 			} catch (e) {
 				showFeedback('error', e instanceof Error ? e.message : 'Failed to save route');
 				await load();

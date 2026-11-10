@@ -46,6 +46,18 @@ export function routeFor(
 	return routes.find((r) => r.media_type === mediaType && r.disc_type === discType);
 }
 
+/** The routes with `saved` in place of any route for the same media
+ * and disc type, added last. */
+export function withRoute(
+	routes: readonly SessionRouteView[],
+	mediaType: MediaType,
+	discType: DiscType | null,
+	saved: SessionRouteView
+): SessionRouteView[] {
+	const others = routes.filter((r) => !(r.media_type === mediaType && r.disc_type === discType));
+	return [...others, saved];
+}
+
 /** Every session the Backend would accept for this row (same compatibility
  * rule as PUT /api/session-routes), plus the one already routed, so a live
  * route never renders as a blank select. */
