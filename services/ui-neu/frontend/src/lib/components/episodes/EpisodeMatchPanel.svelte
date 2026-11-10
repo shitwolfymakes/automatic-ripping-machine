@@ -34,6 +34,7 @@
 	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
+	import EpisodeStateAlert from './EpisodeStateAlert.svelte';
 	import RerunPanel from './RerunPanel.svelte';
 
 	interface Props {
@@ -390,52 +391,7 @@
 			</ul>
 		{/if}
 
-		{#if loading}
-			<!-- first fetch still running: no state to show yet -->
-		{:else if episodeIdentity.loadError}
-			<div class="alert alert-danger">
-				<p class="alert-title">Could not load the episode match</p>
-				<p class="alert-body">{episodeIdentity.loadError}</p>
-			</div>
-		{:else if view === 'unavailable'}
-			<div class="alert alert-warning">
-				<p class="alert-title">No episode source is set up</p>
-				<p class="alert-body">
-					ARM needs an episode list from TMDb, TVmaze or TVDB to place these tracks. Turn one on in
-					<a href="/settings#Identification/episode_sources">Settings › Identification › Identity</a>.
-				</p>
-			</div>
-		{:else if view === 'unsure' && held}
-			<div class="alert alert-warning">
-				<p class="alert-title episode-panel-hold-line">
-					<span>{held.line}</span>
-					{#if held.more.length > 0}
-						<button
-							type="button"
-							class="btn btn-ghost btn-sm episode-panel-why"
-							aria-label="Why this is a guess"
-							aria-expanded={whyOpen}
-							onclick={() => (whyOpen = !whyOpen)}><Glyph name="info" /></button
-						>
-					{/if}
-				</p>
-				{#if whyOpen}
-					<ul class="episode-panel-why-list">
-						{#each held.more as reason (reason)}
-							<li>{reason}</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		{:else if view === 'nomatch'}
-			<div class="alert alert-info">
-				<p class="alert-title">No source could place these tracks</p>
-				{#each failed as f (f.id)}
-					<p class="alert-body">{f.label} failed{f.detail ? `: ${f.detail}` : ''}</p>
-				{/each}
-				<p class="alert-body">Try another source, season or disc number, or set the tracks by hand.</p>
-			</div>
-		{/if}
+		<EpisodeStateAlert {loading} loadError={episodeIdentity.loadError} {view} {held} {failed} bind:whyOpen />
 
 		{#if canAct && rerunOpen}
 			<RerunPanel
@@ -536,20 +492,6 @@
 	.episode-panel-fit {
 		font-size: 0.875rem;
 		font-weight: 600;
-	}
-	.episode-panel-hold-line {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-	.episode-panel-why {
-		min-height: 1.5rem;
-		padding: 0 0.25rem;
-		color: inherit;
-	}
-	.episode-panel-why-list {
-		margin: 0.25rem 0 0;
-		padding-left: 1.25rem;
 	}
 	.episode-panel-error {
 		display: flex;
