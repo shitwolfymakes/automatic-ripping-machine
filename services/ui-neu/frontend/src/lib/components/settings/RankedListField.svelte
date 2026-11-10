@@ -2,6 +2,7 @@
 	import { getContext, tick } from 'svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
+	import { missingKey } from '$lib/utils/ranked-list';
 	import { SETTINGS_SCHEMA_CONTEXT, settingsFieldHref } from '$lib/utils/settings-sections';
 
 	let {
@@ -47,12 +48,6 @@
 	let announcement = $state('');
 
 	const labelOf = (v: string) => field.enum_labels?.[v] ?? v;
-	function missingKey(v: string): string | null {
-		const key = field.enum_requires?.[v];
-		if (!key) return null;
-		const current = config[key];
-		return typeof current === 'string' && current.trim() !== '' ? null : key;
-	}
 	const buttonId = (v: string, dir: 'up' | 'down') => `ranked-${field.key}-${v}-${dir}`;
 	const rankId = (v: string) => `ranked-${field.key}-${v}-rank`;
 	const useId = (v: string) => `ranked-${field.key}-${v}-use`;
@@ -95,7 +90,7 @@
 	{#each rows as v (v)}
 		{@const isOn = selected.includes(v)}
 		{@const rank = selected.indexOf(v)}
-		{@const missing = missingKey(v)}
+		{@const missing = missingKey(field, config, v)}
 		<div class="list-row list-row-compact ranked-list-field-row" role="listitem" data-on={isOn}>
 			<div class="list-row-lead">
 				<input
