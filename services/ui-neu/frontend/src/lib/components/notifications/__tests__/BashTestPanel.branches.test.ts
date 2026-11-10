@@ -4,10 +4,11 @@ import BashTestPanel from '../BashTestPanel.svelte';
 
 // Branch pins for BashTestPanel, beside BashTestPanel.svelte.test.ts. The
 // branches left open below cannot be reached from the rendered component:
-// - The `?? {}` fallback in contextRows (`preview?.env ?? {}`): the markup
-//   reads contextRows only inside the `{:else if preview}` block, so a preview
-//   is always set there, and every preview the panel stores (from previewBash
-//   or from its own catch) carries an `env` object.
+// - The `?? {}` fallback in contextRows (`bash.preview?.env ?? {}`): the
+//   markup reads contextRows only inside the `{:else if bash.preview}` block,
+//   so a preview is always set there, and every preview BashPreview stores
+//   (from previewBash, or failedPreview when it throws) carries an `env`
+//   object.
 // - The `?? ''` fallback Svelte compiles around `{e.label}` in the option
 //   text (`<option value={e.key}>{e.label}{isCustomized(templates[e.key])
 //   ? ...`): label is a required string on EventTypeInfo, so it is never

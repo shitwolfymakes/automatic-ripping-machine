@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { ChevronRight } from 'lucide-svelte';
-	import { previewBash, type BashPreviewResult, type EventTypeInfo, type ScriptInput } from '$lib/api/channels';
+	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import { armContext, failedPreview, failedRun, incompleteInput, isCustomized, runSummary } from './bashResults';
+	import { BashPreview } from './bashPreview.svelte';
+	import { armContext, incompleteInput, isCustomized, runSummary } from './bashResults';
 
 	let {
 		config,
@@ -22,14 +23,12 @@
 
 	let open = $state(false);
 	let eventType = $state('');
-	let preview = $state<BashPreviewResult | null>(null);
-	let running = $state(false);
+	const bash = new BashPreview();
 	let showAll = $state(false);
-	let lastRun = $state<BashPreviewResult['result'] | null>(null);
 
 	// A missing required input is a form-completion hint, not a failure:
 	// name the field the way the Inputs block labels it.
-	const incomplete = $derived(incompleteInput(preview?.error, inputs));
+	const incomplete = $derived(incompleteInput(bash.preview?.error, inputs));
 
 	const subscribed = $derived(eventTypes.filter((e) => events.includes(e.key)));
 	$effect(() => {
@@ -46,36 +45,18 @@
 		};
 	}
 
-	let timer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		// Track the form state so the preview refreshes as the user types.
 		void JSON.stringify([config, templates[eventType]]);
-		clearTimeout(timer);
+		bash.cancel();
 		if (!open || !eventType) return;
-		timer = setTimeout(async () => {
-			try {
-				preview = await previewBash(request(false));
-			} catch (e) {
-				preview = failedPreview(e instanceof Error ? e.message : 'preview failed');
-			}
-		}, 300);
-		return () => clearTimeout(timer);
+		bash.schedule(() => request(false));
+		return bash.cancel;
 	});
 
-	async function runTest() {
-		running = true;
-		try {
-			const res = await previewBash(request(true));
-			preview = res;
-			lastRun = res.result ?? null;
-		} catch (e) {
-			lastRun = failedRun(e instanceof Error ? e.message : 'test failed');
-		} finally {
-			running = false;
-		}
-	}
+	const runTest = () => bash.run(request(true));
 
-	const contextRows = $derived(armContext(preview?.env ?? {}));
+	const contextRows = $derived(armContext(bash.preview?.env ?? {}));
 	const visibleContext = $derived(showAll ? contextRows : contextRows.slice(0, 6));
 </script>
 
@@ -83,8 +64,10 @@
 	<button type="button" class="panel-title bash-test-panel-toggle" aria-expanded={open} onclick={() => (open = !open)}>
 		<ChevronRight class="chevron" />
 		Test
-		{#if lastRun}
-			<span class="bash-test-panel-last-run" data-ok={lastRun.ok}>last run: {lastRun.ok ? 'passed' : 'failed'}</span>
+		{#if bash.lastRun}
+			<span class="bash-test-panel-last-run" data-ok={bash.lastRun.ok}
+				>last run: {bash.lastRun.ok ? 'passed' : 'failed'}</span
+			>
 		{/if}
 	</button>
 	{#if open}
@@ -100,9 +83,9 @@
 				</label>
 				<button
 					type="button"
-					disabled={running || !eventType || !!preview?.error}
+					disabled={bash.running || !eventType || !!bash.preview?.error}
 					onclick={runTest}
-					class="btn btn-primary">{running ? 'Running...' : 'Run test'}</button
+					class="btn btn-primary">{bash.running ? 'Running...' : 'Run test'}</button
 				>
 			</div>
 			<p class="field-help">
@@ -111,19 +94,19 @@
 
 			{#if incomplete}
 				<p class="alert alert-warning">Fill in {incomplete} above to preview this hook.</p>
-			{:else if preview?.error}
-				<p class="alert alert-danger">{preview.error}</p>
-			{:else if preview}
+			{:else if bash.preview?.error}
+				<p class="alert alert-danger">{bash.preview.error}</p>
+			{:else if bash.preview}
 				<div class="bash-test-panel-grid">
 					<div class="eyebrow bash-test-panel-grid-title">What the script will receive</div>
 					<dl class="bash-test-panel-dl">
 						<dt class="mono">$1</dt>
-						<dd class="truncate">{preview.title}</dd>
+						<dd class="truncate">{bash.preview.title}</dd>
 						<dt class="mono">$2</dt>
-						<dd class="truncate">{preview.body}</dd>
-						{#if Object.keys(preview.inputs).length}
+						<dd class="truncate">{bash.preview.body}</dd>
+						{#if Object.keys(bash.preview.inputs).length}
 							<dt class="eyebrow bash-test-panel-dl-heading">Inputs</dt>
-							{#each Object.entries(preview.inputs) as [k, v] (k)}
+							{#each Object.entries(bash.preview.inputs) as [k, v] (k)}
 								<dt class="mono">{k}</dt>
 								<dd class="truncate">{v}</dd>
 							{/each}
@@ -145,15 +128,15 @@
 				</div>
 			{/if}
 
-			{#if lastRun}
-				<div class="alert bash-test-panel-result {lastRun.ok ? 'alert-success' : 'alert-danger'}">
+			{#if bash.lastRun}
+				<div class="alert bash-test-panel-result {bash.lastRun.ok ? 'alert-success' : 'alert-danger'}">
 					<div class="bash-test-panel-result-grid">
 						<span class="bash-test-panel-result-label">Result</span>
-						<span>{runSummary(lastRun)}</span>
+						<span>{runSummary(bash.lastRun)}</span>
 						<span class="bash-test-panel-result-label">stderr</span>
-						<pre class="code-block bash-test-panel-pre">{lastRun.stderr || '(empty)'}</pre>
+						<pre class="code-block bash-test-panel-pre">{bash.lastRun.stderr || '(empty)'}</pre>
 						<span class="bash-test-panel-result-label">stdout</span>
-						<pre class="code-block bash-test-panel-pre">{lastRun.stdout || '(empty)'}</pre>
+						<pre class="code-block bash-test-panel-pre">{bash.lastRun.stdout || '(empty)'}</pre>
 					</div>
 				</div>
 			{/if}
