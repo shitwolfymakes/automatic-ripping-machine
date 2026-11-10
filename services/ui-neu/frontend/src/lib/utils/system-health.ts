@@ -52,6 +52,21 @@ const CHECK_LABELS: Record<string, string> = {
 /** Operator-facing names for the services. */
 export const SERVICE_LABELS: Record<string, string> = { ripper_manager: 'Ripper service', transcoder: 'Transcoder' };
 
+/** A storage root's operator-facing name, or its key when it has none. */
+export function storageLabel(name: string): string {
+	return STORAGE_LABELS[name] ?? name;
+}
+
+/** The line saying what a storage root is for, or an empty one. */
+export function storageHelp(name: string): string {
+	return STORAGE_HELP[name] ?? '';
+}
+
+/** A service's operator-facing name, or its key when it has none. */
+export function serviceLabel(name: string): string {
+	return SERVICE_LABELS[name] ?? name;
+}
+
 /** A check's operator-facing name, or its key when it has none. */
 export function checkLabel(name: string): string {
 	return CHECK_LABELS[name] ?? name;

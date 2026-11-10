@@ -6,8 +6,6 @@
 	import { formatDateTime } from '$lib/utils/format';
 	import {
 		SERVICE_CHECKS,
-		SERVICE_LABELS,
-		STORAGE_HELP,
 		STORAGE_LABELS,
 		checkDetail,
 		checkLabel,
@@ -17,7 +15,10 @@
 		pathDetail,
 		pathState,
 		serviceBadge,
-		serviceDescription
+		serviceDescription,
+		serviceLabel,
+		storageHelp,
+		storageLabel
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
@@ -131,9 +132,9 @@
 						<div class="system-health-item" data-testid="system-health-path" data-status={st}>
 							<div class="system-health-item-head">
 								<div>
-									<span class="system-health-item-name">{STORAGE_LABELS[p.name] ?? p.name}</span>
+									<span class="system-health-item-name">{storageLabel(p.name)}</span>
 									<code class="mono system-health-item-path">{p.path}</code>
-									<p class="system-health-description">{STORAGE_HELP[p.name] ?? ''}</p>
+									<p class="system-health-description">{storageHelp(p.name)}</p>
 								</div>
 								<span class="badge badge-sm {st === 'ok' ? 'badge-success' : 'badge-danger'}">
 									{st === 'ok' ? 'OK' : 'Problem'}
@@ -174,7 +175,7 @@
 						<div class="system-health-item" data-testid="system-health-service" data-status={c.status}>
 							<div class="system-health-item-head">
 								<div>
-									<span class="system-health-item-name">{SERVICE_LABELS[c.name] ?? c.name}</span>
+									<span class="system-health-item-name">{serviceLabel(c.name)}</span>
 									<p class="system-health-description">{serviceDescription(c)}</p>
 								</div>
 								<span class="badge badge-sm badge-{b.tone}"><Glyph name={b.glyph} class="h-3 w-3" /> {b.text}</span>

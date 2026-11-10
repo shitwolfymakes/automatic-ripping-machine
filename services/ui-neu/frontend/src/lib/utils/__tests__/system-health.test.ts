@@ -11,6 +11,9 @@ import {
 	serviceBadge,
 	serviceDescription,
 	serviceHost,
+	serviceLabel,
+	storageHelp,
+	storageLabel,
 	SERVICE_CHECKS,
 	SERVICE_LABELS,
 	STORAGE_HELP,
@@ -45,6 +48,36 @@ describe('the label tables', () => {
 		expect(STORAGE_HELP.LOG_DIR).toBe('Rip and system logs.');
 		expect(SERVICE_CHECKS).toEqual(['ripper_manager', 'transcoder']);
 		expect(SERVICE_LABELS.ripper_manager).toBe('Ripper service');
+	});
+});
+
+describe('storageLabel', () => {
+	it('returns the label of a known key', () => {
+		expect(storageLabel('MEDIA_ROOT')).toBe('Media library');
+	});
+
+	it('returns an unknown key as itself', () => {
+		expect(storageLabel('SOMETHING_NEW')).toBe('SOMETHING_NEW');
+	});
+});
+
+describe('storageHelp', () => {
+	it('returns the help line of a known key', () => {
+		expect(storageHelp('LOG_DIR')).toBe('Rip and system logs.');
+	});
+
+	it('returns an empty line for an unknown key', () => {
+		expect(storageHelp('SOMETHING_NEW')).toBe('');
+	});
+});
+
+describe('serviceLabel', () => {
+	it('returns the label of a known key', () => {
+		expect(serviceLabel('ripper_manager')).toBe('Ripper service');
+	});
+
+	it('returns an unknown key as itself', () => {
+		expect(serviceLabel('something_new')).toBe('something_new');
 	});
 });
 

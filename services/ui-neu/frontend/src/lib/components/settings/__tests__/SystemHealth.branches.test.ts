@@ -3,10 +3,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import SystemHealth from '../SystemHealth.svelte';
 
 // Branch pins for SystemHealth, beside SystemHealth.test.ts. Nothing here
-// forces a branch the component cannot reach; the two left open are:
-// - The `?? c.name` fallback of a service's label: a service row is built
-//   only from the ripper_manager and transcoder checks, and both have a
-//   service label, so the name itself is never shown there.
+// forces a branch the component cannot reach; the one left open is:
 // - The empty side of the problem count's `result ?` guard: the count is
 //   read only inside the block that renders once a result is in.
 
