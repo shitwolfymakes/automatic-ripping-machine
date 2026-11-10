@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows, placedCount, formatLength, pickerOptions } from '../episodeModel';
+import {
+	failedSources,
+	panelState,
+	buildRows,
+	placedCount,
+	formatLength,
+	pickerOptions,
+	usedEpisodeNumbers
+} from '../episodeModel';
 import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
@@ -221,5 +229,34 @@ describe('placedCount', () => {
 			row('Not placed', 'none')
 		];
 		expect(placedCount(rows)).toBe(4);
+	});
+});
+
+describe('usedEpisodeNumbers', () => {
+	const held = (trackId: string, season: number | null, episode: number | null, end?: number) =>
+		({ track_id: trackId, season, episode_number: episode, episode_number_end: end }) as TrackIdentityView;
+
+	it('leaves out the asking track own episode', () => {
+		expect(usedEpisodeNumbers([held('a', 1, 2), held('b', 1, 3)], 1, 'a')).toEqual(new Set([3]));
+	});
+
+	it('leaves out the tracks of another season', () => {
+		expect(usedEpisodeNumbers([held('a', 2, 2), held('b', 1, 3)], 1, 'z')).toEqual(new Set([3]));
+	});
+
+	it('leaves out a track with no episode', () => {
+		expect(usedEpisodeNumbers([held('a', 1, null), held('b', 1, 3)], 1, 'z')).toEqual(new Set([3]));
+	});
+
+	it('adds the whole span of a two-part track', () => {
+		expect(usedEpisodeNumbers([held('a', 1, 4, 6)], 1, 'z')).toEqual(new Set([4, 5, 6]));
+	});
+
+	it('adds up several tracks', () => {
+		expect(usedEpisodeNumbers([held('a', 1, 1), held('b', 1, 2, 3)], 1, 'z')).toEqual(new Set([1, 2, 3]));
+	});
+
+	it('gives an empty set for no tracks', () => {
+		expect(usedEpisodeNumbers([], 1, 'z')).toEqual(new Set());
 	});
 });

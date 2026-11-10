@@ -143,6 +143,18 @@ export function buildRows(
 
 export const ROLE_OPTIONS = Object.entries(NON_EPISODE).map(([value, label]) => ({ value, label }));
 
+/** The episode numbers the other tracks of a season already hold, a
+ * two-part episode's whole span included: `pickerOptions` marks them
+ * used. */
+export function usedEpisodeNumbers(tracks: Iterable<TrackIdentityView>, season: number, trackId: string): Set<number> {
+	const used = new Set<number>();
+	for (const t of tracks) {
+		if (t.track_id === trackId || t.season !== season || t.episode_number == null) continue;
+		for (let n = t.episode_number; n <= (t.episode_number_end ?? t.episode_number); n++) used.add(n);
+	}
+	return used;
+}
+
 /** The by-hand choices for one track in one season: its episodes, closest
  * runtime to the track's length first (unknown runtimes last, ties by number),
  * the episodes other tracks already hold after the rest and marked used, then

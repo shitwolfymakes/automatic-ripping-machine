@@ -27,6 +27,7 @@
 		placedCount,
 		failedSources,
 		pickerOptions,
+		usedEpisodeNumbers,
 		ROLE_OPTIONS,
 		type EpisodeRow
 	} from './episodeModel';
@@ -336,23 +337,17 @@
 		});
 	});
 
-	// The episode numbers the other tracks of a season already hold.
-	function usedIn(season: number, trackId: string): Set<number> {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a fresh value per call, never mutated after
-		const used = new Set<number>();
-		for (const t of placed.values()) {
-			if (t.track_id === trackId || t.season !== season || t.episode_number == null) continue;
-			for (let n = t.episode_number; n <= (t.episode_number_end ?? t.episode_number); n++) used.add(n);
-		}
-		return used;
-	}
-
 	// The by-hand choices of a shown row (its season already resolved). The
 	// roles need no season; the episodes do.
 	function optionsFor(row: EpisodeRow) {
 		const season = row.season ?? discSeason;
 		if (season == null) return ROLE_OPTIONS;
-		return pickerOptions(episodesBySeason.get(season) ?? [], season, row.seconds, usedIn(season, row.trackId));
+		return pickerOptions(
+			episodesBySeason.get(season) ?? [],
+			season,
+			row.seconds,
+			usedEpisodeNumbers(placed.values(), season, row.trackId)
+		);
 	}
 
 	// Picking a season saves nothing: it switches the row's episode list, and
