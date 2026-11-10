@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import { HIDDEN_SECRET } from '$lib/api/config';
 	import RankedListField from './RankedListField.svelte';
 	import MakemkvKeyField from './MakemkvKeyField.svelte';
 	import DiscHandlingField from './DiscHandlingField.svelte';
@@ -40,9 +41,8 @@
 		describedBy?: string;
 	} = $props();
 
-	const HIDDEN = '<hidden>';
 	const isSecret = $derived(field.tier === 'secret');
-	const isHiddenSecret = $derived(isSecret && value === HIDDEN);
+	const isHiddenSecret = $derived(isSecret && value === HIDDEN_SECRET);
 	let reveal = $state(false);
 	let removed = $state(false);
 

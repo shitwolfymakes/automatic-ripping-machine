@@ -5,7 +5,10 @@ import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
 const fetchConfigView = vi.fn();
 const fetchDrives = vi.fn();
-vi.mock('$lib/api/config', () => ({ fetchConfigView: () => fetchConfigView() }));
+vi.mock('$lib/api/config', () => ({
+	fetchConfigView: () => fetchConfigView(),
+	HIDDEN_SECRET: '<hidden>'
+}));
 vi.mock('$lib/api/drives', () => ({ fetchDrives: () => fetchDrives() }));
 
 const field: ConfigFieldMeta = {

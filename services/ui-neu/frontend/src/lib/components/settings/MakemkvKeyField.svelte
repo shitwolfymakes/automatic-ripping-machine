@@ -4,7 +4,7 @@
 	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import { fetchConfigView } from '$lib/api/config';
+	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
 	import { driveTitle } from '$lib/utils/drives';
@@ -13,7 +13,6 @@
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports
 	// back, so the status line polls the reported state (setup spec §5.5).
 	// Rendered for the `makemkv_key` widget in Settings > Metadata and setup.
-	const HIDDEN = '<hidden>';
 	let {
 		field,
 		value = $bindable(),
@@ -95,8 +94,8 @@
 					class="field-control w-full mono"
 					type={reveal ? 'text' : 'password'}
 					autocomplete="off"
-					value={value === HIDDEN ? '' : ((value as string | null) ?? '')}
-					placeholder={value === HIDDEN ? '******** (set, leave blank to keep)' : 'T-...'}
+					value={value === HIDDEN_SECRET ? '' : ((value as string | null) ?? '')}
+					placeholder={value === HIDDEN_SECRET ? '******** (set, leave blank to keep)' : 'T-...'}
 					oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
 				/>
 				<button
@@ -109,7 +108,7 @@
 					<Glyph name={reveal ? 'eye-off' : 'eye'} />
 				</button>
 			</div>
-			{#if value === HIDDEN}
+			{#if value === HIDDEN_SECRET}
 				<p class="field-help"><span class="chip chip-sm chip-success">Saved</span> Type a new key to replace it.</p>
 			{/if}
 		</div>
