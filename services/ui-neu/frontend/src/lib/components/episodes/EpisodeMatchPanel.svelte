@@ -3,12 +3,13 @@
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import type { JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
-	import { clearEpisodeMatch, matchIdentity, type EpisodeSource } from '$lib/api/identity';
+	import type { JobView, TrackView } from '$lib/types/api.gen';
+	import { clearEpisodeMatch, type EpisodeSource } from '$lib/api/identity';
 	import { updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
 	import { EpisodeIdentity } from '$lib/stores/episodeIdentity.svelte';
 	import { EpisodeLists } from '$lib/stores/episodeLists.svelte';
+	import { MatchRunner } from '$lib/stores/matchRunner.svelte';
 	import { SeasonList } from '$lib/stores/seasonList.svelte';
 	import {
 		panelState,
@@ -61,16 +62,16 @@
 	// The seasons of the re-run form's source while it is open, else of the
 	// picker's source (the per-row season select); null when the list could not load.
 	const seasonList = new SeasonList();
-	let preview = $state<MatchPreview | null>(null);
-	let previewSource = $state<EpisodeSource | null>(null);
-	// The request that produced the preview on screen: Apply sends exactly it.
-	// previewSeq invalidates a preview still in flight when the form changes.
-	let previewRequest: MatchRequest | null = null;
-	let previewSeq = 0;
-	let busy = $state(false);
+	const runner = new MatchRunner({
+		jobId: () => job.id,
+		placementLabel: () => sourceLabel,
+		closeForm: () => (rerunOpen = false),
+		reload: async () => {
+			await reload();
+			onchanged?.();
+		}
+	});
 	let clearing = $state(false);
-	let actionError = $state<string | null>(null);
-	let lastRequest = $state.raw<MatchRequest | null>(null);
 	// The picker's episode lists by season.
 	const episodeLists = new EpisodeLists();
 	// A season the operator picked for a row with no episode yet (nothing saved).
@@ -91,8 +92,7 @@
 		whyOpen = false;
 		rerunOpen = false;
 		rerun = { ...NO_RERUN };
-		dropPreview();
-		lastRequest = null;
+		runner.reset();
 		seasonList.reset();
 		episodeLists.reset();
 		rowSeason = {};
@@ -110,12 +110,14 @@
 	});
 
 	$effect(() => {
-		if (matching) untrack(dropPreview);
+		if (matching) untrack(runner.drop);
 	});
 
 	const view = $derived(panelState(job, identity, matching));
 	const loading = $derived(!episodeIdentity.loaded && view !== 'noseries' && view !== 'matching');
-	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview, !!job.episodes_unsure));
+	const rows = $derived(
+		view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, runner.preview, !!job.episodes_unsure)
+	);
 	const source = $derived(identity ? activeSource(identity) : null);
 	const sourceLabel = $derived(source ? (SOURCE_LABEL[source] ?? source) : null);
 	const others = $derived(
@@ -132,15 +134,7 @@
 		rerunOpen = !rerunOpen;
 		if (!rerunOpen) return;
 		rerun = fixMatchForm(source, sourceOptions, ownSeason?.season ?? altSeasons[0]?.season ?? null, job);
-		dropPreview();
-	}
-
-	function dropPreview() {
-		previewSeq++;
-		previewRequest = null;
-		preview = null;
-		previewSource = null;
-		actionError = null;
+		runner.drop();
 	}
 
 	// A guess: the season the source guessed and the other seasons the scan
@@ -163,62 +157,20 @@
 	async function clearEpisodes() {
 		if (clearing) return;
 		clearing = true;
-		actionError = null;
+		runner.error = null;
 		const jobId = job.id;
 		try {
 			const next = await clearEpisodeMatch(jobId);
 			if (job.id !== jobId) return;
 			episodeIdentity.identity = next;
-			dropPreview();
+			runner.drop();
 			rerunOpen = false;
 			onchanged?.();
 		} catch (e) {
-			if (job.id === jobId) actionError = `Could not clear the episodes (${e instanceof Error ? e.message : 'error'}).`;
+			if (job.id === jobId)
+				runner.error = `Could not clear the episodes (${e instanceof Error ? e.message : 'error'}).`;
 		} finally {
 			clearing = false;
-		}
-	}
-	async function run(req: MatchRequest) {
-		busy = true;
-		actionError = null;
-		lastRequest = req;
-		const label = shortSourceLabel(req.source);
-		const jobId = job.id;
-		const seq = ++previewSeq;
-		// A preview is stale once the form (or the job) changed while it ran.
-		const stale = () => job.id !== jobId || (!req.apply && seq !== previewSeq);
-		try {
-			const out = await matchIdentity(jobId, req);
-			if (stale()) return;
-			const failed = out.outcomes?.find((o) => o.status === 'error');
-			if (failed) {
-				// An apply records its source even when that source failed: reload
-				// so the stored state shows, then report the failure.
-				if (req.apply) {
-					await reload();
-					onchanged?.();
-				}
-				if (stale()) return;
-				throw new Error(failed.detail ?? 'error');
-			}
-			if (req.apply) {
-				dropPreview();
-				rerunOpen = false;
-				await reload();
-				onchanged?.();
-			} else {
-				preview = out;
-				previewSource = req.source ?? null;
-				previewRequest = req;
-			}
-		} catch (e) {
-			if (stale()) return;
-			const still = sourceLabel
-				? ` the placement below is still ${sourceLabel}'s.`
-				: ' the placement below is unchanged.';
-			actionError = `${label} didn't answer (${e instanceof Error ? e.message : 'error'}). Nothing changed;${still}`;
-		} finally {
-			busy = false;
 		}
 	}
 
@@ -324,8 +276,8 @@
 		if (!src) return;
 		rerun = fillRestForm(src, job, rows);
 		rerunOpen = true;
-		dropPreview();
-		return run(rerunRequest(rerun, false));
+		runner.drop();
+		return runner.run(rerunRequest(rerun, false));
 	}
 
 	async function revert(trackId: string) {
@@ -335,18 +287,17 @@
 	function setExcluded(trackId: string, excluded: boolean) {
 		return saveTrack(trackId, { excluded });
 	}
-
-	function applyPreview() {
-		if (previewRequest) return run({ ...previewRequest, apply: true });
-	}
 </script>
 
 {#snippet errorAlert()}
-	{#if actionError}
+	{#if runner.error}
 		<div class="alert alert-danger episode-panel-error" role="alert">
-			<p class="alert-body">{actionError}</p>
-			<button type="button" class="btn btn-sm" disabled={busy} onclick={() => lastRequest && run(lastRequest)}
-				>Try again</button
+			<p class="alert-body">{runner.error}</p>
+			<button
+				type="button"
+				class="btn btn-sm"
+				disabled={runner.busy}
+				onclick={() => runner.lastRequest && runner.run(runner.lastRequest)}>Try again</button
 			>
 		</div>
 	{/if}
@@ -384,16 +335,16 @@
 				{/if}
 			{/if}
 			<span class="episode-panel-status-actions">
-				{#if canAct && canFill && !preview}
-					<button type="button" class="btn btn-sm" disabled={busy} onclick={fillTheRest}>Fill the rest</button>
+				{#if canAct && canFill && !runner.preview}
+					<button type="button" class="btn btn-sm" disabled={runner.busy} onclick={fillTheRest}>Fill the rest</button>
 				{/if}
 				{#if canAct}
-					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} disabled={busy} onclick={fixMatch}
+					<button type="button" class="btn btn-sm" aria-expanded={rerunOpen} disabled={runner.busy} onclick={fixMatch}
 						>Fix match</button
 					>
 				{/if}
-				{#if canAct && rows.some((r) => r.code !== 'Not placed' && !r.handSet) && !preview}
-					<button type="button" class="btn btn-sm" disabled={busy || clearing} onclick={clearEpisodes}
+				{#if canAct && rows.some((r) => r.code !== 'Not placed' && !r.handSet) && !runner.preview}
+					<button type="button" class="btn btn-sm" disabled={runner.busy || clearing} onclick={clearEpisodes}
 						>{clearing ? 'Clearing...' : 'Clear episodes'}</button
 					>
 				{/if}
@@ -491,14 +442,14 @@
 				bind:form={rerun}
 				sources={sourceOptions}
 				seasons={seasonList.seasons}
-				{busy}
-				preview={preview && previewSource
-					? { changed: rows.filter((r) => r.changed).length, label: shortSourceLabel(previewSource) }
+				busy={runner.busy}
+				preview={runner.preview && runner.previewSource
+					? { changed: rows.filter((r) => r.changed).length, label: shortSourceLabel(runner.previewSource) }
 					: null}
-				onfieldchange={dropPreview}
-				onpreview={() => run(rerunRequest(rerun, false))}
-				ondiscard={dropPreview}
-				onapply={applyPreview}
+				onfieldchange={runner.drop}
+				onpreview={() => runner.run(rerunRequest(rerun, false))}
+				ondiscard={runner.drop}
+				onapply={runner.applyPreview}
 			>
 				{@render errorAlert()}
 			</RerunPanel>
@@ -512,8 +463,8 @@
 				fileNames={episodeIdentity.fileNames}
 				matching={view === 'matching'}
 				phone={phoneQuery.current}
-				proposedLabel={preview && previewSource ? shortSourceLabel(previewSource) : null}
-				optionsFor={canAct && !preview ? optionsFor : null}
+				proposedLabel={runner.preview && runner.previewSource ? shortSourceLabel(runner.previewSource) : null}
+				optionsFor={canAct && !runner.preview ? optionsFor : null}
 				seasons={seasonList.seasons}
 				panelSeason={discSeason}
 				onseason={setRowSeason}

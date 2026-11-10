@@ -7,9 +7,6 @@ import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$l
 // panel, so nothing here forces them:
 // - failed's `: []`: only the no-match alert reads it, and that state needs an
 //   identity.
-// - `req.source ?? null` in run: every request the panel sends has a source.
-// - applyPreview with no preview request: Apply only shows with a preview on
-//   screen.
 // - the `bind:form` setter on RerunPanel: RerunPanel changes the form's fields
 //   and never reassigns it.
 // - held's `: null` (when the panel is not showing a guess): the derived is
