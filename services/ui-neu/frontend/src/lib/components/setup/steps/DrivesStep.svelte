@@ -11,6 +11,7 @@
 	import { fetchIsoLibrary } from '$lib/api/iso';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { partitionDrives } from '$lib/utils/drives';
+	import { enrollBlockReason, isoStatus, type IsoStatus } from '$lib/utils/setup-drives';
 	import type { StepCommitResult } from '../steps';
 
 	// Step 3, the core step: enroll the drives to rip with (setup spec §5.4).
@@ -21,20 +22,13 @@
 	const drives = createPollingStore(fetchDrives, [] as DriveView[], 3000);
 	const parts = $derived(partitionDrives($drives));
 	let enrollDisabledReason = $state<string | null>(null);
-	let iso = $state<{ on: boolean; count: number; path: string | null } | null>(null);
+	let iso = $state<IsoStatus | null>(null);
 
 	onMount(async () => {
 		drives.start();
 		const [diag, lib] = await Promise.allSettled([fetchSystemDiagnostics(), fetchIsoLibrary()]);
-		if (diag.status === 'fulfilled') {
-			const rm = diag.value.checks.find((c) => c.name === 'ripper_manager');
-			if (rm && rm.status !== 'ok')
-				enrollDisabledReason = "Drives can't be enrolled until the ripper service is fixed. See System check.";
-		}
-		iso =
-			lib.status === 'fulfilled'
-				? { on: true, count: lib.value.entries.filter((e) => e.kind === 'iso').length, path: lib.value.host_path }
-				: { on: false, count: 0, path: null };
+		if (diag.status === 'fulfilled') enrollDisabledReason = enrollBlockReason(diag.value);
+		iso = isoStatus(lib.status === 'fulfilled' ? lib.value : null);
 	});
 	onDestroy(() => drives.stop());
 
