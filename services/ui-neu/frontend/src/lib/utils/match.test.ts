@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type { MetadataCandidate } from '$lib/types/api.gen';
-import { candidateKey, detailsId, formatVotes, formatYears, isSeriesKind, kindLabel, mergeCandidate } from './match';
+import {
+	candidateKey,
+	candidateSubtitle,
+	detailsId,
+	formatVotes,
+	formatYears,
+	isSeriesKind,
+	kindLabel,
+	mergeCandidate
+} from './match';
 
 const cand = (o: Partial<MetadataCandidate> = {}): MetadataCandidate => ({ title: 'K', kind: 'tv', ...o });
 
@@ -68,5 +77,28 @@ describe('match utils', () => {
 			rating_source: 'tvmaze',
 			episode_count: 20
 		});
+	});
+});
+
+describe('candidateSubtitle', () => {
+	it('joins the year and kind of a movie', () => {
+		expect(candidateSubtitle(cand({ kind: 'movie', year: 1999 }))).toBe('1999 · Movie');
+	});
+
+	it('shows the span of a finished series', () => {
+		const c = cand({ year: 1974, facts: { genres: [], cast: [], creators: [], end_year: 1975 } });
+		expect(candidateSubtitle(c)).toBe('1974–1975 · TV Series');
+	});
+
+	it('leaves out the years when there is no year', () => {
+		expect(candidateSubtitle(cand({ kind: 'movie' }))).toBe('Movie');
+	});
+
+	it('adds an extra part at the end', () => {
+		expect(candidateSubtitle(cand({ year: 2005 }), '20 episodes')).toBe('2005 · TV Series · 20 episodes');
+	});
+
+	it('leaves out an empty extra part', () => {
+		expect(candidateSubtitle(cand({ year: 2005 }), '')).toBe('2005 · TV Series');
 	});
 });

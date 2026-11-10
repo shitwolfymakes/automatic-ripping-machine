@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import { formatVotes, formatYears, isSeriesKind, kindLabel, RATING_LABEL } from '$lib/utils/match';
+	import { candidateSubtitle, formatVotes, isSeriesKind, RATING_LABEL } from '$lib/utils/match';
 
 	interface Props {
 		candidate: MetadataCandidate;
@@ -20,11 +20,7 @@
 	let facts = $derived(candidate.facts);
 	let imdb = $derived(candidate.external_ids?.imdb ?? null);
 	let episodes = $derived(facts?.episode_count ? `${facts.episode_count} episodes` : '');
-	let sub = $derived(
-		[formatYears(candidate.year, facts?.end_year, candidate.kind), kindLabel(candidate.kind), episodes]
-			.filter(Boolean)
-			.join(' · ')
-	);
+	let sub = $derived(candidateSubtitle(candidate, episodes));
 	let rows = $derived(
 		[
 			{ label: 'Genres', value: (facts?.genres ?? []).join(', ') },

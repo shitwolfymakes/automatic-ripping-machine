@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import { formatYears, kindLabel } from '$lib/utils/match';
+	import { candidateSubtitle } from '$lib/utils/match';
 
 	interface Props {
 		candidate: MetadataCandidate;
@@ -11,11 +11,7 @@
 
 	let { candidate, selected, onselect }: Props = $props();
 
-	let sub = $derived(
-		[formatYears(candidate.year, candidate.facts?.end_year, candidate.kind), kindLabel(candidate.kind)]
-			.filter(Boolean)
-			.join(' · ')
-	);
+	let sub = $derived(candidateSubtitle(candidate));
 	let cast = $derived((candidate.facts?.cast ?? []).slice(0, 2).join(', '));
 	let rating = $derived(candidate.facts?.rating ?? null);
 </script>
