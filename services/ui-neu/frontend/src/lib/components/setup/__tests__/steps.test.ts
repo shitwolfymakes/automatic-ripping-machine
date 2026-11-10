@@ -132,6 +132,10 @@ describe('setup step registry', () => {
 		expect(uiState('finish', 'drives', progress)).toBe('not-started');
 	});
 
+	it('gives only the notifications step a plain Skip for now button', () => {
+		expect(STEPS.filter((s) => s.skipEmphasis).map((s) => s.id)).toEqual(['notifications']);
+	});
+
 	it('copy has no em dashes or single-character ellipses', () => {
 		for (const s of STEPS) {
 			for (const text of [s.label, s.title, s.intro]) {

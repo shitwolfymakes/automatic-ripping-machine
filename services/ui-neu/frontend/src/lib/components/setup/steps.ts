@@ -12,6 +12,8 @@ export interface StepMeta {
 	optional: boolean;
 	/** 'continue': saved on Continue. 'live': the step's controls save as they change. */
 	saveHint: 'continue' | 'live';
+	/** Skip for now is drawn as a plain button rather than a link. */
+	skipEmphasis?: boolean;
 }
 
 export const STEPS: StepMeta[] = [
@@ -80,7 +82,8 @@ export const STEPS: StepMeta[] = [
 		title: 'Notifications',
 		intro: 'Get told when a rip finishes, needs you, or fails.',
 		optional: true,
-		saveHint: 'continue'
+		saveHint: 'continue',
+		skipEmphasis: true
 	},
 	{
 		id: 'finish',

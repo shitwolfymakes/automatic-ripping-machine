@@ -48,7 +48,7 @@
 				{#if step.optional}
 					<button
 						type="button"
-						class="btn {step.id === 'notifications' ? '' : 'btn-link'} setup-footer-skip"
+						class="btn {step.skipEmphasis ? '' : 'btn-link'} setup-footer-skip"
 						onclick={onskip}
 						disabled={busy}>Skip for now</button
 					>
