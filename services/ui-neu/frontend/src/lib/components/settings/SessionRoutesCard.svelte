@@ -17,6 +17,7 @@
 		withRoute
 	} from '$lib/utils/session-routes';
 	import { PendingKeys } from './pendingKeys.svelte';
+	import SessionRouteRow from './SessionRouteRow.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
@@ -108,35 +109,16 @@
 						{#each DISC_SCOPES as scope (scope.key ?? 'any')}
 							{@const route = routeFor(routes, mt.key, scope.key)}
 							{@const key = rowKey(mt.key, scope.key)}
-							{@const rowBusy = pending.has(key)}
-							{@const options = sessionsFor(sessions, mt.key, route)}
-							<div class="panel-section session-routes-card-row">
-								<span class="session-routes-card-scope-label">{scope.label}</span>
-								<select
-									id="route-{key}"
-									aria-label="{mt.label} / {scope.label} session"
-									value={route?.session_id ?? ''}
-									disabled={!$isAdmin || rowBusy || options.length === 0}
-									onchange={(e) => handleChange(mt.key, scope.key, (e.target as HTMLSelectElement).value)}
-									class="field-control session-routes-card-select"
-								>
-									<option value="">- none -</option>
-									{#each options as s (s.id)}
-										<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
-									{/each}
-								</select>
-								{#if $isAdmin && route}
-									<button
-										type="button"
-										onclick={() => handleClear(route)}
-										disabled={rowBusy}
-										aria-label="Clear {mt.label} / {scope.label} route"
-										class="btn btn-sm"
-									>
-										Clear
-									</button>
-								{/if}
-							</div>
+							<SessionRouteRow
+								rowId={key}
+								mediaLabel={mt.label}
+								scopeLabel={scope.label}
+								{route}
+								options={sessionsFor(sessions, mt.key, route)}
+								busy={pending.has(key)}
+								onchange={(sessionId) => handleChange(mt.key, scope.key, sessionId)}
+								onclear={handleClear}
+							/>
 						{/each}
 					</div>
 				</div>
@@ -221,22 +203,6 @@
 		border-color: var(--color-primary-tint-2);
 		background: none;
 		padding: 0.5rem 0.75rem;
-	}
-	.session-routes-card-scope-label {
-		width: 5rem;
-		flex-shrink: 0;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-	.session-routes-card-select {
-		min-width: 0;
-		flex: 1 1 0%;
-		width: auto;
-		min-height: 0;
-		padding: 0.375rem 0.5rem;
-		font-size: 0.75rem;
 	}
 	/* other-routes: API-created keys outside the grid; same row shape,
 	   muted single-line label. */

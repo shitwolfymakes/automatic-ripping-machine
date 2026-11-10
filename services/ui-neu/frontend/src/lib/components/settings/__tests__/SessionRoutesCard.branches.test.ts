@@ -7,9 +7,6 @@ import type { SessionRouteView, SessionView } from '$lib/types/api.gen';
 // forces it:
 // - The success side of the feedback banner's class: showFeedback is only
 //   ever called with 'error' in this card, so the banner is never a success.
-// The coverage tool also reports one on a session's `<option value={s.id}>`,
-// which is Svelte's, not the component's: it compiles the attribute to
-// `(option.__value = s.id) ?? ''`, and a session's id is never null.
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
