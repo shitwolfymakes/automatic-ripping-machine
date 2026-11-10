@@ -16,7 +16,7 @@
 	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, toConfig } from './channelActions';
+	import { createChannelFromBody, runTest, toConfig, type TestOutcome } from './channelActions';
 	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
@@ -100,18 +100,20 @@
 		return eventTypes[0]?.key ?? 'rip.completed';
 	}
 
-	async function handleTestSaved(c: Channel) {
-		addToast({ tone: 'info', title: `Sending test to ${c.name}...` });
-		const outcome = await runTest(() => testSendChannel(c.id, c.subscribed_events[0] ?? firstEventKey()));
+	// Toasts how a test send went.
+	function toastTestOutcome(outcome: TestOutcome): void {
 		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
 		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
 	}
 
+	async function handleTestSaved(c: Channel) {
+		addToast({ tone: 'info', title: `Sending test to ${c.name}...` });
+		toastTestOutcome(await runTest(() => testSendChannel(c.id, c.subscribed_events[0] ?? firstEventKey())));
+	}
+
 	// Test an unsaved config from the add form and toast the result.
 	async function testConfigAndToast(type: string, config: Record<string, unknown>, eventType: string) {
-		const outcome = await runTest(() => testConfig({ type, config, event_type: eventType }));
-		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
-		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
+		toastTestOutcome(await runTest(() => testConfig({ type, config, event_type: eventType })));
 	}
 
 	async function handleTestUnsaved(body: AddChannelBody) {
@@ -126,9 +128,7 @@
 			await handleTestSaved(c);
 			return;
 		}
-		const outcome = await runTest(() => testConfig(payload));
-		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
-		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
+		toastTestOutcome(await runTest(() => testConfig(payload)));
 	}
 
 	async function confirmDelete() {
