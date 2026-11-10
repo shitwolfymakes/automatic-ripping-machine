@@ -6,10 +6,8 @@ import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 import EventSubscriptions from '../EventSubscriptions.svelte';
 
 // Branch pins for EventSubscriptions, beside EventSubscriptions.svelte.test.ts.
-// Some branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - insertVariable's two `next || null` (the title's and the body's): the
-//   spliced text always holds the token, so it is never empty.
+// One branch cannot be reached from the rendered component, so nothing here
+// forces it:
 // - each option's `value={v}` in the values select: Svelte compiles in a check
 //   for an unchanged value and a `?? ''` for a null one. The each block is
 //   keyed by the value itself, so an option's value never changes, and the

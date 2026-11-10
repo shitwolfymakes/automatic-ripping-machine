@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import type { ChannelTemplate } from '$lib/types/notifications';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
+	import { withInput, spliceToken, withText, type TemplateField } from './eventTemplates';
 
 	let {
 		selected = $bindable(),
@@ -17,10 +18,9 @@
 
 	const overridable = $derived(inputs.filter((i) => !i.secret));
 
-	type FieldName = 'title' | 'body';
 	type FocusTarget = {
 		key: string;
-		field: FieldName;
+		field: TemplateField;
 		el: HTMLInputElement | HTMLTextAreaElement;
 		start: number;
 		end: number;
@@ -39,15 +39,12 @@
 		if (!templates[key]) templates[key] = { title: null, body: null };
 		return templates[key];
 	}
-	function rememberCaret(key: string, field: FieldName, el: HTMLInputElement | HTMLTextAreaElement) {
+	function rememberCaret(key: string, field: TemplateField, el: HTMLInputElement | HTMLTextAreaElement) {
 		active = { key, field, el, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length };
 	}
 	function setInput(key: string, inputKey: string, value: string) {
 		const t = ensure(key);
-		const next = { ...(t.inputs ?? {}) };
-		if (value === '') delete next[inputKey];
-		else next[inputKey] = value;
-		t.inputs = Object.keys(next).length ? next : null;
+		t.inputs = withInput(t.inputs, inputKey, value);
 	}
 	async function insertVariable(key: string, varName: string) {
 		const token = `{${varName}}`;
@@ -57,23 +54,14 @@
 				? active
 				: {
 						key,
-						field: 'title' as FieldName,
+						field: 'title' as TemplateField,
 						el: null,
 						start: (tmpl.title ?? '').length,
 						end: (tmpl.title ?? '').length
 					};
 		const current = (target.field === 'title' ? tmpl.title : tmpl.body) ?? '';
-		const start = Math.min(target.start, current.length);
-		const end = Math.min(target.end, current.length);
-		const next = current.slice(0, start) + token + current.slice(end);
-		templates = {
-			...templates,
-			[key]: {
-				title: target.field === 'title' ? next || null : (tmpl.title ?? null),
-				body: target.field === 'body' ? next || null : (tmpl.body ?? null)
-			}
-		};
-		const caret = start + token.length;
+		const { text, caret } = spliceToken(current, target.start, target.end, token);
+		templates = { ...templates, [key]: withText(tmpl, target.field, text) };
 		await tick();
 		if (target.el) {
 			target.el.focus();
