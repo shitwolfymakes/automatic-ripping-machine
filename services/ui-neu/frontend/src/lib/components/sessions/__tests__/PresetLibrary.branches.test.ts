@@ -5,9 +5,9 @@ import PresetLibrary from '../PresetLibrary.svelte';
 // Branch pins for PresetLibrary, beside PresetLibrary.svelte.test.ts. One
 // branch cannot be reached from the rendered component, so nothing here forces
 // it:
-// - The `?? 0` fallback in `(counts.all ?? 0) + 1`: the counts object starts
-//   as `{ all: 0 }` and `all` is only ever incremented, so it is never
-//   undefined when the loop reads it.
+// - The `?? 0` fallback in the chip's `presetTypeCounts[chip.key] ?? 0`:
+//   `countByMediaType` sets all six keys a chip reads (`all` and the five
+//   media types), 0 included, so it is never undefined.
 
 const rip = (id: string, name: string, mt: string, builtin = false) => ({
 	id,

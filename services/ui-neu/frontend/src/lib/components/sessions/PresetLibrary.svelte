@@ -2,6 +2,7 @@
 	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
 	import PresetRow from './PresetRow.svelte';
 	import { matchesFilters, type SourceFilter } from './listFilters';
+	import { countByMediaType } from '$lib/utils/sessions';
 
 	interface Props {
 		/** Which preset kind this tab shows. */
@@ -54,17 +55,7 @@
 	];
 
 	// Derive preset counts per media type for the active kind only
-	const presetTypeCounts = $derived(
-		(() => {
-			const counts: Record<string, number> = { all: 0 };
-			const source = kind === 'rip' ? ripPresets : transcodePresets;
-			for (const p of source) {
-				counts[p.media_type] = (counts[p.media_type] ?? 0) + 1;
-				counts.all = (counts.all ?? 0) + 1;
-			}
-			return counts;
-		})()
-	);
+	const presetTypeCounts = $derived(countByMediaType(kind === 'rip' ? ripPresets : transcodePresets));
 
 	// Filtered preset lists
 	const visibleRip = $derived(ripPresets.filter(matches));
