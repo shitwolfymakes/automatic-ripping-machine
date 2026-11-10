@@ -77,14 +77,14 @@ describe('PresetRow media type pill', () => {
 		['iso', 'ISO']
 	])('labels %s as %s and keeps the raw value in data-media', (media, label) => {
 		const { container } = renderRow('rip', ripPreset({ media_type: media, name: 'Zed' }));
-		const pill = container.querySelector('.preset-row-pill') as HTMLElement;
+		const pill = container.querySelector('.media-pill') as HTMLElement;
 		expect(pill.textContent?.trim()).toBe(label);
 		expect(pill.getAttribute('data-media')).toBe(media);
 	});
 
 	it('shows the raw value for a media type no table lists', () => {
 		const { container } = renderRow('rip', ripPreset({ media_type: 'hologram' }));
-		const pill = container.querySelector('.preset-row-pill') as HTMLElement;
+		const pill = container.querySelector('.media-pill') as HTMLElement;
 		expect(pill.textContent?.trim()).toBe('hologram');
 		expect(pill.getAttribute('data-media')).toBe('hologram');
 	});

@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { humanizeMediaType, humanizeOutputMode, humanizeTrackSelection } from '$lib/utils/preset-labels';
+	import { humanizeOutputMode, humanizeTrackSelection } from '$lib/utils/preset-labels';
 	import { onMount } from 'svelte';
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
+	import MediaPill from './MediaPill.svelte';
 	import RecipeStrip from './RecipeStrip.svelte';
 
 	interface Props {
@@ -36,19 +37,12 @@
 	);
 
 	let samplePath = $derived(resolveSample(session.output_path_template, session.media_type));
-
-	// Five media-type hues (movie/tv/music/data/iso) with no dedicated block:
-	// mapped onto existing tone/accent tokens, same soft-bg + accent-fg
-	// pairing as PosterImage.svelte's fallback tile (see PresetRow.svelte,
-	// which shares this exact pill and colour mapping).
 </script>
 
 <div class="panel-section session-card">
 	<div class="session-card-head">
 		<!-- Media type pill -->
-		<span class="badge badge-sm session-card-pill" data-media={session.media_type}>
-			{humanizeMediaType(session.media_type)}
-		</span>
+		<MediaPill mediaType={session.media_type} />
 
 		<!-- Name + BUILT-IN badge -->
 		<div class="session-card-name-wrap">
@@ -105,51 +99,6 @@
 		align-items: flex-start;
 		column-gap: 1rem;
 		row-gap: 0.5rem;
-	}
-	/* original: rounded px-2 py-0.5 text-xs font-semibold uppercase
-	   tracking-wide - badge-sm's own size/tracking/padding are tuned for
-	   the BUILT-IN tag look, smaller than this media pill's metrics, so
-	   both are restated here (see PresetRow.svelte's identical pill). */
-	.session-card-pill {
-		flex-shrink: 0;
-		padding: 0.125rem 0.5rem;
-		font-size: 0.75rem;
-		line-height: 1rem;
-		font-weight: 600;
-		letter-spacing: 0.025em;
-	}
-	.session-card-pill[data-media='movie'] {
-		background: var(--color-info-soft);
-		color: var(--color-on-info-soft);
-	}
-	.session-card-pill[data-media='tv'] {
-		background: color-mix(in srgb, var(--color-accent-3) 15%, transparent);
-		color: var(--color-accent-3);
-	}
-	.session-card-pill[data-media='music'] {
-		background: var(--color-success-soft);
-		color: var(--color-on-success-soft);
-	}
-	/* original gray-100 is within a few RGB units of this card's own
-	   surface background - visually no pill box, just bold text (see
-	   PresetRow.svelte's identical pill). */
-	.session-card-pill[data-media='data'] {
-		background: transparent;
-		color: var(--color-text-secondary);
-	}
-	/* dark WAS visible (gray-700 at 30% alpha) - the strict token set forbids
-	   a literal wash even where no dedicated neutral-grey role exists, so
-	   this collapses onto --color-backdrop (a fixed-black token, unlike
-	   --color-text which is near-white in dark mode and would lighten
-	   rather than darken the surface) scaled down via color-mix; recorded
-	   as a deviation if it pushes a screen over threshold. */
-	/* token collapse: scaled backdrop stands in for the literal grey wash */
-	:global(.dark) .session-card-pill[data-media='data'] {
-		background: color-mix(in srgb, var(--color-backdrop) 30%, transparent);
-	}
-	.session-card-pill[data-media='iso'] {
-		background: var(--color-warning-soft);
-		color: var(--color-on-warning-soft);
 	}
 	.session-card-name-wrap {
 		display: flex;
