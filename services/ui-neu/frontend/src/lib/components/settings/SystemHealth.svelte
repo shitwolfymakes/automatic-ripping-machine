@@ -21,6 +21,7 @@
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
+	import HealthCheckRow from './HealthCheckRow.svelte';
 
 	// Settings > System and the setup walkthrough's System check share this.
 	// `grouped`: Storage + Services panels with fix commands (setup spec §5.3).
@@ -199,15 +200,9 @@
 					<h3 id="system-health-other" class="system-health-title">Other checks</h3>
 					<ul class="mt-2">
 						{#each otherChecks as check (check.name)}
-							<li
-								class="list-row list-row-compact system-health-row"
-								data-testid="system-health-check"
-								data-status={check.status}
+							<HealthCheckRow testid="system-health-check" status={check.status} label={checkLabel(check.name)}
+								>{checkDetail(check)}</HealthCheckRow
 							>
-								<span class="status-dot" data-status={check.status}></span>
-								<span class="system-health-row-label">{checkLabel(check.name)}</span>
-								<span class="system-health-row-detail">{checkDetail(check)}</span>
-							</li>
 						{/each}
 					</ul>
 				</section>
@@ -260,23 +255,14 @@
 
 			<ul class="mt-3">
 				{#each result.checks as check (check.name)}
-					<li
-						class="list-row list-row-compact system-health-row"
-						data-testid="system-health-check"
-						data-status={check.status}
+					<HealthCheckRow testid="system-health-check" status={check.status} label={checkLabel(check.name)}
+						>{checkDetail(check)}</HealthCheckRow
 					>
-						<span class="status-dot" data-status={check.status}></span>
-						<span class="system-health-row-label">{checkLabel(check.name)}</span>
-						<span class="system-health-row-detail">{checkDetail(check)}</span>
-					</li>
 				{/each}
 				{#each result.paths as p (p.name)}
-					{@const st = pathState(p)}
-					<li class="list-row list-row-compact system-health-row" data-testid="system-health-path" data-status={st}>
-						<span class="status-dot" data-status={st}></span>
-						<span class="system-health-row-label">{p.name}</span>
-						<span class="system-health-row-detail"><code class="mono">{p.path}</code>, {pathDetail(p)}</span>
-					</li>
+					<HealthCheckRow testid="system-health-path" status={pathState(p)} label={p.name}
+						><code class="mono">{p.path}</code>, {pathDetail(p)}</HealthCheckRow
+					>
 				{/each}
 			</ul>
 		{:else}
@@ -316,27 +302,6 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-faint);
-	}
-	/* list-row is a grid whose column template the owning list sets; these
-	   rows are a simple inline label/status/detail line, not a data grid. */
-	.system-health-row {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.5rem;
-		cursor: default;
-	}
-	.system-health-row-label {
-		width: 10rem;
-		flex-shrink: 0;
-		color: var(--color-text);
-		font-size: 0.875rem;
-	}
-	/* the original detail text inherited the list's own text-sm (0.875rem)
-	   context, not panel-hint's smaller 0.75rem. */
-	.system-health-row-detail {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		color: var(--color-text-muted);
 	}
 	.system-health-summary-count {
 		margin-top: 0;
