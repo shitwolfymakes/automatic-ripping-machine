@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import type { DiscRouteSummary, SetupView } from '$lib/types/api.gen';
 	import RecipeStrip from '$lib/components/sessions/RecipeStrip.svelte';
-	import { resolveSample } from '$lib/components/sessions/sampleTokens';
 	import { fetchDiscRoutes } from '$lib/api/setup';
+	import { discKindLabel, exampleMovie, routeCells } from '$lib/utils/disc-routes';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
 	import type { StepCommitResult } from '../steps';
 
@@ -14,19 +14,12 @@
 	let fields: SetupConfigFields | undefined = $state();
 	let routes = $state<DiscRouteSummary[] | null>(null);
 
-	const KIND_LABEL: Record<string, string> = { movie: 'Movie', tv: 'TV', music: 'Music CD', data: 'Data', iso: 'ISO' };
-
 	onMount(async () => {
 		try {
 			routes = await fetchDiscRoutes();
 		} catch {
 			routes = [];
 		}
-	});
-
-	const example = $derived.by(() => {
-		const movie = routes?.find((r) => r.kind === 'movie' && r.output_template);
-		return movie?.output_template ? resolveSample(movie.output_template, 'movie') : null;
 	});
 
 	export async function commit(): Promise<StepCommitResult> {
@@ -46,21 +39,11 @@
 		{#if routes === null}
 			<p class="discs-step-help">Loading...</p>
 		{:else}
+			{@const example = exampleMovie(routes)}
 			{#each routes as r (r.kind)}
 				<div class="discs-step-row">
-					<span class="badge badge-sm discs-step-kind">{KIND_LABEL[r.kind] ?? r.kind}</span>
-					<RecipeStrip
-						cells={[
-							{ label: 'Rips', value: r.rip_summary, sub: r.session_name, empty: 'No session' },
-							{ label: 'Encodes', value: r.transcode_summary, empty: 'No encode' },
-							{
-								label: 'Lands in',
-								value: r.output_template ? resolveSample(r.output_template, r.kind) : null,
-								mono: true,
-								empty: 'Not set'
-							}
-						]}
-					/>
+					<span class="badge badge-sm discs-step-kind">{discKindLabel(r.kind)}</span>
+					<RecipeStrip cells={routeCells(r)} />
 				</div>
 			{/each}
 			{#if example}
