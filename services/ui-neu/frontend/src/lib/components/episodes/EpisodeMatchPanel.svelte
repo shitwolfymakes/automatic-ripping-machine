@@ -15,12 +15,12 @@
 		clearEpisodeMatch,
 		fetchEpisodes,
 		fetchIdentity,
-		fetchSeasons,
 		matchIdentity,
 		type EpisodeSource
 	} from '$lib/api/identity';
 	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
+	import { SeasonList } from '$lib/stores/seasonList.svelte';
 	import {
 		panelState,
 		buildRows,
@@ -73,8 +73,7 @@
 	let rerun = $state<RerunForm>({ ...NO_RERUN });
 	// The seasons of the re-run form's source while it is open, else of the
 	// picker's source (the per-row season select); null when the list could not load.
-	let seasons = $state<number[] | null>([]);
-	let seasonsKey = '';
+	const seasonList = new SeasonList();
 	let preview = $state<MatchPreview | null>(null);
 	let previewSource = $state<EpisodeSource | null>(null);
 	// The request that produced the preview on screen: Apply sends exactly it.
@@ -130,8 +129,7 @@
 		rerun = { ...NO_RERUN };
 		dropPreview();
 		lastRequest = null;
-		seasons = [];
-		seasonsKey = '';
+		seasonList.reset();
 		episodesBySeason = new Map();
 		episodesFor = '';
 		episodesRequested.clear();
@@ -275,20 +273,7 @@
 		const jobId = job.id;
 		void identity;
 		if (!src || !canAct) return;
-		const key = `${jobId}:${src}`;
-		if (key === seasonsKey) return;
-		seasonsKey = key;
-		untrack(() => (seasons = []));
-		fetchSeasons(jobId, src).then(
-			(r) => {
-				if (seasonsKey === key) seasons = r.seasons ?? [];
-			},
-			() => {
-				if (seasonsKey !== key) return;
-				seasons = null;
-				seasonsKey = '';
-			}
-		);
+		untrack(() => seasonList.follow(jobId, src));
 	});
 
 	// The identity tracks that hold an episode: their saved season is the row's.
@@ -564,7 +549,7 @@
 			<RerunPanel
 				bind:form={rerun}
 				sources={sourceOptions}
-				{seasons}
+				seasons={seasonList.seasons}
 				{busy}
 				preview={preview && previewSource
 					? { changed: rows.filter((r) => r.changed).length, label: shortSourceLabel(previewSource) }
@@ -588,7 +573,7 @@
 				phone={phoneQuery.current}
 				proposedLabel={preview && previewSource ? shortSourceLabel(previewSource) : null}
 				optionsFor={canAct && !preview ? optionsFor : null}
-				{seasons}
+				seasons={seasonList.seasons}
 				panelSeason={discSeason}
 				onseason={setRowSeason}
 				onpick={setByHand}
