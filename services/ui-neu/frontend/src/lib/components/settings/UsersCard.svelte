@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { reveal } from '$lib/transitions';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
 	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
@@ -8,6 +7,7 @@
 	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 	import { TimedFeedback } from './timedFeedback.svelte';
+	import FeedbackAlert from './FeedbackAlert.svelte';
 
 	let users = $state<UserView[]>([]);
 	let loading = $state(true);
@@ -58,11 +58,7 @@
 	<h3 class="users-card-title">Users</h3>
 	<p class="users-card-intro">Manage the admin password and guest access.</p>
 
-	{#if feedback.current}
-		<p in:reveal class="alert {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
-			{feedback.current.message}
-		</p>
-	{/if}
+	<FeedbackAlert feedback={feedback.current} />
 
 	{#if loading}
 		<p class="users-card-loading">Loading...</p>

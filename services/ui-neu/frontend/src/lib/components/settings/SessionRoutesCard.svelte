@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import { reveal } from '$lib/transitions';
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/sessionRoutes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
@@ -17,6 +16,7 @@
 		withRoute
 	} from '$lib/utils/session-routes';
 	import { PendingKeys } from './pendingKeys.svelte';
+	import FeedbackAlert from './FeedbackAlert.svelte';
 	import SessionRouteRow from './SessionRouteRow.svelte';
 	import { TimedFeedback } from './timedFeedback.svelte';
 
@@ -85,11 +85,7 @@
 		(DVD, Blu-ray, CD) beats the Any-disc wildcard for the same media type.
 	</p>
 
-	{#if feedback.current}
-		<p in:reveal class="alert {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
-			{feedback.current.message}
-		</p>
-	{/if}
+	<FeedbackAlert feedback={feedback.current} />
 
 	{#if loading}
 		<p class="session-routes-card-loading">Loading...</p>

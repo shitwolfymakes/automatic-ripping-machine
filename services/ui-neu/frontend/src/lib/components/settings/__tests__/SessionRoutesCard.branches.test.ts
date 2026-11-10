@@ -2,11 +2,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { SessionRouteView, SessionView } from '$lib/types/api.gen';
 
-// Branch pins for SessionRoutesCard, beside SessionRoutesCard.test.ts. One
-// branch cannot be reached from the rendered component, so nothing here
-// forces it:
-// - The success side of the feedback banner's class: this card only ever
-//   shows or holds an 'error', so the banner is never a success.
+// Branch pins for SessionRoutesCard, beside SessionRoutesCard.test.ts. No
+// branch is left open, so nothing here forces an unreachable one.
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
