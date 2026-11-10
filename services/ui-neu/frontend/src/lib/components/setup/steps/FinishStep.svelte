@@ -8,7 +8,6 @@
 	import { fetchConfigView } from '$lib/api/config';
 	import { fetchGpus } from '$lib/api/gpus';
 	import { fetchChannels } from '$lib/api/channels';
-	import { wsClient, type WSEnvelope } from '$lib/api/ws';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { setupSummaries } from '$lib/utils/setup-summaries';
@@ -21,7 +20,6 @@
 	const target = $derived(
 		$drives.find((d) => d.lifecycle === 'enrolled' && d.kind !== 'virtual' && d.status !== 'offline') ?? null
 	);
-	let ripStarted = $state(false);
 	let config = $state<ConfigView | null>(null);
 	let gpus = $state<GpuView[]>([]);
 	let channelCount = $state(0);
@@ -40,11 +38,6 @@
 	onMount(() => {
 		drives.start();
 		void loadSummaryData();
-		wsClient.start();
-		const unsubscribe = wsClient.subscribe('ripper.events', (env: WSEnvelope) => {
-			if (env.event_type === 'rip.started' && target && env.payload.drive_id === target.id) ripStarted = true;
-		});
-		return () => unsubscribe?.();
 	});
 	onDestroy(() => drives.stop());
 
@@ -58,7 +51,7 @@
 </script>
 
 <div class="stack stack-lg">
-	<FirstDiscCard {target} {ripStarted} />
+	<FirstDiscCard {target} />
 
 	<section class="panel stack">
 		<h2 class="finish-step-title">Your setup</h2>

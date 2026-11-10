@@ -1,10 +1,23 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { DriveView } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
+	import { wsClient, type WSEnvelope } from '$lib/api/ws';
 	import { driveTitle } from '$lib/utils/drives';
 
-	// The "Insert a disc to try it" card: what the watched drive is doing.
-	let { target, ripStarted }: { target: DriveView | null; ripStarted: boolean } = $props();
+	// The "Insert a disc to try it" card: what the watched drive is doing. It
+	// watches the ripper events itself to learn when a rip starts on that drive.
+	let { target }: { target: DriveView | null } = $props();
+
+	let ripStarted = $state(false);
+
+	onMount(() => {
+		wsClient.start();
+		const unsubscribe = wsClient.subscribe('ripper.events', (env: WSEnvelope) => {
+			if (env.event_type === 'rip.started' && target && env.payload.drive_id === target.id) ripStarted = true;
+		});
+		return () => unsubscribe?.();
+	});
 </script>
 
 <section class="panel first-disc-card" data-testid="finish-disc">
