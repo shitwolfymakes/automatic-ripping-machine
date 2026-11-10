@@ -1,16 +1,16 @@
 ---
 name: project-guidelines-audit
-description: Codebase-wide refactor to the CLAUDE.md development guidelines, tracked on wolfy #407; how to measure S3776 through SonarQube for IDE's local endpoint and how to resume
+description: The finished codebase-wide refactor to the CLAUDE.md development guidelines (wolfy #407); how to measure S3776 through SonarQube for IDE's local endpoint, and the coverage-measuring traps it hit
 metadata:
   type: project
 ---
 
-Tracker: shitwolfymakes/automatic-ripping-machine #407. One sub-issue per package,
-created when its phase starts (arm_common, transcode, site, ripper, backend,
-ui-neu), and one sub-issue per unit of work under its package. Commits go
-straight to `main`, one per refactoring-skill use (applied by a Sonnet
-subagent), with a test-only commit first when a symbol isn't fully covered.
-Each unit is pushed once its gate is green.
+Tracker: shitwolfymakes/automatic-ripping-machine #407, finished 2026-11-10.
+Every first-party package (arm_common, transcode, site, ripper, backend,
+ui-neu) has a closed sub-issue with its audit table and units. Sonar reports
+no S3776 in any of the 554 in-scope source files (77 at the 2026-11-05
+baseline). The tracker lists the defects found while pinning, which were filed
+and not fixed, and the deferred items that need an owner decision.
 
 **Measuring S3776 without the editor:** SonarQube for IDE's embedded server
 listens on the first free port in 64120-64130. Send
@@ -47,9 +47,22 @@ calls a closure-heavy function fully covered when its closures aren't. That
 hid real gaps in the ripper's `_execute_rip` (#453). Fold nested regions into
 the named symbol before judging it.
 
+**A file no test loads is not covered.** With `--coverage.include`, Vitest
+still lists a file no test imported, with empty statement, function and
+branch maps. A checker that counts missing entries calls it 100%. Treat empty
+maps as "not loaded" and fail. `vitest related` also misses tests that reach
+a component only through a route or a dynamic import (the setup step pages),
+so name the test files explicitly for those.
+
+**Svelte fallbacks that can't run.** A `$derived(x ? f(x) : [])` that is only
+read once `x` has loaded leaves its fallback arm unreachable. Work the value
+out inside the loaded branch (`{@const v = f(x)}`), or let the function take
+the possibly missing value through `x?.field`. V8 does not count optional
+chaining as a branch. Svelte also compiles `<option value>` and `{expr}` into
+`?? ''` arms that pin headers name rather than chase.
+
 **Why:** the owner wants the guidelines applied to existing code, with SonarQube
 for IDE as the complexity authority.
 
-**How to apply:** to resume, read #407 and find the open unit sub-issue that
-has a "started" comment. Then check `git status` and `git log origin/main..main`.
-Related: [[project-backend-coverage-push]].
+**How to apply:** for new work, use the same endpoint and the coverage rules
+above to meet the CLAUDE.md gate. Related: [[project-backend-coverage-push]].
