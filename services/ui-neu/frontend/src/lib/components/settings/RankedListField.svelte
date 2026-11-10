@@ -75,6 +75,13 @@
 		await tick();
 		announcement = `${labelOf(v)} moved to rank ${next.indexOf(v) + 1}`;
 		await tick();
+		focusAfterMove(v, dir);
+	}
+
+	/** After a move, focus stays on the moved row's button for the same
+	 *  direction, or goes to its other button once the row has reached that end
+	 *  and the first is disabled. */
+	function focusAfterMove(v: string, dir: RankDirection): void {
 		const same = document.getElementById(buttonId(v, dir)) as HTMLButtonElement | null;
 		const other = document.getElementById(buttonId(v, dir === 'up' ? 'down' : 'up')) as HTMLButtonElement | null;
 		(same && !same.disabled ? same : other)?.focus();
