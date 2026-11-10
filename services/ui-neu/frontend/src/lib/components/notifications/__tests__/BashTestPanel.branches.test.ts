@@ -9,8 +9,9 @@ import BashTestPanel from '../BashTestPanel.svelte';
 //   is always set there, and every preview the panel stores (from previewBash
 //   or from its own catch) carries an `env` object.
 // - The `?? ''` fallback Svelte compiles around `{e.label}` in the option
-//   text (`<option value={e.key}>{e.label}{customized(e.key) ? ...`): label
-//   is a required string on EventTypeInfo, so it is never nullish.
+//   text (`<option value={e.key}>{e.label}{isCustomized(templates[e.key])
+//   ? ...`): label is a required string on EventTypeInfo, so it is never
+//   nullish.
 
 const previewBash = vi.fn();
 vi.mock('$lib/api/channels', async (orig) => ({

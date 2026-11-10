@@ -2,6 +2,7 @@
 	import { ChevronRight } from 'lucide-svelte';
 	import { previewBash, type BashPreviewResult, type EventTypeInfo, type ScriptInput } from '$lib/api/channels';
 	import type { ChannelTemplate } from '$lib/types/notifications';
+	import { armContext, incompleteInput, isCustomized } from './bashResults';
 
 	let {
 		config,
@@ -19,14 +20,6 @@
 		inputs?: ScriptInput[];
 	} = $props();
 
-	// A missing required input is a form-completion hint, not a failure:
-	// name the field the way the Inputs block labels it.
-	const incomplete = $derived.by(() => {
-		const m = preview?.error?.match(/^input ([A-Z][A-Z0-9_]*) is required$/);
-		if (!m) return null;
-		return inputs.find((i) => i.key === m[1])?.label ?? m[1];
-	});
-
 	let open = $state(false);
 	let eventType = $state('');
 	let preview = $state<BashPreviewResult | null>(null);
@@ -34,15 +27,14 @@
 	let showAll = $state(false);
 	let lastRun = $state<BashPreviewResult['result'] | null>(null);
 
+	// A missing required input is a form-completion hint, not a failure:
+	// name the field the way the Inputs block labels it.
+	const incomplete = $derived(incompleteInput(preview?.error, inputs));
+
 	const subscribed = $derived(eventTypes.filter((e) => events.includes(e.key)));
 	$effect(() => {
 		if (!subscribed.some((e) => e.key === eventType)) eventType = subscribed[0]?.key ?? '';
 	});
-
-	function customized(key: string): boolean {
-		const t = templates[key];
-		return !!t && (!!t.title || !!t.body || !!(t.inputs && Object.keys(t.inputs).length));
-	}
 
 	function request(run: boolean) {
 		return {
@@ -98,7 +90,7 @@
 		}
 	}
 
-	const contextRows = $derived(Object.entries(preview?.env ?? {}).filter(([k]) => k.startsWith('ARM_')));
+	const contextRows = $derived(armContext(preview?.env ?? {}));
 	const visibleContext = $derived(showAll ? contextRows : contextRows.slice(0, 6));
 </script>
 
@@ -117,7 +109,7 @@
 					<span class="field-label">Simulate event</span>
 					<select aria-label="Simulate event" bind:value={eventType}>
 						{#each subscribed as e (e.key)}
-							<option value={e.key}>{e.label}{customized(e.key) ? ' (customized)' : ''}</option>
+							<option value={e.key}>{e.label}{isCustomized(templates[e.key]) ? ' (customized)' : ''}</option>
 						{/each}
 					</select>
 				</label>
