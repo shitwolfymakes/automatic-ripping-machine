@@ -11,6 +11,7 @@
 		STORAGE_LABELS,
 		checkLabel,
 		freeLabel,
+		inScope,
 		locationLabel,
 		pathDetail,
 		pathState,
@@ -35,8 +36,6 @@
 		onresult?: (r: SystemDiagnosticsResponse) => void;
 	} = $props();
 
-	const SYSTEM_STEP_CHECKS = new Set(['config', 'MEDIA_ROOT', 'RAW_ROOT', 'LOG_DIR', ...SERVICE_CHECKS]);
-
 	let result = $state<SystemDiagnosticsResponse | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -44,8 +43,7 @@
 
 	let storage = $state<StorageRoot[] | null>(null);
 
-	const inScope = (name: string) => scope === 'all' || SYSTEM_STEP_CHECKS.has(name);
-	const issues = $derived(result ? result.checks.filter((c) => c.status !== 'ok' && inScope(c.name)) : []);
+	const issues = $derived(result ? result.checks.filter((c) => c.status !== 'ok' && inScope(scope, c.name)) : []);
 	const pathIssues = $derived(result ? result.paths.filter((p) => !p.exists || !p.writable) : []);
 	const allOk = $derived(result !== null && issues.length === 0 && pathIssues.length === 0);
 	const problemCount = $derived(
@@ -54,7 +52,9 @@
 	const services = $derived(result ? result.checks.filter((c) => SERVICE_CHECKS.includes(c.name)) : []);
 	const otherChecks = $derived(
 		result
-			? result.checks.filter((c) => !SERVICE_CHECKS.includes(c.name) && !(c.name in STORAGE_LABELS) && inScope(c.name))
+			? result.checks.filter(
+					(c) => !SERVICE_CHECKS.includes(c.name) && !(c.name in STORAGE_LABELS) && inScope(scope, c.name)
+				)
 			: []
 	);
 

@@ -19,6 +19,22 @@ export const STORAGE_HELP: Record<string, string> = {
 /** The names of the checks that report a service. */
 export const SERVICE_CHECKS = ['ripper_manager', 'transcoder'];
 
+/** The checks the setup walkthrough's System step is about: the set
+ * the backend reconciles on (routers/setup.py _SYSTEM_STEP_CHECKS). */
+export const SYSTEM_STEP_CHECKS: ReadonlySet<string> = new Set([
+	'config',
+	'MEDIA_ROOT',
+	'RAW_ROOT',
+	'LOG_DIR',
+	...SERVICE_CHECKS
+]);
+
+/** Whether a check belongs to `scope`: every check for 'all', or only
+ * the System step's for 'system'. */
+export function inScope(scope: 'all' | 'system', name: string): boolean {
+	return scope === 'all' || SYSTEM_STEP_CHECKS.has(name);
+}
+
 // Operator-facing names for the backend's check keys.
 const CHECK_LABELS: Record<string, string> = {
 	config: 'Configuration',

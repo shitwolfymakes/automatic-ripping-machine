@@ -3,6 +3,7 @@ import type { PathStatus, StorageRoot, SystemDiagnosticCheck } from '$lib/types/
 import {
 	checkLabel,
 	freeLabel,
+	inScope,
 	locationLabel,
 	pathDetail,
 	pathState,
@@ -10,7 +11,8 @@ import {
 	SERVICE_CHECKS,
 	SERVICE_LABELS,
 	STORAGE_HELP,
-	STORAGE_LABELS
+	STORAGE_LABELS,
+	SYSTEM_STEP_CHECKS
 } from '../system-health';
 
 const check = (over: Partial<SystemDiagnosticCheck>): SystemDiagnosticCheck => ({
@@ -131,5 +133,27 @@ describe('freeLabel', () => {
 
 	it('says Measuring... when no root has that name', () => {
 		expect(freeLabel([root('RAW_ROOT', 1)], 'MEDIA_ROOT')).toBe('Measuring...');
+	});
+});
+
+describe('SYSTEM_STEP_CHECKS', () => {
+	it('holds the config, the three storage roots and the two services', () => {
+		expect([...SYSTEM_STEP_CHECKS].sort()).toEqual(
+			['config', 'MEDIA_ROOT', 'RAW_ROOT', 'LOG_DIR', 'ripper_manager', 'transcoder'].sort()
+		);
+	});
+});
+
+describe('inScope', () => {
+	it('takes any check for all', () => {
+		expect(inScope('all', 'drives')).toBe(true);
+	});
+
+	it('takes a System step check for system', () => {
+		expect(inScope('system', 'config')).toBe(true);
+	});
+
+	it('leaves out any other check for system', () => {
+		expect(inScope('system', 'drives')).toBe(false);
 	});
 });
