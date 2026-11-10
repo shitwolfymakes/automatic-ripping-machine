@@ -75,6 +75,18 @@ export function serviceBadge(status: string): {
 	return { text: 'Problem', tone: 'warning', glyph: 'warning' };
 }
 
+/** A service card's one-line description: what the ripper manager or
+ * the transcoder can do, given its status and where it runs. */
+export function serviceDescription(c: Pick<SystemDiagnosticCheck, 'name' | 'status' | 'location'>): string {
+	if (c.name === 'ripper_manager') {
+		return c.status === 'ok'
+			? 'ARM can start a ripper for each drive you enroll.'
+			: "ARM can't start a ripper for your drives. Drives can't be enrolled until this is fixed.";
+	}
+	if (c.location === 'none') return 'This install only rips; encoding happens elsewhere or not at all.';
+	return c.status === 'ok' ? 'Encode containers can run.' : "Encode containers can't start right now.";
+}
+
 /** Where a service runs: "This server", or "Remote host <name>"
  * ("Remote host" when the name is missing). Null for any other location. */
 export function serviceHost(c: Pick<SystemDiagnosticCheck, 'location' | 'remote_host'>): string | null {

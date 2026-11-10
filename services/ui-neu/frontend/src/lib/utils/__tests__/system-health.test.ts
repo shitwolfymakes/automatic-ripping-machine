@@ -8,6 +8,7 @@ import {
 	pathDetail,
 	pathState,
 	serviceBadge,
+	serviceDescription,
 	serviceHost,
 	SERVICE_CHECKS,
 	SERVICE_LABELS,
@@ -53,6 +54,36 @@ describe('checkLabel', () => {
 
 	it('returns an unknown key as itself', () => {
 		expect(checkLabel('something_new')).toBe('something_new');
+	});
+});
+
+describe('serviceDescription', () => {
+	it('says the ripper manager can start a ripper when ok', () => {
+		expect(serviceDescription(check({ name: 'ripper_manager', status: 'ok' }))).toBe(
+			'ARM can start a ripper for each drive you enroll.'
+		);
+	});
+
+	it('says drives cannot be enrolled when the ripper manager is not ok', () => {
+		expect(serviceDescription(check({ name: 'ripper_manager', status: 'error' }))).toBe(
+			"ARM can't start a ripper for your drives. Drives can't be enrolled until this is fixed."
+		);
+	});
+
+	it('says the install only rips for a transcoder with location none', () => {
+		expect(serviceDescription(check({ location: 'none', status: 'error' }))).toBe(
+			'This install only rips; encoding happens elsewhere or not at all.'
+		);
+	});
+
+	it('says encode containers can run for an ok transcoder elsewhere', () => {
+		expect(serviceDescription(check({ location: 'local', status: 'ok' }))).toBe('Encode containers can run.');
+	});
+
+	it('says encode containers cannot start for a transcoder that is not ok', () => {
+		expect(serviceDescription(check({ location: 'local', status: 'error' }))).toBe(
+			"Encode containers can't start right now."
+		);
 	});
 });
 

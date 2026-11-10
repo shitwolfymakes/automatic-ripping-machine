@@ -15,7 +15,8 @@
 		locationLabel,
 		pathDetail,
 		pathState,
-		serviceBadge
+		serviceBadge,
+		serviceDescription
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
@@ -168,21 +169,7 @@
 							<div class="system-health-item-head">
 								<div>
 									<span class="system-health-item-name">{SERVICE_LABELS[c.name] ?? c.name}</span>
-									{#if c.name === 'ripper_manager'}
-										<p class="system-health-description">
-											{c.status === 'ok'
-												? 'ARM can start a ripper for each drive you enroll.'
-												: "ARM can't start a ripper for your drives. Drives can't be enrolled until this is fixed."}
-										</p>
-									{:else}
-										<p class="system-health-description">
-											{c.location === 'none'
-												? 'This install only rips; encoding happens elsewhere or not at all.'
-												: c.status === 'ok'
-													? 'Encode containers can run.'
-													: "Encode containers can't start right now."}
-										</p>
-									{/if}
+									<p class="system-health-description">{serviceDescription(c)}</p>
 								</div>
 								<span class="badge badge-sm badge-{b.tone}"><Glyph name={b.glyph} class="h-3 w-3" /> {b.text}</span>
 							</div>
