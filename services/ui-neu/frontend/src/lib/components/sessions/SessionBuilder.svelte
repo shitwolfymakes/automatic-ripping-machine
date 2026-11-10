@@ -3,7 +3,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
 	import OutputPathField from './OutputPathField.svelte';
-	import { parseOverrides } from './sessionForm';
+	import { parseOverrides, sessionUpdate, sessionCreate, type SessionForm } from './sessionForm';
 
 	interface Props {
 		session?: JoinedSession | null;
@@ -111,30 +111,13 @@
 			return;
 		}
 
+		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parsedOverrides };
+
 		submitting = true;
 		try {
-			let result: SessionView;
-			if (isEdit && session) {
-				// media_type is immutable on edit — never send it. The update schema
-				// has no media_type field, so omit it rather than rely on the backend
-				// silently dropping an extra key.
-				result = await updateSession(session.id, {
-					name,
-					rip_preset_id: ripId,
-					transcode_preset_id: tcId || null,
-					output_path_template: template,
-					overrides_json: parsedOverrides
-				});
-			} else {
-				result = await createSession({
-					name,
-					media_type: mediaType,
-					rip_preset_id: ripId,
-					transcode_preset_id: tcId || null,
-					output_path_template: template,
-					overrides_json: parsedOverrides
-				});
-			}
+			const result = session
+				? await updateSession(session.id, sessionUpdate(form))
+				: await createSession(sessionCreate(form));
 			onsaved(result);
 		} catch (err) {
 			submitError = err instanceof Error ? err.message : 'Failed to save session';
