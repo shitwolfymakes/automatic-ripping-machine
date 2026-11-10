@@ -1,5 +1,5 @@
 <script lang="ts">
-	export type ChannelFilter = 'all' | 'enabled' | 'paused' | 'issues';
+	import type { ChannelFilter } from './channelFilters';
 	let {
 		active,
 		counts,

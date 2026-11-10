@@ -12,7 +12,8 @@
 	import type { EventTypeInfo } from '$lib/api/channels';
 	import { addToast } from '$lib/stores/toast.svelte';
 	import StatStrip from './StatStrip.svelte';
-	import FilterPills, { type ChannelFilter } from './FilterPills.svelte';
+	import FilterPills from './FilterPills.svelte';
+	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
 	import { createChannelFromBody, toConfig } from './channelActions';
@@ -53,22 +54,9 @@
 		}
 	}
 
-	const counts = $derived({
-		total: channels.length,
-		issues: channels.filter((c) => c.last_error).length,
-		subscribedEvents: new Set(channels.flatMap((c) => c.subscribed_events)).size
-	});
-	const filterCounts = $derived({
-		all: channels.length,
-		enabled: channels.filter((c) => c.enabled).length,
-		paused: channels.filter((c) => !c.enabled).length,
-		issues: channels.filter((c) => c.last_error).length
-	});
-	const visible = $derived(
-		channels.filter((c) =>
-			filter === 'all' ? true : filter === 'enabled' ? c.enabled : filter === 'paused' ? !c.enabled : !!c.last_error
-		)
-	);
+	const counts = $derived(summaryCounts(channels));
+	const pillCounts = $derived(filterCounts(channels));
+	const visible = $derived(channels.filter((c) => matchesFilter(c, filter)));
 
 	function serviceNameFor(c: Channel): string {
 		return c.type === 'apprise' ? 'Service' : c.type;
@@ -232,7 +220,7 @@
 
 		{#if channels.length > 0}
 			<div class="panel-section notifications-tab-toolbar">
-				<FilterPills active={filter} counts={filterCounts} onselect={(f) => (filter = f)} />
+				<FilterPills active={filter} counts={pillCounts} onselect={(f) => (filter = f)} />
 				{#if !addOpen}
 					<button
 						type="button"
