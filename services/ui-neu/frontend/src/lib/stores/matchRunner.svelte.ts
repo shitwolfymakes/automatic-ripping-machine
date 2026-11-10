@@ -17,6 +17,15 @@ export interface MatchRunHost {
 	reload: () => Promise<void>;
 }
 
+/** The error line of a run that failed: what the source said, and that
+ * nothing changed, naming the placement still on screen. */
+function matchErrorLine(label: string, error: unknown, placementLabel: string | null): string {
+	const still = placementLabel
+		? ` the placement below is still ${placementLabel}'s.`
+		: ' the placement below is unchanged.';
+	return `${label} didn't answer (${error instanceof Error ? error.message : 'error'}). Nothing changed;${still}`;
+}
+
 export class MatchRunner {
 	preview = $state<MatchPreview | null>(null);
 	previewSource = $state<EpisodeSource | null>(null);
@@ -73,23 +82,26 @@ export class MatchRunner {
 				if (stale()) return;
 				throw new Error(failed.detail ?? 'error');
 			}
-			if (req.apply) {
-				this.drop();
-				this.#host.closeForm();
-				await this.#host.reload();
-			} else {
-				this.preview = out;
-				this.previewSource = req.source ?? null;
-				this.#previewRequest = req;
-			}
+			await this.#keep(req, out);
 		} catch (e) {
 			if (stale()) return;
-			const still = this.#host.placementLabel()
-				? ` the placement below is still ${this.#host.placementLabel()}'s.`
-				: ' the placement below is unchanged.';
-			this.error = `${label} didn't answer (${e instanceof Error ? e.message : 'error'}). Nothing changed;${still}`;
+			this.error = matchErrorLine(label, e, this.#host.placementLabel());
 		} finally {
 			this.busy = false;
+		}
+	};
+
+	/** Keeps what a run that landed leaves: an apply drops the preview,
+	 * closes the form and reloads; a preview goes on screen. */
+	#keep = async (req: MatchRequest, out: MatchPreview): Promise<void> => {
+		if (req.apply) {
+			this.drop();
+			this.#host.closeForm();
+			await this.#host.reload();
+		} else {
+			this.preview = out;
+			this.previewSource = req.source ?? null;
+			this.#previewRequest = req;
 		}
 	};
 
