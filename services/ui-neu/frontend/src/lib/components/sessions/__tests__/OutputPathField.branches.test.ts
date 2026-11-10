@@ -4,12 +4,8 @@ vi.mock('$lib/api/sessions', () => ({ previewTemplate: vi.fn() }));
 import { previewTemplate } from '$lib/api/sessions';
 import OutputPathField from '../OutputPathField.svelte';
 
-// Branch pins for OutputPathField, beside OutputPathField.svelte.test.ts. One
-// branch cannot be reached from the rendered component, so nothing here
-// forces it:
-// - The false side of the effect cleanup's `if (debounceTimer)`: the effect
-//   returns its cleanup only right after it has set a timer, so the handle is
-//   always set when the cleanup runs.
+// Branch pins for OutputPathField, beside OutputPathField.svelte.test.ts. No
+// branch is left open.
 
 beforeEach(() => {
 	vi.useFakeTimers();

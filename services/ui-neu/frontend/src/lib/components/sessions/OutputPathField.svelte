@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { MediaType } from '$lib/types/api.gen';
-	import { previewTemplate } from '$lib/api/sessions';
+	import type { MediaType, TemplatePreviewRequest } from '$lib/types/api.gen';
 	import { mediaTokens } from './sampleTokens';
+	import { TemplatePreview } from './templatePreview.svelte';
 
 	interface Props {
 		value: string;
@@ -17,51 +17,33 @@
 	// Tokens that commonly have no value; each gets an extra chip inserting {token?}.
 	const OPTIONAL_CHIPS = new Set(['year']);
 
-	let expansion = $state<string | null>(null);
-	let expansionWithoutOptional = $state<string | null>(null);
-	let previewError = $state<string | null>(null);
-	// Non-reactive — just a handle for clearTimeout; must NOT be $state (would cause effect cycles)
-	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const preview = new TemplatePreview();
+
+	// Built when the preview's wait ends, so it reads has_transcode_preset
+	// then (#600).
+	function previewRequest(template: string, type: MediaType): TemplatePreviewRequest {
+		const body: TemplatePreviewRequest = { template, media_type: type };
+		if (has_transcode_preset !== undefined) {
+			body.has_transcode_preset = has_transcode_preset;
+		}
+		return body;
+	}
 
 	$effect(() => {
 		// Access reactive values to track them
 		const template = value;
 		const type = mediaType;
 
-		if (debounceTimer !== null) {
-			clearTimeout(debounceTimer);
-		}
+		preview.cancel();
 
 		if (!template) {
-			expansion = null;
-			expansionWithoutOptional = null;
-			previewError = null;
+			preview.clear();
 			return;
 		}
 
-		debounceTimer = setTimeout(async () => {
-			try {
-				const body: { template: string; media_type: MediaType; has_transcode_preset?: boolean } = {
-					template,
-					media_type: type
-				};
-				if (has_transcode_preset !== undefined) {
-					body.has_transcode_preset = has_transcode_preset;
-				}
-				const result = await previewTemplate(body);
-				expansion = result.expansion;
-				expansionWithoutOptional = result.expansion_without_optional ?? null;
-				previewError = null;
-			} catch (err) {
-				previewError = err instanceof Error ? err.message : String(err);
-				expansion = null;
-				expansionWithoutOptional = null;
-			}
-		}, 300);
+		preview.schedule(() => previewRequest(template, type));
 
-		return () => {
-			if (debounceTimer) clearTimeout(debounceTimer);
-		};
+		return preview.cancel;
 	});
 
 	function insertToken(token: string, optional = false) {
@@ -111,22 +93,22 @@
 	{/if}
 
 	<!-- Live preview -->
-	{#if expansion !== null}
+	{#if preview.expansion !== null}
 		<div class="output-path-field-preview">
 			<span class="output-path-field-preview-label">LIVE PREVIEW</span>
-			<span class="mono output-path-field-preview-value">{expansion}</span>
+			<span class="mono output-path-field-preview-value">{preview.expansion}</span>
 		</div>
 	{/if}
-	{#if expansion !== null && expansionWithoutOptional !== null}
+	{#if preview.expansion !== null && preview.expansionWithoutOptional !== null}
 		<div class="output-path-field-preview">
 			<span class="output-path-field-preview-label">WITH OPTIONAL VALUES EMPTY</span>
-			<span class="mono output-path-field-preview-value">{expansionWithoutOptional}</span>
+			<span class="mono output-path-field-preview-value">{preview.expansionWithoutOptional}</span>
 		</div>
 	{/if}
-	{#if previewError !== null}
+	{#if preview.error !== null}
 		<div class="output-path-field-preview output-path-field-preview-error">
 			<span class="output-path-field-preview-label output-path-field-error-label">PREVIEW ERROR</span>
-			<span class="mono output-path-field-preview-value output-path-field-error-value">{previewError}</span>
+			<span class="mono output-path-field-preview-value output-path-field-error-value">{preview.error}</span>
 		</div>
 	{/if}
 </div>
