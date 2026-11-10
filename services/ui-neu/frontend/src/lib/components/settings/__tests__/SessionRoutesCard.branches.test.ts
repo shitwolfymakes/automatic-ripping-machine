@@ -5,8 +5,8 @@ import type { SessionRouteView, SessionView } from '$lib/types/api.gen';
 // Branch pins for SessionRoutesCard, beside SessionRoutesCard.test.ts. One
 // branch cannot be reached from the rendered component, so nothing here
 // forces it:
-// - The success side of the feedback banner's class: showFeedback is only
-//   ever called with 'error' in this card, so the banner is never a success.
+// - The success side of the feedback banner's class: this card only ever
+//   shows or holds an 'error', so the banner is never a success.
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');

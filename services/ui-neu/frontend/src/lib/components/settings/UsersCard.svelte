@@ -7,10 +7,11 @@
 	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
+	import { TimedFeedback } from './timedFeedback.svelte';
 
 	let users = $state<UserView[]>([]);
 	let loading = $state(true);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback();
 
 	const admin = $derived(users.find((u) => u.role === 'admin') ?? null);
 	const guest = $derived(users.find((u) => u.role === 'guest') ?? null);
@@ -25,20 +26,13 @@
 		try {
 			users = await fetchUsers();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to load users' };
+			feedback.hold('error', e instanceof Error ? e.message : 'Failed to load users');
 		} finally {
 			loading = false;
 		}
 	}
 
 	onMount(load);
-
-	function showFeedback(type: 'success' | 'error', message: string) {
-		feedback = { type, message };
-		setTimeout(() => {
-			feedback = null;
-		}, 4000);
-	}
 
 	function closePanel() {
 		panel = null;
@@ -50,7 +44,7 @@
 
 	function handleAdminPasswordSuccess() {
 		closePanel();
-		showFeedback('success', 'Admin password changed');
+		feedback.show('success', 'Admin password changed');
 	}
 
 	// bg-blue-100/text-blue-700 and bg-amber-100/text-amber-700 were soft
@@ -64,9 +58,9 @@
 	<h3 class="users-card-title">Users</h3>
 	<p class="users-card-intro">Manage the admin password and guest access.</p>
 
-	{#if feedback}
-		<p in:reveal class="alert {feedback.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
-			{feedback.message}
+	{#if feedback.current}
+		<p in:reveal class="alert {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
+			{feedback.current.message}
 		</p>
 	{/if}
 
@@ -101,9 +95,9 @@
 				{guest}
 				onsaved={async (enabled) => {
 					await load();
-					showFeedback('success', enabled ? 'Guest access enabled' : 'Guest access disabled');
+					feedback.show('success', enabled ? 'Guest access enabled' : 'Guest access disabled');
 				}}
-				onerror={(message) => showFeedback('error', message)}
+				onerror={(message) => feedback.show('error', message)}
 			/>
 		</div>
 	{/if}

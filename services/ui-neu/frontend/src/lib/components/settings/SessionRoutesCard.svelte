@@ -18,11 +18,12 @@
 	} from '$lib/utils/session-routes';
 	import { PendingKeys } from './pendingKeys.svelte';
 	import SessionRouteRow from './SessionRouteRow.svelte';
+	import { TimedFeedback } from './timedFeedback.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
 	let loading = $state(true);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback();
 	// Row keys currently in flight (upsert or delete), keyed by "media_type/disc_type".
 	const pending = new PendingKeys();
 
@@ -31,20 +32,13 @@
 		try {
 			[routes, sessions] = await Promise.all([fetchSessionRoutes(), fetchSessions()]);
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to load session routes' };
+			feedback.hold('error', e instanceof Error ? e.message : 'Failed to load session routes');
 		} finally {
 			loading = false;
 		}
 	}
 
 	onMount(load);
-
-	function showFeedback(type: 'success' | 'error', message: string) {
-		feedback = { type, message };
-		setTimeout(() => {
-			feedback = null;
-		}, 4000);
-	}
 
 	async function handleChange(mediaType: MediaType, discType: DiscType | null, sessionId: string) {
 		if (!sessionId) {
@@ -63,7 +57,7 @@
 				const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
 				routes = withRoute(routes, mediaType, discType, saved);
 			} catch (e) {
-				showFeedback('error', e instanceof Error ? e.message : 'Failed to save route');
+				feedback.show('error', e instanceof Error ? e.message : 'Failed to save route');
 				await load();
 			}
 		});
@@ -76,7 +70,7 @@
 				await deleteSessionRoute(route.id);
 				routes = routes.filter((r) => r.id !== route.id);
 			} catch (e) {
-				showFeedback('error', e instanceof Error ? e.message : 'Failed to clear route');
+				feedback.show('error', e instanceof Error ? e.message : 'Failed to clear route');
 				await load();
 			}
 		});
@@ -91,9 +85,9 @@
 		(DVD, Blu-ray, CD) beats the Any-disc wildcard for the same media type.
 	</p>
 
-	{#if feedback}
-		<p in:reveal class="alert {feedback.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
-			{feedback.message}
+	{#if feedback.current}
+		<p in:reveal class="alert {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'} mb-3">
+			{feedback.current.message}
 		</p>
 	{/if}
 
