@@ -2,6 +2,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
 	import SessionCard from './SessionCard.svelte';
+	import { matchesFilters, matchesTranscode, type SourceFilter, type TranscodeFilter } from './listFilters';
 
 	interface Props {
 		sessions: JoinedSession[];
@@ -17,8 +18,8 @@
 
 	// Local filter state
 	let search = $state('');
-	let sourceFilter = $state<'all' | 'builtin' | 'custom'>('all');
-	let transcodeFilter = $state<'any' | 'has' | 'none'>('any');
+	let sourceFilter = $state<SourceFilter>('all');
+	let transcodeFilter = $state<TranscodeFilter>('any');
 	let typeFilter = $state<MediaType | 'all'>('all');
 
 	// Media type chips
@@ -33,21 +34,10 @@
 
 	// Derived visible list applying all filters
 	const visible = $derived(
-		sessions.filter((s) => {
-			// Search filter
-			if (search.trim() && !s.name.toLowerCase().includes(search.trim().toLowerCase())) {
-				return false;
-			}
-			// Source filter
-			if (sourceFilter === 'builtin' && !s.is_builtin) return false;
-			if (sourceFilter === 'custom' && s.is_builtin) return false;
-			// Transcode filter
-			if (transcodeFilter === 'has' && s.transcode_preset_id == null) return false;
-			if (transcodeFilter === 'none' && s.transcode_preset_id != null) return false;
-			// Type filter
-			if (typeFilter !== 'all' && s.media_type !== typeFilter) return false;
-			return true;
-		})
+		sessions.filter(
+			(s) =>
+				matchesFilters(s, { type: typeFilter, source: sourceFilter, search }) && matchesTranscode(s, transcodeFilter)
+		)
 	);
 
 	// Skeleton count for loading state

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
 	import PresetRow from './PresetRow.svelte';
+	import { matchesFilters, type SourceFilter } from './listFilters';
 
 	interface Props {
 		/** Which preset kind this tab shows. */
@@ -37,15 +38,10 @@
 
 	let typeFilter = $state<MediaType | 'all'>('all');
 	let search = $state('');
-	let sourceFilter = $state<'all' | 'builtin' | 'custom'>('all');
+	let sourceFilter = $state<SourceFilter>('all');
 
 	function matches(p: RipPresetView | TranscodePresetView): boolean {
-		if (typeFilter !== 'all' && p.media_type !== typeFilter) return false;
-		if (sourceFilter === 'builtin' && !p.is_builtin) return false;
-		if (sourceFilter === 'custom' && p.is_builtin) return false;
-		const q = search.trim().toLowerCase();
-		if (q && !p.name.toLowerCase().includes(q)) return false;
-		return true;
+		return matchesFilters(p, { type: typeFilter, source: sourceFilter, search });
 	}
 
 	const MEDIA_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
