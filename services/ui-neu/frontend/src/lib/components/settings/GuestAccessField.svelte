@@ -4,26 +4,21 @@
 	import { fetchUsers, setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
-	// Guest access on/off, shared by Settings > Users and the setup walkthrough.
-	// Settings: an immediate-effect Toggle. Setup (`deferred`): a checkbox that
-	// saves when the parent calls `save()` on Continue. Pass `guest` when the
-	// parent already has the users list; otherwise the field loads it.
+	// Guest access on/off for Settings > Users: an immediate-effect Toggle.
+	// Pass `guest` when the parent already has the users list; otherwise the
+	// field loads it.
 	let {
 		guest: guestProp,
-		deferred = false,
 		onsaved,
 		onerror
 	}: {
 		guest?: UserView | null;
-		deferred?: boolean;
 		onsaved?: (enabled: boolean) => void;
 		onerror?: (message: string) => void;
 	} = $props();
 
 	let loaded = $state<UserView | null>(null);
 	const guest = $derived(guestProp !== undefined ? guestProp : loaded);
-	// Follows the account until the operator ticks it; save() persists it.
-	let checked = $derived(guest ? !guest.disabled : false);
 	let saving = $state(false);
 
 	onMount(async () => {
@@ -51,12 +46,6 @@
 		}
 	}
 
-	/** Deferred mode: persist the checkbox if it changed. */
-	export async function save(): Promise<void> {
-		if (!guest || checked === !guest.disabled) return;
-		await apply(checked);
-	}
-
 	async function toggle(next: boolean) {
 		try {
 			await apply(next);
@@ -67,42 +56,21 @@
 </script>
 
 {#if guest}
-	{#if deferred}
-		<label class="field field-row guest-access-field" data-testid="guest-access-row">
-			<input type="checkbox" bind:checked disabled={saving} />
-			<span>
-				<span class="guest-access-field-label">Let anyone on my network view ARM without signing in (read-only)</span>
-				<span class="field-help">Guests can see everything but change nothing. Off by default.</span>
-			</span>
-		</label>
-	{:else}
-		<div class="panel-section guest-access-field-row" data-testid="guest-access-row">
-			<div class="field guest-access-field-info">
-				<span class="field-label">Guest access</span>
-				<p class="field-help">
-					Let anyone on the network browse without signing in. Guests can view but not change anything.
-				</p>
-			</div>
-			<div class="flex shrink-0 items-center gap-2">
-				<span class="guest-access-field-state">{guest.disabled ? 'Off' : 'On'}</span>
-				<Toggle checked={!guest.disabled} label="guest" onchange={toggle} disabled={saving} />
-			</div>
+	<div class="panel-section guest-access-field-row" data-testid="guest-access-row">
+		<div class="field guest-access-field-info">
+			<span class="field-label">Guest access</span>
+			<p class="field-help">
+				Let anyone on the network browse without signing in. Guests can view but not change anything.
+			</p>
 		</div>
-	{/if}
+		<div class="flex shrink-0 items-center gap-2">
+			<span class="guest-access-field-state">{guest.disabled ? 'Off' : 'On'}</span>
+			<Toggle checked={!guest.disabled} label="guest" onchange={toggle} disabled={saving} />
+		</div>
+	</div>
 {/if}
 
 <style>
-	.guest-access-field {
-		align-items: flex-start;
-		gap: 0.625rem;
-	}
-	.guest-access-field input {
-		margin-top: 0.25rem;
-	}
-	.guest-access-field-label {
-		display: block;
-		color: var(--color-text);
-	}
 	/* matches UsersCard's row chrome, which this row sits beside */
 	.guest-access-field-row {
 		display: flex;
