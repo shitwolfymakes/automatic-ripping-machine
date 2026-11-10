@@ -5,7 +5,16 @@
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/sessionRoutes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
-	import { mediaTypesCompatible } from '$lib/utils/sessions';
+	import {
+		DISC_SCOPES,
+		MEDIA_TYPES,
+		discLabel,
+		otherRoutes,
+		routeFor,
+		rowKey,
+		sessionNameFor,
+		sessionsFor
+	} from '$lib/utils/session-routes';
 	import { PendingKeys } from './pendingKeys.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
@@ -14,65 +23,6 @@
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 	// Row keys currently in flight (upsert or delete), keyed by "media_type/disc_type".
 	const pending = new PendingKeys();
-
-	const MEDIA_TYPES: Array<{ key: MediaType; label: string }> = [
-		{ key: 'movie', label: 'Movie' },
-		{ key: 'tv', label: 'TV' },
-		{ key: 'music', label: 'Music' },
-		{ key: 'data', label: 'Data' }
-	];
-
-	// disc_type null is the wildcard row for that media type.
-	const DISC_SCOPES: Array<{ key: DiscType | null; label: string }> = [
-		{ key: null, label: 'Any disc' },
-		{ key: 'dvd', label: 'DVD' },
-		{ key: 'bluray', label: 'Blu-ray' },
-		{ key: 'cd', label: 'CD' }
-	];
-
-	function rowKey(mediaType: MediaType, discType: DiscType | null): string {
-		return `${mediaType}/${discType ?? 'any'}`;
-	}
-
-	function routeFor(mediaType: MediaType, discType: DiscType | null): SessionRouteView | undefined {
-		return routes.find((r) => r.media_type === mediaType && r.disc_type === discType);
-	}
-
-	// Every session the Backend would accept for this row (same compatibility
-	// rule as PUT /api/session-routes), plus the one already routed, so a live
-	// route never renders as a blank select.
-	function sessionsFor(mediaType: MediaType, route: SessionRouteView | undefined): SessionView[] {
-		const options = sessions.filter((s) => mediaTypesCompatible(mediaType, s.media_type));
-		if (route && !options.some((s) => s.id === route.session_id)) {
-			const routed = sessions.find((s) => s.id === route.session_id);
-			if (routed) options.unshift(routed);
-		}
-		return options;
-	}
-
-	// A route is grid-covered when both its media_type and disc_type appear
-	// among the fixed 4x4 grid's rows/columns. Anything else (media_type=iso,
-	// or disc_type=data/unknown) is creatable via the API and wins resolution
-	// (resolve_routed_session_id), but has no cell in the grid to render in;
-	// it must still be visible and clearable here, or it's silently stuck.
-	const GRID_MEDIA_TYPES = new Set(MEDIA_TYPES.map((mt) => mt.key));
-	const GRID_DISC_TYPES = new Set(DISC_SCOPES.map((s) => s.key));
-
-	function isGridCovered(route: SessionRouteView): boolean {
-		return GRID_MEDIA_TYPES.has(route.media_type) && GRID_DISC_TYPES.has(route.disc_type);
-	}
-
-	function otherRoutes(): SessionRouteView[] {
-		return routes.filter((r) => !isGridCovered(r));
-	}
-
-	function sessionNameFor(sessionId: string): string {
-		return sessions.find((s) => s.id === sessionId)?.name ?? sessionId;
-	}
-
-	function discLabel(discType: DiscType | null): string {
-		return discType ?? 'Any disc';
-	}
 
 	async function load() {
 		loading = true;
@@ -99,7 +49,7 @@
 			// M1: choosing "- none -" must clear a stored route, the same as
 			// clicking Clear — otherwise the route stays stored while the
 			// select shows none, and the two drift out of sync.
-			const existing = routeFor(mediaType, discType);
+			const existing = routeFor(routes, mediaType, discType);
 			if (existing) {
 				await handleClear(existing);
 			}
@@ -155,10 +105,10 @@
 					<h4 class="eyebrow session-routes-card-group-title">{mt.label}</h4>
 					<div class="stack stack-sm">
 						{#each DISC_SCOPES as scope (scope.key ?? 'any')}
-							{@const route = routeFor(mt.key, scope.key)}
+							{@const route = routeFor(routes, mt.key, scope.key)}
 							{@const key = rowKey(mt.key, scope.key)}
 							{@const rowBusy = pending.has(key)}
-							{@const options = sessionsFor(mt.key, route)}
+							{@const options = sessionsFor(sessions, mt.key, route)}
 							<div class="panel-section session-routes-card-row">
 								<span class="session-routes-card-scope-label">{scope.label}</span>
 								<select
@@ -192,18 +142,18 @@
 			{/each}
 		</div>
 
-		{#if otherRoutes().length > 0}
+		{#if otherRoutes(routes).length > 0}
 			<div class="session-routes-card-other">
 				<h4 class="eyebrow session-routes-card-group-title">Other routes</h4>
 				<div class="stack stack-sm">
-					{#each otherRoutes() as route (route.id)}
+					{#each otherRoutes(routes) as route (route.id)}
 						{@const key = rowKey(route.media_type, route.disc_type)}
 						{@const rowBusy = pending.has(key)}
 						<div class="panel-section session-routes-card-row">
 							<span class="session-routes-card-other-label">
 								<span class="session-routes-card-other-key">{route.media_type} / {discLabel(route.disc_type)}</span>
 								<span class="session-routes-card-other-arrow">&rarr;</span>
-								{sessionNameFor(route.session_id)}
+								{sessionNameFor(sessions, route.session_id)}
 							</span>
 							{#if $isAdmin}
 								<button
@@ -211,6 +161,7 @@
 									onclick={() => handleClear(route)}
 									disabled={rowBusy}
 									aria-label="Clear {route.media_type} / {discLabel(route.disc_type)} route ({sessionNameFor(
+										sessions,
 										route.session_id
 									)})"
 									class="btn btn-sm"
