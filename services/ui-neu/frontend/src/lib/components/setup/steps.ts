@@ -120,6 +120,29 @@ export function progressState(id: string, progress: SetupView['progress']): Setu
 	return state === 'done' || state === 'skipped' || state === 'attention' ? state : null;
 }
 
+/** The steps summarised after setup: every step but Finish, in order. */
+export const REVIEWABLE_STEPS: StepMeta[] = STEPS.filter((s) => s.id !== 'finish');
+
+/** A step setup left open, with its state. */
+export interface OpenStep {
+	step: StepMeta;
+	state: 'skipped' | 'attention';
+}
+
+/**
+ * The reviewable steps setup left skipped or needing attention, in order;
+ * none while progress is undefined (the setup view has not loaded).
+ */
+export function openSteps(progress: SetupView['progress'] | undefined): OpenStep[] {
+	if (!progress) return [];
+	const open: OpenStep[] = [];
+	for (const step of REVIEWABLE_STEPS) {
+		const state = progressState(step.id, progress);
+		if (state === 'skipped' || state === 'attention') open.push({ step, state });
+	}
+	return open;
+}
+
 export function uiState(id: SetupStep, current: SetupStep, progress: SetupView['progress']): StepUiState {
 	if (id === current) return 'current';
 	return progressState(id, progress) ?? 'not-started';

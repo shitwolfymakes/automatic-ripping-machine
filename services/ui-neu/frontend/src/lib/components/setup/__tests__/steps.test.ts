@@ -1,6 +1,46 @@
 import { describe, it, expect } from 'vitest';
 import type { SetupView } from '$lib/types/api.gen';
-import { STEPS, nextStep, prevStep, progressState, uiState, stepMeta } from '../steps';
+import { STEPS, REVIEWABLE_STEPS, nextStep, openSteps, prevStep, progressState, uiState, stepMeta } from '../steps';
+
+describe('REVIEWABLE_STEPS', () => {
+	it('is every step but Finish, in walkthrough order', () => {
+		expect(REVIEWABLE_STEPS).toEqual(STEPS.slice(0, -1));
+		expect(REVIEWABLE_STEPS.map((s) => s.id)).not.toContain('finish');
+	});
+});
+
+describe('openSteps', () => {
+	it('returns skipped and attention steps in walkthrough order with their state', () => {
+		const progress: SetupView['progress'] = {
+			notifications: { state: 'skipped' },
+			system: { state: 'attention' },
+			metadata: { state: 'skipped' }
+		};
+		expect(openSteps(progress).map((o) => [o.step.id, o.state])).toEqual([
+			['system', 'attention'],
+			['metadata', 'skipped'],
+			['notifications', 'skipped']
+		]);
+		expect(openSteps(progress)[0].step).toBe(stepMeta('system'));
+	});
+
+	it('leaves out done steps and steps with no entry', () => {
+		const progress: SetupView['progress'] = { account: { state: 'done' }, drives: { state: 'skipped' } };
+		expect(openSteps(progress).map((o) => o.step.id)).toEqual(['drives']);
+	});
+
+	it('leaves out the Finish step', () => {
+		expect(openSteps({ finish: { state: 'skipped' } })).toEqual([]);
+	});
+
+	it('returns an empty list while progress is undefined', () => {
+		expect(openSteps(undefined)).toEqual([]);
+	});
+
+	it('returns an empty list for empty progress', () => {
+		expect(openSteps({})).toEqual([]);
+	});
+});
 
 describe('progressState', () => {
 	const progress: SetupView['progress'] = {

@@ -1,13 +1,12 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import { STEPS, progressState } from './steps';
+	import { REVIEWABLE_STEPS, progressState } from './steps';
 
 	// One row per step: what was set up, with a way back to it. Used by the
 	// walkthrough's Finish step.
 	let { view, summaries = {} }: { view: SetupView; summaries?: Record<string, string> } = $props();
 
-	const rows = $derived(STEPS.filter((s) => s.id !== 'finish'));
 	function state(id: string): 'done' | 'skipped' | 'attention' | 'pending' {
 		return progressState(id, view.progress) ?? 'pending';
 	}
@@ -20,7 +19,7 @@
 </script>
 
 <ul class="finish-summary">
-	{#each rows as r (r.id)}
+	{#each REVIEWABLE_STEPS as r (r.id)}
 		{@const st = state(r.id)}
 		{@const b = BADGE[st]}
 		<li class="finish-summary-row" data-testid="finish-row-{r.id}" data-state={st}>
