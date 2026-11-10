@@ -99,6 +99,7 @@
 	{#if loading}
 		<p class="session-routes-card-loading">Loading...</p>
 	{:else}
+		{@const others = otherRoutes(routes)}
 		<div class="stack">
 			{#each MEDIA_TYPES as mt (mt.key)}
 				<div>
@@ -142,11 +143,11 @@
 			{/each}
 		</div>
 
-		{#if otherRoutes(routes).length > 0}
+		{#if others.length > 0}
 			<div class="session-routes-card-other">
 				<h4 class="eyebrow session-routes-card-group-title">Other routes</h4>
 				<div class="stack stack-sm">
-					{#each otherRoutes(routes) as route (route.id)}
+					{#each others as route (route.id)}
 						{@const key = rowKey(route.media_type, route.disc_type)}
 						{@const rowBusy = pending.has(key)}
 						<div class="panel-section session-routes-card-row">
