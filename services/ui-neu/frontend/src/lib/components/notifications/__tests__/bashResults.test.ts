@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { armContext, incompleteInput, isCustomized } from '../bashResults';
+import { armContext, failedPreview, failedRun, incompleteInput, isCustomized, runSummary } from '../bashResults';
 
 const inputs = [{ key: 'TO', label: 'Recipient' }];
 
@@ -70,5 +70,56 @@ describe('armContext', () => {
 
 	it('is empty for an empty env', () => {
 		expect(armContext({})).toEqual([]);
+	});
+});
+
+describe('failedPreview', () => {
+	it('is a blank preview carrying the message and no result', () => {
+		expect(failedPreview('boom')).toEqual({
+			title: '',
+			body: '',
+			inputs: {},
+			env: {},
+			argv: [],
+			error: 'boom',
+			result: null
+		});
+	});
+});
+
+describe('failedRun', () => {
+	it('is a failed run with no exit code carrying the message', () => {
+		expect(failedRun('boom')).toEqual({
+			ok: false,
+			exit_code: null,
+			duration_ms: 0,
+			stdout: '',
+			stderr: '',
+			error: 'boom'
+		});
+	});
+});
+
+describe('runSummary', () => {
+	const run = { ok: true, exit_code: 0, duration_ms: 400, stdout: '', stderr: '', error: null };
+
+	it('says passed with the exit code and the duration', () => {
+		expect(runSummary(run)).toBe('Passed: exit code 0 after 0.4s');
+	});
+
+	it('leaves the error out of a failure that has an exit code', () => {
+		expect(runSummary({ ...run, ok: false, exit_code: 67, error: 'bad' })).toBe('Failed: exit code 67 after 0.4s');
+	});
+
+	it('adds the error to a failure with no exit code', () => {
+		expect(runSummary({ ...run, ok: false, exit_code: null, error: 'bad' })).toBe('Failed after 0.4s: bad');
+	});
+
+	it('adds nothing to a failure with no exit code and no error', () => {
+		expect(runSummary({ ...run, ok: false, exit_code: null, error: null })).toBe('Failed after 0.4s');
+	});
+
+	it('rounds the duration to one decimal', () => {
+		expect(runSummary({ ...run, duration_ms: 1250 })).toBe(`Passed: exit code 0 after ${(1.25).toFixed(1)}s`);
 	});
 });

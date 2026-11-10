@@ -2,7 +2,7 @@
 	import { ChevronRight } from 'lucide-svelte';
 	import { previewBash, type BashPreviewResult, type EventTypeInfo, type ScriptInput } from '$lib/api/channels';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import { armContext, incompleteInput, isCustomized } from './bashResults';
+	import { armContext, failedPreview, failedRun, incompleteInput, isCustomized, runSummary } from './bashResults';
 
 	let {
 		config,
@@ -56,15 +56,7 @@
 			try {
 				preview = await previewBash(request(false));
 			} catch (e) {
-				preview = {
-					title: '',
-					body: '',
-					inputs: {},
-					env: {},
-					argv: [],
-					error: e instanceof Error ? e.message : 'preview failed',
-					result: null
-				};
+				preview = failedPreview(e instanceof Error ? e.message : 'preview failed');
 			}
 		}, 300);
 		return () => clearTimeout(timer);
@@ -77,14 +69,7 @@
 			preview = res;
 			lastRun = res.result ?? null;
 		} catch (e) {
-			lastRun = {
-				ok: false,
-				exit_code: null,
-				duration_ms: 0,
-				stdout: '',
-				stderr: '',
-				error: e instanceof Error ? e.message : 'test failed'
-			};
+			lastRun = failedRun(e instanceof Error ? e.message : 'test failed');
 		} finally {
 			running = false;
 		}
@@ -164,12 +149,7 @@
 				<div class="alert bash-test-panel-result {lastRun.ok ? 'alert-success' : 'alert-danger'}">
 					<div class="bash-test-panel-result-grid">
 						<span class="bash-test-panel-result-label">Result</span>
-						<span
-							>{lastRun.ok ? 'Passed' : 'Failed'}{lastRun.exit_code !== null ? `: exit code ${lastRun.exit_code}` : ''} after
-							{(lastRun.duration_ms / 1000).toFixed(1)}s{!lastRun.ok && lastRun.exit_code === null && lastRun.error
-								? `: ${lastRun.error}`
-								: ''}</span
-						>
+						<span>{runSummary(lastRun)}</span>
 						<span class="bash-test-panel-result-label">stderr</span>
 						<pre class="code-block bash-test-panel-pre">{lastRun.stderr || '(empty)'}</pre>
 						<span class="bash-test-panel-result-label">stdout</span>
