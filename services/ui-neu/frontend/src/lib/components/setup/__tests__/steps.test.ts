@@ -1,11 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import type { SetupView } from '$lib/types/api.gen';
-import { STEPS, REVIEWABLE_STEPS, nextStep, openSteps, prevStep, progressState, uiState, stepMeta } from '../steps';
+import {
+	STEPS,
+	REVIEWABLE_STEPS,
+	STATE_BADGE,
+	nextStep,
+	openSteps,
+	prevStep,
+	progressState,
+	uiState,
+	stepMeta
+} from '../steps';
 
 describe('REVIEWABLE_STEPS', () => {
 	it('is every step but Finish, in walkthrough order', () => {
 		expect(REVIEWABLE_STEPS).toEqual(STEPS.slice(0, -1));
 		expect(REVIEWABLE_STEPS.map((s) => s.id)).not.toContain('finish');
+	});
+});
+
+describe('STATE_BADGE', () => {
+	it('gives the text, glyph and class for each state', () => {
+		expect(STATE_BADGE).toEqual({
+			done: { text: 'Done', glyph: 'check', cls: 'chip-success' },
+			skipped: { text: 'Skipped', glyph: 'minus-circle', cls: '' },
+			attention: { text: 'Needs attention', glyph: 'warning', cls: 'chip-warning' },
+			pending: { text: 'Not done', glyph: 'clock', cls: '' }
+		});
 	});
 });
 

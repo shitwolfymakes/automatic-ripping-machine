@@ -1,3 +1,4 @@
+import type { GlyphName } from '$lib/components/glyph-names';
 import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 
 // The walkthrough's nine steps, in order (setup spec 2026-10-01 §5).
@@ -119,6 +120,24 @@ export function progressState(id: string, progress: SetupView['progress']): Setu
 	const state = progress[id]?.state;
 	return state === 'done' || state === 'skipped' || state === 'attention' ? state : null;
 }
+
+/** A step's state as the summary shows it: recorded, or 'pending'. */
+export type SummaryState = SetupStepState | 'pending';
+
+/** The chip a step state is drawn with. */
+export interface StateBadge {
+	text: string;
+	glyph: GlyphName;
+	cls: string;
+}
+
+/** The chip text, glyph and class for each step state. */
+export const STATE_BADGE: Record<SummaryState, StateBadge> = {
+	done: { text: 'Done', glyph: 'check', cls: 'chip-success' },
+	skipped: { text: 'Skipped', glyph: 'minus-circle', cls: '' },
+	attention: { text: 'Needs attention', glyph: 'warning', cls: 'chip-warning' },
+	pending: { text: 'Not done', glyph: 'clock', cls: '' }
+};
 
 /** The steps summarised after setup: every step but Finish, in order. */
 export const REVIEWABLE_STEPS: StepMeta[] = STEPS.filter((s) => s.id !== 'finish');

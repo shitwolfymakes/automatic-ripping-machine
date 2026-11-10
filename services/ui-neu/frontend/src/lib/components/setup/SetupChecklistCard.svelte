@@ -6,7 +6,7 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
-	import { REVIEWABLE_STEPS, openSteps } from './steps';
+	import { REVIEWABLE_STEPS, STATE_BADGE, openSteps } from './steps';
 
 	// Dashboard card listing whatever setup left open: steps skipped or needing
 	// attention, or the whole walkthrough after "Finish later". Dismissal is
@@ -61,10 +61,11 @@
 		</div>
 		<ul class="setup-checklist-rows">
 			{#each open as { step, state } (step.id)}
+				{@const badge = STATE_BADGE[state]}
 				<li class="setup-checklist-row" data-testid="setup-checklist-row-{step.id}">
-					<span class="chip chip-sm {state === 'attention' ? 'chip-warning' : ''}">
-						<Glyph name={state === 'attention' ? 'warning' : 'minus-circle'} class="h-3 w-3" />
-						{state === 'attention' ? 'Needs attention' : 'Skipped'}
+					<span class="chip chip-sm {badge.cls}">
+						<Glyph name={badge.glyph} class="h-3 w-3" />
+						{badge.text}
 					</span>
 					<span class="setup-checklist-label">{step.label}</span>
 					<a class="btn btn-sm" href="/setup/{step.id}"
