@@ -57,6 +57,12 @@ export function checkLabel(name: string): string {
 	return CHECK_LABELS[name] ?? name;
 }
 
+/** A check row's detail: the check's own detail, or "OK" (or its
+ * status, when it isn't ok) for a check that has none. */
+export function checkDetail(c: Pick<SystemDiagnosticCheck, 'status' | 'detail'>): string {
+	return c.detail ?? (c.status === 'ok' ? 'OK' : c.status);
+}
+
 /** How much space the named storage root has free, or that it is still
  * being measured. */
 export function freeLabel(storage: readonly StorageRoot[] | null, name: string): string {

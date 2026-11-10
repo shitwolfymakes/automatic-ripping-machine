@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PathStatus, StorageRoot, SystemDiagnosticCheck } from '$lib/types/api.gen';
 import {
+	checkDetail,
 	checkLabel,
 	freeLabel,
 	inScope,
@@ -54,6 +55,32 @@ describe('checkLabel', () => {
 
 	it('returns an unknown key as itself', () => {
 		expect(checkLabel('something_new')).toBe('something_new');
+	});
+});
+
+describe('checkDetail', () => {
+	it('shows the detail of an ok check', () => {
+		expect(checkDetail(check({ status: 'ok', detail: 'all good' }))).toBe('all good');
+	});
+
+	it('shows the detail of a check that is not ok', () => {
+		expect(checkDetail(check({ status: 'error', detail: 'disk full' }))).toBe('disk full');
+	});
+
+	it('shows OK for an ok check with a null detail', () => {
+		expect(checkDetail(check({ status: 'ok', detail: null }))).toBe('OK');
+	});
+
+	it('shows OK for an ok check with no detail', () => {
+		expect(checkDetail(check({ status: 'ok' }))).toBe('OK');
+	});
+
+	it('shows the status of a check that is not ok and has a null detail', () => {
+		expect(checkDetail(check({ status: 'warning', detail: null }))).toBe('warning');
+	});
+
+	it('shows the status of a check that is not ok and has no detail', () => {
+		expect(checkDetail(check({ status: 'error' }))).toBe('error');
 	});
 });
 

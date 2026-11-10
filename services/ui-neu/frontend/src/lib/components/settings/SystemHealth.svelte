@@ -9,6 +9,7 @@
 		SERVICE_LABELS,
 		STORAGE_HELP,
 		STORAGE_LABELS,
+		checkDetail,
 		checkLabel,
 		freeLabel,
 		inScope,
@@ -201,9 +202,7 @@
 							>
 								<span class="status-dot" data-status={check.status}></span>
 								<span class="system-health-row-label">{checkLabel(check.name)}</span>
-								<span class="system-health-row-detail"
-									>{check.detail ?? (check.status === 'ok' ? 'OK' : check.status)}</span
-								>
+								<span class="system-health-row-detail">{checkDetail(check)}</span>
 							</li>
 						{/each}
 					</ul>
@@ -264,8 +263,7 @@
 					>
 						<span class="status-dot" data-status={check.status}></span>
 						<span class="system-health-row-label">{checkLabel(check.name)}</span>
-						<span class="system-health-row-detail">{check.detail ?? (check.status === 'ok' ? 'OK' : check.status)}</span
-						>
+						<span class="system-health-row-detail">{checkDetail(check)}</span>
 					</li>
 				{/each}
 				{#each result.paths as p (p.name)}
