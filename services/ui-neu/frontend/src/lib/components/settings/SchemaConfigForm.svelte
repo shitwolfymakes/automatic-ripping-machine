@@ -13,8 +13,7 @@
 		KEY_SERVICE_LABEL
 	} from '$lib/utils/settings-sections';
 	import { formatDateTime } from '$lib/utils/format';
-	import { unchanged } from '$lib/utils/unchanged';
-	import { buildConfigPayload, mergeSavedPayload } from '$lib/utils/config-payload';
+	import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '$lib/utils/config-payload';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
@@ -74,15 +73,8 @@
 		const prev = configRef;
 		const sameFields = fields === fieldsRef;
 		const current = untrack(() => values);
-		const next: Record<string, unknown> = {};
-		for (const f of fields) {
-			const v = config[f.key];
-			// A new `config` (another tab's save folded in, or a reload) replaces
-			// only the values it changed; an unsaved edit to any other field of
-			// this form survives, since Settings keeps every config tab mounted.
-			next[f.key] = sameFields && prev && f.key in current && unchanged(v, prev[f.key]) ? current[f.key] : v;
-		}
-		values = next;
+		const kept = sameFields && prev ? { config: prev, values: current } : null;
+		values = mergeConfigValues(fields, config, kept);
 		fieldsRef = fields;
 		if (config !== configRef) {
 			configRef = config;

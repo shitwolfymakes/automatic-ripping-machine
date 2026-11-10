@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildConfigPayload, mergeSavedPayload } from '../config-payload';
+import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '../config-payload';
 import { HIDDEN_SECRET } from '$lib/api/config';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
@@ -99,5 +99,38 @@ describe('mergeSavedPayload', () => {
 		expect(payload).toEqual({ api_key: 'raw', name: 'new' });
 		expect(overrides).toEqual({ name: 'old' });
 		expect(values).toEqual({ api_key: 'raw' });
+	});
+});
+
+describe('mergeConfigValues', () => {
+	const fields = [field('a'), field('b')];
+
+	it('takes every value from config when nothing is kept, edits or not', () => {
+		expect(mergeConfigValues(fields, { a: 1, b: 2 }, null)).toEqual({ a: 1, b: 2 });
+	});
+
+	it('keeps an edit to a field whose config value did not change', () => {
+		const kept = { config: { a: 1, b: 2 }, values: { a: 'edited', b: 2 } };
+		expect(mergeConfigValues(fields, { a: 1, b: 2 }, kept)).toEqual({ a: 'edited', b: 2 });
+	});
+
+	it('takes the new config value for a field config changed', () => {
+		const kept = { config: { a: 1, b: 2 }, values: { a: 'edited', b: 'edited too' } };
+		expect(mergeConfigValues(fields, { a: 1, b: 3 }, kept)).toEqual({ a: 'edited', b: 3 });
+	});
+
+	it('takes the config value for a field the kept values do not hold', () => {
+		const kept = { config: { a: 1, b: 2 }, values: { a: 'edited' } };
+		expect(mergeConfigValues(fields, { a: 1, b: 2 }, kept)).toEqual({ a: 'edited', b: 2 });
+	});
+
+	it('counts an equal array in both configs as unchanged', () => {
+		const kept = { config: { a: ['x', 'y'] }, values: { a: ['edited'] } };
+		expect(mergeConfigValues([field('a')], { a: ['x', 'y'] }, kept)).toEqual({ a: ['edited'] });
+	});
+
+	it('puts only the given fields in the result', () => {
+		const kept = { config: { a: 1, extra: 1 }, values: { a: 1, extra: 'edited' } };
+		expect(mergeConfigValues([field('a')], { a: 1, extra: 2 }, kept)).toEqual({ a: 1 });
 	});
 });

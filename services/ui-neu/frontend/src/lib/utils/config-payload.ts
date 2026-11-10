@@ -51,3 +51,24 @@ export function mergeSavedPayload(
 	}
 	return { overrides: mergedOverrides, values: mergedValues };
 }
+
+/** The form's values for a new `config`: each field's value from it,
+ * except that a field `kept` holds keeps its edit when `config` didn't
+ * change that field from `kept.config`. Pass `kept` only when the field
+ * list is the one the form already showed; with null, every value comes
+ * from `config`. */
+export function mergeConfigValues(
+	fields: readonly ConfigFieldMeta[],
+	config: Record<string, unknown>,
+	kept: { config: Record<string, unknown>; values: Record<string, unknown> } | null
+): Record<string, unknown> {
+	const next: Record<string, unknown> = {};
+	for (const f of fields) {
+		const v = config[f.key];
+		// A new `config` (another tab's save folded in, or a reload) replaces
+		// only the values it changed; an unsaved edit to any other field of
+		// this form survives, since Settings keeps every config tab mounted.
+		next[f.key] = kept && f.key in kept.values && unchanged(v, kept.config[f.key]) ? kept.values[f.key] : v;
+	}
+	return next;
+}
