@@ -16,7 +16,7 @@
 	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, toConfig, type TestOutcome } from './channelActions';
+	import { createChannelFromBody, runTest, testUnsavedBody, type TestOutcome } from './channelActions';
 	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
@@ -111,13 +111,8 @@
 		toastTestOutcome(await runTest(() => testSendChannel(c.id, c.subscribed_events[0] ?? firstEventKey())));
 	}
 
-	// Test an unsaved config from the add form and toast the result.
-	async function testConfigAndToast(type: string, config: Record<string, unknown>, eventType: string) {
-		toastTestOutcome(await runTest(() => testConfig({ type, config, event_type: eventType })));
-	}
-
 	async function handleTestUnsaved(body: AddChannelBody) {
-		await testConfigAndToast(body.type, toConfig(body), body.subscribed_events[0] ?? firstEventKey());
+		toastTestOutcome(await runTest(() => testUnsavedBody(body, body.subscribed_events[0] ?? firstEventKey())));
 	}
 
 	async function handleEditorTest(c: Channel, body: EditorBody) {
