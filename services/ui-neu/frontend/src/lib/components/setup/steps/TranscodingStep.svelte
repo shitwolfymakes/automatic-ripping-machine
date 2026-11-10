@@ -4,6 +4,7 @@
 	import GpusCard from '$lib/components/settings/GpusCard.svelte';
 	import { fetchSystemDiagnostics } from '$lib/api/system';
 	import { transcoderEnabled } from '$lib/stores/config';
+	import { serviceHost } from '$lib/utils/system-health';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
 	import type { StepCommitResult } from '../steps';
 
@@ -18,8 +19,8 @@
 		if (!$transcoderEnabled) return;
 		try {
 			const tc = (await fetchSystemDiagnostics()).checks.find((c) => c.name === 'transcoder');
-			if (tc?.location === 'remote') location = { label: `Remote host ${tc.remote_host ?? ''}`.trim() };
-			else if (tc?.location === 'local') location = { label: 'This server' };
+			const host = tc ? serviceHost(tc) : null;
+			if (host) location = { label: host };
 		} catch {
 			location = null;
 		}

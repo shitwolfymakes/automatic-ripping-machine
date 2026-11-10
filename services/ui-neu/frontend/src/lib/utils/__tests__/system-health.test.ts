@@ -8,6 +8,7 @@ import {
 	pathDetail,
 	pathState,
 	serviceBadge,
+	serviceHost,
 	SERVICE_CHECKS,
 	SERVICE_LABELS,
 	STORAGE_HELP,
@@ -66,6 +67,26 @@ describe('serviceBadge', () => {
 
 	it('reads any other status as a warning badge', () => {
 		expect(serviceBadge('warning')).toEqual({ text: 'Problem', tone: 'warning', glyph: 'warning' });
+	});
+});
+
+describe('serviceHost', () => {
+	it('names a local service as this server', () => {
+		expect(serviceHost(check({ location: 'local' }))).toBe('This server');
+	});
+
+	it('names a remote service with its host', () => {
+		expect(serviceHost(check({ location: 'remote', remote_host: 'nas' }))).toBe('Remote host nas');
+	});
+
+	it('names a remote service without a host, trimmed', () => {
+		expect(serviceHost(check({ location: 'remote' }))).toBe('Remote host');
+	});
+
+	it('returns null for none, a missing location or another one', () => {
+		expect(serviceHost(check({ location: 'none' }))).toBeNull();
+		expect(serviceHost(check({ location: null }))).toBeNull();
+		expect(serviceHost(check({ location: 'elsewhere' }))).toBeNull();
 	});
 });
 

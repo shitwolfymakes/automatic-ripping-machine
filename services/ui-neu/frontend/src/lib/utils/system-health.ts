@@ -75,12 +75,18 @@ export function serviceBadge(status: string): {
 	return { text: 'Problem', tone: 'warning', glyph: 'warning' };
 }
 
-/** Where a service runs, or null when the check does not say. */
-export function locationLabel(c: SystemDiagnosticCheck): string | null {
+/** Where a service runs: "This server", or "Remote host <name>"
+ * ("Remote host" when the name is missing). Null for any other location. */
+export function serviceHost(c: Pick<SystemDiagnosticCheck, 'location' | 'remote_host'>): string | null {
 	if (c.location === 'local') return 'This server';
 	if (c.location === 'remote') return `Remote host ${c.remote_host ?? ''}`.trim();
-	if (c.location === 'none') return 'Ripper only';
 	return null;
+}
+
+/** The host a service runs on, or "Ripper only" for a service that runs
+ * nowhere. Null when the check does not say. */
+export function locationLabel(c: SystemDiagnosticCheck): string | null {
+	return c.location === 'none' ? 'Ripper only' : serviceHost(c);
 }
 
 /** A storage path's status: error when missing, warning when read-only,
