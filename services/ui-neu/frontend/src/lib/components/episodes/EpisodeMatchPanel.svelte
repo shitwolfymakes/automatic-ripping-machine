@@ -3,10 +3,11 @@
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import type { IdentityView, JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
-	import { clearEpisodeMatch, fetchIdentity, matchIdentity, type EpisodeSource } from '$lib/api/identity';
-	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
+	import type { JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
+	import { clearEpisodeMatch, matchIdentity, type EpisodeSource } from '$lib/api/identity';
+	import { updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
+	import { EpisodeIdentity } from '$lib/stores/episodeIdentity.svelte';
 	import { EpisodeLists } from '$lib/stores/episodeLists.svelte';
 	import { SeasonList } from '$lib/stores/seasonList.svelte';
 	import {
@@ -45,13 +46,11 @@
 	let { job, tracks, matching = false, onsearchseries, onchanged }: Props = $props();
 	const STATUS_WORD: Record<string, string> = { ok: 'matched', miss: 'no match', skipped: 'skipped', error: 'failed' };
 
-	let identity = $state<IdentityView | null>(null);
-	let fileNames = $state(new Map<string, { name: string; path: string }>());
+	const episodeIdentity = new EpisodeIdentity(() => job.id);
+	const identity = $derived(episodeIdentity.identity);
 	let othersOpen = $state(false);
 	// The (i) next to a held result's one-line reading: the other reasons.
 	let whyOpen = $state(false);
-	let loadError = $state<string | null>(null);
-	let loaded = $state(false);
 	let loadedFor: string | null = null;
 	const phoneQuery = new MediaQuery('(max-width: 639px)', false);
 
@@ -81,33 +80,13 @@
 
 	export async function reload(): Promise<void> {
 		if (!job.has_series) return;
-		const jobId = job.id;
-		try {
-			const next = await fetchIdentity(jobId);
-			if (job.id !== jobId) return;
-			identity = next;
-			loadError = null;
-		} catch (e) {
-			if (job.id !== jobId) return;
-			loadError = e instanceof Error ? e.message : 'Could not load episodes';
-		}
-		loaded = true;
-		try {
-			const preview = await fetchNamingPreview(jobId);
-			if (job.id !== jobId) return;
-			fileNames = new Map((preview.items ?? []).map((i) => [i.track_id, { name: i.output_name, path: i.output_path }]));
-		} catch {
-			/* file names are a nicety */
-		}
+		await episodeIdentity.load(job.id);
 	}
 
 	// Everything that belongs to one job is dropped when the panel is handed
 	// another, so nothing (a preview, an open form, a late response) leaks across.
 	function resetForJob() {
-		identity = null;
-		loaded = false;
-		loadError = null;
-		fileNames = new Map();
+		episodeIdentity.reset();
 		othersOpen = false;
 		whyOpen = false;
 		rerunOpen = false;
@@ -135,7 +114,7 @@
 	});
 
 	const view = $derived(panelState(job, identity, matching));
-	const loading = $derived(!loaded && view !== 'noseries' && view !== 'matching');
+	const loading = $derived(!episodeIdentity.loaded && view !== 'noseries' && view !== 'matching');
 	const rows = $derived(view === 'noseries' ? [] : buildRows(tracks, identity ?? {}, preview, !!job.episodes_unsure));
 	const source = $derived(identity ? activeSource(identity) : null);
 	const sourceLabel = $derived(source ? (SOURCE_LABEL[source] ?? source) : null);
@@ -189,7 +168,7 @@
 		try {
 			const next = await clearEpisodeMatch(jobId);
 			if (job.id !== jobId) return;
-			identity = next;
+			episodeIdentity.identity = next;
 			dropPreview();
 			rerunOpen = false;
 			onchanged?.();
@@ -431,7 +410,7 @@
 			</span>
 		</div>
 
-		{#if (ownSeason || altSeasons.length > 0) && !loading && !loadError}
+		{#if (ownSeason || altSeasons.length > 0) && !loading && !episodeIdentity.loadError}
 			<div class="episode-panel-seasons" data-testid="season-fit">
 				{#if ownSeason}
 					<span class="episode-panel-fit"
@@ -462,10 +441,10 @@
 
 		{#if loading}
 			<!-- first fetch still running: no state to show yet -->
-		{:else if loadError}
+		{:else if episodeIdentity.loadError}
 			<div class="alert alert-danger">
 				<p class="alert-title">Could not load the episode match</p>
-				<p class="alert-body">{loadError}</p>
+				<p class="alert-body">{episodeIdentity.loadError}</p>
 			</div>
 		{:else if view === 'unavailable'}
 			<div class="alert alert-warning">
@@ -530,7 +509,7 @@
 		{#if showRows}
 			<EpisodeRows
 				rows={shownRows}
-				{fileNames}
+				fileNames={episodeIdentity.fileNames}
 				matching={view === 'matching'}
 				phone={phoneQuery.current}
 				proposedLabel={preview && previewSource ? shortSourceLabel(previewSource) : null}
