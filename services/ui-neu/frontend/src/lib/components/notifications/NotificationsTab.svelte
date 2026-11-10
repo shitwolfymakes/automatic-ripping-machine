@@ -15,8 +15,14 @@
 	import FilterPills from './FilterPills.svelte';
 	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
 	import ChannelList from './ChannelList.svelte';
-	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, testUnsavedBody, type TestOutcome } from './channelActions';
+	import AddChannelForm from './AddChannelForm.svelte';
+	import {
+		createChannelFromBody,
+		runTest,
+		testUnsavedBody,
+		type AddChannelBody,
+		type TestOutcome
+	} from './channelActions';
 	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 

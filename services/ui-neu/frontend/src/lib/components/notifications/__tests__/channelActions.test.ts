@@ -7,9 +7,9 @@ vi.mock('$lib/api/channels', () => ({
 	testConfig: (b: unknown) => testConfig(b)
 }));
 
-import { toConfig, createChannelFromBody, testUnsavedBody, runTest } from '../channelActions';
+import { toConfig, createChannelFromBody, testUnsavedBody, runTest, type AddChannelBody } from '../channelActions';
 
-const body = {
+const body: AddChannelBody = {
 	type: 'apprise',
 	name: 'ntfy',
 	enabled: true,

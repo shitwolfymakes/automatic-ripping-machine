@@ -3,8 +3,8 @@
 	import type { Catalog } from '$lib/types/notifications';
 	import { fetchServices, fetchEventTypes, type EventTypeInfo } from '$lib/api/channels';
 	import { saveArmConfig } from '$lib/api/settings';
-	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, testUnsavedBody } from './channelActions';
+	import AddChannelForm from './AddChannelForm.svelte';
+	import { createChannelFromBody, runTest, testUnsavedBody, type AddChannelBody } from './channelActions';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 

@@ -8,17 +8,8 @@
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from './channelHelpers';
+	import type { AddChannelBody } from './channelActions';
 	import Glyph from '$lib/components/Glyph.svelte';
-
-	export interface AddChannelBody {
-		type: ChannelType;
-		name: string;
-		enabled: boolean;
-		config: Record<string, unknown>;
-		subscribed_events: string[];
-		templates: Record<string, ChannelTemplate>;
-		serviceId: string | null;
-	}
 
 	// `compact` (setup walkthrough): a service channel only, no header, no
 	// Save/Cancel (the parent saves on Continue through getBody()/isReady()),
