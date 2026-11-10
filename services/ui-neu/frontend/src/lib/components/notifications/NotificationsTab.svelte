@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Channel, Catalog, AppriseConfig } from '$lib/types/notifications';
+	import type { Channel, Catalog } from '$lib/types/notifications';
 	import {
 		fetchChannels,
 		fetchServices,
@@ -17,7 +17,7 @@
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
 	import { createChannelFromBody, toConfig } from './channelActions';
-	import type { EditorBody } from './ChannelEditor.svelte';
+	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	let channels = $state<Channel[]>([]);
@@ -85,37 +85,9 @@
 		}
 	}
 
-	// Has the editor changed the apprise field map vs what's stored? When
-	// false the editor handlers omit `config` from the PATCH (save) or
-	// fall through to the saved-channel test path so neu keeps the
-	// stored url + recompose state intact.
-	function appriseFieldsDirty(c: Channel, body: EditorBody): boolean {
-		const stored = ((c.config as AppriseConfig).fields ?? {}) as Record<string, unknown>;
-		return JSON.stringify(body.appriseFields) !== JSON.stringify(stored);
-	}
-
 	async function handleEditorSave(c: Channel, body: EditorBody) {
 		try {
-			const patch: Record<string, unknown> = {
-				name: body.name,
-				enabled: body.enabled,
-				subscribed_events: body.subscribed_events,
-				templates: body.templates
-			};
-			if (c.type === 'apprise') {
-				if (appriseFieldsDirty(c, body) && body.serviceId) {
-					patch.config = {
-						type: 'apprise',
-						url: '',
-						service_id: body.serviceId,
-						fields: body.appriseFields
-					};
-				}
-				// not dirty -> omit config -> neu keeps stored url + fields
-			} else {
-				patch.config = body.config as unknown as Channel['config'];
-			}
-			const updated = await updateChannel(c.id, patch as Parameters<typeof updateChannel>[1]);
+			const updated = await updateChannel(c.id, editorPatch(c, body));
 			channels = channels.map((x) => (x.id === c.id ? updated : x));
 			addToast({ tone: 'success', title: 'Saved.' });
 		} catch (e) {
@@ -139,8 +111,7 @@
 		}
 	}
 
-	// Test an unsaved/edited config and toast the result. Shared by the add-form
-	// and the inline editor so the success/error toast handling lives in one place.
+	// Test an unsaved config from the add form and toast the result.
 	async function testConfigAndToast(type: string, config: Record<string, unknown>, eventType: string) {
 		const res = await testConfig({ type, config, event_type: eventType });
 		if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
@@ -158,24 +129,15 @@
 	async function handleEditorTest(c: Channel, body: EditorBody) {
 		const eventType = body.subscribed_events[0] ?? firstEventKey();
 		try {
-			if (c.type === 'apprise') {
-				if (appriseFieldsDirty(c, body)) {
-					const res = await testConfig({
-						channel_id: c.id,
-						fields: body.appriseFields,
-						event_type: eventType
-					});
-					if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
-					else addToast({ tone: 'error', title: 'Test failed', body: res.error ?? '' });
-					return;
-				}
+			const payload = editorTestPayload(c, body, eventType);
+			if (!payload) {
 				// Fields unchanged: test the saved channel instead.
 				await handleTestSaved(c);
 				return;
 			}
-			// Webhook/bash: test the edited config directly via the unsaved-config
-			// endpoint so the user tests their current edits, not the last-saved state.
-			await testConfigAndToast(c.type, body.config, eventType);
+			const res = await testConfig(payload);
+			if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
+			else addToast({ tone: 'error', title: 'Test failed', body: res.error ?? '' });
 		} catch (e) {
 			addToast({ tone: 'error', title: 'Test failed', body: e instanceof Error ? e.message : '' });
 		}

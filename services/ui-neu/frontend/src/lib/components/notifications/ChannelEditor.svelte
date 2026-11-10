@@ -6,15 +6,7 @@
 	import EventsSection from './sections/EventsSection.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 
-	export interface EditorBody {
-		name: string;
-		enabled: boolean;
-		config: Record<string, unknown>;
-		subscribed_events: string[];
-		templates: Record<string, ChannelTemplate>;
-		appriseFields: Record<string, unknown>;
-		serviceId: string | null;
-	}
+	import type { EditorBody } from './channelEdits';
 
 	let {
 		channel,

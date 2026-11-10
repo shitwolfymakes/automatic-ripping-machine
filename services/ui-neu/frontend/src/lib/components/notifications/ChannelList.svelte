@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Channel, Catalog } from '$lib/types/notifications';
-	import type { EditorBody } from './ChannelEditor.svelte';
+	import type { EditorBody } from './channelEdits';
 	import type { EventTypeInfo } from '$lib/api/channels';
 	import ChannelRow from './ChannelRow.svelte';
 	import ChannelEditor from './ChannelEditor.svelte';
