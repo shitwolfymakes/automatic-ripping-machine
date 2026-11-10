@@ -6,13 +6,14 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
 	import { mediaTypesCompatible } from '$lib/utils/sessions';
+	import { PendingKeys } from './pendingKeys.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
 	let loading = $state(true);
 	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 	// Row keys currently in flight (upsert or delete), keyed by "media_type/disc_type".
-	let pending = $state<Set<string>>(new Set());
+	const pending = new PendingKeys();
 
 	const MEDIA_TYPES: Array<{ key: MediaType; label: string }> = [
 		{ key: 'movie', label: 'Movie' },
@@ -105,39 +106,29 @@
 			return;
 		}
 		const key = rowKey(mediaType, discType);
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		pending = new Set(pending).add(key);
-		try {
-			const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
-			const others = routes.filter((r) => !(r.media_type === mediaType && r.disc_type === discType));
-			routes = [...others, saved];
-		} catch (e) {
-			showFeedback('error', e instanceof Error ? e.message : 'Failed to save route');
-			await load();
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const next = new Set(pending);
-			next.delete(key);
-			pending = next;
-		}
+		await pending.run(key, async () => {
+			try {
+				const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
+				const others = routes.filter((r) => !(r.media_type === mediaType && r.disc_type === discType));
+				routes = [...others, saved];
+			} catch (e) {
+				showFeedback('error', e instanceof Error ? e.message : 'Failed to save route');
+				await load();
+			}
+		});
 	}
 
 	async function handleClear(route: SessionRouteView) {
 		const key = rowKey(route.media_type, route.disc_type);
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		pending = new Set(pending).add(key);
-		try {
-			await deleteSessionRoute(route.id);
-			routes = routes.filter((r) => r.id !== route.id);
-		} catch (e) {
-			showFeedback('error', e instanceof Error ? e.message : 'Failed to clear route');
-			await load();
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const next = new Set(pending);
-			next.delete(key);
-			pending = next;
-		}
+		await pending.run(key, async () => {
+			try {
+				await deleteSessionRoute(route.id);
+				routes = routes.filter((r) => r.id !== route.id);
+			} catch (e) {
+				showFeedback('error', e instanceof Error ? e.message : 'Failed to clear route');
+				await load();
+			}
+		});
 	}
 </script>
 

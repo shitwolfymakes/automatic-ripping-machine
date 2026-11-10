@@ -17,6 +17,7 @@
 	import Glyph from '$lib/components/Glyph.svelte';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import { PendingKeys } from './pendingKeys.svelte';
 
 	// Shared by Settings > Transcoding and the setup walkthrough's Transcoding
 	// step. A probe is a real test encode run in a container (10-60 s); its
@@ -29,7 +30,7 @@
 	let gpus = $state<GpuView[]>([]);
 	let loaded = $state(false);
 	let error = $state<string | null>(null);
-	let pending = $state<Set<string>>(new Set());
+	const pending = new PendingKeys();
 	let probingAll = $state(false);
 	let confirmTarget = $state<GpuView | null>(null);
 	let probing = $state<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -70,20 +71,15 @@
 	}
 
 	async function reprobe(g: GpuView) {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		pending = new Set(pending).add(g.id);
-		try {
-			await probeGpu(g.id);
-			startProbing([g.id]);
-			error = null;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Re-probe failed.';
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const p = new Set(pending);
-			p.delete(g.id);
-			pending = p;
-		}
+		await pending.run(g.id, async () => {
+			try {
+				await probeGpu(g.id);
+				startProbing([g.id]);
+				error = null;
+			} catch (e) {
+				error = e instanceof Error ? e.message : 'Re-probe failed.';
+			}
+		});
 	}
 
 	async function reprobeAll() {
@@ -100,46 +96,36 @@
 	}
 
 	async function toggle(g: GpuView, next: boolean) {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		pending = new Set(pending).add(g.id);
-		try {
-			const updated = await updateGpu(g.id, next);
-			gpus = gpus.map((x) => (x.id === g.id ? updated : x));
-			error = null;
-			encodersStore.refresh();
-		} catch {
-			error = 'Saving the GPU switch failed.';
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const p = new Set(pending);
-			p.delete(g.id);
-			pending = p;
-		}
+		await pending.run(g.id, async () => {
+			try {
+				const updated = await updateGpu(g.id, next);
+				gpus = gpus.map((x) => (x.id === g.id ? updated : x));
+				error = null;
+				encodersStore.refresh();
+			} catch {
+				error = 'Saving the GPU switch failed.';
+			}
+		});
 	}
 
 	async function removeConfirmed() {
 		const g = confirmTarget;
 		confirmTarget = null;
 		if (!g) return;
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-		pending = new Set(pending).add(g.id);
-		try {
-			await deleteGpu(g.id);
-			gpus = gpus.filter((x) => x.id !== g.id);
-			error = null;
-			encodersStore.refresh();
-		} catch (e) {
-			// The client puts the server's detail in the message; the status is the signal.
-			error =
-				e instanceof ApiError && e.status === 409
-					? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
-					: 'Deleting the GPU failed.';
-		} finally {
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
-			const p = new Set(pending);
-			p.delete(g.id);
-			pending = p;
-		}
+		await pending.run(g.id, async () => {
+			try {
+				await deleteGpu(g.id);
+				gpus = gpus.filter((x) => x.id !== g.id);
+				error = null;
+				encodersStore.refresh();
+			} catch (e) {
+				// The client puts the server's detail in the message; the status is the signal.
+				error =
+					e instanceof ApiError && e.status === 409
+						? 'That GPU is in use by a running transcode. Disable it instead, or wait for the task to finish.'
+						: 'Deleting the GPU failed.';
+			}
+		});
 	}
 
 	onMount(() => {
