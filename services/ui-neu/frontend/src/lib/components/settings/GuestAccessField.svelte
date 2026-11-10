@@ -17,26 +17,17 @@
 
 	let saving = $state(false);
 
-	async function apply(enabled: boolean): Promise<void> {
+	async function toggle(next: boolean): Promise<void> {
 		if (!guest) return;
 		saving = true;
 		try {
-			await setUserDisabled(guest.id, !enabled);
-			onsaved?.(enabled);
+			await setUserDisabled(guest.id, !next);
+			onsaved?.(next);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Failed to update guest access';
 			onerror?.(message);
-			throw e;
 		} finally {
 			saving = false;
-		}
-	}
-
-	async function toggle(next: boolean) {
-		try {
-			await apply(next);
-		} catch {
-			/* reported through onerror */
 		}
 	}
 </script>
