@@ -27,6 +27,8 @@
 		placedCount,
 		failedSources,
 		pickerOptions,
+		parseHandPick,
+		pickedEpisodeName,
 		usedEpisodeNumbers,
 		ROLE_OPTIONS,
 		type EpisodeRow
@@ -91,7 +93,6 @@
 	// A season the operator picked for a row with no episode yet (nothing saved).
 	let rowSeason = $state<Record<string, number>>({});
 	let handError = $state<string | null>(null);
-	const ROLES = ['extra', 'trailer', 'other'] as const;
 	const REVERT = ['role', 'season', 'episode_number', 'episode_number_end', 'episode_name'] as const;
 
 	export async function reload(): Promise<void> {
@@ -376,16 +377,14 @@
 	}
 
 	async function setByHand(trackId: string, value: string) {
-		const role = ROLES.find((r) => r === value);
-		if (role) return saveTrack(trackId, { role });
-		const m = /^s(\d+)e(\d+)$/.exec(value);
-		if (!m) return;
-		const [season, n] = [Number(m[1]), Number(m[2])];
+		const pick = parseHandPick(value);
+		if (!pick) return;
+		if ('role' in pick) return saveTrack(trackId, { role: pick.role });
 		const row = rows.find((r) => r.trackId === trackId);
 		const listSeason = row ? seasonOf(row) : null;
 		const list = listSeason == null ? [] : (episodesBySeason.get(listSeason) ?? []);
-		const ep = list.find((e) => e.number === n && (!!e.special || listSeason === 0) === (season === 0));
-		const data = { role: 'episode' as const, season, episode_number: n, episode_name: ep?.name ?? null };
+		const name = pickedEpisodeName(list, listSeason, pick.season, pick.episode);
+		const data = { role: 'episode' as const, season: pick.season, episode_number: pick.episode, episode_name: name };
 		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
 	}
 

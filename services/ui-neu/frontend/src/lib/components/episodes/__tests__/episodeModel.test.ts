@@ -6,9 +6,18 @@ import {
 	placedCount,
 	formatLength,
 	pickerOptions,
+	parseHandPick,
+	pickedEpisodeName,
 	usedEpisodeNumbers
 } from '../episodeModel';
-import type { IdentityView, TrackIdentityView, JobView, TrackView, MatchPreview } from '$lib/types/api.gen';
+import type {
+	EpisodeSummary,
+	IdentityView,
+	TrackIdentityView,
+	JobView,
+	TrackView,
+	MatchPreview
+} from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>
 	({ has_series: true, looks_episodic: true, media_type: 'tv', ...o }) as JobView;
@@ -258,5 +267,80 @@ describe('usedEpisodeNumbers', () => {
 
 	it('gives an empty set for no tracks', () => {
 		expect(usedEpisodeNumbers([], 1, 'z')).toEqual(new Set());
+	});
+});
+
+describe('parseHandPick', () => {
+	it.each(['extra', 'trailer', 'other'])('reads %s as that role', (role) => {
+		expect(parseHandPick(role)).toEqual({ role });
+	});
+
+	it('reads s2e5 as season 2, episode 5', () => {
+		expect(parseHandPick('s2e5')).toEqual({ season: 2, episode: 5 });
+	});
+
+	it('reads s0e3 as season 0, episode 3', () => {
+		expect(parseHandPick('s0e3')).toEqual({ season: 0, episode: 3 });
+	});
+
+	it.each(['', 'episode', 's2', 's2e', 'x2e5'])('gives null for %j', (value) => {
+		expect(parseHandPick(value)).toBeNull();
+	});
+
+	it('reads back every value pickerOptions gives', () => {
+		const eps = [
+			{ number: 1, name: 'First', runtime_s: 3000 },
+			{ number: 4, name: 'Fourth' },
+			{ number: 2, name: 'Pilot', special: true }
+		] as EpisodeSummary[];
+		const picks = pickerOptions(eps, 3, 3000, new Set([4])).map((o) => [o.value, parseHandPick(o.value)]);
+		expect(picks).toEqual([
+			['s3e1', { season: 3, episode: 1 }],
+			['s0e2', { season: 0, episode: 2 }],
+			['s3e4', { season: 3, episode: 4 }],
+			['extra', { role: 'extra' }],
+			['trailer', { role: 'trailer' }],
+			['other', { role: 'other' }]
+		]);
+	});
+});
+
+describe('pickedEpisodeName', () => {
+	const list = [
+		{ number: 1, name: 'First' },
+		{ number: 2 },
+		{ number: 1, name: 'Pilot', special: true }
+	] as EpisodeSummary[];
+
+	it('gives the name of a regular episode', () => {
+		expect(pickedEpisodeName(list, 1, 1, 1)).toBe('First');
+	});
+
+	it('gives null when the list does not hold the episode', () => {
+		expect(pickedEpisodeName(list, 1, 1, 9)).toBeNull();
+	});
+
+	it('gives null for a found episode with no name', () => {
+		expect(pickedEpisodeName(list, 1, 1, 2)).toBeNull();
+	});
+
+	it('takes a special for a season 0 pick from a regular season list', () => {
+		expect(pickedEpisodeName(list, 1, 0, 1)).toBe('Pilot');
+	});
+
+	it('does not take a regular episode of the same number for a season 0 pick', () => {
+		expect(pickedEpisodeName([list[0]], 1, 0, 1)).toBeNull();
+	});
+
+	it('does not take a special for a regular season pick', () => {
+		expect(pickedEpisodeName([list[2]], 1, 1, 1)).toBeNull();
+	});
+
+	it('matches every episode of a season 0 list to a season 0 pick', () => {
+		expect(pickedEpisodeName([list[0]], 0, 0, 1)).toBe('First');
+	});
+
+	it('gives null for no list', () => {
+		expect(pickedEpisodeName([], null, 1, 1)).toBeNull();
 	});
 });

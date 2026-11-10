@@ -15,7 +15,7 @@ import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$l
 // - held's `: null` (when the panel is not showing a guess): the derived is
 //   read only inside `view === 'unsure' && held`, and an unsure view always
 //   has an identity, so it is never evaluated in any other state.
-// - setByHand's `if (!m) return;`: EpisodeRows only sends values from the
+// - setByHand's `if (!pick) return;`: EpisodeRows only sends values from the
 //   options the panel gives it, roles or `s<season>e<episode>`, so every
 //   value parses.
 // - setByHand's missing row (`row ? ... : null`): the trackId always comes
