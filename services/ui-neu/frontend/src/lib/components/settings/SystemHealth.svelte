@@ -23,6 +23,7 @@
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
+	import HealthItem from './HealthItem.svelte';
 
 	// Settings > System and the setup walkthrough's System check share this.
 	// `grouped`: Storage + Services panels with fix commands (setup spec §5.3).
@@ -129,18 +130,19 @@
 				<div class="stack mt-3">
 					{#each result.paths as p (p.name)}
 						{@const st = pathState(p)}
-						<div class="system-health-item" data-testid="system-health-path" data-status={st}>
-							<div class="system-health-item-head">
-								<div>
-									<span class="system-health-item-name">{storageLabel(p.name)}</span>
-									<code class="mono system-health-item-path">{p.path}</code>
-									<p class="system-health-description">{storageHelp(p.name)}</p>
-								</div>
+						<HealthItem
+							testid="system-health-path"
+							status={st}
+							name={storageLabel(p.name)}
+							path={p.path}
+							description={storageHelp(p.name)}
+						>
+							{#snippet badge()}
 								<span class="badge badge-sm {st === 'ok' ? 'badge-success' : 'badge-danger'}">
 									{st === 'ok' ? 'OK' : 'Problem'}
 								</span>
-							</div>
-							<div class="cluster system-health-chips">
+							{/snippet}
+							{#snippet chips()}
 								<span class="chip chip-sm {p.exists ? 'chip-success' : 'chip-danger'}">
 									<Glyph name={p.exists ? 'check' : 'x'} class="h-3 w-3" />{p.exists ? 'Exists' : 'Missing'}
 								</span>
@@ -148,7 +150,7 @@
 									<Glyph name={p.writable ? 'check' : 'x'} class="h-3 w-3" />{p.writable ? 'Writable' : 'Not writable'}
 								</span>
 								<span class="chip chip-sm">{freeLabel(storage, p.name)}</span>
-							</div>
+							{/snippet}
 							{#if st !== 'ok'}
 								{#if p.host_path}
 									<p class="system-health-description">
@@ -161,7 +163,7 @@
 									</p>
 								{/if}
 							{/if}
-						</div>
+						</HealthItem>
 					{/each}
 				</div>
 			</section>
@@ -172,26 +174,27 @@
 				<div class="stack mt-3">
 					{#each services as c (c.name)}
 						{@const b = serviceBadge(c.status)}
-						<div class="system-health-item" data-testid="system-health-service" data-status={c.status}>
-							<div class="system-health-item-head">
-								<div>
-									<span class="system-health-item-name">{serviceLabel(c.name)}</span>
-									<p class="system-health-description">{serviceDescription(c)}</p>
-								</div>
+						<HealthItem
+							testid="system-health-service"
+							status={c.status}
+							name={serviceLabel(c.name)}
+							description={serviceDescription(c)}
+						>
+							{#snippet badge()}
 								<span class="badge badge-sm badge-{b.tone}"><Glyph name={b.glyph} class="h-3 w-3" /> {b.text}</span>
-							</div>
-							<div class="cluster system-health-chips">
+							{/snippet}
+							{#snippet chips()}
 								{#if locationLabel(c)}<span class="chip chip-sm chip-info">{locationLabel(c)}</span>{/if}
 								{#each c.details ?? [] as d (d.label)}
 									<span class="chip chip-sm {d.ok ? 'chip-success' : 'chip-danger'}">
 										<Glyph name={d.ok ? 'check' : 'x'} class="h-3 w-3" />{d.label}{d.ok ? '' : ': problem'}
 									</span>
 								{/each}
-							</div>
+							{/snippet}
 							{#if c.status !== 'ok' && c.detail}
 								<p class="mono system-health-item-detail">{c.detail}</p>
 							{/if}
-						</div>
+						</HealthItem>
 					{/each}
 				</div>
 			</section>
@@ -319,39 +322,10 @@
 	.system-health-group {
 		padding: 1.25rem;
 	}
-	.system-health-item {
-		display: grid;
-		gap: 0.5rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 0.875rem 1rem;
-	}
-	.system-health-item[data-status='error'],
-	.system-health-item[data-status='warning'] {
-		border-color: var(--color-danger);
-	}
-	.system-health-item-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-	.system-health-item-name {
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.system-health-item-path {
-		margin-left: 0.5rem;
-		font-size: 0.8125rem;
-		color: var(--color-text-muted);
-	}
 	.system-health-item-detail {
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
 		overflow-wrap: anywhere;
-	}
-	.system-health-chips {
-		gap: 0.375rem;
 	}
 	.system-health-placeholder {
 		font-size: 0.875rem;
