@@ -7,6 +7,7 @@
 	import RankedListField from './RankedListField.svelte';
 	import MakemkvKeyField from './MakemkvKeyField.svelte';
 	import DiscHandlingField from './DiscHandlingField.svelte';
+	import SecretStatus from './SecretStatus.svelte';
 
 	// `config` (the live form values, keyed by field key) lets a field type
 	// read a sibling's value - the `ranked` branch below uses it to flag a
@@ -152,18 +153,7 @@
 				Get a free key <Glyph name="external-link" class="h-3.5 w-3.5" />
 			</a>
 		{/if}
-		{#if isHiddenSecret}
-			<div class="config-schema-field-saved">
-				<span class="chip chip-sm chip-success"><Glyph name="check" class="h-3 w-3" /> Saved</span>
-				<span class="config-schema-field-saved-note">Type a new key to replace it.</span>
-				<button type="button" class="btn btn-link btn-sm" onclick={removeSecret}>Remove</button>
-			</div>
-		{:else if removed}
-			<div class="config-schema-field-saved">
-				<span class="chip chip-sm chip-warning"><Glyph name="minus-circle" class="h-3 w-3" /> Will be removed</span>
-				<span class="config-schema-field-saved-note">The key is cleared when you save.</span>
-			</div>
-		{/if}
+		<SecretStatus saved={isHiddenSecret} {removed} onremove={removeSecret} />
 	{/if}
 	{#if field.help && field.widget == null && !hideHelp}
 		<p class="field-help" id={helpId}>{field.help}</p>
@@ -194,16 +184,6 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.8125rem;
-	}
-	.config-schema-field-saved {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.25rem 0.5rem;
-		font-size: 0.8125rem;
-	}
-	.config-schema-field-saved-note {
-		color: var(--color-text-muted);
 	}
 	/* an int field is a short number, not a full-width text box. */
 	.config-schema-field-number {
