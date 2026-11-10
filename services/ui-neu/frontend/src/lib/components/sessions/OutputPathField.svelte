@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MediaType } from '$lib/types/api.gen';
 	import { previewTemplate } from '$lib/api/sessions';
+	import { mediaTokens } from './sampleTokens';
 
 	interface Props {
 		value: string;
@@ -12,26 +13,6 @@
 	}
 
 	let { value, mediaType, onchange, has_transcode_preset, id, disabled = false }: Props = $props();
-
-	// Valid tokens per media type
-	const TOKENS: Record<MediaType, string[]> = {
-		movie: ['title', 'year', 'track', 'duration_human', 'transcode_slug', 'ext'],
-		tv: [
-			'show',
-			'year',
-			'season',
-			'disc',
-			'track',
-			'episode',
-			'episode_title',
-			'duration_human',
-			'transcode_slug',
-			'ext'
-		],
-		music: ['artist', 'album', 'disc', 'track', 'track_title', 'transcode_slug', 'ext'],
-		data: ['title'],
-		iso: ['title', 'year', 'ext']
-	};
 
 	// Tokens that commonly have no value; each gets an extra chip inserting {token?}.
 	const OPTIONAL_CHIPS = new Set(['year']);
@@ -88,7 +69,7 @@
 		onchange(newValue);
 	}
 
-	let tokens = $derived(TOKENS[mediaType] ?? []);
+	let tokens = $derived(mediaTokens(mediaType));
 </script>
 
 <div class="stack stack-sm">

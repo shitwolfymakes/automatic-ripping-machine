@@ -1,5 +1,37 @@
-import { it, expect } from 'vitest';
-import { resolveSample, MEDIA_SAMPLE } from '../sampleTokens';
+import { describe, it, expect } from 'vitest';
+import { resolveSample, mediaTokens, MEDIA_SAMPLE } from '../sampleTokens';
+
+describe('mediaTokens', () => {
+	it('lists the movie tokens in chip order', () => {
+		expect(mediaTokens('movie')).toEqual(['title', 'year', 'track', 'duration_human', 'transcode_slug', 'ext']);
+	});
+	it('lists the tv tokens in chip order', () => {
+		expect(mediaTokens('tv')).toEqual([
+			'show',
+			'year',
+			'season',
+			'disc',
+			'track',
+			'episode',
+			'episode_title',
+			'duration_human',
+			'transcode_slug',
+			'ext'
+		]);
+	});
+	it('lists the music tokens in chip order', () => {
+		expect(mediaTokens('music')).toEqual(['artist', 'album', 'disc', 'track', 'track_title', 'transcode_slug', 'ext']);
+	});
+	it('lists the data tokens in chip order', () => {
+		expect(mediaTokens('data')).toEqual(['title']);
+	});
+	it('lists the iso tokens in chip order', () => {
+		expect(mediaTokens('iso')).toEqual(['title', 'year', 'ext']);
+	});
+	it('gives no tokens for a media type the sample does not know', () => {
+		expect(mediaTokens('bogus' as any)).toEqual([]);
+	});
+});
 
 it('substitutes movie tokens', () => {
 	expect(resolveSample('movies/{title} ({year}).{ext}', 'movie')).toBe('movies/Fight Club (1999).mkv');

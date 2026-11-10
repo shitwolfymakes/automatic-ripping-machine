@@ -34,6 +34,12 @@ export const MEDIA_SAMPLE: Record<MediaType, Record<string, string>> = {
 	iso: { title: 'The Matrix', year: '1999', ext: 'iso' }
 };
 
+/** The tokens a template for the media type can use, in the order the
+ * chips show them: the keys of its sample. */
+export function mediaTokens(mediaType: MediaType): string[] {
+	return Object.keys(MEDIA_SAMPLE[mediaType] ?? {});
+}
+
 export function resolveSample(template: string, mediaType: MediaType): string {
 	const map = MEDIA_SAMPLE[mediaType] ?? {};
 	return template.replace(/\{(\w+)\??\}/g, (m, key) => (key in map ? map[key] : m));
