@@ -94,3 +94,13 @@ export function sessionsForDisc<S extends { media_type: string }>(sessions: read
 	const mt = discTypeToMediaType(discType);
 	return sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
 }
+
+/** The media types a session can have. */
+const SESSION_MEDIA_TYPES: MediaType[] = ['movie', 'tv', 'music', 'data', 'iso'];
+
+/** How many sessions there are, in all and of each media type. */
+export function countByMediaType(sessions: ReadonlyArray<{ media_type: string }>): Record<MediaType | 'all', number> {
+	const counts: Record<string, number> = { all: sessions.length };
+	for (const m of SESSION_MEDIA_TYPES) counts[m] = sessions.filter((s) => s.media_type === m).length;
+	return counts as Record<MediaType | 'all', number>;
+}

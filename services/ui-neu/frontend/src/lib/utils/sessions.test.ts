@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { defaultSessionChoices, manualRipSessionChoices, mediaTypesCompatible, sessionsForDisc } from './sessions';
+import {
+	countByMediaType,
+	defaultSessionChoices,
+	manualRipSessionChoices,
+	mediaTypesCompatible,
+	sessionsForDisc
+} from './sessions';
 
 const presets = [
 	{ id: 'p-none', tool: 'none' },
@@ -92,5 +98,33 @@ describe('sessionsForDisc', () => {
 		const second = { id: 'b', media_type: 'tv' };
 		const third = { id: 'c', media_type: 'movie' };
 		expect(sessionsForDisc([third, second, first], 'dvd')).toEqual([third, second, first]);
+	});
+});
+
+describe('countByMediaType', () => {
+	it('counts zero in all and of every media type when there are no sessions', () => {
+		expect(countByMediaType([])).toEqual({ all: 0, movie: 0, tv: 0, music: 0, data: 0, iso: 0 });
+	});
+
+	it('counts each media type, with two sessions of one type', () => {
+		const sessions = [
+			{ media_type: 'movie' },
+			{ media_type: 'tv' },
+			{ media_type: 'movie' },
+			{ media_type: 'music' },
+			{ media_type: 'iso' }
+		];
+		expect(countByMediaType(sessions)).toEqual({ all: 5, movie: 2, tv: 1, music: 1, data: 0, iso: 1 });
+	});
+
+	it('counts a session of an unlisted media type in all only', () => {
+		expect(countByMediaType([{ media_type: 'game' }, { media_type: 'data' }])).toEqual({
+			all: 2,
+			movie: 0,
+			tv: 0,
+			music: 0,
+			data: 1,
+			iso: 0
+		});
 	});
 });

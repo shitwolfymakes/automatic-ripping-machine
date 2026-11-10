@@ -1,4 +1,5 @@
-import type { SessionView, RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
+import type { SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+import { countByMediaType } from '$lib/utils/sessions';
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/ripPresets';
 import { fetchTranscodePresets } from '$lib/api/transcodePresets';
@@ -7,8 +8,6 @@ export type JoinedSession = SessionView & {
 	ripPreset: RipPresetView | undefined;
 	transcodePreset: TranscodePresetView | undefined;
 };
-
-const MEDIA_TYPES: MediaType[] = ['movie', 'tv', 'music', 'data', 'iso'];
 
 export function createSessionsData() {
 	let rawSessions = $state<SessionView[]>([]);
@@ -51,11 +50,7 @@ export function createSessionsData() {
 		transcodePresets: () => tcs,
 		ripUsage: (id: string) => rawSessions.filter((s) => s.rip_preset_id === id).length,
 		transcodeUsage: (id: string) => rawSessions.filter((s) => s.transcode_preset_id === id).length,
-		typeCounts: () => {
-			const counts: Record<string, number> = { all: rawSessions.length };
-			for (const m of MEDIA_TYPES) counts[m] = rawSessions.filter((s) => s.media_type === m).length;
-			return counts as Record<MediaType | 'all', number>;
-		},
+		typeCounts: () => countByMediaType(rawSessions),
 		loading: () => loading,
 		error: () => error,
 		load

@@ -13,8 +13,8 @@
 	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcodePresets';
 	import { addToast } from '$lib/stores/toast.svelte';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { isPassthroughSession, presetToolMap, PASSTHROUGH_TOOL } from '$lib/utils/sessions';
-	import type { MediaType, RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+	import { countByMediaType, isPassthroughSession, presetToolMap, PASSTHROUGH_TOOL } from '$lib/utils/sessions';
+	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 
 	const data = createSessionsData();
 
@@ -31,13 +31,7 @@
 	const shownTranscodePresets = $derived(
 		$transcoderEnabled ? data.transcodePresets() : data.transcodePresets().filter((p) => p.tool === PASSTHROUGH_TOOL)
 	);
-	const SESSION_MEDIA_TYPES: MediaType[] = ['movie', 'tv', 'music', 'data', 'iso'];
-	const shownTypeCounts = $derived.by(() => {
-		if ($transcoderEnabled) return data.typeCounts();
-		const counts: Record<string, number> = { all: shownSessions.length };
-		for (const m of SESSION_MEDIA_TYPES) counts[m] = shownSessions.filter((s) => s.media_type === m).length;
-		return counts;
-	});
+	const shownTypeCounts = $derived($transcoderEnabled ? data.typeCounts() : countByMediaType(shownSessions));
 
 	// Active sub-tab: sessions hub, or one of the two preset libraries
 	let view = $state<'sessions' | 'rip' | 'transcode'>('sessions');
