@@ -26,14 +26,20 @@
 	let gpus = $state<GpuView[]>([]);
 	let channelCount = $state(0);
 
+	/**
+	 * Loads what the summary lines need besides the drives. A load that
+	 * fails leaves its value at the default.
+	 */
+	async function loadSummaryData(): Promise<void> {
+		const [c, g, ch] = await Promise.allSettled([fetchConfigView(), fetchGpus(), fetchChannels()]);
+		if (c.status === 'fulfilled') config = c.value;
+		if (g.status === 'fulfilled') gpus = g.value;
+		if (ch.status === 'fulfilled') channelCount = ch.value.filter((x) => (x.type as string) !== 'inapp').length;
+	}
+
 	onMount(() => {
 		drives.start();
-		void (async () => {
-			const [c, g, ch] = await Promise.allSettled([fetchConfigView(), fetchGpus(), fetchChannels()]);
-			if (c.status === 'fulfilled') config = c.value;
-			if (g.status === 'fulfilled') gpus = g.value;
-			if (ch.status === 'fulfilled') channelCount = ch.value.filter((x) => (x.type as string) !== 'inapp').length;
-		})();
+		void loadSummaryData();
 		wsClient.start();
 		const unsubscribe = wsClient.subscribe('ripper.events', (env: WSEnvelope) => {
 			if (env.event_type === 'rip.started' && target && env.payload.drive_id === target.id) ripStarted = true;
