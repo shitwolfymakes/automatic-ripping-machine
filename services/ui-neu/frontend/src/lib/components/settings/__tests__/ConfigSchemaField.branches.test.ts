@@ -207,3 +207,24 @@ describe('ConfigSchemaField controls', () => {
 		expect(screen.getByTestId('setting-k')).not.toHaveTextContent('Help');
 	});
 });
+
+describe('ConfigSchemaField plain text', () => {
+	it('keeps what is typed into it', async () => {
+		renderComponent(ConfigSchemaField, {
+			props: { field: f({ type: 'string', label: 'Name' }), value: 'old' }
+		});
+		const input = screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement;
+		expect(input.value).toBe('old');
+		await fireEvent.input(input, { target: { value: 'new' } });
+		expect(input.value).toBe('new');
+	});
+
+	it('shows a null value as an empty text input', () => {
+		renderComponent(ConfigSchemaField, {
+			props: { field: f({ type: 'string', label: 'Name' }), value: null }
+		});
+		const input = screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement;
+		expect(input.value).toBe('');
+		expect(input.type).toBe('text');
+	});
+});

@@ -3,7 +3,7 @@
 	import type { ConfigFieldMeta, ConfigView, DriveView } from '$lib/types/api.gen';
 	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
@@ -20,7 +20,6 @@
 	}: { field: ConfigFieldMeta; value: unknown; onclear?: () => void } = $props();
 
 	let mode = $state<'beta' | 'own'>('beta');
-	let reveal = $state(false);
 	let cfg = $state<ConfigView | null>(null);
 	let drives = $state<DriveView[]>([]);
 
@@ -89,24 +88,14 @@
 		<div class="field">
 			<label class="field-label" for="makemkv-key-input">Registration key</label>
 			<div class="makemkv-key-field-row">
-				<input
+				<SecretInput
 					id="makemkv-key-input"
 					class="field-control w-full mono"
-					type={reveal ? 'text' : 'password'}
 					autocomplete="off"
-					value={value === HIDDEN_SECRET ? '' : ((value as string | null) ?? '')}
-					placeholder={value === HIDDEN_SECRET ? '******** (set, leave blank to keep)' : 'T-...'}
-					oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
+					bind:value
+					placeholder="T-..."
+					revealLabel="Show registration key"
 				/>
-				<button
-					type="button"
-					class="btn btn-icon"
-					aria-label="Show registration key"
-					aria-pressed={reveal}
-					onclick={() => (reveal = !reveal)}
-				>
-					<Glyph name={reveal ? 'eye-off' : 'eye'} />
-				</button>
 			</div>
 			{#if value === HIDDEN_SECRET}
 				<p class="field-help"><span class="chip chip-sm chip-success">Saved</span> Type a new key to replace it.</p>

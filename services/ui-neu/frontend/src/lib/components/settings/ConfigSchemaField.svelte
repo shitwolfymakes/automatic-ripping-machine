@@ -8,6 +8,7 @@
 	import MakemkvKeyField from './MakemkvKeyField.svelte';
 	import DiscHandlingField from './DiscHandlingField.svelte';
 	import SecretStatus from './SecretStatus.svelte';
+	import SecretInput from './SecretInput.svelte';
 
 	// `config` (the live form values, keyed by field key) lets a field type
 	// read a sibling's value - the `ranked` branch below uses it to flag a
@@ -45,7 +46,6 @@
 
 	const isSecret = $derived(field.tier === 'secret');
 	const isHiddenSecret = $derived(isSecret && value === HIDDEN_SECRET);
-	let reveal = $state(false);
 	let removed = $state(false);
 
 	function removeSecret() {
@@ -54,8 +54,6 @@
 		onclear?.();
 	}
 	const boolValue = $derived(Boolean(value));
-	const displayValue = $derived(isHiddenSecret ? '' : (value ?? ''));
-	const placeholder = $derived(isHiddenSecret ? '******** (set, leave blank to keep)' : '');
 	const helpId = $derived(field.help ? `setting-help-${field.key}` : undefined);
 </script>
 
@@ -121,30 +119,24 @@
 					}}
 					class="field-control config-schema-field-number"
 				/>
-			{:else}
-				<input
-					type={isSecret && !reveal ? 'password' : 'text'}
+			{:else if isSecret}
+				<SecretInput
+					bind:value
 					aria-label={field.label}
 					aria-describedby={describedBy}
-					value={displayValue}
-					{placeholder}
-					oninput={(e) => {
-						value = (e.currentTarget as HTMLInputElement).value;
-						removed = false;
-					}}
+					revealLabel="Show hidden value"
+					oninput={() => (removed = false)}
 					class="field-control w-full"
 				/>
-				{#if isSecret}
-					<button
-						type="button"
-						class="btn btn-icon"
-						aria-label="Show hidden value"
-						aria-pressed={reveal}
-						onclick={() => (reveal = !reveal)}
-					>
-						<Glyph name={reveal ? 'eye-off' : 'eye'} />
-					</button>
-				{/if}
+			{:else}
+				<input
+					type="text"
+					aria-label={field.label}
+					aria-describedby={describedBy}
+					value={value ?? ''}
+					oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}
+					class="field-control w-full"
+				/>
 			{/if}
 			{#if action}{@render action()}{/if}
 		</div>
