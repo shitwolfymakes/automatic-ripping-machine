@@ -14,6 +14,7 @@
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import RankedListField from './RankedListField.svelte';
 	import DiscKindSwitch from './DiscKindSwitch.svelte';
+	import IdentityCheckbox from './IdentityCheckbox.svelte';
 	import IdentityPreview from './IdentityPreview.svelte';
 
 	// Settings › Identification › Identity: the four pipeline steps over the
@@ -63,17 +64,13 @@
 			{#if field}
 				<div class="identity-card-option" id="setting-{db.key}" data-testid="setting-{db.key}">
 					<div class="identity-card-row-head">
-						<label class="field field-row">
-							<input
-								type="checkbox"
-								aria-label={db.label}
-								aria-describedby="identity-help-{db.key}"
-								checked={Boolean(values[db.key])}
-								disabled={off(db.key)}
-								onchange={(e) => (values[db.key] = (e.currentTarget as HTMLInputElement).checked)}
-							/>
-							<span class="field-label">{db.label}</span>
-						</label>
+						<IdentityCheckbox
+							label={db.label}
+							describedby="identity-help-{db.key}"
+							checked={Boolean(values[db.key])}
+							disabled={off(db.key)}
+							onchange={(on) => (values[db.key] = on)}
+						/>
 						{#each db.chips as chip (chip)}<span class="chip identity-card-kind">{chip}</span>{/each}
 					</div>
 					<p class="field-help" id="identity-help-{db.key}">{db.description ?? field.help}</p>
@@ -124,17 +121,13 @@
 			{#each TRUST_OPTIONS as t (t.key)}
 				{#if meta(t.key)}
 					<div class="identity-card-option" id="setting-{t.key}" data-testid="setting-{t.key}">
-						<label class="field field-row">
-							<input
-								type="checkbox"
-								aria-label={t.label}
-								aria-describedby="identity-help-trust"
-								checked={Boolean(values[t.key])}
-								disabled={off(t.key)}
-								onchange={(e) => (values[t.key] = (e.currentTarget as HTMLInputElement).checked)}
-							/>
-							<span class="field-label">{t.label}</span>
-						</label>
+						<IdentityCheckbox
+							label={t.label}
+							describedby="identity-help-trust"
+							checked={Boolean(values[t.key])}
+							disabled={off(t.key)}
+							onchange={(on) => (values[t.key] = on)}
+						/>
 					</div>
 				{/if}
 			{/each}
@@ -151,22 +144,13 @@
 			<span class="label-caps">Advanced</span>
 			{#each IGNORE_OPTIONS as box (box.hint)}
 				<div class="identity-card-option">
-					<label class="field field-row">
-						<input
-							type="checkbox"
-							aria-label={box.label}
-							aria-describedby="identity-help-ignore-{box.hint}"
-							checked={isIgnored(box.hint)}
-							disabled={off('disc_hint_sources')}
-							onchange={(e) =>
-								(values.disc_hint_sources = withHintIgnored(
-									values,
-									box.hint,
-									(e.currentTarget as HTMLInputElement).checked
-								))}
-						/>
-						<span class="field-label">{box.label}</span>
-					</label>
+					<IdentityCheckbox
+						label={box.label}
+						describedby="identity-help-ignore-{box.hint}"
+						checked={isIgnored(box.hint)}
+						disabled={off('disc_hint_sources')}
+						onchange={(on) => (values.disc_hint_sources = withHintIgnored(values, box.hint, on))}
+					/>
 					<p class="field-help" id="identity-help-ignore-{box.hint}">{box.help}</p>
 				</div>
 			{/each}
