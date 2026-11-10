@@ -1,12 +1,5 @@
 <script lang="ts">
-	import {
-		humanizeContainer,
-		humanizeIdentificationMode,
-		humanizeMediaType,
-		humanizeOutputMode,
-		humanizeTool,
-		humanizeTrackSelection
-	} from '$lib/utils/preset-labels';
+	import { humanizeMediaType, ripPresetSummary, transcodePresetSummary } from '$lib/utils/preset-labels';
 	import { onMount } from 'svelte';
 	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import { encodersStore, encoderLabel } from '$lib/stores/encoders.svelte';
@@ -31,16 +24,8 @@
 
 	let summary = $derived(
 		kind === 'rip'
-			? (() => {
-					const p = preset as RipPresetView;
-					return `${humanizeTrackSelection(p.track_selection)} | ${humanizeIdentificationMode(p.identification_mode)} | ${humanizeOutputMode(p.output_mode)}`;
-				})()
-			: (() => {
-					const p = preset as TranscodePresetView;
-					return [humanizeTool(p.tool), humanizeContainer(p.container), encoderLabel(p.encoder)]
-						.filter((v) => !!v)
-						.join(' | ');
-				})()
+			? ripPresetSummary(preset as RipPresetView)
+			: transcodePresetSummary(preset as TranscodePresetView, encoderLabel)
 	);
 
 	let deleteDisabled = $derived(preset.is_builtin || usedBy > 0);

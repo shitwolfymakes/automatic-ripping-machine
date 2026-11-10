@@ -1,6 +1,8 @@
-// The labels the sessions screens show for a session's or preset's settings,
-// shared by SessionCard and PresetRow. Each shows an unknown value as it is,
-// and a missing one as -.
+// The labels and one-line summaries the sessions screens show for a
+// session's or preset's settings, shared by SessionCard and PresetRow.
+// Each label shows an unknown value as it is, and a missing one as -.
+
+import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 
 /** A value's label from `labels`. A value the table doesn't list shows
  * as itself, and no value as "-". */
@@ -81,4 +83,22 @@ const CONTAINER_LABELS: ReadonlyMap<string, string> = new Map([
 /** A container's label. */
 export function humanizeContainer(v: string | null | undefined): string {
 	return labelFrom(CONTAINER_LABELS, v);
+}
+
+/** A rip preset's one-line summary: its track selection, identification
+ * mode and output mode. */
+export function ripPresetSummary(
+	p: Pick<RipPresetView, 'track_selection' | 'identification_mode' | 'output_mode'>
+): string {
+	return `${humanizeTrackSelection(p.track_selection)} | ${humanizeIdentificationMode(p.identification_mode)} | ${humanizeOutputMode(p.output_mode)}`;
+}
+
+/** A transcode preset's one-line summary: its tool, container and
+ * encoder, leaving out any part that is empty. `encoderName` names an
+ * encoder id, as the encoders store's `encoderLabel` does. */
+export function transcodePresetSummary(
+	p: Pick<TranscodePresetView, 'tool' | 'container' | 'encoder'>,
+	encoderName: (id: string | null | undefined) => string
+): string {
+	return [humanizeTool(p.tool), humanizeContainer(p.container), encoderName(p.encoder)].filter((v) => !!v).join(' | ');
 }
