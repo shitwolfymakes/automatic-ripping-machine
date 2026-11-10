@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { PathStatus, StorageRoot, SystemDiagnosticCheck } from '$lib/types/api.gen';
+import type { PathStatus, StorageRoot, SystemDiagnosticCheck, SystemDiagnosticsResponse } from '$lib/types/api.gen';
 import {
 	checkDetail,
 	checkLabel,
 	freeLabel,
+	healthTally,
 	inScope,
 	locationLabel,
 	pathDetail,
@@ -40,6 +41,41 @@ const root = (name: string, free_gb: number): StorageRoot => ({
 	used_gb: 100 - free_gb,
 	free_gb,
 	percent: 0
+});
+
+const diagnostics = (checks: SystemDiagnosticCheck[], paths: PathStatus[]): SystemDiagnosticsResponse => ({
+	status: 'ok',
+	checks,
+	paths
+});
+
+describe('healthTally', () => {
+	it('is all ok with no issues when every check is ok and every path writable', () => {
+		const tally = healthTally(diagnostics([check({})], [path({})]), 'all');
+		expect(tally).toEqual({ allOk: true, issueCount: 0, problemCount: 0 });
+	});
+
+	it('counts a failing check in scope', () => {
+		const tally = healthTally(diagnostics([check({ name: 'drives', status: 'error' })], []), 'all');
+		expect(tally).toEqual({ allOk: false, issueCount: 1, problemCount: 1 });
+	});
+
+	it('leaves out a failing check the system scope does not cover', () => {
+		const tally = healthTally(diagnostics([check({ name: 'drives', status: 'error' })], []), 'system');
+		expect(tally).toEqual({ allOk: true, issueCount: 0, problemCount: 0 });
+	});
+
+	it('counts a missing path and a read-only one', () => {
+		const paths = [path({ name: 'RAW_ROOT', exists: false }), path({ name: 'LOG_DIR', writable: false })];
+		const tally = healthTally(diagnostics([], paths), 'all');
+		expect(tally).toEqual({ allOk: false, issueCount: 2, problemCount: 2 });
+	});
+
+	it('counts a check and a path with the same name as two issues but one problem', () => {
+		const checks = [check({ name: 'MEDIA_ROOT', status: 'error' })];
+		const tally = healthTally(diagnostics(checks, [path({ exists: false })]), 'all');
+		expect(tally).toEqual({ allOk: false, issueCount: 2, problemCount: 1 });
+	});
 });
 
 describe('the label tables', () => {

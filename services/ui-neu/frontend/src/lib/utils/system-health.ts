@@ -1,6 +1,6 @@
-// System health's labels, and the small decisions its cards make about a
-// check, a storage path or a service.
-import type { PathStatus, StorageRoot, SystemDiagnosticCheck } from '$lib/types/api.gen';
+// System health's labels, and the small decisions its summary and cards
+// make about a result, a check, a storage path or a service.
+import type { PathStatus, StorageRoot, SystemDiagnosticCheck, SystemDiagnosticsResponse } from '$lib/types/api.gen';
 
 /** Operator-facing names for the storage roots. */
 export const STORAGE_LABELS: Record<string, string> = {
@@ -33,6 +33,27 @@ export const SYSTEM_STEP_CHECKS: ReadonlySet<string> = new Set([
  * the System step's for 'system'. */
 export function inScope(scope: 'all' | 'system', name: string): boolean {
 	return scope === 'all' || SYSTEM_STEP_CHECKS.has(name);
+}
+
+/** How a result's summary reads: whether everything is fine, how many
+ * failing checks and paths it has, and how many distinct names those
+ * are (a check and a path can share one). */
+export interface HealthTally {
+	allOk: boolean;
+	issueCount: number;
+	problemCount: number;
+}
+
+/** Tallies a result's failing checks (within `scope`) and failing
+ * paths for the summary. */
+export function healthTally(result: SystemDiagnosticsResponse, scope: 'all' | 'system'): HealthTally {
+	const issues = result.checks.filter((c) => c.status !== 'ok' && inScope(scope, c.name));
+	const pathIssues = result.paths.filter((p) => !p.exists || !p.writable);
+	return {
+		allOk: issues.length === 0 && pathIssues.length === 0,
+		issueCount: issues.length + pathIssues.length,
+		problemCount: new Set([...issues.map((c) => c.name), ...pathIssues.map((p) => p.name)]).size
+	};
 }
 
 // Operator-facing names for the backend's check keys.

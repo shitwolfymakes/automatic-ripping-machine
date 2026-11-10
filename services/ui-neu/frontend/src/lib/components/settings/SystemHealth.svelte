@@ -9,6 +9,7 @@
 		STORAGE_LABELS,
 		checkDetail,
 		checkLabel,
+		healthTally,
 		inScope,
 		pathDetail,
 		pathState
@@ -41,12 +42,6 @@
 
 	let storage = $state<StorageRoot[] | null>(null);
 
-	const issues = $derived(result ? result.checks.filter((c) => c.status !== 'ok' && inScope(scope, c.name)) : []);
-	const pathIssues = $derived(result ? result.paths.filter((p) => !p.exists || !p.writable) : []);
-	const allOk = $derived(result !== null && issues.length === 0 && pathIssues.length === 0);
-	const problemCount = $derived(
-		result ? new Set([...issues.map((c) => c.name), ...pathIssues.map((p) => p.name)]).size : 0
-	);
 	const services = $derived(result ? result.checks.filter((c) => SERVICE_CHECKS.includes(c.name)) : []);
 	const otherChecks = $derived(
 		result
@@ -102,7 +97,8 @@
 		{#if error}
 			<p class="alert alert-danger" data-testid="system-health-error">{error}</p>
 		{:else if result}
-			{#if allOk}
+			{@const tally = healthTally(result, scope)}
+			{#if tally.allOk}
 				<div class="alert alert-success flex items-center gap-2" data-testid="system-health-summary">
 					<Glyph name="check-circle" />
 					<span><strong>Everything checks out.</strong> Storage and services are ready.</span>
@@ -111,7 +107,8 @@
 				<div class="alert alert-danger flex items-start gap-2" data-testid="system-health-summary" role="alert">
 					<Glyph name="x-circle" class="mt-0.5" />
 					<span>
-						<strong>{problemCount} problem{problemCount === 1 ? '' : 's'} to fix on the server</strong><br />
+						<strong>{tally.problemCount} problem{tally.problemCount === 1 ? '' : 's'} to fix on the server</strong><br
+						/>
 						These come from .env and docker-compose, so the fix happens on the server, not here.
 					</span>
 				</div>
@@ -181,14 +178,13 @@
 		{#if error}
 			<p class="field-error mt-3" data-testid="system-health-error">{error}</p>
 		{:else if result}
+			{@const tally = healthTally(result, scope)}
 			<div
-				class="alert {allOk ? 'alert-success' : 'alert-warning'} mt-4 flex items-center gap-3"
+				class="alert {tally.allOk ? 'alert-success' : 'alert-warning'} mt-4 flex items-center gap-3"
 				data-testid="system-health-summary"
 			>
 				<span class="alert-title">
-					{allOk
-						? 'All OK'
-						: `${issues.length + pathIssues.length} issue${issues.length + pathIssues.length === 1 ? '' : 's'} found`}
+					{tally.allOk ? 'All OK' : `${tally.issueCount} issue${tally.issueCount === 1 ? '' : 's'} found`}
 				</span>
 				<span class="panel-hint system-health-summary-count"
 					>{result.checks.length} checks, {result.paths.length} paths</span
