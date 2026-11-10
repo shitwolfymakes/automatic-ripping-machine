@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
+	import { serviceGroups, matchingServices } from './serviceCatalog';
 
 	let { catalog, selectedId, onpick }: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } =
 		$props();
@@ -12,12 +13,8 @@
 	const byId = $derived(new Map(catalog.services.map((s) => [s.id, s])));
 	const selected = $derived(selectedId ? (byId.get(selectedId) ?? null) : null);
 
-	const featured = $derived(catalog.featured.map((id) => byId.get(id)).filter((s): s is CatalogService => !!s));
-	const rest = $derived(
-		catalog.services.filter((s) => !catalog.featured.includes(s.id)).sort((a, b) => a.name.localeCompare(b.name))
-	);
-	const q = $derived(search.trim().toLowerCase());
-	const filtered = $derived(q ? catalog.services.filter((s) => s.name.toLowerCase().includes(q)) : null);
+	const groups = $derived(serviceGroups(catalog));
+	const filtered = $derived(matchingServices(catalog, search));
 
 	function choose(id: string) {
 		onpick?.(id);
@@ -66,9 +63,9 @@
 					{/if}
 				{:else}
 					<li class="eyebrow service-dropdown-group">Featured</li>
-					{#each featured as svc (svc.id)}{@render option(svc)}{/each}
+					{#each groups.featured as svc (svc.id)}{@render option(svc)}{/each}
 					<li class="eyebrow service-dropdown-group service-dropdown-group-muted">All services</li>
-					{#each rest as svc (svc.id)}{@render option(svc)}{/each}
+					{#each groups.rest as svc (svc.id)}{@render option(svc)}{/each}
 				{/if}
 			</ul>
 		</div>
