@@ -2,11 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import GuestAccessField from '../GuestAccessField.svelte';
 
-// Branch pins for GuestAccessField, beside GuestAccessField.test.ts. One
-// branch cannot be reached from the rendered component, so nothing here
-// forces it:
-// - The no-guest early return in toggle: it is wired only to the Toggle
-//   drawn while a guest exists.
+// Branch pins for GuestAccessField, beside GuestAccessField.test.ts. No
+// branch is left open: toggle takes the guest from the Toggle drawn while a
+// guest exists, so it has no no-guest path.
 
 vi.mock('$lib/api/users', () => ({
 	setUserDisabled: vi.fn()

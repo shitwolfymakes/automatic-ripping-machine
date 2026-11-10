@@ -17,11 +17,10 @@
 
 	let saving = $state(false);
 
-	async function toggle(next: boolean): Promise<void> {
-		if (!guest) return;
+	async function toggle(user: UserView, next: boolean): Promise<void> {
 		saving = true;
 		try {
-			await setUserDisabled(guest.id, !next);
+			await setUserDisabled(user.id, !next);
 			onsaved?.(next);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Failed to update guest access';
@@ -42,7 +41,7 @@
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<span class="guest-access-field-state">{guest.disabled ? 'Off' : 'On'}</span>
-			<Toggle checked={!guest.disabled} label="guest" onchange={toggle} disabled={saving} />
+			<Toggle checked={!guest.disabled} label="guest" onchange={(next) => toggle(guest, next)} disabled={saving} />
 		</div>
 	</div>
 {/if}
