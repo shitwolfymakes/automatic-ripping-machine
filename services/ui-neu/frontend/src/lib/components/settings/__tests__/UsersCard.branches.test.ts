@@ -2,10 +2,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import type { UserView } from '$lib/types/api.gen';
 
-// Branch pins for UsersCard, beside UsersCard.test.ts. One branch cannot be
-// reached from the rendered component, so nothing here forces it:
-// - The warning side of roleBadgeClass: it is called only with the admin
-//   user's role, which is always 'admin', so the warning class never applies.
+// Branch pins for UsersCard, beside UsersCard.test.ts. No branch is left
+// open: every one can be reached from the rendered component.
 
 const fetchUsers = vi.fn();
 vi.mock('$lib/api/users', () => ({

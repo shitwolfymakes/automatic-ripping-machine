@@ -46,12 +46,6 @@
 		closePanel();
 		feedback.show('success', 'Admin password changed');
 	}
-
-	// bg-blue-100/text-blue-700 and bg-amber-100/text-amber-700 were soft
-	// tints, not badge-info/badge-warning's solid fills.
-	function roleBadgeClass(role: string): string {
-		return role === 'admin' ? 'users-card-role-badge-info' : 'users-card-role-badge-warning';
-	}
 </script>
 
 <div class="panel">
@@ -69,7 +63,7 @@
 				<div class="panel-section users-card-row">
 					<div class="users-card-row-main">
 						<span class="truncate users-card-username">{admin.username}</span>
-						<span class="badge badge-sm users-card-role-badge {roleBadgeClass(admin.role)}">
+						<span class="badge badge-sm users-card-role-badge users-card-role-badge-info">
 							{admin.role}
 						</span>
 						<span class="users-card-meta">
@@ -185,13 +179,11 @@
 		font-weight: 700;
 		letter-spacing: 0.1em;
 	}
+	/* bg-blue-100/text-blue-700 was a soft tint, not badge-info's solid
+	   fill. */
 	.users-card-role-badge-info {
 		background: var(--color-info-soft);
 		color: var(--color-on-info-soft);
-	}
-	.users-card-role-badge-warning {
-		background: var(--color-warning-soft);
-		color: var(--color-on-warning-soft);
 	}
 	/* the original was border-primary/30 bg-primary/10 text-primary (a
 	   tinted fill with a border), not .btn's plain outlined default. Its
