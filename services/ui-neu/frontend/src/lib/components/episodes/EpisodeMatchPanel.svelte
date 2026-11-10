@@ -3,23 +3,11 @@
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import type {
-		EpisodeSummary,
-		IdentityView,
-		JobView,
-		MatchPreview,
-		MatchRequest,
-		TrackView
-	} from '$lib/types/api.gen';
-	import {
-		clearEpisodeMatch,
-		fetchEpisodes,
-		fetchIdentity,
-		matchIdentity,
-		type EpisodeSource
-	} from '$lib/api/identity';
+	import type { IdentityView, JobView, MatchPreview, MatchRequest, TrackView } from '$lib/types/api.gen';
+	import { clearEpisodeMatch, fetchIdentity, matchIdentity, type EpisodeSource } from '$lib/api/identity';
 	import { fetchNamingPreview, updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
+	import { EpisodeLists } from '$lib/stores/episodeLists.svelte';
 	import { SeasonList } from '$lib/stores/seasonList.svelte';
 	import {
 		panelState,
@@ -84,11 +72,8 @@
 	let clearing = $state(false);
 	let actionError = $state<string | null>(null);
 	let lastRequest = $state.raw<MatchRequest | null>(null);
-	// The picker's episode lists by season, for the job and source in episodesFor.
-	let episodesBySeason = $state.raw(new Map<number, EpisodeSummary[]>());
-	let episodesFor = '';
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- fetch bookkeeping, never read reactively
-	const episodesRequested = new Set<number>();
+	// The picker's episode lists by season.
+	const episodeLists = new EpisodeLists();
 	// A season the operator picked for a row with no episode yet (nothing saved).
 	let rowSeason = $state<Record<string, number>>({});
 	let handError = $state<string | null>(null);
@@ -130,9 +115,7 @@
 		dropPreview();
 		lastRequest = null;
 		seasonList.reset();
-		episodesBySeason = new Map();
-		episodesFor = '';
-		episodesRequested.clear();
+		episodeLists.reset();
 		rowSeason = {};
 		handError = null;
 	}
@@ -299,28 +282,7 @@
 		const jobId = job.id;
 		const needed = new Set(rows.map(seasonOf).filter((n): n is number => n != null));
 		if (!src || !canAct) return;
-		untrack(() => {
-			const key = `${jobId}:${src}`;
-			if (key !== episodesFor) {
-				episodesFor = key;
-				episodesRequested.clear();
-				episodesBySeason = new Map();
-			}
-			for (const season of needed) {
-				if (episodesRequested.has(season)) continue;
-				episodesRequested.add(season);
-				fetchEpisodes(jobId, src, season).then(
-					(r) => {
-						if (episodesFor !== key) return;
-						// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state.raw variable triggers updates
-						episodesBySeason = new Map(episodesBySeason).set(season, r.episodes ?? []);
-					},
-					() => {
-						if (episodesFor === key) episodesRequested.delete(season);
-					}
-				);
-			}
-		});
+		untrack(() => episodeLists.want(jobId, src, needed));
 	});
 
 	// The by-hand choices of a shown row (its season already resolved). The
@@ -329,7 +291,7 @@
 		const season = row.season ?? discSeason;
 		if (season == null) return ROLE_OPTIONS;
 		return pickerOptions(
-			episodesBySeason.get(season) ?? [],
+			episodeLists.get(season),
 			season,
 			row.seconds,
 			usedEpisodeNumbers(placed.values(), season, row.trackId)
@@ -367,7 +329,7 @@
 		if ('role' in pick) return saveTrack(trackId, { role: pick.role });
 		const row = rows.find((r) => r.trackId === trackId);
 		const listSeason = row ? seasonOf(row) : null;
-		const list = listSeason == null ? [] : (episodesBySeason.get(listSeason) ?? []);
+		const list = listSeason == null ? [] : episodeLists.get(listSeason);
 		const name = pickedEpisodeName(list, listSeason, pick.season, pick.episode);
 		const data = { role: 'episode' as const, season: pick.season, episode_number: pick.episode, episode_name: name };
 		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
