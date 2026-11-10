@@ -5,8 +5,7 @@
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
 	import SessionBuilderSlideOver from './SessionBuilderSlideOver.svelte';
-	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
-	import TranscodePresetForm from '$lib/components/TranscodePresetForm.svelte';
+	import InlinePresetDialog from './InlinePresetDialog.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
 	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
@@ -185,17 +184,6 @@
 			preselectTranscodeId = p.id;
 		}
 	}
-
-	// Inline dialog label for ARIA
-	let inlineDialogLabel = $derived(
-		inlineKind === 'rip'
-			? inlinePreset
-				? 'Edit rip preset'
-				: 'New rip preset'
-			: inlinePreset
-				? 'Edit transcode preset'
-				: 'New transcode preset'
-	);
 </script>
 
 <div class="stack stack-lg">
@@ -282,28 +270,13 @@
 
 <!-- ── Inline-create / inline-edit stacked dialog ────────────────────── -->
 {#if inlineKind !== null}
-	<!-- Stacked modal: same shape as .modal, but layered above the builder
-		 slide-over (z-index bumped in the scoped rule below - the block's own
-		 z-index of 50 would sit under the slide-over's 50 in source order). -->
-	<div class="modal sessions-area-inline-modal">
-		<button type="button" class="sessions-area-scrim" aria-label="Close dialog" onclick={closeInline}></button>
-
-		<div role="dialog" aria-modal="true" aria-label={inlineDialogLabel} class="modal-panel sessions-area-inline-panel">
-			{#if inlineKind === 'rip'}
-				<RipPresetForm
-					preset={inlinePreset as RipPresetView | null}
-					onsaved={handleRipPresetSaved}
-					oncancel={closeInline}
-				/>
-			{:else}
-				<TranscodePresetForm
-					preset={inlinePreset as TranscodePresetView | null}
-					onsaved={handleTranscodePresetSaved}
-					oncancel={closeInline}
-				/>
-			{/if}
-		</div>
-	</div>
+	<InlinePresetDialog
+		kind={inlineKind}
+		preset={inlinePreset}
+		onripsaved={handleRipPresetSaved}
+		ontranscodesaved={handleTranscodePresetSaved}
+		onclose={closeInline}
+	/>
 {/if}
 
 <!-- ── Confirm: delete session ────────────────────────────────────────────── -->
@@ -374,28 +347,5 @@
 	/* reach the imported block's class from this scoped selector */
 	.sessions-area-tabs :global(.tabs-tab) {
 		padding: 0.375rem 0.75rem;
-	}
-	/* the inline create/edit dialog stacks above the builder slide-over
-	   (both are z-index: 50 in their block files); bump this one layer
-	   higher so it wins the stacking contest the original's z-60/z-70
-	   pairing guaranteed explicitly. */
-	.sessions-area-inline-modal {
-		z-index: 60;
-	}
-	/* scrim button covers the backdrop box behind the panel, same pattern as
-	   ConfirmDialog.svelte - the panel gets its own stacking context via
-	   z-index so no click-guard is needed on the panel itself. */
-	.sessions-area-scrim {
-		position: absolute;
-		inset: 0;
-		z-index: 0;
-		background: transparent;
-		border: 0;
-		padding: 0;
-		cursor: default;
-	}
-	.sessions-area-inline-panel {
-		position: relative;
-		z-index: 1;
 	}
 </style>
