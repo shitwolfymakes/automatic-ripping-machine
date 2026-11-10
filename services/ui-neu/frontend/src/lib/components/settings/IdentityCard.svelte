@@ -2,8 +2,6 @@
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import {
 		DISC_DATABASES,
-		DISC_KIND_LABELS,
-		DISC_KINDS,
 		IGNORE_OPTIONS,
 		SOURCE_LISTS,
 		TRUST_OPTIONS,
@@ -15,6 +13,7 @@
 	} from '$lib/utils/identity-card';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import RankedListField from './RankedListField.svelte';
+	import DiscKindSwitch from './DiscKindSwitch.svelte';
 	import IdentityPreview from './IdentityPreview.svelte';
 
 	// Settings › Identification › Identity: the four pipeline steps over the
@@ -53,17 +52,7 @@
 <div class="identity-card stack stack-lg" data-testid="identity-card">
 	<div class="identity-card-step stack" data-step="preview">
 		<span class="identity-card-caption">Preview</span>
-		<div class="identity-card-segment" role="radiogroup" aria-label="Disc kind">
-			{#each DISC_KINDS as k (k)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={kind === k}
-					class="identity-card-segment-btn"
-					onclick={() => (kind = k)}>{DISC_KIND_LABELS[k]}</button
-				>
-			{/each}
-		</div>
+		<DiscKindSwitch bind:kind />
 		<IdentityPreview {kind} {values} {fields} />
 	</div>
 
@@ -279,36 +268,5 @@
 	.identity-card-trust {
 		display: flex;
 		flex-direction: column;
-	}
-	/* Segmented radiogroup: one outlined group, the selected kind filled. */
-	.identity-card-segment {
-		display: inline-flex;
-		align-self: flex-start;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		overflow: hidden;
-		background: transparent;
-	}
-	.identity-card-segment-btn {
-		padding: 0.5rem 1.125rem;
-		font-size: 0.9375rem;
-		font-weight: 500;
-		line-height: 1.25rem;
-		background: transparent;
-		color: var(--color-text);
-		cursor: pointer;
-		transition:
-			background-color var(--motion-fast) var(--ease),
-			color var(--motion-fast) var(--ease);
-	}
-	.identity-card-segment-btn + .identity-card-segment-btn {
-		border-left: 1px solid var(--color-border);
-	}
-	.identity-card-segment-btn:hover {
-		background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-	}
-	.identity-card-segment-btn[aria-checked='true'] {
-		background: var(--color-primary);
-		color: var(--color-primary-contrast, var(--color-on-primary));
 	}
 </style>
