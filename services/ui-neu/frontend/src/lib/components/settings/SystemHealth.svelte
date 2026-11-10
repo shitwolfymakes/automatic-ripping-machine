@@ -72,12 +72,16 @@
 		} finally {
 			loading = false;
 		}
-		if (grouped) {
-			try {
-				storage = (await fetchResources()).storage;
-			} catch {
-				storage = null;
-			}
+		if (grouped) storage = await loadStorage();
+	}
+
+	/** The storage roots for the free-space chips, or null when the
+	 * lookup fails. */
+	async function loadStorage(): Promise<StorageRoot[] | null> {
+		try {
+			return (await fetchResources()).storage;
+		} catch {
+			return null;
 		}
 	}
 
