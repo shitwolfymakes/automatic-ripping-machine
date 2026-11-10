@@ -3,6 +3,7 @@
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
 	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
+	import { HIDDEN_SECRET } from '$lib/api/config';
 	import {
 		groupBlurb,
 		groupLabel,
@@ -39,7 +40,6 @@
 		bare?: boolean;
 	} = $props();
 
-	const HIDDEN = '<hidden>';
 	const editable = $derived(group.fields.filter((f: ConfigFieldMeta) => f.editable));
 	const sections = $derived(sectionFields(group.name, group.fields));
 	/** Id of a section's note; set only when the section hides its fields' own help. */
@@ -108,7 +108,7 @@
 				out[f.key] = null;
 				continue;
 			}
-			if (f.tier === 'secret' && (v === HIDDEN || v === '' || v == null)) continue;
+			if (f.tier === 'secret' && (v === HIDDEN_SECRET || v === '' || v == null)) continue;
 			if (unchanged(v, base[f.key])) continue;
 			out[f.key] = v;
 		}
@@ -130,8 +130,8 @@
 					// Never keep the raw secret around as a comparison baseline (or
 					// on screen) once it is saved - both fall back to the masked
 					// sentinel, same as an untouched secret on load.
-					mergedOverrides[key] = HIDDEN;
-					mergedValues[key] = HIDDEN;
+					mergedOverrides[key] = HIDDEN_SECRET;
+					mergedValues[key] = HIDDEN_SECRET;
 				} else {
 					mergedOverrides[key] = payload[key];
 				}
@@ -175,7 +175,7 @@
 
 	function unsavedValueFor(fieldKey: string): string | undefined {
 		const v = values[fieldKey];
-		if (typeof v !== 'string' || v === '' || v === HIDDEN) return undefined;
+		if (typeof v !== 'string' || v === '' || v === HIDDEN_SECRET) return undefined;
 		if (v === config[fieldKey]) return undefined;
 		return v;
 	}

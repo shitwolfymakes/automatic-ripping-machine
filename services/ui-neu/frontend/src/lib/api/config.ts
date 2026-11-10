@@ -18,7 +18,8 @@ export interface AppConfig {
 	tvdb_keyed: boolean;
 }
 
-const HIDDEN = '<hidden>';
+/** The config view's stand-in for a saved secret (the backend's HIDDEN_SECRET). */
+export const HIDDEN_SECRET = '<hidden>';
 
 export async function fetchConfig(): Promise<AppConfig> {
 	const cfg = await get<ConfigView>('/api/config');
@@ -27,9 +28,9 @@ export async function fetchConfig(): Promise<AppConfig> {
 		transcoder_enabled: cfg.transcode_enabled ?? true,
 		search_provider_movie: cfg.search_provider_movie ?? null,
 		search_provider_tv: cfg.search_provider_tv ?? null,
-		tmdb_keyed: cfg.tmdb_api_key === HIDDEN,
-		omdb_keyed: cfg.omdb_api_key === HIDDEN,
-		tvdb_keyed: cfg.tvdb_api_key === HIDDEN
+		tmdb_keyed: cfg.tmdb_api_key === HIDDEN_SECRET,
+		omdb_keyed: cfg.omdb_api_key === HIDDEN_SECRET,
+		tvdb_keyed: cfg.tvdb_api_key === HIDDEN_SECRET
 	};
 }
 

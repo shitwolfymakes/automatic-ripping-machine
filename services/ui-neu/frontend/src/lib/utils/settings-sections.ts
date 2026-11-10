@@ -1,5 +1,6 @@
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 import type { SettingsData } from '$lib/api/settings';
+import { HIDDEN_SECRET } from '$lib/api/config';
 
 /** Presentation-only grouping for the schema-driven settings tabs, so they
  *  read like the Sessions / Appearance tabs: a tab description, then one
@@ -181,7 +182,7 @@ export function foldSavedConfig(settings: SettingsData, payload: Record<string, 
 		(settings.schema?.groups ?? []).flatMap((g) => g.fields.filter((f) => f.tier === 'secret').map((f) => f.key))
 	);
 	const saved = Object.fromEntries(
-		Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? '<hidden>' : v])
+		Object.entries(payload).map(([k, v]) => [k, secret.has(k) && v != null ? HIDDEN_SECRET : v])
 	);
 	return { ...settings, config: { ...settings.config, ...saved } };
 }
