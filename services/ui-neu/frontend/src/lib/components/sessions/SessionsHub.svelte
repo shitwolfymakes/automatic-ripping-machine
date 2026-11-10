@@ -2,6 +2,7 @@
 	import type { JoinedSession } from './sessionsData.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
 	import SessionCard from './SessionCard.svelte';
+	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, matchesTranscode, type SourceFilter, type TranscodeFilter } from './listFilters';
 
 	interface Props {
@@ -21,16 +22,6 @@
 	let sourceFilter = $state<SourceFilter>('all');
 	let transcodeFilter = $state<TranscodeFilter>('any');
 	let typeFilter = $state<MediaType | 'all'>('all');
-
-	// Media type chips
-	const MEDIA_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
-		{ key: 'all', label: 'All' },
-		{ key: 'movie', label: 'Movie' },
-		{ key: 'tv', label: 'TV' },
-		{ key: 'music', label: 'Music' },
-		{ key: 'data', label: 'Data' },
-		{ key: 'iso', label: 'ISO' }
-	];
 
 	// Derived visible list applying all filters
 	const visible = $derived(
@@ -95,20 +86,7 @@
 			<!-- Bottom row: TYPE chips + New session -->
 			<div class="cluster sessions-hub-type-row">
 				<span class="sessions-hub-label">Type</span>
-				{#each MEDIA_TYPES as chip (chip.key)}
-					{@const count = typeCounts[chip.key] ?? 0}
-					<button
-						type="button"
-						aria-pressed={typeFilter === chip.key}
-						class="chip sessions-hub-type-chip"
-						onclick={() => {
-							typeFilter = chip.key;
-						}}
-					>
-						{chip.label}
-						{count}
-					</button>
-				{/each}
+				<MediaTypeChips counts={typeCounts} bind:selected={typeFilter} />
 
 				<!-- New session — pinned to the bottom-right of the filter panel -->
 				<button type="button" onclick={onnew} class="btn btn-primary sessions-hub-new-btn"> + New session </button>
@@ -230,27 +208,6 @@
 		margin: 0.75rem 0;
 		border: 0;
 		border-top: 1px solid var(--color-border);
-	}
-	/* the TYPE filter pills are a plain bordered toggle (border-gray-300
-	   bg-white, selected = border-primary bg-primary text-white), not chip's
-	   tinted-background look - same shape PresetLibrary.svelte's identical
-	   TYPE row already uses (.preset-library-type-chip). */
-	.sessions-hub-type-chip {
-		border: 1px solid var(--color-border-strong);
-		border-radius: 9999px;
-		background: var(--color-surface-raised);
-		padding: 0.125rem 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-	.sessions-hub-type-chip:hover {
-		background: var(--color-primary-tint-1);
-	}
-	.sessions-hub-type-chip[aria-pressed='true'] {
-		border-color: var(--color-primary);
-		background: var(--color-primary);
-		color: var(--color-on-primary);
 	}
 	/* original: rounded-md bg-primary ... px-4 py-1.5 text-sm hover:bg-primary/90
 	   - no border/ring class at all; .btn-primary's own border is invisible

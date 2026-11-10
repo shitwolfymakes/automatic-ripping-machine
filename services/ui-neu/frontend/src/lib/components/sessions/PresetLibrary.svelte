@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
 	import PresetRow from './PresetRow.svelte';
+	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, type SourceFilter } from './listFilters';
 	import { countByMediaType } from '$lib/utils/sessions';
 
@@ -49,15 +50,6 @@
 	function usage(id: string): number {
 		return kind === 'rip' ? ripUsage(id) : transcodeUsage(id);
 	}
-
-	const MEDIA_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
-		{ key: 'all', label: 'All' },
-		{ key: 'movie', label: 'Movie' },
-		{ key: 'tv', label: 'TV' },
-		{ key: 'music', label: 'Music' },
-		{ key: 'data', label: 'Data' },
-		{ key: 'iso', label: 'ISO' }
-	];
 
 	// The active kind's presets
 	const presets = $derived(kind === 'rip' ? ripPresets : transcodePresets);
@@ -116,20 +108,7 @@
 		<!-- Bottom row: TYPE chips + New preset -->
 		<div class="cluster">
 			<span class="eyebrow">Type</span>
-			{#each MEDIA_TYPES as chip (chip.key)}
-				{@const count = presetTypeCounts[chip.key] ?? 0}
-				<button
-					type="button"
-					aria-pressed={typeFilter === chip.key}
-					class="chip preset-library-type-chip"
-					onclick={() => {
-						typeFilter = chip.key;
-					}}
-				>
-					{chip.label}
-					{count}
-				</button>
-			{/each}
+			<MediaTypeChips counts={presetTypeCounts} bind:selected={typeFilter} />
 
 			<button
 				type="button"
@@ -194,27 +173,6 @@
 		margin: 0.75rem 0;
 		border: 0;
 		border-top: 1px solid var(--color-border);
-	}
-	/* chip's default modifiers are all solid-tone; the TYPE filter pills are
-	   a plain bordered toggle (border-gray-300 bg-white, selected =
-	   border-primary bg-primary), not chip's tinted-background look, so the
-	   shape is redrawn here on top of chip's base sizing/cursor/transition. */
-	.preset-library-type-chip {
-		border: 1px solid var(--color-border-strong);
-		border-radius: 9999px;
-		background: var(--color-surface-raised);
-		padding: 0.125rem 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--color-text-secondary);
-	}
-	.preset-library-type-chip:hover {
-		background: var(--color-primary-tint-1);
-	}
-	.preset-library-type-chip[aria-pressed='true'] {
-		border-color: var(--color-primary);
-		background: var(--color-primary);
-		color: var(--color-on-primary);
 	}
 	.preset-library-new-btn {
 		margin-left: auto;

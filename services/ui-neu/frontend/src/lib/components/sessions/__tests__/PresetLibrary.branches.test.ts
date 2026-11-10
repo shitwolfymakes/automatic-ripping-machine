@@ -2,12 +2,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
 import PresetLibrary from '../PresetLibrary.svelte';
 
-// Branch pins for PresetLibrary, beside PresetLibrary.svelte.test.ts. One
-// branch cannot be reached from the rendered component, so nothing here forces
-// it:
-// - The `?? 0` fallback in the chip's `presetTypeCounts[chip.key] ?? 0`:
-//   `countByMediaType` sets all six keys a chip reads (`all` and the five
-//   media types), 0 included, so it is never undefined.
+// Branch pins for PresetLibrary, beside PresetLibrary.svelte.test.ts. No
+// branch is left open.
 
 const rip = (id: string, name: string, mt: string, builtin = false) => ({
 	id,
