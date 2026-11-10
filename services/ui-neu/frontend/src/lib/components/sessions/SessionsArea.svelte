@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { createSessionsData, type JoinedSession } from './sessionsData.svelte';
+	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
 	import SessionBuilder from './SessionBuilder.svelte';
@@ -74,7 +75,7 @@
 
 	async function handleCloneSession(s: JoinedSession) {
 		try {
-			await cloneSession(s.id, { name: `${s.name} (copy)` });
+			await cloneSession(s.id, { name: copyName(s.name) });
 			await data.load();
 		} catch (e) {
 			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
@@ -119,7 +120,7 @@
 	// FIX 2: wire View/Edit to open the form in the stacked dialog.
 	// PresetLibrary passes (preset) — the kind is inferred from the preset shape.
 	function openPresetForm(p: RipPresetView | TranscodePresetView) {
-		inlineKind = 'track_selection' in p ? 'rip' : 'transcode';
+		inlineKind = isRipPreset(p) ? 'rip' : 'transcode';
 		inlinePreset = p;
 	}
 
@@ -133,16 +134,7 @@
 
 	async function handleCloneRipPreset(p: RipPresetView) {
 		try {
-			await createRipPreset({
-				name: `${p.name} (copy)`,
-				media_type: p.media_type,
-				track_selection: p.track_selection,
-				identification_mode: p.identification_mode,
-				output_mode: p.output_mode,
-				// track_filters_json is { [key: string]: unknown } | null in the API;
-				// RipPresetView carries it as unknown — narrow with a cast.
-				track_filters_json: p.track_filters_json as { [key: string]: unknown } | null
-			});
+			await createRipPreset(ripPresetCopy(p));
 			await data.load();
 		} catch (e) {
 			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
@@ -151,15 +143,7 @@
 
 	async function handleCloneTranscodePreset(p: TranscodePresetView) {
 		try {
-			await createTranscodePreset({
-				name: `${p.name} (copy)`,
-				media_type: p.media_type,
-				tool: p.tool,
-				preset_ref: p.preset_ref ?? null,
-				container: p.container,
-				encoder: p.encoder,
-				extra_args: p.extra_args ?? null
-			});
+			await createTranscodePreset(transcodePresetCopy(p));
 			await data.load();
 		} catch (e) {
 			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
@@ -167,10 +151,10 @@
 	}
 
 	async function handleClonePreset(p: RipPresetView | TranscodePresetView) {
-		if ('track_selection' in p) {
-			await handleCloneRipPreset(p as RipPresetView);
+		if (isRipPreset(p)) {
+			await handleCloneRipPreset(p);
 		} else {
-			await handleCloneTranscodePreset(p as TranscodePresetView);
+			await handleCloneTranscodePreset(p);
 		}
 	}
 
@@ -184,7 +168,7 @@
 		const target = deletePresetTarget;
 		deletePresetTarget = null;
 		try {
-			if ('track_selection' in target) {
+			if (isRipPreset(target)) {
 				await deleteRipPreset(target.id);
 			} else {
 				await deleteTranscodePreset(target.id);
