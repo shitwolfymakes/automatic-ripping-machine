@@ -36,6 +36,13 @@ export class ApiError extends Error {
 // quotes for the rest of that file and flag unrelated code past it.
 export const NETWORK_ERROR_MESSAGE = "The server didn't respond. Your changes are still here, so try Save again.";
 
+/** The message to show when a request fails: an ApiError's message (the
+ * backend's 400 detail, or "API {status}: {statusText}"), or the network
+ * message when the request never reached the server. */
+export function saveErrorMessage(e: unknown): string {
+	return e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
+}
+
 let on401: () => void = () => {};
 
 export function setUnauthorizedHandler(fn: () => void): void {

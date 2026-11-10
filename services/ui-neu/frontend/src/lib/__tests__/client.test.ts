@@ -12,7 +12,9 @@ import {
 	clearToken,
 	getToken,
 	setUnauthorizedHandler,
-	ApiError
+	ApiError,
+	NETWORK_ERROR_MESSAGE,
+	saveErrorMessage
 } from '../api/client';
 
 const mockFetch = vi.fn();
@@ -302,5 +304,23 @@ describe('apiFetchResponse', () => {
 			headers: new Headers()
 		});
 		await expect(apiFetchResponse('/api/jobs')).rejects.toThrow('nope');
+	});
+});
+
+describe('saveErrorMessage', () => {
+	it('gives an ApiError its own message', () => {
+		expect(saveErrorMessage(new ApiError(400, 'bad value', null))).toBe('bad value');
+	});
+
+	it('gives the network message for a TypeError, as fetch throws', () => {
+		expect(saveErrorMessage(new TypeError('Failed to fetch'))).toBe(NETWORK_ERROR_MESSAGE);
+	});
+
+	it('gives the network message for a plain Error', () => {
+		expect(saveErrorMessage(new Error('boom'))).toBe(NETWORK_ERROR_MESSAGE);
+	});
+
+	it('gives the network message for a non-error value', () => {
+		expect(saveErrorMessage('oops')).toBe(NETWORK_ERROR_MESSAGE);
 	});
 });

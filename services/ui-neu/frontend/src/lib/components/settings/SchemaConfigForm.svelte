@@ -2,7 +2,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import type { SettingsGroup, ConfigFieldMeta, KeyCheckResponse } from '$lib/types/api.gen';
 	import { saveArmConfig, checkApiKey } from '$lib/api/settings';
-	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
+	import { saveErrorMessage } from '$lib/api/client';
 	import { HIDDEN_SECRET } from '$lib/api/config';
 	import {
 		groupBlurb,
@@ -107,11 +107,7 @@
 			onsaved?.(payload);
 			return true;
 		} catch (e) {
-			// An ApiError message is already the 400 backend detail (or a
-			// generic "API {status}: {statusText}"); anything else (fetch itself
-			// throwing) means the request never reached the server.
-			const message = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
-			feedback = { type: 'error', message };
+			feedback = { type: 'error', message: saveErrorMessage(e) };
 			return false;
 		} finally {
 			saving = false;

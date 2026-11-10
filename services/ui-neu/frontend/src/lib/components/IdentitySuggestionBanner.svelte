@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import { acceptIdentitySuggestion } from '$lib/api/jobs';
-	import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
+	import { saveErrorMessage } from '$lib/api/client';
 	import { identitySuggestionOf } from '$lib/utils/job-review';
 	import { providerLabel } from '$lib/utils/provider-labels';
 	import PosterImage from './PosterImage.svelte';
@@ -39,7 +39,7 @@
 			acceptedSuggestion = accepted;
 			onaccepted?.(resp);
 		} catch (e) {
-			errorMessage = e instanceof ApiError ? e.message : NETWORK_ERROR_MESSAGE;
+			errorMessage = saveErrorMessage(e);
 		} finally {
 			accepting = false;
 		}
