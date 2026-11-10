@@ -35,6 +35,7 @@
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import EpisodeStateAlert from './EpisodeStateAlert.svelte';
+	import EpisodeStatusBar from './EpisodeStatusBar.svelte';
 	import RerunPanel from './RerunPanel.svelte';
 
 	interface Props {
@@ -318,24 +319,15 @@
 			{/if}
 		</div>
 	{:else}
-		<div class="episode-panel-status" role="status">
-			<span class="eyebrow">Episodes</span>
-			{#if view === 'matching'}
-				<span class="episode-panel-text">Matching episodes...</span>
-			{:else if loading}
-				<span class="episode-panel-text">Loading episodes...</span>
-			{:else}
-				{#if sourceLabel}<span class="chip chip-sm chip-info">{sourceLabel}</span>{/if}
-				{#if view === 'unsure'}
-					<span class="chip chip-sm chip-warning">Guess</span>
-				{:else if view === 'nomatch'}
-					<span class="chip chip-sm">No match</span>
-				{/if}
-				{#if showRows}
-					<span class="episode-panel-count">{placedCount(rows)} of {rows.length} tracks placed</span>
-				{/if}
-			{/if}
-			<span class="episode-panel-status-actions">
+		<EpisodeStatusBar
+			{view}
+			{loading}
+			{sourceLabel}
+			showCount={showRows}
+			placed={placedCount(rows)}
+			total={rows.length}
+		>
+			{#snippet actions()}
 				{#if canAct && canFill && !runner.preview}
 					<button type="button" class="btn btn-sm" disabled={runner.busy} onclick={fillTheRest}>Fill the rest</button>
 				{/if}
@@ -359,8 +351,8 @@
 						View sources <Glyph name="chevron-down" />
 					</button>
 				{/if}
-			</span>
-		</div>
+			{/snippet}
+		</EpisodeStatusBar>
 
 		{#if (ownSeason || altSeasons.length > 0) && !loading && !episodeIdentity.loadError}
 			<div class="episode-panel-seasons" data-testid="season-fit">
@@ -444,24 +436,12 @@
 		gap: 0.75rem;
 		min-width: 0;
 	}
-	.episode-panel-status {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.episode-panel-status-actions {
-		display: flex;
-		gap: 0.5rem;
-		margin-left: auto;
-	}
 	.episode-panel-seasons {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.episode-panel-count,
 	.episode-panel-text {
 		font-size: 0.875rem;
 		color: var(--color-text-secondary);
