@@ -1,4 +1,4 @@
-import type { SetupStep, SetupView } from '$lib/types/api.gen';
+import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 
 // The walkthrough's nine steps, in order (setup spec 2026-10-01 §5).
 export interface StepMeta {
@@ -111,10 +111,18 @@ export function prevStep(id: SetupStep): SetupStep | null {
 
 export type StepUiState = 'not-started' | 'current' | 'done' | 'skipped' | 'attention';
 
+/**
+ * A step's recorded state, or null when it has none; a state the UI does not
+ * know counts as none.
+ */
+export function progressState(id: string, progress: SetupView['progress']): SetupStepState | null {
+	const state = progress[id]?.state;
+	return state === 'done' || state === 'skipped' || state === 'attention' ? state : null;
+}
+
 export function uiState(id: SetupStep, current: SetupStep, progress: SetupView['progress']): StepUiState {
 	if (id === current) return 'current';
-	const p = progress[id]?.state;
-	return p === 'done' ? 'done' : p === 'skipped' ? 'skipped' : p === 'attention' ? 'attention' : 'not-started';
+	return progressState(id, progress) ?? 'not-started';
 }
 
 export const STATE_WORD: Record<StepUiState, string> = {

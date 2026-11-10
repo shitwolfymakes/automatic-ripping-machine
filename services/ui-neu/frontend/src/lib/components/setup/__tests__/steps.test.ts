@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { STEPS, nextStep, prevStep, uiState, stepMeta } from '../steps';
+import type { SetupView } from '$lib/types/api.gen';
+import { STEPS, nextStep, prevStep, progressState, uiState, stepMeta } from '../steps';
+
+describe('progressState', () => {
+	const progress: SetupView['progress'] = {
+		account: { state: 'done' },
+		system: { state: 'attention' },
+		metadata: { state: 'skipped' }
+	};
+
+	it('returns each recorded state', () => {
+		expect(progressState('account', progress)).toBe('done');
+		expect(progressState('system', progress)).toBe('attention');
+		expect(progressState('metadata', progress)).toBe('skipped');
+	});
+
+	it('returns null for a step with no entry', () => {
+		expect(progressState('finish', progress)).toBeNull();
+	});
+
+	it('returns null for a state the UI does not know', () => {
+		const unknown = { account: { state: 'weird' } } as unknown as SetupView['progress'];
+		expect(progressState('account', unknown)).toBeNull();
+	});
+});
 
 describe('setup step registry', () => {
 	it('lists the nine steps in walkthrough order', () => {

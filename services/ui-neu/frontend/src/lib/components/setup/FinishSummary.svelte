@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import { STEPS } from './steps';
+	import { STEPS, progressState } from './steps';
 
 	// One row per step: what was set up, with a way back to it. Used by the
 	// walkthrough's Finish step.
@@ -9,8 +9,7 @@
 
 	const rows = $derived(STEPS.filter((s) => s.id !== 'finish'));
 	function state(id: string): 'done' | 'skipped' | 'attention' | 'pending' {
-		const s = view.progress[id]?.state;
-		return s === 'done' || s === 'skipped' || s === 'attention' ? s : 'pending';
+		return progressState(id, view.progress) ?? 'pending';
 	}
 	const BADGE = {
 		done: { text: 'Done', glyph: 'check', cls: 'chip-success' },
