@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { humanizeOutputMode } from '$lib/utils/preset-labels';
+	import { humanizeMediaType, humanizeOutputMode, humanizeTrackSelection } from '$lib/utils/preset-labels';
 	import { onMount } from 'svelte';
 	import type { JoinedSession } from './sessionsData.svelte';
 	import { resolveSample } from './sampleTokens';
@@ -18,39 +18,6 @@
 	onMount(() => {
 		encodersStore.load();
 	});
-
-	// Humanise enum values for display
-	function humanizeTrackSelection(v: string | null | undefined): string {
-		switch (v) {
-			case 'main_feature':
-				return 'Main feature';
-			case 'all_tracks':
-				return 'All tracks';
-			case 'archive':
-				return 'Archive';
-			case 'custom':
-				return 'Custom';
-			default:
-				return v ?? '-';
-		}
-	}
-
-	function humanizeMediaType(v: string | null | undefined): string {
-		switch (v) {
-			case 'movie':
-				return 'Movie';
-			case 'tv':
-				return 'TV';
-			case 'music':
-				return 'Music';
-			case 'data':
-				return 'Data';
-			case 'iso':
-				return 'ISO';
-			default:
-				return v ?? '-';
-		}
-	}
 
 	let ripSummary = $derived(
 		session.ripPreset

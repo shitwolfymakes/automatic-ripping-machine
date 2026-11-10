@@ -2,14 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import SessionCard from '../SessionCard.svelte';
 
-// Branch pins for SessionCard, beside SessionCard.svelte.test.ts. Branches
-// left open, because the rendered component cannot reach them:
-// - The `?? '-'` fallback in humanizeTrackSelection and humanizeMediaType:
-//   JoinedSession's media_type is a required, non-null string, and the rip
-//   summary only calls humanizeTrackSelection when a rip preset is present,
-//   whose track_selection is required and non-null, so the null and
-//   undefined outcomes never occur. Only the unknown-value default (the raw
-//   value shown) is exercised.
+// Branch pins for SessionCard, beside SessionCard.svelte.test.ts.
 
 vi.mock('$lib/api/encoders', () => ({
 	fetchEncoders: () => Promise.resolve([])

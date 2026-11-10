@@ -2,13 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import PresetRow from '../PresetRow.svelte';
 
-// Branch pins for PresetRow, beside PresetRow.svelte.test.ts. Branches left
-// open, because the rendered component cannot reach them:
-// - The `?? '-'` fallback in each humanizer (media type, track selection,
-//   identification mode, tool, container): every field they read is a
-//   required, non-null string on RipPresetView and TranscodePresetView, so
-//   the null and undefined outcomes never occur. Only the unknown-value
-//   default (the raw value shown) is exercised.
+// Branch pins for PresetRow, beside PresetRow.svelte.test.ts.
 
 vi.mock('$lib/api/encoders', () => ({
 	fetchEncoders: () =>

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { humanizeOutputMode } from '../utils/preset-labels';
+import {
+	humanizeContainer,
+	humanizeIdentificationMode,
+	humanizeMediaType,
+	humanizeOutputMode,
+	humanizeTool,
+	humanizeTrackSelection
+} from '../utils/preset-labels';
 
 describe('humanizeOutputMode', () => {
 	it.each([
@@ -14,5 +21,88 @@ describe('humanizeOutputMode', () => {
 	it('passes an unknown mode through and shows - for none', () => {
 		expect(humanizeOutputMode('weird')).toBe('weird');
 		expect(humanizeOutputMode(null)).toBe('-');
+	});
+});
+
+describe('humanizeMediaType', () => {
+	it.each([
+		['movie', 'Movie'],
+		['tv', 'TV'],
+		['music', 'Music'],
+		['data', 'Data'],
+		['iso', 'ISO']
+	])('maps %s -> %s', (type, label) => {
+		expect(humanizeMediaType(type)).toBe(label);
+	});
+
+	it('passes an unknown type through and shows - for none', () => {
+		expect(humanizeMediaType('weird')).toBe('weird');
+		expect(humanizeMediaType(null)).toBe('-');
+	});
+});
+
+describe('humanizeTrackSelection', () => {
+	it.each([
+		['main_feature', 'Main feature'],
+		['all_tracks', 'All tracks'],
+		['archive', 'Archive'],
+		['custom', 'Custom']
+	])('maps %s -> %s', (selection, label) => {
+		expect(humanizeTrackSelection(selection)).toBe(label);
+	});
+
+	it('passes an unknown selection through and shows - for none', () => {
+		expect(humanizeTrackSelection('weird')).toBe('weird');
+		expect(humanizeTrackSelection(null)).toBe('-');
+	});
+});
+
+describe('humanizeIdentificationMode', () => {
+	it.each([
+		['required', 'ID required'],
+		['skip', 'ID skip'],
+		['deferred_placeholder', 'ID deferred']
+	])('maps %s -> %s', (mode, label) => {
+		expect(humanizeIdentificationMode(mode)).toBe(label);
+	});
+
+	it('passes an unknown mode through and shows - for none', () => {
+		expect(humanizeIdentificationMode('weird')).toBe('weird');
+		expect(humanizeIdentificationMode(null)).toBe('-');
+	});
+});
+
+describe('humanizeTool', () => {
+	it.each([
+		['handbrake', 'HandBrake'],
+		['abcde', 'abcde'],
+		['none', 'None']
+	])('maps %s -> %s', (tool, label) => {
+		expect(humanizeTool(tool)).toBe(label);
+	});
+
+	it('passes an unknown tool through and shows - for none', () => {
+		expect(humanizeTool('weird')).toBe('weird');
+		expect(humanizeTool(null)).toBe('-');
+	});
+});
+
+describe('humanizeContainer', () => {
+	it.each([
+		['mkv', 'MKV'],
+		['mp4', 'MP4'],
+		['webm', 'WebM'],
+		['flac', 'FLAC'],
+		['mp3', 'MP3'],
+		['ogg', 'OGG'],
+		['iso', 'ISO'],
+		['none', 'None']
+	])('maps %s -> %s', (container, label) => {
+		expect(humanizeContainer(container)).toBe(label);
+	});
+
+	it('passes an unknown container through and shows - for none', () => {
+		expect(humanizeContainer('weird')).toBe('weird');
+		expect(humanizeContainer(null)).toBe('-');
 	});
 });
