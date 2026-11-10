@@ -10,16 +10,12 @@
 		checkDetail,
 		checkLabel,
 		inScope,
-		locationLabel,
 		pathDetail,
-		pathState,
-		serviceBadge,
-		serviceDescription,
-		serviceLabel
+		pathState
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
-	import HealthItem from './HealthItem.svelte';
+	import ServiceItem from './ServiceItem.svelte';
 	import StoragePathItem from './StoragePathItem.svelte';
 
 	// Settings > System and the setup walkthrough's System check share this.
@@ -136,28 +132,7 @@
 				<p class="system-health-description">What ARM can start on this server.</p>
 				<div class="stack mt-3">
 					{#each services as c (c.name)}
-						{@const b = serviceBadge(c.status)}
-						<HealthItem
-							testid="system-health-service"
-							status={c.status}
-							name={serviceLabel(c.name)}
-							description={serviceDescription(c)}
-						>
-							{#snippet badge()}
-								<span class="badge badge-sm badge-{b.tone}"><Glyph name={b.glyph} class="h-3 w-3" /> {b.text}</span>
-							{/snippet}
-							{#snippet chips()}
-								{#if locationLabel(c)}<span class="chip chip-sm chip-info">{locationLabel(c)}</span>{/if}
-								{#each c.details ?? [] as d (d.label)}
-									<span class="chip chip-sm {d.ok ? 'chip-success' : 'chip-danger'}">
-										<Glyph name={d.ok ? 'check' : 'x'} class="h-3 w-3" />{d.label}{d.ok ? '' : ': problem'}
-									</span>
-								{/each}
-							{/snippet}
-							{#if c.status !== 'ok' && c.detail}
-								<p class="mono system-health-item-detail">{c.detail}</p>
-							{/if}
-						</HealthItem>
+						<ServiceItem check={c} />
 					{/each}
 				</div>
 			</section>
@@ -284,11 +259,6 @@
 	}
 	.system-health-group {
 		padding: 1.25rem;
-	}
-	.system-health-item-detail {
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-		overflow-wrap: anywhere;
 	}
 	.system-health-placeholder {
 		font-size: 0.875rem;
