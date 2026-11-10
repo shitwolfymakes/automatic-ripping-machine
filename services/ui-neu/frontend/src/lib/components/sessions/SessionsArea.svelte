@@ -61,6 +61,17 @@
 
 	onMount(data.load);
 
+	// Runs a change, then reloads. A change that throws skips the reload
+	// and toasts `failTitle` with what went wrong.
+	async function reloadAfter(change: () => Promise<unknown>, failTitle: string) {
+		try {
+			await change();
+			await data.load();
+		} catch (e) {
+			addToast({ tone: 'error', title: failTitle, body: e instanceof Error ? e.message : 'Unknown error' });
+		}
+	}
+
 	// ── Sessions view callbacks ────────────────────────────────────────────────
 
 	function openNewSession() {
@@ -74,12 +85,7 @@
 	}
 
 	async function handleCloneSession(s: JoinedSession) {
-		try {
-			await cloneSession(s.id, { name: copyName(s.name) });
-			await data.load();
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
-		}
+		await reloadAfter(() => cloneSession(s.id, { name: copyName(s.name) }), 'Clone failed');
 	}
 
 	// FIX 1: open confirm dialog instead of deleting immediately
@@ -91,13 +97,7 @@
 		if (!deleteSessionTarget) return;
 		const target = deleteSessionTarget;
 		deleteSessionTarget = null;
-		try {
-			await deleteSession(target.id);
-			await data.load();
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			addToast({ tone: 'error', title: 'Delete failed', body: msg });
-		}
+		await reloadAfter(() => deleteSession(target.id), 'Delete failed');
 	}
 
 	// Applying a session needs a job context (ApplySessionDialog requires a job),
@@ -125,21 +125,11 @@
 	}
 
 	async function handleCloneRipPreset(p: RipPresetView) {
-		try {
-			await createRipPreset(ripPresetCopy(p));
-			await data.load();
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
-		}
+		await reloadAfter(() => createRipPreset(ripPresetCopy(p)), 'Clone failed');
 	}
 
 	async function handleCloneTranscodePreset(p: TranscodePresetView) {
-		try {
-			await createTranscodePreset(transcodePresetCopy(p));
-			await data.load();
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Clone failed', body: e instanceof Error ? e.message : 'Unknown error' });
-		}
+		await reloadAfter(() => createTranscodePreset(transcodePresetCopy(p)), 'Clone failed');
 	}
 
 	async function handleClonePreset(p: RipPresetView | TranscodePresetView) {
@@ -159,17 +149,10 @@
 		if (!deletePresetTarget) return;
 		const target = deletePresetTarget;
 		deletePresetTarget = null;
-		try {
-			if (isRipPreset(target)) {
-				await deleteRipPreset(target.id);
-			} else {
-				await deleteTranscodePreset(target.id);
-			}
-			await data.load();
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			addToast({ tone: 'error', title: 'Delete failed', body: msg });
-		}
+		await reloadAfter(
+			() => (isRipPreset(target) ? deleteRipPreset(target.id) : deleteTranscodePreset(target.id)),
+			'Delete failed'
+		);
 	}
 
 	// ── Inline-create / inline-edit callbacks ─────────────────────────────────
