@@ -5,6 +5,7 @@
 	import ConfigureSection from './sections/ConfigureSection.svelte';
 	import LabelEnabledRow from './sections/LabelEnabledRow.svelte';
 	import EventsSection from './sections/EventsSection.svelte';
+	import ChannelTypePicker from './ChannelTypePicker.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from './channelHelpers';
@@ -75,12 +76,6 @@
 	export function isStarted(): boolean {
 		return serviceId !== null;
 	}
-
-	const types: { key: ChannelType; label: string; recommended?: boolean }[] = [
-		{ key: 'apprise', label: 'Service (Apprise)', recommended: true },
-		{ key: 'webhook', label: 'Webhook' },
-		{ key: 'bash', label: 'Bash script' }
-	];
 </script>
 
 <div class="add-channel-form" data-variant={variant}>
@@ -95,23 +90,7 @@
 
 	<div class="stack add-channel-form-body">
 		{#if variant === 'full'}
-			<fieldset class="add-channel-form-types">
-				<legend class="sr-only">Delivery type</legend>
-				{#each types as t (t.key)}
-					<label class="channel-type-option" data-selected={type === t.key}>
-						<input
-							type="radio"
-							name="delivery"
-							class="sr-only"
-							aria-label={t.label}
-							checked={type === t.key}
-							onchange={() => setType(t.key)}
-						/>
-						<span class="channel-type-option-label">{t.label}</span>
-						{#if t.recommended}<span class="badge badge-sm channel-type-option-badge">RECOMMENDED</span>{/if}
-					</label>
-				{/each}
-			</fieldset>
+			<ChannelTypePicker selected={type} onpick={setType} />
 
 			<LabelEnabledRow bind:name bind:enabled />
 		{/if}
@@ -199,17 +178,6 @@
 		padding: 1.25rem;
 		gap: 1.25rem;
 	}
-	.add-channel-form-types {
-		position: relative;
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 0.75rem;
-	}
-	@media (min-width: 640px) {
-		.add-channel-form-types {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-		}
-	}
 	.add-channel-form-footer {
 		display: flex;
 		align-items: center;
@@ -227,46 +195,5 @@
 	}
 	.add-channel-form-ready[data-ready='true'] {
 		color: var(--color-status-success);
-	}
-
-	/* channel-type-option: a selectable card, one per delivery type. No block
-	   covers this shape (a bordered card wrapping a hidden radio input, with
-	   a data-selected state on the label carrying the selected look; the radio
-	   itself carries the checked state for assistive tech). */
-	.channel-type-option {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		background: var(--color-primary-tint-1);
-		padding: 1rem;
-		cursor: pointer;
-	}
-	.channel-type-option[data-selected='true'] {
-		border-color: var(--color-primary);
-		background: var(--color-primary-tint-2);
-	}
-	.channel-type-option-label {
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-		font-weight: 600;
-		color: var(--color-text-secondary);
-	}
-	/* badge-sm's default tint-2/primary-text pairing was bg-primary/15
-	   text-primary here (fix round 1: the nearest documented tint, tint-3 at
-	   20%, was visibly more saturated than the original's literal 15% -
-	   color-mix against --color-primary at the exact 15% reproduces it,
-	   the same pattern tokens.css itself uses for tint-1/2/3), and the
-	   original size (9.5px) sits a hair under badge-sm's 0.625rem. */
-	.channel-type-option-badge {
-		position: absolute;
-		top: 0.75rem;
-		right: 0.75rem;
-		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-		color: var(--color-primary);
-		font-size: 9.5px;
-		letter-spacing: 0.05em;
 	}
 </style>
