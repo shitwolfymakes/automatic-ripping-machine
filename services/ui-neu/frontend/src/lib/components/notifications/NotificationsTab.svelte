@@ -16,7 +16,7 @@
 	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, toConfig } from './channelActions';
+	import { createChannelFromBody, runTest, toConfig } from './channelActions';
 	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
@@ -102,45 +102,33 @@
 
 	async function handleTestSaved(c: Channel) {
 		addToast({ tone: 'info', title: `Sending test to ${c.name}...` });
-		try {
-			const res = await testSendChannel(c.id, c.subscribed_events[0] ?? firstEventKey());
-			if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
-			else addToast({ tone: 'error', title: 'Test failed', body: res.error ?? '' });
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Test failed', body: e instanceof Error ? e.message : '' });
-		}
+		const outcome = await runTest(() => testSendChannel(c.id, c.subscribed_events[0] ?? firstEventKey()));
+		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
+		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
 	}
 
 	// Test an unsaved config from the add form and toast the result.
 	async function testConfigAndToast(type: string, config: Record<string, unknown>, eventType: string) {
-		const res = await testConfig({ type, config, event_type: eventType });
-		if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
-		else addToast({ tone: 'error', title: 'Test failed', body: res.error ?? '' });
+		const outcome = await runTest(() => testConfig({ type, config, event_type: eventType }));
+		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
+		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
 	}
 
 	async function handleTestUnsaved(body: AddChannelBody) {
-		try {
-			await testConfigAndToast(body.type, toConfig(body), body.subscribed_events[0] ?? firstEventKey());
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Test failed', body: e instanceof Error ? e.message : '' });
-		}
+		await testConfigAndToast(body.type, toConfig(body), body.subscribed_events[0] ?? firstEventKey());
 	}
 
 	async function handleEditorTest(c: Channel, body: EditorBody) {
 		const eventType = body.subscribed_events[0] ?? firstEventKey();
-		try {
-			const payload = editorTestPayload(c, body, eventType);
-			if (!payload) {
-				// Fields unchanged: test the saved channel instead.
-				await handleTestSaved(c);
-				return;
-			}
-			const res = await testConfig(payload);
-			if (res.ok) addToast({ tone: 'success', title: 'Test delivered' });
-			else addToast({ tone: 'error', title: 'Test failed', body: res.error ?? '' });
-		} catch (e) {
-			addToast({ tone: 'error', title: 'Test failed', body: e instanceof Error ? e.message : '' });
+		const payload = editorTestPayload(c, body, eventType);
+		if (!payload) {
+			// Fields unchanged: test the saved channel instead.
+			await handleTestSaved(c);
+			return;
 		}
+		const outcome = await runTest(() => testConfig(payload));
+		if (outcome.ok) addToast({ tone: 'success', title: 'Test delivered' });
+		else addToast({ tone: 'error', title: 'Test failed', body: outcome.detail ?? '' });
 	}
 
 	async function confirmDelete() {

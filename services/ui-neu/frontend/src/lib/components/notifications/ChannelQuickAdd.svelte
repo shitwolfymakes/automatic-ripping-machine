@@ -4,7 +4,7 @@
 	import { fetchServices, fetchEventTypes, type EventTypeInfo } from '$lib/api/channels';
 	import { saveArmConfig } from '$lib/api/settings';
 	import AddChannelForm, { type AddChannelBody } from './AddChannelForm.svelte';
-	import { createChannelFromBody, testUnsavedBody } from './channelActions';
+	import { createChannelFromBody, runTest, testUnsavedBody } from './channelActions';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 
@@ -27,14 +27,10 @@
 
 	async function sendTest(body: AddChannelBody) {
 		test = { tone: 'busy', title: 'Sending a test...' };
-		try {
-			const res = await testUnsavedBody(body, body.subscribed_events[0] ?? 'rip.completed');
-			test = res.ok
-				? { tone: 'ok', title: 'Test sent', message: null }
-				: { tone: 'danger', title: "The test didn't arrive", message: res.error ?? null };
-		} catch (e) {
-			test = { tone: 'danger', title: "The test didn't arrive", message: e instanceof Error ? e.message : null };
-		}
+		const outcome = await runTest(() => testUnsavedBody(body, body.subscribed_events[0] ?? 'rip.completed'));
+		test = outcome.ok
+			? { tone: 'ok', title: 'Test sent', message: null }
+			: { tone: 'danger', title: "The test didn't arrive", message: outcome.detail };
 	}
 
 	/**

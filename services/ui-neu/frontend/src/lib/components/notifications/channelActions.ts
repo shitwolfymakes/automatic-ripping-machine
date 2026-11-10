@@ -2,8 +2,9 @@ import type { Channel, ChannelCreate } from '$lib/types/notifications';
 import type { NotificationTestResult } from '$lib/api/channels';
 import { createChannel, testConfig } from '$lib/api/channels';
 
-// The add-a-channel calls, shared by Settings > Notifications and the setup
-// walkthrough's quick add (setup spec D5: one implementation per feature).
+// The add-a-channel and test-send calls, shared by Settings > Notifications
+// and the setup walkthrough's quick add (setup spec D5: one implementation
+// per feature).
 
 export interface ChannelBodyLike {
 	type: string;
@@ -37,4 +38,19 @@ export function createChannelFromBody(body: ChannelBodyLike): Promise<Channel> {
 
 export function testUnsavedBody(body: ChannelBodyLike, eventType: string): Promise<NotificationTestResult> {
 	return testConfig({ type: body.type, config: toConfig(body), event_type: eventType });
+}
+
+/** How a test send went: delivered, or failed with what the server or
+ * the request said, if anything. */
+export type TestOutcome = { ok: true } | { ok: false; detail: string | null };
+
+/** Runs a test send. A send that throws failed too, with the error's
+ * message as the detail. */
+export async function runTest(send: () => Promise<NotificationTestResult>): Promise<TestOutcome> {
+	try {
+		const res = await send();
+		return res.ok ? { ok: true } : { ok: false, detail: res.error ?? null };
+	} catch (e) {
+		return { ok: false, detail: e instanceof Error ? e.message : null };
+	}
 }
