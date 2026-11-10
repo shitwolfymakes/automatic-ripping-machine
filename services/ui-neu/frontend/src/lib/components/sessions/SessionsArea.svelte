@@ -157,6 +157,12 @@
 
 	// ── Inline-create / inline-edit callbacks ─────────────────────────────────
 
+	// Opens the inline dialog on an empty form of that kind.
+	function openNewPreset(kind: 'rip' | 'transcode') {
+		inlineKind = kind;
+		inlinePreset = null;
+	}
+
 	function closeInline() {
 		inlineKind = null;
 		inlinePreset = null;
@@ -250,14 +256,8 @@
 			ripUsage={data.ripUsage}
 			transcodeUsage={data.transcodeUsage}
 			loading={data.loading()}
-			onnewrip={() => {
-				inlineKind = 'rip';
-				inlinePreset = null;
-			}}
-			onnewtranscode={() => {
-				inlineKind = 'transcode';
-				inlinePreset = null;
-			}}
+			onnewrip={() => openNewPreset('rip')}
+			onnewtranscode={() => openNewPreset('transcode')}
 			onview={openPresetForm}
 			onedit={openPresetForm}
 			onclone={handleClonePreset}
@@ -288,14 +288,8 @@
 					session={editing}
 					ripPresets={data.ripPresets()}
 					transcodePresets={shownTranscodePresets}
-					oncreaterip={() => {
-						inlineKind = 'rip';
-						inlinePreset = null;
-					}}
-					oncreatetranscode={() => {
-						inlineKind = 'transcode';
-						inlinePreset = null;
-					}}
+					oncreaterip={() => openNewPreset('rip')}
+					oncreatetranscode={() => openNewPreset('transcode')}
 					onsaved={handleBuilderSaved}
 					oncancel={handleBuilderCancel}
 					{preselectRipId}
