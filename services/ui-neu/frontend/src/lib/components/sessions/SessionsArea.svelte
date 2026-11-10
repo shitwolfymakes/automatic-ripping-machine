@@ -124,14 +124,6 @@
 		inlinePreset = p;
 	}
 
-	function handleViewPreset(p: RipPresetView | TranscodePresetView) {
-		openPresetForm(p);
-	}
-
-	function handleEditPreset(p: RipPresetView | TranscodePresetView) {
-		openPresetForm(p);
-	}
-
 	async function handleCloneRipPreset(p: RipPresetView) {
 		try {
 			await createRipPreset(ripPresetCopy(p));
@@ -283,8 +275,8 @@
 				inlineKind = 'transcode';
 				inlinePreset = null;
 			}}
-			onview={handleViewPreset}
-			onedit={handleEditPreset}
+			onview={openPresetForm}
+			onedit={openPresetForm}
 			onclone={handleClonePreset}
 			ondelete={handleDeletePreset}
 		/>
