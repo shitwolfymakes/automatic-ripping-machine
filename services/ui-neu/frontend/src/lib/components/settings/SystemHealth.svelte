@@ -9,21 +9,18 @@
 		STORAGE_LABELS,
 		checkDetail,
 		checkLabel,
-		freeLabel,
 		inScope,
 		locationLabel,
 		pathDetail,
 		pathState,
 		serviceBadge,
 		serviceDescription,
-		serviceLabel,
-		storageHelp,
-		storageLabel
+		serviceLabel
 	} from '$lib/utils/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import CopyBlock from '$lib/components/CopyBlock.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
 	import HealthItem from './HealthItem.svelte';
+	import StoragePathItem from './StoragePathItem.svelte';
 
 	// Settings > System and the setup walkthrough's System check share this.
 	// `grouped`: Storage + Services panels with fix commands (setup spec §5.3).
@@ -129,41 +126,7 @@
 				<p class="system-health-description">Folders from docker-compose. ARM needs to write to all three.</p>
 				<div class="stack mt-3">
 					{#each result.paths as p (p.name)}
-						{@const st = pathState(p)}
-						<HealthItem
-							testid="system-health-path"
-							status={st}
-							name={storageLabel(p.name)}
-							path={p.path}
-							description={storageHelp(p.name)}
-						>
-							{#snippet badge()}
-								<span class="badge badge-sm {st === 'ok' ? 'badge-success' : 'badge-danger'}">
-									{st === 'ok' ? 'OK' : 'Problem'}
-								</span>
-							{/snippet}
-							{#snippet chips()}
-								<span class="chip chip-sm {p.exists ? 'chip-success' : 'chip-danger'}">
-									<Glyph name={p.exists ? 'check' : 'x'} class="h-3 w-3" />{p.exists ? 'Exists' : 'Missing'}
-								</span>
-								<span class="chip chip-sm {p.writable ? 'chip-success' : 'chip-danger'}">
-									<Glyph name={p.writable ? 'check' : 'x'} class="h-3 w-3" />{p.writable ? 'Writable' : 'Not writable'}
-								</span>
-								<span class="chip chip-sm">{freeLabel(storage, p.name)}</span>
-							{/snippet}
-							{#if st !== 'ok'}
-								{#if p.host_path}
-									<p class="system-health-description">
-										Host path <code class="mono">{p.host_path}</code>. Run this on the server, then press Check again:
-									</p>
-									<CopyBlock text={`sudo chown -R ${p.uid}:${p.gid} ${p.host_path}`} />
-								{:else}
-									<p class="system-health-description">
-										Set ARM_HOST_*_PATH in .env so ARM can name the folder to fix.
-									</p>
-								{/if}
-							{/if}
-						</HealthItem>
+						<StoragePathItem folder={p} {storage} />
 					{/each}
 				</div>
 			</section>
