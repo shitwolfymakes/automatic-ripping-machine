@@ -7,7 +7,7 @@
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
-	import { driveTitle } from '$lib/utils/drives';
+	import { makemkvKeyStatus } from '$lib/utils/makemkv';
 
 	// MakeMKV key: the free monthly beta key (value null) or a purchased key.
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports
@@ -41,22 +41,7 @@
 		}
 	}
 
-	const enrolled = $derived(drives.filter((d) => d.lifecycle === 'enrolled' && d.kind !== 'virtual'));
-	const checker = $derived(drives.find((d) => d.id === cfg?.makemkv_key_checked_by_drive_id) ?? null);
-	const status = $derived.by(() => {
-		if (!cfg) return null;
-		if (cfg.makemkv_key_valid === true)
-			return {
-				tone: 'ok' as const,
-				title: checker ? `Valid, checked by ${driveTitle(checker)}` : 'Valid',
-				message: null
-			};
-		if (cfg.makemkv_key_valid === false)
-			return { tone: 'danger' as const, title: 'Key not accepted', message: cfg.makemkv_key_state ?? null };
-		if (enrolled.length === 0)
-			return { tone: 'muted' as const, title: 'Will be checked when you enroll a drive', message: null };
-		return { tone: 'busy' as const, title: 'Waiting for a drive to check the key...', message: null };
-	});
+	const status = $derived(makemkvKeyStatus(cfg, drives));
 </script>
 
 <div class="makemkv-key-field stack">
