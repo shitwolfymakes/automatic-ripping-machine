@@ -7,7 +7,7 @@ import { fetchGpus } from '$lib/api/gpus';
 import { get } from 'svelte/store';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/components/__fixtures__/identity-metas';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {

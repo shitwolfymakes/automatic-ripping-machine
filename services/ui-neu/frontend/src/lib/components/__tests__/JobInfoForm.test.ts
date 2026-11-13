@@ -1,0 +1,216 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+
+vi.mock('$lib/stores/auth', async () => {
+	const { derived, writable } = await import('svelte/store');
+	const _role = writable<string | null>('admin');
+	return {
+		role: { subscribe: _role.subscribe },
+		isAdmin: derived(_role, (r) => r === 'admin'),
+		// Test-only helper — not part of the real module's public API.
+		__setRole: (r: string | null) => _role.set(r)
+	};
+});
+
+vi.mock('$lib/api/jobs', () => ({
+	resolveJob: vi.fn()
+}));
+import { resolveJob } from '$lib/api/jobs';
+import type { JobStatus } from '$lib/types/api.gen';
+import JobInfoForm from '../JobInfoForm.svelte';
+import { actionsFor } from '../__fixtures__/job';
+
+const mockResolve = vi.mocked(resolveJob);
+
+function job(overrides: Record<string, unknown> = {}) {
+	return {
+		id: 'job_1',
+		drive_id: 'drv_1',
+		disc_type: 'dvd',
+		status: 'awaiting_user_id',
+		actions: actionsFor((overrides.status as JobStatus | undefined) ?? 'awaiting_user_id'),
+		title: 'Star Knight',
+		year: 1985,
+		disc_number: null,
+		disc_total: null,
+		metadata_json: {},
+		resumed_from_crash: false,
+		...overrides
+	} as any;
+}
+
+beforeEach(() => {
+	mockResolve.mockReset();
+	mockResolve.mockResolvedValue({ status: 'identified' } as any);
+});
+
+afterEach(() => {
+	cleanup();
+});
+
+describe('JobInfoForm', () => {
+	it('seeds Title and Year from the job', () => {
+		renderComponent(JobInfoForm, { props: { job: job() } });
+		expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Star Knight');
+		expect((screen.getByLabelText('Year') as HTMLInputElement).value).toBe('1985');
+	});
+
+	it('Save calls resolveJob once with the form body', async () => {
+		const onrefresh = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onrefresh } });
+		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
+		expect(mockResolve).toHaveBeenCalledWith('job_1', {
+			title: 'Star Knight',
+			year: 1986,
+			disc_number: null,
+			disc_total: null
+		});
+		await waitFor(() => expect(onrefresh).toHaveBeenCalled());
+	});
+
+	it('Save sends the seeded title even on a disc-only change', async () => {
+		renderComponent(JobInfoForm, { props: { job: job() } });
+		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
+		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() =>
+			expect(mockResolve).toHaveBeenCalledWith('job_1', {
+				title: 'Star Knight',
+				year: 1985,
+				disc_number: 2,
+				disc_total: 3
+			})
+		);
+	});
+
+	it('a save error shows error feedback and keeps the dirty Save bar', async () => {
+		mockResolve.mockRejectedValueOnce(new Error('boom'));
+		renderComponent(JobInfoForm, { props: { job: job() } });
+		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1990' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+		// still dirty → Save button still present
+		expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+	});
+
+	it('blank Title disables Save', async () => {
+		renderComponent(JobInfoForm, { props: { job: job() } });
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: '' } });
+		// dirty now true (title touched) so Save bar shows; the button is disabled
+		expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+	});
+
+	it('a non-resolvable job renders fields read-only with the lock note', () => {
+		renderComponent(JobInfoForm, { props: { job: job({ status: 'ripping' }) } });
+		expect(screen.getByText(/Identity is locked/i)).toBeInTheDocument();
+		expect(screen.getByLabelText('Title')).toBeDisabled();
+	});
+
+	it('does not overwrite a touched field when the job prop changes', async () => {
+		const { rerender } = renderComponent(JobInfoForm, { props: { job: job() } });
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'My Edit' } });
+		await rerender({ job: job({ title: 'Polled Title' }) });
+		expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('My Edit');
+	});
+
+	it('has no Start button — the form only saves metadata (Start lives in the action row)', async () => {
+		renderComponent(JobInfoForm, { props: { job: job() } });
+		expect(screen.queryByRole('button', { name: /start rip/i })).not.toBeInTheDocument();
+		// editing reveals only Save + Reset
+		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+		expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /start/i })).not.toBeInTheDocument();
+	});
+
+	describe('guest write-control gating', () => {
+		afterEach(async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('admin');
+		});
+
+		it('hides the Save button for guests', async () => {
+			const auth = (await import('$lib/stores/auth')) as unknown as {
+				__setRole: (r: string | null) => void;
+			};
+			auth.__setRole('guest');
+			renderComponent(JobInfoForm, { props: { job: job() } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+			expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		});
+
+		it('shows the Save button for admins', async () => {
+			renderComponent(JobInfoForm, { props: { job: job() } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
+			expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+		});
+	});
+
+	it('shows the season empty when unknown and saves a typed season', async () => {
+		mockResolve.mockResolvedValue({ job: job({ season: 7 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job({ season: null }), onsaved } });
+		const season = screen.getByLabelText('Season') as HTMLInputElement;
+		expect(season.value).toBe('');
+		await fireEvent.input(season, { target: { value: '7' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: 7 })));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: true, disc: false }));
+	});
+
+	it('clears a season by sending null', async () => {
+		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: null })));
+	});
+
+	it('does not send season when untouched', async () => {
+		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Other' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+		expect(mockResolve.mock.calls[0][1]).not.toHaveProperty('season');
+	});
+
+	it('reports a disc change', async () => {
+		mockResolve.mockResolvedValue({ job: job({ disc_number: 2 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: true }));
+	});
+
+	it('reports nothing changed when a cleared season comes back the same', async () => {
+		// The label owns the season: clearing it re-resolves to the same value.
+		mockResolve.mockResolvedValue({ job: job({ season: 2 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, {
+			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }), onsaved }
+		});
+		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: null })));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: false }));
+	});
+
+	it('a disc-total-only edit changes neither season nor disc', async () => {
+		mockResolve.mockResolvedValue({ job: job({ disc_total: 3 }), fan_out: [] } as any);
+		const onsaved = vi.fn();
+		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: false }));
+	});
+
+	it('shows the provenance line for a set season', () => {
+		renderComponent(JobInfoForm, {
+			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }) }
+		});
+		expect(screen.getByText('Season from the disc label')).toBeInTheDocument();
+	});
+});

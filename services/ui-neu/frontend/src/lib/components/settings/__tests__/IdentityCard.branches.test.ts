@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import IdentityCardHarness from './IdentityCardHarness.svelte';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/components/__fixtures__/identity-metas';
 
 // Branch pins for IdentityCard, beside IdentityCard.test.ts. No branch is
 // left open.
