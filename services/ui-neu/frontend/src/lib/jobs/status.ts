@@ -64,11 +64,6 @@ export function isAwaitingAction(job: JobLike): boolean {
 	return eff === 'ripped' || eff === 'ripped_partial';
 }
 
-/** True when the job carries a non-empty, non-whitespace title. */
-export function hasTitleMatch(job: Pick<JobView, 'title'>): boolean {
-	return typeof job.title === 'string' && job.title.trim().length > 0;
-}
-
 /**
  * The jobs-table Transcode column display for a job, gated so it is only
  * "Complete" (green) when every task succeeded. A retry-in-flight on a session

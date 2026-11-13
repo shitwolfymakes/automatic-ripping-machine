@@ -5,10 +5,6 @@ export function fetchRipPresets(): Promise<RipPresetView[]> {
 	return get<RipPresetView[]>('/api/rip-presets');
 }
 
-export function fetchRipPreset(id: string): Promise<RipPresetView> {
-	return get<RipPresetView>(`/api/rip-presets/${id}`);
-}
-
 export function createRipPreset(body: RipPresetCreateRequest): Promise<RipPresetView> {
 	return post<RipPresetView>('/api/rip-presets', body);
 }

@@ -1,8 +1,7 @@
-// What the transcode preset sidebar and the presets list say: notes, titles, row flags and setting issues.
+// What the transcode preset sidebar and the presets list say: notes, titles and setting issues.
 // Pure functions; the components render the result.
 
 import type { SettingIssue, TranscodePresetView } from '$lib/types/api.gen';
-import { settingsCount } from './draft';
 import { plural } from '$lib/utils/plural';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
@@ -22,27 +21,6 @@ const TITLES: Record<SidebarMode, string> = {
 
 export function footerNote(preset: TranscodePresetView | null): string | null {
 	return preset?.host_notes?.includes('encodes_on_cpu_here') ? CPU_HERE_NOTE : null;
-}
-
-interface RowFlags {
-	settings: string | null;
-	needsReview: boolean;
-	cpuHere: boolean;
-}
-
-function settingsLabel(count: number): string | null {
-	if (count === 0) return null;
-	return `${count} ${plural(count, 'setting')}`;
-}
-
-// What a Transcode presets list row adds to its attribute line; nothing for a rip preset (null).
-export function rowFlags(preset: TranscodePresetView | null): RowFlags {
-	const count = settingsCount(preset?.handbrake_settings ?? null);
-	return {
-		settings: settingsLabel(count),
-		needsReview: (preset?.issues ?? []).length > 0,
-		cpuHere: footerNote(preset) !== null
-	};
 }
 
 export function sidebarTitle(mode: SidebarMode): string {

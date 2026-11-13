@@ -10,7 +10,6 @@ vi.mock('$lib/api/client', () => ({
 import { get, post, patch, del } from '$lib/api/client';
 import {
 	fetchTranscodePresets,
-	fetchTranscodePreset,
 	createTranscodePreset,
 	updateTranscodePreset,
 	deleteTranscodePreset
@@ -37,11 +36,6 @@ describe('transcodePresets CRUD api module', () => {
 	it('fetchTranscodePresets with a media_type appends the query', async () => {
 		await fetchTranscodePresets('tv');
 		expect(mockGet).toHaveBeenCalledWith('/api/transcode-presets?media_type=tv');
-	});
-
-	it('fetchTranscodePreset GETs /api/transcode-presets/{id}', async () => {
-		await fetchTranscodePreset('tpr_1');
-		expect(mockGet).toHaveBeenCalledWith('/api/transcode-presets/tpr_1');
 	});
 
 	it('createTranscodePreset POSTs /api/transcode-presets with the body', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveJobStatus, isPartialComplete, hasTitleMatch, isAwaitingAction, countRipping } from '$lib/jobs/status';
+import { effectiveJobStatus, isPartialComplete, isAwaitingAction, countRipping } from '$lib/jobs/status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
@@ -49,17 +49,6 @@ describe('isPartialComplete', () => {
 			false
 		);
 		expect(isPartialComplete(job('ripped', null))).toBe(false);
-	});
-});
-
-describe('hasTitleMatch', () => {
-	it('true for a non-empty title', () => {
-		expect(hasTitleMatch({ title: 'MysterySuspense' } as any)).toBe(true);
-	});
-	it('false for null / empty / whitespace title', () => {
-		expect(hasTitleMatch({ title: null } as any)).toBe(false);
-		expect(hasTitleMatch({ title: '' } as any)).toBe(false);
-		expect(hasTitleMatch({ title: '   ' } as any)).toBe(false);
 	});
 });
 

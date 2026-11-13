@@ -8,7 +8,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get, post, patch, del } from '$lib/api/client';
-import { fetchRipPresets, fetchRipPreset, createRipPreset, updateRipPreset, deleteRipPreset } from '../rip-presets';
+import { fetchRipPresets, createRipPreset, updateRipPreset, deleteRipPreset } from '../rip-presets';
 
 const mockGet = vi.mocked(get);
 const mockPost = vi.mocked(post);
@@ -26,11 +26,6 @@ describe('ripPresets CRUD api module', () => {
 	it('fetchRipPresets GETs /api/rip-presets', async () => {
 		await fetchRipPresets();
 		expect(mockGet).toHaveBeenCalledWith('/api/rip-presets');
-	});
-
-	it('fetchRipPreset GETs /api/rip-presets/{id}', async () => {
-		await fetchRipPreset('rp_1');
-		expect(mockGet).toHaveBeenCalledWith('/api/rip-presets/rp_1');
 	});
 
 	it('createRipPreset POSTs /api/rip-presets with the body', async () => {

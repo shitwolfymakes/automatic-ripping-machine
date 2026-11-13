@@ -12,10 +12,6 @@ export function fetchTranscodePresets(mediaType?: MediaType): Promise<TranscodeP
 	return get<TranscodePresetView[]>(`/api/transcode-presets${query}`);
 }
 
-export function fetchTranscodePreset(id: string): Promise<TranscodePresetView> {
-	return get<TranscodePresetView>(`/api/transcode-presets/${id}`);
-}
-
 export function createTranscodePreset(body: TranscodePresetCreateRequest): Promise<TranscodePresetView> {
 	return post<TranscodePresetView>('/api/transcode-presets', body);
 }

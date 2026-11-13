@@ -1,13 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
 	humanizeContainer,
 	humanizeIdentificationMode,
 	humanizeMediaType,
 	humanizeOutputMode,
 	humanizeTool,
-	humanizeTrackSelection,
-	ripPresetSummary,
-	transcodePresetSummary
+	humanizeTrackSelection
 } from '../preset-labels';
 
 describe('humanizeOutputMode', () => {
@@ -123,31 +121,5 @@ describe('labelFrom fallbacks', () => {
 	it('gives a value named like an Object prototype member back as itself', () => {
 		expect(humanizeTrackSelection('constructor')).toBe('constructor');
 		expect(humanizeIdentificationMode('toString')).toBe('toString');
-	});
-});
-
-describe('ripPresetSummary', () => {
-	it("joins a preset's three labels in order", () => {
-		expect(
-			ripPresetSummary({
-				track_selection: 'main_feature',
-				identification_mode: 'required',
-				output_mode: 'tracks'
-			})
-		).toBe('Main feature | ID required | Tracks');
-	});
-});
-
-describe('transcodePresetSummary', () => {
-	const preset = { tool: 'handbrake', container: 'mkv', encoder: 'any_h265' } as const;
-
-	it('joins the tool, container and encoder name', () => {
-		const encoderName = vi.fn(() => 'Any GPU H.265');
-		expect(transcodePresetSummary(preset, encoderName)).toBe('HandBrake | MKV | Any GPU H.265');
-		expect(encoderName).toHaveBeenCalledWith('any_h265');
-	});
-
-	it('leaves out an encoder name that is empty', () => {
-		expect(transcodePresetSummary(preset, () => '')).toBe('HandBrake | MKV');
 	});
 });

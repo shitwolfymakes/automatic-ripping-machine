@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as client from '$lib/api/client';
 import {
 	fetchChannels,
-	fetchChannel,
 	createChannel,
 	updateChannel,
 	deleteChannel,
@@ -25,12 +24,6 @@ describe('channels api', () => {
 		const out = await fetchChannels();
 		expect(spy).toHaveBeenCalledWith('/api/notifications/channels');
 		expect(out).toEqual([{ id: 1 }]);
-	});
-
-	it('fetchChannel GETs by id', async () => {
-		const spy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ id: 3 } as never);
-		await fetchChannel(3);
-		expect(spy).toHaveBeenCalledWith('/api/notifications/channels/3');
 	});
 
 	it('createChannel POSTs the body', async () => {

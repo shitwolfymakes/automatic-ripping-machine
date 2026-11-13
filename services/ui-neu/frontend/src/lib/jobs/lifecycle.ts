@@ -32,10 +32,6 @@ const ALL_STAGES: { id: LifecycleStageId; label: string }[] = [
 	{ id: 'complete', label: 'Complete' }
 ];
 
-export function isFolderImport(sourceType: string | null | undefined): boolean {
-	return sourceType === 'folder';
-}
-
 /**
  * Compute the lifecycle node list for a job. Caller passes the snapshot
  * status + source_type; we derive the active stage and paint earlier

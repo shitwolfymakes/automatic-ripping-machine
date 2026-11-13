@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLifecycle, isFolderImport, lifecycleColorVar } from '$lib/jobs/lifecycle';
+import { deriveLifecycle, lifecycleColorVar } from '$lib/jobs/lifecycle';
 
 describe('deriveLifecycle - disc rip 5-step', () => {
 	it('exposes the five stages in order', () => {
@@ -70,15 +70,6 @@ describe('deriveLifecycle - edge cases', () => {
 	it('case-insensitive status matching', () => {
 		const upper = deriveLifecycle('TRANSCODING', 'disc');
 		expect(upper[3].state).toBe('active');
-	});
-});
-
-describe('isFolderImport', () => {
-	it('identifies folder source_type', () => {
-		expect(isFolderImport('folder')).toBe(true);
-		expect(isFolderImport('disc')).toBe(false);
-		expect(isFolderImport(null)).toBe(false);
-		expect(isFolderImport(undefined)).toBe(false);
 	});
 });
 
