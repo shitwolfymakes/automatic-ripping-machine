@@ -4,7 +4,7 @@ import type { IdentityView } from '$lib/types/api.gen';
 
 /** Why a held (suggestion) result was not applied, by the backend's
  * `extra.hold_reasons` code (design spec 2026-10-23 section 4.2 E). */
-export const HOLD_REASON_TEXT: Record<string, string> = {
+const HOLD_REASON_TEXT: Record<string, string> = {
 	ambiguous: 'The titles fit equally well one episode earlier or later.',
 	near_tie: 'Another season fits about as well.',
 	low_coverage: 'Fewer than half the titles found an episode.',

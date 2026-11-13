@@ -7,7 +7,7 @@ import { HIDDEN_SECRET } from '$lib/api/config';
  *  card per section. The backend only knows group + tier; any field this map
  *  doesn't name lands in a trailing card titled after its group. */
 
-export interface SettingsSection {
+interface SettingsSection {
 	title: string;
 	blurb?: string;
 	keys: string[];

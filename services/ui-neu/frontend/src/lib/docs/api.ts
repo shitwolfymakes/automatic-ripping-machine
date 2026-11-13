@@ -2,8 +2,8 @@
 // /docs-data/ (nav.json, pages/<section>/<slug>.json, search.json).
 import MiniSearch, { type Options } from 'minisearch';
 
-export const DOCS_BASE = '/docs-data';
-export const HOME_ID = 'guide/home';
+const DOCS_BASE = '/docs-data';
+const HOME_ID = 'guide/home';
 
 export interface DocsTocEntry {
 	depth: number;
@@ -18,13 +18,13 @@ export interface DocsPage {
 	source: string;
 	editUrl: string;
 }
-export interface DocsNavItem {
+interface DocsNavItem {
 	label: string;
 	href: string;
 	external: boolean;
 	pageId: string | null;
 }
-export interface DocsNavGroup {
+interface DocsNavGroup {
 	label: string | null;
 	items: DocsNavItem[];
 }

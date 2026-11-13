@@ -4,7 +4,7 @@ import type { JobView } from '$lib/types/api.gen';
 import { isAwaitingAction } from '$lib/jobs/status';
 import { isReviewCardStatus } from '$lib/jobs/status-groups';
 
-export interface ActiveJobGroups {
+interface ActiveJobGroups {
 	scanning: JobView[];
 	waiting: JobView[];
 	ripping: JobView[];

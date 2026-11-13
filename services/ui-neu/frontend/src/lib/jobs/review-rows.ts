@@ -3,7 +3,7 @@ import type { TrackView, ScanTitle, TrackRole } from '$lib/types/api.gen';
 // One row shape covering both review-card lifecycle stages. A row is editable iff
 // it has a real materialized-track id; scanned-title rows (trackId === null) are
 // read-only.
-export type ReviewRow = {
+type ReviewRow = {
 	index: number;
 	durationSeconds: number | null;
 	sourceLabel: string | null;

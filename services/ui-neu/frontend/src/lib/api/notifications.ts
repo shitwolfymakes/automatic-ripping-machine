@@ -23,11 +23,11 @@ export function dismissNotification(id: string): Promise<NotificationInboxView> 
 	return patch<NotificationInboxView>(`/api/notifications/inbox/${id}`, body);
 }
 
-export interface NotificationDismissAllResult {
+interface NotificationDismissAllResult {
 	updated: number;
 }
 
-export interface NotificationPurgeResult {
+interface NotificationPurgeResult {
 	deleted: number;
 }
 

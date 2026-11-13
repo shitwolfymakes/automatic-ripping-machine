@@ -120,7 +120,7 @@ export function deleteGuard(preset: { is_builtin: boolean }, usedBy: number): { 
 const NO_TRANSCODE: CellContent = { text: 'No transcode', muted: true };
 
 /** How a session's cells reach the presets it points at, and its sample output path. */
-export interface SessionLookup {
+interface SessionLookup {
 	rip: (id: string) => RipPresetView | undefined;
 	transcode: (id: string | null) => TranscodePresetView | undefined;
 	samplePath: (session: SessionView) => string;

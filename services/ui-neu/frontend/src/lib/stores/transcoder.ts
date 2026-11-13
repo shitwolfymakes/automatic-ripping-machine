@@ -13,7 +13,7 @@ export const emptyStats: TranscodeStatsView = {
 };
 // Was WorkersResponse { max_concurrent, active_count, workers }; v3 is a bare
 // worker array.
-export const emptyWorkers: TranscodeWorkerView[] = [];
+const emptyWorkers: TranscodeWorkerView[] = [];
 
 /**
  * Singleton transcoder stores — they survive page navigations and retain their

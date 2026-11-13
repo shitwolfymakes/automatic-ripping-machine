@@ -4,7 +4,7 @@ import type { MediaType } from '$lib/types/api.gen';
 
 export type BadgeTone = 'warn' | 'info' | 'neutral';
 
-export type PillTone = MediaType | 'custom' | 'builtin';
+type PillTone = MediaType | 'custom' | 'builtin';
 
 export type CellContent = {
 	text: string;
@@ -24,7 +24,7 @@ export interface TableColumn<R> {
 	cell: (row: R) => CellContent;
 }
 
-export type CellView = {
+type CellView = {
 	/** Class of the cell's td (and of its column's th). */
 	className: string;
 	/** Tooltip of the plain text; a pill carries none. */

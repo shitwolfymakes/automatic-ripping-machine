@@ -14,7 +14,7 @@ import { fieldVisible, type Context } from './dependencyRules';
 import { PRESET_ENCODER_ID, findAvailability } from './encoder-availability';
 
 // 'open' is a card with no hardware state to report: a pinned or base-preset family.
-export type CardState = 'verified' | 'cpu-fallback' | 'collapsed' | 'open';
+type CardState = 'verified' | 'cpu-fallback' | 'collapsed' | 'open';
 export interface EncoderCard {
 	family: string;
 	label: string;

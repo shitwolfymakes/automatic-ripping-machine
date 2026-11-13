@@ -2,7 +2,7 @@
 // the title override; pure, so each rule is tested without the component.
 import type { TrackEditRequest } from '$lib/types/api.gen';
 
-export type TrackEdit = Omit<TrackEditRequest, 'track_id'>;
+type TrackEdit = Omit<TrackEditRequest, 'track_id'>;
 
 /**
  * The typed episode number: a number, or null when blank or not a finite

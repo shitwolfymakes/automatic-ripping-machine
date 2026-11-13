@@ -10,7 +10,7 @@ export function transcoderDotStatus(
 }
 
 /** One row of the mobile stats panel's service list. */
-export interface ServiceRow {
+interface ServiceRow {
 	label: string;
 	href: string;
 	status: 'ok' | 'warn' | 'error' | 'off';

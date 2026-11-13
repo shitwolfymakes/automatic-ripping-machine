@@ -4,9 +4,9 @@ import { isPassthroughSession, presetToolMap, PASSTHROUGH_TOOL } from '$lib/sess
 
 export type View = 'sessions' | 'rip' | 'transcode' | 'routing';
 
-export type ViewCounts = Partial<Record<View, number>>;
+type ViewCounts = Partial<Record<View, number>>;
 
-export interface ViewTab {
+interface ViewTab {
 	key: View;
 	label: string;
 	count: number | undefined;

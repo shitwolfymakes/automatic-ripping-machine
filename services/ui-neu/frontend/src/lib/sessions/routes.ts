@@ -90,7 +90,7 @@ export function discLabel(discType: DiscType | null): string {
 	return discType ?? 'Any disc';
 }
 
-export interface RouteCellView {
+interface RouteCellView {
 	value: string;
 	className: string;
 	disabled: boolean;
@@ -117,7 +117,7 @@ export function sessionOptionLabel(session: SessionView): string {
 	return `${session.name ?? ''}${session.is_builtin ? ' (built-in)' : ''}`;
 }
 
-export interface OtherRouteView {
+interface OtherRouteView {
 	label: string;
 	name: string;
 }

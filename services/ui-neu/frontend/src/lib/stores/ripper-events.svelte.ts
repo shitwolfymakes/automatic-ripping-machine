@@ -21,7 +21,7 @@ import { wsClient, type WSEnvelope } from '$lib/api/ws';
 // back-to-back) into a single refresh.
 const DEBOUNCE_MS = 300;
 
-export type RipperEventTypes = Map<string, Set<string>>;
+type RipperEventTypes = Map<string, Set<string>>;
 type Listener = (jobIds: Set<string>, eventTypes: RipperEventTypes) => void;
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- notifier bookkeeping, never read reactively

@@ -16,9 +16,9 @@
 import { lifecycleStageFor, LIFECYCLE_FAILURE_STATUSES } from '$lib/jobs/status-groups';
 import type { LifecycleStageId } from '$lib/jobs/lifecycle-stage';
 
-export type LifecycleNodeState = 'completed' | 'active' | 'paused' | 'failed' | 'pending';
+type LifecycleNodeState = 'completed' | 'active' | 'paused' | 'failed' | 'pending';
 
-export interface LifecycleNode {
+interface LifecycleNode {
 	id: LifecycleStageId;
 	label: string;
 	state: LifecycleNodeState;

@@ -2,14 +2,14 @@
 // it is on, what the buttons allow, and how each preset in the file reads.
 import type { HandbrakeSchemaSlimView, ImportedPresetView } from '$lib/types/api.gen';
 
-export interface ImportPanelInput {
+interface ImportPanelInput {
 	presets: readonly ImportedPresetView[] | null;
 	schema: HandbrakeSchemaSlimView | null;
 	text: string;
 	loading: boolean;
 }
 
-export interface ImportPanelView {
+interface ImportPanelView {
 	step: 1 | 2;
 	showVersionLine: boolean;
 	versionTag: string;
@@ -21,7 +21,7 @@ export interface ImportPanelView {
 	picks: PresetPickView[];
 }
 
-export interface PresetPickView {
+interface PresetPickView {
 	label: string;
 	disabled: boolean;
 	reason: string | null;

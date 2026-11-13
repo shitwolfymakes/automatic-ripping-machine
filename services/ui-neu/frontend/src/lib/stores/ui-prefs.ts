@@ -4,7 +4,7 @@ import { browser } from '$app/environment';
 /** Per-browser interface preferences (Settings > Interface). These describe
  *  this device, not the server, so they live in localStorage rather than
  *  Config. Every field has a default so a missing or corrupt entry is fine. */
-export interface UiPrefs {
+interface UiPrefs {
 	/** Resource stats surface: sidebar panel (2xl) / bottom bar (lg). */
 	showStats: boolean;
 	/** Dashboard job list layout the page opens with (a default, not the live state). */

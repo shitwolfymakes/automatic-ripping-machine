@@ -6,8 +6,8 @@ import { titleMatchBody, titleResolveBody, type TitleApplyValues } from '$lib/jo
 import { isSeriesKind } from '$lib/match/match';
 import { errorMessage } from '$lib/utils/errors';
 
-export type FeedbackAt = { row: number; list: number };
-export type TitleFeedback = { type: 'success' | 'error'; message: string } & FeedbackAt;
+type FeedbackAt = { row: number; list: number };
+type TitleFeedback = { type: 'success' | 'error'; message: string } & FeedbackAt;
 
 export interface TitleApplyPlan {
 	/**

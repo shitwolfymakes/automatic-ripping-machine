@@ -2,7 +2,7 @@ import { writable, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { errorMessage } from '$lib/utils/errors';
 
-export interface PollingStore<T> extends Readable<T> {
+interface PollingStore<T> extends Readable<T> {
 	refresh: () => Promise<void>;
 	start: () => void;
 	stop: () => void;

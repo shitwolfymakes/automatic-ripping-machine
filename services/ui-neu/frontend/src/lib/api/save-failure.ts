@@ -4,7 +4,7 @@
 import type { SettingIssue } from '$lib/types/api.gen';
 import { ApiError, saveErrorMessage } from './client';
 
-export const MARKED_ISSUES_MESSAGE = 'Fix the marked settings and save again.';
+const MARKED_ISSUES_MESSAGE = 'Fix the marked settings and save again.';
 
 export interface SaveFailure {
 	issues: SettingIssue[] | null;

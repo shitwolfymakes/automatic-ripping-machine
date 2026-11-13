@@ -48,7 +48,7 @@ export function jobInfoResolveBody(fields: JobInfoText, seasonTouched: boolean):
 }
 
 /** The season and disc number a save can change. */
-export interface SavedFacts {
+interface SavedFacts {
 	season: number | null;
 	disc: number | null;
 }

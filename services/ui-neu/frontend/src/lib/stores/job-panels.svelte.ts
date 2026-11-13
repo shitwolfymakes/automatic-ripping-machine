@@ -1,6 +1,6 @@
 // The job page's search panel: which one the header card shows below the
 // facts, and the search type the title panel opens with.
-export type JobPanel = 'title' | 'music' | 'episodes';
+type JobPanel = 'title' | 'music' | 'episodes';
 
 export class JobPanels {
 	active = $state<JobPanel | null>(null);

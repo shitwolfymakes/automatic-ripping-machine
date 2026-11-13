@@ -38,7 +38,7 @@ export function inScope(scope: 'all' | 'system', name: string): boolean {
 /** How a result's summary reads: whether everything is fine, how many
  * failing checks and paths it has, and how many distinct names those
  * are (a check and a path can share one). */
-export interface HealthTally {
+interface HealthTally {
 	allOk: boolean;
 	issueCount: number;
 	problemCount: number;

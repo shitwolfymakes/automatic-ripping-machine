@@ -7,7 +7,7 @@ import { shortSourceLabel } from '$lib/episodes/sources';
 import { errorMessage } from '$lib/utils/errors';
 
 /** What a run needs from the panel. */
-export interface MatchRunHost {
+interface MatchRunHost {
 	/** The job the panel shows now; a run for another job is dropped. */
 	jobId: () => string;
 	/** The label of the source whose placement is on screen, or null. */

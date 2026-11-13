@@ -7,7 +7,7 @@ import { cancelIsoRip } from '$lib/api/iso';
 import { errorMessage } from '$lib/utils/errors';
 
 /** What the card does once an action lands. */
-export interface JobActionCallbacks {
+interface JobActionCallbacks {
 	/** The card leaves the dashboard. */
 	dismiss: () => void;
 	/** The dashboard reloads. */

@@ -17,10 +17,10 @@ function parseWholeNumber(
 }
 
 /** The lowest rip speed the drive settings accept. */
-export const RIP_SPEED_MIN = 1;
+const RIP_SPEED_MIN = 1;
 
 /** The highest rip speed the drive settings accept. */
-export const RIP_SPEED_MAX = 99;
+const RIP_SPEED_MAX = 99;
 
 /**
  * The rip speed to save: the speed, null to clear it (max speed), or
@@ -31,7 +31,7 @@ export function parseRipSpeed(raw: string | number | null | undefined): number |
 }
 
 /** A parsed prescan override: the value to store and whether it was the default. */
-export interface PrescanInput {
+interface PrescanInput {
 	value: number | null;
 	matchesDefault: boolean;
 }

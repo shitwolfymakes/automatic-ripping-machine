@@ -6,7 +6,7 @@ import { fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrake
 import type { HandbrakeSchemaSlimView } from '$lib/types/api.gen';
 import { errorMessage } from '$lib/utils/errors';
 
-export type SchemaState = 'idle' | 'loading' | 'ready' | 'unavailable';
+type SchemaState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 let state = $state<SchemaState>('idle');
 let schema = $state<HandbrakeSchemaSlimView | null>(null);

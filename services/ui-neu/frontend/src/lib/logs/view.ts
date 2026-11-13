@@ -51,7 +51,7 @@ export function followLabel(following: boolean, waiting: number): string {
 }
 
 /** What a log line's `data-tone` can be: a tone, or null for none. */
-export type LogTone = 'warning' | 'danger' | 'debug' | null;
+type LogTone = 'warning' | 'danger' | 'debug' | null;
 
 // The well is a fixed dark surface in both modes (see the --color-terminal-*
 // tokens), so the chips take fixed-dark recipes mixed towards the ink rather

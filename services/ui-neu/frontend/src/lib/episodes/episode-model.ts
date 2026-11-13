@@ -186,7 +186,7 @@ export function pickerOptions(
 
 /** A picker value read back: a role, or an episode by its season and
  * number. */
-export type HandPick = { role: (typeof ROLES)[number] } | { season: number; episode: number };
+type HandPick = { role: (typeof ROLES)[number] } | { season: number; episode: number };
 
 /** Reads a value `pickerOptions` gave back; null for any other value. */
 export function parseHandPick(value: string): HandPick | null {

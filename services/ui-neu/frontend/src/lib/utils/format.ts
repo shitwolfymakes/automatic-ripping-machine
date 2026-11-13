@@ -139,7 +139,7 @@ export function formatRemaining(remainingSec: number): string {
 }
 
 /** The byte-copy fields of a live rip tick that formatTransfer reads. */
-export interface ByteTransfer {
+interface ByteTransfer {
 	bytes_done: number | null;
 	bytes_total: number | null;
 	rate_bps: number | null;

@@ -1,6 +1,6 @@
 // The review card's expanded sections: which one is open (one at a time),
 // the Info field to focus, and the search type the title search opens with.
-export type ReviewSection = 'info' | 'title' | 'music' | 'episodes';
+type ReviewSection = 'info' | 'title' | 'music' | 'episodes';
 
 export class ReviewSections {
 	active = $state<ReviewSection | null>(null);

@@ -10,13 +10,13 @@ import { clearsSettings, isVaapiEncoder, showTabs, type Draft } from './draft';
 import type { SaveFailure } from '$lib/api/save-failure';
 import type { SidebarMode } from './display';
 
-export interface SettingsPanelInput {
+interface SettingsPanelInput {
 	tab: TabId;
 	encoder: string;
 	availability: EncoderAvailabilityView[];
 }
 
-export interface SettingsPanelView {
+interface SettingsPanelView {
 	section: 'video' | 'plain';
 	showAmdNote: boolean;
 	encoderLabel: string;
@@ -45,7 +45,7 @@ export interface PresetBlockInput {
 	presetEncoderId: string;
 }
 
-export interface PresetBlockView {
+interface PresetBlockView {
 	encoderDisabled: boolean;
 	usesFfmpegVaapi: boolean;
 	encoderList: 'loading' | 'empty' | 'groups';
@@ -97,7 +97,7 @@ export interface PresetSidebarInput {
 	unplacedCount: number;
 }
 
-export interface PresetSidebarView {
+interface PresetSidebarView {
 	readonly: boolean;
 	showImport: boolean;
 	showFooter: boolean;

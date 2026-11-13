@@ -13,7 +13,7 @@ import { storedCount } from './settings-edit';
 import type { Draft } from './draft';
 import { plural } from '$lib/utils/plural';
 
-export interface ImportReview {
+interface ImportReview {
 	encoderInFile: string;
 	codecDepth: string;
 	encoderInArm: string;

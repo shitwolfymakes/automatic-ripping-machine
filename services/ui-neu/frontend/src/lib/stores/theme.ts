@@ -25,7 +25,3 @@ if (browser) {
 export function toggleTheme() {
 	theme.update((current) => (current === 'dark' ? 'light' : 'dark'));
 }
-
-export function setTheme(value: 'light' | 'dark') {
-	theme.set(value);
-}

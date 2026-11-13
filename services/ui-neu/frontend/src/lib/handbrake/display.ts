@@ -24,7 +24,7 @@ export function footerNote(preset: TranscodePresetView | null): string | null {
 	return preset?.host_notes?.includes('encodes_on_cpu_here') ? CPU_HERE_NOTE : null;
 }
 
-export interface RowFlags {
+interface RowFlags {
 	settings: string | null;
 	needsReview: boolean;
 	cpuHere: boolean;

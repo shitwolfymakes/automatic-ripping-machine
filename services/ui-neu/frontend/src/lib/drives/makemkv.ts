@@ -4,7 +4,7 @@ import type { ConfigView, DriveView } from '$lib/types/api.gen';
 import { driveTitle } from '$lib/drives/drives';
 
 /** A key status for a StatusStrip: its tone, title and message. */
-export interface MakemkvKeyStatus {
+interface MakemkvKeyStatus {
 	tone: 'ok' | 'danger' | 'muted' | 'busy';
 	title: string;
 	message: string | null;

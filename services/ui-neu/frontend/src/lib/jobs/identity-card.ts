@@ -10,13 +10,13 @@ export type DiscKind = 'bluray' | 'dvd' | 'cd';
 export type DiscHint = 'bd_title' | 'label';
 
 export const DISC_KIND_LABELS: Record<DiscKind, string> = { bluray: 'Blu-ray', dvd: 'DVD', cd: 'CD' };
-export const HINT_LABELS = { bd_title: 'Disc title metadata', label: 'Volume label' } as const;
-export const HINT_DEFAULT_ORDER = ['bd_title', 'label'] as const;
+const HINT_LABELS = { bd_title: 'Disc title metadata', label: 'Volume label' } as const;
+const HINT_DEFAULT_ORDER = ['bd_title', 'label'] as const;
 
 /** The Preview's disc-kind control: the kinds it offers, in order. */
 export const DISC_KINDS: readonly DiscKind[] = ['bluray', 'dvd', 'cd'];
 
-export interface DiscDatabaseOption {
+interface DiscDatabaseOption {
 	key: string;
 	label: string;
 	chips: string[];
@@ -93,11 +93,11 @@ export function enabledLabels(values: Record<string, unknown>, key: string, fiel
 	return (v as string[]).map((s) => labels?.[s] ?? s);
 }
 
-export interface PreviewSource {
+interface PreviewSource {
 	rank: number;
 	label: string;
 }
-export interface PreviewRow {
+interface PreviewRow {
 	key: 'disc' | 'movie' | 'tv' | 'music';
 	label: 'Disc' | 'Movies' | 'TV shows' | 'Music';
 	sentence?: string;

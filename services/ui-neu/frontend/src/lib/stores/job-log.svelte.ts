@@ -6,7 +6,7 @@
 
 import { fetchJobLog, toLogEntry, type LogEntry } from '$lib/api/logs';
 
-export function sortByTime(list: LogEntry[]): LogEntry[] {
+function sortByTime(list: LogEntry[]): LogEntry[] {
 	return list
 		.map((e, i) => ({ e, i, t: e.timestamp ? Date.parse(e.timestamp) : Number.NaN }))
 		.sort((a, b) => {
@@ -19,7 +19,7 @@ import { wsClient, type WSEnvelope } from '$lib/api/ws';
 
 const MAX_LIVE_ENTRIES = 2000;
 
-export interface JobLogOptions {
+interface JobLogOptions {
 	limit?: number;
 }
 
@@ -102,5 +102,3 @@ export function createJobLog(jobId: string, { limit = 200 }: JobLogOptions = {})
 		stop
 	};
 }
-
-export type JobLogStore = ReturnType<typeof createJobLog>;

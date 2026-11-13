@@ -1,5 +1,5 @@
 // Where a job's season / disc position came from, as a short operator-facing line.
-export const PROVENANCE_LABEL: Record<string, string> = {
+const PROVENANCE_LABEL: Record<string, string> = {
 	manual: 'set by you',
 	label: 'from the disc label',
 	bd_title: 'from the Blu-ray disc title',

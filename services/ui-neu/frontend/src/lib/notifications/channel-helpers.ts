@@ -32,7 +32,7 @@ export function typeLabel(type: ChannelType): string {
 	return TYPE_LABELS[type] ?? type;
 }
 
-export interface FormState {
+interface FormState {
 	type: ChannelType;
 	name: string;
 	config: Record<string, unknown>;

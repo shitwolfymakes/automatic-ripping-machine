@@ -128,7 +128,7 @@ export function progressState(id: string, progress: SetupView['progress']): Setu
 export type SummaryState = SetupStepState | 'pending';
 
 /** The chip a step state is drawn with. */
-export interface StateBadge {
+interface StateBadge {
 	text: string;
 	glyph: GlyphName;
 	cls: string;
@@ -146,7 +146,7 @@ export const STATE_BADGE: Record<SummaryState, StateBadge> = {
 export const REVIEWABLE_STEPS: StepMeta[] = STEPS.filter((s) => s.id !== 'finish');
 
 /** A step setup left open, with its state. */
-export interface OpenStep {
+interface OpenStep {
 	step: StepMeta;
 	state: 'skipped' | 'attention';
 }

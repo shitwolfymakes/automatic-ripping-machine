@@ -6,7 +6,7 @@ import type { ResolveBody } from '$lib/jobs/resolve';
 import type { JobUpdateRequest } from '$lib/types/api.gen';
 import { errorMessage } from '$lib/utils/errors';
 
-export type ApplyFeedback = { type: 'success' | 'error'; message: string };
+type ApplyFeedback = { type: 'success' | 'error'; message: string };
 
 export interface ReleaseApplyPlan {
 	/** The job the release is applied to. */

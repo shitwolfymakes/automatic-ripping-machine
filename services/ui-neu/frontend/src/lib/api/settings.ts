@@ -16,7 +16,7 @@ import { get, post, patch } from './client';
 
 // GET /api/settings/infra is an untyped dict in v3 — model only what the page
 // touches as a thin local interface.
-export interface InfraInfo {
+interface InfraInfo {
 	[key: string]: unknown;
 }
 

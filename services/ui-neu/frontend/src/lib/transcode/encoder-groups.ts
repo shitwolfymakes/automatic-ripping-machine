@@ -15,7 +15,7 @@ const GROUP_LABELS: Record<EncoderAvailabilityView['group'], string> = {
 };
 
 /** One optgroup of the encoder select. */
-export interface EncoderGroup {
+interface EncoderGroup {
 	group: EncoderAvailabilityView['group'];
 	label: string;
 	encoders: EncoderAvailabilityView[];
