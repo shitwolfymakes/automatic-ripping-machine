@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { failedSources, panelState, buildRows } from '../../../episodes/episode-model';
+import { failedSources, panelState, buildRows } from '../episode-model';
 import type { IdentityView, JobView, MatchPreview, TrackView } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) => ({ has_series: true, media_type: 'tv', ...o }) as JobView;

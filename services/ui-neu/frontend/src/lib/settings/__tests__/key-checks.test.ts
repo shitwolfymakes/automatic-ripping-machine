@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { KeyCheckResponse } from '$lib/types/api.gen';
-import { KeyChecks, keyToTest } from '../../../settings/key-checks.svelte';
+import { KeyChecks, keyToTest } from '../key-checks.svelte';
 
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
 	Promise.resolve({ name: 'tmdb', status: 'ok', detail: null, checked_at: null })

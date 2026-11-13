@@ -5,7 +5,7 @@ import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import { ApiError } from '$lib/api/client';
 import { sectionFields } from '$lib/settings/sections';
 import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/components/__fixtures__/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>

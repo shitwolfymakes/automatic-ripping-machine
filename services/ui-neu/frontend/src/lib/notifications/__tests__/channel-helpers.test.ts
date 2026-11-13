@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	channelStatus,
-	relativeTime,
-	typeLabel,
-	isReady,
-	missingRequirements
-} from '../../../notifications/channel-helpers';
+import { channelStatus, relativeTime, typeLabel, isReady, missingRequirements } from '../channel-helpers';
 import type { Channel, CatalogService } from '$lib/types/notifications';
 
 const base: Channel = {

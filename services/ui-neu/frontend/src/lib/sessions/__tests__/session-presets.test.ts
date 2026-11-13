@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MediaType, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
-import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../../../sessions/session-presets';
+import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../session-presets';
 
 const makeRip = (id = 'r1', name = 'rip r1') => ({
 	id,

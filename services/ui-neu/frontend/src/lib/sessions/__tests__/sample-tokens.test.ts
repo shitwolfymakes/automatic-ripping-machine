@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSample, mediaTokens, MEDIA_SAMPLE } from '../../../sessions/sample-tokens';
+import { resolveSample, mediaTokens, MEDIA_SAMPLE } from '../sample-tokens';
 
 describe('mediaTokens', () => {
 	it('lists the movie tokens in chip order', () => {

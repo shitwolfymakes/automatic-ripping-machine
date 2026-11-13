@@ -9,7 +9,7 @@ import {
 	parseHandPick,
 	pickedEpisodeName,
 	usedEpisodeNumbers
-} from '../../../episodes/episode-model';
+} from '../episode-model';
 import type {
 	EpisodeSummary,
 	IdentityView,

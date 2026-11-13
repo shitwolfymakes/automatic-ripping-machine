@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { serviceGroups, matchingServices } from '../../../notifications/service-catalog';
+import { serviceGroups, matchingServices } from '../service-catalog';
 import type { Catalog, CatalogService } from '$lib/types/notifications';
 
 function svc(id: string, name: string): CatalogService {

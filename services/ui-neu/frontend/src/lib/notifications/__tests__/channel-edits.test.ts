@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { editorPatch, editorTestPayload, type EditorBody } from '../../../notifications/channel-edits';
-import { appriseChannel, webhookChannel } from './apprise-fixtures';
+import { editorPatch, editorTestPayload, type EditorBody } from '../channel-edits';
+import { appriseChannel, webhookChannel } from '../../components/notifications/__tests__/apprise-fixtures';
 
 function editorBody(overrides: Partial<EditorBody> = {}): EditorBody {
 	return {

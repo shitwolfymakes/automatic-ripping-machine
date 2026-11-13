@@ -16,7 +16,7 @@ import {
 	passthroughSessions,
 	passthroughTranscodePresets,
 	type EditorState
-} from '../../../sessions/sessions-area-model';
+} from '../sessions-area-model';
 
 const closed: EditorState = { builderOpen: false, sessionId: null, ripPresetId: null, transcodePresetId: null };
 const asRip = (o: Partial<RipPresetView>) => o as RipPresetView;

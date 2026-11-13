@@ -6,7 +6,7 @@ import {
 	sessionUpdate,
 	sessionCreate,
 	type SessionForm
-} from '../../../sessions/session-form';
+} from '../session-form';
 
 const form: SessionForm = {
 	name: 'Movies',

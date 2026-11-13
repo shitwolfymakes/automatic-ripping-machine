@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from '../../../notifications/channel-filters';
-import { webhookChannel } from './apprise-fixtures';
+import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from '../channel-filters';
+import { webhookChannel } from '../../components/notifications/__tests__/apprise-fixtures';
 
 const enabled = webhookChannel({ id: 1, enabled: true, subscribed_events: ['job.started', 'rip.completed'] });
 const paused = webhookChannel({ id: 2, enabled: false, subscribed_events: ['rip.completed'] });

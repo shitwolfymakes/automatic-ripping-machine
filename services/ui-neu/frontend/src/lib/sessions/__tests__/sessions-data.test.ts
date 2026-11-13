@@ -7,7 +7,7 @@ vi.mock('$lib/api/transcode-presets', () => ({ fetchTranscodePresets: vi.fn() })
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/rip-presets';
 import { fetchTranscodePresets } from '$lib/api/transcode-presets';
-import { createSessionsData } from '../../../sessions/sessions-data.svelte';
+import { createSessionsData } from '../sessions-data.svelte';
 
 const rip = (id: string, media_type = 'movie') =>
 	({
