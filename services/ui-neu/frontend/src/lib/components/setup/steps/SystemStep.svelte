@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SetupView, SystemDiagnosticsResponse } from '$lib/types/api.gen';
-	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
+	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
 	import { SYSTEM_STEP_CHECKS } from '$lib/dashboard/system-health';
 	import type { StepCommitResult } from '../../../setup/steps';
 

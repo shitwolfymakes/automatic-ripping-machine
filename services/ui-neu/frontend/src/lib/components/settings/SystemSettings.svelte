@@ -3,7 +3,7 @@
 	import type { SettingsGroup } from '$lib/types/api.gen';
 	import type { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
-	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
+	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
 	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';
 
 	interface Props {

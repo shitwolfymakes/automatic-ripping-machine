@@ -5,7 +5,7 @@
 	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
 	import { IDLE_STATUS, type EditorStatus } from '$lib/components/editor-status';
 	import SessionBuilder from './SessionBuilder.svelte';
-	import type { JoinedSession } from '../../sessions/sessions-data.svelte';
+	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 
 	const FORM_ID = 'session-builder-form';

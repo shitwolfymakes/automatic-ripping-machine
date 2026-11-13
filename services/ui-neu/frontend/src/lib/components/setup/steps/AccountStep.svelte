@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { SetupView, SystemResourcesResponse } from '$lib/types/api.gen';
-	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
+	import ChangePasswordForm from '$lib/components/shared/ChangePasswordForm.svelte';
 	import { fetchResources } from '$lib/api/resources';
 	import { fetchSystemVersion } from '$lib/api/system';
 	import { clearPasswordMustChange } from '$lib/stores/auth';

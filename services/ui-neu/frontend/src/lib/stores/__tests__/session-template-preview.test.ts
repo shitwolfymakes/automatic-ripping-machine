@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 vi.mock('$lib/api/sessions', () => ({ previewTemplate: vi.fn() }));
 import { previewTemplate } from '$lib/api/sessions';
-import { TemplatePreview } from '../template-preview.svelte';
+import { TemplatePreview } from '../session-template-preview.svelte';
 
 beforeEach(() => {
 	vi.useFakeTimers();

@@ -3,7 +3,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import { candidateKey, mergeCandidate } from '$lib/match/match';
-	import { MatchDetailsCache } from '../../match/match-details.svelte';
+	import { MatchDetailsCache } from '../../stores/match-details.svelte';
 	import MatchResultRow from './MatchResultRow.svelte';
 	import MatchDetailPane from './MatchDetailPane.svelte';
 

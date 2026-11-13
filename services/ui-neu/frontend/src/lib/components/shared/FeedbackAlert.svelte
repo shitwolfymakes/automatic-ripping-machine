@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A settings card's feedback line, green for a success and red for an error.
 	import { reveal } from '$lib/transitions';
-	import type { Feedback } from '../../settings/timed-feedback.svelte';
+	import type { Feedback } from '../../stores/timed-feedback.svelte';
 
 	let { feedback }: { feedback: Feedback | null } = $props();
 </script>

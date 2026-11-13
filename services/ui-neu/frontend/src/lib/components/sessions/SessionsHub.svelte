@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { JoinedSession } from '../../sessions/sessions-data.svelte';
+	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';

@@ -1,0 +1,160 @@
+{
+  "moves": [
+    {
+      "from": "src/lib/components/notifications/Toggle.svelte",
+      "to": "src/lib/components/shared/Toggle.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/FeedbackAlert.svelte",
+      "to": "src/lib/components/shared/FeedbackAlert.svelte"
+    },
+    {
+      "from": "src/lib/components/sessions/RecipeStrip.svelte",
+      "to": "src/lib/components/shared/RecipeStrip.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/ChangePasswordForm.svelte",
+      "to": "src/lib/components/shared/ChangePasswordForm.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/SystemHealth.svelte",
+      "to": "src/lib/components/shared/SystemHealth.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/SystemHealthGrouped.svelte",
+      "to": "src/lib/components/shared/SystemHealthGrouped.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/SystemHealthList.svelte",
+      "to": "src/lib/components/shared/SystemHealthList.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/GpusCard.svelte",
+      "to": "src/lib/components/shared/GpusCard.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/GpuEncoderChips.svelte",
+      "to": "src/lib/components/shared/GpuEncoderChips.svelte"
+    },
+    {
+      "from": "src/lib/components/notifications/__tests__/Toggle.test.ts",
+      "to": "src/lib/components/shared/__tests__/Toggle.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/FeedbackAlert.test.ts",
+      "to": "src/lib/components/shared/__tests__/FeedbackAlert.test.ts"
+    },
+    {
+      "from": "src/lib/components/sessions/__tests__/RecipeStrip.test.ts",
+      "to": "src/lib/components/shared/__tests__/RecipeStrip.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/ChangePasswordForm.test.ts",
+      "to": "src/lib/components/shared/__tests__/ChangePasswordForm.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/ChangePasswordForm.branches.test.ts",
+      "to": "src/lib/components/shared/__tests__/ChangePasswordForm.branches.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/SystemHealth.test.ts",
+      "to": "src/lib/components/shared/__tests__/SystemHealth.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/SystemHealth.branches.test.ts",
+      "to": "src/lib/components/shared/__tests__/SystemHealth.branches.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/GpusCard.test.ts",
+      "to": "src/lib/components/shared/__tests__/GpusCard.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/GpusCard.branches.test.ts",
+      "to": "src/lib/components/shared/__tests__/GpusCard.branches.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/GpuEncoderChips.test.ts",
+      "to": "src/lib/components/shared/__tests__/GpuEncoderChips.test.ts"
+    },
+    {
+      "from": "src/lib/settings/key-checks.svelte.ts",
+      "to": "src/lib/stores/key-checks.svelte.ts"
+    },
+    {
+      "from": "src/lib/settings/__tests__/key-checks.test.ts",
+      "to": "src/lib/stores/__tests__/key-checks.test.ts"
+    },
+    {
+      "from": "src/lib/settings/probe-timers.svelte.ts",
+      "to": "src/lib/stores/probe-timers.svelte.ts"
+    },
+    {
+      "from": "src/lib/settings/__tests__/probe-timers.test.ts",
+      "to": "src/lib/stores/__tests__/probe-timers.test.ts"
+    },
+    {
+      "from": "src/lib/settings/timed-feedback.svelte.ts",
+      "to": "src/lib/stores/timed-feedback.svelte.ts"
+    },
+    {
+      "from": "src/lib/settings/__tests__/timed-feedback.test.ts",
+      "to": "src/lib/stores/__tests__/timed-feedback.test.ts"
+    },
+    {
+      "from": "src/lib/settings/pending-keys.svelte.ts",
+      "to": "src/lib/stores/pending-keys.svelte.ts"
+    },
+    {
+      "from": "src/lib/settings/__tests__/pending-keys.test.ts",
+      "to": "src/lib/stores/__tests__/pending-keys.test.ts"
+    },
+    {
+      "from": "src/lib/sessions/sessions-data.svelte.ts",
+      "to": "src/lib/stores/sessions-data.svelte.ts"
+    },
+    {
+      "from": "src/lib/sessions/__tests__/sessions-data.test.ts",
+      "to": "src/lib/stores/__tests__/sessions-data.test.ts"
+    },
+    {
+      "from": "src/lib/sessions/template-preview.svelte.ts",
+      "to": "src/lib/stores/session-template-preview.svelte.ts"
+    },
+    {
+      "from": "src/lib/sessions/__tests__/template-preview.test.ts",
+      "to": "src/lib/stores/__tests__/session-template-preview.test.ts"
+    },
+    {
+      "from": "src/lib/notifications/bash-preview.svelte.ts",
+      "to": "src/lib/stores/notification-bash-preview.svelte.ts"
+    },
+    {
+      "from": "src/lib/notifications/__tests__/bash-preview.test.ts",
+      "to": "src/lib/stores/__tests__/notification-bash-preview.test.ts"
+    },
+    {
+      "from": "src/lib/match/match-details.svelte.ts",
+      "to": "src/lib/stores/match-details.svelte.ts"
+    },
+    {
+      "from": "src/lib/match/__tests__/match-details.test.ts",
+      "to": "src/lib/stores/__tests__/match-details.test.ts"
+    },
+    {
+      "from": "src/lib/components/notifications/__tests__/apprise-fixtures.ts",
+      "to": "src/lib/__fixtures__/apprise-fixtures.ts"
+    },
+    {
+      "from": "src/lib/components/notifications/__tests__/sections.svelte.test.ts",
+      "to": "src/lib/components/notifications/sections/__tests__/EventsAndConfigureSections.svelte.test.ts"
+    },
+    {
+      "from": "src/lib/components/setup/__tests__/steps.behaviour.test.ts",
+      "to": "src/lib/components/setup/steps/__tests__/steps.behaviour.test.ts"
+    },
+    {
+      "from": "src/lib/components/setup/__tests__/steps.reuse-guard.test.ts",
+      "to": "src/lib/components/setup/steps/__tests__/steps.reuse-guard.test.ts"
+    }
+  ]
+}

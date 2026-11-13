@@ -1,7 +1,7 @@
 // The bash hook test panel's talk with the preview endpoint: the latest
 // preview, the last test run, and whether a run is in flight.
 import { previewBash, type BashPreviewRequest, type BashPreviewResult } from '$lib/api/channels';
-import { failedPreview, failedRun } from './bash-results';
+import { failedPreview, failedRun } from '../notifications/bash-results';
 import { errorMessage } from '$lib/utils/errors';
 
 export class BashPreview {

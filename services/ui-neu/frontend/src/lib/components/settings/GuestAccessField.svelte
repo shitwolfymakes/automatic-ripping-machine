@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import Toggle from '$lib/components/shared/Toggle.svelte';
 	import { setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 

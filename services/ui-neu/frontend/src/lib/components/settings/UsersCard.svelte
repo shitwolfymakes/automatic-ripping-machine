@@ -3,12 +3,12 @@
 	import { onMount } from 'svelte';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
-	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
+	import ChangePasswordForm from '$lib/components/shared/ChangePasswordForm.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
-	import { TimedFeedback } from '../../settings/timed-feedback.svelte';
-	import FeedbackAlert from './FeedbackAlert.svelte';
+	import { TimedFeedback } from '../../stores/timed-feedback.svelte';
+	import FeedbackAlert from '../shared/FeedbackAlert.svelte';
 
 	let users = $state<UserView[]>([]);
 	let loading = $state(true);

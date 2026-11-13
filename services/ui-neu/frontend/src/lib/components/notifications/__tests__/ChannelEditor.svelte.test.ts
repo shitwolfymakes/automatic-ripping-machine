@@ -3,7 +3,7 @@ import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-
 import ChannelEditor from '../ChannelEditor.svelte';
 import type { Channel, Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
-import { discordCatalog, appriseChannel, webhookChannel } from './apprise-fixtures';
+import { discordCatalog, appriseChannel, webhookChannel } from '../../../__fixtures__/apprise-fixtures';
 import * as channelsApi from '$lib/api/channels';
 
 vi.mock('$lib/api/channels', async (orig) => ({

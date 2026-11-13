@@ -2,7 +2,7 @@
 	import { ChevronRight } from 'lucide-svelte';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 	import type { ChannelTemplate } from '$lib/types/notifications';
-	import { BashPreview } from '../../notifications/bash-preview.svelte';
+	import { BashPreview } from '../../stores/notification-bash-preview.svelte';
 	import { armContext, incompleteInput, isCustomized, runSummary } from '../../notifications/bash-results';
 
 	let {

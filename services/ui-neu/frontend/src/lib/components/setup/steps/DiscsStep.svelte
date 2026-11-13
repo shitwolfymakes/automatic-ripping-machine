@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { DiscRouteSummary, SetupView } from '$lib/types/api.gen';
-	import RecipeStrip from '$lib/components/sessions/RecipeStrip.svelte';
+	import RecipeStrip from '$lib/components/shared/RecipeStrip.svelte';
 	import { fetchDiscRoutes } from '$lib/api/setup';
 	import { discKindLabel, exampleMovie, routeCells } from '$lib/sessions/disc-routes';
 	import SetupConfigFields from '../SetupConfigFields.svelte';

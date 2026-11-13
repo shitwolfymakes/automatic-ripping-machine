@@ -13,7 +13,7 @@ import NotificationsTab from '../NotificationsTab.svelte';
 import * as api from '$lib/api/channels';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';
 import type { Channel } from '$lib/types/notifications';
-import { discordCatalog, appriseChannel, webhookChannel } from './apprise-fixtures';
+import { discordCatalog, appriseChannel, webhookChannel } from '../../../__fixtures__/apprise-fixtures';
 
 const mockEventTypes = [
 	{

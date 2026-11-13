@@ -43,9 +43,9 @@ const isoLibrary = vi.fn();
 vi.mock('$lib/api/iso', () => ({ fetchIsoLibrary: () => isoLibrary() }));
 vi.mock('$lib/stores/auth', () => ({ clearPasswordMustChange: vi.fn(), isAdmin: readable(true) }));
 
-import AccountStep from '../steps/AccountStep.svelte';
-import SystemStep from '../steps/SystemStep.svelte';
-import DrivesStep from '../steps/DrivesStep.svelte';
+import AccountStep from '../AccountStep.svelte';
+import SystemStep from '../SystemStep.svelte';
+import DrivesStep from '../DrivesStep.svelte';
 
 const view = (over: Partial<SetupView> = {}): SetupView => ({
 	completed_at: null,

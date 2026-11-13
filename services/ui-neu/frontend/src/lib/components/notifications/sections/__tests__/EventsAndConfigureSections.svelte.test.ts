@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
-import EventsSection from '../sections/EventsSection.svelte';
-import ConfigureSection from '../sections/ConfigureSection.svelte';
+import EventsSection from '../EventsSection.svelte';
+import ConfigureSection from '../ConfigureSection.svelte';
 import type { CatalogField, CatalogService, ChannelTemplate } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 import { fetchScripts, fetchScript } from '$lib/api/channels';

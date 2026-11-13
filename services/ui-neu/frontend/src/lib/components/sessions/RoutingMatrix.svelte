@@ -19,9 +19,9 @@
 		sessionsFor,
 		withRoute
 	} from '$lib/sessions/routes';
-	import { PendingKeys } from '$lib/settings/pending-keys.svelte';
-	import { TimedFeedback } from '$lib/settings/timed-feedback.svelte';
-	import FeedbackAlert from '$lib/components/settings/FeedbackAlert.svelte';
+	import { PendingKeys } from '$lib/stores/pending-keys.svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
+	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
 	import MediaPill from '../MediaPill.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);

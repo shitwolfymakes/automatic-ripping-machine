@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MediaType, TemplatePreviewRequest } from '$lib/types/api.gen';
 	import { mediaTokens } from '../../sessions/sample-tokens';
-	import { TemplatePreview } from '../../sessions/template-preview.svelte';
+	import { TemplatePreview } from '../../stores/session-template-preview.svelte';
 
 	interface Props {
 		value: string;

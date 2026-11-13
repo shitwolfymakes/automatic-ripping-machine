@@ -10,7 +10,7 @@ import { setTranscoderEnabled } from '$lib/stores/config';
 const gpusProps = vi.hoisted(() => ({ current: null as { location: { label: string } | null } | null }));
 const fieldsState = vi.hoisted(() => ({ save: null as (() => Promise<boolean>) | null }));
 
-vi.mock('$lib/components/settings/GpusCard.svelte', () => ({
+vi.mock('$lib/components/shared/GpusCard.svelte', () => ({
 	default: (_anchor: unknown, props: { location: { label: string } | null }) => {
 		gpusProps.current = props;
 	}

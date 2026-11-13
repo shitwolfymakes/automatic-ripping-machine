@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createSessionsData, type JoinedSession } from '../../sessions/sessions-data.svelte';
+	import { createSessionsData, type JoinedSession } from '../../stores/sessions-data.svelte';
 	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../../sessions/session-presets';
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
