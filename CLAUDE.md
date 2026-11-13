@@ -125,6 +125,15 @@ cd services/ui-neu/frontend && npx vitest run --coverage --coverage.include='src
 
 Any missing line or branch inside a touched symbol fails the rule. Use `# pragma: no cover` or `/* v8 ignore next */` only for code that cannot run, with a comment saying why.
 
+### ui-neu file layout
+
+Under `services/ui-neu/frontend/src/lib`; `npm run lint` enforces the file names (`unicorn/filename-case`).
+
+1. **Names:** kebab-case for every `.ts`, `.js` and `.svelte.ts` file and every folder (`session-routes.ts`, `handbrake-schema.svelte.ts`, `drive-card/`); Svelte components stay PascalCase (`DataTable.svelte`). In code: camelCase for variables, functions and properties; PascalCase for types, interfaces and components.
+2. **Tests:** in a `__tests__/` folder beside the code they test, never a loose sibling `*.test.ts` or a `lib/__tests__/` catch-all. A test file is named after its module (`data-table.test.ts` tests `data-table.ts`; extra suites use a dotted suffix: `data-table.cells.test.ts`).
+3. **Logic home:** pure logic lives in `lib/<domain>/` (handbrake, sessions, jobs, drives, ...), Svelte components in `components/<domain>/`, and `lib/utils/` holds only generic helpers with no domain knowledge. A helper used by one component's markup only may stay beside that component when it is generic UI logic (`components/data-table.ts` for `DataTable.svelte`).
+4. **Layer folders:** `api/` (HTTP clients), `stores/` (stateful runes and stores), `types/`, `styles/` and `themes/` keep their folders; their files are kebab-case.
+
 ## Gotchas / invariants
 
 - **OpenAPI drift gates CI.** Touching Backend routers or `arm_common` schemas without regenerating the snapshot + TS types fails the `openapi-drift` job — see [Wire contract](#wire-contract-openapi).

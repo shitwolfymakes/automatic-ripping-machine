@@ -3,6 +3,7 @@ import prettier from 'eslint-config-prettier';
 import sonarjs from 'eslint-plugin-sonarjs';
 import svelte from 'eslint-plugin-svelte';
 import { defineConfig } from 'eslint/config';
+import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
@@ -59,6 +60,24 @@ export default defineConfig(
 		plugins: { sonarjs },
 		rules: {
 			'sonarjs/cognitive-complexity': ['error', 15]
+		}
+	},
+	{
+		// ui-neu file layout (see the development guidelines): kebab-case modules, PascalCase components. SvelteKit route files
+		// (+page, +layout) and generated or ambient declarations are exempt. Warning until the renames land.
+		plugins: { unicorn },
+		ignores: ['src/routes/**', '**/*.d.ts', 'src/lib/types/api.gen.ts'],
+		files: ['**/*.ts', '**/*.js', '**/*.svelte'],
+		rules: {
+			'unicorn/filename-case': ['warn', { cases: { kebabCase: true }, ignore: [/^__tests__$/] }]
+		}
+	},
+	{
+		// The rule also checks folder names, which stay kebab-case, so components allow both cases.
+		files: ['**/*.svelte'],
+		ignores: ['src/routes/**'],
+		rules: {
+			'unicorn/filename-case': ['warn', { cases: { kebabCase: true, pascalCase: true }, ignore: [/^__tests__$/] }]
 		}
 	},
 	{
