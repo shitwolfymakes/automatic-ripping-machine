@@ -4,7 +4,7 @@ Moves or renames files under `services/ui-neu/frontend` with `git mv` and rewrit
 
 ```bash
 node devtools/ui-neu-restructure/move.mjs <mapping.json> [--dry-run] [--root <frontend dir>]
-node --test devtools/ui-neu-restructure/*.test.mjs
+node --test devtools/ui-neu-restructure/*.test.mjs   # the bare directory form fails on Node 22
 ```
 
 `mapping.json` holds `{ "moves": [{ "from": "src/lib/utils/session-routes.ts", "to": "src/lib/sessions/routes.ts" }] }`,
@@ -14,7 +14,7 @@ targets are rejected: split them into separate runs.
 
 ## What it rewrites
 
-- Module specifiers in `.ts`, `.js`, `.mjs` and `.svelte` files under `src/`, `tests/`, `site/` and the frontend root
+- Module specifiers in `.ts`, `.js`, `.mjs`, `.svelte` and `.css` (`@import`) files under `src/`, `tests/`, `site/` and the frontend root
   config files: every string literal that starts with `$lib/`, `./` or `../`, so `import`, `export ... from`,
   `import()`, `vi.mock()` and `vi.importActual()` are all covered. A specifier is resolved to the real file
   (alias or relative, with or without extension, `.svelte.ts` modules, `index` directory imports, `.js` for `.ts`,
@@ -30,5 +30,8 @@ After the run it re-reads the tree and fails (exit 1) listing any specifier that
 old path, and any old path form still present in a scanned file. `--dry-run` prints the plan, evaluates the same
 check against the planned content, and changes nothing. Exit 2 is a usage or mapping error.
 
-Not followed: computed specifiers, `import.meta.glob` patterns and path strings built from parts. Files outside the
-scanned roots (for example `services/ui-neu/frontend/e2e/`) are not scanned.
+Not followed, so check by hand after a run: computed specifiers and `import.meta.glob` patterns, path strings built from
+parts or from directory depth (for example `style-guide-drift.test.ts` climbing with `../../..`), unquoted CSS `url()`
+references, CSS and other files outside `src/`, `tests/` and `site/` (the frontend root configs are scanned), `static/`,
+`.json` files, and bare `'.'` / `'..'` specifiers. A cwd-relative path string such as `'./src/lib/a.ts'` is reported as
+a survivor rather than rewritten.

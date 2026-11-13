@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pathForms, buildFormMap, run, buildPlan, applyPlan, survivorsOnDisk, findSurvivors, parseArgs, gitCommandsFor, resolveSpecifier, formatSpecifier, expandMoves, validateMoves } from './move.mjs';
+import { cli, pathForms, buildFormMap, run, buildPlan, applyPlan, survivorsOnDisk, findSurvivors, parseArgs, gitCommandsFor, resolveSpecifier, formatSpecifier, expandMoves, validateMoves } from './move.mjs';
 
 const F = 'services/ui-neu/frontend';
 const script = fileURLToPath(new URL('./move.mjs', import.meta.url));
@@ -309,8 +309,8 @@ test('a mapping that moves nothing referenced leaves content untouched', () => {
 	fx.done();
 });
 
-test('an empty mapping is a no-op', () => {
-	const fx = fixture({ [lib('a.ts')]: 'export {};\n' });
+test('an empty mapping is a no-op, text files and CLAUDE.md included', () => {
+	const fx = fixture({ [lib('a.ts')]: 'export {};\n', 'docs/d.md': 'src/lib/a.ts\n', 'CLAUDE.md': 'x\n' });
 	const { plan, survivors } = go(fx, []);
 	assert.equal(plan.moves.length, 0);
 	assert.deepEqual(survivors, []);
@@ -322,4 +322,69 @@ test('pathForms and buildFormMap only pair forms that exist on both sides', () =
 	assert.deepEqual(pathForms(`${F}/src/routes/r.ts`), [`${F}/src/routes/r.ts`, 'src/routes/r.ts', null, null]);
 	const map = buildFormMap([{ from: `${F}/src/lib/a.ts`, to: `${F}/src/other/a.ts` }], []);
 	assert.deepEqual([...map.keys()], [`${F}/src/lib/a.ts`, 'src/lib/a.ts']);
+});
+
+test('strings that look like specifiers but resolve to nothing are left alone', () => {
+	const src = "const g = import.meta.glob('../steps/*.svelte');\nconst up = '../../../../../../..';\nconst ok = '$lib/none';\n";
+	const fx = fixture({ [lib('a.ts')]: 'export {};\n', [lib('g.ts')]: src });
+	go(fx, [{ from: 'src/lib/a.ts', to: 'src/lib/b.ts' }]);
+	assert.equal(fx.read(lib('g.ts')), src);
+	fx.done();
+});
+
+test('a moved importer landing in the folder it imports gets a dot specifier', () => {
+	const fx = fixture({ [lib('a/one.ts')]: "import { p } from './pkg';\n", [lib('a/pkg/index.ts')]: 'export const p = 1;\n' });
+	go(fx, [{ from: 'src/lib/a/one.ts', to: 'src/lib/a/pkg/one.ts' }]);
+	assert.equal(fx.read(lib('a/pkg/one.ts')), "import { p } from '.';\n");
+	fx.done();
+});
+
+test('css files are scanned for @import specifiers', () => {
+	const fx = fixture({ [lib('styles/a.css')]: 'a{}\n', [`${F}/src/app.css`]: "@import './lib/styles/a.css';\n" });
+	go(fx, [{ from: 'src/lib/styles/a.css', to: 'src/lib/styles/base.css' }]);
+	assert.equal(fx.read(`${F}/src/app.css`), "@import './lib/styles/base.css';\n");
+	fx.done();
+});
+
+test('moving a folder into its own descendant reports no false survivors', () => {
+	const fx = fixture({ [lib('c/a.ts')]: 'export {};\n', 'docs/d.md': 'folder src/lib/c and src/lib/c/a.ts\n' });
+	const { survivors } = go(fx, [{ from: 'src/lib/c', to: 'src/lib/c/sub' }]);
+	assert.deepEqual(survivors, []);
+	assert.equal(fx.read('docs/d.md'), 'folder src/lib/c/sub and src/lib/c/sub/a.ts\n');
+	fx.done();
+});
+
+test('run reports a survivor through the log and cli exits 1', () => {
+	const fx = fixture({ [lib('a.ts')]: 'export {};\n', [lib('p.ts')]: "const path = './src/lib/a.ts';\n" });
+	const lines = [];
+	const { survivors } = go(fx, [{ from: 'src/lib/a.ts', to: 'src/lib/z.ts' }], { log: (l) => lines.push(l) });
+	assert.deepEqual(survivors, [`${lib('p.ts')}: src/lib/a.ts`]);
+	assert.ok(lines.includes(`SURVIVOR ${lib('p.ts')}: src/lib/a.ts`));
+	fx.done();
+
+	const fx2 = fixture({ [lib('a.ts')]: 'export {};\n', [lib('p.ts')]: "const path = './src/lib/a.ts';\n" });
+	const map = join(fx2.root, 'map.json');
+	writeFileSync(map, JSON.stringify({ moves: [{ from: 'src/lib/a.ts', to: 'src/lib/z.ts' }] }));
+	const out = [];
+	assert.equal(cli([map, '--root', fx2.frontendRoot], '/unused', { log: (l) => out.push(l), error: () => {} }), 1);
+	assert.ok(out.some((l) => l.startsWith('SURVIVOR ')));
+	fx2.done();
+});
+
+test('cli returns 2 for a missing mapping, a missing --root value and an unreadable mapping', () => {
+	const errors = [];
+	const io = { log: () => {}, error: (e) => errors.push(e) };
+	assert.equal(cli([], '/d', io), 2);
+	assert.equal(cli(['m.json', '--root'], '/d', io), 2);
+	assert.equal(cli(['/nonexistent/m.json'], '/d', io), 2);
+	assert.match(errors[0], /usage: move\.mjs/);
+	assert.match(errors[1], /--root needs a directory/);
+});
+
+test('cli returns 0 for a clean run', () => {
+	const fx = fixture({ [lib('a.ts')]: 'export {};\n' });
+	const map = join(fx.root, 'map.json');
+	writeFileSync(map, JSON.stringify({ moves: [{ from: 'src/lib/a.ts', to: 'src/lib/z.ts' }] }));
+	assert.equal(cli([map, '--root', fx.frontendRoot, '--dry-run'], '/d', { log: () => {}, error: () => {} }), 0);
+	fx.done();
 });

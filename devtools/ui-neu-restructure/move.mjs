@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const FRONTEND = 'services/ui-neu/frontend';
 const SKIP_DIRS = new Set(['node_modules', '.git', '.svelte-kit', 'coverage', 'test-results', 'build', 'dist']);
-const CODE_EXT = /\.(ts|js|mjs|svelte)$/;
+const CODE_EXT = /\.(ts|js|mjs|svelte|css)$/;
 const TEXT_EXT = /\.(md|mjs|js|sh)$/;
 const SPEC = String.raw`(?:\$lib\/|\.\.?\/)[^'"` + '`' + String.raw`\s]*`;
 
@@ -37,8 +37,8 @@ function listScanFiles(repoRoot) {
 		...walk(repoRoot, 'devtools').filter((p) => !p.startsWith('devtools/ui-neu-restructure/')),
 		...walk(repoRoot, '.claude/memory'),
 		...walk(repoRoot, 'site'),
-		'CLAUDE.md',
-	].filter((p) => (TEXT_EXT.test(p) || p === 'CLAUDE.md') && existsSync(resolve(repoRoot, p)));
+	].filter((p) => TEXT_EXT.test(p));
+	if (existsSync(resolve(repoRoot, 'CLAUDE.md'))) text.push('CLAUDE.md');
 	return [...code.map((path) => ({ path, mode: 'code' })), ...text.map((path) => ({ path, mode: 'text' }))];
 }
 
@@ -183,19 +183,21 @@ function specSurvivors(path, content, finalFiles, goneFiles) {
 	return out;
 }
 
-function textSurvivors(path, content, oldForms) {
+function textSurvivors(path, content, oldForms, newForms) {
 	const text = textPattern(oldForms);
 	if (!text) return [];
-	return [...content.matchAll(new RegExp(text, 'g'))].map((m) => `${path}: ${m[0]}`);
+	const coveredByNewForm = (m) => newForms.some((f) => content.startsWith(f, m.index));
+	return [...content.matchAll(new RegExp(text, 'g'))].filter((m) => !coveredByNewForm(m)).map((m) => `${path}: ${m[0]}`);
 }
 
 export function findSurvivors(entries, finalFiles, moves, formMap) {
 	const goneFiles = new Set(moves.map((m) => m.from).filter((f) => !finalFiles.has(f)));
 	const newForms = new Set(formMap.values());
 	const oldForms = [...formMap.keys()].filter((f) => !newForms.has(f));
+	const newList = [...newForms];
 	const found = entries.flatMap(({ path, mode, content }) => [
 		...(mode === 'code' ? specSurvivors(path, content, finalFiles, goneFiles) : []),
-		...textSurvivors(path, content, oldForms),
+		...textSurvivors(path, content, oldForms, newList),
 	]);
 	return [...new Set(found)];
 }
@@ -266,25 +268,30 @@ export function run({ mapping, frontendRoot, dryRun = false, log = console.log }
 export function parseArgs(argv, defaultRoot) {
 	const rest = argv.filter((a) => a !== '--dry-run');
 	const rootAt = rest.indexOf('--root');
+	if (rootAt >= 0 && rootAt === rest.length - 1) throw new Error('--root needs a directory');
 	const frontendRoot = rootAt >= 0 ? resolve(rest.splice(rootAt, 2)[1]) : defaultRoot;
 	return { mappingFile: rest[0], dryRun: argv.includes('--dry-run'), frontendRoot };
 }
 
-function main() {
-	const defaultRoot = resolve(fileURLToPath(import.meta.url), '../../..', FRONTEND);
-	const { mappingFile, dryRun, frontendRoot } = parseArgs(process.argv.slice(2), defaultRoot);
-	if (!mappingFile) {
-		console.error('usage: move.mjs <mapping.json> [--dry-run] [--root <frontend dir>]');
-		process.exit(2);
-	}
+const USAGE = 'usage: move.mjs <mapping.json> [--dry-run] [--root <frontend dir>]';
+
+// Returns the process exit code: 0 clean, 1 survivors, 2 usage or mapping error.
+export function cli(argv, defaultRoot, io = { log: console.log, error: console.error }) {
 	try {
+		const { mappingFile, dryRun, frontendRoot } = parseArgs(argv, defaultRoot);
+		if (!mappingFile) throw new Error(USAGE);
 		const mapping = JSON.parse(readFileSync(mappingFile, 'utf8'));
-		const { survivors } = run({ mapping, frontendRoot, dryRun });
-		process.exit(survivors.length ? 1 : 0);
+		const { survivors } = run({ mapping, frontendRoot, dryRun, log: io.log });
+		return survivors.length ? 1 : 0;
 	} catch (err) {
-		console.error(`error: ${err.message}`);
-		process.exit(2);
+		io.error(`error: ${err.message}`);
+		return 2;
 	}
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// The entry-point guard only runs when the file is executed directly, which the tests do in a subprocess.
+/* node:coverage disable */
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	process.exit(cli(process.argv.slice(2), resolve(fileURLToPath(import.meta.url), '../../..', FRONTEND)));
+}
+/* node:coverage enable */
