@@ -3,7 +3,7 @@ import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, ImportedPresetVi
 import slim from './fixtures/slim-schema.json';
 import tenBit from './fixtures/x265-10bit-import-response.json';
 import plex from './fixtures/plex-import-response.json';
-import { applyProposal, defaultPick, familyLabel, reviewRows } from '../importReview';
+import { applyProposal, defaultPick, familyLabel, reviewRows } from '../import-review';
 import { initialDraft } from '../draft';
 
 const schema = slim as unknown as HandbrakeSchemaSlimView;

@@ -2,10 +2,10 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import { effectiveJobStatus } from '$lib/utils/job-status';
-	import { driveLabel } from '$lib/utils/drive-name';
-	import { jobPoster } from '$lib/utils/poster';
-	import { discKindLabel, discPosition, jobTypeConfig, shortJobId } from '$lib/utils/log-list';
+	import { effectiveJobStatus } from '$lib/jobs/status';
+	import { driveLabel } from '$lib/drives/name';
+	import { jobPoster } from '$lib/match/poster';
+	import { discKindLabel, discPosition, jobTypeConfig, shortJobId } from '$lib/logs/list';
 	import { calendarTimeAgo, formatShortDateTime } from '$lib/utils/format';
 	import { dashboard } from '$lib/stores/dashboard';
 

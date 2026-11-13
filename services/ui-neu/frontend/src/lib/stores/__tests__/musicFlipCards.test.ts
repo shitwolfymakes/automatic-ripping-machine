@@ -5,7 +5,7 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchMusicDetail: (...a: unknown[]) => fetchMusicDetailMock(...a)
 }));
 
-import { MusicFlipCards } from '$lib/stores/musicFlipCards.svelte';
+import { MusicFlipCards } from '$lib/stores/music-flip-cards.svelte';
 import type { MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 
 function candidate(over: Partial<MetadataCandidate> = {}): MetadataCandidate {

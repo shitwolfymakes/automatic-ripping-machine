@@ -39,7 +39,7 @@ describe('colorScheme - theme fetch dedup', () => {
 		vi.stubGlobal('fetch', mockFetch);
 
 		try {
-			const { loadThemeCss } = await import('$lib/stores/colorScheme');
+			const { loadThemeCss } = await import('$lib/stores/color-scheme');
 
 			await Promise.all([loadThemeCss('blue'), loadThemeCss('blue')]);
 
@@ -62,7 +62,7 @@ describe('colorScheme - theme fetch dedup', () => {
 		const setItem = vi.spyOn(Storage.prototype, 'setItem');
 
 		try {
-			const mod = await import('$lib/stores/colorScheme');
+			const mod = await import('$lib/stores/color-scheme');
 			await mod.loadThemeCss('blue');
 
 			expect(setItem).toHaveBeenCalledWith('theme-cache-v1-blue', 'body { background: blue; }');

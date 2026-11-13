@@ -7,7 +7,7 @@ vi.mock('$lib/api/settings', () => ({
 
 import { fetchSettings, saveArmConfig } from '$lib/api/settings';
 import type { SettingsData } from '$lib/api/settings';
-import { LoadedSettings } from '../loadedSettings.svelte';
+import { LoadedSettings } from '../loaded-settings.svelte';
 
 const mockFetch = vi.mocked(fetchSettings);
 const mockSave = vi.mocked(saveArmConfig);

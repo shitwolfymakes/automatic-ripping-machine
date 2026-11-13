@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bulkDeleteFeedback } from '$lib/utils/bulk-delete-feedback';
+import { bulkDeleteFeedback } from '$lib/dashboard/bulk-delete-feedback';
 
 const response = (deleted: string[], skipped: string[]) =>
 	({ deleted_ids: deleted, skipped_non_terminal: skipped }) as any;

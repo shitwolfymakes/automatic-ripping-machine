@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { plural } from '$lib/utils/plural';
-	import type { ImageCache } from '$lib/stores/imageCache.svelte';
+	import type { ImageCache } from '$lib/stores/image-cache.svelte';
 
 	interface Props {
 		cache: ImageCache;

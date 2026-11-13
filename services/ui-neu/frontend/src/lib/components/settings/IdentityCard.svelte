@@ -10,7 +10,7 @@
 		withHintIgnored,
 		type DiscHint,
 		type DiscKind
-	} from '$lib/utils/identity-card';
+	} from '$lib/jobs/identity-card';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import RankedListField from './RankedListField.svelte';
 	import DiscKindSwitch from './DiscKindSwitch.svelte';

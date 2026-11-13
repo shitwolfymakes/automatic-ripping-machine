@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-	visibleTracksFor,
-	discTotalSeconds,
-	releaseTotalMs,
-	pairTracks,
-	releasePatchBody
-} from '$lib/utils/music-release';
-import { matchIndicator } from '$lib/utils/track-match';
+import { visibleTracksFor, discTotalSeconds, releaseTotalMs, pairTracks, releasePatchBody } from '$lib/music/release';
+import { matchIndicator } from '$lib/jobs/track-match';
 
 const rt = (title: string, length_ms?: number | null, disc_number?: number | null) =>
 	({ title, length_ms, disc_number }) as any;

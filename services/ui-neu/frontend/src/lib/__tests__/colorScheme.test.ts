@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { colorScheme, schemeLocksMode } from '../stores/colorScheme';
-import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
+import { colorScheme, schemeLocksMode } from '../stores/color-scheme';
+import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 
 describe('schemeLocksMode', () => {
 	it('returns true for a scheme with mode set', () => {

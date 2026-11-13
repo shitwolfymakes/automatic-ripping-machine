@@ -15,7 +15,7 @@ vi.mock('$lib/api/ws', () => ({
 	}
 }));
 
-import { createJobLog } from '$lib/stores/jobLog.svelte';
+import { createJobLog } from '$lib/stores/job-log.svelte';
 
 function logLineEnv(jobId: string, raw: Record<string, unknown>): WSEnvelope {
 	return {
@@ -174,7 +174,7 @@ describe('createJobLog', () => {
 			},
 			{ timestamp: null, level: 'info', logger: 'x', event: 'undated', service: 'arm-ripper-a' }
 		] as never);
-		const { createJobLog } = await import('../jobLog.svelte');
+		const { createJobLog } = await import('../job-log.svelte');
 		const log = createJobLog('job_x', { limit: 10 });
 		await log.load();
 		expect(log.entries.map((e) => e.event)).toEqual(['transcode rename', 'backend spawn', 'undated']);

@@ -18,7 +18,7 @@ vi.mock('$lib/api/ws', () => ({
 	}
 }));
 
-import { startRipperEvents, stopRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+import { startRipperEvents, stopRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
 
 let eventCounter = 0;
 function eventEnv(

@@ -2,9 +2,9 @@
 	// The open release in the music search, with its header, tracklist, edit
 	// fields, confirmation gates and Apply.
 	import type { TrackView, MetadataReleaseDetail, MetadataReleaseTrack } from '$lib/types/api.gen';
-	import type { TrackPair } from '$lib/utils/music-release';
-	import type { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
-	import type { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
+	import type { TrackPair } from '$lib/music/release';
+	import type { MusicReleaseApply } from '$lib/stores/music-release-apply.svelte';
+	import type { MusicReleaseFields } from '$lib/stores/music-release-fields.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import PosterImage from '../PosterImage.svelte';
 	import Glyph from '../Glyph.svelte';

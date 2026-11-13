@@ -1,15 +1,15 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import type { JobMetadata } from '$lib/utils/job-metadata';
-	import type { EpisodeStatus } from '$lib/utils/episode-status';
-	import { isIdentifyMiss, missReason } from '$lib/utils/job-review';
+	import type { JobMetadata } from '$lib/jobs/metadata';
+	import type { EpisodeStatus } from '$lib/episodes/status';
+	import { isIdentifyMiss, missReason } from '$lib/jobs/review';
 	import {
 		discFactsLine,
 		episodeMatchingDetail,
 		matchDetailLine,
 		matchProviderLabel,
 		type SourceRow
-	} from '$lib/utils/review-card';
+	} from '$lib/jobs/review-card';
 
 	interface Props {
 		/** The job the card shows (the loaded detail's, else the list's). */

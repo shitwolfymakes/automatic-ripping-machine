@@ -2,19 +2,13 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail } from '$lib/api/jobs';
-	import { matchIndicator } from '$lib/utils/track-match';
-	import { musicReleaseBody } from '$lib/utils/job-resolve';
-	import type { MusicSearchOpts } from '$lib/utils/music-search';
-	import {
-		visibleTracksFor,
-		discTotalSeconds,
-		releaseTotalMs,
-		pairTracks,
-		releasePatchBody
-	} from '$lib/utils/music-release';
-	import { MusicFlipCards } from '$lib/stores/musicFlipCards.svelte';
-	import { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
-	import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
+	import { matchIndicator } from '$lib/jobs/track-match';
+	import { musicReleaseBody } from '$lib/jobs/resolve';
+	import type { MusicSearchOpts } from '$lib/music/search';
+	import { visibleTracksFor, discTotalSeconds, releaseTotalMs, pairTracks, releasePatchBody } from '$lib/music/release';
+	import { MusicFlipCards } from '$lib/stores/music-flip-cards.svelte';
+	import { MusicReleaseApply } from '$lib/stores/music-release-apply.svelte';
+	import { MusicReleaseFields } from '$lib/stores/music-release-fields.svelte';
 	import MusicReleaseDetail from './music-search/MusicReleaseDetail.svelte';
 	import MusicSearchForm from './music-search/MusicSearchForm.svelte';
 	import MusicResultCard from './music-search/MusicResultCard.svelte';

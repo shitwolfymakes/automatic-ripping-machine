@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { videoTypeLabel, buildMetadataFields } from './job-fields';
+import { videoTypeLabel, buildMetadataFields } from '../jobs/fields';
 import { createJob } from '$lib/components/__fixtures__/job';
 
 describe('videoTypeLabel', () => {

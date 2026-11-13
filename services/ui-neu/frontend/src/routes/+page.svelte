@@ -3,7 +3,7 @@
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
-	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
+	import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
 	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';
@@ -15,12 +15,12 @@
 	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
 	import { fadeIn } from '$lib/transitions';
 	import { fade } from 'svelte/transition';
-	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
-	import { isoSourceFor, isoKindFor } from '$lib/utils/iso-source';
+	import { groupActiveJobs } from '$lib/dashboard/groups';
+	import { isoSourceFor, isoKindFor } from '$lib/drives/iso-source';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
-	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
 
 	// --- Dashboard state ---
 	// Seed from the persistent singleton store the layout already polls, so

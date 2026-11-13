@@ -30,12 +30,12 @@ const VIEWPORTS = { desktop: { width: 1280, height: 900 }, mobile: { width: 390,
 
 // Schemes whose `mode` locks the app to light or dark regardless of the
 // user's saved theme preference (see schemeLocksMode in
-// src/lib/stores/colorScheme.ts). Derived from COLOR_SCHEMES itself rather
+// src/lib/stores/color-scheme.ts). Derived from COLOR_SCHEMES itself rather
 // than hand-listed: a hand-maintained copy silently mis-captures any scheme
 // added to it later (hollywood-video-v2 is mode: 'dark' and was missing from
 // the old list, so it would have rendered light against dark-only tokens).
 const LOCKED_DARK_SCHEMES = new Set(
-	[...readFileSync(resolve(here, '../services/ui-neu/frontend/src/lib/stores/colorScheme.ts'), 'utf8')
+	[...readFileSync(resolve(here, '../services/ui-neu/frontend/src/lib/stores/color-scheme.ts'), 'utf8')
 		.matchAll(/id:\s*'([^']+)',[\s\S]{0,400}?mode:\s*'dark'/g)]
 		.map((m) => m[1])
 );
@@ -50,7 +50,7 @@ if (LOCKED_DARK_SCHEMES.size === 0 || !LOCKED_DARK_SCHEMES.has('lcars')) {
 		"locked-dark schemes (or is missing the 'lcars' sentinel). The regex's " +
 		"400-char window between a scheme's `id:` and its `mode: 'dark'` is " +
 		'likely too narrow for a scheme definition in ' +
-		'src/lib/stores/colorScheme.ts — widen the window.'
+		'src/lib/stores/color-scheme.ts — widen the window.'
 	);
 }
 
@@ -287,7 +287,7 @@ async function capture(dirName, routesFilter) {
 			if (!screensThisViewport.length) continue;
 			const ctx = await browser.newContext({ viewport: vp, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
 			// Cover art is a live third-party fetch (posterSrc() in
-			// src/lib/utils/poster.ts routes every external poster through the
+			// src/lib/match/poster.ts routes every external poster through the
 			// backend's /api/images/proxy). Whether it arrives before the
 			// screenshot varies run to run, so abort it on every context: the
 			// <img> onerror handler then swaps in the local placeholder, which

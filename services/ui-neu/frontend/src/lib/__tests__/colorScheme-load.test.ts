@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
-import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
+import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 
 vi.mock('$app/environment', () => ({ browser: true }));
 
@@ -24,7 +24,7 @@ function serveBuiltinCss(files: Record<string, string>) {
 
 async function freshModule() {
 	vi.resetModules();
-	const mod = await import('$lib/stores/colorScheme');
+	const mod = await import('$lib/stores/color-scheme');
 	await mod.loadThemeCss(get(mod.colorScheme));
 	return mod;
 }

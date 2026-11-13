@@ -5,7 +5,7 @@
 	// the requests.
 	import type { Snippet } from 'svelte';
 	import type { EpisodeSource } from '$lib/api/identity';
-	import type { RerunForm } from '$lib/utils/rerun-form';
+	import type { RerunForm } from '$lib/jobs/rerun-form';
 	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface Props {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { MetadataCandidate } from '$lib/types/api.gen';
-import { MatchDetailsCache } from './matchDetails.svelte';
+import { MatchDetailsCache } from '../../match/match-details.svelte';
 
 vi.mock('$lib/api/jobs', () => ({ fetchMatchDetails: vi.fn() }));
 import { fetchMatchDetails } from '$lib/api/jobs';

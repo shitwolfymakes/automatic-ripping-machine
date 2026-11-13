@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { holdReasons, seasonAlternatives, heldSeason, holdHeadline } from '../episode-hold';
+import { holdReasons, seasonAlternatives, heldSeason, holdHeadline } from '../../episodes/hold';
 import type { IdentityView, TrackIdentityView } from '$lib/types/api.gen';
 
 const ident = (o: Record<string, unknown> = {}) => ({ pin: {}, ...o }) as unknown as IdentityView;

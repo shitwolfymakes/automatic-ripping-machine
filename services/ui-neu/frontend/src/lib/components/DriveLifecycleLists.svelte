@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { DriveView } from '$lib/types/api.gen';
-	import { DriveLifecycleActions } from '$lib/stores/driveLifecycleActions.svelte';
+	import { DriveLifecycleActions } from '$lib/stores/drive-lifecycle-actions.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import DriveLifecycleRow from '$lib/components/drive-lifecycle/DriveLifecycleRow.svelte';
 

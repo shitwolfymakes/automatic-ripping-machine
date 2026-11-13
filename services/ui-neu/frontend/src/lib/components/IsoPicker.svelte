@@ -4,7 +4,7 @@
 	import { startIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { addToast } from '$lib/stores/toast.svelte';
-	import { IsoLibraryBrowser } from '$lib/stores/isoLibraryBrowser.svelte';
+	import { IsoLibraryBrowser } from '$lib/stores/iso-library-browser.svelte';
 	import type { IsoFolderEntry, IsoLibraryEntry, SessionView } from '$lib/types/api.gen';
 	import SlideOver from './SlideOver.svelte';
 	import LoadState from './LoadState.svelte';

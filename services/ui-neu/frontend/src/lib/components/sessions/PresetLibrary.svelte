@@ -1,12 +1,12 @@
 <script lang="ts">
 	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
 	import DataTable from '$lib/components/DataTable.svelte';
-	import { deleteGuard, openLabel, ripPresetColumns, transcodePresetColumns } from './tableColumns';
+	import { deleteGuard, openLabel, ripPresetColumns, transcodePresetColumns } from '../../sessions/table-columns';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';
 	import MediaTypeChips from './MediaTypeChips.svelte';
-	import { matchesFilters, type SourceFilter } from './listFilters';
-	import { countByMediaType } from '$lib/utils/sessions';
+	import { matchesFilters, type SourceFilter } from '../../sessions/list-filters';
+	import { countByMediaType } from '$lib/sessions/sessions';
 
 	interface Props {
 		/** Which preset kind this tab shows. */

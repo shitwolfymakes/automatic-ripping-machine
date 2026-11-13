@@ -2,7 +2,7 @@
 	import FileRow from '$lib/components/FileRow.svelte';
 	import SortIndicator from '$lib/components/SortIndicator.svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import type { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
+	import type { FilesBrowser } from '$lib/stores/files-browser.svelte';
 
 	interface Props {
 		browser: FilesBrowser;

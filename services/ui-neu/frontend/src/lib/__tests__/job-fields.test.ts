@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createJob } from '../components/__fixtures__/job';
-import { buildMetadataFields, type MetadataField } from '../utils/job-fields';
+import { buildMetadataFields, type MetadataField } from '../jobs/fields';
 
 function fieldLabels(fields: MetadataField[]): string[] {
 	return fields.filter((f) => !f.empty).map((f) => f.label);

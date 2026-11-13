@@ -2,7 +2,7 @@
 	// The Match episodes tab's one alert for its state: the identity
 	// could not load, no episode source is set up, the match is a guess
 	// (with why, on request), or no source could place the tracks.
-	import type { PanelState } from './episodeModel';
+	import type { PanelState } from '../../episodes/episode-model';
 	import Glyph from '../Glyph.svelte';
 
 	interface Props {

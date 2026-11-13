@@ -11,10 +11,10 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 import { goto } from '$app/navigation';
 import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
-import { buildResolveBody } from '$lib/utils/job-resolve';
+import { buildResolveBody } from '$lib/jobs/resolve';
 import { ApiError } from '$lib/api/client';
 import { createJob, createTrack, createJobDetail } from '$lib/components/__fixtures__/job';
-import { JobDetail } from '../jobDetail.svelte';
+import { JobDetail } from '../job-detail.svelte';
 
 const mockFetchJob = vi.mocked(fetchJob);
 const mockPreview = vi.mocked(fetchNamingPreview);

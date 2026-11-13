@@ -10,9 +10,9 @@
 	import { fetchSystemDiagnostics } from '$lib/api/system';
 	import { fetchIsoLibrary } from '$lib/api/iso';
 	import { createPollingStore } from '$lib/stores/polling';
-	import { partitionDrives } from '$lib/utils/drives';
-	import { enrollBlockReason, isoStatus, type IsoStatus } from '$lib/utils/setup-drives';
-	import type { StepCommitResult } from '../steps';
+	import { partitionDrives } from '$lib/drives/drives';
+	import { enrollBlockReason, isoStatus, type IsoStatus } from '$lib/drives/setup-drives';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 3, the core step: enroll the drives to rip with (setup spec §5.4).
 	// The same drive components as Settings > Drives; changes save as made.

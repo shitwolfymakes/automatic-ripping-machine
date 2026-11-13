@@ -4,7 +4,7 @@
 import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, SlimFamily, SlimKey } from '$lib/types/api.gen';
 import { baseVideoEncoder, type BaseValues } from './base-values';
 import { fieldVisible, type Context } from './dependencyRules';
-import { encoderCards, type EncoderCard } from './encoderCards';
+import { encoderCards, type EncoderCard } from './encoder-cards';
 import { keysForTab, type TabId } from './fields';
 
 export type FilterState = { text: string; changedOnly: boolean };

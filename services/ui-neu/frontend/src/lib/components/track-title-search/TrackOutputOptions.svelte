@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	// The track title override's output options box, with its save.
 	import type { TrackView } from '$lib/types/api.gen';
-	import { trackOptionsBody } from '$lib/utils/track-edit';
+	import { trackOptionsBody } from '$lib/jobs/track-edit';
 	import { updateTrack } from '$lib/api/jobs';
 
 	interface Props {

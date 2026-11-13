@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SetupStep, SetupView } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import { STEPS, STATE_WORD, uiState, stepIndex, type StepUiState } from './steps';
+	import { STEPS, STATE_WORD, uiState, stepIndex, type StepUiState } from '../../setup/steps';
 
 	// Every step with its state as a glyph + word (never colour alone). Done,
 	// skipped and needs-attention steps can be revisited; not-started ones

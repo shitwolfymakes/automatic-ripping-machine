@@ -7,7 +7,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { get, del, apiFetch } from '$lib/api/client';
-import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '../sessionRoutes';
+import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '../session-routes';
 
 const mockGet = vi.mocked(get);
 const mockDel = vi.mocked(del);

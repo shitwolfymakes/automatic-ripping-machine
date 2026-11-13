@@ -16,7 +16,7 @@
 		depthText,
 		VARIANT_LISTS,
 		type EncoderCard
-	} from '$lib/handbrake/encoderCards';
+	} from '$lib/handbrake/encoder-cards';
 	import { docUrlForFamily } from '$lib/handbrake/docLinks';
 	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
 	import type { BaseValues } from '$lib/handbrake/base-values';

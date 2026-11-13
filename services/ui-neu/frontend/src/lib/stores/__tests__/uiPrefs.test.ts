@@ -8,12 +8,12 @@ beforeEach(() => {
 
 describe('uiPrefs store', () => {
 	it('defaults to stats on and card view', async () => {
-		const { uiPrefs } = await import('../uiPrefs');
+		const { uiPrefs } = await import('../ui-prefs');
 		expect(get(uiPrefs)).toEqual({ showStats: true, dashboardView: 'card', logWrap: true });
 	});
 
 	it('persists changes and reads them back on a fresh load', async () => {
-		const { setUiPref } = await import('../uiPrefs');
+		const { setUiPref } = await import('../ui-prefs');
 		setUiPref('showStats', false);
 		setUiPref('dashboardView', 'table');
 		setUiPref('logWrap', false);
@@ -23,17 +23,17 @@ describe('uiPrefs store', () => {
 			logWrap: false
 		});
 		vi.resetModules();
-		const fresh = await import('../uiPrefs');
+		const fresh = await import('../ui-prefs');
 		expect(get(fresh.uiPrefs)).toEqual({ showStats: false, dashboardView: 'table', logWrap: false });
 	});
 
 	it('falls back to defaults on corrupt or partial storage', async () => {
 		localStorage.setItem('arm_ui_prefs', '{not json');
-		let mod = await import('../uiPrefs');
+		let mod = await import('../ui-prefs');
 		expect(get(mod.uiPrefs)).toEqual({ showStats: true, dashboardView: 'card', logWrap: true });
 		vi.resetModules();
 		localStorage.setItem('arm_ui_prefs', JSON.stringify({ dashboardView: 'bogus', showStats: 'yes', logWrap: 'no' }));
-		mod = await import('../uiPrefs');
+		mod = await import('../ui-prefs');
 		expect(get(mod.uiPrefs)).toEqual({ showStats: true, dashboardView: 'card', logWrap: true });
 	});
 });

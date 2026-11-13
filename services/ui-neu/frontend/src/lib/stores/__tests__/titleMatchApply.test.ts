@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
-import type { TitleApplyValues } from '$lib/utils/job-resolve';
-import { titleMatchBody } from '$lib/utils/job-resolve';
+import type { TitleApplyValues } from '$lib/jobs/resolve';
+import { titleMatchBody } from '$lib/jobs/resolve';
 
 vi.mock('$lib/api/jobs', () => ({
 	resolveJob: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock('$lib/api/jobs', () => ({
 }));
 
 import { resolveJob, updateJobTitle } from '$lib/api/jobs';
-import { TitleMatchApply, type TitleApplyPlan } from '../titleMatchApply.svelte';
+import { TitleMatchApply, type TitleApplyPlan } from '../title-match-apply.svelte';
 
 const RESPONSE = { id: 'r1' } as unknown as ResolveResponse;
 const AT = { row: 2, list: 5 };

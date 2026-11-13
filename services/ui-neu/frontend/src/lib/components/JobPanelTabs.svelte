@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import type { JobDetail } from '$lib/stores/jobDetail.svelte';
-	import type { JobPanels } from '$lib/stores/jobPanels.svelte';
+	import type { JobDetail } from '$lib/stores/job-detail.svelte';
+	import type { JobPanels } from '$lib/stores/job-panels.svelte';
 
 	interface Props {
 		job: JobView;

@@ -6,7 +6,7 @@
 	import InboxHeader from '$lib/components/inbox/InboxHeader.svelte';
 	import NotificationCard from '$lib/components/inbox/NotificationCard.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { NotificationInbox } from '$lib/stores/notificationInbox.svelte';
+	import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 
 	const inbox = new NotificationInbox();
 	let showCleared = $state(false);

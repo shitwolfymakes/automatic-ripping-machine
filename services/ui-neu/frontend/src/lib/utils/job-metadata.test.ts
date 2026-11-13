@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readJobMetadata } from './job-metadata';
+import { readJobMetadata } from '../jobs/metadata';
 
 describe('readJobMetadata', () => {
 	it('returns empty object fields for an empty blob', () => {

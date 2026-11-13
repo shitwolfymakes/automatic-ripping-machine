@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MetadataCandidate } from '$lib/types/api.gen';
-import { IMDB_LOOKUP, MetadataSearch, type SearchMessages } from '../metadataSearch.svelte';
+import { IMDB_LOOKUP, MetadataSearch, type SearchMessages } from '../metadata-search.svelte';
 
 const MESSAGES: SearchMessages = { empty: 'nothing', failed: 'broke' };
 const candidate = (title: string) => ({ title }) as unknown as MetadataCandidate;

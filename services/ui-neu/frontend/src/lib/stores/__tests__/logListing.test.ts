@@ -9,7 +9,7 @@ vi.mock('$lib/api/logs', () => ({
 	fetchJobLogIndex: (...a: unknown[]) => fetchJobLogIndexMock(...a)
 }));
 
-import { LogListing } from '$lib/stores/logListing.svelte';
+import { LogListing } from '$lib/stores/log-listing.svelte';
 
 const JOBS = [{ id: 'j1' }, { id: 'j2' }];
 

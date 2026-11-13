@@ -145,25 +145,33 @@ export function buildFormMap(files, folders) {
 		const [olds, news] = [pathForms(m.from), pathForms(m.to)];
 		olds.forEach((o, i) => o && news[i] && o !== news[i] && map.set(o, news[i]));
 	}
+	// Folder forms may be followed by `/`; a file form followed by `/` names a sibling folder of the same stem.
+	map.folderForms = new Set(folders.flatMap((f) => pathForms(f.from)).filter((o) => o && map.has(o)));
 	return map;
 }
 
-function textPattern(forms) {
+const altOf = (forms) => [...forms].sort((a, b) => b.length - a.length).map(escapeRe).join('|');
+
+function textPattern(forms, folderForms) {
 	if (!forms.length) return null;
-	const alt = [...forms].sort((a, b) => b.length - a.length).map(escapeRe).join('|');
-	return String.raw`(?<![\w-]|\w\/)(?:${alt})(?![\w-]|\.\w)`;
+	const folders = forms.filter((f) => folderForms.has(f));
+	const files = forms.filter((f) => !folderForms.has(f));
+	const parts = [];
+	if (files.length) parts.push(String.raw`(?:${altOf(files)})(?![\w-]|\.\w|\/\w)`);
+	if (folders.length) parts.push(String.raw`(?:${altOf(folders)})(?![\w-]|\.\w)`);
+	return String.raw`(?<![\w-]|\w\/)(?:${parts.join('|')})`;
 }
 
-function combinedRegex(forms, withSpecs) {
+function combinedRegex(forms, withSpecs, folderForms) {
 	const parts = [];
 	if (withSpecs) parts.push(String.raw`(?<q>['"` + '`' + String.raw`])(?<spec>${SPEC})\k<q>`);
-	const text = textPattern(forms);
+	const text = textPattern(forms, folderForms);
 	if (text) parts.push(`(?<text>${text})`);
 	return parts.length ? new RegExp(parts.join('|'), 'g') : null;
 }
 
 export function rewriteContent(content, file, mode, ctx) {
-	const re = combinedRegex([...ctx.formMap.keys()], mode === 'code');
+	const re = combinedRegex([...ctx.formMap.keys()], mode === 'code', ctx.formMap.folderForms);
 	if (!re) return content;
 	return content.replace(re, (m, ...args) => {
 		const g = args[args.length - 1];
@@ -183,8 +191,8 @@ function specSurvivors(path, content, finalFiles, goneFiles) {
 	return out;
 }
 
-function textSurvivors(path, content, oldForms, newForms) {
-	const text = textPattern(oldForms);
+function textSurvivors(path, content, oldForms, newForms, folderForms) {
+	const text = textPattern(oldForms, folderForms);
 	if (!text) return [];
 	const coveredByNewForm = (m) => newForms.some((f) => content.startsWith(f, m.index));
 	return [...content.matchAll(new RegExp(text, 'g'))].filter((m) => !coveredByNewForm(m)).map((m) => `${path}: ${m[0]}`);
@@ -197,7 +205,7 @@ export function findSurvivors(entries, finalFiles, moves, formMap) {
 	const newList = [...newForms];
 	const found = entries.flatMap(({ path, mode, content }) => [
 		...(mode === 'code' ? specSurvivors(path, content, finalFiles, goneFiles) : []),
-		...textSurvivors(path, content, oldForms, newList),
+		...textSurvivors(path, content, oldForms, newList, formMap.folderForms),
 	]);
 	return [...new Set(found)];
 }

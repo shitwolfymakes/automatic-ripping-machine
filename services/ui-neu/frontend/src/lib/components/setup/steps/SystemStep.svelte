@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { SetupView, SystemDiagnosticsResponse } from '$lib/types/api.gen';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
-	import { SYSTEM_STEP_CHECKS } from '$lib/utils/system-health';
-	import type { StepCommitResult } from '../steps';
+	import { SYSTEM_STEP_CHECKS } from '$lib/dashboard/system-health';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 2: deploy-time facts the operator can't change in the browser. Never
 	// blocks; problems record the step as needing attention (setup spec §5.3).

@@ -4,7 +4,7 @@ import type { EpisodeSummary } from '$lib/types/api.gen';
 vi.mock('$lib/api/identity', () => ({ fetchEpisodes: vi.fn() }));
 
 import { fetchEpisodes } from '$lib/api/identity';
-import { EpisodeLists } from '../episodeLists.svelte';
+import { EpisodeLists } from '../episode-lists.svelte';
 
 const mockFetch = vi.mocked(fetchEpisodes);
 

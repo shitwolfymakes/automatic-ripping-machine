@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ReviewSections } from '$lib/stores/reviewSections.svelte';
+import { ReviewSections } from '$lib/stores/review-sections.svelte';
 
 describe('ReviewSections', () => {
 	describe('open', () => {

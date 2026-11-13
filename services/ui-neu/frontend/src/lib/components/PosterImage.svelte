@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { posterSrc } from '$lib/utils/poster';
+	import { posterSrc } from '$lib/match/poster';
 
 	interface Props {
 		url: string | null | undefined;

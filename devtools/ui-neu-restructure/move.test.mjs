@@ -388,3 +388,18 @@ test('cli returns 0 for a clean run', () => {
 	assert.equal(cli([map, '--root', fx.frontendRoot, '--dry-run'], '/d', { log: () => {}, error: () => {} }), 0);
 	fx.done();
 });
+
+test('a file whose stem is also a sibling folder leaves paths into that folder alone', () => {
+	const doc = 'See $lib/a/steps and $lib/a/steps/One.svelte here.\n';
+	const fx = fixture({
+		[lib('a/steps.ts')]: 'export {};\n',
+		[lib('a/steps/One.svelte')]: '<p>one</p>\n',
+		[lib('c.ts')]: "import { x } from '$lib/a/steps';\nimport One from '$lib/a/steps/One.svelte';\n",
+		'docs/n.md': doc,
+	});
+	const { survivors } = go(fx, [{ from: 'src/lib/a/steps.ts', to: 'src/lib/b/steps.ts' }]);
+	assert.deepEqual(survivors, []);
+	assert.equal(fx.read(lib('c.ts')), "import { x } from '$lib/b/steps';\nimport One from '$lib/a/steps/One.svelte';\n");
+	assert.equal(fx.read('docs/n.md'), 'See $lib/b/steps and $lib/a/steps/One.svelte here.\n');
+	fx.done();
+});

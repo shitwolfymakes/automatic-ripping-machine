@@ -4,10 +4,10 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
-	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
-	import { MovePicker } from '$lib/stores/movePicker.svelte';
-	import { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
-	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
+	import { FilesBrowser } from '$lib/stores/files-browser.svelte';
+	import { MovePicker } from '$lib/stores/move-picker.svelte';
+	import { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
+	import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
 		orderForDelete,

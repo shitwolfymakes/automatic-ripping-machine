@@ -10,8 +10,8 @@
 	import { fetchChannels } from '$lib/api/channels';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { setupSummaries } from '$lib/utils/setup-summaries';
-	import type { StepCommitResult } from '../steps';
+	import { setupSummaries } from '$lib/settings/setup-summaries';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 9: the first disc, the summary, and the certificate (setup spec §5.10).
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();

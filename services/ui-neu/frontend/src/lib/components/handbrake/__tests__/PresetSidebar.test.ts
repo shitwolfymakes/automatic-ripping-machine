@@ -4,18 +4,18 @@ import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, TranscodePresetV
 import plexImport from '$lib/handbrake/__tests__/fixtures/plex-import-response.json';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
 import { ApiError } from '$lib/api/client';
-import { fetchBuiltinPreset, fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrakeSchema';
-import { createTranscodePreset, parseHandbrakeImport, updateTranscodePreset } from '$lib/api/transcodePresets';
-import { handbrakeSchema } from '$lib/stores/handbrakeSchema.svelte';
+import { fetchBuiltinPreset, fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrake-schema';
+import { createTranscodePreset, parseHandbrakeImport, updateTranscodePreset } from '$lib/api/transcode-presets';
+import { handbrakeSchema } from '$lib/stores/handbrake-schema.svelte';
 import { stopEncoderEvents } from '$lib/stores/encoders.svelte';
 import PresetSidebar from '../PresetSidebar.svelte';
 
-vi.mock('$lib/api/handbrakeSchema', () => ({
+vi.mock('$lib/api/handbrake-schema', () => ({
 	fetchHandbrakeSchema: vi.fn(),
 	fetchBuiltinPreset: vi.fn(),
 	refreshHandbrakeSchema: vi.fn()
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
 	parseHandbrakeImport: vi.fn()

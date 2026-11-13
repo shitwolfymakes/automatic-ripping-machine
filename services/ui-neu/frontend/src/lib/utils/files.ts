@@ -3,7 +3,7 @@
 // the move picker offers, the bulk delete order, and the wording of the
 // result banners.
 import type { FileEntry, FileRoot } from '$lib/api/files';
-import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
+import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
 import { plural } from '$lib/utils/plural';
 
 export type SortKey = 'name' | 'size' | 'modified';

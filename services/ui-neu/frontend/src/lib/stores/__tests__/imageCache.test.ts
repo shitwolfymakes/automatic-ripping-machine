@@ -7,7 +7,7 @@ vi.mock('$lib/api/maintenance', () => ({
 	clearImageCache: (...a: unknown[]) => clearImageCacheMock(...a)
 }));
 
-import { ImageCache } from '$lib/stores/imageCache.svelte';
+import { ImageCache } from '$lib/stores/image-cache.svelte';
 
 beforeEach(() => {
 	fetchImageCacheStatsMock.mockReset();

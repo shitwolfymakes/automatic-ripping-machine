@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MatchPreview, MatchRequest } from '$lib/types/api.gen';
-import { MatchRunner } from '../matchRunner.svelte';
+import { MatchRunner } from '../match-runner.svelte';
 
 const matchIdentity = vi.fn();
 vi.mock('$lib/api/identity', () => ({

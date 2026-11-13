@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The title mapping preview shown before a release's track titles are
 	// written onto the disc's tracks, with Apply titles and Cancel.
-	import type { TrackPair } from '$lib/utils/music-release';
-	import { MATCH_TONE } from '$lib/utils/track-match';
+	import type { TrackPair } from '$lib/music/release';
+	import { MATCH_TONE } from '$lib/jobs/track-match';
 	import { formatMinSec } from '$lib/utils/format';
 	import Glyph from '../Glyph.svelte';
 	import MatchGlyph from './MatchGlyph.svelte';

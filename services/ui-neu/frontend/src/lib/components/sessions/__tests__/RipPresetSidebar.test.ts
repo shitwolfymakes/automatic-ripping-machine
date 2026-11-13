@@ -1,12 +1,12 @@
 import { it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn()
 }));
 
-import { createRipPreset } from '$lib/api/ripPresets';
+import { createRipPreset } from '$lib/api/rip-presets';
 import RipPresetSidebar from '../RipPresetSidebar.svelte';
 
 const preset = (over = {}) =>

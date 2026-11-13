@@ -5,7 +5,7 @@ vi.mock('$lib/api/drives', () => ({
 	fetchDriveDiagnostic: (...a: unknown[]) => fetchDriveDiagnosticMock(...a)
 }));
 
-import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
+import { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
 
 const RESULT = { drives: [], system: [] };
 

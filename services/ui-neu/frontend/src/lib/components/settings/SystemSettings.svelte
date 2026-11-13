@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SettingsData } from '$lib/api/settings';
 	import type { SettingsGroup } from '$lib/types/api.gen';
-	import type { SetupRestart } from '$lib/stores/setupRestart.svelte';
+	import type { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';

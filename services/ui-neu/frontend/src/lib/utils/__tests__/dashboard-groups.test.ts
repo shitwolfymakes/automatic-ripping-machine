@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isAwaitingAction } from '$lib/utils/job-status';
-import { groupActiveJobs } from '$lib/utils/dashboard-groups';
+import { isAwaitingAction } from '$lib/jobs/status';
+import { groupActiveJobs } from '$lib/dashboard/groups';
 
 const job = (status: string, tp: any = null) => ({ status, transcode_progress: tp }) as any;
 

@@ -9,7 +9,7 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchNamingPreview: (...a: unknown[]) => fetchNamingPreviewMock(...a)
 }));
 
-import { EpisodeIdentity } from '$lib/stores/episodeIdentity.svelte';
+import { EpisodeIdentity } from '$lib/stores/episode-identity.svelte';
 
 const IDENTITY = { tracks: [] };
 const PREVIEW = {

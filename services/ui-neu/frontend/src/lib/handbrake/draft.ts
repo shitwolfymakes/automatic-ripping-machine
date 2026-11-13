@@ -11,7 +11,7 @@ import type {
 	TranscodeTool
 } from '$lib/types/api.gen';
 import { PRESET_ENCODER_ID } from './encoder-availability';
-import { toPayload } from './settingsEdit';
+import { toPayload } from './settings-edit';
 
 export type PresetField = 'name' | 'media_type' | 'tool' | 'preset_ref' | 'container' | 'encoder' | 'extra_args';
 

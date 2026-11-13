@@ -2,8 +2,8 @@
 // and how many, so the tab strip's counts and the rendered fields agree.
 
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SlimFamily, SlimKey } from '$lib/types/api.gen';
-import { rowKeys, visibleTrackKeys } from './audioTracks';
-import { cardOpen, cardVariant, visibleCardFields, type EncoderCard } from './encoderCards';
+import { rowKeys, visibleTrackKeys } from './audio-tracks';
+import { cardOpen, cardVariant, visibleCardFields, type EncoderCard } from './encoder-cards';
 import { fieldKind, TABS, type TabId } from './fields';
 import { audioListValue, blockOf, commonOf, inheritedDepth, panelContext, type BaseValues } from './base-values';
 import { audioListShown, commonKeys, keyShown, type FilterState } from './visibility';

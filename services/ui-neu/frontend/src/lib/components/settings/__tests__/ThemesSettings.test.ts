@@ -3,9 +3,9 @@ import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 import { renderComponent, screen, cleanup, fireEvent, within } from '$lib/test-utils';
 import ThemesSettings from '../ThemesSettings.svelte';
-import { UserThemes } from '$lib/stores/userThemes.svelte';
+import { UserThemes } from '$lib/stores/user-themes.svelte';
 import { theme, toggleTheme } from '$lib/stores/theme';
-import { colorScheme, allSchemes, schemeLocksMode } from '$lib/stores/colorScheme';
+import { colorScheme, allSchemes, schemeLocksMode } from '$lib/stores/color-scheme';
 
 vi.mock('$lib/api/themes', () => ({
 	uploadTheme: vi.fn(() => Promise.resolve()),
@@ -17,7 +17,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),

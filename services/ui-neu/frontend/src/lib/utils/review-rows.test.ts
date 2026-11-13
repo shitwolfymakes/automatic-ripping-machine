@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trackToRow, scanTitleToRow, nonEpisode } from './review-rows';
+import { trackToRow, scanTitleToRow, nonEpisode } from '../jobs/review-rows';
 
 describe('review-rows mappers', () => {
 	it('trackToRow carries the id + editable fields', () => {

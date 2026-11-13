@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import JobPanelTabs from '../JobPanelTabs.svelte';
 import { createJob, createJobDetail } from '$lib/components/__fixtures__/job';
-import { JobDetail } from '$lib/stores/jobDetail.svelte';
-import { JobPanels } from '$lib/stores/jobPanels.svelte';
+import { JobDetail } from '$lib/stores/job-detail.svelte';
+import { JobPanels } from '$lib/stores/job-panels.svelte';
 import type { JobView } from '$lib/types/api.gen';
 
 function render(fields: Partial<JobView>) {

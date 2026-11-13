@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { flushSync } from 'svelte';
-import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
+import { MusicReleaseFields } from '$lib/stores/music-release-fields.svelte';
 import type { JobView, MetadataReleaseDetail } from '$lib/types/api.gen';
 
 function job(over: Record<string, unknown> = {}): JobView {

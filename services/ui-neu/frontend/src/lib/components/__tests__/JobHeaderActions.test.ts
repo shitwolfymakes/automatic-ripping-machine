@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
 import JobHeaderActions from '../JobHeaderActions.svelte';
 import { createJob, createJobDetail, createTrack } from '$lib/components/__fixtures__/job';
-import { JobDetail } from '$lib/stores/jobDetail.svelte';
+import { JobDetail } from '$lib/stores/job-detail.svelte';
 import * as authStore from '$lib/stores/auth';
 import { abandonJob, deleteJob, setJobMediaType } from '$lib/api/jobs';
 import type { JobView, TrackView } from '$lib/types/api.gen';

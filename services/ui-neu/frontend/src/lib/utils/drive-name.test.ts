@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { driveLabel } from './drive-name';
+import { driveLabel } from '../drives/name';
 
 it('returns the friendly name when the drive id is known', () => {
 	expect(driveLabel('drv_1', { drv_1: 'Main Drive' })).toBe('Main Drive');

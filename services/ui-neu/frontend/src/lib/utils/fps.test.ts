@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatFps } from './fps';
+import { formatFps } from '../transcode/fps';
 
 describe('formatFps', () => {
 	it('shows the live rate with the average in brackets', () => {

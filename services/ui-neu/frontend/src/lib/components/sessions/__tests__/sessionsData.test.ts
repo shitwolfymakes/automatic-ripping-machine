@@ -1,13 +1,13 @@
 import { it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/api/sessions', () => ({ fetchSessions: vi.fn() }));
-vi.mock('$lib/api/ripPresets', () => ({ fetchRipPresets: vi.fn() }));
-vi.mock('$lib/api/transcodePresets', () => ({ fetchTranscodePresets: vi.fn() }));
+vi.mock('$lib/api/rip-presets', () => ({ fetchRipPresets: vi.fn() }));
+vi.mock('$lib/api/transcode-presets', () => ({ fetchTranscodePresets: vi.fn() }));
 
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchRipPresets } from '$lib/api/ripPresets';
-import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-import { createSessionsData } from '../sessionsData.svelte';
+import { fetchRipPresets } from '$lib/api/rip-presets';
+import { fetchTranscodePresets } from '$lib/api/transcode-presets';
+import { createSessionsData } from '../../../sessions/sessions-data.svelte';
 
 const rip = (id: string, media_type = 'movie') =>
 	({

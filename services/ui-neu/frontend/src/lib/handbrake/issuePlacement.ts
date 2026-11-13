@@ -6,7 +6,7 @@
 
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
 import type { FieldErrors } from '$lib/utils/formValidation';
-import { BIT_DEPTH_FIELD } from './encoderCards';
+import { BIT_DEPTH_FIELD } from './encoder-cards';
 import { TABS, type TabId } from './fields';
 import { visibleTab, type TabVisible, type VisibleInput } from './filter';
 

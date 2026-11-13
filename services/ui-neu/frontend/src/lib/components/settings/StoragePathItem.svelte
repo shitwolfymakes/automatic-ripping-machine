@@ -3,7 +3,7 @@
 	// and writable, how much space it has free, and how to fix it when it
 	// isn't.
 	import type { PathStatus, StorageRoot } from '$lib/types/api.gen';
-	import { freeLabel, pathState, storageHelp, storageLabel } from '$lib/utils/system-health';
+	import { freeLabel, pathState, storageHelp, storageLabel } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
 	import HealthItem from './HealthItem.svelte';

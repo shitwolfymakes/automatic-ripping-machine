@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isoSourceFor, isoKindFor } from '../iso-source';
+import { isoSourceFor, isoKindFor } from '../../drives/iso-source';
 
 describe('isoSourceFor', () => {
 	const sources = { d1: '/isos/a.iso' };

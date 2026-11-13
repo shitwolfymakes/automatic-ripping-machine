@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { episodeStatus } from '$lib/utils/episode-status';
+import { episodeStatus } from '$lib/episodes/status';
 
 describe('episodeStatus', () => {
 	const tv = (over: Record<string, unknown> = {}, claims?: Record<string, { status: string }>) =>

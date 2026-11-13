@@ -3,10 +3,10 @@
 	import PosterImage from './PosterImage.svelte';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { jobPoster } from '$lib/utils/poster';
-	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import { isInProgress } from '$lib/utils/job-status-groups';
+	import { jobPoster } from '$lib/match/poster';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
+	import { isInProgress } from '$lib/jobs/status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import JobLifecycle from './JobLifecycle.svelte';

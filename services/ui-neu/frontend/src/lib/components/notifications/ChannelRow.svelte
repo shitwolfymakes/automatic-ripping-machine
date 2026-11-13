@@ -4,7 +4,7 @@
 	import StatusDot from './StatusDot.svelte';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 	import Toggle from './Toggle.svelte';
-	import { channelStatus, relativeTime, typeLabel } from './channelHelpers';
+	import { channelStatus, relativeTime, typeLabel } from '../../notifications/channel-helpers';
 
 	let {
 		channel,

@@ -4,7 +4,7 @@ import type { JobView } from '$lib/types/api.gen';
 vi.mock('$lib/api/jobs', () => ({ fetchJobsPage: vi.fn() }));
 
 import { fetchJobsPage } from '$lib/api/jobs';
-import { DashboardJobs, JOBS_PER_PAGE } from '../dashboardJobs.svelte';
+import { DashboardJobs, JOBS_PER_PAGE } from '../dashboard-jobs.svelte';
 
 const mockFetch = vi.mocked(fetchJobsPage);
 

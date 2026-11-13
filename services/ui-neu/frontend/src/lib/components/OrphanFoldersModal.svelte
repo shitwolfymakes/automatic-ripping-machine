@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { features } from '$lib/features';
 	import { formatBytes } from '$lib/utils/format';
-	import type { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
+	import type { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
 
 	interface Props {
 		orphans: OrphanFolders;

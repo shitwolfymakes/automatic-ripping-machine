@@ -7,7 +7,7 @@ import {
 	orderedConfigGroups,
 	settingsTabLabel,
 	tabFromHash
-} from '../settings-tabs';
+} from '../../settings/tabs';
 import type { SettingsGroup } from '$lib/types/api.gen';
 
 const group = (name: string, keys: string[] = []) =>

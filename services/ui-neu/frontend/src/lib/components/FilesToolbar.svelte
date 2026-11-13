@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { isAdmin } from '$lib/stores/auth';
 	import { features } from '$lib/features';
-	import type { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
+	import type { FilesBrowser } from '$lib/stores/files-browser.svelte';
 
 	interface Props {
 		browser: FilesBrowser;

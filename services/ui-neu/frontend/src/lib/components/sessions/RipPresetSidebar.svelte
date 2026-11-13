@@ -4,7 +4,7 @@
 	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
 	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
 	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
-	import { IDLE_STATUS, type EditorStatus } from '$lib/components/editorStatus';
+	import { IDLE_STATUS, type EditorStatus } from '$lib/components/editor-status';
 	import { usageLabel } from '$lib/handbrake/display';
 	import type { RipPresetView } from '$lib/types/api.gen';
 

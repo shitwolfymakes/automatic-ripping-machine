@@ -1,17 +1,17 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/stores';
-	import { loadThemesFromApi } from '$lib/stores/colorScheme';
+	import { loadThemesFromApi } from '$lib/stores/color-scheme';
 	import { theme } from '$lib/stores/theme';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { goto } from '$app/navigation';
-	import { isoPickerMode, showIsoPicker } from '$lib/stores/isoPicker';
+	import { isoPickerMode, showIsoPicker } from '$lib/stores/iso-picker';
 	import IsoPicker from '$lib/components/IsoPicker.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
-	import { uiPrefs } from '$lib/stores/uiPrefs';
+	import { uiPrefs } from '$lib/stores/ui-prefs';
 	import { NAV_ITEMS, visibleNavItems } from '$lib/nav';
 	import NavList from '$lib/components/NavList.svelte';
 	import HeaderActions from '$lib/components/HeaderActions.svelte';

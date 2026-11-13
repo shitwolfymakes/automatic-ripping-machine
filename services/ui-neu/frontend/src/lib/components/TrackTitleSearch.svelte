@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
 	import type { TrackView, MetadataCandidate, MediaType } from '$lib/types/api.gen';
-	import { trackTitleBody } from '$lib/utils/track-edit';
+	import { trackTitleBody } from '$lib/jobs/track-edit';
 	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
 	import TrackOutputOptions from './track-title-search/TrackOutputOptions.svelte';
 	import TrackSearchResults from './track-title-search/TrackSearchResults.svelte';
-	import { isSeriesKind } from '$lib/utils/match';
-	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
+	import { isSeriesKind } from '$lib/match/match';
+	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadata-search.svelte';
 
 	interface Props {
 		jobId: string;

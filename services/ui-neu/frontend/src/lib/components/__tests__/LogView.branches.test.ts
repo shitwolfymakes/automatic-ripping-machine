@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { tick, createRawSnippet } from 'svelte';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import LogView from '$lib/components/LogView.svelte';
-import { setUiPref } from '$lib/stores/uiPrefs';
+import { setUiPref } from '$lib/stores/ui-prefs';
 import type { LogEntry } from '$lib/api/logs';
 
 // Branch pins for LogView, beside LogView.test.ts. One branch cannot be

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parkedSessionLine, sessionDisplayName } from '../utils/parked-session';
+import { parkedSessionLine, sessionDisplayName } from '../sessions/parked-session';
 
 describe('sessionDisplayName', () => {
 	const names = new Map([['ses_a', 'Plex 1080p']]);

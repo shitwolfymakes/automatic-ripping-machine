@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
 import SystemSettings from '../SystemSettings.svelte';
-import { SetupRestart } from '$lib/stores/setupRestart.svelte';
+import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
 import type { SettingsData } from '$lib/api/settings';

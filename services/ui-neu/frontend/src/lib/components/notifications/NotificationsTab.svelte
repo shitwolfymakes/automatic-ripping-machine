@@ -14,7 +14,7 @@
 	import { addToast } from '$lib/stores/toast.svelte';
 	import StatStrip from './StatStrip.svelte';
 	import FilterPills from './FilterPills.svelte';
-	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
+	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from '../../notifications/channel-filters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm from './AddChannelForm.svelte';
 	import {
@@ -23,8 +23,8 @@
 		testUnsavedBody,
 		type AddChannelBody,
 		type TestOutcome
-	} from './channelActions';
-	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
+	} from '../../notifications/channel-actions';
+	import { editorPatch, editorTestPayload, type EditorBody } from '../../notifications/channel-edits';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	let channels = $state<Channel[]>([]);

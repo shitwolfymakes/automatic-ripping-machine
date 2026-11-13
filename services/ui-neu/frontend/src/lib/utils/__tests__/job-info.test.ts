@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/utils/job-info';
-import type { JobInfoText } from '$lib/utils/job-info';
+import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/jobs/info';
+import type { JobInfoText } from '$lib/jobs/info';
 
 describe('jobInfoResolveBody', () => {
 	const fields: JobInfoText = { title: 'Alien', year: '1979', season: '2', discNumber: '3', discTotal: '4' };

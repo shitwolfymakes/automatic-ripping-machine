@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '$lib/api/logs';
-import { logService, serviceLabel } from '$lib/utils/log-service';
+import { logService, serviceLabel } from '$lib/logs/service';
 import {
 	chipBackground,
 	chipText,
@@ -12,7 +12,7 @@ import {
 	levelTone,
 	matchLabel,
 	type LogFilter
-} from '../log-view';
+} from '../../logs/view';
 
 function entry(over: Partial<LogEntry> = {}): LogEntry {
 	return { level: 'info', logger: 'log', event: 'evt', service: 'arm-backend', ...over };

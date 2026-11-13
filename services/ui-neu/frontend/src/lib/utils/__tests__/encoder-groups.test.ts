@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { encoderGroups } from '$lib/utils/encoder-groups';
+import { encoderGroups } from '$lib/transcode/encoder-groups';
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 
 const enc = (id: string, group: string) =>

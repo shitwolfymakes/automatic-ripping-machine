@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import type { EpisodeStatus } from '$lib/utils/episode-status';
-	import type { ReviewSections } from '$lib/stores/reviewSections.svelte';
-	import type { DiscReviewJobActions } from '$lib/stores/discReviewJobActions.svelte';
+	import type { EpisodeStatus } from '$lib/episodes/status';
+	import type { ReviewSections } from '$lib/stores/review-sections.svelte';
+	import type { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 
 	interface Props {

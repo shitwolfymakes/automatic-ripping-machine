@@ -6,8 +6,8 @@
 	import HelpToc from '$lib/components/help/HelpToc.svelte';
 	import HelpTopics from '$lib/components/help/HelpTopics.svelte';
 	import { fragmentId, scrollToFragment } from '$lib/docs/fragment';
-	import { HelpDoc } from '$lib/stores/helpDoc.svelte';
-	import { HelpSearch } from '$lib/stores/helpSearch.svelte';
+	import { HelpDoc } from '$lib/stores/help-doc.svelte';
+	import { HelpSearch } from '$lib/stores/help-search.svelte';
 
 	const id = $derived(slugToId($page.params.slug));
 

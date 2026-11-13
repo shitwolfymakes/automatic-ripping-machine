@@ -16,20 +16,20 @@ vi.mock('$lib/api/sessions', () => ({
 	cloneSession: vi.fn(),
 	previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null })
 }));
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
 	deleteTranscodePreset: vi.fn()
 }));
 // The transcode preset sidebar loads the HandBrake schema.
-vi.mock('$lib/api/handbrakeSchema', () => ({
+vi.mock('$lib/api/handbrake-schema', () => ({
 	fetchHandbrakeSchema: vi.fn().mockRejectedValue(new Error('No HandBrake schema loaded yet')),
 	fetchBuiltinPreset: vi.fn(),
 	refreshHandbrakeSchema: vi.fn()
@@ -40,15 +40,15 @@ vi.mock('$lib/api/ws', () => ({
 }));
 
 import { fetchSessions, updateSession, deleteSession, cloneSession } from '$lib/api/sessions';
-import { fetchRipPresets, createRipPreset, updateRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
+import { fetchRipPresets, createRipPreset, updateRipPreset, deleteRipPreset } from '$lib/api/rip-presets';
 import {
 	fetchTranscodePresets,
 	createTranscodePreset,
 	updateTranscodePreset,
 	deleteTranscodePreset
-} from '$lib/api/transcodePresets';
+} from '$lib/api/transcode-presets';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';
-import { handbrakeSchema } from '$lib/stores/handbrakeSchema.svelte';
+import { handbrakeSchema } from '$lib/stores/handbrake-schema.svelte';
 import SessionsArea from '../SessionsArea.svelte';
 
 const makeSession = (id = 's1', name = 'ses Alpha') => ({

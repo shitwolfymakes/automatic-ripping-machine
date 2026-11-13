@@ -9,7 +9,7 @@ vi.mock('$lib/api/drives', () => ({
 	unignoreDrive: (...a: unknown[]) => unignoreDriveMock(...a)
 }));
 
-import { DriveLifecycleActions } from '$lib/stores/driveLifecycleActions.svelte';
+import { DriveLifecycleActions } from '$lib/stores/drive-lifecycle-actions.svelte';
 
 const onchanged = vi.fn();
 

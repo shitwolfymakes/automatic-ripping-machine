@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DiscRouteSummary } from '$lib/types/api.gen';
-import { discKindLabel, exampleMovie, routeCells } from '../disc-routes';
+import { discKindLabel, exampleMovie, routeCells } from '../../sessions/disc-routes';
 
 const EMPTY_ROUTE: DiscRouteSummary = {
 	kind: 'movie',

@@ -25,7 +25,7 @@ vi.mock('$lib/features', async (importOriginal) => {
 import { fetchDirectory } from '$lib/api/files';
 import * as auth from '$lib/stores/auth';
 import { features } from '$lib/features';
-import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
+import { FilesBrowser } from '$lib/stores/files-browser.svelte';
 import FilesToolbar from '../FilesToolbar.svelte';
 
 const setRole = (auth as unknown as { __setRole: (r: string | null) => void }).__setRole;

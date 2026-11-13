@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { StepMeta } from './steps';
+	import type { StepMeta } from '../../setup/steps';
 
 	// The walkthrough's sticky action bar: Back, the save hint (or why Continue
 	// is blocked), Skip for now on optional steps, and Continue.

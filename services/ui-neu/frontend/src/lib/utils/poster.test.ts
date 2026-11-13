@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { jobPoster, posterSrc, POSTER_PLACEHOLDER } from './poster';
+import { jobPoster, posterSrc, POSTER_PLACEHOLDER } from '../match/poster';
 
 it('jobPoster prefers the manual override over the auto url', () => {
 	expect(jobPoster({ poster_url: 'auto.jpg', poster_url_manual: 'manual.jpg' })).toBe('manual.jpg');

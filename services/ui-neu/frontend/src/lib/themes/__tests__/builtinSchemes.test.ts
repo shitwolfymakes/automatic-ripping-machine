@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
+import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 
 const DARK_ONLY_IDS = [
 	'glass',

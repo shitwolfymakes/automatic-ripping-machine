@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import SetupFooter from '../SetupFooter.svelte';
-import { STEPS } from '../steps';
+import { STEPS } from '../../../setup/steps';
 
 // Branch pins for SetupFooter, beside SetupFooter.test.ts. No branch is left
 // open.

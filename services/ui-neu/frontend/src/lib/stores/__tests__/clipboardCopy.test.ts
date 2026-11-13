@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { ClipboardCopy } from '../clipboardCopy.svelte';
+import { ClipboardCopy } from '../clipboard-copy.svelte';
 
 const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 

@@ -12,7 +12,7 @@ import {
 	prescanOverrideCount,
 	serialLabel,
 	startRipBlockedReason
-} from '$lib/utils/drives';
+} from '$lib/drives/drives';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {

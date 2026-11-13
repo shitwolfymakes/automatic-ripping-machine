@@ -6,7 +6,7 @@ import {
 	sectionFields,
 	settingsFieldHref,
 	settingsTabFor
-} from '../settings-sections';
+} from '../../settings/sections';
 import type { SettingsData } from '$lib/api/settings';
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 
@@ -119,7 +119,7 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 	});
 
 	it('stepFields picks tagged fields across groups in setup_order, plus their part_of fields', async () => {
-		const { stepFields } = await import('../settings-sections');
+		const { stepFields } = await import('../../settings/sections');
 		const groups = [
 			{
 				name: 'Ripping',
@@ -137,7 +137,7 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 	});
 
 	it('stepGroup wraps them in a synthetic group', async () => {
-		const { stepGroup } = await import('../settings-sections');
+		const { stepGroup } = await import('../../settings/sections');
 		const g = stepGroup(
 			[
 				{

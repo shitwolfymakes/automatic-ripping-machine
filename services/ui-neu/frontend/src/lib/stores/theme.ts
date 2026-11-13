@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { reapplySchemeForCurrentMode } from './colorScheme';
+import { reapplySchemeForCurrentMode } from './color-scheme';
 
 function getInitialTheme(): 'light' | 'dark' {
 	if (!browser) return 'dark';

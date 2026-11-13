@@ -5,10 +5,10 @@
 	import TitleSearch from './TitleSearch.svelte';
 	import IdentifyCdForm from './identify/IdentifyCdForm.svelte';
 	import IdentifyVideoForm from './identify/IdentifyVideoForm.svelte';
-	import { driveLabel } from '$lib/utils/drive-name';
-	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
-	import { readJobMetadata } from '$lib/utils/job-metadata';
-	import { cdIdentifyBody, videoIdentifyBody } from '$lib/utils/job-resolve';
+	import { driveLabel } from '$lib/drives/name';
+	import { isAwaitingIdentity } from '$lib/jobs/status-groups';
+	import { readJobMetadata } from '$lib/jobs/metadata';
+	import { cdIdentifyBody, videoIdentifyBody } from '$lib/jobs/resolve';
 
 	let {
 		job,

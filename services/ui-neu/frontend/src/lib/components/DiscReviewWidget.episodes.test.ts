@@ -37,7 +37,7 @@ const ripperListeners: RipperListener[] = [];
 function fireRipperEvent(jobId: string, eventType: string) {
 	ripperListeners.forEach((fn) => fn(new Set([jobId]), new Map([[jobId, new Set([eventType])]])));
 }
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: (fn: RipperListener) => {
 		ripperListeners.push(fn);

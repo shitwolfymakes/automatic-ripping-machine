@@ -3,8 +3,8 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import { elapsedTime, statusAccentVar } from '$lib/utils/format';
-	import { etaLabel, fpsLabel } from '$lib/utils/transcode-progress';
-	import { TranscodeLive } from '$lib/stores/transcodeLive.svelte';
+	import { etaLabel, fpsLabel } from '$lib/transcode/progress';
+	import { TranscodeLive } from '$lib/stores/transcode-live.svelte';
 	import TimeAgo from './TimeAgo.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import { slide } from 'svelte/transition';

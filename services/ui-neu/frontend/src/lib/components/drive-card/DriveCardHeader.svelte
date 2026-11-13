@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
-	import { driveStatusLabel, isDriveDetached, isRipperOfflinePresent } from '$lib/utils/drives';
+	import { driveStatusLabel, isDriveDetached, isRipperOfflinePresent } from '$lib/drives/drives';
 	import StatusBadge from '../StatusBadge.svelte';
 
 	interface Props {

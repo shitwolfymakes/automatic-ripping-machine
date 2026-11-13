@@ -7,7 +7,7 @@
 	// BottomStatsBar mounted, resources will show the initial empty snapshot
 	// until BottomStatsBar mounts and starts the poll.
 	import { resources } from '$lib/stores/resources.svelte';
-	import { barColor, filesHref } from '$lib/utils/resource-bars';
+	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
 </script>
 
 <div data-sidebar-stats class="stats-bar-side">

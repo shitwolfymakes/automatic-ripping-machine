@@ -5,7 +5,7 @@ vi.mock('$lib/api/jobs', () => ({
 	fetchNamingPreview: (...a: unknown[]) => fetchNamingPreviewMock(...a)
 }));
 
-import { NamingPreview } from '$lib/stores/namingPreview.svelte';
+import { NamingPreview } from '$lib/stores/naming-preview.svelte';
 import type { JobNamingPreviewResponse } from '$lib/types/api.gen';
 
 function answer(): JobNamingPreviewResponse {

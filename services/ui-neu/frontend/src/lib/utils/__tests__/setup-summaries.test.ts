@@ -9,7 +9,7 @@ import {
 	systemSummary,
 	transcodingSummary,
 	type SummaryInputs
-} from '../setup-summaries';
+} from '../../settings/setup-summaries';
 import type { ConfigView, DriveView, GpuView, SetupView } from '$lib/types/api.gen';
 
 const drive = (over: Partial<DriveView>): DriveView =>

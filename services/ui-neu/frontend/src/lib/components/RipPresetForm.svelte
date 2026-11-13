@@ -3,11 +3,11 @@
 	// routed page; this is an inline (no-route) form driven by props. Field
 	// wiring, the disabled rules, and the create / custom-edit / built-in
 	// submit-body shapes follow the Vue source faithfully.
-	import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
-	import { PresetSave } from '$lib/stores/presetSave.svelte';
-	import type { EditorStatus } from './editorStatus';
+	import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
+	import { PresetSave } from '$lib/stores/preset-save.svelte';
+	import type { EditorStatus } from './editor-status';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
-	import { trackFiltersBody, type TrackFilters } from '$lib/utils/track-filters';
+	import { trackFiltersBody, type TrackFilters } from '$lib/jobs/track-filters';
 	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/utils/formValidation';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
 

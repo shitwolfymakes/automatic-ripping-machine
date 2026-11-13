@@ -2,7 +2,7 @@
 	// One drive in the lifecycle lists, with its identity, its Ignore or
 	// Un-ignore and Enroll buttons, and its enroll progress or failure.
 	import type { DriveView } from '$lib/types/api.gen';
-	import { connectionLabel, driveTitle, mediaLabel, serialLabel } from '$lib/utils/drives';
+	import { connectionLabel, driveTitle, mediaLabel, serialLabel } from '$lib/drives/drives';
 	import { formatDateTime } from '$lib/utils/format';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';

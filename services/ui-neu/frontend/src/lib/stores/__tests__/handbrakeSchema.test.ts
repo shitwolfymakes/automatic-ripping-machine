@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/api/handbrakeSchema', () => ({
+vi.mock('$lib/api/handbrake-schema', () => ({
 	fetchHandbrakeSchema: vi.fn(),
 	refreshHandbrakeSchema: vi.fn()
 }));
 
-import { fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrakeSchema';
+import { fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrake-schema';
 import { ApiError } from '$lib/api/client';
 import type { HandbrakeSchemaSlimView } from '$lib/types/api.gen';
-import { handbrakeSchema } from '../handbrakeSchema.svelte';
+import { handbrakeSchema } from '../handbrake-schema.svelte';
 
 const SCHEMA = { handbrake_tag: '1.11.1' } as HandbrakeSchemaSlimView;
 

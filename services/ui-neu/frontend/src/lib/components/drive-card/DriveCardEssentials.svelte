@@ -4,7 +4,7 @@
 	// walkthrough (setup spec §5.4).
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
-	import { connectionLabel, driveTitle, isRipping, mediaLabel } from '$lib/utils/drives';
+	import { connectionLabel, driveTitle, isRipping, mediaLabel } from '$lib/drives/drives';
 	import StatusStrip from '../StatusStrip.svelte';
 	import Glyph from '../Glyph.svelte';
 

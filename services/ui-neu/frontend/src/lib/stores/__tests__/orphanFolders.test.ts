@@ -8,7 +8,7 @@ vi.mock('$lib/api/maintenance', () => ({
 }));
 
 import { fetchOrphanFolders, deleteFolder, bulkDeleteFolders } from '$lib/api/maintenance';
-import { OrphanFolders } from '../orphanFolders.svelte';
+import { OrphanFolders } from '../orphan-folders.svelte';
 
 const mockFetch = vi.mocked(fetchOrphanFolders);
 const mockDelete = vi.mocked(deleteFolder);

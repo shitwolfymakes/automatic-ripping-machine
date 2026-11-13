@@ -4,9 +4,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { JobView } from '$lib/types/api.gen';
-import type { EpisodeState, EpisodeStatus } from '$lib/utils/episode-status';
-import { ReviewSections } from '$lib/stores/reviewSections.svelte';
-import { DiscReviewJobActions } from '$lib/stores/discReviewJobActions.svelte';
+import type { EpisodeState, EpisodeStatus } from '$lib/episodes/status';
+import { ReviewSections } from '$lib/stores/review-sections.svelte';
+import { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
 import { actionsFor, createJob } from '../../__fixtures__/job';
 import DiscReviewActions from '../DiscReviewActions.svelte';
 

@@ -5,9 +5,9 @@
 	import StatusBadge from '../StatusBadge.svelte';
 	import DiscTypeIcon from '../DiscTypeIcon.svelte';
 	import PosterImage from '../PosterImage.svelte';
-	import { jobPoster } from '$lib/utils/poster';
-	import { effectiveJobStatus } from '$lib/utils/job-status';
-	import { discTypeLabel, type VideoTypeConfig } from '$lib/utils/job-type';
+	import { jobPoster } from '$lib/match/poster';
+	import { effectiveJobStatus } from '$lib/jobs/status';
+	import { discTypeLabel, type VideoTypeConfig } from '$lib/jobs/type';
 	import { formatRipStage } from '$lib/utils/format';
 
 	interface Props {

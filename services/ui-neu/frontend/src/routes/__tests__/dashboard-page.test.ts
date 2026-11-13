@@ -169,7 +169,7 @@ describe('Dashboard Page', () => {
 		afterEach(() => cleanup());
 
 		it('opens in the default layout from Settings > Interface; toggling on the page does not change it', async () => {
-			const { setUiPref, uiPrefs } = await import('$lib/stores/uiPrefs');
+			const { setUiPref, uiPrefs } = await import('$lib/stores/ui-prefs');
 			const { get } = await import('svelte/store');
 			setUiPref('dashboardView', 'table');
 			await renderDashboard();

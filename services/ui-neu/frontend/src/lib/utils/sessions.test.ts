@@ -5,7 +5,7 @@ import {
 	manualRipSessionChoices,
 	mediaTypesCompatible,
 	sessionsForDisc
-} from './sessions';
+} from '../sessions/sessions';
 
 const presets = [
 	{ id: 'p-none', tool: 'none' },

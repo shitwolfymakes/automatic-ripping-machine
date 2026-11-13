@@ -3,8 +3,8 @@
 	import type { Snippet } from 'svelte';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { isGuest } from '$lib/stores/auth';
-	import { countRipping } from '$lib/utils/job-status';
-	import { transcoderDotStatus, makemkvKeyTitle } from '$lib/utils/header-status';
+	import { countRipping } from '$lib/jobs/status';
+	import { transcoderDotStatus, makemkvKeyTitle } from '$lib/dashboard/header-status';
 
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
 </script>

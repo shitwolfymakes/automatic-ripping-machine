@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { etaTime, formatRemaining } from '../format';
-import { formatFps } from '../fps';
-import { etaLabel, fpsLabel, liveSample, type TranscodeLiveSample } from '../transcode-progress';
+import { formatFps } from '../../transcode/fps';
+import { etaLabel, fpsLabel, liveSample, type TranscodeLiveSample } from '../../transcode/progress';
 
 function sample(values: Partial<TranscodeLiveSample>): TranscodeLiveSample {
 	return { taskId: 't1', eta: null, fps: null, avgFps: null, ...values };

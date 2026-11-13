@@ -60,7 +60,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -150,7 +150,7 @@ describe('Layout', () => {
 	});
 
 	it('hides the resource stats surfaces when the Interface preference is off', async () => {
-		const { setUiPref } = await import('$lib/stores/uiPrefs');
+		const { setUiPref } = await import('$lib/stores/ui-prefs');
 		setUiPref('showStats', true);
 		const { unmount } = renderComponent(Layout, { props: { children: childSnippet() } });
 		expect(document.querySelector('[data-testid="bottom-stats-bar"]')).not.toBeNull();

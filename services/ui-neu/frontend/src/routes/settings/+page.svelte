@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { SetupRestart } from '$lib/stores/setupRestart.svelte';
+	import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
+	import { LoadedSettings } from '$lib/stores/loaded-settings.svelte';
 	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/settings/sections';
 	import {
 		SCREEN_TABS,
 		fieldFromHash,
@@ -15,14 +15,14 @@
 		orderedConfigGroups,
 		settingsTabLabel,
 		tabFromHash
-	} from '$lib/utils/settings-tabs';
-	import { UserThemes } from '$lib/stores/userThemes.svelte';
+	} from '$lib/settings/tabs';
+	import { UserThemes } from '$lib/stores/user-themes.svelte';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, rescanDrives } from '$lib/api/drives';
-	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
-	import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
+	import { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
+	import { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
 	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
-	import { ImageCache } from '$lib/stores/imageCache.svelte';
+	import { ImageCache } from '$lib/stores/image-cache.svelte';
 	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
 	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';

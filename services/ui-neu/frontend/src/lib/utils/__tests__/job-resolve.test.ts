@@ -7,7 +7,7 @@ import {
 	titleResolveBody,
 	tvSeasonOrDiscChanged,
 	videoIdentifyBody
-} from '$lib/utils/job-resolve';
+} from '$lib/jobs/resolve';
 
 const job = (over: Record<string, unknown> = {}) =>
 	({ id: 'j1', title: 'Show', year: 2020, media_type: 'tv', season: 1, disc_number: 2, ...over }) as any;

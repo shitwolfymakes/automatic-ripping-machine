@@ -2,7 +2,7 @@
 	import { plural } from '$lib/utils/plural';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { childSubpath } from '$lib/utils/files';
-	import type { MovePicker } from '$lib/stores/movePicker.svelte';
+	import type { MovePicker } from '$lib/stores/move-picker.svelte';
 
 	interface Props {
 		picker: MovePicker;

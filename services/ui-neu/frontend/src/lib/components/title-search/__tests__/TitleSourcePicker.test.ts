@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
-import { SEARCH_SOURCES } from '$lib/utils/search-providers';
+import { SEARCH_SOURCES } from '$lib/settings/search-providers';
 import TitleSourcePicker from '../TitleSourcePicker.svelte';
 
 const ALL_KEYED = { tmdb: true, omdb: true, tvdb: true };

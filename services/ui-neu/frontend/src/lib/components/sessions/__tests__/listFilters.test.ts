@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchesFilters, matchesTranscode, type ListFilters } from '../listFilters';
+import { matchesFilters, matchesTranscode, type ListFilters } from '../../../sessions/list-filters';
 
 const builtin = { media_type: 'movie', is_builtin: true, name: 'Blu-ray Movie' };
 const custom = { media_type: 'tv', is_builtin: false, name: 'My Show' };

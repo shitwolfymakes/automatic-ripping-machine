@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { TranscodeStatsView } from '$lib/types/api.gen';
-	import { taskCount } from '$lib/utils/transcode-stats';
+	import { taskCount } from '$lib/transcode/stats';
 
 	interface Props {
 		stats: TranscodeStatsView;

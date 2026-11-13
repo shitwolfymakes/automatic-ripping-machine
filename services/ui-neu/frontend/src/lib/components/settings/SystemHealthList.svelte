@@ -4,7 +4,7 @@
 	// check and per storage path.
 	import type { SystemDiagnosticsResponse } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
-	import { checkDetail, checkLabel, healthTally, pathDetail, pathState } from '$lib/utils/system-health';
+	import { checkDetail, checkLabel, healthTally, pathDetail, pathState } from '$lib/dashboard/system-health';
 	import HealthCheckRow from './HealthCheckRow.svelte';
 
 	let {

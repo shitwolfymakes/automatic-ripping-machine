@@ -2,15 +2,15 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { fetchRipPresets } from '$lib/api/ripPresets';
-	import { fetchTranscodePresets } from '$lib/api/transcodePresets';
+	import { fetchRipPresets } from '$lib/api/rip-presets';
+	import { fetchTranscodePresets } from '$lib/api/transcode-presets';
 	import { applySession } from '$lib/api/jobs';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
-	import { NamingPreview } from '$lib/stores/namingPreview.svelte';
+	import { NamingPreview } from '$lib/stores/naming-preview.svelte';
 	import ApplySessionCollisions from './apply-session/ApplySessionCollisions.svelte';
 	import ApplySessionRecipe from './apply-session/ApplySessionRecipe.svelte';
-	import { collisionsFromApplyError } from '$lib/utils/apply-collisions';
-	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/utils/sessions';
+	import { collisionsFromApplyError } from '$lib/sessions/apply-collisions';
+	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/sessions/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortTranscodeTasks } from '$lib/utils/transcode-sort';
+import { sortTranscodeTasks } from '$lib/transcode/sort';
 
 const t = (status: string, created_at: string) => ({ status, created_at }) as any;
 

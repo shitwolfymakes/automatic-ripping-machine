@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getVideoTypeConfig, discTypeLabel } from '../utils/job-type';
+import { getVideoTypeConfig, discTypeLabel } from '../jobs/type';
 
 describe('getVideoTypeConfig', () => {
 	it('returns fallback for null', () => {

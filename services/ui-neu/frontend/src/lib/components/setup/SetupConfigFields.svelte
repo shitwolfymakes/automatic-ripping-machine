@@ -4,7 +4,7 @@
 	import type { ConfigView, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { fetchSettings } from '$lib/api/settings';
-	import { stepGroup } from '$lib/utils/settings-sections';
+	import { stepGroup } from '$lib/settings/sections';
 
 	// The config fields a step owns, picked from CONFIG_FIELD_META by their
 	// setup_step tag and rendered by the same SchemaConfigForm Settings uses

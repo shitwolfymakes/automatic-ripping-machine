@@ -5,7 +5,7 @@ import {
 	effectiveMovieProvider,
 	sourceKeyed,
 	type SearchSource
-} from './search-providers';
+} from '../settings/search-providers';
 
 const ALL_KEYED = { tmdb: true, omdb: true, tvdb: true };
 const NONE_KEYED = { tmdb: false, omdb: false, tvdb: false };

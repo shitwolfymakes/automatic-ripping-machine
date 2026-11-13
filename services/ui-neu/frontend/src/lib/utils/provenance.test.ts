@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { provenanceLine } from './provenance';
+import { provenanceLine } from '../jobs/provenance';
 
 describe('provenanceLine', () => {
 	it('names where a season came from', () => {

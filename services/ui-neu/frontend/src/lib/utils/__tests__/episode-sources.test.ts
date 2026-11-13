@@ -6,8 +6,8 @@ import {
 	pickerSourceFor,
 	shortSourceId,
 	shortSourceLabel
-} from '../episode-sources';
-import { panelState } from '$lib/components/episodes/episodeModel';
+} from '../../episodes/sources';
+import { panelState } from '$lib/episodes/episode-model';
 import type { IdentityView, SourceSummary, TrackIdentityView, JobView } from '$lib/types/api.gen';
 
 const job = (o: Partial<JobView> = {}) =>

@@ -2,7 +2,7 @@
 	// The chosen release's tracklist, with each track's disc length and match
 	// when the disc's tracks are known, and the totals.
 	import type { TrackView, MetadataReleaseTrack } from '$lib/types/api.gen';
-	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
+	import { MATCH_TONE, matchIndicator } from '$lib/jobs/track-match';
 	import { formatMinSec } from '$lib/utils/format';
 	import MatchGlyph from './MatchGlyph.svelte';
 

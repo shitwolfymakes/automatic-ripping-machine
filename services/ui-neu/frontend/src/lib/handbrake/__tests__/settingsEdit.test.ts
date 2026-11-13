@@ -9,7 +9,7 @@ import {
 	setCommon,
 	storedCount,
 	toPayload
-} from '../settingsEdit';
+} from '../settings-edit';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 

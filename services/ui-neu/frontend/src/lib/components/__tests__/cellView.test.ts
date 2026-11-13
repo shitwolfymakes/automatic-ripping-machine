@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignClass, cellView } from '$lib/components/dataTable';
+import { alignClass, cellView } from '$lib/components/data-table';
 
 describe('alignClass', () => {
 	it('right-aligns end columns only', () => {

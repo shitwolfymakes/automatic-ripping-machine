@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
+import { applyNote, identifyNote } from '$lib/jobs/action-notes';
 
 const resolved = (fan_out?: unknown[]) => ({ fan_out }) as any;
 const applied = (status: string, tasks?: unknown[]) => ({ session_application: { status }, tasks }) as any;

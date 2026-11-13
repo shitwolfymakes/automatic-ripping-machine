@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countRipping } from '$lib/utils/job-status';
+import { countRipping } from '$lib/jobs/status';
 
 const job = (status: string, tp: any = null) => ({ status, transcode_progress: tp }) as any;
 

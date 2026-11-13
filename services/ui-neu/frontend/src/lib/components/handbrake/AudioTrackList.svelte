@@ -16,7 +16,7 @@
 		rowOptions,
 		setTrackField,
 		type AudioItem
-	} from '$lib/handbrake/audioTracks';
+	} from '$lib/handbrake/audio-tracks';
 	import TunableField from './TunableField.svelte';
 
 	interface Props {

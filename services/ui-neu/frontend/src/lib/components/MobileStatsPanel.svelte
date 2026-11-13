@@ -2,8 +2,8 @@
 	import { plural } from '$lib/utils/plural';
 	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
-	import { serviceRows } from '$lib/utils/header-status';
-	import { countRipping } from '$lib/utils/job-status';
+	import { serviceRows } from '$lib/dashboard/header-status';
+	import { countRipping } from '$lib/jobs/status';
 	import SidebarStats from './SidebarStats.svelte';
 
 	interface Props {

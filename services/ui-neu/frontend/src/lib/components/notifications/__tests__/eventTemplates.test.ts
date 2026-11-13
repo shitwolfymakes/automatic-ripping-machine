@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { spliceToken, withInput, withText } from '../eventTemplates';
+import { spliceToken, withInput, withText } from '../../../notifications/event-templates';
 
 describe('withInput', () => {
 	it('starts a new override set when there are none (undefined)', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readOnlyValue } from '../config-field';
+import { readOnlyValue } from '../../settings/config-field';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
 const f = (over: Partial<ConfigFieldMeta>): ConfigFieldMeta => ({

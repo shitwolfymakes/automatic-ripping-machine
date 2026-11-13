@@ -4,7 +4,7 @@ import type { DirectoryListing, FileEntry, FileRoot } from '$lib/api/files';
 vi.mock('$lib/api/files', () => ({ fetchRoots: vi.fn(), fetchDirectory: vi.fn() }));
 
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
-import { FilesBrowser } from '../filesBrowser.svelte';
+import { FilesBrowser } from '../files-browser.svelte';
 
 const mockRoots = vi.mocked(fetchRoots);
 const mockDir = vi.mocked(fetchDirectory);

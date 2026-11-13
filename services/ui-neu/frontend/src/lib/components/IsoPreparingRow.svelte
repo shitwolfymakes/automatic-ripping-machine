@@ -7,7 +7,7 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { addToast } from '$lib/stores/toast.svelte';
-	import { isoPhaseLabel } from '$lib/utils/iso-phase';
+	import { isoPhaseLabel } from '$lib/drives/iso-phase';
 
 	/**
 	 * An ISO rip before its job exists: the ripper is scanning the image, or

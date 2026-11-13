@@ -6,8 +6,8 @@ import type { DirectoryListing, FileEntry } from '$lib/api/files';
 vi.mock('$lib/api/files', () => ({ fetchRoots: vi.fn(), fetchDirectory: vi.fn() }));
 
 import { fetchDirectory } from '$lib/api/files';
-import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
-import { MovePicker } from '$lib/stores/movePicker.svelte';
+import { FilesBrowser } from '$lib/stores/files-browser.svelte';
+import { MovePicker } from '$lib/stores/move-picker.svelte';
 import FileMoveDialog from '../FileMoveDialog.svelte';
 
 const mockDir = vi.mocked(fetchDirectory);

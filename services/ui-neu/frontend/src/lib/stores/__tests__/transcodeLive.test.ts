@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WSEnvelope } from '$lib/api/ws';
-import { liveSample } from '$lib/utils/transcode-progress';
-import { TranscodeLive } from '../transcodeLive.svelte';
+import { liveSample } from '$lib/transcode/progress';
+import { TranscodeLive } from '../transcode-live.svelte';
 
 const wsHandlers = new Map<string, (env: WSEnvelope) => void>();
 vi.mock('$lib/api/ws', () => ({

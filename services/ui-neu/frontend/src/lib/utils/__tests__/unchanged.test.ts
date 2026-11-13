@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unchanged } from '../unchanged';
+import { unchanged } from '../../jobs/unchanged';
 
 describe('unchanged', () => {
 	it('treats equal arrays as unchanged', () => {

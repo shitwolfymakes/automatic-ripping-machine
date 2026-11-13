@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PendingKeys } from '../pendingKeys.svelte';
+import { PendingKeys } from '../../../settings/pending-keys.svelte';
 
 function deferred<T>() {
 	let resolve!: (v: T) => void;

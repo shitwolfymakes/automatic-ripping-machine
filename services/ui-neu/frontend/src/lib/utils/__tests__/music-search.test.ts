@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '../music-search';
+import { buildSearchOpts, countActiveFilters, type MusicSearchFilters } from '../../music/search';
 
 const none: MusicSearchFilters = {
 	artist: '',

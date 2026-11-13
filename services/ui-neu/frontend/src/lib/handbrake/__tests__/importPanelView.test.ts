@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, ImportedPresetView } from '$lib/types/api.gen';
-import { importPanelView, presetPickView } from '../importPanelView';
+import { importPanelView, presetPickView } from '../import-panel-view';
 
 const schema = { handbrake_tag: '1.9.0' } as HandbrakeSchemaSlimView;
 

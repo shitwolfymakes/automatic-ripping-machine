@@ -7,7 +7,7 @@
 	import CloseButton from '$lib/components/CloseButton.svelte';
 	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
-	import { TimedFeedback } from './timedFeedback.svelte';
+	import { TimedFeedback } from '../../settings/timed-feedback.svelte';
 	import FeedbackAlert from './FeedbackAlert.svelte';
 
 	let users = $state<UserView[]>([]);

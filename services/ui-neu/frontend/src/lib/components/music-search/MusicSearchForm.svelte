@@ -2,13 +2,13 @@
 	// The music search's query form, with the artist, the four filters, the
 	// match-track-count box, Clear, and Enter to search.
 	import type { JobView } from '$lib/types/api.gen';
-	import { readJobMetadata } from '$lib/utils/job-metadata';
+	import { readJobMetadata } from '$lib/jobs/metadata';
 	import {
 		buildSearchOpts,
 		countActiveFilters,
 		type MusicSearchFilters,
 		type MusicSearchOpts
-	} from '$lib/utils/music-search';
+	} from '$lib/music/search';
 
 	interface Props {
 		/** The job whose title and metadata seed the query and the artist. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hintIgnored, withHintIgnored, enabledLabels, previewRows, isEmptyList } from '../identity-card';
+import { hintIgnored, withHintIgnored, enabledLabels, previewRows, isEmptyList } from '../../jobs/identity-card';
 import { IDENTITY_METAS, IDENTITY_DEFAULTS } from './fixtures/identity-metas';
 
 const v = (over: Record<string, unknown> = {}) => ({ ...IDENTITY_DEFAULTS, ...over });

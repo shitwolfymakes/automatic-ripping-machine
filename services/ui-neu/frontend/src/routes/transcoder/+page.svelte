@@ -5,10 +5,10 @@
 	import { fetchTranscoderStats } from '$lib/api/transcoder';
 	import { fadeIn, fadeOut } from '$lib/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache } from '$lib/stores/transcoder';
-	import { GpuInventory } from '$lib/stores/gpuInventory.svelte';
-	import { TranscodeJobs } from '$lib/stores/transcodeJobs.svelte';
-	import { TranscodeTaskActions } from '$lib/stores/transcodeTaskActions.svelte';
-	import { taskCount } from '$lib/utils/transcode-stats';
+	import { GpuInventory } from '$lib/stores/gpu-inventory.svelte';
+	import { TranscodeJobs } from '$lib/stores/transcode-jobs.svelte';
+	import { TranscodeTaskActions } from '$lib/stores/transcode-task-actions.svelte';
+	import { taskCount } from '$lib/transcode/stats';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 	import TranscoderUnavailable from '$lib/components/transcoder/TranscoderUnavailable.svelte';
 	import TranscoderStatsSkeleton from '$lib/components/transcoder/TranscoderStatsSkeleton.svelte';

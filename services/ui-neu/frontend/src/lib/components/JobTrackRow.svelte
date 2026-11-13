@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { posterSrc, posterFallback } from '$lib/utils/poster';
+	import { posterSrc, posterFallback } from '$lib/match/poster';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import TrackTitleSearch from '$lib/components/TrackTitleSearch.svelte';
-	import { formatFps } from '$lib/utils/fps';
-	import { trackKindLabel, trackSizeLabel } from '$lib/utils/track-fields';
+	import { formatFps } from '$lib/transcode/fps';
+	import { trackKindLabel, trackSizeLabel } from '$lib/jobs/track-fields';
 	import { formatTrackLength } from '$lib/utils/format';
 	import { isAdmin } from '$lib/stores/auth';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';

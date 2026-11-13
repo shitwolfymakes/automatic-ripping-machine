@@ -6,14 +6,14 @@ vi.mock('$lib/api/themes', () => ({
 }));
 
 const loadThemesMock = vi.fn();
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return { colorScheme: writable('blue'), loadThemesFromApi: (...a: unknown[]) => loadThemesMock(...a) };
 });
 
 import { get } from 'svelte/store';
-import { colorScheme } from '$lib/stores/colorScheme';
-import { UserThemes } from '$lib/stores/userThemes.svelte';
+import { colorScheme } from '$lib/stores/color-scheme';
+import { UserThemes } from '$lib/stores/user-themes.svelte';
 
 let confirmSpy: ReturnType<typeof vi.spyOn>;
 

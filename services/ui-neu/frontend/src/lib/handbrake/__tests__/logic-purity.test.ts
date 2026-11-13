@@ -11,7 +11,7 @@ vi.mock('$lib/api/client', () => {
 	return {};
 });
 
-const MODULES = ['../draft', '../draft-rules', '../base-values', '../visibility', '../display', '../panelView'];
+const MODULES = ['../draft', '../draft-rules', '../base-values', '../visibility', '../display', '../panel-view'];
 
 describe('preset sidebar logic purity', () => {
 	it.each(MODULES)('%s loads without the encoders store or the API client', async (path) => {

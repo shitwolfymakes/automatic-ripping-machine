@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '../config-payload';
+import { buildConfigPayload, mergeConfigValues, mergeSavedPayload } from '../../settings/config-payload';
 import { HIDDEN_SECRET } from '$lib/api/config';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 

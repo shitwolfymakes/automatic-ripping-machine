@@ -33,7 +33,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return { schemeLocksMode: writable(false) };
 });
@@ -51,9 +51,9 @@ import HeaderActions from '../HeaderActions.svelte';
 import * as authModule from '$lib/stores/auth';
 import { dashboard } from '$lib/stores/dashboard';
 import { theme, toggleTheme } from '$lib/stores/theme';
-import { schemeLocksMode } from '$lib/stores/colorScheme';
+import { schemeLocksMode } from '$lib/stores/color-scheme';
 import { setRippingEnabled } from '$lib/api/config';
-import { showIsoPicker, isoPickerMode } from '$lib/stores/isoPicker';
+import { showIsoPicker, isoPickerMode } from '$lib/stores/iso-picker';
 
 const setSession = (authModule as unknown as { __setSession: (k: 'admin' | 'user' | 'guest') => void }).__setSession;
 

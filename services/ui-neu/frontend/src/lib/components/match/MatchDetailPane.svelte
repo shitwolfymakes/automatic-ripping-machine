@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import PosterImage from '$lib/components/PosterImage.svelte';
-	import { candidateSubtitle, formatVotes, isSeriesKind, RATING_LABEL } from '$lib/utils/match';
+	import { candidateSubtitle, formatVotes, isSeriesKind, RATING_LABEL } from '$lib/match/match';
 
 	interface Props {
 		candidate: MetadataCandidate;

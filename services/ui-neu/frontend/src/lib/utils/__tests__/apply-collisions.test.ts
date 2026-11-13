@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import { collisionsFromApplyError } from '$lib/utils/apply-collisions';
+import { collisionsFromApplyError } from '$lib/sessions/apply-collisions';
 
 const collision = { output_path: '/out/a.mkv', reason: 'on_disk' } as any;
 

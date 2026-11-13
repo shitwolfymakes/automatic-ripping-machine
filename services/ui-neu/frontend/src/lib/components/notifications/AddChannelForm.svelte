@@ -9,8 +9,8 @@
 	import AddChannelFooter from './AddChannelFooter.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
-	import { missingRequirements } from './channelHelpers';
-	import type { AddChannelBody } from './channelActions';
+	import { missingRequirements } from '../../notifications/channel-helpers';
+	import type { AddChannelBody } from '../../notifications/channel-actions';
 	import Glyph from '$lib/components/Glyph.svelte';
 
 	// `compact` (setup walkthrough): a service channel only, no header, no

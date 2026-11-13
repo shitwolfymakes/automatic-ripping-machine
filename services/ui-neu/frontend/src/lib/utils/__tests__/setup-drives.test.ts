@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IsoLibraryListing, SystemDiagnosticsResponse } from '$lib/types/api.gen';
-import { RIPPER_DOWN_REASON, enrollBlockReason, isoStatus } from '../setup-drives';
+import { RIPPER_DOWN_REASON, enrollBlockReason, isoStatus } from '../../drives/setup-drives';
 
 function diagnostics(checks: Array<{ name: string; status: string }>): SystemDiagnosticsResponse {
 	return { status: 'ok', checks, paths: [] } as unknown as SystemDiagnosticsResponse;

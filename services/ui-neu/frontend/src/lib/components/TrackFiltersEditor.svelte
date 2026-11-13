@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Ported from the TrackFiltersEditor component of the removed Vue UI.
 	// Model is the `track_filters_json` shape; all conditions are ANDed.
-	import { parseDuration, parseIndexList, type TrackFilters } from '$lib/utils/track-filters';
+	import { parseDuration, parseIndexList, type TrackFilters } from '$lib/jobs/track-filters';
 
 	let { value, onchange }: { value: TrackFilters; onchange: (v: TrackFilters) => void } = $props();
 

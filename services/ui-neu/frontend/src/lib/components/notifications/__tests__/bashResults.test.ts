@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { armContext, failedPreview, failedRun, incompleteInput, isCustomized, runSummary } from '../bashResults';
+import {
+	armContext,
+	failedPreview,
+	failedRun,
+	incompleteInput,
+	isCustomized,
+	runSummary
+} from '../../../notifications/bash-results';
 
 const inputs = [{ key: 'TO', label: 'Recipient' }];
 

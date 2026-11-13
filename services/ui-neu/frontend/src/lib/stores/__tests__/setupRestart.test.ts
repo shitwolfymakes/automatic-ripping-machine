@@ -9,7 +9,7 @@ vi.mock('$app/navigation', () => ({
 	goto: (...a: unknown[]) => gotoMock(...a)
 }));
 
-import { SetupRestart } from '$lib/stores/setupRestart.svelte';
+import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 
 beforeEach(() => {
 	restartSetupMock.mockReset();

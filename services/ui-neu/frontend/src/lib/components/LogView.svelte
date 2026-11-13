@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
 	import type { LogEntry } from '$lib/api/logs';
-	import { logService, serviceLabel } from '$lib/utils/log-service';
+	import { logService, serviceLabel } from '$lib/logs/service';
 	import {
 		chipBackground,
 		chipText,
@@ -13,11 +13,11 @@
 		levelTone,
 		type LogLevelFilter,
 		type LogServiceFilter
-	} from '$lib/utils/log-view';
+	} from '$lib/logs/view';
 	import { isTextField } from '$lib/utils/text-field';
-	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
-	import { ClipboardCopy } from '$lib/stores/clipboardCopy.svelte';
-	import { FollowScroll } from '$lib/stores/followScroll.svelte';
+	import { uiPrefs, setUiPref } from '$lib/stores/ui-prefs';
+	import { ClipboardCopy } from '$lib/stores/clipboard-copy.svelte';
+	import { FollowScroll } from '$lib/stores/follow-scroll.svelte';
 	import LogSearchField from '$lib/components/log-view/LogSearchField.svelte';
 	import LogSegmentGroup from '$lib/components/log-view/LogSegmentGroup.svelte';
 

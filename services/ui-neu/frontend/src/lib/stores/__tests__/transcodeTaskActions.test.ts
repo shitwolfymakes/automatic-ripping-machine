@@ -6,7 +6,7 @@ vi.mock('$lib/api/transcoder', () => ({
 }));
 
 import { retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
-import { TranscodeTaskActions } from '../transcodeTaskActions.svelte';
+import { TranscodeTaskActions } from '../transcode-task-actions.svelte';
 
 describe('TranscodeTaskActions', () => {
 	let reload: Mock<() => void>;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { deriveLifecycle, lifecycleColorVar } from '$lib/utils/job-lifecycle';
+	import { deriveLifecycle, lifecycleColorVar } from '$lib/jobs/lifecycle';
 	import { Pause } from 'lucide-svelte';
 
 	interface Props {

@@ -14,7 +14,7 @@ async function load(seed?: { tab: string; data: TranscodeTaskView[] }) {
 	vi.resetModules();
 	const cache = await import('$lib/stores/transcoder');
 	if (seed) cache.setJobsCache(seed.tab, seed.data);
-	const { TranscodeJobs } = await import('$lib/stores/transcodeJobs.svelte');
+	const { TranscodeJobs } = await import('$lib/stores/transcode-jobs.svelte');
 	return { jobs: new TranscodeJobs(), cache };
 }
 

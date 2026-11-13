@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { theme, toggleTheme } from '$lib/stores/theme';
-	import { schemeLocksMode } from '$lib/stores/colorScheme';
+	import { schemeLocksMode } from '$lib/stores/color-scheme';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { setRippingEnabled } from '$lib/api/config';
-	import { isoPickerMode, showIsoPicker } from '$lib/stores/isoPicker';
+	import { isoPickerMode, showIsoPicker } from '$lib/stores/iso-picker';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import Flyout from '$lib/components/Flyout.svelte';
 	import FlyoutItem from '$lib/components/FlyoutItem.svelte';

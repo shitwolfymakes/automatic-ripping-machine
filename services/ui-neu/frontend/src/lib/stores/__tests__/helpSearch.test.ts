@@ -5,7 +5,7 @@ vi.mock('$lib/docs/api', async () => {
 	return { ...actual, loadDocsSearch: vi.fn() };
 });
 
-import { HelpSearch } from '../helpSearch.svelte';
+import { HelpSearch } from '../help-search.svelte';
 import { loadDocsSearch } from '$lib/docs/api';
 import MiniSearch from 'minisearch';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { EpisodeSourceOption } from '../episode-sources';
-import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '../rerun-form';
+import type { EpisodeSourceOption } from '../../episodes/sources';
+import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '../../jobs/rerun-form';
 
 const BARE: RerunForm = { source: 'tvmaze', season: null, disc: null, tolerance: null };
 

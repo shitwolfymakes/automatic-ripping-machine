@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The log terminal's search box, with its match count, clear button and
 	// match-case toggle.
-	import { matchLabel } from '$lib/utils/log-view';
+	import { matchLabel } from '$lib/logs/view';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 
 	interface Props {

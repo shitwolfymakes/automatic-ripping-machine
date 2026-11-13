@@ -4,7 +4,7 @@
 	// step, with storage and services as cards and fix commands for what fails.
 	import type { SystemDiagnosticsResponse, StorageRoot } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
-	import { checkDetail, checkLabel, healthTally, otherChecks, serviceChecks } from '$lib/utils/system-health';
+	import { checkDetail, checkLabel, healthTally, otherChecks, serviceChecks } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
 	import ServiceItem from './ServiceItem.svelte';

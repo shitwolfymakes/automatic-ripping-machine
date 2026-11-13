@@ -3,7 +3,7 @@ import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
-import { blockFields, type EncoderCard } from '$lib/handbrake/encoderCards';
+import { blockFields, type EncoderCard } from '$lib/handbrake/encoder-cards';
 import EncoderBlockCard from '../EncoderBlockCard.svelte';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;

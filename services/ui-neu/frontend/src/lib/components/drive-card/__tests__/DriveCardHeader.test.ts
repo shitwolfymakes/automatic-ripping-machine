@@ -5,7 +5,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import DriveCardHeader from '../DriveCardHeader.svelte';
 import type { DriveView as Drive } from '$lib/types/api.gen';
 import { createDrive } from '../../__fixtures__/drive';
-import { DETACHED_LABEL } from '$lib/utils/drives';
+import { DETACHED_LABEL } from '$lib/drives/drives';
 
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve())

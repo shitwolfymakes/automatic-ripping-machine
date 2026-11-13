@@ -8,10 +8,10 @@
 	import { clearEpisodeMatch, type EpisodeSource } from '$lib/api/identity';
 	import { updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
-	import { EpisodeIdentity } from '$lib/stores/episodeIdentity.svelte';
-	import { EpisodeLists } from '$lib/stores/episodeLists.svelte';
-	import { MatchRunner } from '$lib/stores/matchRunner.svelte';
-	import { SeasonList } from '$lib/stores/seasonList.svelte';
+	import { EpisodeIdentity } from '$lib/stores/episode-identity.svelte';
+	import { EpisodeLists } from '$lib/stores/episode-lists.svelte';
+	import { MatchRunner } from '$lib/stores/match-runner.svelte';
+	import { SeasonList } from '$lib/stores/season-list.svelte';
 	import {
 		panelState,
 		buildRows,
@@ -23,16 +23,16 @@
 		usedEpisodeNumbers,
 		ROLE_OPTIONS,
 		type EpisodeRow
-	} from './episodeModel';
+	} from '../../episodes/episode-model';
 	import {
 		activeSource,
 		episodeSourceOptions,
 		pickerSourceFor,
 		shortSourceLabel,
 		SOURCE_LABEL
-	} from '$lib/utils/episode-sources';
-	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/utils/episode-hold';
-	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
+	} from '$lib/episodes/sources';
+	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/episodes/hold';
+	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/jobs/rerun-form';
 	import Glyph from '../Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import EpisodeStateAlert from './EpisodeStateAlert.svelte';

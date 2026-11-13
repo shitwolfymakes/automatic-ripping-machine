@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { posterSrc, posterFallback, POSTER_PLACEHOLDER } from '../utils/poster';
+import { posterSrc, posterFallback, POSTER_PLACEHOLDER } from '../match/poster';
 
 describe('posterSrc', () => {
 	it('returns placeholder for null', () => {

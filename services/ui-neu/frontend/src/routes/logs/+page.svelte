@@ -4,8 +4,8 @@
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
 	import LogJobRow from '$lib/components/logs/LogJobRow.svelte';
-	import { filterLogJobs, logCountText, orderByLastModified } from '$lib/utils/log-list';
-	import { LogListing } from '$lib/stores/logListing.svelte';
+	import { filterLogJobs, logCountText, orderByLastModified } from '$lib/logs/list';
+	import { LogListing } from '$lib/stores/log-listing.svelte';
 
 	const COLUMNS = ['Title', 'Status', 'Type', 'Disc', 'Drive', 'Last modified'];
 

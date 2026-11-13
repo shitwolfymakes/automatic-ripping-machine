@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDuration, parseIndexList, trackFiltersBody } from '../track-filters';
+import { parseDuration, parseIndexList, trackFiltersBody } from '../../jobs/track-filters';
 
 describe('parseIndexList', () => {
 	it('splits on commas', () => {

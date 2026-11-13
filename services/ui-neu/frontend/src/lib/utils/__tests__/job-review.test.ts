@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { identitySuggestionOf, isIdentifyMiss, missReason, reviewPhaseBadge } from '$lib/utils/job-review';
+import { identitySuggestionOf, isIdentifyMiss, missReason, reviewPhaseBadge } from '$lib/jobs/review';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 

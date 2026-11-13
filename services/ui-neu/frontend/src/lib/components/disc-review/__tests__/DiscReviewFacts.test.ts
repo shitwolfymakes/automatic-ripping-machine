@@ -6,9 +6,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
 import type { JobView } from '$lib/types/api.gen';
-import { readJobMetadata } from '$lib/utils/job-metadata';
-import type { EpisodeStatus } from '$lib/utils/episode-status';
-import type { SourceRow } from '$lib/utils/review-card';
+import { readJobMetadata } from '$lib/jobs/metadata';
+import type { EpisodeStatus } from '$lib/episodes/status';
+import type { SourceRow } from '$lib/jobs/review-card';
 import { createJob } from '../../__fixtures__/job';
 import DiscReviewFacts from '../DiscReviewFacts.svelte';
 

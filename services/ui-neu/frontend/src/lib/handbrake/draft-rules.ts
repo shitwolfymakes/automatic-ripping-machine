@@ -5,8 +5,8 @@ import type { HandbrakeSchemaSlimView, TranscodeTool } from '$lib/types/api.gen'
 import { baseVideoEncoder } from './base-values';
 import type { Draft, PresetField } from './draft';
 import { PRESET_ENCODER_ID } from './encoder-availability';
-import { encoderCards } from './encoderCards';
-import { pruneUnreachable } from './settingsEdit';
+import { encoderCards } from './encoder-cards';
+import { pruneUnreachable } from './settings-edit';
 
 // The built-in presets loaded so far, by name.
 export type Bases = Record<string, Record<string, unknown>>;

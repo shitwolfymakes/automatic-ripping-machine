@@ -5,8 +5,8 @@
 	// immutable on edit. `encoder` is one arm_common.encoders catalog id.
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
-	import { encoderGroups } from '$lib/utils/encoder-groups';
-	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panelView';
+	import { encoderGroups } from '$lib/transcode/encoder-groups';
+	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panel-view';
 	import { CLEARED_NOTE } from '$lib/handbrake/display';
 	import { isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/draft';
 	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';

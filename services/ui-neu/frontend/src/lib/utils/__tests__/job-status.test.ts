@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	effectiveJobStatus,
-	isPartialComplete,
-	hasTitleMatch,
-	isAwaitingAction,
-	countRipping
-} from '$lib/utils/job-status';
+import { effectiveJobStatus, isPartialComplete, hasTitleMatch, isAwaitingAction, countRipping } from '$lib/jobs/status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
@@ -69,7 +63,7 @@ describe('hasTitleMatch', () => {
 	});
 });
 
-import { transcodeColumnStatus } from '$lib/utils/job-status';
+import { transcodeColumnStatus } from '$lib/jobs/status';
 
 const tp = (state: string, tasks_total: number, tasks_done: number, tasks_failed: number) =>
 	({ status: 'ripped', transcode_progress: { state, tasks_total, tasks_done, tasks_failed, percent: 0 } }) as any;

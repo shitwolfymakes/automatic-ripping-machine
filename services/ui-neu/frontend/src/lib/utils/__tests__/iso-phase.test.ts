@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isoPhaseLabel } from '../iso-phase';
+import { isoPhaseLabel } from '../../drives/iso-phase';
 
 describe('isoPhaseLabel', () => {
 	it('labels an image scan', () => {

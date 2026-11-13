@@ -16,7 +16,7 @@ vi.mock('$lib/features', async (importOriginal) => {
 
 import { fetchOrphanFolders, deleteFolder, bulkDeleteFolders } from '$lib/api/maintenance';
 import { features } from '$lib/features';
-import { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
+import { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
 import OrphanFoldersModal from '../OrphanFoldersModal.svelte';
 
 const mockFetch = vi.mocked(fetchOrphanFolders);

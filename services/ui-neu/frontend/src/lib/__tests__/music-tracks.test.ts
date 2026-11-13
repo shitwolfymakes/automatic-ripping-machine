@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractMusicTracks } from '../utils/music-tracks';
+import { extractMusicTracks } from '../music/tracks';
 
 describe('extractMusicTracks', () => {
 	it('returns [] when metadata has no music section or no tracks', () => {

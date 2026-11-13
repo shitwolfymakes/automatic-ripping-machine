@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FollowScroll } from '../followScroll.svelte';
+import { FollowScroll } from '../follow-scroll.svelte';
 
 function makeView(scrollTop: number): HTMLDivElement {
 	const view = document.createElement('div');

@@ -2,10 +2,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import RipPresetForm from '../RipPresetForm.svelte';
 import RipPresetFormHarness from './RipPresetFormHarness.svelte';
-import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
+import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
 import type { RipPresetView } from '$lib/types/api.gen';
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn()
 }));

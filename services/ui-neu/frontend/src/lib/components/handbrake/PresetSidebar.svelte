@@ -12,11 +12,11 @@
 	import PresetBlock from './PresetBlock.svelte';
 	import SettingsPanel from './SettingsPanel.svelte';
 	import ImportPanel from './ImportPanel.svelte';
-	import { fetchBuiltinPreset } from '$lib/api/handbrakeSchema';
-	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
-	import { handbrakeSchema } from '$lib/stores/handbrakeSchema.svelte';
+	import { fetchBuiltinPreset } from '$lib/api/handbrake-schema';
+	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcode-presets';
+	import { handbrakeSchema } from '$lib/stores/handbrake-schema.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
-	import { PRESET_NAME_ID, presetErrors, presetSidebarView } from '$lib/handbrake/panelView';
+	import { PRESET_NAME_ID, presetErrors, presetSidebarView } from '$lib/handbrake/panel-view';
 	import type { TabId } from '$lib/handbrake/fields';
 	import { focusField, focusFirstInvalid } from '$lib/utils/formValidation';
 	import {
@@ -31,7 +31,7 @@
 	import { draftToCreate, draftToUpdate, initialDraft, showTabs, type PresetField } from '$lib/handbrake/draft';
 	import { panelCards, type FilterState } from '$lib/handbrake/visibility';
 	import { saveFailure, type SaveFailure } from '$lib/api/save-failure';
-	import { applyProposal } from '$lib/handbrake/importReview';
+	import { applyProposal } from '$lib/handbrake/import-review';
 	import { firstIssueTarget, unplacedIssues, unplacedText, type IssueTarget } from '$lib/handbrake/issuePlacement';
 	import type {
 		HandbrakeSchemaSlimView,

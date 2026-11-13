@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { numberInputText, parsePrescanInput, parseRipSpeed, PRESCAN_FIELDS, prescanInputTexts } from './drive-settings';
+import {
+	numberInputText,
+	parsePrescanInput,
+	parseRipSpeed,
+	PRESCAN_FIELDS,
+	prescanInputTexts
+} from '../drives/settings';
 
 describe('prescanInputTexts', () => {
 	it('shows four blank inputs when there is no drive', () => {

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import type { SettingsData } from '$lib/api/settings';
-	import type { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
-	import type { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
-	import { partitionDrives } from '$lib/utils/drives';
+	import type { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
+	import type { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
+	import { partitionDrives } from '$lib/drives/drives';
 	import DriveCard from '$lib/components/DriveCard.svelte';
 	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';

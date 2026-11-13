@@ -3,7 +3,7 @@
 	import { slide } from 'svelte/transition';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { formatDateTime } from '$lib/utils/format';
-	import type { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
+	import type { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
 
 	interface Props {
 		diagnostics: DriveDiagnostics;

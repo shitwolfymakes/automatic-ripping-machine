@@ -9,8 +9,8 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 import { apiFetch, get, post } from '$lib/api/client';
-import { fetchBuiltinPreset, fetchHandbrakeSchema, refreshHandbrakeSchema } from '../handbrakeSchema';
-import { parseHandbrakeImport } from '../transcodePresets';
+import { fetchBuiltinPreset, fetchHandbrakeSchema, refreshHandbrakeSchema } from '../handbrake-schema';
+import { parseHandbrakeImport } from '../transcode-presets';
 
 beforeEach(() => vi.clearAllMocks());
 

@@ -2,7 +2,7 @@
 	import { plural } from '$lib/utils/plural';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { IsoStatus } from '$lib/utils/setup-drives';
+	import type { IsoStatus } from '$lib/drives/setup-drives';
 
 	// Shows whether the ISO library is on, or how to turn it on.
 	let { iso }: { iso: IsoStatus } = $props();

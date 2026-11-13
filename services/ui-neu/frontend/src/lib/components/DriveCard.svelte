@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A drive's card: the skeleton while it loads, then the essentials or the full variant.
 	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
-	import type { PrescanKey } from '$lib/utils/drive-settings';
+	import type { PrescanKey } from '$lib/drives/settings';
 	import DriveCardEssentials from './drive-card/DriveCardEssentials.svelte';
 	import DriveCardFull from './drive-card/DriveCardFull.svelte';
 	import SkeletonCard from './SkeletonCard.svelte';

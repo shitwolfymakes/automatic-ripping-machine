@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { PresetSave } from '../presetSave.svelte';
+import { PresetSave } from '../preset-save.svelte';
 
 describe('PresetSave', () => {
 	it('is idle with no error before a run', () => {

@@ -22,7 +22,7 @@ import {
 	STORAGE_HELP,
 	STORAGE_LABELS,
 	SYSTEM_STEP_CHECKS
-} from '../system-health';
+} from '../../dashboard/system-health';
 
 const check = (over: Partial<SystemDiagnosticCheck>): SystemDiagnosticCheck => ({
 	name: 'transcoder',

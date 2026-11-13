@@ -5,11 +5,11 @@
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
-	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/utils/search-providers';
+	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/settings/search-providers';
 	import TitleSourcePicker from './title-search/TitleSourcePicker.svelte';
-	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadataSearch.svelte';
-	import { TitleEditDraft } from '$lib/stores/titleEditDraft.svelte';
-	import { TitleMatchApply } from '$lib/stores/titleMatchApply.svelte';
+	import { MetadataSearch, IMDB_LOOKUP, type SearchMessages } from '$lib/stores/metadata-search.svelte';
+	import { TitleEditDraft } from '$lib/stores/title-edit-draft.svelte';
+	import { TitleMatchApply } from '$lib/stores/title-match-apply.svelte';
 
 	interface Props {
 		job: JobView;

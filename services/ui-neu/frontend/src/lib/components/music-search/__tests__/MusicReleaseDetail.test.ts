@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import type { MetadataReleaseDetail } from '$lib/types/api.gen';
-import type { TrackPair } from '$lib/utils/music-release';
-import { MusicReleaseApply } from '$lib/stores/musicReleaseApply.svelte';
-import { MusicReleaseFields } from '$lib/stores/musicReleaseFields.svelte';
+import type { TrackPair } from '$lib/music/release';
+import { MusicReleaseApply } from '$lib/stores/music-release-apply.svelte';
+import { MusicReleaseFields } from '$lib/stores/music-release-fields.svelte';
 import { createJob } from '../../__fixtures__/job';
 import MusicReleaseDetail from '../MusicReleaseDetail.svelte';
 

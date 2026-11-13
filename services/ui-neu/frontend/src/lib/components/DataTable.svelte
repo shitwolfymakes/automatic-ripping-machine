@@ -5,7 +5,7 @@
 	import type { Snippet } from 'svelte';
 	import MediaPill from '$lib/components/MediaPill.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
-	import { alignClass, cellView, type BadgeTone, type TableColumn } from '$lib/components/dataTable';
+	import { alignClass, cellView, type BadgeTone, type TableColumn } from '$lib/components/data-table';
 
 	interface Props {
 		columns: TableColumn<R>[];

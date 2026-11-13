@@ -3,9 +3,9 @@
 	import InlineField from '$lib/components/InlineField.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import type { JobDetail } from '$lib/stores/jobDetail.svelte';
+	import type { JobDetail } from '$lib/stores/job-detail.svelte';
 	import type { JobView } from '$lib/types/api.gen';
-	import { effectiveJobStatus } from '$lib/utils/job-status';
+	import { effectiveJobStatus } from '$lib/jobs/status';
 
 	interface Props {
 		job: JobView;

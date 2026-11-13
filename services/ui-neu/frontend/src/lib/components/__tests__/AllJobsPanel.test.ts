@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import AllJobsPanel from '../AllJobsPanel.svelte';
-import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
+import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 import { createJob } from '$lib/components/__fixtures__/job';
 
 vi.mock('$lib/stores/auth', async () => {
@@ -62,7 +62,7 @@ async function renderLoaded(jobs: JobView[] = [JOB], total = jobs.length) {
 describe('AllJobsPanel', () => {
 	beforeEach(async () => {
 		await setRole('admin');
-		const { setUiPref } = await import('$lib/stores/uiPrefs');
+		const { setUiPref } = await import('$lib/stores/ui-prefs');
 		setUiPref('dashboardView', 'card');
 	});
 
@@ -100,7 +100,7 @@ describe('AllJobsPanel', () => {
 	});
 
 	it('opens in table view when the Settings default says so', async () => {
-		const { setUiPref } = await import('$lib/stores/uiPrefs');
+		const { setUiPref } = await import('$lib/stores/ui-prefs');
 		setUiPref('dashboardView', 'table');
 		await renderLoaded();
 		expect(screen.getByText('Table')).toHaveAttribute('aria-pressed', 'true');
@@ -108,7 +108,7 @@ describe('AllJobsPanel', () => {
 	});
 
 	it('toggles between cards and table without touching the saved default', async () => {
-		const { uiPrefs } = await import('$lib/stores/uiPrefs');
+		const { uiPrefs } = await import('$lib/stores/ui-prefs');
 		const { get } = await import('svelte/store');
 		await renderLoaded();
 		expect(screen.getByText('Cards')).toHaveAttribute('aria-pressed', 'true');

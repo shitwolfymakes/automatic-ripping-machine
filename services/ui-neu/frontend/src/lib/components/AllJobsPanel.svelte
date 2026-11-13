@@ -4,8 +4,8 @@
 	import { slide } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { bulkDeleteJobs } from '$lib/api/jobs';
-	import { bulkDeleteFeedback, type BulkFeedback } from '$lib/utils/bulk-delete-feedback';
-	import type { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
+	import { bulkDeleteFeedback, type BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
+	import type { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
 	import JobRow from '$lib/components/JobRow.svelte';
 	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
@@ -13,7 +13,7 @@
 	import JobPagination from '$lib/components/JobPagination.svelte';
 	import CloseButton from '$lib/components/CloseButton.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
-	import { uiPrefs } from '$lib/stores/uiPrefs';
+	import { uiPrefs } from '$lib/stores/ui-prefs';
 	import { isAdmin } from '$lib/stores/auth';
 
 	let { jobs: jobsList }: { jobs: DashboardJobs } = $props();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MATCH_TONE, matchIndicator } from '../utils/track-match';
+import { MATCH_TONE, matchIndicator } from '../jobs/track-match';
 
 describe('MATCH_TONE', () => {
 	it('maps each match kind to its tone', () => {

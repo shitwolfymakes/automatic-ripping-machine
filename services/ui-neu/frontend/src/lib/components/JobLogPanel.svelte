@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
-	import { createJobLog } from '$lib/stores/jobLog.svelte';
-	import { isLive } from '$lib/utils/job-status-groups';
+	import { createJobLog } from '$lib/stores/job-log.svelte';
+	import { isLive } from '$lib/jobs/status-groups';
 	import type { JobView } from '$lib/types/api.gen';
 	import LogView from '$lib/components/LogView.svelte';
 

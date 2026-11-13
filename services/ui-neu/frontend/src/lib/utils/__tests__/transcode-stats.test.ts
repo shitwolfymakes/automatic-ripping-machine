@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { taskCount } from '$lib/utils/transcode-stats';
+import { taskCount } from '$lib/transcode/stats';
 import type { TranscodeStatsView } from '$lib/types/api.gen';
 
 describe('taskCount', () => {

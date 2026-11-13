@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { transcoderDotStatus, serviceRows, makemkvKeyTitle } from '../header-status';
+import { transcoderDotStatus, serviceRows, makemkvKeyTitle } from '../../dashboard/header-status';
 
 type Input = Parameters<typeof transcoderDotStatus>[0];
 

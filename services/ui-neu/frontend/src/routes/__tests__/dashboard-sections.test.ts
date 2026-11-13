@@ -42,7 +42,7 @@ vi.mock('$lib/stores/rips.svelte', () => ({
 	reconcileSubscriptions: h.reconcileSubscriptions
 }));
 
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: h.startRipperEvents,
 	// The review cards register listeners of their own besides the page's.
 	onRipperEvent: (cb: (ids: Set<string>, types: Map<string, Set<string>>) => void) => {

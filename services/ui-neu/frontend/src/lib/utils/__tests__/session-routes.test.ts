@@ -13,7 +13,7 @@ import {
 	sessionOptionLabel,
 	sessionsFor,
 	withRoute
-} from '../session-routes';
+} from '../../sessions/routes';
 
 function route(over: Partial<SessionRouteView>): SessionRouteView {
 	return {

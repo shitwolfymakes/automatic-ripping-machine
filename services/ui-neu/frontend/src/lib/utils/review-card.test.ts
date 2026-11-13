@@ -9,7 +9,7 @@ import {
 	reviewSourceRow,
 	reviewStatusLabel,
 	type StatusLabelFlags
-} from './review-card';
+} from '../jobs/review-card';
 
 const none: StatusLabelFlags = { previouslyRipped: false, suggestion: false, reviewGate: false, postRip: false };
 

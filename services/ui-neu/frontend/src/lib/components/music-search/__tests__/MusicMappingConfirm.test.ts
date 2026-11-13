@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import MusicMappingConfirm from '../MusicMappingConfirm.svelte';
-import type { TrackPair } from '$lib/utils/music-release';
-import type { MatchKind } from '$lib/utils/track-match';
+import type { TrackPair } from '$lib/music/release';
+import type { MatchKind } from '$lib/jobs/track-match';
 
 const pair = (index: number, seconds: number | null, title: string, lengthMs: number | null, match: MatchKind) =>
 	({

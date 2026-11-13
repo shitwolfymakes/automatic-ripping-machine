@@ -67,11 +67,11 @@ vi.mock('$lib/api/sessions', () => ({
 }));
 
 // ApplySessionDialog fetches the preset lists to enrich its recipe preview.
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([]))
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 
@@ -97,7 +97,7 @@ const ripperListeners: RipperListener[] = [];
 function fireRipperEvent(jobId: string, eventType: string) {
 	ripperListeners.forEach((fn) => fn(new Set([jobId]), new Map([[jobId, new Set([eventType])]])));
 }
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: (fn: RipperListener) => {
 		ripperListeners.push(fn);

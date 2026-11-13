@@ -243,20 +243,20 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([])),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
@@ -279,7 +279,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -591,7 +591,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows "Locked by theme" when schemeLocksMode is true', async () => {
-			const { schemeLocksMode } = await import('$lib/stores/colorScheme');
+			const { schemeLocksMode } = await import('$lib/stores/color-scheme');
 			const { writable } = await import('svelte/store');
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });

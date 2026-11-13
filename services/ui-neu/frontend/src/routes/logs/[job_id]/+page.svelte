@@ -3,7 +3,7 @@
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
-	import { createJobLog } from '$lib/stores/jobLog.svelte';
+	import { createJobLog } from '$lib/stores/job-log.svelte';
 	import LogView from '$lib/components/LogView.svelte';
 
 	const DEFAULT_LIMIT = 1000;

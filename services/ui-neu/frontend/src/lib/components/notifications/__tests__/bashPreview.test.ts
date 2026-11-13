@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { BashPreviewRequest } from '$lib/api/channels';
-import { BashPreview } from '../bashPreview.svelte';
-import { failedPreview, failedRun } from '../bashResults';
+import { BashPreview } from '../../../notifications/bash-preview.svelte';
+import { failedPreview, failedRun } from '../../../notifications/bash-results';
 
 const previewBash = vi.fn();
 vi.mock('$lib/api/channels', async (orig) => ({

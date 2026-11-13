@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import RipPresetFormHarness from './RipPresetFormHarness.svelte';
-import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
+import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
 import type { RipPresetView } from '$lib/types/api.gen';
 
 // Pins for RipPresetForm's submit rules, beside RipPresetForm.test.ts. One
@@ -11,7 +11,7 @@ import type { RipPresetView } from '$lib/types/api.gen';
 //   derived from `!!preset`, so whenever it is true `preset` is set too and
 //   the else path (create) is only taken when `editing` is false.
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn()
 }));

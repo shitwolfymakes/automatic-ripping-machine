@@ -17,7 +17,7 @@ vi.mock('$lib/api/iso', () => ({
 	cancelIsoRip: (...a: unknown[]) => cancelIsoRipMock(...a)
 }));
 
-import { DiscReviewJobActions } from '$lib/stores/discReviewJobActions.svelte';
+import { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
 import { createJob } from '../../components/__fixtures__/job';
 
 const calls: string[] = [];

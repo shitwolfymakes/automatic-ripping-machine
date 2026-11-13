@@ -46,10 +46,10 @@ vi.mock('$lib/api/jobs', () => ({
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn(() => Promise.resolve([]))
 }));
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([]))
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([]))
 }));
 

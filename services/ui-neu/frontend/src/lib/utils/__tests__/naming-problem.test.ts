@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explainNamingProblem } from '../naming-problem';
+import { explainNamingProblem } from '../../jobs/naming-problem';
 
 const msg = (token: string) => `cannot resolve token {${token}} for job`;
 

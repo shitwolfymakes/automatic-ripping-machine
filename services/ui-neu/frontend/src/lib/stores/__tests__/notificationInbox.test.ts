@@ -13,7 +13,7 @@ vi.mock('$lib/api/notifications', () => ({
 	purgeNotifications: (...a: unknown[]) => purgeNotificationsMock(...a)
 }));
 
-import { NotificationInbox } from '$lib/stores/notificationInbox.svelte';
+import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 import type { NotificationInboxView } from '$lib/types/api.gen';
 
 function row(id: string, seen = false, cleared = false): NotificationInboxView {

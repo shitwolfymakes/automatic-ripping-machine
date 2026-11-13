@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FEEDBACK_MS, TimedFeedback } from '../timedFeedback.svelte';
+import { FEEDBACK_MS, TimedFeedback } from '../../../settings/timed-feedback.svelte';
 
 describe('TimedFeedback', () => {
 	beforeEach(() => {

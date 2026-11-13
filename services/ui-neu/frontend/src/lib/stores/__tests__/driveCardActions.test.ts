@@ -11,7 +11,7 @@ vi.mock('$lib/api/jobs', () => ({
 	triggerManual: (...a: unknown[]) => triggerManualMock(...a)
 }));
 
-import { DriveCardActions } from '$lib/stores/driveCardActions.svelte';
+import { DriveCardActions } from '$lib/stores/drive-card-actions.svelte';
 
 const refresh = vi.fn();
 

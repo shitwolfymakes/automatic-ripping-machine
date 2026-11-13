@@ -48,7 +48,7 @@ vi.mock('$lib/api/jobs', () => ({
 vi.mock('$lib/api/sessions', () => ({ fetchSessions: vi.fn() }));
 vi.mock('$lib/api/iso', () => ({ cancelIsoRip: vi.fn() }));
 
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: () => () => {}
 }));

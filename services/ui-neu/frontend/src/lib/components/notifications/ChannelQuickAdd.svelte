@@ -5,7 +5,12 @@
 	import { fetchServices, fetchEventTypes, type EventTypeInfo } from '$lib/api/channels';
 	import { saveArmConfig } from '$lib/api/settings';
 	import AddChannelForm from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, testUnsavedBody, type AddChannelBody } from './channelActions';
+	import {
+		createChannelFromBody,
+		runTest,
+		testUnsavedBody,
+		type AddChannelBody
+	} from '../../notifications/channel-actions';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 

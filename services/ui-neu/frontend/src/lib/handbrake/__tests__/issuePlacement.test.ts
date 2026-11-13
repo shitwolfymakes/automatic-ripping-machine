@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
-import type { EncoderCard } from '../encoderCards';
-import { AUDIO_LIST_ID } from '../audioTracks';
+import type { EncoderCard } from '../encoder-cards';
+import { AUDIO_LIST_ID } from '../audio-tracks';
 import {
 	firstIssueTarget,
 	issueTarget,

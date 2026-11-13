@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import EpisodeRows from '../episodes/EpisodeRows.svelte';
-import type { EpisodeRow } from '../episodes/episodeModel';
+import type { EpisodeRow } from '../../episodes/episode-model';
 
 // UI copy is ASCII: an empty value is "-", a trailing wait is "...", and joined
 // facts are separated by ", ". Comments and <style> blocks are not copy.

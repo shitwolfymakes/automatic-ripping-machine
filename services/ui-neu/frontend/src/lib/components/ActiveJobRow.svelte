@@ -5,12 +5,12 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import ActiveJobRowDetails from './active-job-row/ActiveJobRowDetails.svelte';
 	import { statusAccentVar, formatEta, formatTransfer } from '$lib/utils/format';
-	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import { isInProgress } from '$lib/utils/job-status-groups';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
+	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
+	import { isInProgress } from '$lib/jobs/status-groups';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import PosterImage from './PosterImage.svelte';
-	import { jobPoster } from '$lib/utils/poster';
+	import { jobPoster } from '$lib/match/poster';
 	import SkeletonCard from './SkeletonCard.svelte';
 	import IsoSourceChip from './IsoSourceChip.svelte';
 	import type { RipLiveProgress } from '$lib/stores/rips.svelte';

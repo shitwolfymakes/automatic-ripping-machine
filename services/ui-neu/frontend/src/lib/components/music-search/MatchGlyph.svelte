@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The glyph for one match kind, drawn inside a match cell.
-	import type { MatchKind } from '$lib/utils/track-match';
+	import type { MatchKind } from '$lib/jobs/track-match';
 	import Glyph from '../Glyph.svelte';
 
 	interface Props {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { JobPanels } from '$lib/stores/jobPanels.svelte';
+import { JobPanels } from '$lib/stores/job-panels.svelte';
 
 describe('JobPanels', () => {
 	it('starts with no panel open and no initial search type', () => {

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView, TrackView, ScanResult } from '$lib/types/api.gen';
-	import { DiscReviewData } from '$lib/stores/discReviewData.svelte';
-	import { DiscReviewJobActions } from '$lib/stores/discReviewJobActions.svelte';
-	import { parkedSessionLine } from '$lib/utils/parked-session';
-	import { readJobMetadata } from '$lib/utils/job-metadata';
-	import { episodeStatus } from '$lib/utils/episode-status';
-	import { handSetTrackCount } from '$lib/utils/track-fields';
-	import { identitySuggestionOf, previouslyRippedJobId, reviewPhaseBadge } from '$lib/utils/job-review';
-	import { appliedSessionName, reviewSourceRow, reviewStatusLabel } from '$lib/utils/review-card';
+	import { DiscReviewData } from '$lib/stores/disc-review-data.svelte';
+	import { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
+	import { parkedSessionLine } from '$lib/sessions/parked-session';
+	import { readJobMetadata } from '$lib/jobs/metadata';
+	import { episodeStatus } from '$lib/episodes/status';
+	import { handSetTrackCount } from '$lib/jobs/track-fields';
+	import { identitySuggestionOf, previouslyRippedJobId, reviewPhaseBadge } from '$lib/jobs/review';
+	import { appliedSessionName, reviewSourceRow, reviewStatusLabel } from '$lib/jobs/review-card';
 	import DiscReviewActions from './disc-review/DiscReviewActions.svelte';
 	import DiscReviewFacts from './disc-review/DiscReviewFacts.svelte';
 	import DiscReviewStatusBar from './disc-review/DiscReviewStatusBar.svelte';
@@ -24,9 +24,9 @@
 	import IdentitySuggestionBanner from './IdentitySuggestionBanner.svelte';
 	import MediaTypeSwitch from './episodes/MediaTypeSwitch.svelte';
 	import EpisodeMatchPanel from './episodes/EpisodeMatchPanel.svelte';
-	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
+	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episode-matching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import { ReviewSections } from '$lib/stores/reviewSections.svelte';
+	import { ReviewSections } from '$lib/stores/review-sections.svelte';
 
 	interface Props {
 		job?: JobView;

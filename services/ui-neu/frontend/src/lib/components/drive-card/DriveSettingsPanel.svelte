@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import { sessionOptionLabel } from '$lib/utils/session-routes';
+	import { sessionOptionLabel } from '$lib/sessions/routes';
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import {
@@ -11,7 +11,7 @@
 		prescanInputTexts,
 		type PrescanField,
 		type PrescanKey
-	} from '$lib/utils/drive-settings';
+	} from '$lib/drives/settings';
 	import SlideOver from '../SlideOver.svelte';
 
 	interface Props {

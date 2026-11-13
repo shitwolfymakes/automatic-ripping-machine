@@ -14,7 +14,7 @@ import {
 	createTranscodePreset,
 	updateTranscodePreset,
 	deleteTranscodePreset
-} from '../transcodePresets';
+} from '../transcode-presets';
 
 const mockGet = vi.mocked(get);
 const mockPost = vi.mocked(post);

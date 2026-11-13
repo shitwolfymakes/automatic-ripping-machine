@@ -1,6 +1,6 @@
 <script lang="ts">
 	import InlineField from '$lib/components/InlineField.svelte';
-	import type { EditableJobField, MetadataField } from '$lib/utils/job-fields';
+	import type { EditableJobField, MetadataField } from '$lib/jobs/fields';
 
 	interface Props {
 		fields: MetadataField[];

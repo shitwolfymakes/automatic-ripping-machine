@@ -7,7 +7,7 @@ vi.mock('$lib/api/jobs', () => ({
 	patchJob: (...a: unknown[]) => patchJobMock(...a)
 }));
 
-import { MusicReleaseApply, type ReleaseApplyPlan } from '$lib/stores/musicReleaseApply.svelte';
+import { MusicReleaseApply, type ReleaseApplyPlan } from '$lib/stores/music-release-apply.svelte';
 
 const RESOLVE_BODY = { title: 'Album' } as unknown as ReleaseApplyPlan['resolveBody'];
 const PATCH_BODY = { poster_url: 'x' } as unknown as NonNullable<ReturnType<ReleaseApplyPlan['patchBody']>>;

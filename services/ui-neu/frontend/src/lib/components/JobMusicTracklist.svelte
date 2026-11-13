@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { MusicTrackRow } from '$lib/utils/music-tracks';
+	import type { MusicTrackRow } from '$lib/music/tracks';
 
 	interface Props {
 		tracks: MusicTrackRow[];

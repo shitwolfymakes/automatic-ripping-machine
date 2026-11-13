@@ -2,7 +2,7 @@
 	import type { GpuView, TranscodeStatsView, TranscodeWorkerView } from '$lib/types/api.gen';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import { formatElapsed } from '$lib/utils/format';
-	import { taskCount } from '$lib/utils/transcode-stats';
+	import { taskCount } from '$lib/transcode/stats';
 
 	interface Props {
 		workers: TranscodeWorkerView[];

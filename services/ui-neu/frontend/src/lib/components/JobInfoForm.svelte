@@ -4,8 +4,8 @@
 	import { resolveJob } from '$lib/api/jobs';
 	import { reveal } from '$lib/transitions';
 	import { isAdmin } from '$lib/stores/auth';
-	import { provenanceLine } from '$lib/utils/provenance';
-	import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/utils/job-info';
+	import { provenanceLine } from '$lib/jobs/provenance';
+	import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/jobs/info';
 
 	interface Props {
 		job: JobView;

@@ -6,7 +6,7 @@ vi.mock('$lib/docs/api', async () => {
 });
 
 import { fetchDocsPage, DocsNotFoundError, type DocsPage } from '$lib/docs/api';
-import { HelpDoc } from '../helpDoc.svelte';
+import { HelpDoc } from '../help-doc.svelte';
 
 const mockFetch = vi.mocked(fetchDocsPage);
 

@@ -3,7 +3,7 @@ import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
-import { rowKeys } from '$lib/handbrake/audioTracks';
+import { rowKeys } from '$lib/handbrake/audio-tracks';
 import AudioTrackList from '../AudioTrackList.svelte';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;

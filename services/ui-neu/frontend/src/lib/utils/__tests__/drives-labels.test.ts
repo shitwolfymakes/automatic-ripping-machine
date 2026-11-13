@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { connectionLabel, driveTitle, mediaLabel } from '../drives';
+import { connectionLabel, driveTitle, mediaLabel } from '../../drives/drives';
 import type { DriveView } from '$lib/types/api.gen';
 
 const d = (over: Partial<DriveView>) => ({ device_path: '/dev/sr0', ...over }) as DriveView;

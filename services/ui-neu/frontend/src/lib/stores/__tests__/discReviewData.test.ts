@@ -11,7 +11,7 @@ vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: (...a: unknown[]) => fetchSessionsMock(...a)
 }));
 
-import { DiscReviewData } from '$lib/stores/discReviewData.svelte';
+import { DiscReviewData } from '$lib/stores/disc-review-data.svelte';
 
 const DETAIL = { job: { id: 'j1' }, tracks: [] };
 const PREVIEW = {

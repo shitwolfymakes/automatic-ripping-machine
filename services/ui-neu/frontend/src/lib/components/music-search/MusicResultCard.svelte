@@ -2,7 +2,7 @@
 	// One music search result as a flip card, with the release's facts on the
 	// front and its tracklist on the back.
 	import type { TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
-	import { MATCH_TONE, matchIndicator } from '$lib/utils/track-match';
+	import { MATCH_TONE, matchIndicator } from '$lib/jobs/track-match';
 	import { formatMinSec } from '$lib/utils/format';
 	import PosterImage from '../PosterImage.svelte';
 	import MatchGlyph from './MatchGlyph.svelte';

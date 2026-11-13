@@ -3,10 +3,10 @@
 	// The HandBrake GUI export import flow in the preset sidebar: step 1 reads a
 	// file or pasted JSON through the parse endpoint, step 2 reviews what came
 	// back. Accepting hands the preset to the sidebar; nothing is saved here.
-	import { parseHandbrakeImport } from '$lib/api/transcodePresets';
+	import { parseHandbrakeImport } from '$lib/api/transcode-presets';
 	import { TABS } from '$lib/handbrake/fields';
-	import { defaultPick, reviewRows } from '$lib/handbrake/importReview';
-	import { importPanelView } from '$lib/handbrake/importPanelView';
+	import { defaultPick, reviewRows } from '$lib/handbrake/import-review';
+	import { importPanelView } from '$lib/handbrake/import-panel-view';
 	import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, ImportedPresetView } from '$lib/types/api.gen';
 
 	interface Props {

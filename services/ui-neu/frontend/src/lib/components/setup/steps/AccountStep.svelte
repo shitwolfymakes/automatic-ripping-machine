@@ -5,7 +5,7 @@
 	import { fetchResources } from '$lib/api/resources';
 	import { fetchSystemVersion } from '$lib/api/system';
 	import { clearPasswordMustChange } from '$lib/stores/auth';
-	import type { StepCommitResult } from '../steps';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 1, the one hard gate: ARM locks everything else until the seeded
 	// admin password is changed (setup spec §5.2).

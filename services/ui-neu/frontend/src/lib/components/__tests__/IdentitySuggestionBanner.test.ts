@@ -4,7 +4,7 @@ import IdentitySuggestionBanner from '../IdentitySuggestionBanner.svelte';
 import { createJob } from '../__fixtures__/job';
 import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 import type { JobView } from '$lib/types/api.gen';
-import { posterSrc } from '$lib/utils/poster';
+import { posterSrc } from '$lib/match/poster';
 
 vi.mock('$lib/api/jobs', () => ({
 	acceptIdentitySuggestion: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] }))

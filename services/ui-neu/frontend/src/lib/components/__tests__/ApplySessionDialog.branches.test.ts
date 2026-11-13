@@ -13,8 +13,8 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
 import { createJob } from '../__fixtures__/job';
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchRipPresets } from '$lib/api/ripPresets';
-import { fetchTranscodePresets } from '$lib/api/transcodePresets';
+import { fetchRipPresets } from '$lib/api/rip-presets';
+import { fetchTranscodePresets } from '$lib/api/transcode-presets';
 import { applySession, fetchNamingPreview } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
 import type { SessionView, RipPresetView, TranscodePresetView, JobNamingPreviewResponse } from '$lib/types/api.gen';
@@ -22,10 +22,10 @@ import type { SessionView, RipPresetView, TranscodePresetView, JobNamingPreviewR
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn()
 }));
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn()
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn()
 }));
 vi.mock('$lib/api/jobs', () => ({

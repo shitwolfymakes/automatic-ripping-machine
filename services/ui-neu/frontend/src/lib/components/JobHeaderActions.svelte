@@ -2,9 +2,9 @@
 	import JobActions from '$lib/components/JobActions.svelte';
 	import MediaTypeSwitch from '$lib/components/episodes/MediaTypeSwitch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import type { JobDetail } from '$lib/stores/jobDetail.svelte';
+	import type { JobDetail } from '$lib/stores/job-detail.svelte';
 	import type { JobView } from '$lib/types/api.gen';
-	import { isAwaitingIdentity } from '$lib/utils/job-status-groups';
+	import { isAwaitingIdentity } from '$lib/jobs/status-groups';
 
 	// The two types the switch offers (a narrower set than the API's MediaType).
 	type MediaType = 'movie' | 'tv';

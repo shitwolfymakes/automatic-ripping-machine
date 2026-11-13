@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { providerLabel, PROVIDER_LABELS } from '$lib/utils/provider-labels';
+import { providerLabel, PROVIDER_LABELS } from '$lib/settings/provider-labels';
 
 describe('PROVIDER_LABELS / providerLabel', () => {
 	it('maps every known provider', () => {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
-	import { barColor, filesHref } from '$lib/utils/resource-bars';
+	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
 
 	// Auth pages (/login, /change-password) have no usable session, so the
 	// resources poll would 401 or 403 every tick there (D-137). Same rule as

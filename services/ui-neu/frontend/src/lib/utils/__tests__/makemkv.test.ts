@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { makemkvKeyStatus } from '../makemkv';
-import { driveTitle } from '../drives';
+import { makemkvKeyStatus } from '../../drives/makemkv';
+import { driveTitle } from '../../drives/drives';
 import type { ConfigView, DriveView } from '$lib/types/api.gen';
 
 const cfg = (over: Record<string, unknown> = {}) => ({ ...over }) as unknown as ConfigView;

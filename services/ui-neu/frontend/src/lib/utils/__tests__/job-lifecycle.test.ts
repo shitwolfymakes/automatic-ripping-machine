@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLifecycle } from '$lib/utils/job-lifecycle';
-import { effectiveJobStatus } from '$lib/utils/job-status';
+import { deriveLifecycle } from '$lib/jobs/lifecycle';
+import { effectiveJobStatus } from '$lib/jobs/status';
 
 const job = (status: string, transcode_progress: any = null) => ({ status, transcode_progress }) as any;
 

@@ -2,8 +2,8 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import Skeleton from './Skeleton.svelte';
-	import { getVideoTypeConfig, discTypeLabel } from '$lib/utils/job-type';
-	import { transcodeColumnStatus } from '$lib/utils/job-status';
+	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
+	import { transcodeColumnStatus } from '$lib/jobs/status';
 	import { statusLabel } from '$lib/utils/format';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';

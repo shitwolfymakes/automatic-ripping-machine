@@ -9,7 +9,7 @@ import {
 	isSeriesKind,
 	kindLabel,
 	mergeCandidate
-} from './match';
+} from '../match/match';
 
 const cand = (o: Partial<MetadataCandidate> = {}): MetadataCandidate => ({ title: 'K', kind: 'tv', ...o });
 

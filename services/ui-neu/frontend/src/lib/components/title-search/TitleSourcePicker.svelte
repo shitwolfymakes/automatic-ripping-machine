@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The title search's source picker, where a keyed source without a saved
 	// key is disabled.
-	import { sourceKeyed, type SearchSource, type SearchSourceOption } from '$lib/utils/search-providers';
+	import { sourceKeyed, type SearchSource, type SearchSourceOption } from '$lib/settings/search-providers';
 	import type { KeyedSources } from '$lib/stores/config';
 
 	interface Props {

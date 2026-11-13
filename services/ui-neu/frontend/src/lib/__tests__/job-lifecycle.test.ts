@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLifecycle, isFolderImport, lifecycleColorVar } from '$lib/utils/job-lifecycle';
+import { deriveLifecycle, isFolderImport, lifecycleColorVar } from '$lib/jobs/lifecycle';
 
 describe('deriveLifecycle - disc rip 5-step', () => {
 	it('exposes the five stages in order', () => {

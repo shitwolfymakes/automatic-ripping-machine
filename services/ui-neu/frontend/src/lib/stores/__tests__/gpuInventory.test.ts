@@ -19,7 +19,7 @@ vi.mock('$lib/api/ws', () => ({
 	}
 }));
 
-import { GpuInventory } from '$lib/stores/gpuInventory.svelte';
+import { GpuInventory } from '$lib/stores/gpu-inventory.svelte';
 
 const GPU = { id: 'gpu-0' };
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
-import { ImageCache } from '$lib/stores/imageCache.svelte';
+import { ImageCache } from '$lib/stores/image-cache.svelte';
 import ImageCacheCard from '../ImageCacheCard.svelte';
 
 vi.mock('$lib/api/maintenance', () => ({

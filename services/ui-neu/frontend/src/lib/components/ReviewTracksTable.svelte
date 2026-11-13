@@ -2,9 +2,9 @@
 	import { errorMessage as toErrorMessage } from '$lib/utils/errors';
 	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
-	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/utils/review-rows';
+	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/jobs/review-rows';
 	import { formatTrackDuration } from '$lib/utils/format';
-	import { parseEpisodeNumber } from '$lib/utils/track-edit';
+	import { parseEpisodeNumber } from '$lib/jobs/track-edit';
 	import TrackTitleSearch from './TrackTitleSearch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {

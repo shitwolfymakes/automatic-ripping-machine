@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { handSetTrackCount, isSeriesTrackList, trackKindLabel, trackSizeLabel } from '../utils/track-fields';
+import { handSetTrackCount, isSeriesTrackList, trackKindLabel, trackSizeLabel } from '../jobs/track-fields';
 import { createTrack } from '../components/__fixtures__/job';
 
 describe('trackKindLabel', () => {

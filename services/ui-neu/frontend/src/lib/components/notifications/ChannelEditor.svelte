@@ -6,7 +6,7 @@
 	import EventsSection from './sections/EventsSection.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
 
-	import type { EditorBody } from './channelEdits';
+	import type { EditorBody } from '../../notifications/channel-edits';
 
 	let {
 		channel,

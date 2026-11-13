@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SeasonList } from '../seasonList.svelte';
+import { SeasonList } from '../season-list.svelte';
 
 vi.mock('$lib/api/identity', () => ({ fetchSeasons: vi.fn() }));
 

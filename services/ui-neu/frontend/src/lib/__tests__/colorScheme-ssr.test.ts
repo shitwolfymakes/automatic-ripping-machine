@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { COLOR_SCHEMES } from '$lib/themes/builtinSchemes';
+import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 
 vi.mock('$app/environment', () => ({ browser: false }));
 vi.mock('$lib/api/themes', () => ({
@@ -22,7 +22,7 @@ beforeEach(() => {
 
 describe('colorScheme store outside the browser', () => {
 	it('starts on the default scheme and does not subscribe or touch the DOM', async () => {
-		const { colorScheme } = await import('$lib/stores/colorScheme');
+		const { colorScheme } = await import('$lib/stores/color-scheme');
 
 		expect(get(colorScheme)).toBe(COLOR_SCHEMES[0].id);
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -30,7 +30,7 @@ describe('colorScheme store outside the browser', () => {
 	});
 
 	it('reapplySchemeForCurrentMode returns without writing tokens', async () => {
-		const { reapplySchemeForCurrentMode } = await import('$lib/stores/colorScheme');
+		const { reapplySchemeForCurrentMode } = await import('$lib/stores/color-scheme');
 
 		reapplySchemeForCurrentMode();
 
@@ -38,7 +38,7 @@ describe('colorScheme store outside the browser', () => {
 	});
 
 	it('loadThemeCss caches the CSS but applies no scheme to the DOM', async () => {
-		const { loadThemeCss } = await import('$lib/stores/colorScheme');
+		const { loadThemeCss } = await import('$lib/stores/color-scheme');
 
 		await loadThemeCss('blue');
 

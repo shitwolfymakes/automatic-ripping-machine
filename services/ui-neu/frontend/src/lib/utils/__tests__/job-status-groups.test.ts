@@ -9,7 +9,7 @@ import {
 	isRipped,
 	lifecycleStageFor,
 	LIFECYCLE_FAILURE_STATUSES
-} from '../job-status-groups';
+} from '../../jobs/status-groups';
 
 const ALL: JobStatus[] = [
 	'created',

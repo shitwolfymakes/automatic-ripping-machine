@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEpisodeNumber, trackOptionsBody, trackTitleBody } from '../track-edit';
+import { parseEpisodeNumber, trackOptionsBody, trackTitleBody } from '../../jobs/track-edit';
 
 describe('parseEpisodeNumber', () => {
 	it.each([

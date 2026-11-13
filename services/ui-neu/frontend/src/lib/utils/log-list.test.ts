@@ -9,7 +9,7 @@ import {
 	shortJobId,
 	filterLogJobs,
 	logCountText
-} from './log-list';
+} from '../logs/list';
 
 const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
 

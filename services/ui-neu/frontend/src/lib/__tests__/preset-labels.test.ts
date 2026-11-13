@@ -8,7 +8,7 @@ import {
 	humanizeTrackSelection,
 	ripPresetSummary,
 	transcodePresetSummary
-} from '../utils/preset-labels';
+} from '../sessions/preset-labels';
 
 describe('humanizeOutputMode', () => {
 	it.each([

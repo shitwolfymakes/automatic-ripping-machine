@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { sessionOptionLabel } from '$lib/utils/session-routes';
-	import { DriveCardActions } from '$lib/stores/driveCardActions.svelte';
-	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/utils/sessions';
-	import { hasLiveJob, isDriveDetached, prescanOverrideCount, startRipBlockedReason } from '$lib/utils/drives';
-	import type { PrescanKey } from '$lib/utils/drive-settings';
+	import { sessionOptionLabel } from '$lib/sessions/routes';
+	import { DriveCardActions } from '$lib/stores/drive-card-actions.svelte';
+	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/sessions/sessions';
+	import { hasLiveJob, isDriveDetached, prescanOverrideCount, startRipBlockedReason } from '$lib/drives/drives';
+	import type { PrescanKey } from '$lib/drives/settings';
 	import DriveSettingsPanel from './DriveSettingsPanel.svelte';
 	import DriveCardHeader from './DriveCardHeader.svelte';
 	import Glyph from '../Glyph.svelte';

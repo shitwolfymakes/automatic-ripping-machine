@@ -5,11 +5,11 @@ const fetchTranscodePresetsMock = vi.fn();
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: (...a: unknown[]) => fetchSessionsMock(...a)
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: (...a: unknown[]) => fetchTranscodePresetsMock(...a)
 }));
 
-import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
+import { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
 
 const SESSIONS = [{ id: 's1' }, { id: 's2' }];
 const PRESETS = [{ id: 'p1' }];

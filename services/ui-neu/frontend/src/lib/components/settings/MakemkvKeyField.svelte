@@ -7,7 +7,7 @@
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
-	import { makemkvKeyStatus } from '$lib/utils/makemkv';
+	import { makemkvKeyStatus } from '$lib/drives/makemkv';
 
 	// MakeMKV key: the free monthly beta key (value null) or a purchased key.
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports

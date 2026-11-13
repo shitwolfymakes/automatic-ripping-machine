@@ -66,8 +66,8 @@ vi.mock('$lib/api/identity', () => ({
 }));
 
 vi.mock('$lib/api/sessions', () => ({ fetchSessions: vi.fn() }));
-vi.mock('$lib/api/ripPresets', () => ({ fetchRipPresets: vi.fn(() => Promise.resolve([])) }));
-vi.mock('$lib/api/transcodePresets', () => ({ fetchTranscodePresets: vi.fn(() => Promise.resolve([])) }));
+vi.mock('$lib/api/rip-presets', () => ({ fetchRipPresets: vi.fn(() => Promise.resolve([])) }));
+vi.mock('$lib/api/transcode-presets', () => ({ fetchTranscodePresets: vi.fn(() => Promise.resolve([])) }));
 
 vi.mock('$lib/api/logs', () => ({
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
@@ -87,7 +87,7 @@ vi.mock('$lib/api/settings', () => ({
 }));
 
 type RipperListener = (jobIds: Set<string>, eventTypes: Map<string, Set<string>>) => void;
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: (fn: RipperListener) => {
 		void fn;

@@ -5,7 +5,7 @@
 	// (same soft-bg + accent-fg pairing PosterImage.svelte uses for its
 	// fallback tile). data-media on the tag selects the pairing below.
 	import type { MediaType } from '$lib/types/api.gen';
-	import { humanizeMediaType } from '$lib/utils/preset-labels';
+	import { humanizeMediaType } from '$lib/sessions/preset-labels';
 
 	interface Props {
 		mediaType: MediaType;

@@ -297,7 +297,7 @@ describe('Job Detail Page', () => {
 
 	describe('refresh', () => {
 		beforeEach(async () => {
-			const { stopRipperEvents } = await import('$lib/stores/ripperEvents.svelte');
+			const { stopRipperEvents } = await import('$lib/stores/ripper-events.svelte');
 			stopRipperEvents();
 		});
 		afterEach(() => vi.useRealTimers());

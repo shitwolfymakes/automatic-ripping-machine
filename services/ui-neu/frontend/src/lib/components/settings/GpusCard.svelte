@@ -19,8 +19,8 @@
 	import GpuEncoderChips from './GpuEncoderChips.svelte';
 	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
 	import StatusStrip from '$lib/components/StatusStrip.svelte';
-	import { PendingKeys } from './pendingKeys.svelte';
-	import { ProbeTimers } from './probeTimers.svelte';
+	import { PendingKeys } from '../../settings/pending-keys.svelte';
+	import { ProbeTimers } from '../../settings/probe-timers.svelte';
 
 	// Shared by Settings > Transcoding and the setup walkthrough's Transcoding
 	// step. A probe is a real test encode run in a container (10-60 s); its

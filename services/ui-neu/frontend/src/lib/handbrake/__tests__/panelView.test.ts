@@ -9,7 +9,7 @@ import {
 	settingsPanelView,
 	type PresetBlockInput,
 	type PresetSidebarInput
-} from '../panelView';
+} from '../panel-view';
 import { initialDraft, type Draft } from '../draft';
 
 const draft = (over: Partial<Draft> = {}): Draft => ({ ...initialDraft(null), name: 'Movies', ...over });

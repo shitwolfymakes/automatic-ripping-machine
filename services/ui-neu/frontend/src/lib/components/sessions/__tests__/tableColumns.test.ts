@@ -5,7 +5,13 @@ vi.mock('$lib/stores/encoders.svelte', () => ({
 		id === 'any_h265' ? 'Any GPU H.265' : id === 'preset' ? '' : (id ?? '')
 }));
 
-import { deleteGuard, openLabel, ripPresetColumns, sessionColumns, transcodePresetColumns } from '../tableColumns';
+import {
+	deleteGuard,
+	openLabel,
+	ripPresetColumns,
+	sessionColumns,
+	transcodePresetColumns
+} from '../../../sessions/table-columns';
 
 const rip = (over = {}) => ({
 	id: 'r1',

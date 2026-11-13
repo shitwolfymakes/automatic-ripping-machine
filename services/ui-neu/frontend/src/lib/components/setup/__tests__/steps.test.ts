@@ -10,7 +10,7 @@ import {
 	progressState,
 	uiState,
 	stepMeta
-} from '../steps';
+} from '../../../setup/steps';
 
 describe('REVIEWABLE_STEPS', () => {
 	it('is every step but Finish, in walkthrough order', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TitleEditDraft } from '../titleEditDraft.svelte';
+import { TitleEditDraft } from '../title-edit-draft.svelte';
 import type { MetadataCandidate } from '$lib/types/api.gen';
 
 function candidate(over: Partial<MetadataCandidate> = {}): MetadataCandidate {

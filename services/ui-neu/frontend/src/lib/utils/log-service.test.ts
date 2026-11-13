@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { logService, serviceLabel } from './log-service';
+import { logService, serviceLabel } from '../logs/service';
 
 describe('logService', () => {
 	it('maps arm-backend to backend', () => {

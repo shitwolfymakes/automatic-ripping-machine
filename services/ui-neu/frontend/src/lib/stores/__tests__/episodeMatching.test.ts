@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 type Listener = (jobIds: Set<string>, eventTypes: Map<string, Set<string>>) => void;
 const listeners: Listener[] = [];
-vi.mock('../ripperEvents.svelte', () => ({
+vi.mock('../ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: (fn: Listener) => {
 		listeners.push(fn);
@@ -16,8 +16,8 @@ import {
 	RECENT_UPDATE_MS,
 	onJobEvents,
 	watchEpisodeMatching
-} from '../episodeMatching.svelte';
-import { startRipperEvents } from '../ripperEvents.svelte';
+} from '../episode-matching.svelte';
+import { startRipperEvents } from '../ripper-events.svelte';
 
 function fire(jobId: string, type: string) {
 	listeners.forEach((fn) => fn(new Set([jobId]), new Map([[jobId, new Set([type])]])));

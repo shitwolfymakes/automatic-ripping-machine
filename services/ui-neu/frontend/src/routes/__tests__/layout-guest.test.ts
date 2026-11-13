@@ -72,7 +72,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -218,7 +218,7 @@ describe('Layout guest gating', () => {
 	});
 
 	it('Rip from folder opens the picker in folder mode', async () => {
-		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		const { showIsoPicker } = await import('$lib/stores/iso-picker');
 		try {
 			renderComponent(Layout, { props: { children: childSnippet() } });
 			await fireEvent.click(screen.getByTitle('Quick actions'));
@@ -235,7 +235,7 @@ describe('Layout guest gating', () => {
 			__setSession: (kind: 'admin' | 'guest') => void;
 		};
 		auth.__setSession('guest');
-		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		const { showIsoPicker } = await import('$lib/stores/iso-picker');
 		showIsoPicker.set(true);
 		try {
 			renderComponent(Layout, { props: { children: childSnippet() } });
@@ -250,7 +250,7 @@ describe('Layout guest gating', () => {
 	it('hides the Rip from ISO item and mounts no picker for a signed-in non-writer', async () => {
 		const auth = (await import('$lib/stores/auth')) as unknown as { __setReader: () => void };
 		auth.__setReader();
-		const { showIsoPicker } = await import('$lib/stores/isoPicker');
+		const { showIsoPicker } = await import('$lib/stores/iso-picker');
 		showIsoPicker.set(true);
 		try {
 			renderComponent(Layout, { props: { children: childSnippet() } });
@@ -395,7 +395,7 @@ describe('Layout dashboard poll across sign-in', () => {
 
 	it('starts the poll and theme load once the visitor leaves /login', async () => {
 		const { dashboard } = await import('$lib/stores/dashboard');
-		const { loadThemesFromApi } = await import('$lib/stores/colorScheme');
+		const { loadThemesFromApi } = await import('$lib/stores/color-scheme');
 		const start = dashboard.start as ReturnType<typeof vi.fn>;
 		const stop = dashboard.stop as ReturnType<typeof vi.fn>;
 		const loadThemes = loadThemesFromApi as ReturnType<typeof vi.fn>;

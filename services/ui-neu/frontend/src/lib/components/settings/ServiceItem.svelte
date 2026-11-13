@@ -2,7 +2,7 @@
 	// One service's card in System health, saying what it can do, where it
 	// runs, and which of its parts pass.
 	import type { SystemDiagnosticCheck } from '$lib/types/api.gen';
-	import { locationLabel, serviceBadge, serviceDescription, serviceLabel } from '$lib/utils/system-health';
+	import { locationLabel, serviceBadge, serviceDescription, serviceLabel } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import HealthItem from './HealthItem.svelte';
 

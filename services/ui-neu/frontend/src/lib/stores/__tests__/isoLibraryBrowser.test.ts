@@ -8,7 +8,7 @@ vi.mock('$lib/api/iso', () => ({
 }));
 
 import { ApiError } from '$lib/api/client';
-import { IsoLibraryBrowser } from '$lib/stores/isoLibraryBrowser.svelte';
+import { IsoLibraryBrowser } from '$lib/stores/iso-library-browser.svelte';
 import type { IsoFolderListing, IsoLibraryListing } from '$lib/types/api.gen';
 
 function library(subpath: string, hostPath = '/host/iso'): IsoLibraryListing {
