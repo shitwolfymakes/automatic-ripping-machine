@@ -5,7 +5,7 @@
 	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
 	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
 	import { IDLE_STATUS, type EditorStatus } from '$lib/components/editorStatus';
-	import { usageLabel } from '$lib/handbrake/sidebarModel';
+	import { usageLabel } from '$lib/handbrake/display';
 	import type { RipPresetView } from '$lib/types/api.gen';
 
 	const FORM_ID = 'rip-preset-sidebar-form';

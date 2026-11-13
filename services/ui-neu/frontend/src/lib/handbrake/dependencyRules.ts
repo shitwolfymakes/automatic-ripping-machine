@@ -1,7 +1,7 @@
 // Which settings apply given the other settings' effective values, and
 // whether a field is shown under the current filter.
 
-import type { FilterState } from './sidebarModel';
+import type { FilterState } from './visibility';
 
 export type Context = Record<string, unknown>;
 

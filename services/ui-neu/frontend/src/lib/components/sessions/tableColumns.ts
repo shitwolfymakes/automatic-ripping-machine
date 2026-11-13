@@ -10,7 +10,7 @@ import {
 	humanizeTrackSelection
 } from '$lib/utils/preset-labels';
 import { encoderLabel } from '$lib/stores/encoders.svelte';
-import { settingsCount } from '$lib/handbrake/sidebarModel';
+import { settingsCount } from '$lib/handbrake/draft';
 import type { CellContent, TableColumn } from '$lib/components/dataTable';
 import { plural } from '$lib/utils/plural';
 

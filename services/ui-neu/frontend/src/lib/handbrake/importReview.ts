@@ -10,7 +10,7 @@ import type {
 import { availabilityLabel } from './encoder-availability';
 import { TABS, type TabId } from './fields';
 import { storedCount } from './settingsEdit';
-import type { Draft } from './sidebarModel';
+import type { Draft } from './draft';
 import { plural } from '$lib/utils/plural';
 
 export interface ImportReview {

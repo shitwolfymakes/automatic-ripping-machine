@@ -10,7 +10,7 @@ import {
 	type PresetBlockInput,
 	type PresetSidebarInput
 } from '../panelView';
-import { initialDraft, type Draft } from '../sidebarModel';
+import { initialDraft, type Draft } from '../draft';
 
 const draft = (over: Partial<Draft> = {}): Draft => ({ ...initialDraft(null), name: 'Movies', ...over });
 const avail = (over: Partial<EncoderAvailabilityView>): EncoderAvailabilityView =>

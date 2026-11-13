@@ -8,7 +8,7 @@
 	import SessionBuilderSlideOver from './SessionBuilderSlideOver.svelte';
 	import RipPresetSidebar from './RipPresetSidebar.svelte';
 	import PresetSidebar from '$lib/components/handbrake/PresetSidebar.svelte';
-	import type { SidebarMode } from '$lib/handbrake/sidebarModel';
+	import type { SidebarMode } from '$lib/handbrake/display';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
 	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';

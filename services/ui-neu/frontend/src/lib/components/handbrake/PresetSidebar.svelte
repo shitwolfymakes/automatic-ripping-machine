@@ -21,24 +21,16 @@
 	import { focusField, focusFirstInvalid } from '$lib/utils/formValidation';
 	import {
 		VAAPI_NOTE,
-		applyField,
-		draftToCreate,
-		draftToUpdate,
 		footerNote,
-		initialDraft,
-		onBaseChange,
-		saveFailure,
 		schemaLoadError,
-		panelCards,
-		showTabs,
 		sidebarTitle,
 		usageLabel,
-		type Bases,
-		type FilterState,
-		type PresetField,
-		type SaveFailure,
 		type SidebarMode
-	} from '$lib/handbrake/sidebarModel';
+	} from '$lib/handbrake/display';
+	import { applyField, onBaseChange, type Bases } from '$lib/handbrake/draft-rules';
+	import { draftToCreate, draftToUpdate, initialDraft, showTabs, type PresetField } from '$lib/handbrake/draft';
+	import { panelCards, type FilterState } from '$lib/handbrake/visibility';
+	import { saveFailure, type SaveFailure } from '$lib/api/save-failure';
 	import { applyProposal } from '$lib/handbrake/importReview';
 	import { firstIssueTarget, unplacedIssues, unplacedText, type IssueTarget } from '$lib/handbrake/issuePlacement';
 	import type {

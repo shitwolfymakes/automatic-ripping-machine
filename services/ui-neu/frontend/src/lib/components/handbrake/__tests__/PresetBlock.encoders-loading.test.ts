@@ -5,7 +5,7 @@
 // through loading and then failure within one render.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, waitFor, cleanup } from '$lib/test-utils';
-import { initialDraft } from '$lib/handbrake/sidebarModel';
+import { initialDraft } from '$lib/handbrake/draft';
 import PresetBlock from '../PresetBlock.svelte';
 
 let rejectFetch: (e: unknown) => void = () => {};

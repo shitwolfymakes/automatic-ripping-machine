@@ -6,14 +6,9 @@ import { nameErrors, type FieldErrors } from '$lib/utils/formValidation';
 import { availabilityLabel } from './encoder-availability';
 import { showsAmdNote } from './encoderCards';
 import type { TabId } from './fields';
-import {
-	clearsSettings,
-	isVaapiEncoder,
-	showTabs,
-	type Draft,
-	type SaveFailure,
-	type SidebarMode
-} from './sidebarModel';
+import { clearsSettings, isVaapiEncoder, showTabs, type Draft } from './draft';
+import type { SaveFailure } from '$lib/api/save-failure';
+import type { SidebarMode } from './display';
 
 export interface SettingsPanelInput {
 	tab: TabId;

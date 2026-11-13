@@ -16,18 +16,17 @@
 	import { changedCount, changedLabel } from '$lib/handbrake/groupSummary';
 	import { settingsPanelView } from '$lib/handbrake/panelView';
 	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settingsEdit';
+	import { AMD_NOTE, issuesFor } from '$lib/handbrake/display';
 	import {
-		AMD_NOTE,
 		audioListValue,
 		blockOf,
 		commonOf,
 		inheritedDepth,
 		inheritedValue,
-		issuesFor,
 		panelContext,
-		type BaseValues,
-		type FilterState
-	} from '$lib/handbrake/sidebarModel';
+		type BaseValues
+	} from '$lib/handbrake/base-values';
+	import type { FilterState } from '$lib/handbrake/visibility';
 	import SettingsTabs from './SettingsTabs.svelte';
 	import TunableField from './TunableField.svelte';
 	import EncoderBlockCard from './EncoderBlockCard.svelte';

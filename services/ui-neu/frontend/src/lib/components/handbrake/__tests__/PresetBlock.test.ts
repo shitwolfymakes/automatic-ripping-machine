@@ -8,7 +8,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import type { EncoderAvailabilityView, SettingIssue } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 import { stopEncoderEvents } from '$lib/stores/encoders.svelte';
-import { initialDraft, type Draft } from '$lib/handbrake/sidebarModel';
+import { initialDraft, type Draft } from '$lib/handbrake/draft';
 import PresetBlock from '../PresetBlock.svelte';
 
 // One entry per group, in catalog order, standing in for the full

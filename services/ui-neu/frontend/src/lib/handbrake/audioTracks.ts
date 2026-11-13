@@ -3,7 +3,7 @@
 
 import type { HandbrakeSchemaSlimView, SettingIssue, SlimKey } from '$lib/types/api.gen';
 import { fieldOptions, scalarText } from './fields';
-import type { FilterState } from './sidebarModel';
+import type { FilterState } from './visibility';
 import { fieldVisible, type Context } from './dependencyRules';
 
 export type AudioItem = Record<string, unknown>;

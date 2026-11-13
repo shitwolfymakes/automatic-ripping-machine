@@ -9,7 +9,7 @@ import type {
 	SlimKey,
 	SlimVariant
 } from '$lib/types/api.gen';
-import type { FilterState } from './sidebarModel';
+import type { FilterState } from './visibility';
 import { fieldVisible, type Context } from './dependencyRules';
 import { PRESET_ENCODER_ID, findAvailability } from './encoder-availability';
 

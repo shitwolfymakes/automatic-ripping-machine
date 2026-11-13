@@ -9,7 +9,8 @@
 	import { TABS, type TabId } from '$lib/handbrake/fields';
 	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
 	import { issueTarget, placedIssues } from '$lib/handbrake/issuePlacement';
-	import type { BaseValues, FilterState } from '$lib/handbrake/sidebarModel';
+	import type { BaseValues } from '$lib/handbrake/base-values';
+	import type { FilterState } from '$lib/handbrake/visibility';
 
 	interface Props {
 		schema: HandbrakeSchemaSlimView;

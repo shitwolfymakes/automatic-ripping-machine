@@ -5,18 +5,8 @@ import type { HandbrakeSchemaSlimView, HandbrakeSettings, SlimFamily, SlimKey } 
 import { rowKeys, visibleTrackKeys } from './audioTracks';
 import { cardOpen, cardVariant, visibleCardFields, type EncoderCard } from './encoderCards';
 import { fieldKind, TABS, type TabId } from './fields';
-import {
-	audioListShown,
-	audioListValue,
-	blockOf,
-	commonKeys,
-	commonOf,
-	inheritedDepth,
-	keyShown,
-	panelContext,
-	type BaseValues,
-	type FilterState
-} from './sidebarModel';
+import { audioListValue, blockOf, commonOf, inheritedDepth, panelContext, type BaseValues } from './base-values';
+import { audioListShown, commonKeys, keyShown, type FilterState } from './visibility';
 import type { Context } from './dependencyRules';
 
 export interface VisibleInput {

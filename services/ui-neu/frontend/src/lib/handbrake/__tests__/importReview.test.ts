@@ -4,7 +4,7 @@ import slim from './fixtures/slim-schema.json';
 import tenBit from './fixtures/x265-10bit-import-response.json';
 import plex from './fixtures/plex-import-response.json';
 import { applyProposal, defaultPick, familyLabel, reviewRows } from '../importReview';
-import { initialDraft } from '../sidebarModel';
+import { initialDraft } from '../draft';
 
 const schema = slim as unknown as HandbrakeSchemaSlimView;
 const response = plex as unknown as { presets: ImportedPresetView[] };

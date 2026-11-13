@@ -1,4 +1,4 @@
-import type { SidebarMode } from '$lib/handbrake/sidebarModel';
+import type { SidebarMode } from '$lib/handbrake/display';
 import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 import { isPassthroughSession, presetToolMap, PASSTHROUGH_TOOL } from '$lib/utils/sessions';
 
