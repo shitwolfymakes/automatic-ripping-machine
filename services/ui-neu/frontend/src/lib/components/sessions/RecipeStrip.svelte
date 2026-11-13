@@ -1,15 +1,6 @@
-<script lang="ts" module>
-	export interface RecipeCell {
-		label: string;
-		value?: string | null;
-		sub?: string | null;
-		mono?: boolean;
-		empty?: string;
-	}
-</script>
-
 <script lang="ts">
 	import Glyph from '$lib/components/Glyph.svelte';
+	import type { RecipeCell } from '$lib/sessions/recipe-cell';
 
 	// The rip > transcode > output strip: Settings > Sessions cards and the
 	// setup walkthrough's "What happens to each kind of disc" table. Cells sit

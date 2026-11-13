@@ -1,4 +1,4 @@
-import type { RecipeCell } from '$lib/components/sessions/RecipeStrip.svelte';
+import type { RecipeCell } from '$lib/sessions/recipe-cell';
 import { resolveSample } from '$lib/sessions/sample-tokens';
 import type { DiscRouteSummary } from '$lib/types/api.gen';
 

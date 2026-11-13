@@ -3,7 +3,7 @@
 // keyed on the generated JobStatus so a new backend status fails `npm run check`
 // until it is placed in every group.
 import type { JobStatus, JobView } from '$lib/types/api.gen';
-import type { LifecycleStageId } from '$lib/jobs/lifecycle';
+import type { LifecycleStageId } from '$lib/jobs/lifecycle-stage';
 import { effectiveJobStatus } from '$lib/jobs/status';
 
 // Raw statuses after which nothing further happens to the job.
