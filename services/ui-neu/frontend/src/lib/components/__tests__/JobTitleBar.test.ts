@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
 import JobTitleBar from '../JobTitleBar.svelte';
-import { createJob, createJobDetail } from '$lib/components/__fixtures__/job';
+import { createJob, createJobDetail } from '$lib/__fixtures__/job';
 import { JobDetail } from '$lib/stores/job-detail.svelte';
 import * as authStore from '$lib/stores/auth';
 import type { JobView } from '$lib/types/api.gen';

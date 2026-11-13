@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { MetadataCandidate, ScanTitle, TrackView } from '$lib/types/api.gen';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 // Branch pins for ReviewTracksTable, beside ReviewTracksTable.test.ts. Every
 // branch is reachable from the rendered component.

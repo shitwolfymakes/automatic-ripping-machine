@@ -3,7 +3,7 @@ import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-
 import type { JobStatus } from '$lib/types/api.gen';
 import { resolveJob } from '$lib/api/jobs';
 import JobInfoForm from '../JobInfoForm.svelte';
-import { actionsFor } from '../__fixtures__/job';
+import { actionsFor } from '../../__fixtures__/job';
 
 // Branch pins for JobInfoForm, beside JobInfoForm.test.ts. Every branch is
 // reachable from the rendered component.

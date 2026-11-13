@@ -18,7 +18,7 @@ vi.mock('$lib/api/iso', () => ({
 }));
 
 import { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
-import { createJob } from '../../components/__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 const calls: string[] = [];
 const dismiss = vi.fn(() => calls.push('dismiss'));

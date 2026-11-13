@@ -1,6 +1,6 @@
 <script lang="ts">
 	import DataTable from '../DataTable.svelte';
-	import type { TableColumn } from '../data-table';
+	import type { TableColumn } from '../../ui/data-table';
 
 	interface Row {
 		id: string;

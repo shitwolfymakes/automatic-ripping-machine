@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import type { JobStatus, JobView } from '$lib/types/api.gen';
 import JobActions from '../JobActions.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 // Behaviour pins for JobActions, beside JobActions.test.ts, written before
 // its three handlers share one helper. Every branch is reachable from the

@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import type { JobView, TrackView } from '$lib/types/api.gen';
-import { createJob, createJobDetail, createTrack } from '../__fixtures__/job';
+import { createJob, createJobDetail, createTrack } from '../../__fixtures__/job';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');

@@ -9,7 +9,7 @@ import type { JobView } from '$lib/types/api.gen';
 import { readJobMetadata } from '$lib/jobs/metadata';
 import type { EpisodeStatus } from '$lib/episodes/status';
 import type { SourceRow } from '$lib/jobs/review-card';
-import { createJob } from '../../__fixtures__/job';
+import { createJob } from '../../../__fixtures__/job';
 import DiscReviewFacts from '../DiscReviewFacts.svelte';
 
 const SOURCE: SourceRow = { label: 'Drive', value: 'Drive A' };

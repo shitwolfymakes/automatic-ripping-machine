@@ -64,12 +64,12 @@ export default defineConfig(
 	},
 	{
 		// ui-neu file layout (see the development guidelines): kebab-case modules, PascalCase components. SvelteKit route files
-		// (+page, +layout) and generated or ambient declarations are exempt. Warning until the renames land.
+		// (+page, +layout) and generated or ambient declarations are exempt. 
 		plugins: { unicorn },
 		ignores: ['src/routes/**', '**/*.d.ts', 'src/lib/types/api.gen.ts'],
 		files: ['**/*.ts', '**/*.js'],
 		rules: {
-			'unicorn/filename-case': ['warn', { cases: { kebabCase: true }, ignore: [/^__tests__$/, /^__fixtures__$/] }]
+			'unicorn/filename-case': ['error', { cases: { kebabCase: true }, ignore: [/^__tests__$/, /^__fixtures__$/] }]
 		}
 	},
 	{
@@ -79,8 +79,19 @@ export default defineConfig(
 		ignores: ['src/routes/**'],
 		rules: {
 			'unicorn/filename-case': [
-				'warn',
+				'error',
 				{ cases: { pascalCase: true }, checkDirectories: false, ignore: [/^__tests__$/, /^__fixtures__$/] }
+			]
+		}
+	},
+	{
+		// Layering: lib code outside components/ never imports from components/. Shared pieces live in lib/ui, lib/__fixtures__ etc.
+		files: ['src/lib/**/*.ts', 'src/lib/**/*.js'],
+		ignores: ['src/lib/components/**'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{ patterns: [{ regex: '(^\\$lib/components(/|$))|((^|/)components/)', message: 'lib code outside components/ must not import from components/.' }] }
 			]
 		}
 	},

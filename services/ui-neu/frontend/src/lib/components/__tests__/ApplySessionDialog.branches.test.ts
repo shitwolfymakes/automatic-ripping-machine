@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/rip-presets';
 import { fetchTranscodePresets } from '$lib/api/transcode-presets';

@@ -4,7 +4,7 @@ import type { MetadataReleaseDetail } from '$lib/types/api.gen';
 import type { TrackPair } from '$lib/music/release';
 import { MusicReleaseApply } from '$lib/stores/music-release-apply.svelte';
 import { MusicReleaseFields } from '$lib/stores/music-release-fields.svelte';
-import { createJob } from '../../__fixtures__/job';
+import { createJob } from '../../../__fixtures__/job';
 import MusicReleaseDetail from '../MusicReleaseDetail.svelte';
 
 vi.mock('$lib/stores/auth', async () => {

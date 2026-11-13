@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createJob } from '../../components/__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 import { buildMetadataFields, type MetadataField } from '../fields';
 
 function fieldLabels(fields: MetadataField[]): string[] {

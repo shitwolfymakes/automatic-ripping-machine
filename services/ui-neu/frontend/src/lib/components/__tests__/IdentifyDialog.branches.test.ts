@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import IdentifyDialog from '../IdentifyDialog.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 import { resolveJob } from '$lib/api/jobs';
 import type { ResolveResponse } from '$lib/types/api.gen';
 

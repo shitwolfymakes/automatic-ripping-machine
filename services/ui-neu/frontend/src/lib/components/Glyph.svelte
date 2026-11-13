@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { GLYPH_PATHS, type GlyphName } from './glyph-names';
+	import { GLYPH_PATHS, type GlyphName } from '../ui/glyph-names';
 
 	interface Props {
 		name: GlyphName;

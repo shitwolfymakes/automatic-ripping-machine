@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import JobTracksTable from '../JobTracksTable.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { NamingPreviewItem, TrackView } from '$lib/types/api.gen';
 import { searchMetadata, updateTrack } from '$lib/api/jobs';
 import * as authStore from '$lib/stores/auth';

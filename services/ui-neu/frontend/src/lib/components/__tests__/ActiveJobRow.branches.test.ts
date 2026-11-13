@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import ActiveJobRow from '../ActiveJobRow.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 import type { RipLiveProgress } from '$lib/stores/rips.svelte';
 
 // Branch pins for ActiveJobRow, beside ActiveJobRow.test.ts and the other

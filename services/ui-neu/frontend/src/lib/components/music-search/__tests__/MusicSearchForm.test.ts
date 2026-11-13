@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
 import MusicSearchForm from '../MusicSearchForm.svelte';
-import { createJob } from '../../__fixtures__/job';
+import { createJob } from '../../../__fixtures__/job';
 
 function renderForm(
 	overrides: { job?: ReturnType<typeof createJob>; discTrackCount?: number; searching?: boolean } = {}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
 import DashboardPage from '../+page.svelte';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 import { fetchDashboard } from '$lib/api/dashboard';
 import { fetchJobsPage, bulkDeleteJobs, abandonJob, deleteJob } from '$lib/api/jobs';
 import { setTranscoderEnabled } from '$lib/stores/config';

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import type { JobView, TrackView } from '$lib/types/api.gen';
-import { createJob, createJobDetail, createTrack } from '../__fixtures__/job';
+import { createJob, createJobDetail, createTrack } from '../../__fixtures__/job';
 
 /** Build a JobDetailView from explicit job overrides + tracks. */
 function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {

@@ -7,7 +7,7 @@ import type { JobView } from '$lib/types/api.gen';
 import type { EpisodeState, EpisodeStatus } from '$lib/episodes/status';
 import { ReviewSections } from '$lib/stores/review-sections.svelte';
 import { DiscReviewJobActions } from '$lib/stores/disc-review-job-actions.svelte';
-import { actionsFor, createJob } from '../../__fixtures__/job';
+import { actionsFor, createJob } from '../../../__fixtures__/job';
 import DiscReviewActions from '../DiscReviewActions.svelte';
 
 vi.mock('$lib/stores/auth', async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import JobDetailPage from '../[id]/+page.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { JobView, JobDetailView, SessionView, ApplySessionResponse } from '$lib/types/api.gen';
 
 vi.mock('$app/stores', async () => {

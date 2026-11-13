@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
 import DashboardPage from '../+page.svelte';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');

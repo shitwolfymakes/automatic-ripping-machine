@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, within, cleanup } from '$lib/test-utils';
 import ActiveJobRowDetails from '../ActiveJobRowDetails.svelte';
-import { createJob } from '../../__fixtures__/job';
+import { createJob } from '../../../__fixtures__/job';
 import { getVideoTypeConfig } from '$lib/jobs/type';
 import type { JobView } from '$lib/types/api.gen';
 

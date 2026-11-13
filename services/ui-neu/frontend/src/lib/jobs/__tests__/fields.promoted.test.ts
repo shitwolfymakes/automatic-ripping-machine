@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { videoTypeLabel, buildMetadataFields } from '../fields';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 
 describe('videoTypeLabel', () => {
 	it('maps known types', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import JobRow from '../JobRow.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 // JobRow renders a <tr>, which needs a <table> parent for valid DOM
 function renderInTable(props: Record<string, unknown>) {

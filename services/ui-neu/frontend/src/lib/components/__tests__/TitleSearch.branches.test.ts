@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 import TitleSearch from '../TitleSearch.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 // Branch pins for TitleSearch, beside TitleSearch.test.ts, ahead of splitting
 // it into helpers, stores and a source picker. Every branch of the component

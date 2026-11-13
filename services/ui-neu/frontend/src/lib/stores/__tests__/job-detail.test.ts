@@ -13,7 +13,7 @@ import { goto } from '$app/navigation';
 import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
 import { buildResolveBody } from '$lib/jobs/resolve';
 import { ApiError } from '$lib/api/client';
-import { createJob, createTrack, createJobDetail } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack, createJobDetail } from '$lib/__fixtures__/job';
 import { JobDetail } from '../job-detail.svelte';
 
 const mockFetchJob = vi.mocked(fetchJob);

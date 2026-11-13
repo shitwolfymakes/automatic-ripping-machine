@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { handSetTrackCount, isSeriesTrackList, trackKindLabel, trackSizeLabel } from '../track-fields';
-import { createTrack } from '../../components/__fixtures__/job';
+import { createTrack } from '../../__fixtures__/job';
 
 describe('trackKindLabel', () => {
 	it.each([

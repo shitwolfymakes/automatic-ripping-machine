@@ -3,7 +3,7 @@ import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import { updateTrack } from '$lib/api/jobs';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import type { TrackView } from '$lib/types/api.gen';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { readable } = await import('svelte/store');

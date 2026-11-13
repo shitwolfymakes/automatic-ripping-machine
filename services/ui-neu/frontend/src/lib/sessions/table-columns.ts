@@ -11,7 +11,7 @@ import {
 } from '$lib/sessions/preset-labels';
 import { encoderLabel } from '$lib/stores/encoders.svelte';
 import { settingsCount } from '$lib/handbrake/draft';
-import type { CellContent, TableColumn } from '$lib/components/data-table';
+import type { CellContent, TableColumn } from '$lib/ui/data-table';
 import { plural } from '$lib/utils/plural';
 
 const NOT_USED: CellContent = { text: 'Not used', muted: true };

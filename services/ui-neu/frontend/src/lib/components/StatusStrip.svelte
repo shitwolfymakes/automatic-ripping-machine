@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Glyph from '$lib/components/Glyph.svelte';
-	import type { GlyphName } from '$lib/components/glyph-names';
+	import type { GlyphName } from '$lib/ui/glyph-names';
 
 	// One-line state of an async thing (enroll, probe, key check): glyph + words,
 	// never colour alone. role=status so screen readers hear the change.

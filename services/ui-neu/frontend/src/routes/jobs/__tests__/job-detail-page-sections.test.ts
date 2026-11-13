@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
 import Page from '../[id]/+page.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type {
 	ApplySessionResponse,
 	JobDetailView,

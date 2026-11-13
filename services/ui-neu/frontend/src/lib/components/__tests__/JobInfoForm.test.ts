@@ -18,7 +18,7 @@ vi.mock('$lib/api/jobs', () => ({
 import { resolveJob } from '$lib/api/jobs';
 import type { JobStatus } from '$lib/types/api.gen';
 import JobInfoForm from '../JobInfoForm.svelte';
-import { actionsFor } from '../__fixtures__/job';
+import { actionsFor } from '../../__fixtures__/job';
 
 const mockResolve = vi.mocked(resolveJob);
 

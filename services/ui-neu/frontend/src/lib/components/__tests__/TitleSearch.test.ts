@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import TitleSearch from '../TitleSearch.svelte';
-import { createJob } from '../__fixtures__/job';
+import { createJob } from '../../__fixtures__/job';
 import type { MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 
 vi.mock('$lib/stores/auth', async () => {

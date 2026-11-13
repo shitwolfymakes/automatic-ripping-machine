@@ -2,8 +2,8 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import type { JobView, MetadataCandidate, MetadataReleaseDetail, TrackView } from '$lib/types/api.gen';
 import MusicSearch from '../MusicSearch.svelte';
-import { GLYPH_PATHS } from '../glyph-names';
-import { createJob, createTrack } from '../__fixtures__/job';
+import { GLYPH_PATHS } from '../../ui/glyph-names';
+import { createJob, createTrack } from '../../__fixtures__/job';
 
 // Branch pins for MusicSearch, beside MusicSearch.test.ts. One branch cannot
 // be reached from the rendered component, so nothing here forces it:
