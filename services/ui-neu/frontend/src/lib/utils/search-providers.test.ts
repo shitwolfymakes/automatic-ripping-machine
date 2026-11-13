@@ -3,7 +3,6 @@ import {
 	SEARCH_SOURCES,
 	chooseSource,
 	effectiveMovieProvider,
-	providerLabel,
 	sourceKeyed,
 	type SearchSource
 } from './search-providers';
@@ -58,17 +57,6 @@ describe('chooseSource', () => {
 	it('has no source when the default is not one of the options', () => {
 		expect(chooseSource(movie, null, 'tvmaze', ALL_KEYED)).toBeUndefined();
 		expect(chooseSource(movie, null, null, ALL_KEYED)).toBeUndefined();
-	});
-});
-
-describe('providerLabel', () => {
-	it('names each provider and falls back until the config store hydrates', () => {
-		expect(providerLabel('tmdb')).toBe('TMDb');
-		expect(providerLabel('omdb')).toBe('OMDb');
-		expect(providerLabel('tvmaze')).toBe('TVmaze');
-		expect(providerLabel('tvdb')).toBe('TVDB');
-		expect(providerLabel(null)).toBe('OMDb/TMDb');
-		expect(providerLabel('bogus', 'TMDb')).toBe('TMDb');
 	});
 });
 

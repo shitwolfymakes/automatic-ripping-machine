@@ -1,5 +1,6 @@
 import type { ConfigView, DriveView, GpuView, SetupView } from '$lib/types/api.gen';
-import { effectiveMovieProvider, providerLabel } from '$lib/utils/search-providers';
+import { effectiveMovieProvider } from '$lib/utils/search-providers';
+import { providerLabel } from '$lib/utils/provider-labels';
 import { plural } from '$lib/utils/plural';
 
 const LOOKUP_KEYS = ['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key'] as const satisfies readonly (keyof ConfigView)[];

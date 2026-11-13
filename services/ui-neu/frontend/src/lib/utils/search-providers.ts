@@ -1,14 +1,5 @@
 import type { KeyedSources } from '$lib/stores/config';
 
-// Shared by TitleSearch (the job page's provider badge) and FinishStep (the
-// setup summary), which each carried their own copy of the label map.
-const PROVIDER_LABELS: Record<string, string> = { tmdb: 'TMDb', omdb: 'OMDb', tvmaze: 'TVmaze', tvdb: 'TVDB' };
-
-/** Pretty name for a search-provider id; `fallback` until the config store hydrates. */
-export function providerLabel(id: string | null | undefined, fallback = 'OMDb/TMDb'): string {
-	return PROVIDER_LABELS[id ?? ''] ?? fallback;
-}
-
 export type SearchSource = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
 
 export interface SearchSourceOption {

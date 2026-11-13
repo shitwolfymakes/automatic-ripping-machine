@@ -1,5 +1,5 @@
-// How identify names a provider to the operator. The search source picker
-// keeps its own labels in search-providers.ts.
+// How a provider is named to the operator, shared by identify, the search
+// source picker and the setup summary.
 
 /** Display names for identification provider ids. */
 export const PROVIDER_LABELS: Record<string, string> = {
