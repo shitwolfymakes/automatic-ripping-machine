@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import type { ImageCache } from '$lib/stores/imageCache.svelte';
 
 	interface Props {
@@ -14,8 +15,7 @@
 			<h3 class="settings-page-panel-title settings-page-panel-title-flush">Image Cache</h3>
 			<p class="settings-page-description mt-1">
 				{#if cache.loading}Loading...
-				{:else if cache.stats}{cache.stats.count} cached image{cache.stats.count !== 1 ? 's' : ''} ({cache.stats
-						.size_mb}
+				{:else if cache.stats}{cache.stats.count} cached {plural(cache.stats.count, 'image')} ({cache.stats.size_mb}
 					MB)
 				{:else}Unable to load cache stats
 				{/if}

@@ -4,6 +4,7 @@
 // result banners.
 import type { FileEntry, FileRoot } from '$lib/api/files';
 import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
+import { plural } from '$lib/utils/plural';
 
 export type SortKey = 'name' | 'size' | 'modified';
 export type SortDir = 'asc' | 'desc';
@@ -82,7 +83,7 @@ export function orderForDelete<T extends { subpath: string }>(items: readonly T[
 // any failed, else a success with the item count.
 export function bulkResultFeedback(verb: 'Moved' | 'Deleted', done: number, failed: number): BulkFeedback {
 	if (failed > 0) return { type: 'error', message: `${verb} ${done}, failed ${failed}` };
-	return { type: 'success', message: `${verb} ${done} item${done !== 1 ? 's' : ''}` };
+	return { type: 'success', message: `${verb} ${done} ${plural(done, 'item')}` };
 }
 
 // The banner after a cleanup that removes `count` of `noun`: the error tone
@@ -90,10 +91,10 @@ export function bulkResultFeedback(verb: 'Moved' | 'Deleted', done: number, fail
 export function cleanupFeedback(count: number, noun: string, errors: number): BulkFeedback {
 	return {
 		type: errors ? 'error' : 'success',
-		message: `Deleted ${count} ${noun}${count !== 1 ? 's' : ''}${errors ? `, ${errors} error(s)` : ''}`
+		message: `Deleted ${count} ${plural(count, noun)}${errors ? `, ${errors} error(s)` : ''}`
 	};
 }
 
 export function fixedPermissionsMessage(name: string, fixed: number): string {
-	return `Fixed permissions on ${name} (${fixed} item${fixed !== 1 ? 's' : ''})`;
+	return `Fixed permissions on ${name} (${fixed} ${plural(fixed, 'item')})`;
 }

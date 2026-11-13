@@ -1,5 +1,6 @@
 import type { ConfigView, DriveView, GpuView, SetupView } from '$lib/types/api.gen';
 import { effectiveMovieProvider, providerLabel } from '$lib/utils/search-providers';
+import { plural } from '$lib/utils/plural';
 
 const LOOKUP_KEYS = ['tmdb_api_key', 'omdb_api_key', 'tvdb_api_key'] as const satisfies readonly (keyof ConfigView)[];
 
@@ -14,7 +15,7 @@ export interface SummaryInputs {
 }
 
 function countOf(n: number, noun: string): string {
-	return `${n} ${noun}${n === 1 ? '' : 's'}`;
+	return `${n} ${plural(n, noun)}`;
 }
 
 /** The enrolled and ignored drive counts for the Drives line. */

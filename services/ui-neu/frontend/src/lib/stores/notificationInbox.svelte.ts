@@ -10,6 +10,7 @@ import {
 import type { NotificationInboxView } from '$lib/types/api.gen';
 import { SvelteSet } from 'svelte/reactivity';
 import { errorMessage } from '$lib/utils/errors';
+import { plural } from '$lib/utils/plural';
 
 /** A row as a dismiss leaves it: seen and cleared. */
 function markCleared(n: NotificationInboxView): NotificationInboxView {
@@ -79,7 +80,7 @@ export class NotificationInbox {
 			const result = await purgeNotifications();
 			this.feedback = {
 				type: 'success',
-				message: `Purged ${result.deleted} cleared notification${result.deleted !== 1 ? 's' : ''}`
+				message: `Purged ${result.deleted} cleared ${plural(result.deleted, 'notification')}`
 			};
 			await this.load();
 		} catch (e) {

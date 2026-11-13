@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { serviceRows } from '$lib/utils/header-status';
@@ -54,7 +55,8 @@
 				href={$isGuest ? undefined : '/settings#drives'}
 				class="nav-item mobile-stats-row"
 			>
-				{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}
+				{$dashboard.db_available ? $dashboard.drives_online : '--'}
+				{plural($dashboard.drives_online, 'drive')}
 			</svelte:element>
 			{#if rippingCount > 0}
 				<p class="nav-item mobile-stats-ripping">{rippingCount} ripping</p>
@@ -71,7 +73,8 @@
 			{/if}
 			{#if ($dashboard.notification_count ?? 0) > 0}
 				<a href="/notifications" class="nav-item mobile-stats-notification">
-					{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}
+					{$dashboard.notification_count}
+					{plural($dashboard.notification_count, 'notification')}
 				</a>
 			{/if}
 		</div>

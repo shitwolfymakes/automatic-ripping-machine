@@ -12,6 +12,7 @@ import {
 import { encoderLabel } from '$lib/stores/encoders.svelte';
 import { settingsCount } from '$lib/handbrake/sidebarModel';
 import type { CellContent, TableColumn } from '$lib/components/dataTable';
+import { plural } from '$lib/utils/plural';
 
 const NOT_USED: CellContent = { text: 'Not used', muted: true };
 const CPU_HERE = 'Encodes on CPU on this host';
@@ -48,7 +49,7 @@ function identificationCell(p: RipPresetView): CellContent {
 function trackFiltersCell(p: RipPresetView): CellContent {
 	const count = Object.keys(p.track_filters_json ?? {}).length;
 	if (count === 0) return NONE;
-	return { text: `${count} ${count === 1 ? 'filter' : 'filters'}` };
+	return { text: `${count} ${plural(count, 'filter')}` };
 }
 
 /** The Rip presets table's columns. `usage` maps a preset id to the number of sessions that use it. */

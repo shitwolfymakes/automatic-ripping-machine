@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import type { IsoStatus } from '$lib/utils/setup-drives';
@@ -12,7 +13,7 @@
 		<span class="iso-library-card-title"><Glyph name="disc-3" /> Rip from image files</span>
 		<span class="chip chip-sm {iso.on ? 'chip-success' : ''}">
 			<Glyph name={iso.on ? 'check-circle' : 'minus-circle'} class="h-3 w-3" />
-			ISO library: {iso.on ? `on, ${iso.count} image${iso.count === 1 ? '' : 's'}` : 'off'}
+			ISO library: {iso.on ? `on, ${iso.count} ${plural(iso.count, 'image')}` : 'off'}
 		</span>
 	</div>
 	<p class="iso-library-card-help">ARM can rip ISO image files with no drive at all.</p>

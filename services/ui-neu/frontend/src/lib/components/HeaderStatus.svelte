@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import type { Snippet } from 'svelte';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { isGuest } from '$lib/stores/auth';
@@ -31,7 +32,7 @@
 {/snippet}
 
 {#snippet driveCount()}
-	{$dashboard.db_available ? $dashboard.drives_online : '--'} drive{$dashboard.drives_online !== 1 ? 's' : ''}
+	{$dashboard.db_available ? $dashboard.drives_online : '--'} {plural($dashboard.drives_online, 'drive')}
 {/snippet}
 
 <div class="layout-stats-bar hidden lg:flex items-center gap-3">
@@ -66,7 +67,7 @@
 		{/if}
 		{#if ($dashboard.notification_count ?? 0) > 0}
 			<a href="/notifications" class="layout-activity-notification"
-				>{$dashboard.notification_count} notification{$dashboard.notification_count !== 1 ? 's' : ''}</a
+				>{$dashboard.notification_count} {plural($dashboard.notification_count, 'notification')}</a
 			>
 		{/if}
 	</div>

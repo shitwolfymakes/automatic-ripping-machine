@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	// System health's list layout, used by Settings > System, with one row per
 	// check and per storage path.
 	import type { SystemDiagnosticsResponse } from '$lib/types/api.gen';
@@ -56,7 +57,7 @@
 			data-testid="system-health-summary"
 		>
 			<span class="alert-title">
-				{tally.allOk ? 'All OK' : `${tally.issueCount} issue${tally.issueCount === 1 ? '' : 's'} found`}
+				{tally.allOk ? 'All OK' : `${tally.issueCount} ${plural(tally.issueCount, 'issue')} found`}
 			</span>
 			<span class="panel-hint system-health-list-summary-count"
 				>{result.checks.length} checks, {result.paths.length} paths</span

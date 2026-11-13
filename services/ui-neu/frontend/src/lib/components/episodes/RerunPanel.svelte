@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	// Fix match: pick a source / season / disc / tolerance, preview the
 	// outcome, then apply it or discard it. Presentational - the panel owns
 	// the requests.
@@ -94,7 +95,7 @@
 		<div class="rerun-panel-bar">
 			<p class="rerun-panel-bar-text">
 				{preview.changed}
-				{preview.changed === 1 ? 'track changes' : 'tracks change'} if you apply {preview.label}. Nothing is saved yet.
+				{plural(preview.changed, 'track changes', 'tracks change')} if you apply {preview.label}. Nothing is saved yet.
 			</p>
 			<div class="rerun-panel-bar-actions">
 				<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={ondiscard}>Discard</button>

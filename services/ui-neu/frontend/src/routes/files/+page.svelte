@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
@@ -363,7 +364,7 @@
 <!-- Bulk delete confirmation -->
 <ConfirmDialog
 	open={bulkDeleteOpen}
-	title="Delete {browser.selectedKeys.size} item{browser.selectedKeys.size !== 1 ? 's' : ''}"
+	title="Delete {browser.selectedKeys.size} {plural(browser.selectedKeys.size, 'item')}"
 	message="This will permanently delete {browser.selectedKeys.size} selected item{browser.selectedKeys.size !== 1
 		? 's'
 		: ''}, including all contents of any folders. This cannot be undone."

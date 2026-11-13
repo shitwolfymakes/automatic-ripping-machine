@@ -1,5 +1,6 @@
 // Display and merge helpers for the match picker (match picker spec 4.1).
 import type { ExternalIds, IdentityFacts, MetadataCandidate } from '$lib/types/api.gen';
+import { plural } from '$lib/utils/plural';
 
 export const RATING_LABEL: Record<string, string> = { imdb: 'IMDb', tmdb: 'TMDb', tvmaze: 'TVmaze' };
 
@@ -28,7 +29,7 @@ export function candidateSubtitle(c: MetadataCandidate, ...extra: string[]): str
 export function formatVotes(n: number): string {
 	if (n >= 1_000_000) return `${trim(n / 1_000_000)}M votes`;
 	if (n >= 1000) return `${trim(n / 1000)}K votes`;
-	return `${n} ${n === 1 ? 'vote' : 'votes'}`;
+	return `${n} ${plural(n, 'vote')}`;
 }
 
 function trim(x: number): string {

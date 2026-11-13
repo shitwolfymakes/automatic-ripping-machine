@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	// System health's grouped layout, used by the setup walkthrough's System
 	// step, with storage and services as cards and fix commands for what fails.
 	import type { SystemDiagnosticsResponse, StorageRoot } from '$lib/types/api.gen';
@@ -55,7 +56,7 @@
 			<div class="alert alert-danger flex items-start gap-2" data-testid="system-health-summary" role="alert">
 				<Glyph name="x-circle" class="mt-0.5" />
 				<span>
-					<strong>{tally.problemCount} problem{tally.problemCount === 1 ? '' : 's'} to fix on the server</strong><br />
+					<strong>{tally.problemCount} {plural(tally.problemCount, 'problem')} to fix on the server</strong><br />
 					These come from .env and docker-compose, so the fix happens on the server, not here.
 				</span>
 			</div>

@@ -1,6 +1,7 @@
 // Pure helpers for the LogView log terminal.
 import type { LogEntry } from '$lib/api/logs';
 import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
+import { plural } from '$lib/utils/plural';
 
 /** A level filter: one level, or every line. */
 export type LogLevelFilter = 'all' | 'error' | 'warning' | 'info' | 'debug';
@@ -41,16 +42,12 @@ export function countLabel(shown: number, total: number): string {
 
 /** "1 match", or "N matches". */
 export function matchLabel(count: number): string {
-	return `${count} ${count === 1 ? 'match' : 'matches'}`;
+	return `${count} ${plural(count, 'match', 'matches')}`;
 }
 
 /** "Following", "Paused", or "Paused · N new line(s)". */
 export function followLabel(following: boolean, waiting: number): string {
-	return following
-		? 'Following'
-		: waiting === 0
-			? 'Paused'
-			: `Paused · ${waiting} new ${waiting === 1 ? 'line' : 'lines'}`;
+	return following ? 'Following' : waiting === 0 ? 'Paused' : `Paused · ${waiting} new ${plural(waiting, 'line')}`;
 }
 
 /** What a log line's `data-tone` can be: a tone, or null for none. */

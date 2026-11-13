@@ -21,6 +21,7 @@ import { encoderCards, type EncoderCard } from './encoderCards';
 import { keysForTab, type TabId } from './fields';
 import { pruneUnreachable, toPayload } from './settingsEdit';
 import { fieldVisible, type Context } from './dependencyRules';
+import { plural } from '$lib/utils/plural';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
 export type BaseValues = Record<string, unknown> | null;
@@ -181,7 +182,7 @@ export interface RowFlags {
 
 function settingsLabel(count: number): string | null {
 	if (count === 0) return null;
-	return `${count} ${count === 1 ? 'setting' : 'settings'}`;
+	return `${count} ${plural(count, 'setting')}`;
 }
 
 // What a Transcode presets list row adds to its attribute line; nothing for a rip preset (null).
@@ -199,7 +200,7 @@ export function sidebarTitle(mode: SidebarMode): string {
 }
 
 export function usageLabel(count: number): string {
-	return `Used by ${count} ${count === 1 ? 'session' : 'sessions'}`;
+	return `Used by ${count} ${plural(count, 'session')}`;
 }
 
 export function commonOf(s: HandbrakeSettings): Record<string, unknown> {

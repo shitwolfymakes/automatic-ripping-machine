@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { childSubpath } from '$lib/utils/files';
 	import type { MovePicker } from '$lib/stores/movePicker.svelte';
@@ -25,7 +26,8 @@
 			<!-- Header -->
 			<div class="shrink-0 files-page-modal-header">
 				<h3 class="modal-title">
-					Move {count} item{count !== 1 ? 's' : ''}
+					Move {count}
+					{plural(count, 'item')}
 				</h3>
 				<p class="files-page-modal-subtitle">Browse to the destination folder</p>
 			</div>

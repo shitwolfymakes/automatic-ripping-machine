@@ -10,6 +10,7 @@ import type {
 import { TABS, type TabId } from './fields';
 import { storedCount } from './settingsEdit';
 import type { Draft } from './sidebarModel';
+import { plural } from '$lib/utils/plural';
 
 export interface ImportReview {
 	encoderInFile: string;
@@ -84,10 +85,6 @@ function tabCounts(settings: HandbrakeSettings, schema: HandbrakeSchemaSlimView)
 	return counts;
 }
 
-function plural(n: number): string {
-	return n === 1 ? 'key' : 'keys';
-}
-
 function notesFor(
 	p: ImportedPresetView,
 	schema: HandbrakeSchemaSlimView,
@@ -101,7 +98,9 @@ function notesFor(
 	}
 	if (p.dropped_keys.length > 0) {
 		const n = p.dropped_keys.length;
-		notes.push(`${n} ${plural(n)} dropped (not in HandBrake ${schema.handbrake_tag}): ${p.dropped_keys.join(', ')}`);
+		notes.push(
+			`${n} ${plural(n, 'key')} dropped (not in HandBrake ${schema.handbrake_tag}): ${p.dropped_keys.join(', ')}`
+		);
 	}
 	return [...notes, ...messagesOf(p)];
 }

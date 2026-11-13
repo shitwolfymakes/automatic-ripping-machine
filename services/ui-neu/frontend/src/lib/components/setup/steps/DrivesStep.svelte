@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { onMount, onDestroy } from 'svelte';
 	import type { DriveView, SetupView } from '$lib/types/api.gen';
 	import DriveCard from '$lib/components/DriveCard.svelte';
@@ -43,7 +44,8 @@
 	<div class="drives-step-head">
 		<div>
 			<p class="drives-step-count">
-				{total} drive{total === 1 ? '' : 's'} found{parts.ignored.length ? `, ${parts.ignored.length} ignored` : ''}
+				{total}
+				{plural(total, 'drive')} found{parts.ignored.length ? `, ${parts.ignored.length} ignored` : ''}
 			</p>
 			<p class="drives-step-help">ARM also rescans every 30 seconds. New drives appear here on their own.</p>
 		</div>

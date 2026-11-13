@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { errorMessage } from '$lib/utils/errors';
 	import { slide } from 'svelte/transition';
 	import { get } from 'svelte/store';
@@ -72,7 +73,7 @@
 <section id="all-jobs" class="list-panel">
 	<div class="list-panel-header">
 		<h2 class="list-panel-title">All Jobs</h2>
-		<span class="list-panel-count">{jobsList.total} {jobsList.total === 1 ? 'job' : 'jobs'}</span>
+		<span class="list-panel-count">{jobsList.total} {plural(jobsList.total, 'job')}</span>
 		<JobFilterBar statusFilter={jobsList.statusFilter} onstatusfilter={jobsList.setStatusFilter} />
 		<span class="flex-1"></span>
 		<div class="dashboard-view-group">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
@@ -154,7 +155,7 @@
 		items={preparingRips}
 		key={(prepare) => prepare.drive_id}
 		accent="var(--color-accent-4)"
-		label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
+		label="PREPARING - {preparingRips.length} {plural(preparingRips.length, 'ISO', 'ISOS')}"
 	>
 		{#snippet row(prepare)}
 			<IsoPreparingRow {prepare} />
@@ -166,7 +167,7 @@
 		items={scanningJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-4)"
-		label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}"
+		label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
 	>
 		{#snippet row(job)}
 			<ActiveJobRow
@@ -201,7 +202,7 @@
 		items={finishingJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-1)"
-		label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}"
+		label="FINISHING - {finishingJobs.length} {plural(finishingJobs.length, 'JOB', 'JOBS')}"
 	>
 		{#snippet row(job)}
 			<ActiveJobRow {job} />

@@ -3,6 +3,7 @@ import type { JobLogFileView, JobView } from '$lib/types/api.gen';
 import type { IsoSourceKind } from '$lib/api/dashboard';
 import { discTypeLabel, getVideoTypeConfig, type VideoTypeConfig } from './job-type';
 import { readJobMetadata } from './job-metadata';
+import { plural } from '$lib/utils/plural';
 
 type DiscFields = Partial<Pick<JobView, 'season' | 'disc_number' | 'disc_total'>>;
 type TypeFields = Pick<JobView, 'metadata_json' | 'disc_type'> &
@@ -82,7 +83,7 @@ export function filterLogJobs<T extends Pick<JobView, 'id' | 'status' | 'title'>
  * noun follows `total`, not `shown`.
  */
 export function logCountText(shown: number, total: number, filtering: boolean): string {
-	const noun = total === 1 ? 'job' : 'jobs';
+	const noun = plural(total, 'job');
 	return filtering ? `${shown} of ${total} ${noun}` : `${total} ${noun}`;
 }
 
