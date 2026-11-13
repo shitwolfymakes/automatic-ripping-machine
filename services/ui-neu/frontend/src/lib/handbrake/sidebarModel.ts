@@ -19,10 +19,10 @@ import type {
 } from '$lib/types/api.gen';
 import { encoderCards, type EncoderCard } from './encoderCards';
 import { keysForTab, type TabId } from './fields';
+import { PRESET_ENCODER_ID } from './encoder-availability';
 import { pruneUnreachable, toPayload } from './settingsEdit';
 import { fieldVisible, type Context } from './dependencyRules';
 import { plural } from '$lib/utils/plural';
-import { PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
 export type BaseValues = Record<string, unknown> | null;

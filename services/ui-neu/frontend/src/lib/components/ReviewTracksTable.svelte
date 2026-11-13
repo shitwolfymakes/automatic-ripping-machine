@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage as toErrorMessage } from '$lib/utils/errors';
 	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
 	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/utils/review-rows';
@@ -34,7 +35,7 @@
 			await updateTrack(job.id, trackId, { [field]: value });
 			onrefresh?.();
 		} catch (e) {
-			errorMessage = `Failed to update track: ${e instanceof Error ? e.message : 'Unknown error'}`;
+			errorMessage = `Failed to update track: ${toErrorMessage(e, 'Unknown error')}`;
 		}
 	}
 

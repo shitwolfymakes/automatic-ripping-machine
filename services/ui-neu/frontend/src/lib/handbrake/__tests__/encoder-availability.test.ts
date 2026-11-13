@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
-import { availabilityLabel, findAvailability } from '../encoder-availability';
+import { PRESET_ENCODER_ID, availabilityLabel, findAvailability } from '../encoder-availability';
 
 const catalog = [
 	{ id: 'x265', label: 'x265 (CPU)', available: true },
@@ -24,5 +24,11 @@ describe('availabilityLabel', () => {
 
 	it('is the caller fallback for an unlisted id', () => {
 		expect(availabilityLabel(catalog, 'nope', 'This preset')).toBe('This preset');
+	});
+});
+
+describe('PRESET_ENCODER_ID', () => {
+	it('is the preset sentinel id', () => {
+		expect(PRESET_ENCODER_ID).toBe('preset');
 	});
 });

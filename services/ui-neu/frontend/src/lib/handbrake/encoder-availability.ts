@@ -1,5 +1,8 @@
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 
+/** The encoder id meaning "the preset's own encoder" (no catalog entry). */
+export const PRESET_ENCODER_ID = 'preset';
+
 /** The availability entry whose catalog id is `id`, if the catalog lists it. */
 export function findAvailability(
 	availability: EncoderAvailabilityView[],

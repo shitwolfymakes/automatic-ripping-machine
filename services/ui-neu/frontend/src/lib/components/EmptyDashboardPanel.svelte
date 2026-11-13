@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { transcoderEnabled } from '$lib/stores/config';
 
 	interface Props {
@@ -28,8 +29,9 @@
 			{$transcoderEnabled ? 'No active rips or transcodes' : 'No active rips'}
 		</p>
 		<p class="empty-dashboard-hint">
-			Insert a disc to get started - {drivesOnline} drive{drivesOnline !== 1 ? 's' : ''} online{#if !armOnline}, ARM
-				offline{/if}{#if $transcoderEnabled && !transcoderOnline}, transcoder offline{/if}
+			Insert a disc to get started - {drivesOnline}
+			{plural(drivesOnline ?? 0, 'drive')} online{#if !armOnline}, ARM offline{/if}{#if $transcoderEnabled && !transcoderOnline},
+				transcoder offline{/if}
 		</p>
 	</div>
 </section>
