@@ -64,7 +64,7 @@ export default defineConfig(
 	},
 	{
 		// ui-neu file layout (see the development guidelines): kebab-case modules, PascalCase components. SvelteKit route files
-		// (+page, +layout) and generated or ambient declarations are exempt. 
+		// (+page, +layout) and generated or ambient declarations are exempt.
 		plugins: { unicorn },
 		ignores: ['src/routes/**', '**/*.d.ts', 'src/lib/types/api.gen.ts'],
 		files: ['**/*.ts', '**/*.js'],
@@ -91,7 +91,14 @@ export default defineConfig(
 		rules: {
 			'no-restricted-imports': [
 				'error',
-				{ patterns: [{ regex: '(^\\$lib/components(/|$))|((^|/)components/)', message: 'lib code outside components/ must not import from components/.' }] }
+				{
+					patterns: [
+						{
+							regex: '(^\\$lib/components(/|$))|((^|/)components/)',
+							message: 'lib code outside components/ must not import from components/.'
+						}
+					]
+				}
 			]
 		}
 	},
