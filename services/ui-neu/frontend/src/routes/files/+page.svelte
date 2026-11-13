@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
@@ -58,7 +59,7 @@
 		try {
 			await action();
 		} catch (e) {
-			showFeedback({ type: 'error', message: e instanceof Error ? e.message : fallback });
+			showFeedback({ type: 'error', message: errorMessage(e, fallback) });
 		}
 	}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount, tick, type Component } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
@@ -72,7 +73,7 @@
 		try {
 			await action();
 		} catch (e) {
-			error = e instanceof Error ? e.message : failure;
+			error = errorMessage(e, failure);
 		} finally {
 			busy = false;
 		}

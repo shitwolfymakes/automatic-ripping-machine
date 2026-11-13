@@ -3,6 +3,7 @@
 import type { MetadataCandidate } from '$lib/types/api.gen';
 import { fetchMatchDetails, type MatchProvider } from '$lib/api/jobs';
 import { candidateKey, detailsId, isSeriesKind, mergeCandidate } from '$lib/utils/match';
+import { errorMessage } from '$lib/utils/errors';
 
 export class MatchDetailsCache {
 	/** Fetched details by candidate key. */
@@ -60,7 +61,7 @@ export class MatchDetailsCache {
 			this.errors = { ...this.errors, [key]: resp.detail ?? 'No details found.' };
 		} catch (e) {
 			if (gen !== this.#generation) return null;
-			this.errors = { ...this.errors, [key]: e instanceof Error ? e.message : 'Could not load details' };
+			this.errors = { ...this.errors, [key]: errorMessage(e, 'Could not load details') };
 		} finally {
 			if (gen === this.#generation) this.loading = { ...this.loading, [key]: false };
 		}

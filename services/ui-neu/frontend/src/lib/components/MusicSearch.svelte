@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView, TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
 	import { searchMusicMetadata, fetchMusicDetail } from '$lib/api/jobs';
 	import { matchIndicator } from '$lib/utils/track-match';
@@ -57,7 +58,7 @@
 			if (resp.detail) searchError = resp.detail;
 			else if (results.length === 0) searchError = 'No results found.';
 		} catch (e) {
-			searchError = e instanceof Error ? e.message : 'Search failed';
+			searchError = errorMessage(e, 'Search failed');
 		} finally {
 			searching = false;
 		}
@@ -70,7 +71,7 @@
 		try {
 			detail = await fetchMusicDetail(c.provider_id);
 		} catch (e) {
-			release.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+			release.feedback = { type: 'error', message: errorMessage(e, 'Load failed') };
 		} finally {
 			loadingDetail = false;
 		}

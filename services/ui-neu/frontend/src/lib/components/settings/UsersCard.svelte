@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import TimeAgo from '$lib/components/TimeAgo.svelte';
 	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
@@ -26,7 +27,7 @@
 		try {
 			users = await fetchUsers();
 		} catch (e) {
-			feedback.hold('error', e instanceof Error ? e.message : 'Failed to load users');
+			feedback.hold('error', errorMessage(e, 'Failed to load users'));
 		} finally {
 			loading = false;
 		}

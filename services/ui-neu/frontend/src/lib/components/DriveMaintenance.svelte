@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { DriveRescanResponse } from '$lib/types/api.gen';
 	import { rescanDrives } from '$lib/api/drives';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -20,7 +21,7 @@
 			summary = await rescanDrives(force);
 			onrescanned(summary);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Rescan failed';
+			error = errorMessage(e, 'Rescan failed');
 		} finally {
 			scanning = false;
 		}

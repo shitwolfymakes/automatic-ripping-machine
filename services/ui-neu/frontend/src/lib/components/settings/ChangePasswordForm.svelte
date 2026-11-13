@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { reveal } from '$lib/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import Glyph from '$lib/components/Glyph.svelte';
@@ -58,7 +59,7 @@
 			onsuccess();
 			return true;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Password change failed';
+			error = errorMessage(err, 'Password change failed');
 			return false;
 		} finally {
 			submitting = false;

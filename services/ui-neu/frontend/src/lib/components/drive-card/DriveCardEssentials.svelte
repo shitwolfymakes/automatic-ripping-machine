@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The drive card's essentials variant: name and 4K only, for the setup
 	// walkthrough (setup spec §5.4).
 	import type { DriveView as Drive } from '$lib/types/api.gen';
@@ -32,7 +33,7 @@
 			essentialsSaved = 'Name saved';
 			onupdate?.();
 		} catch (e) {
-			essentialsError = e instanceof Error ? e.message : 'Saving the name failed';
+			essentialsError = errorMessage(e, 'Saving the name failed');
 		}
 	}
 
@@ -43,7 +44,7 @@
 			essentialsSaved = '4K setting saved';
 			onupdate?.();
 		} catch (e) {
-			essentialsError = e instanceof Error ? e.message : 'Saving the 4K setting failed';
+			essentialsError = errorMessage(e, 'Saving the 4K setting failed');
 		}
 	}
 </script>

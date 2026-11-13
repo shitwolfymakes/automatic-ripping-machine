@@ -1,6 +1,7 @@
 // The transcoder page's task actions: retry and delete, and the feedback
 // banner's error.
 import { retryTranscoderJob, deleteTranscoderJob } from '$lib/api/transcoder';
+import { errorMessage } from '$lib/utils/errors';
 
 export class TranscodeTaskActions {
 	#reload: () => unknown;
@@ -19,7 +20,7 @@ export class TranscodeTaskActions {
 		try {
 			await action();
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : `${verb} failed`;
+			this.error = errorMessage(e, `${verb} failed`);
 		}
 		this.#reload();
 	};

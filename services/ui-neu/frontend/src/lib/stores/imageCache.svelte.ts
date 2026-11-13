@@ -1,6 +1,7 @@
 // The Settings page's image cache: its stats, the loading and busy flags,
 // the clear confirmation and the feedback line.
 import { fetchImageCacheStats, clearImageCache, type ImageCacheStats } from '$lib/api/maintenance';
+import { errorMessage } from '$lib/utils/errors';
 
 export class ImageCache {
 	stats = $state<ImageCacheStats | null>(null);
@@ -32,7 +33,7 @@ export class ImageCache {
 			};
 			this.stats = await fetchImageCacheStats();
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Failed to clear cache' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Failed to clear cache') };
 		}
 		this.busy = false;
 	};

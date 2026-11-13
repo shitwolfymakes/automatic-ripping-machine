@@ -5,7 +5,6 @@ import {
 	activeSessionKey,
 	deletePresetMessage,
 	deleteSessionMessage,
-	errorMessage,
 	isCreatingRipPreset,
 	isCreatingTranscodePreset,
 	isRipSidebarReadOnly,
@@ -100,10 +99,6 @@ describe('messages', () => {
 		expect(deleteSessionMessage(null)).toBe('');
 		expect(deletePresetMessage({ name: 'HQ' })).toBe('Delete the preset "HQ"? This cannot be undone.');
 		expect(deletePresetMessage(null)).toBe('');
-	});
-	it('errorMessage uses the Error message or a fallback', () => {
-		expect(errorMessage(new Error('boom'))).toBe('boom');
-		expect(errorMessage('x')).toBe('Unknown error');
 	});
 });
 

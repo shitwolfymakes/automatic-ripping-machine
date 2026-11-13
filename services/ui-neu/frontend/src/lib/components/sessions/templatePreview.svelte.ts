@@ -2,6 +2,7 @@
 // latest expansion, the one with optional values empty, and any error.
 import { previewTemplate } from '$lib/api/sessions';
 import type { TemplatePreviewRequest } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export class TemplatePreview {
 	/** The template filled with sample values, or null when there is none. */
@@ -29,7 +30,7 @@ export class TemplatePreview {
 				this.expansionWithoutOptional = result.expansion_without_optional ?? null;
 				this.error = null;
 			} catch (err) {
-				this.error = err instanceof Error ? err.message : String(err);
+				this.error = errorMessage(err, String(err));
 				this.expansion = null;
 				this.expansionWithoutOptional = null;
 			}

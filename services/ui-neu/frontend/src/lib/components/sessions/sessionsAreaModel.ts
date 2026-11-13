@@ -81,10 +81,6 @@ export function deletePresetMessage(target: { name: string } | null): string {
 	return target ? `Delete the preset "${target.name}"? This cannot be undone.` : '';
 }
 
-export function errorMessage(e: unknown): string {
-	return e instanceof Error ? e.message : 'Unknown error';
-}
-
 // A ripper-only deployment (not transcode-capable) can never run encode work,
 // so it shows only passthrough sessions and presets.
 export function passthroughSessions<S extends SessionView>(

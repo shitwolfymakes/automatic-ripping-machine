@@ -5,6 +5,7 @@
      confirmation and is refused by the server (409) while a running
      transcode holds the claim. -->
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import type { GpuView } from '$lib/types/api.gen';
 	import { fetchGpus, updateGpu, deleteGpu, probeGpu, probeAllGpus } from '$lib/api/gpus';
@@ -53,7 +54,7 @@
 				probes.start([g.id]);
 				error = null;
 			} catch (e) {
-				error = e instanceof Error ? e.message : 'Re-probe failed.';
+				error = errorMessage(e, 'Re-probe failed.');
 			}
 		});
 	}
@@ -65,7 +66,7 @@
 			probes.start(gpus.filter((g) => g.enabled).map((g) => g.id));
 			error = null;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Re-probe failed.';
+			error = errorMessage(e, 'Re-probe failed.');
 		} finally {
 			probingAll = false;
 		}

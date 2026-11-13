@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { slide } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { bulkDeleteJobs } from '$lib/api/jobs';
@@ -42,7 +43,7 @@
 		} catch (e) {
 			bulkFeedback = {
 				type: 'error',
-				message: e instanceof Error ? e.message : 'Bulk action failed'
+				message: errorMessage(e, 'Bulk action failed')
 			};
 		} finally {
 			bulkBusy = false;

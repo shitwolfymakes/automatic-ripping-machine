@@ -9,6 +9,7 @@ import {
 } from '$lib/api/notifications';
 import type { NotificationInboxView } from '$lib/types/api.gen';
 import { SvelteSet } from 'svelte/reactivity';
+import { errorMessage } from '$lib/utils/errors';
 
 /** A row as a dismiss leaves it: seen and cleared. */
 function markCleared(n: NotificationInboxView): NotificationInboxView {
@@ -66,7 +67,7 @@ export class NotificationInbox {
 			this.clearedCount += result.updated;
 			this.rows = this.rows.map((n) => (n.cleared ? n : markCleared(n)));
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Dismiss all failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Dismiss all failed') };
 		} finally {
 			this.dismissing = new SvelteSet();
 		}
@@ -82,7 +83,7 @@ export class NotificationInbox {
 			};
 			await this.load();
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Purge failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Purge failed') };
 		}
 		this.purging = false;
 	};

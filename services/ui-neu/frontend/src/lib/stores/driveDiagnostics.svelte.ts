@@ -3,6 +3,7 @@
 import { SvelteDate } from 'svelte/reactivity';
 import { fetchDriveDiagnostic } from '$lib/api/drives';
 import type { DriveDiagnosticResponse } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export class DriveDiagnostics {
 	running = $state(false);
@@ -22,7 +23,7 @@ export class DriveDiagnostics {
 			this.lastRun = new SvelteDate(Date.now()).toLocaleTimeString();
 			this.open = true;
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : 'Diagnostic failed';
+			this.error = errorMessage(e, 'Diagnostic failed');
 			this.result = null;
 		} finally {
 			this.running = false;

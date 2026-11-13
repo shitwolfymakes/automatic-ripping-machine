@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { fetchSystemDiagnostics } from '$lib/api/system';
 	import { fetchResources } from '$lib/api/resources';
@@ -37,7 +38,7 @@
 			lastRun = new Date().toISOString();
 			onresult?.(result);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Health checks failed';
+			error = errorMessage(e, 'Health checks failed');
 		} finally {
 			loading = false;
 		}

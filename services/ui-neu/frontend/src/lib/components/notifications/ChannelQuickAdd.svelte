@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import type { Catalog } from '$lib/types/notifications';
 	import { fetchServices, fetchEventTypes, type EventTypeInfo } from '$lib/api/channels';
@@ -21,7 +22,7 @@
 		try {
 			[catalog, eventTypes] = await Promise.all([fetchServices(), fetchEventTypes()]);
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not load the notification services.';
+			loadError = errorMessage(e, 'Could not load the notification services.');
 		}
 	});
 

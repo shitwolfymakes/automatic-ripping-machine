@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import { setJobMediaType } from '$lib/api/jobs';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -35,7 +36,7 @@
 			await setJobMediaType(job.id, type);
 			onchanged(type);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not change the type';
+			error = errorMessage(e, 'Could not change the type');
 		} finally {
 			saving = false;
 		}

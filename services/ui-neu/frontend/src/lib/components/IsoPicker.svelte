@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { tick } from 'svelte';
 	import { startIsoRip } from '$lib/api/iso';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -189,7 +190,7 @@
 			});
 			onstarted(created.drive_id);
 		} catch (e) {
-			startError = e instanceof Error ? e.message : 'Could not start the rip.';
+			startError = errorMessage(e, 'Could not start the rip.');
 		} finally {
 			starting = false;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// A value in a facts grid that an admin edits in place: click it, type,
 	// Enter saves (Escape cancels, leaving the field saves too). The owner
 	// does the save and the reload; this only holds the draft.
@@ -43,7 +44,7 @@
 			await onsave(text);
 			editing = false;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Save failed';
+			error = errorMessage(e, 'Save failed');
 		} finally {
 			busy = false;
 		}

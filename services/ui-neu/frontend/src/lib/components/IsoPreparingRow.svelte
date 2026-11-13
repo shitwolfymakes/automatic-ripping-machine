@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { IsoPreparing } from '$lib/api/dashboard';
 	import IsoSourceChip from './IsoSourceChip.svelte';
 	import ProgressBar from './ProgressBar.svelte';
@@ -29,7 +30,7 @@
 		try {
 			await cancelIsoRip(prepare.drive_id);
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Cancel failed', body: e instanceof Error ? e.message : 'Unknown error' });
+			addToast({ tone: 'error', title: 'Cancel failed', body: errorMessage(e, 'Unknown error') });
 		} finally {
 			cancelling = false;
 		}

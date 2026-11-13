@@ -1,6 +1,7 @@
 // A metadata search's progress flag and its error line, shared by the title
 // searches; the caller owns the results.
 import type { MetadataCandidate } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export interface SearchMessages {
 	/** Shown when the answer has no candidates. */
@@ -35,7 +36,7 @@ export class MetadataSearch {
 			onfound(resp.candidates);
 			if (resp.candidates.length === 0) this.error = messages.empty;
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : messages.failed;
+			this.error = errorMessage(e, messages.failed);
 		} finally {
 			this.searching = false;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 	import { goto } from '$app/navigation';
@@ -39,7 +40,7 @@
 			if (firstRun && result.role === 'admin') goto('/setup');
 			else goto(result.password_must_change ? '/change-password' : '/');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Login failed';
+			error = errorMessage(err, 'Login failed');
 		} finally {
 			submitting = false;
 		}

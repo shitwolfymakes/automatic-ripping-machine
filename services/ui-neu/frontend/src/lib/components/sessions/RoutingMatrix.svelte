@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The Routing view: a media-type by disc-type matrix, each cell the session
 	// a disc of that kind routes to. Loads and saves its own routes.
 	import { onMount } from 'svelte';
@@ -37,7 +38,7 @@
 		try {
 			[routes, sessions] = await Promise.all([fetchSessionRoutes(), fetchSessions()]);
 		} catch (e) {
-			feedback.hold('error', e instanceof Error ? e.message : 'Failed to load session routes');
+			feedback.hold('error', errorMessage(e, 'Failed to load session routes'));
 		} finally {
 			loading = false;
 		}
@@ -59,7 +60,7 @@
 				const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
 				routes = withRoute(routes, mediaType, discType, saved);
 			} catch (e) {
-				feedback.show('error', e instanceof Error ? e.message : 'Failed to save route');
+				feedback.show('error', errorMessage(e, 'Failed to save route'));
 				await load();
 			}
 		});
@@ -71,7 +72,7 @@
 				await deleteSessionRoute(route.id);
 				routes = routes.filter((r) => r.id !== route.id);
 			} catch (e) {
-				feedback.show('error', e instanceof Error ? e.message : 'Failed to clear route');
+				feedback.show('error', errorMessage(e, 'Failed to clear route'));
 				await load();
 			}
 		});

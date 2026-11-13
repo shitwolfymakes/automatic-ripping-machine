@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
@@ -56,7 +57,7 @@
 			await cancelIsoRip(job.drive_id);
 		} catch (e) {
 			// The card stays; tell the operator why (e.g. 409 once the rip ended).
-			addToast({ tone: 'error', title: 'Cancel failed', body: e instanceof Error ? e.message : 'Unknown error' });
+			addToast({ tone: 'error', title: 'Cancel failed', body: errorMessage(e, 'Unknown error') });
 		} finally {
 			cancelling = false;
 		}

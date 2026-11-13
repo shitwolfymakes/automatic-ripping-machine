@@ -4,6 +4,7 @@ import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api
 import { resolveJob, updateJobTitle } from '$lib/api/jobs';
 import { titleMatchBody, titleResolveBody, type TitleApplyValues } from '$lib/utils/job-resolve';
 import { isSeriesKind } from '$lib/utils/match';
+import { errorMessage } from '$lib/utils/errors';
 
 export type FeedbackAt = { row: number; list: number };
 export type TitleFeedback = { type: 'success' | 'error'; message: string } & FeedbackAt;
@@ -58,7 +59,7 @@ export class TitleMatchApply {
 			this.feedback = { type: 'success', message, ...at };
 			done(resolved);
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed', ...at };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Apply failed'), ...at };
 		} finally {
 			this.applying = false;
 		}

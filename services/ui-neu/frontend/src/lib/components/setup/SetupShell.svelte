@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { theme, toggleTheme } from '$lib/stores/theme';
@@ -26,7 +27,7 @@
 			await finishLater();
 			goto('/');
 		} catch (e) {
-			deferError = e instanceof Error ? e.message : 'Could not save Finish later.';
+			deferError = errorMessage(e, 'Could not save Finish later.');
 		} finally {
 			deferring = false;
 		}

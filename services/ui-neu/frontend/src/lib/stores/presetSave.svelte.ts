@@ -1,3 +1,4 @@
+import { errorMessage } from '$lib/utils/errors';
 // A preset form's save: whether one is in flight, and the last one's
 // error line.
 export class PresetSave {
@@ -16,7 +17,7 @@ export class PresetSave {
 		try {
 			onsaved(await save());
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : 'Save failed';
+			this.error = errorMessage(e, 'Save failed');
 		} finally {
 			this.submitting = false;
 		}

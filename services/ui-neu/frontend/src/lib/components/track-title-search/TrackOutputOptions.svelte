@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The track title override's output options box, with its save.
 	import type { TrackView } from '$lib/types/api.gen';
 	import { trackOptionsBody } from '$lib/utils/track-edit';
@@ -39,7 +40,7 @@
 			onfeedback({ type: 'success', message: 'Track options saved' });
 			onsaved();
 		} catch (e) {
-			onfeedback({ type: 'error', message: e instanceof Error ? e.message : 'Save failed' });
+			onfeedback({ type: 'error', message: errorMessage(e, 'Save failed') });
 		} finally {
 			savingOptions = false;
 		}

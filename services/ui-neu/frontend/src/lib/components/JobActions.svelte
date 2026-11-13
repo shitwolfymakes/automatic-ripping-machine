@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 	import { isRipped } from '$lib/utils/job-status-groups';
@@ -41,7 +42,7 @@
 			feedback = { type: 'success', message };
 			onaction?.();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : failed };
+			feedback = { type: 'error', message: errorMessage(e, failed) };
 		} finally {
 			loading = null;
 			clearFeedback();

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The HandBrake GUI export import flow in the preset sidebar: step 1 reads a
 	// file or pasted JSON through the parse endpoint, step 2 reviews what came
 	// back. Accepting hands the preset to the sidebar; nothing is saved here.
@@ -40,7 +41,7 @@
 			presets = response.presets;
 			pick = defaultPick(response.presets);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not read the file';
+			error = errorMessage(e, 'Could not read the file');
 		} finally {
 			loading = false;
 		}

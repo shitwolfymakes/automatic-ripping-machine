@@ -14,13 +14,13 @@
 	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
 	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcodePresets';
 	import { addToast } from '$lib/stores/toast.svelte';
+	import { errorMessage } from '$lib/utils/errors';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import {
 		activePresetKey,
 		activeSessionKey,
 		deletePresetMessage,
 		deleteSessionMessage,
-		errorMessage,
 		isCreatingRipPreset,
 		isCreatingTranscodePreset,
 		isRipSidebarReadOnly,
@@ -96,7 +96,7 @@
 			await data.load();
 			return true;
 		} catch (e) {
-			addToast({ tone: 'error', title: failTitle, body: errorMessage(e) });
+			addToast({ tone: 'error', title: failTitle, body: errorMessage(e, 'Unknown error') });
 			return false;
 		}
 	}

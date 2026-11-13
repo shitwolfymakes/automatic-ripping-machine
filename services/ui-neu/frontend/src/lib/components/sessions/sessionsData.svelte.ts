@@ -3,6 +3,7 @@ import { countByMediaType } from '$lib/utils/sessions';
 import { fetchSessions } from '$lib/api/sessions';
 import { fetchRipPresets } from '$lib/api/ripPresets';
 import { fetchTranscodePresets } from '$lib/api/transcodePresets';
+import { errorMessage } from '$lib/utils/errors';
 
 export type JoinedSession = SessionView & {
 	ripPreset: RipPresetView | undefined;
@@ -38,7 +39,7 @@ export function createSessionsData() {
 			rips = r;
 			tcs = t;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load sessions';
+			error = errorMessage(e, 'Failed to load sessions');
 		} finally {
 			loading = false;
 		}

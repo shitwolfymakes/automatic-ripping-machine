@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { TrackView, MetadataCandidate, MediaType } from '$lib/types/api.gen';
 	import { trackTitleBody } from '$lib/utils/track-edit';
 	import { searchMetadata, fetchMediaDetail, clearTrackTitle, updateTrack } from '$lib/api/jobs';
@@ -93,7 +94,7 @@
 			feedback = { type: 'success', message: 'Track title updated' };
 			onapply?.();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Update failed' };
+			feedback = { type: 'error', message: errorMessage(e, 'Update failed') };
 		} finally {
 			applying = false;
 		}
@@ -109,7 +110,7 @@
 			results = [];
 			onclear?.();
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Clear failed' };
+			feedback = { type: 'error', message: errorMessage(e, 'Clear failed') };
 		} finally {
 			clearing = false;
 		}

@@ -5,6 +5,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { fetchIdentity } from '$lib/api/identity';
 import { fetchNamingPreview } from '$lib/api/jobs';
 import type { IdentityView } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export class EpisodeIdentity {
 	identity = $state<IdentityView | null>(null);
@@ -30,7 +31,7 @@ export class EpisodeIdentity {
 			this.loadError = null;
 		} catch (e) {
 			if (this.#currentJobId() !== jobId) return;
-			this.loadError = e instanceof Error ? e.message : 'Could not load episodes';
+			this.loadError = errorMessage(e, 'Could not load episodes');
 		}
 		this.loaded = true;
 		try {

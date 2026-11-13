@@ -2,6 +2,7 @@
 // with each drive's busy kind and last error; a success tells the caller to
 // reload.
 import { enrollDrive, ignoreDrive, unignoreDrive } from '$lib/api/drives';
+import { errorMessage } from '$lib/utils/errors';
 
 export class DriveLifecycleActions {
 	/** Which kind of action is pending, by drive id. */
@@ -24,7 +25,7 @@ export class DriveLifecycleActions {
 			await action();
 			this.#onchanged();
 		} catch (e) {
-			this.errors = { ...this.errors, [id]: e instanceof Error ? e.message : 'Action failed' };
+			this.errors = { ...this.errors, [id]: errorMessage(e, 'Action failed') };
 		} finally {
 			const { [id]: _done, ...left } = this.busy;
 			this.busy = left;

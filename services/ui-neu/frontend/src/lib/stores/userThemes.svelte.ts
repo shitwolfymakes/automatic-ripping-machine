@@ -3,6 +3,7 @@
 import { get } from 'svelte/store';
 import { colorScheme, loadThemesFromApi } from '$lib/stores/colorScheme';
 import { deleteTheme as deleteThemeApi } from '$lib/api/themes';
+import { errorMessage } from '$lib/utils/errors';
 
 export class UserThemes {
 	feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -16,7 +17,7 @@ export class UserThemes {
 			if (get(colorScheme) === id) colorScheme.set('blue');
 			this.feedback = { type: 'success', message: `Theme "${label}" deleted` };
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Delete failed') };
 		}
 	};
 }

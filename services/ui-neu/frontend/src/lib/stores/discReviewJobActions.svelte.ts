@@ -4,6 +4,7 @@
 import type { JobView } from '$lib/types/api.gen';
 import { abandonJob, deleteJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 import { cancelIsoRip } from '$lib/api/iso';
+import { errorMessage } from '$lib/utils/errors';
 
 /** What the card does once an action lands. */
 export interface JobActionCallbacks {
@@ -40,7 +41,7 @@ export class DiscReviewJobActions {
 			this.#done.dismiss();
 			this.#done.refresh();
 		} catch (e) {
-			this.errorMessage = e instanceof Error ? e.message : 'Failed to cancel the job';
+			this.errorMessage = errorMessage(e, 'Failed to cancel the job');
 		} finally {
 			this.cancelling = false;
 		}
@@ -58,7 +59,7 @@ export class DiscReviewJobActions {
 			this.#done.dismiss();
 			this.#done.refresh();
 		} catch (e) {
-			this.errorMessage = e instanceof Error ? e.message : 'Failed to delete the job';
+			this.errorMessage = errorMessage(e, 'Failed to delete the job');
 		} finally {
 			this.deleting = false;
 		}
@@ -96,7 +97,7 @@ export class DiscReviewJobActions {
 			this.#done.dismiss();
 			this.#done.refresh();
 		} catch (e) {
-			this.errorMessage = e instanceof Error ? e.message : 'Failed to start the rip';
+			this.errorMessage = errorMessage(e, 'Failed to start the rip');
 		} finally {
 			this.starting = false;
 		}
@@ -110,7 +111,7 @@ export class DiscReviewJobActions {
 			await pauseWaitingJob(job.id, paused);
 			this.#done.refresh();
 		} catch (e) {
-			this.errorMessage = e instanceof Error ? e.message : 'Failed to update pause';
+			this.errorMessage = errorMessage(e, 'Failed to update pause');
 		} finally {
 			this.pauseBusy = false;
 		}

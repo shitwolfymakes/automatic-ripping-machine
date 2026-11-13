@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// Ported from the removed Vue UI's Diagnostics view: a read-only Service /
 	// Log-level table from GET /api/diagnostics. Self-loading section (matches
 	// the Rip/Transcode/Sessions settings sections, minus CRUD). Log levels are
@@ -18,7 +19,7 @@
 			const resp = await fetchDiagnostics();
 			services = resp.services;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load diagnostics';
+			error = errorMessage(e, 'Failed to load diagnostics');
 		} finally {
 			loading = false;
 		}

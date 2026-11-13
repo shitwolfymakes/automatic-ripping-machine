@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { fetchRipPresets } from '$lib/api/ripPresets';
@@ -118,7 +119,7 @@
 				collisions = found;
 				return;
 			}
-			error = e instanceof Error ? e.message : 'Apply failed';
+			error = errorMessage(e, 'Apply failed');
 		} finally {
 			submitting = false;
 		}

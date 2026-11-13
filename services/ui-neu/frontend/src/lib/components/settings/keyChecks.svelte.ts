@@ -4,6 +4,7 @@ import type { KeyCheckResponse } from '$lib/types/api.gen';
 import { checkApiKey } from '$lib/api/settings';
 import { HIDDEN_SECRET } from '$lib/api/config';
 import { KEY_CHECK_NAMES } from '$lib/utils/settings-sections';
+import { errorMessage } from '$lib/utils/errors';
 
 /**
  * The key a check sends: the field's value when the operator typed a new
@@ -39,7 +40,7 @@ export class KeyChecks {
 				[fieldKey]: {
 					name,
 					status: 'error',
-					detail: e instanceof Error ? e.message : 'check failed',
+					detail: errorMessage(e, 'check failed'),
 					checked_at: null
 				}
 			};

@@ -4,6 +4,7 @@
 import type { DriveView } from '$lib/types/api.gen';
 import { unenrollDrive, updateDrive } from '$lib/api/drives';
 import { triggerManual } from '$lib/api/jobs';
+import { errorMessage } from '$lib/utils/errors';
 
 export class DriveCardActions {
 	selectedSessionId = $state('');
@@ -31,7 +32,7 @@ export class DriveCardActions {
 			this.selectedSessionId = '';
 			this.#refresh();
 		} catch (e) {
-			this.manualError = e instanceof Error ? e.message : 'Manual rip failed';
+			this.manualError = errorMessage(e, 'Manual rip failed');
 		} finally {
 			this.triggering = false;
 		}
@@ -49,7 +50,7 @@ export class DriveCardActions {
 			await unenrollDrive(driveId);
 			await this.#refresh();
 		} catch (e) {
-			this.unenrollError = e instanceof Error ? e.message : 'Unenroll failed';
+			this.unenrollError = errorMessage(e, 'Unenroll failed');
 		} finally {
 			this.unenrolling = false;
 		}

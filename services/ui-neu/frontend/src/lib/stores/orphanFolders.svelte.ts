@@ -4,6 +4,7 @@ import { fetchOrphanFolders, deleteFolder as deleteOrphanFolder, bulkDeleteFolde
 import type { OrphanFoldersResponse } from '$lib/api/maintenance';
 import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
 import { cleanupFeedback } from '$lib/utils/files';
+import { errorMessage } from '$lib/utils/errors';
 
 export class OrphanFolders {
 	isOpen = $state(false);
@@ -48,7 +49,7 @@ export class OrphanFolders {
 			this.feedback = { type: 'success', message: `Folder "${name}" deleted` };
 			await this.#reload();
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Delete failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Delete failed') };
 		}
 		this.busy = false;
 	};
@@ -60,7 +61,7 @@ export class OrphanFolders {
 			this.feedback = cleanupFeedback(result.removed.length, 'folder', result.errors.length);
 			await this.#reload();
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Bulk delete failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Bulk delete failed') };
 		}
 		this.busy = false;
 	};

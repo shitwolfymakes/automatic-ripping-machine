@@ -4,6 +4,7 @@
 import { fetchNamingPreview } from '$lib/api/jobs';
 import { explainNamingProblem } from '$lib/utils/naming-problem';
 import type { JobNamingPreviewResponse } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export class NamingPreview {
 	/** The output paths the chosen session would give the job. */
@@ -29,7 +30,7 @@ export class NamingPreview {
 			})
 			.catch((e) => {
 				if (cancelled) return;
-				this.problem = explainNamingProblem(e instanceof Error ? e.message : 'Preview failed');
+				this.problem = explainNamingProblem(errorMessage(e, 'Preview failed'));
 			})
 			.finally(() => {
 				if (!cancelled) this.loading = false;

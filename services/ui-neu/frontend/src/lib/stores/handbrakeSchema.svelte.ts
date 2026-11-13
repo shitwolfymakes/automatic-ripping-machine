@@ -4,16 +4,13 @@
 
 import { fetchHandbrakeSchema, refreshHandbrakeSchema } from '$lib/api/handbrakeSchema';
 import type { HandbrakeSchemaSlimView } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export type SchemaState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 let state = $state<SchemaState>('idle');
 let schema = $state<HandbrakeSchemaSlimView | null>(null);
 let error = $state<string | null>(null);
-
-function messageOf(e: unknown): string {
-	return e instanceof Error ? e.message : String(e);
-}
 
 async function load(): Promise<void> {
 	state = 'loading';
@@ -23,7 +20,7 @@ async function load(): Promise<void> {
 		state = 'ready';
 	} catch (e) {
 		schema = null;
-		error = messageOf(e);
+		error = errorMessage(e, String(e));
 		state = 'unavailable';
 	}
 }

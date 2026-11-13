@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import { resolveJob } from '$lib/api/jobs';
 	import { reveal } from '$lib/transitions';
@@ -64,7 +65,7 @@
 			onrefresh?.();
 			onsaved?.(changed);
 		} catch (e) {
-			feedback = { type: 'error', message: e instanceof Error ? e.message : 'Save failed' };
+			feedback = { type: 'error', message: errorMessage(e, 'Save failed') };
 		} finally {
 			saving = false;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import {
@@ -98,7 +99,7 @@
 			await updateDrive(drive.id, { default_session_id: value || null });
 			onupdate?.();
 		} catch (e) {
-			defaultSessionError = e instanceof Error ? e.message : 'Failed to set default session';
+			defaultSessionError = errorMessage(e, 'Failed to set default session');
 		} finally {
 			savingDefaultSession = false;
 		}

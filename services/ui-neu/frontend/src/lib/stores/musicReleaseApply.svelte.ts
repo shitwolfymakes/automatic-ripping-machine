@@ -4,6 +4,7 @@
 import { resolveJob, patchJob } from '$lib/api/jobs';
 import type { ResolveBody } from '$lib/utils/job-resolve';
 import type { JobUpdateRequest } from '$lib/types/api.gen';
+import { errorMessage } from '$lib/utils/errors';
 
 export type ApplyFeedback = { type: 'success' | 'error'; message: string };
 
@@ -87,7 +88,7 @@ export class MusicReleaseApply {
 			await this.#savePatch(plan.jobId, plan.patchBody());
 			onapply?.();
 		} catch (e) {
-			this.feedback = { type: 'error', message: e instanceof Error ? e.message : 'Apply failed' };
+			this.feedback = { type: 'error', message: errorMessage(e, 'Apply failed') };
 		} finally {
 			this.applying = false;
 		}

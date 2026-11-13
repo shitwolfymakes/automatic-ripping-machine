@@ -4,6 +4,7 @@
 import { matchIdentity, type EpisodeSource } from '$lib/api/identity';
 import type { MatchPreview, MatchRequest } from '$lib/types/api.gen';
 import { shortSourceLabel } from '$lib/utils/episode-sources';
+import { errorMessage } from '$lib/utils/errors';
 
 /** What a run needs from the panel. */
 export interface MatchRunHost {
@@ -23,7 +24,7 @@ function matchErrorLine(label: string, error: unknown, placementLabel: string | 
 	const still = placementLabel
 		? ` the placement below is still ${placementLabel}'s.`
 		: ' the placement below is unchanged.';
-	return `${label} didn't answer (${error instanceof Error ? error.message : 'error'}). Nothing changed;${still}`;
+	return `${label} didn't answer (${errorMessage(error, 'error')}). Nothing changed;${still}`;
 }
 
 export class MatchRunner {

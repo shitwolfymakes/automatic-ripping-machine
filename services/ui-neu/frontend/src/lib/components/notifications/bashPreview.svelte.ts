@@ -2,6 +2,7 @@
 // preview, the last test run, and whether a run is in flight.
 import { previewBash, type BashPreviewRequest, type BashPreviewResult } from '$lib/api/channels';
 import { failedPreview, failedRun } from './bashResults';
+import { errorMessage } from '$lib/utils/errors';
 
 export class BashPreview {
 	/** The latest preview, or null before the first one arrives. */
@@ -23,7 +24,7 @@ export class BashPreview {
 			try {
 				this.preview = await previewBash(request());
 			} catch (e) {
-				this.preview = failedPreview(e instanceof Error ? e.message : 'preview failed');
+				this.preview = failedPreview(errorMessage(e, 'preview failed'));
 			}
 		}, 300);
 	};
@@ -41,7 +42,7 @@ export class BashPreview {
 			this.preview = res;
 			this.lastRun = res.result ?? null;
 		} catch (e) {
-			this.lastRun = failedRun(e instanceof Error ? e.message : 'test failed');
+			this.lastRun = failedRun(errorMessage(e, 'test failed'));
 		} finally {
 			this.running = false;
 		}

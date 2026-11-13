@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { Channel, Catalog } from '$lib/types/notifications';
 	import {
 		fetchChannels,
@@ -56,7 +57,7 @@
 			eventTypes = evts;
 			loaded = true;
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Failed to load channels';
+			loadError = errorMessage(e, 'Failed to load channels');
 		}
 	}
 
@@ -75,7 +76,7 @@
 			addOpen = false;
 			addToast({ tone: 'success', title: 'Channel added', body: `${created.name} is now listening for events.` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Add failed', body: e instanceof Error ? e.message : 'Unknown error' });
+			addToast({ tone: 'error', title: 'Add failed', body: errorMessage(e, 'Unknown error') });
 		}
 	}
 
@@ -97,7 +98,7 @@
 			channels = channels.map((x) => (x.id === c.id ? updated : x));
 			addToast({ tone: 'success', title: 'Saved.' });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Save failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Save failed', body: errorMessage(e, '') });
 		}
 	}
 
@@ -142,7 +143,7 @@
 			if (expandedId === c.id) expandedId = null;
 			addToast({ tone: 'info', title: `Deleted ${c.name}` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Delete failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Delete failed', body: errorMessage(e, '') });
 		}
 	}
 

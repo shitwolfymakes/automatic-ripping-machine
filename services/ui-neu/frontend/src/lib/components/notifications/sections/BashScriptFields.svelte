@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { ChevronRight } from 'lucide-svelte';
 	import { fetchScript, fetchScripts, type BashScriptInfo, type BashScriptSummary } from '$lib/api/channels';
@@ -31,7 +32,7 @@
 		try {
 			scripts = await fetchScripts();
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not list scripts';
+			loadError = errorMessage(e, 'Could not list scripts');
 		} finally {
 			loaded = true;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { resolveJob } from '$lib/api/jobs';
 	import type { JobView, ResolveResponse } from '$lib/types/api.gen';
 	import TitleSearch from './TitleSearch.svelte';
@@ -80,7 +81,7 @@
 			const resp = await resolveJob(job.id, body);
 			onidentified(resp);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Identify failed';
+			error = errorMessage(e, 'Identify failed');
 		} finally {
 			submitting = false;
 		}

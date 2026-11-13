@@ -4,6 +4,7 @@ import { fetchRoots, fetchDirectory } from '$lib/api/files';
 import type { FileRoot, DirectoryListing } from '$lib/api/files';
 import { sortEntries, nextSort, sortRoots, childSubpath, selectionKey as buildSelectionKey } from '$lib/utils/files';
 import type { SortKey, SortDir } from '$lib/utils/files';
+import { errorMessage } from '$lib/utils/errors';
 
 export class FilesBrowser {
 	roots = $state<FileRoot[]>([]);
@@ -78,7 +79,7 @@ export class FilesBrowser {
 				this.current = { root: this.roots[0].key, subpath: '' };
 			}
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : 'Failed to load roots';
+			this.error = errorMessage(e, 'Failed to load roots');
 		}
 	};
 
@@ -91,7 +92,7 @@ export class FilesBrowser {
 		try {
 			this.listing = await fetchDirectory(root, subpath);
 		} catch (e) {
-			this.error = e instanceof Error ? e.message : 'Failed to load directory';
+			this.error = errorMessage(e, 'Failed to load directory');
 			this.listing = null;
 		} finally {
 			this.loading = false;

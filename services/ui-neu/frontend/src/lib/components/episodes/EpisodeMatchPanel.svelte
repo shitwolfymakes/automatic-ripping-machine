@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
@@ -169,8 +170,7 @@
 			rerunOpen = false;
 			onchanged?.();
 		} catch (e) {
-			if (job.id === jobId)
-				runner.error = `Could not clear the episodes (${e instanceof Error ? e.message : 'error'}).`;
+			if (job.id === jobId) runner.error = `Could not clear the episodes (${errorMessage(e, 'error')}).`;
 		} finally {
 			clearing = false;
 		}
@@ -248,7 +248,7 @@
 		try {
 			await updateTrack(job.id, trackId, data);
 		} catch (e) {
-			handError = e instanceof Error ? e.message : 'Could not save';
+			handError = errorMessage(e, 'Could not save');
 			return false;
 		}
 		await reload();

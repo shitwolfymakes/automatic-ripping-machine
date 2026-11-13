@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount, type Snippet } from 'svelte';
 	import type { ConfigView, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
@@ -21,7 +22,7 @@
 			group = stepGroup(s.schema.groups, step);
 			config = s.config;
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not load settings';
+			loadError = errorMessage(e, 'Could not load settings');
 		}
 	});
 
