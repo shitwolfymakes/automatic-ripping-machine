@@ -7,6 +7,7 @@ import type {
 	HandbrakeSettings,
 	ImportedPresetView
 } from '$lib/types/api.gen';
+import { availabilityLabel } from './encoder-availability';
 import { TABS, type TabId } from './fields';
 import { storedCount } from './settingsEdit';
 import type { Draft } from './sidebarModel';
@@ -27,7 +28,7 @@ export interface ImportReview {
 	notes: string[];
 }
 
-export const COPIED_NOTE = 'Only bit depth is copied. Other encoders keep their defaults.';
+const COPIED_NOTE = 'Only bit depth is copied. Other encoders keep their defaults.';
 
 // The codec a HandBrake family encodes: the catalog suffix (nvenc_h264) or the CPU family name.
 const CODEC_LABELS: Record<string, string> = {
@@ -47,7 +48,7 @@ type Block = Record<string, unknown>;
 
 // The availability label of the catalog id that matches the family, else the family id.
 export function familyLabel(family: string, availability: EncoderAvailabilityView[]): string {
-	return availability.find((a) => a.id === family)?.label ?? family;
+	return availabilityLabel(availability, family, family);
 }
 
 function sourceFamily(encoder: string): string {

@@ -114,7 +114,7 @@ export function routeCellView(
 
 /** The label of an option in a cell's select. */
 export function sessionOptionLabel(session: SessionView): string {
-	return `${session.name}${session.is_builtin ? ' (built-in)' : ''}`;
+	return `${session.name ?? ''}${session.is_builtin ? ' (built-in)' : ''}`;
 }
 
 export interface OtherRouteView {

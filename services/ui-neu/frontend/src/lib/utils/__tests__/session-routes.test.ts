@@ -185,6 +185,10 @@ describe('sessionOptionLabel', () => {
 	it('marks a built-in session', () => {
 		expect(sessionOptionLabel(session({ name: 'Movie', is_builtin: true }))).toBe('Movie (built-in)');
 	});
+
+	it('is empty for a session that arrives without a name', () => {
+		expect(sessionOptionLabel(session({ name: null as unknown as string }))).toBe('');
+	});
 });
 
 describe('otherRouteView', () => {

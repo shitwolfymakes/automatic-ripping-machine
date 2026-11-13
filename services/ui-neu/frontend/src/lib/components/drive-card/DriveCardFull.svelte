@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 	import { transcoderEnabled } from '$lib/stores/config';
+	import { sessionOptionLabel } from '$lib/utils/session-routes';
 	import { DriveCardActions } from '$lib/stores/driveCardActions.svelte';
 	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/utils/sessions';
 	import { hasLiveJob, isDriveDetached, prescanOverrideCount, startRipBlockedReason } from '$lib/utils/drives';
@@ -137,7 +138,7 @@
 		>
 			<option value="">- none -</option>
 			{#each pickerSessions as s (s.id)}
-				<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
+				<option value={s.id}>{sessionOptionLabel(s)}</option>
 			{/each}
 		</select>
 		<button

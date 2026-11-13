@@ -22,6 +22,7 @@ import { keysForTab, type TabId } from './fields';
 import { pruneUnreachable, toPayload } from './settingsEdit';
 import { fieldVisible, type Context } from './dependencyRules';
 import { plural } from '$lib/utils/plural';
+import { PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
 export type BaseValues = Record<string, unknown> | null;
@@ -49,7 +50,6 @@ export const AMD_NOTE =
 export const CLEARED_NOTE = "This preset's HandBrake settings will be cleared when you save.";
 export const MARKED_ISSUES_MESSAGE = 'Fix the marked settings and save again.';
 
-const PRESET_ENCODER = 'preset';
 const LOCKED_TOOLS = new Set<TranscodeTool>(['abcde', 'none']);
 const DEFAULT_DEPTH = 8;
 const TITLES: Record<SidebarMode, string> = {
@@ -69,7 +69,7 @@ export function initialDraft(preset: TranscodePresetView | null): Draft {
 		tool: preset?.tool ?? 'handbrake',
 		preset_ref: preset?.preset_ref ?? null,
 		container: preset?.container ?? 'mkv',
-		encoder: preset?.encoder ?? PRESET_ENCODER,
+		encoder: preset?.encoder ?? PRESET_ENCODER_ID,
 		extra_args: preset?.extra_args ?? '',
 		settings: settingsOf(preset?.handbrake_settings ?? null)
 	};
@@ -116,7 +116,7 @@ export function draftToCreate(d: Draft): TranscodePresetCreateRequest {
 
 // abcde and none run their own encoder, so a codec encoder would 422.
 export function onToolChange(d: Draft, tool: TranscodeTool): Draft {
-	return { ...d, tool, encoder: LOCKED_TOOLS.has(tool) ? PRESET_ENCODER : d.encoder };
+	return { ...d, tool, encoder: LOCKED_TOOLS.has(tool) ? PRESET_ENCODER_ID : d.encoder };
 }
 
 // Drops the blocks of families the new encoder can never reach (Review Focus 4).
@@ -143,9 +143,9 @@ export function onBaseChange(
 	bases: Bases
 ): Draft {
 	const next = { ...d, preset_ref: presetRef };
-	if (!schema || d.encoder !== PRESET_ENCODER) return next;
+	if (!schema || d.encoder !== PRESET_ENCODER_ID) return next;
 	if (presetRef !== null && !(presetRef in bases)) return next;
-	return onEncoderChange(next, PRESET_ENCODER, schema, baseEncoderOf(bases, presetRef));
+	return onEncoderChange(next, PRESET_ENCODER_ID, schema, baseEncoderOf(bases, presetRef));
 }
 
 // One preset-block edit; `bases` holds the built-in presets loaded so far, by name. Without a schema the

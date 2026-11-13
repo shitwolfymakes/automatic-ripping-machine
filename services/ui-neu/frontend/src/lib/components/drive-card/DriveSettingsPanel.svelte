@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
+	import { sessionOptionLabel } from '$lib/utils/session-routes';
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import {
@@ -119,7 +120,7 @@
 			>
 				<option value="">- none -</option>
 				{#each sessions as s (s.id)}
-					<option value={s.id}>{s.name}{s.is_builtin ? ' (built-in)' : ''}</option>
+					<option value={s.id}>{sessionOptionLabel(s)}</option>
 				{/each}
 			</select>
 			<p class="field-help">Auto-applied to auto-mode rips on this drive.</p>
