@@ -67,17 +67,21 @@ export default defineConfig(
 		// (+page, +layout) and generated or ambient declarations are exempt. Warning until the renames land.
 		plugins: { unicorn },
 		ignores: ['src/routes/**', '**/*.d.ts', 'src/lib/types/api.gen.ts'],
-		files: ['**/*.ts', '**/*.js', '**/*.svelte'],
+		files: ['**/*.ts', '**/*.js'],
 		rules: {
-			'unicorn/filename-case': ['warn', { cases: { kebabCase: true }, ignore: [/^__tests__$/] }]
+			'unicorn/filename-case': ['warn', { cases: { kebabCase: true }, ignore: [/^__tests__$/, /^__fixtures__$/] }]
 		}
 	},
 	{
-		// The rule also checks folder names, which stay kebab-case, so components allow both cases.
+		// Folders are checked kebab-case by the block above; a folder holding only .svelte files is not checked.
+		plugins: { unicorn },
 		files: ['**/*.svelte'],
 		ignores: ['src/routes/**'],
 		rules: {
-			'unicorn/filename-case': ['warn', { cases: { kebabCase: true, pascalCase: true }, ignore: [/^__tests__$/] }]
+			'unicorn/filename-case': [
+				'warn',
+				{ cases: { pascalCase: true }, checkDirectories: false, ignore: [/^__tests__$/, /^__fixtures__$/] }
+			]
 		}
 	},
 	{

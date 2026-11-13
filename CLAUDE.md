@@ -127,7 +127,7 @@ Any missing line or branch inside a touched symbol fails the rule. Use `# pragma
 
 ### ui-neu file layout
 
-Under `services/ui-neu/frontend/src/lib`; `npm run lint` enforces the file names (`unicorn/filename-case`).
+Under `services/ui-neu/frontend/src/lib`; `npm run lint` enforces module and component file names, not test file names (`unicorn/filename-case`).
 
 1. **Names:** kebab-case for every `.ts`, `.js` and `.svelte.ts` file and every folder (`session-routes.ts`, `handbrake-schema.svelte.ts`, `drive-card/`); Svelte components stay PascalCase (`DataTable.svelte`). In code: camelCase for variables, functions and properties; PascalCase for types, interfaces and components.
 2. **Tests:** in a `__tests__/` folder beside the code they test, never a loose sibling `*.test.ts` or a `lib/__tests__/` catch-all. A test file is named after its module (`data-table.test.ts` tests `data-table.ts`; extra suites use a dotted suffix: `data-table.cells.test.ts`).
