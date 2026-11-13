@@ -5,7 +5,7 @@
 	import type { SystemDiagnosticsResponse } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
 	import { checkDetail, checkLabel, healthTally, pathDetail, pathState } from '$lib/dashboard/system-health';
-	import HealthCheckRow from '../settings/HealthCheckRow.svelte';
+	import HealthCheckRow from './HealthCheckRow.svelte';
 
 	let {
 		result,

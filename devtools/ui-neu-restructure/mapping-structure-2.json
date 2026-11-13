@@ -1,0 +1,28 @@
+{
+  "moves": [
+    {
+      "from": "src/lib/components/settings/HealthCheckRow.svelte",
+      "to": "src/lib/components/shared/HealthCheckRow.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/HealthCheckRow.test.ts",
+      "to": "src/lib/components/shared/__tests__/HealthCheckRow.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/ServiceItem.svelte",
+      "to": "src/lib/components/shared/ServiceItem.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/ServiceItem.test.ts",
+      "to": "src/lib/components/shared/__tests__/ServiceItem.test.ts"
+    },
+    {
+      "from": "src/lib/components/settings/StoragePathItem.svelte",
+      "to": "src/lib/components/shared/StoragePathItem.svelte"
+    },
+    {
+      "from": "src/lib/components/settings/__tests__/StoragePathItem.test.ts",
+      "to": "src/lib/components/shared/__tests__/StoragePathItem.test.ts"
+    }
+  ]
+}

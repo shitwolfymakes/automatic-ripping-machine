@@ -6,7 +6,7 @@
 	import { freeLabel, pathState, storageHelp, storageLabel } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import CopyBlock from '$lib/components/CopyBlock.svelte';
-	import HealthItem from './HealthItem.svelte';
+	import HealthItem from '../settings/HealthItem.svelte';
 
 	let { folder, storage }: { folder: PathStatus; storage: readonly StorageRoot[] | null } = $props();
 

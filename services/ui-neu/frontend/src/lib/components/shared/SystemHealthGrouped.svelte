@@ -6,9 +6,9 @@
 	import { formatDateTime } from '$lib/utils/format';
 	import { checkDetail, checkLabel, healthTally, otherChecks, serviceChecks } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import HealthCheckRow from '../settings/HealthCheckRow.svelte';
-	import ServiceItem from '../settings/ServiceItem.svelte';
-	import StoragePathItem from '../settings/StoragePathItem.svelte';
+	import HealthCheckRow from './HealthCheckRow.svelte';
+	import ServiceItem from './ServiceItem.svelte';
+	import StoragePathItem from './StoragePathItem.svelte';
 
 	let {
 		result,

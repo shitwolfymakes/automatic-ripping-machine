@@ -4,7 +4,7 @@
 	import type { SystemDiagnosticCheck } from '$lib/types/api.gen';
 	import { locationLabel, serviceBadge, serviceDescription, serviceLabel } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import HealthItem from './HealthItem.svelte';
+	import HealthItem from '../settings/HealthItem.svelte';
 
 	let { check }: { check: SystemDiagnosticCheck } = $props();
 
