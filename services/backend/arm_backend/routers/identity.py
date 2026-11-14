@@ -328,7 +328,7 @@ async def clear_identity_pin(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> IdentityView:
-    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    # Lock the job row before the identity write (lock order: job, then tracks).
     job = await _get_job(db, job_id, for_update=True)
     clear_pin(job, _EPISODE_PIN)
     db.add(job)
