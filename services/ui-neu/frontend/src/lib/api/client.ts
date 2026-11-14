@@ -1,5 +1,5 @@
 // Single API client core. JWT in localStorage, attached on every request;
-// a 401 fires the unauthorized handler (wired in Tier B to redirect to /login).
+// a 401 fires the unauthorized handler (wired by the root layout to redirect to /login).
 // Same-origin by default — nginx proxies /api/* to the v3 backend.
 
 const TOKEN_KEY = 'arm_token';
