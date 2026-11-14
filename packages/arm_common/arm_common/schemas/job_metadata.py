@@ -1,4 +1,4 @@
-"""Typed core for `jobs.metadata_json` (gap analysis §3.4).
+"""Typed core for `jobs.metadata_json`.
 
 The bag holds four kinds of content, and this module gives each a home:
 
@@ -22,12 +22,10 @@ The bag holds four kinds of content, and this module gives each a home:
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
 
-`extra="allow"` everywhere: the `pending_session_id` mirror that used to live
-in this bag is gone (removed in the job-identity-columns branch; the UIs now
-read the `pending_session_id` job column). `extra="allow"` is kept
-deliberately for one more release as a grace period for rows written before
-migration 0032, so a validate/dump round-trip on old data doesn't drop
-whatever was there; tighten to `forbid` once those rows are confirmed gone.
+`extra="allow"` everywhere, so a validate/dump round-trip on rows written
+before migration 0032 doesn't drop whatever was there; tighten to `forbid`
+once those rows are confirmed gone. The pending session lives in the
+`pending_session_id` job column, not in this bag.
 """
 
 from datetime import datetime
@@ -46,7 +44,7 @@ class ExternalIds(BaseModel):
     tmdb: str | None = None
     tvdb: str | None = None
     tvmaze: str | None = None
-    anidb: str | None = None  # reserved (design test, spec 10)
+    anidb: str | None = None  # reserved
     musicbrainz_release: str | None = None
     # Whether `tmdb` names a movie or a TV show: TMDb numbers the two
     # separately, so a movie's id must never be used as a show id (episode
@@ -83,7 +81,7 @@ class JobIdentity(BaseModel):
     external_ids: ExternalIds = Field(default_factory=ExternalIds)
     overview: str | None = None
     identified_at: datetime | None = None
-    # Snapshot of the picked match's facts (match picker spec 3.6). Not
+    # Snapshot of the picked match's facts. Not
     # refreshed; a later identify or accept replaces the whole identity.
     facts: IdentityFacts | None = None
     facts_fetched_at: datetime | None = None
@@ -127,8 +125,7 @@ class PreviouslyRipped(BaseModel):
 
 class IdentitySuggestion(BaseModel):
     """A confident online match identify did not apply because the media
-    type's "Apply confident matches" switch is off (identification-sources
-    spec D-10). The job keeps its miss title and the `unidentified` flag and
+    type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
     waits in AWAITING_REVIEW with no countdown until the operator accepts
     it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
     way (any resolve clears this section)."""
@@ -155,7 +152,6 @@ class JobMetadata(BaseModel):
     identity: JobIdentity | None = None
     music: MusicMeta | None = None
     # What every identity source proposed (typed; see arm_common.schemas.identity).
-    # Replaces the old `thediscdb` map section (migration 0039 moved it here).
     # Left-to-right union: a valid section parses as IdentityClaims; a corrupt
     # or future-version one passes through raw, so one bad row never fails a
     # bulk read and a validate/dump round-trip (resolve) never wipes it. The

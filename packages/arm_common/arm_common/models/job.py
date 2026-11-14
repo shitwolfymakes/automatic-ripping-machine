@@ -32,21 +32,19 @@ class Job(SQLModel, table=True):
     disc_type: DiscType = Field(sa_column=enum_column(DiscType, "disc_type"))
     # Fingerprints (CRC64, AACS Disc ID, MusicBrainz Disc ID, matrix256, …)
     # live in `disc_fingerprints` keyed by (job_id, algo) — see
-    # arm_common.models.disc_fingerprint. Old single-value columns
-    # (disc_fingerprint, disc_fingerprint_algo, aacs_disc_id) were dropped
-    # in migration 0006 to make the multi-fingerprint design first-class.
+    # arm_common.models.disc_fingerprint.
     title: str | None = Field(default=None)
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
     # What the disc IS (movie/tv/music/data/iso) — set at identify from the
     # provider's kind, correctable at resolve. Null = never identified. This
-    # is the routing input session defaults key on (gap analysis G-03);
+    # is the routing input session defaults key on;
     # VARCHAR + app-side validation like every enum here.
     media_type: MediaType | None = Field(default=None, sa_column=enum_column(MediaType, "media_type", nullable=True))
     # TV box sets: user-supplied season (identify can't know it — see
     # docs/developers/architecture/02 § TV). Null = not a season-shaped disc / unknown.
     season: int | None = Field(sa_column=Column(Integer, nullable=True))
     # Explicit per-rip session choice (manual trigger). Promoted out of
-    # metadata_json (step 2 §3.4): it steers routing, so it is a column.
+    # metadata_json: it steers routing, so it is a column.
     # SET NULL: a deleted session must not strand the job; the routed-session
     # resolver already falls back to the disc-type default.
     pending_session_id: str | None = Field(

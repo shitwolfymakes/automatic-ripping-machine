@@ -34,7 +34,7 @@ def plex_export() -> Any:
 
 @pytest.fixture(scope="session")
 def plex_settings() -> HandbrakeSettings:
-    """The Plex export's settings as stored (spec 4.3): common keys plus an nvenc_h264 block."""
+    """The Plex export's settings as stored: common keys plus an nvenc_h264 block."""
     return HandbrakeSettings(
         common={
             "PictureWidth": 1280,
