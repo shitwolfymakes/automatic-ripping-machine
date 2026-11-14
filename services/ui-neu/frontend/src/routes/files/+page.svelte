@@ -14,7 +14,7 @@
 		bulkResultFeedback,
 		cleanupFeedback,
 		fixedPermissionsMessage
-	} from '$lib/utils/files';
+	} from '$lib/files/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';

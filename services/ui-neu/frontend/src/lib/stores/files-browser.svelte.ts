@@ -2,8 +2,8 @@
 // its sort order and the selection on it.
 import { fetchRoots, fetchDirectory } from '$lib/api/files';
 import type { FileRoot, DirectoryListing } from '$lib/api/files';
-import { sortEntries, nextSort, sortRoots, childSubpath, selectionKey as buildSelectionKey } from '$lib/utils/files';
-import type { SortKey, SortDir } from '$lib/utils/files';
+import { sortEntries, nextSort, sortRoots, childSubpath, selectionKey as buildSelectionKey } from '$lib/files/files';
+import type { SortKey, SortDir } from '$lib/files/files';
 import { errorMessage } from '$lib/utils/errors';
 
 export class FilesBrowser {

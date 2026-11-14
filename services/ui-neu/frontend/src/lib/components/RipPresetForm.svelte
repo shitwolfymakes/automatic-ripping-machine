@@ -5,7 +5,7 @@
 	// submit-body shapes follow the Vue source faithfully.
 	import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
 	import { PresetSave } from '$lib/stores/preset-save.svelte';
-	import type { EditorStatus } from './editor-status';
+	import type { EditorStatus } from '../ui/editor-status';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
 	import { trackFiltersBody, type TrackFilters } from '$lib/jobs/track-filters';
 	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/utils/formValidation';

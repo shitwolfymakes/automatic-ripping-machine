@@ -3,7 +3,7 @@
 import { fetchOrphanFolders, deleteFolder as deleteOrphanFolder, bulkDeleteFolders } from '$lib/api/maintenance';
 import type { OrphanFoldersResponse } from '$lib/api/maintenance';
 import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
-import { cleanupFeedback } from '$lib/utils/files';
+import { cleanupFeedback } from '$lib/files/files';
 import { errorMessage } from '$lib/utils/errors';
 
 export class OrphanFolders {

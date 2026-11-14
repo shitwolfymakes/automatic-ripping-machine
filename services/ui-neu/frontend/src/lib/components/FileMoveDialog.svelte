@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { plural } from '$lib/utils/plural';
 	import Glyph from '$lib/components/Glyph.svelte';
-	import { childSubpath } from '$lib/utils/files';
+	import { childSubpath } from '$lib/files/files';
 	import type { MovePicker } from '$lib/stores/move-picker.svelte';
 
 	interface Props {

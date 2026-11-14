@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROBE_TIMEOUT_MS, ProbeTimers } from '../probe-timers.svelte';
+import { PROBE_TIMEOUT_MS, ProbeTimers } from '../settings-probe-timers.svelte';
 
 describe('ProbeTimers', () => {
 	beforeEach(() => {

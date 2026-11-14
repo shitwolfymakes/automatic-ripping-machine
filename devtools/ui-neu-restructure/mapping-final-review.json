@@ -1,0 +1,13 @@
+{
+  "moves": [
+    { "from": "src/lib/components/editor-status.ts", "to": "src/lib/ui/editor-status.ts" },
+    { "from": "src/lib/utils/files.ts", "to": "src/lib/files/files.ts" },
+    { "from": "src/lib/utils/__tests__/files.test.ts", "to": "src/lib/files/__tests__/files.test.ts" },
+    { "from": "src/lib/components/shared/RecipeStrip.svelte", "to": "src/lib/components/setup/RecipeStrip.svelte" },
+    { "from": "src/lib/components/shared/__tests__/RecipeStrip.test.ts", "to": "src/lib/components/setup/__tests__/RecipeStrip.test.ts" },
+    { "from": "src/lib/stores/key-checks.svelte.ts", "to": "src/lib/stores/settings-key-checks.svelte.ts" },
+    { "from": "src/lib/stores/__tests__/key-checks.test.ts", "to": "src/lib/stores/__tests__/settings-key-checks.test.ts" },
+    { "from": "src/lib/stores/probe-timers.svelte.ts", "to": "src/lib/stores/settings-probe-timers.svelte.ts" },
+    { "from": "src/lib/stores/__tests__/probe-timers.test.ts", "to": "src/lib/stores/__tests__/settings-probe-timers.test.ts" }
+  ]
+}

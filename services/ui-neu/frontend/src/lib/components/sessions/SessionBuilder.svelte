@@ -3,7 +3,7 @@
 	import type { MediaType, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
-	import type { EditorStatus } from '$lib/components/editor-status';
+	import type { EditorStatus } from '$lib/ui/editor-status';
 	import OutputPathField from './OutputPathField.svelte';
 	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/utils/formValidation';
 	import {

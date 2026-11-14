@@ -2,7 +2,7 @@
 // browsing, that folder's listing and the subfolders offered as targets.
 import { fetchDirectory } from '$lib/api/files';
 import type { DirectoryListing } from '$lib/api/files';
-import { moveTargetFolders } from '$lib/utils/files';
+import { moveTargetFolders } from '$lib/files/files';
 import type { FilesBrowser } from './files-browser.svelte';
 
 export class MovePicker {
