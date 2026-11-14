@@ -224,7 +224,7 @@
 				</div>
 
 				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
-			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
+			     Disc identity commits through the IdentifyDialog (resolve), not here. -->
 				<JobPanelTabs {job} {jobDetail} {panels} />
 
 				<!-- Active panel content -->

@@ -114,20 +114,15 @@
 	/* Drive Diagnostics disclosure: a full-width outlined toggle
 	   button over a collapsible detail panel, none of it matching .panel's
 	   metrics (this reuses .panel-section's tint but at its own padding). */
-	/* the original `<hr class="my-2">` sat in a `space-y-6` (margin) stack:
-	   Tailwind v4's zero-specificity space-y rule lost to my-2, so the hr's
-	   own 0.5rem margin-top collapsed into the panel's 1.5rem margin-bottom
-	   (24px above) and its 0.5rem margin-bottom stood alone (8px below,
-	   the diag div being the last child and so getting no space-y margin).
-	   .stack-lg's flex gap never collapses, so cancel 1rem below the hr to
-	   reproduce the original 24px/8px split. */
+	/* the hr sits in a .stack-lg, whose flex gap (1.5rem) never collapses, so cancel 1rem below the hr
+	   to leave 24px above it and 8px below. */
 	.settings-page-diag-divider {
 		margin: 0 0 -1rem;
 		border: 0;
 		border-top: 1px solid var(--color-text);
 		opacity: 0.2;
 	}
-	/* the original border was border-primary/15 (--color-border), lighter
+	/* the border is --color-border, lighter
 	   than .btn's default border-primary-strong. */
 	/* px-3.5 py-2.5 (0.875rem/0.625rem), not .btn's own 1rem/0.5rem - 4px
 	   taller than .btn's default, and the toggle sets the height of
@@ -140,7 +135,7 @@
 		border-color: var(--color-border);
 		background: var(--color-primary-tint-1);
 	}
-	/* the original chevron flipped a full 180deg (open = pointing up);
+	/* the chevron flips a full 180deg (open = pointing up);
 	   .btn's shared .chevron rule only rotates 90deg, tuned for a
 	   right-pointing chevron that turns to point down. */
 	/* :global: .chevron is rendered by the child Glyph component, outside this component's own scoped template */
@@ -151,7 +146,7 @@
 		margin-top: 0.625rem;
 		padding: 0.75rem;
 	}
-	/* the original button was a tinted fill (bg-primary/15, no border), not
+	/* the button is a tinted fill (bg-primary/15, no border), not
 	   .btn's default outlined look. */
 	.settings-page-diag-run {
 		padding: 0.375rem 0.875rem;
@@ -175,7 +170,7 @@
 		font-size: 0.625rem;
 		color: var(--color-text-faint);
 	}
-	/* the original diagError span was text-sm (0.875rem/1.25rem), not
+	/* the diagError span is text-sm (0.875rem/1.25rem), not
 	   field-error's 0.75rem. */
 	.settings-page-diag-error {
 		font-size: 0.875rem;

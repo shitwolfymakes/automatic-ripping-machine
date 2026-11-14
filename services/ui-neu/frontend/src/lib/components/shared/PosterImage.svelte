@@ -51,21 +51,18 @@
 
 <style>
 	/* Default radius (rounded-sm) for both the <img> and its fallback <div>,
-	   moved here because rounded* is banned inline (spec 6.4). NOTE: a few
-	   out-of-scope callers (not in Task 6's file list) still pass their own
-	   rounded-* utility alongside this default class list (e.g. MusicSearch's
-	   rounded-t-md poster tiles); this scoped, unlayered rule now wins that
-	   contest unconditionally instead of the previous same-specificity,
-	   source-order-dependent outcome. Flagged for whichever task migrates
-	   those callers; see task-6-report.md. */
+	   set here because rounded* is banned inline. Some callers (e.g. MusicSearch's rounded-t-md poster
+	   tiles) still pass their own rounded-* utility alongside this default class list; this scoped,
+	   unlayered rule wins that contest unconditionally rather than depending on same-specificity
+	   source order. */
 	.poster-image,
 	.poster-image-fallback {
 		border-radius: var(--radius-sm);
 	}
-	/* was bg-blue-100 text-blue-400: the info tokens (--color-info resolves to
+	/* this icon is a light blue tint with blue-400 text; the info tokens (--color-info resolves to
 	   --color-primary, a much more saturated blue) read too strong for this
 	   icon, so the icon colour uses the blue accent token instead, which is
-	   close to the original blue-400/blue-500 (--color-accent-2 is exactly
+	   close to blue-400/blue-500 (--color-accent-2 is exactly
 	   Tailwind's blue-500 rgb(59,130,246), blue-400 is rgb(96,165,250)). */
 	.poster-image-fallback {
 		background: var(--color-info-soft);

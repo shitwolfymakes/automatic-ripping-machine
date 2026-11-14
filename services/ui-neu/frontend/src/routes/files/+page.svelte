@@ -392,23 +392,21 @@
 <FileMoveDialog picker={movePicker} count={browser.selectedKeys.size} onconfirm={confirmBulkMove} />
 
 <style>
-	/* the original was bg-primary-light-bg/text-primary-dark (blue-100 /
-	   blue-800, dark: 20% blue-900 / blue-400). Those legacy alias tokens are
-	   gone (Task 13), so the banner sits on the nearest live roles: tint-2 is
+	/* the banner sits on the nearest live roles to a light-blue fill with dark-blue text: tint-2 is
 	   a hair lighter than blue-100 and primary-text (blue-700 light /
 	   blue-400 dark) a step lighter than blue-800; both mode-flip on their
-	   own, which also retires the global dark-mode override. Named collapse. */
-	/* original was px-4 py-3 (1rem/0.75rem), not .alert's own 0.5rem/0.75rem default */
+	   own, so no dark-mode override is needed. Named collapse. */
+	/* padding is 1rem/0.75rem, not .alert's own 0.5rem/0.75rem default */
 	.files-page-warning-banner {
 		padding: 0.75rem 1rem;
 		background: var(--color-primary-tint-2);
 		color: var(--color-primary-text);
 	}
-	/* original was px-4 py-2.5 (1rem/0.625rem), not .alert's own 0.5rem/0.75rem default */
+	/* padding is 1rem/0.625rem, not .alert's own 0.5rem/0.75rem default */
 	.files-page-readonly-banner {
 		padding: 0.625rem 1rem;
 	}
-	/* original was px-4 py-2 (1rem/0.5rem) */
+	/* padding is 1rem/0.5rem */
 	.files-page-feedback {
 		padding: 0.5rem 1rem;
 	}
@@ -417,8 +415,7 @@
 	}
 	/* replaces the banned inline `hidden lg:table-cell`/`hidden
 	   md:table-cell` (table/table-row/table-cell are Tailwind
-	   display-utility names, banned outright by the lint per Task 11 fix
-	   round 3 - only the table block's own classes may set that display
+	   display-utility names, banned outright by the lint - only the table block's own classes may set that display
 	   value) */
 	.files-page-cell-lg {
 		display: none;

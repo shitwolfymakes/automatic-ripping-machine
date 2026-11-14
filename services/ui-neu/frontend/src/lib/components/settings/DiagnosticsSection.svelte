@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	// Ported from the removed Vue UI's Diagnostics view: a read-only Service /
+	// A read-only Service /
 	// Log-level table from GET /api/diagnostics. Self-loading section (matches
 	// the Rip/Transcode/Sessions settings sections, minus CRUD). Log levels are
 	// .env-configured (ARM_LOG_LEVEL); there is no write path.
@@ -82,7 +82,7 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original description was text-sm (0.875rem/1.25rem), not
+	/* the description is text-sm (0.875rem/1.25rem), not
 	   panel-hint's 0.75rem - panel-hint is sized for a note under a form
 	   control, a visibly smaller role. */
 	.diagnostics-section-description {

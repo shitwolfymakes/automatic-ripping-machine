@@ -118,11 +118,9 @@
 		border-top: 1px solid var(--color-border);
 		padding: 1rem;
 	}
-	/* the original Close button's border was a genuinely neutral grey
-	   (border-gray-300/600), not the primary-tinted --color-border-strong
-	   every other bare .btn uses - no neutral-border role exists in spec 5.1,
-	   so this is a deliberate, unfixable-without-inventing-a-token collapse
-	   (kept as bare .btn per the reference's precedent, spec section 3). */
+	/* the Close button is a bare .btn, so its border is the primary-tinted --color-border-strong that
+	   every other bare .btn uses, not a neutral grey - no neutral-border role exists in the colour
+	   tokens, so this is a deliberate collapse. */
 	.channel-editor-delete {
 		margin-left: auto;
 	}

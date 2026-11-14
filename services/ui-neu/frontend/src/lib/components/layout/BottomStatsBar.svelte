@@ -4,7 +4,7 @@
 	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
 
 	// Auth pages (/login, /change-password) have no usable session, so the
-	// resources poll would 401 or 403 every tick there (D-137). Same rule as
+	// resources poll would 401 or 403 every tick there. Same rule as
 	// the layout's dashboard poll: stay unmounted and idle on auth pages, and
 	// start once the visitor reaches a real page.
 	const onAuthPage = $derived(

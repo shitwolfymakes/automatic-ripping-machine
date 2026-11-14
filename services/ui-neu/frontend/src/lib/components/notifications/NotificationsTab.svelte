@@ -231,7 +231,7 @@
 		color: var(--color-text-faint);
 	}
 	/* panel-section's own uniform 1rem padding vs this toolbar's px-4 py-3;
-	   the original was bg-page, not panel-section's own primary-tint-1. */
+	   the background is bg-page, not panel-section's own primary-tint-1. */
 	.notifications-tab-toolbar {
 		display: flex;
 		align-items: center;
@@ -240,7 +240,7 @@
 		padding: 0.75rem 1rem;
 		background: var(--color-page);
 	}
-	/* the original was rounded-md px-3 py-1.5 text-xs (0.375rem radius,
+	/* the button is rounded-md px-3 py-1.5 text-xs (0.375rem radius,
 	   0.375rem vertical padding, 1rem bundled line-height) with no border at
 	   all; btn-primary's radius-lg, btn-sm's 0.25rem vertical padding and
 	   inherited 1.25rem line-height (btn-sm sets font-size but not
@@ -251,8 +251,7 @@
 		padding: 0.375rem 0.75rem;
 		line-height: 1rem;
 	}
-	/* the original was p-8 (2rem all around, matches panel-section's default
-	   of 1rem doubled); stated explicitly for clarity. */
+	/* padding is 2rem all around (panel-section's default of 1rem doubled); stated explicitly for clarity. */
 	.notifications-tab-empty {
 		padding: 2rem;
 		text-align: center;

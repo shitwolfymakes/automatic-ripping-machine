@@ -257,7 +257,7 @@
 		width: 62px;
 		justify-content: center;
 	}
-	/* the original buttons were px-2 py-1 text-xs (0.5rem/0.25rem, 12px/16px) -
+	/* the buttons are 0.5rem/0.25rem padding with text-xs (12px/16px) -
 	   .btn-sm's own padding (0.75rem/0.25rem) and line-height (inherited
 	   1.25rem) both differ */
 	.track-title-search-action-btn {

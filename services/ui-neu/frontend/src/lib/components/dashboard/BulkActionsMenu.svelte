@@ -4,7 +4,7 @@
 	import FlyoutDivider from '../shared/FlyoutDivider.svelte';
 
 	interface Props {
-		// v3 job ids are strings (was Set<number> under the BFF).
+		// Job ids are strings.
 		selectedJobs: Set<string>;
 		bulkBusy: boolean;
 		onaction: (action: 'delete', params: { job_ids?: string[]; status?: string }, description: string) => void;

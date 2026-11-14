@@ -18,7 +18,7 @@
 </span>
 
 <style>
-	/* original: rounded px-2 py-0.5 text-xs font-semibold uppercase
+	/* this pill is rounded px-2 py-0.5 text-xs font-semibold uppercase
 	   tracking-wide - badge-sm's own size (0.625rem)/tracking (0.06em)/
 	   padding (0 0.375rem) are tuned for the BUILT-IN/RECOMMENDED tag look,
 	   visibly smaller than this media pill's text-xs (0.75rem)/tracking-wide
@@ -47,9 +47,9 @@
 		background: var(--color-success-soft);
 		color: var(--color-on-success-soft);
 	}
-	/* original gray-100 (rgb 243,244,246) is within a few RGB units of this
-	   card's own surface background (rgb 241,247,255) - visually no pill box
-	   at all, just bold text; transparent reproduces that exactly instead of
+	/* a gray-100 fill (rgb 243,244,246) is within a few RGB units of this card's own surface
+	   background (rgb 241,247,255) - visually no pill box at all, just bold text; transparent gives
+	   that look instead of
 	   introducing a visible box no available neutral token avoids. */
 	.media-pill[data-media='data'] {
 		background: transparent;

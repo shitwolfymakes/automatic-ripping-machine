@@ -6,7 +6,7 @@
 
 	// Detected + ignored drives, shared by Settings > Drives and the setup
 	// walkthrough's Drives step. Enrolling starts a ripper container, which
-	// takes seconds and can fail per drive (setup spec §5.4), so each row
+	// takes seconds and can fail per drive, so each row
 	// carries its own progress and error state.
 	interface Props {
 		detected: DriveView[];

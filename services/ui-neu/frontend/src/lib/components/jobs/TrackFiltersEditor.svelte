@@ -1,5 +1,4 @@
 <script lang="ts">
-	// Ported from the TrackFiltersEditor component of the removed Vue UI.
 	// Model is the `track_filters_json` shape; all conditions are ANDed.
 	import { parseDuration, parseIndexList, type TrackFilters } from '$lib/jobs/track-filters';
 
@@ -74,9 +73,8 @@
 </div>
 
 <style>
-	/* original: mt-2 rounded-lg border border-gray-200 bg-gray-50/50 p-4 -
-	   panel-section's own padding (1rem, matches) and background
-	   (primary-tint-1) are close, but the outer mt-2 spacing to this
+	/* panel-section's own padding (1rem) and background (primary-tint-1) fit, but the outer 0.5rem
+	   spacing to this
 	   component's own caller (RipPresetForm's .stack) needs restating since
 	   .stack's gap does not apply between a sibling and this component's own
 	   root margin. */

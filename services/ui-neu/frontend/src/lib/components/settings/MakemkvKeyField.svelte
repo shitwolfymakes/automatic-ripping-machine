@@ -11,7 +11,7 @@
 
 	// MakeMKV key: the free monthly beta key (value null) or a purchased key.
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports
-	// back, so the status line polls the reported state (setup spec §5.5).
+	// back, so the status line polls the reported state.
 	// Rendered for the `makemkv_key` widget in Settings > Metadata and setup.
 	let {
 		field,
