@@ -77,7 +77,7 @@ describe('TranscodeCard', () => {
 
 		it('renders status badge with a humanized label', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
-			// in_progress now renders as the parsed label "In Progress".
+			// in_progress renders as the parsed label "In Progress".
 			const matches = screen.getAllByText('In Progress');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
@@ -160,7 +160,7 @@ describe('TranscodeCard', () => {
 			});
 		});
 	});
-	// D-130: the ETA must not count the time a task sat queued.
+	// The ETA must not count the time a task sat queued.
 	describe('ETA', () => {
 		it('extrapolates from started_at, not created_at', () => {
 			// Queued at 10:05, claimed at 11:59, 50% at 12:00: one more minute,
@@ -185,7 +185,7 @@ describe('TranscodeCard', () => {
 		});
 
 		it('prefers the persisted eta_seconds from the task row before any live tick arrives', async () => {
-			// D-242: a card that mounts mid-encode shows the heartbeat's ETA, not
+			// A card that mounts mid-encode shows the heartbeat's ETA, not
 			// the local extrapolation (which would read ~1m here).
 			renderComponent(TranscodeCard, {
 				props: {
@@ -218,7 +218,7 @@ describe('TranscodeCard', () => {
 		});
 	});
 
-	// D-248: the encoder frame rate beside the ETA.
+	// The encoder frame rate beside the ETA.
 	describe('frame rate', () => {
 		it('shows the persisted fps and average from the task row', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: 45.67, avg_fps: 23.46 }) } });

@@ -87,7 +87,7 @@
 	.mobile-stats {
 		font-variant-numeric: tabular-nums;
 	}
-	/* .stack-sm is 0.5rem; the original space-y-1 lists here were 0.25rem. */
+	/* .stack-sm is 0.5rem; the lists here are 0.25rem. */
 	.mobile-stats-list {
 		gap: 0.25rem;
 	}

@@ -61,7 +61,7 @@
 {/if}
 
 <style>
-	/* .mono is size-neutral; this was font-mono text-xs (0.75rem/1rem). */
+	/* .mono is size-neutral; this is font-mono text-xs (0.75rem/1rem). */
 	.json-tree-node {
 		font-size: 0.75rem;
 		line-height: 1rem;

@@ -53,14 +53,14 @@ describe('BottomStatsBar', () => {
 		expect(startResources).toHaveBeenCalledTimes(1);
 	});
 
-	it.each(['/login', '/change-password'])('does not render or poll on %s (D-137)', (path) => {
+	it.each(['/login', '/change-password'])('does not render or poll on %s', (path) => {
 		goTo(path);
 		renderComponent(BottomStatsBar);
 		expect(screen.queryByTestId('bottom-stats-bar')).not.toBeInTheDocument();
 		expect(startResources).not.toHaveBeenCalled();
 	});
 
-	it('starts polling on leaving an auth page and stops on returning to one (D-137)', () => {
+	it('starts polling on leaving an auth page and stops on returning to one', () => {
 		goTo('/login');
 		renderComponent(BottomStatsBar);
 		expect(startResources).not.toHaveBeenCalled();

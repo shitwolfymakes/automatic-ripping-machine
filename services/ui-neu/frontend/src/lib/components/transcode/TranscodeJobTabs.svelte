@@ -26,11 +26,11 @@
 </div>
 
 <style>
-	/* the original tab strip had no overflow-x-auto and its buttons had no
+	/* the tab strip has no overflow-x-auto and its buttons have no
 	   whitespace-nowrap - at narrow widths the row itself shrinks and
 	   "In Progress" wraps to two lines, rather than the strip scrolling
 	   horizontally with single-line tabs */
-	/* the original tab strip was gap-1 (0.25rem), not .tabs' own 1rem
+	/* the tab strip gap is 0.25rem, not .tabs' own 1rem
 	   default (tuned for the wider Settings tab strip); no overflow-x-auto
 	   either, so the row shrinks and wraps rather than scrolling. Both axes
 	   are reset: .tabs hides overflow-y, and a hidden y axis would turn a
@@ -39,8 +39,8 @@
 		gap: 0.25rem;
 		overflow: visible;
 	}
-	/* the original buttons were px-4 py-2 (1rem/0.5rem), not .tabs-tab's own
-	   0.25rem/0.625rem default, and had no whitespace-nowrap */
+	/* the buttons are px-4 py-2 (1rem/0.5rem), not .tabs-tab's own
+	   0.25rem/0.625rem default, and have no whitespace-nowrap */
 	.transcoder-page-tab {
 		padding: 0.5rem 1rem;
 		white-space: normal;

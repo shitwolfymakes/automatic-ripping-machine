@@ -20,7 +20,7 @@
 		<h2 class="settings-page-section-title" data-page-section-title>System</h2>
 
 		<!-- Health check (API keys + path permissions) -->
-		<!-- First-run walkthrough re-entry (setup spec §5.11) -->
+		<!-- First-run walkthrough re-entry -->
 		<section class="panel settings-page-setup-again" data-testid="run-setup-again">
 			<div>
 				<h3 class="settings-page-section-title">Setup walkthrough</h3>
@@ -51,7 +51,7 @@
 		{/if}
 	</div>
 
-	<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
+	<!-- Diagnostics -->
 	<section class="mt-6">
 		<DiagnosticsSection />
 	</section>

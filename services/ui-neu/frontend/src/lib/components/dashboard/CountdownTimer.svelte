@@ -121,7 +121,7 @@
 		height: 0.375rem;
 	}
 	/* ticks once per second; the block's default 250ms fill transition is too
-	   quick for that cadence, so this keeps the original 1s linear pace. */
+	   quick for that cadence, so this keeps a 1s linear pace. */
 	.countdown-timer-track .progress-fill {
 		transition-duration: 1000ms;
 	}

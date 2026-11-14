@@ -117,9 +117,9 @@
 
 <style>
 	/* card-status colours its left accent from data-status (job/drive/transcode
-	   statuses in card.css); the ORIGINAL JobCard accent was the video-type hue
-	   (movie/series/music/...), a different axis, so this overrides the accent
-	   colour on top of card-status's own state selectors. */
+	   statuses in card.css); the JobCard accent is the video-type hue (movie/series/music/...), a
+	   different axis, so this overrides the accent colour on top of card-status's own state
+	   selectors. */
 	.job-card {
 		border-left-color: var(--jt-accent);
 		padding: 1rem;
@@ -139,8 +139,8 @@
 	:global(.job-card-poster-square) {
 		width: 6rem;
 	}
-	/* card-title is 0.875rem (a card HEADER size); the original h3 here had no
-	   text-size utility, so it inherited the ambient 1rem body size */
+	/* card-title is 0.875rem (a card HEADER size); this h3 sets no text size, so it inherits the
+	   ambient 1rem body size */
 	.job-card-title {
 		font-weight: 600;
 		color: var(--color-text);
@@ -150,8 +150,7 @@
 		line-height: 1rem;
 		color: var(--color-text-muted);
 	}
-	/* the year row under the title was text-sm in the original; the tag rows
-	   below it were text-xs. One class had silently served both sizes. */
+	/* the year row under the title is 0.875rem; the tag rows below it are 0.75rem. */
 	.job-card-meta-lg {
 		font-size: 0.875rem;
 		line-height: calc(1.25 / 0.875);

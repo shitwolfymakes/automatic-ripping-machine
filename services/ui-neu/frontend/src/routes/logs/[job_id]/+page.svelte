@@ -83,7 +83,7 @@
 		line-height: 1rem;
 		color: var(--color-on-warning-soft);
 	}
-	/* original was px-3 py-2 (0.75rem/0.5rem), not .btn's default 0.5rem
+	/* padding is 0.75rem/0.5rem, not .btn's default 0.5rem
 	   1rem; text-sm matches .btn's own bundled font-size/line-height so no
 	   size modifier is needed, just the padding restated */
 	.log-detail-page-action-btn {

@@ -511,7 +511,7 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
-describe('EpisodeMatchPanel fix round 1', () => {
+describe('EpisodeMatchPanel loading and job changes', () => {
 	it('shows a neutral loading line, not "unavailable", before the first fetch settles', async () => {
 		const first = deferred<IdentityView>();
 		fetchIdentity.mockReturnValue(first.promise);

@@ -133,9 +133,8 @@
 		font-weight: 500;
 		color: var(--color-text);
 	}
-	/* original was a plain lowercase gray-200/gray-600 tag, not .badge's
-	   primary-tinted pill nor .badge-sm's uppercase transform - no neutral
-	   token exists (spec 5.1), so this keeps .badge's shape (pill, weight,
+	/* a plain lowercase neutral tag, not .badge's primary-tinted pill nor .badge-sm's uppercase
+	   transform - no neutral token exists, so this keeps .badge's shape (pill, weight,
 	   size) but restates the case and a text-sm-scale padding */
 	.files-page-current-badge {
 		border-radius: var(--radius-sm);

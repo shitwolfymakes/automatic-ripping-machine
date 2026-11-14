@@ -86,7 +86,7 @@
 			{#if job.updated_at}
 				<span>Updated <TimeAgo date={job.updated_at} /></span>
 			{/if}
-			<!-- From claim to finish: created_at would add the queue wait (D-202).
+			<!-- From claim to finish: created_at would add the queue wait.
 			     Tasks from before started_at existed fall back to created_at. -->
 			{#if job.status === 'done' && (job.started_at ?? job.created_at) && job.updated_at}
 				{@const dur = formatElapsed(job.started_at ?? job.created_at, job.updated_at)}
@@ -108,7 +108,7 @@
 
 <style>
 	/* card-status colours its left accent from data-status, but this card
-	   never sets that attribute - the original was always primary blue.
+	   never sets that attribute - its accent is always primary blue.
 	   style:--card-accent + this scoped rule (which already compiles
 	   unlayered, beating card-status's own @layer components rule
 	   regardless of specificity) reproduces that with no !important -
@@ -121,7 +121,7 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* original action buttons were px-2.5 py-1 text-xs (0.625rem/0.25rem),
+	/* action buttons are px-2.5 py-1 text-xs (0.625rem/0.25rem),
 	   smaller than .btn's own default */
 	.transcoder-page-job-action-btn {
 		padding: 0.25rem 0.625rem;

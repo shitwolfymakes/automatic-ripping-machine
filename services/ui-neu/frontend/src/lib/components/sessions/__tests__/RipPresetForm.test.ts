@@ -196,7 +196,7 @@ describe('RipPresetForm', () => {
 			expect(screen.getByTestId('preset-identification-mode')).toBeDisabled();
 			expect(screen.getByTestId('preset-output-mode')).toBeDisabled();
 
-			// Warning banner instead of the old "only the name is editable" note.
+			// Warning banner rather than an "only the name is editable" note.
 			expect(screen.getByText(/built-in preset and can't be edited/i)).toBeInTheDocument();
 
 			// TrackFiltersEditor hidden for built-in even though track_selection is custom

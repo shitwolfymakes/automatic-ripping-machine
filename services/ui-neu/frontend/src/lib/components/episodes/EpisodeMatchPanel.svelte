@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
+	// The Match Episodes tab: which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';

@@ -39,15 +39,14 @@
 </div>
 
 <style>
-	/* the original stat cards were text-3xl (1.875rem/2.25rem), taller than
+	/* the stat cards are text-3xl (1.875rem/2.25rem), taller than
 	   stat's own 1.5rem/2rem default (tuned for StatStrip) */
 	.transcoder-page-stat-value {
 		font-size: 1.875rem;
 		line-height: 2.25rem;
 	}
-	/* the original "In Progress" value used a literal indigo hue with no
-	   shared token; same transcoder-domain collapse as the worker card and
-	   progress-bar tone above */
+	/* the "In Progress" value has no dedicated token for its indigo hue; same transcoder-domain tone
+	   as the worker card and progress-bar tone above */
 	.transcoder-page-stat-value-progress {
 		color: var(--color-status-transcoding);
 	}

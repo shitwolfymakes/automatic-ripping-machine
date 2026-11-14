@@ -26,7 +26,7 @@
 		</span>
 	</div>
 	{#if gpus.length > 0}
-		<!-- Per-device inventory rows (G-30 awareness): live status per GPU,
+		<!-- Per-device inventory rows: live status per GPU,
 				     with the management card one link away in Settings. -->
 		<div class="stack stack-sm transcoder-page-gpu-rows" data-testid="gpu-rows">
 			{#each gpus as g (g.id)}
@@ -84,9 +84,8 @@
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* the original worker card used a literal indigo hue (border-indigo-200,
-	   bg-indigo-50/50) with no shared token; collapses onto
-	   --color-status-transcoding (violet), the same tone the transcoder
+	/* the worker card has no shared token for its indigo hue (border-indigo-200, bg-indigo-50/50); it
+	   uses --color-status-transcoding (violet), the same tone the transcoder
 	   domain's progress bar uses */
 	.transcoder-page-worker-card {
 		border: 1px solid color-mix(in srgb, var(--color-status-transcoding) 30%, transparent);

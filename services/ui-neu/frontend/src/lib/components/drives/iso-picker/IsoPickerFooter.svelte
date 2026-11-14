@@ -48,7 +48,7 @@
 	/* The slide-over's body (SlideOver.svelte's own markup) is the scrolling
 	   container; pinning the footer to ITS bottom (rather than letting it
 	   scroll away with the content) is this component's one deliberate
-	   departure from the New-session slide-over pattern (spec 7.1). Negative
+	   departure from the New-session slide-over pattern. Negative
 	   margins cancel that body's p-6 so the footer spans full-bleed. */
 	.iso-picker-footer {
 		position: sticky;

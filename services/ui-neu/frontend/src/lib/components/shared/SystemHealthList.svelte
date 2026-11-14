@@ -84,13 +84,13 @@
 </div>
 
 <style>
-	/* the original "Last run" note was text-xs text-gray-400 (a shade
+	/* the "Last run" note is text-xs text-gray-400 (a shade
 	   fainter than panel-hint's --color-text-muted). */
-	/* the original panel was p-6 (1.5rem), not .panel's own p-4 (1rem) default. */
+	/* the panel is p-6 (1.5rem), not .panel's own p-4 (1rem) default. */
 	.system-health-list-panel {
 		padding: 1.5rem;
 	}
-	/* the original button was a tinted fill (bg-primary/15, no border), not
+	/* the button is a tinted fill (bg-primary/15, no border), not
 	   .btn's default outlined look. */
 	.system-health-list-run-btn {
 		border: 0;
@@ -116,9 +116,9 @@
 	.system-health-list-summary-count {
 		margin-top: 0;
 	}
-	/* the header blurb and "Click Run Checks" placeholder were both text-sm
+	/* the header blurb and "Click Run Checks" placeholder are both text-sm
 	   (0.875rem/1.25rem), not panel-hint's 0.75rem - but at different
-	   shades: the blurb was text-gray-500 (muted), the placeholder
+	   shades: the blurb is text-gray-500 (muted), the placeholder
 	   text-gray-400 (faint). */
 	.system-health-list-description {
 		font-size: 0.875rem;

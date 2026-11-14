@@ -135,14 +135,12 @@
 {/if}
 
 <style>
-	/* original was px-3 py-1.5 (0.75rem/0.375rem) */
 	.files-page-orphan-feedback {
 		padding: 0.375rem 0.75rem;
 	}
-	/* original bulk-action buttons were px-3 py-1.5 text-xs (0.75rem/1rem),
-	   smaller than .btn's own default 1rem/0.5rem/text-sm - restated to
-	   match; the icon+label gap (gap-1.5) is close enough to .btn's own
-	   0.375rem default that no override is needed there */
+	/* bulk-action buttons are text-xs (0.75rem/1rem) with 0.375rem/0.75rem padding, smaller than
+	   .btn's own default 1rem/0.5rem/text-sm - restated here; the icon+label gap is close enough to
+	   .btn's own 0.375rem default that no override is needed there */
 	.files-page-bulk-btn {
 		padding: 0.375rem 0.75rem;
 		font-size: 0.75rem;
@@ -153,7 +151,7 @@
 		background: var(--color-danger);
 		color: var(--color-on-primary);
 	}
-	/* darkens on hover like the original's bg-red-600 -> hover:bg-red-700;
+	/* darkens on hover;
 	   no darker danger token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
 	.files-page-bulk-btn-danger:hover {
@@ -210,7 +208,7 @@
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
-	/* the original row was a plain flex row (no hover/pointer affordance -
+	/* the row is a plain flex row (no hover/pointer affordance -
 	   only its checkbox/delete button are interactive); list-row's own
 	   cursor:pointer/hover-tint are for a clickable row and don't apply here */
 	.files-page-orphan-row {
@@ -233,8 +231,8 @@
 		line-height: 1rem;
 		color: var(--color-text-muted);
 	}
-	/* the original category pill used two literal hues with no shared
-	   badge look (rounded-full px-2 py-0.5 text-xs font-medium); nearest
+	/* the category pill is a rounded-full badge (px-2 py-0.5 text-xs font-medium) with no shared badge
+	   look; nearest
 	   tones are warning (raw) and success (completed) */
 	.files-page-category-badge {
 		border-radius: 9999px;

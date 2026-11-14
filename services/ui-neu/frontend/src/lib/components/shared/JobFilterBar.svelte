@@ -1,7 +1,6 @@
 <script lang="ts">
-	// v3 GET /api/jobs supports a single `status` filter (JobStatus). The BFF's
-	// free-text search + video_type / disctype / days filters have no v3
-	// equivalent and were dropped.
+	// GET /api/jobs supports a single `status` filter (JobStatus); it has no free-text search or
+	// video_type / disctype / days filters.
 	interface Props {
 		statusFilter: string;
 		onstatusfilter: (value: string) => void;
