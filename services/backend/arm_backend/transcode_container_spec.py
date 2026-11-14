@@ -71,10 +71,9 @@ def gpu_run_kwargs(gpu: Gpu) -> dict[str, Any]:
 
             kwargs["runtime"] = "nvidia"
             kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
-        # docker-py is a hard dependency (pyproject) — this fallback is dead.
+        # docker-py is a hard dependency (pyproject), so this fallback never runs;
+        # it only keeps the kwarg shape correct should the import ever fail.
         except ImportError:  # pragma: no cover
-            # Defensive guard: keeps the kwarg shape correct if docker-py
-            # is ever missing.
             kwargs["runtime"] = "nvidia"
             fallback = {
                 "Driver": base_kwargs["driver"],

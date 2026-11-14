@@ -1093,7 +1093,7 @@ def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
 
 @pytest.mark.parametrize("status_in", [JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
 def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status_in: JobStatus) -> None:
-    """The cutover-blocker case: a MakeMKV volume-label fallback (or stale TMDB hit) lands
+    """A post-rip title correction: a MakeMKV volume-label fallback (or stale TMDB hit) lands
     a wrong title on a job that auto-identify considers successful. The user fixes title +
     year via the same /resolve endpoint. Status must NOT flip back to IDENTIFIED — a RIPPED
     job stays RIPPED. Fan-out is a no-op because there are no WAITING_IDENTIFY apps."""
@@ -1167,7 +1167,7 @@ def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> N
     """req.external_ids overlays the existing identity.external_ids section
     field-by-field, not a wholesale replace. Sending only a DIFFERENT tmdb
     names a different title, so the old imdb is stale and cleared;
-    same-show partial updates keep the other ids (see the R3 and restate
+    same-show partial updates keep the other ids (see the blank-id and restate
     tests). Non-overlapping sections (scan_result) are preserved."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)

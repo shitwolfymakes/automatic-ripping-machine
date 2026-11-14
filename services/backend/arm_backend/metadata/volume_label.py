@@ -11,8 +11,7 @@ _YEAR_SUFFIX_RE = re.compile(r"[\s_\-.]*\(?\d{4}\)?\s*$")
 _NTSC_TOKEN_RE = re.compile(r"_NTSC(?=[_.\s\-]|$)", re.IGNORECASE)
 # Blu-rays bake disc-format branding into the title/label the same way.
 # Strip the fixed set of "Blu-rayTM" suffixes off the BDMV disc title
-# generically, so a
-# label like `MOVIE_BLU_RAY`, `Movie - Blu-rayTM`, or `BLURAY` loses the
+# generically, so a label like `MOVIE_BLU_RAY`, `Movie - Blu-rayTM`, or `BLURAY` loses the
 # branding before lookup. The optional `tm|™` covers the trademark glyph
 # in either pre- or post-ASCII-normalised form.
 _BLURAY_BRANDING_RE = re.compile(r"[\s_\-]*blu[\s_\-]?ray(?:\s*(?:tm|™))?", re.IGNORECASE)

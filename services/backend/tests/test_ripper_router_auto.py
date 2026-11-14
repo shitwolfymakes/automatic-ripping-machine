@@ -340,7 +340,7 @@ async def test_after_rip_drains_session_parked_on_held_disc_exactly_once(tmp_pat
 
 @pytest.mark.asyncio
 async def test_after_rip_strict_token_surfaces_as_parked_failure_not_exception(tmp_path: Path) -> None:
-    """Spec section 4: a still-strict required token (`{year}`, job year None)
+    """A still-strict required token (`{year}`, job year None)
     cannot be checked pre-rip (the apply parks), so it surfaces at drain time.
     At rip-complete the drain reports a `template` outcome with the error
     detail and the application stays WAITING_IDENTIFY; nothing raises and no

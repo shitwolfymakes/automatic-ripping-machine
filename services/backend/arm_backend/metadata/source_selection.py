@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Step 2 fingerprint sources, gated as a whole by `crc64service_enabled`.
+# Fingerprint sources, gated as a whole by `crc64service_enabled`.
 DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
 
 
@@ -97,7 +97,7 @@ def lookup_sources(
 
 
 def fingerprint_sources(cfg: Config | None, registry: Mapping[str, "OnlineSource"]) -> tuple["OnlineSource", ...]:
-    """Step 2 sources that answer a disc fingerprint, in order; none when the
+    """Sources that answer a disc fingerprint, in order; none when the
     `crc64service_enabled` switch is off (it gates the whole fingerprint walk)."""
     if not crc64service_enabled(cfg):
         return ()

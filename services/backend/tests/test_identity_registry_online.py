@@ -219,7 +219,7 @@ def test_auto_apply_for_maps_each_kind_to_its_switch() -> None:
 
 
 def test_search_provider_need_not_be_on_the_ranked_list():
-    """D-7 keeps OMDb off the automatic TV order (`episode_sources`) while
+    """The automatic TV order (`episode_sources`) leaves OMDb off while
     `search_provider_tv` still offers it, so the box's provider is honoured
     whenever its adapter serves the type and has its key -- looking it up in
     the ranked list only meant the choice could never take effect."""

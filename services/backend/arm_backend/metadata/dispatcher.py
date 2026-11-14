@@ -73,7 +73,7 @@ def _search_candidates(
     label_year: int | None = None
     if scan.volume_label:
         label_title, label_year = normalize_volume_label(scan.volume_label)
-    # D-4: the volume label is a search candidate only while the `label`
+    # The volume label is a search candidate only while the `label`
     # disc hint is enabled; an operator who ignores disc text gets no
     # label search at all. Its year still narrows the hint candidate.
     label_enabled = "label" in hint_sources_setting(cfg)
@@ -243,7 +243,7 @@ class MetadataDispatcher:
         return None
 
     def has_imdb_lookup(self, cfg: Config, kind: Kind) -> bool:
-        """True when an enabled source for `kind` can resolve an IMDb id (D-1)."""
+        """True when an enabled source for `kind` can resolve an IMDb id."""
         return any(capability(s, "lookup_imdb") is not None for s in sources_for(cfg, kind, self._sources))
 
     async def identify_from_imdb(self, imdb_id: str, cfg: Config, *, kind: Kind = "movie") -> MetadataResult | None:
