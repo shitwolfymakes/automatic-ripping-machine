@@ -152,7 +152,7 @@ RESOLVABLE_PRESERVE_JOB_STATUSES: frozenset[JobStatus] = frozenset(
 )
 RESOLVABLE_JOB_STATUSES: frozenset[JobStatus] = RESOLVABLE_PROMOTE_JOB_STATUSES | RESOLVABLE_PRESERVE_JOB_STATUSES
 # Session apply (POST /jobs/{id}/transcode). OK = resolve outputs now (or park
-# as no_tracks pre-rip); PARK = park as waiting_identify until identity lands.
+# as no_tracks pre-rip); PARK = park as waiting_identify until the job is identified.
 APPLY_OK_JOB_STATUSES: frozenset[JobStatus] = frozenset(
     {JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
 )

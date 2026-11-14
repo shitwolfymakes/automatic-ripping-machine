@@ -47,8 +47,8 @@ class Drive(SQLModel, table=True):
     identity_kind: DriveIdentityKind | None = Field(
         default=None, sa_column=enum_column(DriveIdentityKind, "drive_identity_kind", nullable=True)
     )
-    # Operator decision. Python default ENROLLED so a row created by the
-    # hostname register reads as what it is: a served drive.
+    # Operator decision. Python default ENROLLED so a row created without an
+    # explicit lifecycle reads as a served drive.
     # The scanner sets DETECTED explicitly on rows it creates.
     lifecycle: DriveLifecycle = Field(
         default=DriveLifecycle.ENROLLED,
