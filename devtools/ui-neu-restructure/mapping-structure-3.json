@@ -1,6 +1,0 @@
-{
-  "moves": [
-    { "from": "src/lib/components/settings/HealthItem.svelte", "to": "src/lib/components/shared/HealthItem.svelte" },
-    { "from": "src/lib/components/settings/__tests__/HealthItem.test.ts", "to": "src/lib/components/shared/__tests__/HealthItem.test.ts" }
-  ]
-}

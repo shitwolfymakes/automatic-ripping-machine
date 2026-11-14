@@ -1,8 +1,0 @@
-{
-  "moves": [
-    { "from": "src/lib/components/glyph-names.ts", "to": "src/lib/ui/glyph-names.ts" },
-    { "from": "src/lib/components/data-table.ts", "to": "src/lib/ui/data-table.ts" },
-    { "from": "src/lib/components/__tests__/data-table.cells.test.ts", "to": "src/lib/ui/__tests__/data-table.cells.test.ts" },
-    { "from": "src/lib/components/__fixtures__/job.ts", "to": "src/lib/__fixtures__/job.ts" }
-  ]
-}
