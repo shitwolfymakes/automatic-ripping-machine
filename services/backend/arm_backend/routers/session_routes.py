@@ -10,7 +10,7 @@ existing row's `session_id` in place so re-PUTting the same key never
 duplicates a route.
 
 The upsert's compatibility check reuses `media_types_compatible` from
-`session_routing.py` rather than requiring strict equality (Fix 76-2): a movie
+`session_routing.py` rather than requiring strict equality: a movie
 route to an iso-dump session, or a movie/tv pairing, is exactly what the
 apply path (`resolve_routed_session_id` / `apply_session_internal`) already
 lets through, so the router must accept it too instead of 422ing something

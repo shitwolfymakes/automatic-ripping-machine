@@ -604,7 +604,7 @@ async def resume(
             detail=f"job not in ripping state: status={job.status.value}",
         )
 
-    # Fix 75-8: one routed-session resolution for this request (see _routed_rip_choice).
+    # One routed-session resolution for this request (see _routed_rip_choice).
     preset_id, min_length_seconds = await _routed_rip_choice(session, job)
 
     await reset_job_for_recovery(session, job)
@@ -702,8 +702,8 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).
 
     Returns the held job plus `paused` (true when the disc should survive a ripper
-    reboot as a hold — global `ripping_paused`, or a per-job pause once that
-    lands). The ripper uses `paused` to choose re-park vs. abandon on restart
+    reboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by
+    review-pause). The ripper uses `paused` to choose re-park vs. abandon on restart
     (timed review gate). 404 when the drive is unknown or no held job
     exists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery
     paths stay separate.
@@ -953,20 +953,19 @@ async def rip_complete(
     )
     await session.commit()
 
-    # Fix 75-3: the unidentified-flag gate must cover BOTH ripped outcomes,
-    # not just the failed==0 (RIPPED) branch. A RIPPED_PARTIAL placeholder
-    # (identify missed, block_on_miss=false) was falling through to
-    # after_rip unconditionally, fanning out transcodes with paths built
-    # from the raw volume label under the wrong identity. Status handling is
-    # unchanged (partial stays RIPPED_PARTIAL either way) — only after_rip
-    # is gated; a parked application still drains safely once resolve lands.
+    # The unidentified-flag gate covers both ripped outcomes, not just RIPPED:
+    # a RIPPED_PARTIAL placeholder (identify missed, block_on_miss=false) must
+    # not reach after_rip, or transcodes would fan out with paths built from
+    # the raw volume label under the wrong identity. Status handling is
+    # unchanged (partial stays RIPPED_PARTIAL either way); only after_rip is
+    # gated, and a parked application still drains once resolve runs.
     if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL) and not flag_is_set(
         job.metadata_json, "unidentified"
     ):
         # Rip done, identity known: drain parked applications (an explicit
         # operator choice wins over the drive default), then auto-apply.
         # RIPPED_AWAITING_IDENTIFY deliberately skips this — transcode is
-        # gated on identity; resolve runs the same hook when it lands.
+        # gated on identity; resolve runs the same hook when it runs.
         await after_rip(session, job, hub)
 
     return JobView.model_validate(job)
