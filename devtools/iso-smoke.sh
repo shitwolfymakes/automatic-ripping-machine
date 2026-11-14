@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Phase 15 — ISO-source smoke test for the ripper, end-to-end.
+# ISO-source smoke test for the ripper, end-to-end.
 #
 # Runs the full scan → identify → rip → transcode pipeline against a
 # Sintel ISO fixture (no physical disc required), driven entirely through
-# the `/api/iso` "Rip from ISO" API (spec 2026-09-30-iso-source-rip): the
+# the `/api/iso` "Rip from ISO" API: the
 # backend spawns and tears down its own one-shot ripper container, so the
-# smoke no longer borrows (pauses/resumes) a real enrolled drive.
+# smoke never borrows (pauses/resumes) a real enrolled drive.
 #
 # Pipeline:
 #   1. Sintel ISO comes from the matrix256-corpus image — pulled from
@@ -253,7 +253,7 @@ resolve_makemkv_key() {
 }
 
 apply_makemkv_key() {
-    # The ripper no longer reads MAKEMKV_KEY from its own environment — the
+    # The ripper does not read MAKEMKV_KEY from its own environment — the
     # backend spawns it and the pipeline fetches the key from
     # Config.makemkv_key at start (job_controller._configured_makemkv_key).
     # PATCH it onto the backend config instead of injecting it into a container.

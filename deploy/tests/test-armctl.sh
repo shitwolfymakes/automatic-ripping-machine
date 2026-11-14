@@ -108,7 +108,7 @@ check "no saved profile means full" "full" "${PROFILE}"
 out="$( (rm -f "${ENV_FILE}"; require_installed) 2>&1 || true)"
 has "commands before install say what to run" "armctl install" "$out"
 
-# --- images must be present after the pull (Review Focus 4) ---------------------
+# --- images must be present after the pull ---------------------
 # compose tolerates a failed pull for a service that has a build section, so
 # armctl checks for itself before it touches the running stack.
 images() {  # images <image that is missing, or empty>
@@ -274,7 +274,7 @@ has "profile: an invalid saved profile is reported" "ignoring the saved ARMCTL_P
 set +e; out="$( ( set -e; PROFILE_ARG=everything; choose_profile ) </dev/null 2>&1 )"; set -e
 has "profile: an unknown profile is rejected" "must be full, ripper-only or offload" "$out"
 
-# --- config: host overlay (Review Focus 1: a path with spaces) ----------------------
+# --- config: host overlay (a path with spaces) ----------------------
 new_install overlay
 PROFILE=full; RAW_PATH="/media/sam/My Passport/rips"; MEDIA_PATH="/mnt/nas/media"; write_host_overlay
 ov="$(cat "${HOST_OVERLAY}")"
@@ -453,7 +453,7 @@ printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$osr"
 check "os: a derivative is not automated" "other" "$(OS_RELEASE_FILE="$osr" os_family)"
 check "os: no os-release file" "other" "$(OS_RELEASE_FILE="${TMPROOT}/absent" os_family)"
 
-# --- docker group restart (Review Focus 5) --------------------------------------------
+# --- docker group restart --------------------------------------------
 # regroup <ARMCTL_SG_REEXEC value> <sg available: yes|no>
 regroup() {
     (

@@ -28,12 +28,12 @@ lacks() { check "$1" "no"  "$( [[ "$3" == *"$2"* ]] && echo yes || echo no )"; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# --- where the arm folder goes (Review Focus 2) -----------------------------------
+# --- where the arm folder goes -----------------------------------
 check "prefix names the parent folder" "/srv/arm" "$(bootstrap_arm_dir /srv)"
 check "a prefix that already ends in arm is the arm folder itself" "/srv/arm" "$(bootstrap_arm_dir /srv/arm)"
 check "a trailing slash changes nothing" "/srv/arm" "$(bootstrap_arm_dir /srv/arm/)"
 
-# --- an existing folder that is not ours (Review Focus 3) -------------------------
+# --- an existing folder that is not ours -------------------------
 rc=0; (bootstrap_check_target "${TMP}/absent/arm") >/dev/null 2>&1 || rc=$?
 check "a folder that does not exist yet is fine" "0" "$rc"
 mkdir -p "${TMP}/empty/arm"
