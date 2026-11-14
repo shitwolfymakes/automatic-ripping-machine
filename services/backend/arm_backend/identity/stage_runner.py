@@ -1,5 +1,5 @@
-"""Background runner for the episode stage: runs the episode stage off the request path so identify /
-resolve / PATCH never block on a provider round-trip.
+"""Background runner for the episode stage. It runs off the request path, so
+identify / resolve / PATCH never block on a provider round-trip.
 
 `EpisodeStageRunner.schedule(job_id)` is the only trigger surface routers
 use. It is idempotent while a run for that job is pending or in flight: a
@@ -17,9 +17,9 @@ closed with no further query, flush, or commit — so any in-memory mutation
 a newly resolved show id onto it) is discarded on close rather than ever
 reaching the DB. A single shared session for fetch-then-apply is not safe:
 autoflush would otherwise write that stale mutation as a full-row UPDATE
-the moment the apply phase's own re-select ran on the same session — a
-lost-update window a concurrent PATCH/resolve could fall into just as
-easily as a stale write on a shared session. Phase 2 opens a fresh session, re-selects
+the moment the apply phase's own re-select ran on the same session,
+clobbering whatever a concurrent PATCH/resolve committed meanwhile.
+Phase 2 opens a fresh session, re-selects
 the job (`with_for_update` + `populate_existing`), folds in only the show
 ids phase 1 newly resolved (`merge_new_ids`, never overwriting a field the
 fresh row already has), then applies outcomes, commits, and emits. If the
@@ -68,8 +68,8 @@ from arm_common.schemas import ExternalIds
 
 logger = logging.getLogger("arm_backend.identity.stage_runner")
 
-# Most jobs whose episode stage computes and applies at once bounds
-# provider load and DB connections when many jobs are scheduled together
+# Maximum number of jobs whose episode stage computes and applies at once;
+# bounds provider load and DB connections when many jobs are scheduled together
 # (e.g. the startup sweep).
 MAX_CONCURRENT_RUNS = 2
 
@@ -285,7 +285,7 @@ class EpisodeStageRunner:
     async def _compute_phase(self, job_id: str) -> tuple[list[SourceOutcome], ExternalIds] | None:
         """Phase 1 (fetch): the outcomes and newly found show ids for
         `job_id`, or None when there is nothing to apply."""
-        # Load the snapshot and run the network phase
+        # Phase 1: load the snapshot and run the network phase
         # against ONE session, held open only for this session's own
         # queries — the job/tracks/config load, then compute's own
         # sibling/track reads, all of which happen before any provider
@@ -330,7 +330,7 @@ class EpisodeStageRunner:
         """Phase 2 (apply): fold `found` into the freshly locked job row and
         apply `outcomes`, unless the job vanished or this run's outcome was
         superseded or dropped."""
-        # A fresh session. The snapshot `job` is detached now
+        # Phase 2: a fresh session. The snapshot `job` is detached now
         # (its own session closed above without a commit/flush) — never
         # written anywhere itself; only the NEW show ids it resolved
         # (if any) are folded into the fresh row below.

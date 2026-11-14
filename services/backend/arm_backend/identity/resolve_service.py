@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 def identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]]:
     """`season`, `disc_number`, `media_type`, title and the show ids — the
     fields the background episode stage cares about. Compared before/after a
-    mutating request to decide whether to (re)schedule it (an
-    ids change reschedules too)."""
+    mutating request to decide whether to (re)schedule it; a change to
+    the show ids reschedules too."""
     return (job.season, job.disc_number, job.media_type, job.title, current_ids(job).model_dump())
 
 

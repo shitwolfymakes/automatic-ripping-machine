@@ -3343,7 +3343,7 @@ def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.L
 
 
 def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
-    """D-1: the route passes the TheDiscDB kind so a series id asks the TV sources."""
+    """The route passes the TheDiscDB kind so a series id asks the TV sources."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
@@ -3363,7 +3363,7 @@ def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
 
 
 def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() -> None:
-    """D-1: no enabled source offers an IMDb lookup → no online call; the job is
+    """No enabled source offers an IMDb lookup → no online call; the job is
     identified from the release's own title/year/kind with provider thediscdb."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -3516,7 +3516,7 @@ def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None
 
 
 def test_identify_miss_title_prefers_release_then_label() -> None:
-    """D-4 miss title: TheDiscDB release title → raw label (with every hint off)."""
+    """Miss title: TheDiscDB release title → raw label (with every hint off)."""
     # 1. Release title beats the raw label when every lookup misses.
     db = FakeSession()
     db.rows["drives"] = [_drive()]

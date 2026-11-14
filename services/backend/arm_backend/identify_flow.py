@@ -197,7 +197,7 @@ class IdentifyFlow:
         # When the timed review gate is on, a paused machine still scans + identifies
         # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
         # below); it does not reject the job. With the gate off, pause keeps its
-        # its plain meaning: reject new jobs outright.
+        # plain meaning: reject new jobs outright.
         if cfg.ripping_paused and not cfg.hold_for_review:
             raise RippingPausedError()
 
@@ -329,7 +329,7 @@ class IdentifyFlow:
             if imdb:
                 kind = release_kind(self.thediscdb_match)
                 if not self.dispatcher.has_imdb_lookup(cfg, kind):
-                    # D-1: no enabled source can resolve the id, so no
+                    # No enabled source can resolve the id, so no
                     # online TITLE call; the release names the disc.
                     # Held, not returned yet: the fingerprint database
                     # below needs no key either, so a keyless install

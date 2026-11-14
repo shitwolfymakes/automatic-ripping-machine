@@ -85,6 +85,6 @@ def test_tvdb_api_key_round_trips(signing_key: bytes) -> None:
     assert patched.status_code == 200, patched.text
     # The write stores the real value — the actual round-trip proof, true at every layer.
     assert db.rows["config"][0].tvdb_api_key == "tvdb-secret"
-    # The field is exposed on the read view. Assert presence/non-empty rather than a
-    # specific value, since the read view may mask secrets.
+    # The field is exposed on the read view. The router replaces secret values with
+    # `<hidden>` on read, so assert presence/non-empty, not the stored value.
     assert got.json()["tvdb_api_key"]

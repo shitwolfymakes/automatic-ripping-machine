@@ -118,7 +118,7 @@ def test_0045_upgrade_adds_the_identification_columns_and_seeds_them() -> None:
     assert "ALTER TABLE config ADD COLUMN movie_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
     assert "ALTER TABLE config ADD COLUMN music_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
     assert "ALTER TABLE config ADD COLUMN crc64service_enabled BOOLEAN DEFAULT true NOT NULL" in sql
-    # D-8: the old choice goes first in the movie order and stays the search provider.
+    # The old choice goes first in the movie order and stays the search provider.
     assert "WHEN metadata_provider = 'omdb' THEN '{omdb,tmdb}'::text[]" in sql
     assert "WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
     assert "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql

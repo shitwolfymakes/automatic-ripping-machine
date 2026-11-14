@@ -909,7 +909,7 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
     not_tv = _job("job_movie", status=JobStatus.IDENTIFIED, media_type=MediaType.MOVIE)
     # The operator cleared this one: the sweep must not bring the match back.
     cleared = _job("job_cleared", status=JobStatus.IDENTIFIED, meta={"identity_claims": {"episodes_cleared": True}})
-    # RIPPED is terminal: pre-PR-3b jobs must not all be matched on upgrade.
+    # RIPPED is terminal: already-ripped jobs must not all be matched on upgrade.
     wrong_status = _job("job_ripped", status=JobStatus.RIPPED)
 
     db = _db(

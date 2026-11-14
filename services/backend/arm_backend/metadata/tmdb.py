@@ -112,8 +112,8 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        # One detail call per candidate (external ids + credits appended):
-        # it carries the facts the match picker shows. A TV row takes the latest
+        # One detail call per candidate (external ids + credits appended); the call
+        # carries the facts the match picker shows. A TV row takes the latest
         # season's `credits`, not `aggregate_credits`: a long-running show's
         # all-seasons credits run to megabytes, and a row shows two names.
         # The details endpoint fetches the full set. A failed call keeps the

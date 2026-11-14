@@ -571,7 +571,7 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
 
 
 async def test_identify_from_imdb_walks_the_ranked_sources():
-    """D-1: the exact-id lookup asks the enabled sources for the kind in rank
+    """The exact-id lookup asks the enabled sources for the kind in rank
     order; an unconfigured source is skipped and the hit carries its source id."""
     from arm_backend.metadata.base import MetadataResult
 
@@ -668,7 +668,7 @@ async def test_identify_from_imdb_uses_the_kind_list():
 
 
 async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
-    """D-4: with `label` removed from disc_hint_sources the volume label is not
+    """With `label` removed from disc_hint_sources the volume label is not
     searched; only the hint title (and its year-free retry) is."""
     searched: list[str] = []
 
@@ -691,7 +691,7 @@ async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
         assert await dispatcher.identify(scan, cfg) is None
         assert searched == []
         assert await dispatcher.identify(scan, cfg, title_hint="Heat") is None
-    # The label's year still narrows the hint search (D-4 gates the candidate, not the year).
+    # The label's year still narrows the hint search (the hint gate applies to the candidate, not the year).
     assert searched == ["movie:Heat:1995", "tv:Heat:1995"]
 
 

@@ -128,7 +128,7 @@ _GATED_ROUTES: list[tuple[str, str, dict[str, object]]] = [
     ("PATCH", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", {}),
-    # jobs — timed-review-gate stragglers (found in Step 1 sweep; see report)
+    # jobs — timed-review-gate routes
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", {}),
     # drives

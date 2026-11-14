@@ -1240,7 +1240,7 @@ async def test_without_a_loaded_schema_settings_are_not_checked(store: Any) -> N
 
 @pytest.mark.parametrize("store", [None, "empty"])
 async def test_without_a_loaded_schema_a_settings_preset_never_lands_on_vaapi(store: Any) -> None:
-    """M4 needs no schema: the ffmpeg VAAPI engine cannot apply HandBrake settings."""
+    """No schema is needed: the ffmpeg VAAPI engine cannot apply HandBrake settings."""
     from arm_backend.handbrake_schema_store import SchemaStore
 
     db = _settings_db(_invalid_blocks("x265"), gpus=_AMD_ONLY)
