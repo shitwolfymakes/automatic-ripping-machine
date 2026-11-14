@@ -2,7 +2,7 @@
 
 Covers the three live providers (tmdb/omdb/tvdb) against respx-mocked upstream
 responses, the missing-key path, the makemkv stored-verdict mapping, and the
-guest -> 403 write gate. See the spec brief for exact status/detail mapping.
+guest -> 403 write gate.
 """
 
 from __future__ import annotations
