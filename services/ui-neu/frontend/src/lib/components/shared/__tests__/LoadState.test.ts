@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { createRawSnippet } from 'svelte';
 import LoadState from '../LoadState.svelte';
 

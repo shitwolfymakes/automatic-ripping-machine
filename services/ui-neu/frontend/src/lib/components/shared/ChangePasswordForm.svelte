@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { PASSWORD_MIN_LENGTH, passwordProblem } from '$lib/utils/password';

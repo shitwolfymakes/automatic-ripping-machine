@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import ActiveJobRow from '../ActiveJobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
 import type { RipLiveProgress } from '$lib/stores/rips.svelte';

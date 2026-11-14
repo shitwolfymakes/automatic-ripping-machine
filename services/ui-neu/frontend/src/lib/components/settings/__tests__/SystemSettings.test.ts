@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/testing/render';
 import SystemSettings from '../SystemSettings.svelte';
 import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 import { goto } from '$app/navigation';

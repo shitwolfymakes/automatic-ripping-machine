@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { ComponentProps } from 'svelte';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import TranscodeJobList from '../TranscodeJobList.svelte';
 

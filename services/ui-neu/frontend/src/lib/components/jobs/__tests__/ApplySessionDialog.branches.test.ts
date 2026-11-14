@@ -9,7 +9,7 @@
 //   keyed each block, and the runtime-enabled store flipping re-filters the
 //   same objects without re-rendering their options.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
 import { createJob } from '../../../__fixtures__/job';
 import { fetchSessions } from '$lib/api/sessions';

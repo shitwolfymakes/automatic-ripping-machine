@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, cleanup, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, within } from '$lib/testing/render';
 import ThemesSettings from '../ThemesSettings.svelte';
 import { UserThemes } from '$lib/stores/user-themes.svelte';
 import { theme, toggleTheme } from '$lib/stores/theme';

@@ -1,5 +1,5 @@
 // The help page's shown doc: the page itself and its load status.
-import { fetchDocsPage, DocsNotFoundError, type DocsPage } from '$lib/docs/api';
+import { fetchDocsPage, DocsNotFoundError, type DocsPage } from '$lib/help/api';
 
 export class HelpDoc {
 	doc = $state<DocsPage | null>(null);

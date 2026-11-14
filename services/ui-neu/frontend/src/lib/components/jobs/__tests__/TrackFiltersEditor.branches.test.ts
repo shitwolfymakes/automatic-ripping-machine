@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import TrackFiltersEditor from '../TrackFiltersEditor.svelte';
 
 // Branch pins for TrackFiltersEditor, beside TrackFiltersEditor.test.ts. Every

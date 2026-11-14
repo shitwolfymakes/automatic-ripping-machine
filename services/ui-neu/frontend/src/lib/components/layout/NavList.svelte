@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { isActive, type NavItem } from '$lib/nav';
+	import { isActive, type NavItem } from '$lib/layout/nav';
 
 	let {
 		items,

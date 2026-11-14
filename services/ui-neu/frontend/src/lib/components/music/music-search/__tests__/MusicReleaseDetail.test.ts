@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import type { MetadataReleaseDetail } from '$lib/types/api.gen';
 import type { TrackPair } from '$lib/music/release';
 import { MusicReleaseApply } from '$lib/stores/music-release-apply.svelte';

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readable } from 'svelte/store';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { SetupView } from '$lib/types/api.gen';
 
 // --- API boundary mocks (the shared components underneath call these) ---

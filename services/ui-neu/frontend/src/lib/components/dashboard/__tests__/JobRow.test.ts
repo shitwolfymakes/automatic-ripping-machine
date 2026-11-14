@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import JobRow from '../JobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
 

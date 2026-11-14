@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
 import { fetchDriveDiagnostic } from '$lib/api/drives';
 import type { DriveDiagnosticItem, DriveDiagnosticResponse } from '$lib/types/api.gen';

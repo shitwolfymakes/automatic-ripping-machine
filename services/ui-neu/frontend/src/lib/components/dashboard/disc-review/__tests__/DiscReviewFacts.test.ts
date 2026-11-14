@@ -4,7 +4,7 @@
 // since the disc type label is never empty ("Unknown" stands in for a missing
 // type), so the row always shows.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
 import type { JobView } from '$lib/types/api.gen';
 import { readJobMetadata } from '$lib/jobs/metadata';
 import type { EpisodeStatus } from '$lib/episodes/status';

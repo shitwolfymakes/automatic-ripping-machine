@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import ToastHost from '../ToastHost.svelte';
 import { addToast, toasts, dismissToast } from '$lib/stores/toast.svelte';
 

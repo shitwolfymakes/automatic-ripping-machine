@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import type { GpuView } from '$lib/types/api.gen';
 import GpuInventoryRow from '../GpuInventoryRow.svelte';
 

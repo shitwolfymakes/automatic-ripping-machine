@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import { onMount, setContext } from 'svelte';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import { LoadedSettings } from '$lib/stores/loaded-settings.svelte';

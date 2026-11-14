@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import InboxHeaderHarness from './InboxHeaderHarness.svelte';
 
 vi.mock('$lib/stores/auth', async () => {

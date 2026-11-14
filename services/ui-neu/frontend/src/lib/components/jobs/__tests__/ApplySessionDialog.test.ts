@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
 import { isPassthroughSession } from '$lib/sessions/sessions';
 import { createJob } from '../../../__fixtures__/job';

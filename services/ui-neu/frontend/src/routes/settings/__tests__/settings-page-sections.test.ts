@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import SettingsPage from '../+page.svelte';
 import { goto } from '$app/navigation';
 import { fetchSettings, saveArmConfig } from '$lib/api/settings';

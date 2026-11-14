@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/testing/render';
 import { ApiError } from '$lib/api/client';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';
 import IsoPicker from '../IsoPicker.svelte';

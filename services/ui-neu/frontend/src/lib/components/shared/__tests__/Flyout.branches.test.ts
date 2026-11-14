@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { flushSync, tick } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import FlyoutHarness from './FlyoutHarness.svelte';
 
 // Branch pins for Flyout, beside Flyout.svelte.test.ts. Every branch is

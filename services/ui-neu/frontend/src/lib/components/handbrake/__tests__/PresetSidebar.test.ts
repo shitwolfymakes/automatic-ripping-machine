@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, TranscodePresetView } from '$lib/types/api.gen';
 import plexImport from '$lib/handbrake/__tests__/fixtures/plex-import-response.json';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';

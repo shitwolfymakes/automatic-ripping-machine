@@ -1,7 +1,7 @@
 // The help page's search: the query, its hits and the search index, which is
 // loaded on first use and kept.
 import type MiniSearch from 'minisearch';
-import { loadDocsSearch, searchDocs, type DocsSearchHit } from '$lib/docs/api';
+import { loadDocsSearch, searchDocs, type DocsSearchHit } from '$lib/help/api';
 
 export class HelpSearch {
 	query = $state('');

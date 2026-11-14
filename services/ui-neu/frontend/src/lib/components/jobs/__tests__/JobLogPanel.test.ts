@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import type { WSEnvelope } from '$lib/api/ws';
 
 const fetchJobLogMock = vi.fn();

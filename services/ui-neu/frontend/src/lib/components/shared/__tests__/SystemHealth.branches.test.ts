@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import SystemHealth from '../SystemHealth.svelte';
 
 // Branch pins for SystemHealth, beside SystemHealth.test.ts. Nothing here

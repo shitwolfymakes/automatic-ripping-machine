@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, within } from '$lib/testing/render';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';

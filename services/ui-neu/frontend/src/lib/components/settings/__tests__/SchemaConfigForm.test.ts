@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import { ApiError } from '$lib/api/client';
 import { sectionFields } from '$lib/settings/sections';

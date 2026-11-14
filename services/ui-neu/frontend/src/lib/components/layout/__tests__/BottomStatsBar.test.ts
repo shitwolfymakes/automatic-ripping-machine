@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 
 // Drive the store with a fixed snapshot.
 // vi.mock factories are hoisted — all values must be inline (no top-level vars).

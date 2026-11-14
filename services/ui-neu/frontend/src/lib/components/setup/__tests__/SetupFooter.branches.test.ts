@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import SetupFooter from '../SetupFooter.svelte';
 import { STEPS } from '../../../setup/steps';
 

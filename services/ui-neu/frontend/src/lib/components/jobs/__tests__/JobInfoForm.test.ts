@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');

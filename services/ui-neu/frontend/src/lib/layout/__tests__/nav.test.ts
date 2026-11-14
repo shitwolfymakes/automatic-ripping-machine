@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const isScreenEnabled = vi.hoisted(() => vi.fn((_path: string) => true));
 vi.mock('$lib/features', () => ({ isScreenEnabled }));
 
-import { NAV_ITEMS, visibleNavItems, isActive } from '$lib/nav';
+import { NAV_ITEMS, visibleNavItems, isActive } from '$lib/layout/nav';
 
 const ON = { transcoderEnabled: true, isGuest: false };
 const hrefs = (items: readonly { href: string }[]) => items.map((i) => i.href);

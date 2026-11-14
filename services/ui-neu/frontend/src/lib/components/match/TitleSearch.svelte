@@ -2,7 +2,7 @@
 	import type { JobView, MetadataCandidate, ResolveResponse } from '$lib/types/api.gen';
 	import { searchMetadata, fetchMediaDetail } from '$lib/api/jobs';
 	import MatchPicker from './MatchPicker.svelte';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { searchProviders, keyedSources } from '$lib/stores/config';
 	import { SEARCH_SOURCES, chooseSource, type SearchSource } from '$lib/settings/search-providers';

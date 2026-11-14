@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { portal } from '$lib/actions/portal';
+	import { portal } from '$lib/ui/portal';
 	import CloseButton from './CloseButton.svelte';
 
 	interface Props {

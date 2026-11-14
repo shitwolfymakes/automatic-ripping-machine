@@ -1,6 +1,6 @@
 // One drive row of the lifecycle lists, rendered directly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, within, cleanup } from '$lib/testing/render';
 import DriveLifecycleRow from '../DriveLifecycleRow.svelte';
 import type { DriveView } from '$lib/types/api.gen';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 import DiagnosticsSection from '../DiagnosticsSection.svelte';
 import { fetchDiagnostics } from '$lib/api/diagnostics';
 import type { DiagnosticsResponse } from '$lib/types/api.gen';

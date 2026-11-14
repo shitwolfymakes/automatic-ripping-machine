@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/docs/api', async () => {
-	const actual = await vi.importActual<typeof import('$lib/docs/api')>('$lib/docs/api');
+vi.mock('$lib/help/api', async () => {
+	const actual = await vi.importActual<typeof import('$lib/help/api')>('$lib/help/api');
 	return { ...actual, fetchDocsPage: vi.fn() };
 });
 
-import { fetchDocsPage, DocsNotFoundError, type DocsPage } from '$lib/docs/api';
+import { fetchDocsPage, DocsNotFoundError, type DocsPage } from '$lib/help/api';
 import { HelpDoc } from '../help-doc.svelte';
 
 const mockFetch = vi.mocked(fetchDocsPage);

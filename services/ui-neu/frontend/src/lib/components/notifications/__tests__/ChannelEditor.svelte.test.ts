@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import ChannelEditor from '../ChannelEditor.svelte';
 import type { Channel, Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';

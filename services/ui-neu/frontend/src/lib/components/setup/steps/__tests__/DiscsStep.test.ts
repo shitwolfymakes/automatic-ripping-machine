@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, within } from '$lib/testing/render';
 import type { DiscRouteSummary, SetupView } from '$lib/types/api.gen';
 
 // Pins what DiscsStep does today. SetupConfigFields is replaced by a stub

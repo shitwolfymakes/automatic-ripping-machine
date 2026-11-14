@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { fadeIn, fadeOut } from '$lib/ui/transitions';
 	import SectionFrame from '$lib/components/shared/SectionFrame.svelte';
 
 	interface Props {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import JobHeaderActions from '../JobHeaderActions.svelte';
 import { createJob, createJobDetail, createTrack } from '$lib/__fixtures__/job';
 import { JobDetail } from '$lib/stores/job-detail.svelte';

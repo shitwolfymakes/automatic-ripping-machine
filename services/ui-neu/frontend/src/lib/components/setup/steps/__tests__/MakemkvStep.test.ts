@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import type { ConfigView, SetupView } from '$lib/types/api.gen';
 import { stubState } from './fixtures/setup-config-fields-stub';
 

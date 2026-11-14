@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { fadeIn } from '$lib/transitions';
+	import { fadeIn } from '$lib/ui/transitions';
 	import { loadPhase } from '$lib/utils/load-state';
 
 	interface Props {

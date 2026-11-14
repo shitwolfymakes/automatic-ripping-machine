@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import EpisodeRows from '../EpisodeRows.svelte';
 import type { EpisodeRow } from '../../../episodes/episode-model';
 

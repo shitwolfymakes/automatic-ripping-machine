@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import { resolveJob } from '$lib/api/jobs';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import { isAdmin } from '$lib/stores/auth';
 	import { provenanceLine } from '$lib/jobs/provenance';
 	import { jobInfoText, jobInfoResolveBody, savedFacts, savedChanges } from '$lib/jobs/info';

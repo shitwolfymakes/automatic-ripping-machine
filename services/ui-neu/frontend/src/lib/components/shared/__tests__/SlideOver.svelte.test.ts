@@ -2,7 +2,7 @@
 // component's: the `class="... {width}"` template compiles to `(width) ?? ''`
 // (plus its attribute-update `if`), and width always has a default.
 import { it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import SlideOverHarness from './SlideOverHarness.svelte';
 import SlideOverFooterHarness from './SlideOverFooterHarness.svelte';
 

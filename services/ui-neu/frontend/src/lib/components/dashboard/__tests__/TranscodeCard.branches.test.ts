@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodeCard from '../TranscodeCard.svelte';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import JobPanelTabs from '../JobPanelTabs.svelte';
 import { createJob, createJobDetail } from '$lib/__fixtures__/job';
 import { JobDetail } from '$lib/stores/job-detail.svelte';

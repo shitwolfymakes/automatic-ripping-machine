@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import IsoSourceChip from '../IsoSourceChip.svelte';
 
 const LONG_NAME = 'The_Grand_Budapest_Hotel_2014_BLURAY_Criterion_Collection_Disc_1.iso';

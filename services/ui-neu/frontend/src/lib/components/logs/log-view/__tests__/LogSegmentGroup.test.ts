@@ -1,6 +1,6 @@
 // One radio group of segment buttons in the log terminal's toolbar, rendered directly.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import LogSegmentGroup from '../LogSegmentGroup.svelte';
 
 type Defaults = NonNullable<Parameters<typeof renderComponent>[1]>;

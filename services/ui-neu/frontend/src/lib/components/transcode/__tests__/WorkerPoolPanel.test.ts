@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import type { GpuView, TranscodeStatsView, TranscodeWorkerView } from '$lib/types/api.gen';
 import WorkerPoolPanel from '../WorkerPoolPanel.svelte';
 

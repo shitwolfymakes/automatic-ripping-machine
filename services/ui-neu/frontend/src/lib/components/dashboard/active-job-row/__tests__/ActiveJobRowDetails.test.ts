@@ -1,6 +1,6 @@
 // The active job row's expanded panel, rendered directly.
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, within, cleanup } from '$lib/testing/render';
 import ActiveJobRowDetails from '../ActiveJobRowDetails.svelte';
 import { createJob } from '../../../../__fixtures__/job';
 import { getVideoTypeConfig } from '$lib/jobs/type';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 import { get, writable } from 'svelte/store';
 
 const gotoMock = vi.fn();

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import type { JobStatus } from '$lib/types/api.gen';
 import { resolveJob } from '$lib/api/jobs';
 import JobInfoForm from '../JobInfoForm.svelte';

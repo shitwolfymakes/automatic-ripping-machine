@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import JobTitleBar from '../JobTitleBar.svelte';
 import { createJob, createJobDetail } from '$lib/__fixtures__/job';
 import { JobDetail } from '$lib/stores/job-detail.svelte';

@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 	import { goto } from '$app/navigation';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin, isGuest } from '$lib/stores/auth';
 	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';

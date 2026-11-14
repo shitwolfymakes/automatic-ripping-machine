@@ -10,7 +10,7 @@
 	import DriveCardHeader from './DriveCardHeader.svelte';
 	import Glyph from '../../shared/Glyph.svelte';
 	import ConfirmDialog from '../../shared/ConfirmDialog.svelte';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 
 	interface Props {
 		/** The drive this card shows. */

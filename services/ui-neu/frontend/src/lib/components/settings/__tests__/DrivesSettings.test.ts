@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'svelte';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import DrivesSettings from '../DrivesSettings.svelte';
 import { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
 import { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';

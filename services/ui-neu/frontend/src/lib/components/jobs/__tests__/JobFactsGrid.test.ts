@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import JobFactsGrid from '../JobFactsGrid.svelte';
 import type { MetadataField } from '$lib/jobs/fields';
 

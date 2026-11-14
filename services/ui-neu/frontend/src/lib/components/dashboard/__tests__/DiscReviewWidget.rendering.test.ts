@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import type { JobView, TrackView } from '$lib/types/api.gen';
 import { createJob, createJobDetail, createTrack } from '../../../__fixtures__/job';

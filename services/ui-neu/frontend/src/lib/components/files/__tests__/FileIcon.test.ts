@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import FileIcon from '../FileIcon.svelte';
 
 describe('FileIcon', () => {

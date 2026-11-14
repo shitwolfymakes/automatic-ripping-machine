@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import DiscReviewStatusBar from '../DiscReviewStatusBar.svelte';
 
 const START = '2025-06-15T12:00:00Z';

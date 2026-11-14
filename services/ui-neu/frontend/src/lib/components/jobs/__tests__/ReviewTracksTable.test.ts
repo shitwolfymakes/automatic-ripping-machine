@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import { updateTrack } from '$lib/api/jobs';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import type { TrackView } from '$lib/types/api.gen';

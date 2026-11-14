@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 import type { Writable } from 'svelte/store';

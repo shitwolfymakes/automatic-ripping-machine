@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { JobView, MetadataCandidate, MetadataReleaseDetail, TrackView } from '$lib/types/api.gen';
 import MusicSearch from '../MusicSearch.svelte';
 import { GLYPH_PATHS } from '../../../ui/glyph-names';

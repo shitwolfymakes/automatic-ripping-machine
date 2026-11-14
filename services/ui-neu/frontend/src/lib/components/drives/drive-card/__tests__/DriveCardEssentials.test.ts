@@ -1,7 +1,7 @@
 // The drive card's essentials variant, rendered directly. The drives API is
 // mocked the same way as in DriveCard.branches.test.ts.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import DriveCardEssentials from '../DriveCardEssentials.svelte';
 import type { DriveView as Drive } from '$lib/types/api.gen';
 import { createDrive } from '../../../__fixtures__/drive';

@@ -13,7 +13,7 @@
 	import DashboardSection from '$lib/components/dashboard/DashboardSection.svelte';
 	import AllJobsPanel from '$lib/components/dashboard/AllJobsPanel.svelte';
 	import EmptyDashboardPanel from '$lib/components/dashboard/EmptyDashboardPanel.svelte';
-	import { fadeIn } from '$lib/transitions';
+	import { fadeIn } from '$lib/ui/transitions';
 	import { fade } from 'svelte/transition';
 	import { groupActiveJobs } from '$lib/dashboard/groups';
 	import { isoSourceFor, isoKindFor } from '$lib/drives/iso-source';

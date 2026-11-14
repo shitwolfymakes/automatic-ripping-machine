@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DocsTocEntry } from '$lib/docs/api';
+	import type { DocsTocEntry } from '$lib/help/api';
 
 	interface Props {
 		toc: DocsTocEntry[];

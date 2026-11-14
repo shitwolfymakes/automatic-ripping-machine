@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import DashboardSection from '../DashboardSection.svelte';
 
 // jsdom cannot run Web Animations; a transition with no duration finishes

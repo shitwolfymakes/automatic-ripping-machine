@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import IdentifyCdFormHarness from './IdentifyCdFormHarness.svelte';
 
 afterEach(() => cleanup());

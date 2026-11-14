@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { MetadataCandidate, ScanTitle, TrackView } from '$lib/types/api.gen';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import { createJob } from '../../../__fixtures__/job';

@@ -12,7 +12,7 @@
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/ui-prefs';
-	import { NAV_ITEMS, visibleNavItems } from '$lib/nav';
+	import { NAV_ITEMS, visibleNavItems } from '$lib/layout/nav';
 	import NavList from '$lib/components/layout/NavList.svelte';
 	import HeaderActions from '$lib/components/layout/HeaderActions.svelte';
 	import HeaderStatus from '$lib/components/layout/HeaderStatus.svelte';

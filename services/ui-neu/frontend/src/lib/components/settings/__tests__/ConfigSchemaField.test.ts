@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import ConfigSchemaField from '../ConfigSchemaField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 

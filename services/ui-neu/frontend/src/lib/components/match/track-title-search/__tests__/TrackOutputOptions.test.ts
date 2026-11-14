@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 import TrackOutputOptions from '../TrackOutputOptions.svelte';
 import { createTrack } from '../../../../__fixtures__/job';
 import type { JobView, TrackView } from '$lib/types/api.gen';

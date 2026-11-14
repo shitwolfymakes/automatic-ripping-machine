@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import InterfaceSettings from '../InterfaceSettings.svelte';
 import { uiPrefs, setUiPref } from '$lib/stores/ui-prefs';
 

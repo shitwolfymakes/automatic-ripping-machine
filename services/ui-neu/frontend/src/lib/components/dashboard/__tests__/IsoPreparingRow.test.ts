@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent } from '@testing-library/svelte';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 
 vi.mock('$lib/api/iso', () => ({ cancelIsoRip: vi.fn(() => Promise.resolve()) }));
 vi.mock('$lib/stores/auth', async () => {

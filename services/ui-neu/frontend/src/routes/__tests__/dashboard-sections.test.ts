@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/__fixtures__/job';
 import { fetchDashboard } from '$lib/api/dashboard';

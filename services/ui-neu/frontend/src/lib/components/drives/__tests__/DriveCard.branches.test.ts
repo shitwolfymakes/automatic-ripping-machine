@@ -3,7 +3,7 @@
 // API modules are mocked the same way as in DriveCard.test.ts; the slide-over
 // and the confirm dialog render for real.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import DriveCard from '../DriveCard.svelte';
 import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 import { createDrive } from '../../__fixtures__/drive';

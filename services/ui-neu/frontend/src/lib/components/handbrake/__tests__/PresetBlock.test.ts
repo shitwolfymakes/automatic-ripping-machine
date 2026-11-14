@@ -4,7 +4,7 @@
 // `(... ) ?? ''` plus a select-sync `if`, and none of those values is ever
 // null (draft fields are strings, catalog ids and labels are strings).
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { EncoderAvailabilityView, SettingIssue } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 import { stopEncoderEvents } from '$lib/stores/encoders.svelte';

@@ -1,6 +1,6 @@
 // The review card's Episodes section: the job page's episode matcher on Home.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import type { IdentityView, JobView } from '$lib/types/api.gen';
 import { createJob, createJobDetail } from '../../../__fixtures__/job';

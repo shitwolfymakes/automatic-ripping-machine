@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 import type { SetupView } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
 

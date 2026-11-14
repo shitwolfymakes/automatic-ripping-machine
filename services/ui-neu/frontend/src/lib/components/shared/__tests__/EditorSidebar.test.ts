@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
 import EditorSidebarHarness from './EditorSidebarHarness.svelte';
 
 afterEach(cleanup);

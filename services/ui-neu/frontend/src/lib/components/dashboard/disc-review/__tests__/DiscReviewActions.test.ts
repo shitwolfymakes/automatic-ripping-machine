@@ -2,7 +2,7 @@
 // real DiscReviewJobActions whose callbacks and API calls are faked.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { JobView } from '$lib/types/api.gen';
 import type { EpisodeState, EpisodeStatus } from '$lib/episodes/status';
 import { ReviewSections } from '$lib/stores/review-sections.svelte';

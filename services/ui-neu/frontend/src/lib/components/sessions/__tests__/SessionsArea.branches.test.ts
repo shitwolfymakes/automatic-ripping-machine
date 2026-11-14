@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { MediaType } from '$lib/types/api.gen';
 
 // Branch pins for SessionsArea, beside SessionsArea.svelte.test.ts. The delete

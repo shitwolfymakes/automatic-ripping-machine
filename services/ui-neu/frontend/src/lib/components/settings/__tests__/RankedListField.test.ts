@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import RankedListField from '../RankedListField.svelte';
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 import { SETTINGS_SCHEMA_CONTEXT } from '$lib/settings/sections';

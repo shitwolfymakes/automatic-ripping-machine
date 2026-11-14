@@ -3,7 +3,7 @@
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import ProgressBar from '$lib/components/shared/ProgressBar.svelte';
 	import TimeAgo from '$lib/components/shared/TimeAgo.svelte';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { fadeIn, fadeOut } from '$lib/ui/transitions';
 	import { formatElapsed } from '$lib/utils/format';
 	import { pathBasename } from '$lib/utils/path';
 	import { isAdmin } from '$lib/stores/auth';

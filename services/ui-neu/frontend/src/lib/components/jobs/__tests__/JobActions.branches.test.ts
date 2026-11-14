@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import type { JobStatus, JobView } from '$lib/types/api.gen';
 import JobActions from '../JobActions.svelte';
 import { createJob } from '../../../__fixtures__/job';

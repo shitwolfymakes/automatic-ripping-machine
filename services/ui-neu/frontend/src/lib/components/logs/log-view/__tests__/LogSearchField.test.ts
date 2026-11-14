@@ -1,6 +1,6 @@
 // The log terminal's search box, rendered through a harness that binds its text and matchCase.
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import LogSearchFieldHarness from './LogSearchFieldHarness.svelte';
 
 type Defaults = NonNullable<Parameters<typeof renderComponent>[1]>;

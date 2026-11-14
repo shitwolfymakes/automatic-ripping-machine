@@ -2,7 +2,7 @@
 // mocked the same way as in DriveCard.branches.test.ts; the slide-over renders
 // for real.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import DriveSettingsPanel from '../DriveSettingsPanel.svelte';
 import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 import { createDrive } from '../../../__fixtures__/drive';

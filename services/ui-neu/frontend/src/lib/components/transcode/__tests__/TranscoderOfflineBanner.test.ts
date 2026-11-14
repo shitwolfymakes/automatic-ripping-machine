@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount } from 'svelte';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import TranscoderOfflineBanner from '../TranscoderOfflineBanner.svelte';
 
 // jsdom cannot run Web Animations, so an outro would never finish; a

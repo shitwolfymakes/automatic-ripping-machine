@@ -8,7 +8,7 @@
 // - the delete dialog message's `: ''`: ConfirmDialog reads `message` only
 //   while it is open, and it is open only while there is a delete target.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup, within } from '$lib/testing/render';
 import NotificationsTab from '../NotificationsTab.svelte';
 import * as api from '$lib/api/channels';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';

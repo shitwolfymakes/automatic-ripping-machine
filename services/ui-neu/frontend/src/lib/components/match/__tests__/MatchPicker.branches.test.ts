@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import MatchPicker from '../MatchPicker.svelte';
 
 // Branch pins for MatchPicker, beside MatchPicker.test.ts. Two branches cannot

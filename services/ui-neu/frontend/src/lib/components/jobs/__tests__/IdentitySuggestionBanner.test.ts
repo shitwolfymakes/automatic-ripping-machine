@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import IdentitySuggestionBanner from '../IdentitySuggestionBanner.svelte';
 import { createJob } from '../../../__fixtures__/job';
 import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';

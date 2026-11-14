@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import MusicMappingConfirm from '../MusicMappingConfirm.svelte';
 import type { TrackPair } from '$lib/music/release';
 import type { MatchKind } from '$lib/jobs/track-match';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import AddChannelForm from '../AddChannelForm.svelte';
 import type { AddChannelBody } from '../../../notifications/channel-actions';
 import type { Catalog } from '$lib/types/notifications';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 
 // vi.mock factories are hoisted: all values must be inline (no top-level vars).
 vi.mock('$lib/stores/dashboard', async () => {

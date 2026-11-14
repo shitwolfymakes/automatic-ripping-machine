@@ -3,7 +3,7 @@
 	import { get } from 'svelte/store';
 	import { fade } from 'svelte/transition';
 	import { fetchTranscoderStats } from '$lib/api/transcoder';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { fadeIn, fadeOut } from '$lib/ui/transitions';
 	import { transcoderStats, transcoderWorkers, getJobsCache } from '$lib/stores/transcoder';
 	import { GpuInventory } from '$lib/stores/gpu-inventory.svelte';
 	import { TranscodeJobs } from '$lib/stores/transcode-jobs.svelte';

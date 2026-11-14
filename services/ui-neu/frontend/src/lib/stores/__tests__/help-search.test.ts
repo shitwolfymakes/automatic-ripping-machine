@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('$lib/docs/api', async () => {
-	const actual = await vi.importActual<typeof import('$lib/docs/api')>('$lib/docs/api');
+vi.mock('$lib/help/api', async () => {
+	const actual = await vi.importActual<typeof import('$lib/help/api')>('$lib/help/api');
 	return { ...actual, loadDocsSearch: vi.fn() };
 });
 
 import { HelpSearch } from '../help-search.svelte';
-import { loadDocsSearch } from '$lib/docs/api';
+import { loadDocsSearch } from '$lib/help/api';
 import MiniSearch from 'minisearch';
 
 function index(): MiniSearch {

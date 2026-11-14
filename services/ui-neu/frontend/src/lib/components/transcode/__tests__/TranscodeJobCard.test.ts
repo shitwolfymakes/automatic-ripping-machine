@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { mount, unmount } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import TranscodeJobCard from '../TranscodeJobCard.svelte';
 

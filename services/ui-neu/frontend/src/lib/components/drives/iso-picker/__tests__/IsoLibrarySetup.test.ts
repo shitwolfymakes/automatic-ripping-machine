@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, within, cleanup } from '$lib/testing/render';
 import IsoLibrarySetup from '../IsoLibrarySetup.svelte';
 
 describe('IsoLibrarySetup', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
 
 // Branch pins for IsoPreparingRow, beside IsoPreparingRow.test.ts. Every
 // branch is reachable from the rendered component, so nothing is forced.

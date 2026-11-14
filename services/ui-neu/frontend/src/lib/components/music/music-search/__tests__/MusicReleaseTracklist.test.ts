@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import MusicReleaseTracklist from '../MusicReleaseTracklist.svelte';
 import type { MetadataReleaseTrack, TrackView } from '$lib/types/api.gen';
 

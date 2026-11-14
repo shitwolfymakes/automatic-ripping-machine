@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, within } from '$lib/testing/render';
 import type { SystemDiagnosticCheck } from '$lib/types/api.gen';
 import ServiceItem from '../ServiceItem.svelte';
 

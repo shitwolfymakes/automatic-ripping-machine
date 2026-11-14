@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { formatDateTime } from '$lib/utils/format';
 import type { PreviousRipView } from '$lib/types/api.gen';
 import PreviouslyRippedNotice from '../PreviouslyRippedNotice.svelte';

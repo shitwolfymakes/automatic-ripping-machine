@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { tick, createRawSnippet } from 'svelte';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import LogView from '$lib/components/logs/LogView.svelte';
 import { setUiPref } from '$lib/stores/ui-prefs';
 import type { LogEntry } from '$lib/api/logs';

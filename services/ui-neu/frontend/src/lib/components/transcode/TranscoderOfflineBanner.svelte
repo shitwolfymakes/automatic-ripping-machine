@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { fadeIn, fadeOut } from '$lib/transitions';
+	import { fadeIn, fadeOut } from '$lib/ui/transitions';
 </script>
 
 <div in:fade={fadeIn} out:fade={fadeOut} class="flex items-center gap-3 panel-section transcoder-page-offline-banner">

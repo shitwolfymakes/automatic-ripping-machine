@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 
 // Branch pins for MobileStatsPanel, beside MobileStatsPanel.test.ts. Every
 // branch of the component is reachable from the rendered panel, so nothing

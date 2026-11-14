@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import NotificationsSettings from '../NotificationsSettings.svelte';
 
 // NotificationsTab fetches on mount; its calls are faked so the component
