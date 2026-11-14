@@ -213,8 +213,7 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			'--color-page-dark': 'rgb(0, 0, 0)',
 			// Lifted plate, not pure black: a panel painted with the page
 			// colour is invisible against it. This is the flattened value of
-			// the periwinkle wash the sheet used to paint on every panel
-			// (rgba(153, 153, 255, 0.15) over black). The theme sheet paints
+			// a periwinkle wash (rgba(153, 153, 255, 0.15) over black). The theme sheet paints
 			// the shell (header, sidebar) black explicitly.
 			'--color-surface': 'rgb(23, 23, 38)',
 			'--color-surface-dark': 'rgb(23, 23, 38)',

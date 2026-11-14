@@ -6,7 +6,7 @@ import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 /**
  * Built-in scheme ids. Their full CSS ships as static assets in the frontend
  * (static/themes/{id}.css, served same-origin by nginx) — NOT from the backend
- * theme API, which now serves only user-uploaded themes. So theme styling is a
+ * theme API, which serves only user-uploaded themes. So theme styling is a
  * pure frontend concern; only uploads round-trip the backend.
  */
 const BUILTIN_IDS = new Set(COLOR_SCHEMES.map((s) => s.id));
