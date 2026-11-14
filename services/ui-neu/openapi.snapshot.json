@@ -11715,7 +11715,7 @@
           "paused"
         ],
         "title": "HeldJobView",
-        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
+        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused`, or the per-job `manual_pause` set by review-pause).\nThe ripper uses it to choose re-park (paused) vs. abandon-and-self-heal\n(counting down) on restart."
       },
       "IdentificationMode": {
         "type": "string",
