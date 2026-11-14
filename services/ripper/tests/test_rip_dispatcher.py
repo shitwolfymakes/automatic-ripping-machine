@@ -162,8 +162,8 @@ def test_probe_returns_unknown_when_ioctl_unsupported(monkeypatch):
 
 
 def test_probe_does_not_call_read(monkeypatch):
-    """Probe is ioctl-only since the single-invocation rip removed
-    the need for read-verify. Any os.read attempt is a regression."""
+    """Probe is ioctl-only: the single-invocation rip needs no read-verify.
+    Any os.read attempt is a regression."""
 
     def boom(*_args: Any, **_kwargs: Any) -> Any:
         raise AssertionError("os.read must not be called by the probe")
