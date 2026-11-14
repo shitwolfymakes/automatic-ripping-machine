@@ -226,7 +226,7 @@ offload_completion_report() {
         PASS) _report_row "CA fingerprint" "PASS" ;;
         FAIL_MISMATCH) _report_row "CA fingerprint" "FAIL — stale CA at ${certs_p}"; failed_steps+=(ca) ;;
         *) _report_row "CA fingerprint" "FAIL — absent at ${certs_p}"; failed_steps+=(ca) ;; esac
-    # F2: the ref ends in ":" when ARM_IMAGE_TAG_DEFAULT (and no persisted
+    # The ref ends in ":" when ARM_IMAGE_TAG_DEFAULT (and no persisted
     # ARM_IMAGE_TAG) resolved to empty — running verify_image against that
     # always FAILs and is not actionable; report it as unresolved instead.
     if [[ "$image_ref" == *: ]]; then
@@ -239,7 +239,7 @@ offload_completion_report() {
     v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
     case "$v" in PASS) _report_row "data paths" "PASS  (raw, media, logs)" ;;
                  *) _report_row "data paths" "FAIL — missing: ${v#FAIL }" ;; esac
-    # F3: inventory-from-.env row (informational — not a live re-probe of the
+    # Inventory-from-.env row (informational — not a live re-probe of the
     # remote; the walkthrough's remote_detect_gpus already did the live probe).
     if [[ -n "$gpus_raw" && "$gpus_raw" == *'"vendor"'* ]]; then
         local gpu_count vendor_list
@@ -256,7 +256,7 @@ offload_completion_report() {
               # shellcheck disable=SC2016 # backticks are literal text here, not command substitution
               printf '    %-27s %s\n' "" '`armctl up`, then re-run `armctl install`' ;; esac
 
-    # F4: re-offer the paste block for any FAILed step that has one (paths /
+    # Re-offer the paste block for any FAILed step that has one (paths /
     # callback / GPUs have no one-liner fix — mounting shares and opening
     # firewall ports aren't paste-able — so only key/ca/image re-offer).
     if (( ${#failed_steps[@]} > 0 )) && [[ "${OFFLOAD_REOFFER}" == "1" ]]; then
