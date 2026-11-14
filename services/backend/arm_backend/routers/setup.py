@@ -1,4 +1,4 @@
-"""First-run setup walkthrough state (setup spec 2026-10-01 §6.1).
+"""First-run setup walkthrough state.
 
 The walkthrough writes every setting through the router that owns it; this
 router only records which steps are done, skipped or need attention, whether

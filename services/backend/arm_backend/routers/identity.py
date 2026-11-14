@@ -1,5 +1,4 @@
-"""Identity, match, pin and episode-browse endpoints (design spec 2026-09-28-
-identity-sources, section 7; plan Task 9).
+"""Identity, match, pin and episode-browse endpoints.
 
 `/identity` is a read-shaped view of the stored `identity_claims`.
 `/identity/match` runs the episode stage on demand: `apply=False` is a pure
@@ -65,7 +64,7 @@ logger = logging.getLogger("arm_backend.routers.identity")
 
 router = APIRouter(prefix="/api/jobs", tags=["identity"])
 
-# The pin capability this PR uses (spec 7: "a named source sets pin.episode").
+# The pin capability a named source sets.
 _EPISODE_PIN = "episode"
 
 
@@ -178,7 +177,7 @@ async def match_identity(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> MatchPreview:
-    # M4 (spec 5): the manual match works on any job; only the background
+    # The manual match works on any job; only the background
     # stage is gated on a TV candidate.
     job = await _get_job(db, job_id)
     if stage_runner is None:
@@ -188,11 +187,11 @@ async def match_identity(
         )
 
     if req.apply:
-        # F4 part 2: discard any in-flight background run's about-to-be-
+        # Discard any in-flight background run's about-to-be-
         # stale outcome for this job BEFORE we start our own network round-
         # trip, so it can't clobber the write we're about to commit. The
         # hold this places defers the rerun until `release` below, after
-        # our commit (D-093).
+        # our commit.
         stage_runner.invalidate(job_id)
         try:
             return await _match_identity(job_id, job, req, db, hub, stage_runner)
@@ -216,18 +215,18 @@ async def _match_identity(
         season=req.season,
         scan_seasons=req.scan_seasons,
         disc_number=req.disc_number,
-        # None: the pinned source's stored tolerance, else the default (I3).
+        # None: the pinned source's stored tolerance, else the default.
         tolerance=req.tolerance,
         only_source=source_id,
         # Never persist a show id resolved during THIS compute onto the job
-        # object we're about to re-select fresh (controller ruling 2) -- an
+        # object we're about to re-select fresh -- an
         # in-place mutation here, left on an attached object, is exactly the
         # stale-write autoflush hazard the background runner's two-phase
         # split exists to avoid.
         apply=False,
     )
 
-    # F6: end the read transaction before the (possibly slow) provider
+    # End the read transaction before the (possibly slow) provider
     # round-trip. A plain commit, not a rollback: nothing is dirty yet in
     # either branch, and `db.py`'s `expire_on_commit=False` means committing
     # does NOT expire `job` -- `compute_episode_claims` still reads its
@@ -242,7 +241,7 @@ async def _match_identity(
     if not req.apply:
         return MatchPreview(outcomes=[_outcome_view(o.source_id, o.claims) for o in outcomes])
 
-    # F1: nothing is dirty here (persist was off) -- expire everything this
+    # Nothing is dirty here (persist was off) -- expire everything this
     # session is holding so the re-select below, and `apply_episode_outcomes`
     # -> `resolve_job`'s own track re-select, both re-read current rows
     # instead of diffing against copies loaded before the network round-trip
@@ -253,12 +252,12 @@ async def _match_identity(
             select(Job).where(col(Job.id) == job_id).with_for_update().execution_options(populate_existing=True)
         )
     ).scalar_one()
-    # F2: `job` was never mutated (compute ran with persist off), so there is
+    # `job` was never mutated (compute ran with persist off), so there is
     # nothing on it to merge -- fold in whatever show ids THIS compute
     # resolved instead, read back off the outcomes themselves.
     merge_new_ids(fresh_job, found_ids_from_outcomes(outcomes, providers))
-    # I3: the operator's season / disc number become manual job claims, so a
-    # later background run treats them as known (spec 6.3) instead of
+    # The operator's season / disc number become manual job claims, so a
+    # later background run treats them as known instead of
     # scanning again. Recorded before the resolve in apply_outcomes_and_emit.
     choices = {
         attr: value for attr, value in (("season", req.season), ("disc_number", req.disc_number)) if value is not None
@@ -266,8 +265,8 @@ async def _match_identity(
     if choices:
         record_manual_job(fresh_job, choices, keep_restated=True)
     if source_id is not None and req.tolerance is not None:
-        # I3: keep the tolerance in the pinned source's stored inputs; the
-        # stage reuses it on a default run, so the inputs stay equal (C7).
+        # Keep the tolerance in the pinned source's stored inputs; the
+        # stage reuses it on a default run, so the inputs stay equal.
         outcomes = [
             replace(o, claims=o.claims.model_copy(update={"inputs": {**o.claims.inputs, "tolerance": req.tolerance}}))
             if o.source_id == source_id
@@ -306,7 +305,7 @@ async def clear_episode_match(
     if stage_runner is not None:
         stage_runner.invalidate(job_id)
     try:
-        # M2: lock the job row before the identity write (lock order: job, then tracks).
+        # Lock the job row before the identity write (lock order: job, then tracks).
         job = await _get_job(db, job_id, for_update=True)
         forget_episode_sources(job)
         db.add(job)
@@ -335,7 +334,7 @@ async def clear_identity_pin(
     db.add(job)
     resolved = await resolve_job(db, job)
     await db.commit()
-    # F3: spec 7 requires `job.identity_updated` whenever the resolver
+    # `job.identity_updated` must fire whenever the resolver
     # changes anything, not only when `/identity/match` supplied fresh
     # outcomes -- there is no per-source status to report here, so `sources`
     # is empty.
@@ -349,7 +348,7 @@ async def clear_identity_pin(
 async def _browse_show_id(provider: EpisodeListProvider, cfg: Config, job: Job, source: str) -> str:
     """The show id the browse endpoints use, or the HTTPException that says
     why there is none."""
-    # F7: distinguish "not usable at all" (409 / 503) from "no show id" (404)
+    # Distinguish "not usable at all" (409 / 503) from "no show id" (404)
     # from a transient provider failure resolving that id (502) -- the
     # multi-provider `resolve_show_ids` wrapper swallows SourceError/SourceMiss
     # around `resolve_show_id` for its own (best-effort, try-the-next-provider)
@@ -427,7 +426,7 @@ async def browse_episodes(
     except HTTPException:
         raise
     except Exception as e:
-        # M1: a provider bug or an unmapped failure is the upstream's fault,
+        # A provider bug or an unmapped failure is the upstream's fault,
         # not a server error of ours.
         logger.exception("episodes browse: source %s raised job_id=%s", source_id, job_id)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{source}: unexpected error") from e

@@ -1,4 +1,4 @@
-"""Session-routing CRUD (gap analysis G-02/G-17).
+"""Session-routing CRUD.
 
 A route maps `(media_type, disc_type)` -> a session; `disc_type=None` is the
 wildcard for that media_type. `resolve_routed_session_id` in session_routing.py

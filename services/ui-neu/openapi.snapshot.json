@@ -148,7 +148,7 @@
           "ripper"
         ],
         "summary": "Get Ripper Config",
-        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\n(setup spec 2026-10-01 D1). Rippers that omit it get the global value.",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\nRippers that omit it get the global value.",
         "operationId": "get_ripper_config_api_ripper_config_get",
         "security": [
           {
@@ -283,7 +283,7 @@
           "ripper"
         ],
         "summary": "Get Drive",
-        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
+        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\nand the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
         "operationId": "get_drive_api_ripper_drives__drive_id__get",
         "security": [
           {
@@ -502,7 +502,7 @@
           "ripper"
         ],
         "summary": "Register",
-        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
+        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis.",
         "operationId": "register_api_ripper_register_post",
         "requestBody": {
           "content": {
@@ -705,7 +705,7 @@
           "ripper"
         ],
         "summary": "Resume",
-        "description": "Phase 9 \u2014 per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
+        "description": "Per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
         "operationId": "resume_api_ripper_jobs__job_id__resume_post",
         "security": [
           {
@@ -769,7 +769,7 @@
           "ripper"
         ],
         "summary": "Get In Flight Job",
-        "description": "Phase 9 \u2014 boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
+        "description": "Boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
         "operationId": "get_in_flight_job_api_ripper_drives__drive_id__in_flight_job_get",
         "security": [
           {
@@ -865,7 +865,7 @@
           "ripper"
         ],
         "summary": "Get Held Job",
-        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed review gate). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
         "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
         "security": [
           {
@@ -913,7 +913,7 @@
           "ripper"
         ],
         "summary": "Recovery Abandon",
-        "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
+        "description": "Service-token abandon for ripper reboot recovery (timed review gate).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
         "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
         "security": [
           {
@@ -1462,7 +1462,7 @@
           "jobs"
         ],
         "summary": "Abandon Job",
-        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op (and used to,\npre-fix). Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
+        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op. Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
         "operationId": "abandon_job_api_jobs__job_id__abandon_post",
         "security": [
           {
@@ -1528,7 +1528,7 @@
           "jobs"
         ],
         "summary": "Rip Start Review",
-        "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
+        "description": "Operator Start for a disc held in the timed review gate.\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
         "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
         "security": [
           {
@@ -1626,7 +1626,7 @@
           "jobs"
         ],
         "summary": "Review Pause",
-        "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
+        "description": "Pause/resume ONE held disc's review countdown (per-job pause).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
         "operationId": "review_pause_api_jobs__job_id__review_pause_post",
         "security": [
           {
@@ -1790,7 +1790,7 @@
           "jobs"
         ],
         "summary": "Accept Identity Suggestion",
-        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off.\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
         "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
         "security": [
           {
@@ -2318,7 +2318,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
+        "description": "Run the host drive scan now and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "security": [
           {
@@ -2465,7 +2465,7 @@
           "drives"
         ],
         "summary": "Enroll Drive",
-        "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
+        "description": "detected|ignored -> enrolled: the operator says \"this is\nARM's\". Creates (or adopts) the ripper container. A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
         "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
         "security": [
           {
@@ -2608,7 +2608,7 @@
           "drives"
         ],
         "summary": "Unenroll Drive",
-        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
         "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
         "security": [
           {
