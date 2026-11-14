@@ -2040,9 +2040,9 @@ export type HeartbeatRequest = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobView = {
     job: JobView;
@@ -6051,9 +6051,9 @@ export type ValidationError = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobViewWritable = {
     job: JobViewWritable;
