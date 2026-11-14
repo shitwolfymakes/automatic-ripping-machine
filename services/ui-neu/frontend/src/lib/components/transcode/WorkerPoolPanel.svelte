@@ -86,8 +86,8 @@
 	}
 	/* the original worker card used a literal indigo hue (border-indigo-200,
 	   bg-indigo-50/50) with no shared token; collapses onto
-	   --color-status-transcoding (violet), the same tone already accepted
-	   for the transcoder domain's progress-bar tone (DEVIATIONS.md group 2) */
+	   --color-status-transcoding (violet), the same tone the transcoder
+	   domain's progress bar uses */
 	.transcoder-page-worker-card {
 		border: 1px solid color-mix(in srgb, var(--color-status-transcoding) 30%, transparent);
 		border-radius: var(--radius-md);
