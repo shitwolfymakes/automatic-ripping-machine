@@ -9,8 +9,8 @@
 		border-radius: 9999px;
 		background: var(--color-text-faint);
 	}
-	/* Status dots use the --color-status-* scale, not the tone tokens: the
-	   originals were bg-red-500 / bg-green-500 (the status values), and the
+	/* Status dots use the --color-status-* scale, not the tone tokens: the dots are bg-red-500 /
+	   bg-green-500 (the status values), and the
 	   tone tokens are a muted red-600/green-600 in light and a washed
 	   red-400/green-400 in dark, which reads wrong on a 8px dot. */
 	.status-dot[data-status='ok'],
