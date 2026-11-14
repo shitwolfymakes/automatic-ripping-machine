@@ -221,7 +221,6 @@ site/.cache/
 # never commit private keys.
 /certs/
 .claude/scheduled_tasks.lock
-.superpowers/
 .playwright-mcp/
 services/ui-neu/nginx.http.conf
 
