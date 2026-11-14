@@ -43,7 +43,7 @@ export interface ImageCacheStats {
 	freed_bytes?: number;
 }
 
-// Legacy aliases — the surrounding pages import these names.
+// Alias kept for the pages that still import the old response name.
 export type OrphanFoldersResponse = OrphanFolderList;
 
 export async function fetchOrphanFolders(): Promise<OrphanFolderList> {

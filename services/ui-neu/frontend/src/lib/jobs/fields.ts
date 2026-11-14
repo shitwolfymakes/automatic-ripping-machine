@@ -1,5 +1,5 @@
 import type { JobView } from '$lib/types/api.gen';
-import { statusLabel } from '$lib/utils/format';
+import { statusLabel } from '$lib/jobs/status-format';
 import { readJobMetadata, type JobMetadata } from '$lib/jobs/metadata';
 import { discTypeLabel } from '$lib/jobs/type';
 import { isAwaitingIdentity, isInProgress, isLive } from '$lib/jobs/status-groups';

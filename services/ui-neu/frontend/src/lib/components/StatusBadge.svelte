@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { statusColor, statusLabel } from '$lib/utils/format';
+	import { statusColor, statusLabel } from '$lib/jobs/status-format';
 
 	interface Props {
 		status: string | null | undefined;

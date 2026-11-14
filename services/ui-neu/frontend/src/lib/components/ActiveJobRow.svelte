@@ -4,7 +4,8 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
 	import ActiveJobRowDetails from './active-job-row/ActiveJobRowDetails.svelte';
-	import { statusAccentVar, formatEta, formatTransfer } from '$lib/utils/format';
+	import { statusAccentVar } from '$lib/jobs/status-format';
+	import { formatEta, formatTransfer } from '$lib/utils/format';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
 	import { isInProgress } from '$lib/jobs/status-groups';

@@ -8,7 +8,7 @@
 	import { jobPoster } from '$lib/match/poster';
 	import { effectiveJobStatus } from '$lib/jobs/status';
 	import { discTypeLabel, type VideoTypeConfig } from '$lib/jobs/type';
-	import { formatRipStage } from '$lib/utils/format';
+	import { formatRipStage } from '$lib/jobs/status-format';
 
 	interface Props {
 		/** The job the panel describes. */

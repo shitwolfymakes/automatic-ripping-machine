@@ -130,9 +130,11 @@ Any missing line or branch inside a touched symbol fails the rule. Use `# pragma
 Under `services/ui-neu/frontend/src/lib`; `npm run lint` enforces module and component file names, not test file names (`unicorn/filename-case`).
 
 1. **Names:** kebab-case for every `.ts`, `.js` and `.svelte.ts` file and every folder (`session-routes.ts`, `handbrake-schema.svelte.ts`, `drive-card/`); Svelte components stay PascalCase (`DataTable.svelte`). In code: camelCase for variables, functions and properties; PascalCase for types, interfaces and components.
-2. **Tests:** in a `__tests__/` folder beside the code they test, never a loose sibling `*.test.ts` or a `lib/__tests__/` catch-all. A test file is named after its module (`data-table.test.ts` tests `data-table.ts`; extra suites use a dotted suffix: `data-table.cells.test.ts`).
-3. **Logic home:** pure logic lives in `lib/<domain>/` (handbrake, sessions, jobs, drives, ...), Svelte components in `components/<domain>/`, and `lib/utils/` holds only generic helpers with no domain knowledge. A helper used by one component's markup only may stay beside that component when it is generic UI logic (`components/data-table.ts` for `DataTable.svelte`).
-4. **Layer folders:** `api/` (HTTP clients), `stores/` (stateful runes and stores), `types/`, `styles/` and `themes/` keep their folders; their files are kebab-case.
+2. **Tests:** in a `__tests__/` folder beside the code they test, never a loose sibling `*.test.ts`. `src/lib/__tests__/` holds only tests of modules that sit directly in `src/lib/`; it is not a catch-all. A test file is named after its module (`data-table.test.ts` tests `data-table.ts`; extra suites use a dotted suffix: `data-table.cells.test.ts`). Shared test data lives in `__fixtures__/` (`src/lib/__fixtures__/` when several folders use it).
+3. **Logic home:** pure logic lives in `lib/<domain>/` (handbrake, sessions, jobs, drives, ...), Svelte components in `components/<domain>/`, and `lib/utils/` holds only generic helpers with no domain knowledge. Generic UI helpers live in `lib/ui/` (`lib/ui/data-table.ts` for `DataTable.svelte`).
+4. **Layer folders:** `api/` (HTTP clients), `stores/` (stateful runes and stores), `types/`, `styles/` and `themes/` keep their folders; their files are kebab-case. Stateful `.svelte.ts` rune modules live in `stores/`.
+5. **Dependency direction:** `lib/` outside `components/` never imports from `components/` (`no-restricted-imports` enforces it). `components/shared/` holds components used by two or more domains.
+6. Components still at the flat `components/` root predate this layout; new components go in `components/<domain>/` or `components/shared/`.
 
 ## Gotchas / invariants
 

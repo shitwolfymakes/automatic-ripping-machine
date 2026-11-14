@@ -2,7 +2,8 @@
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from './StatusBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { elapsedTime, statusAccentVar } from '$lib/utils/format';
+	import { statusAccentVar } from '$lib/jobs/status-format';
+	import { elapsedTime } from '$lib/utils/format';
 	import { etaLabel, fpsLabel } from '$lib/transcode/progress';
 	import { TranscodeLive } from '$lib/stores/transcode-live.svelte';
 	import TimeAgo from './TimeAgo.svelte';

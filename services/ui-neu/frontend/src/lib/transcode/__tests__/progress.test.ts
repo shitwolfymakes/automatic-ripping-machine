@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { etaTime, formatRemaining } from '../../utils/format';
+import { etaTime } from '../../jobs/status-format';
+import { formatRemaining } from '../../utils/format';
 import { formatFps } from '../fps';
 import { etaLabel, fpsLabel, liveSample, type TranscodeLiveSample } from '../progress';
 

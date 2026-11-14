@@ -4,7 +4,7 @@
 	import Skeleton from './Skeleton.svelte';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
 	import { transcodeColumnStatus } from '$lib/jobs/status';
-	import { statusLabel } from '$lib/utils/format';
+	import { statusLabel } from '$lib/jobs/status-format';
 	import DiscTypeIcon from './DiscTypeIcon.svelte';
 	import VideoTypeIcon from './VideoTypeIcon.svelte';
 

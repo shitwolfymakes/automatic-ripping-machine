@@ -2,7 +2,8 @@
 // on transcode.progress.{id}, and the ETA and frame rate the card shows
 // from it or from the task row.
 import type { TranscodeTaskView } from '$lib/types/api.gen';
-import { etaTime, formatRemaining } from '../utils/format';
+import { etaTime } from '../jobs/status-format';
+import { formatRemaining } from '../utils/format';
 import { formatFps } from './fps';
 
 /** One progress sample for a task; each value is null when not a number. */
