@@ -324,7 +324,7 @@ def test_tier_beats_pin() -> None:
 
 
 def _multi_provider() -> dict[str, SourceClaims]:
-    """The reviewer's fixture: TMDb places tracks 0-2 as E5-E7 and calls 3-4
+    """Fixture: TMDb places tracks 0-2 as E5-E7 and calls 3-4
     extras; TVmaze places 0-4 as E3-E7. Merged field by field, tracks 3-4
     would take TVmaze's E6-E7 and collide with TMDb's E6-E7."""
     tmdb = {str(i): TrackClaim(role=TrackRole.EPISODE, season=1, episode=5 + i) for i in range(3)}

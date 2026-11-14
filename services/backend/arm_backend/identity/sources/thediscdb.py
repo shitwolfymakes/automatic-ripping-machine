@@ -163,7 +163,7 @@ def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> Source
             "release_slug": match.release_slug,
             "title_slug": match.title_slug,
             "kind": match.kind,
-            # Community credit (spec): who contributed this disc layout.
+            # Community credit: who contributed this disc layout.
             "contributors": _contributors(match),
         },
     )

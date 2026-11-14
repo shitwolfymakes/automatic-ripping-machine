@@ -206,8 +206,8 @@ def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:
     # Pathological BD name (a disc-number digit run past int()'s digit-count
-    # limit) no longer raises: parse_label's bounds check catches the ValueError and drops the disc number, so
-    # bd_title still runs to completion (status "ok", no disc claim).
+    # limit) does not raise: parse_label's bounds check catches the ValueError and
+    # drops the disc number, so bd_title still runs to completion (status "ok", no disc claim).
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
     pathological_name = "X D" + "9" * 4301
     scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name=pathological_name))

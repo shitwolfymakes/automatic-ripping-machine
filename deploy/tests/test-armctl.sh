@@ -47,7 +47,7 @@ check "arm_sub: re-indents the line it is given" "      detail" "$(arm_sub '    
 check "arm_warn: bang, on stderr" "  ! careful" "$(arm_warn careful 2>&1 >/dev/null)"
 check "arm_err: ERROR, on stderr" "ERROR: broken" "$(arm_err broken 2>&1 >/dev/null)"
 
-# --- banner ---------------------------------------------------------------------
+# --- banner -------------------------------------------------------------------
 # show_banner <tty 0|1> <cols> <lang>: banner for v3.0.0-rc3 under those conditions.
 show_banner() {
     (
@@ -72,7 +72,7 @@ out="$(show_banner 0 120 en_US.UTF-8)"
 lacks "banner: no art when output is not a terminal" "█" "$out"
 has "banner: the title line when output is not a terminal" "Automatic Ripping Machine v3.0.0-rc3" "$out"
 
-# --- root refusal ---------------------------------------------------------------
+# --- root refusal -------------------------------------------------------------
 out="$( (current_uid() { echo 0; }; refuse_root) 2>&1 || true)"
 has "root is refused with the reason" "do not run armctl as root" "$out"
 rc=0; (current_uid() { echo 0; }; refuse_root) >/dev/null 2>&1 || rc=$?
@@ -80,7 +80,7 @@ check "root refusal exits 1" "1" "$rc"
 rc=0; (current_uid() { echo 1000; }; refuse_root) >/dev/null 2>&1 || rc=$?
 check "a normal user passes" "0" "$rc"
 
-# --- settings -------------------------------------------------------------------
+# --- settings -----------------------------------------------------------------
 out="$( (unset ARM_DIR; armctl_settings) 2>&1 || true)"
 has "missing ARM_DIR is explained" "ARM_DIR is not set" "$out"
 out="$( (ARM_DIR="${TMPROOT}/ripper"; armctl_settings) 2>&1 || true)"
@@ -97,7 +97,7 @@ has "compose reads the host overlay last" "-f ${ARM_DIR}/.armctl/host-overlay.ym
 use_env_file "${ARM_STATE_DIR}/.env.next"
 has "use_env_file switches the env file compose reads" "--env-file ${ARM_STATE_DIR}/.env.next" "${ARM_COMPOSE_CMD[*]}"
 
-# --- profile --------------------------------------------------------------------
+# --- profile ------------------------------------------------------------------
 new_install profile
 printf 'ARMCTL_PROFILE=ripper-only\n' > "${ENV_FILE}"; load_profile
 check "ripper-only profile sets RIPPER_ONLY" "1" "${RIPPER_ONLY}"
@@ -108,7 +108,7 @@ check "no saved profile means full" "full" "${PROFILE}"
 out="$( (rm -f "${ENV_FILE}"; require_installed) 2>&1 || true)"
 has "commands before install say what to run" "armctl install" "$out"
 
-# --- images must be present after the pull ---------------------
+# --- images must be present after the pull ------------------------------------
 # compose tolerates a failed pull for a service that has a build section, so
 # armctl checks for itself before it touches the running stack.
 images() {  # images <image that is missing, or empty>
@@ -140,7 +140,7 @@ out="$( ( new_install images-next; use_env_file "${ARM_STATE_DIR}/.env.next"
 has "a missing image during an upgrade: the hint names the live .env" "ARM_IMAGE_TAG in ${TMPROOT}/images-next/arm/.armctl/.env," "$out"
 lacks "a missing image during an upgrade: the hint does not name .env.next" ".env.next" "$out"
 
-# --- up and down ordering ---------------------------------------------------------
+# --- up and down ordering -----------------------------------------------------
 STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus refresh_ui_leaf backup_db remove_spawned_containers remove_retired_services restart_ui_for_new_leaf respawn_rippers_if_needed wait_for_backend)
 # run_cmd <install name> <FAIL_AT step or ''> <command> [args...]: run an
 # armctl command with every step replaced by a recorder; print the order.
@@ -208,7 +208,7 @@ has "up: the refusal names armctl upgrade --version <linked> as the repair" "Run
 out="$(up_half up-agree v3.1.0)"
 has "up: .env and current agreeing starts the stack" "STARTED" "$out"
 
-# --- lock -------------------------------------------------------------------------
+# --- lock ---------------------------------------------------------------------
 if command -v flock >/dev/null 2>&1; then
     out="$( (new_install lock; acquire_lock; (unset ARMCTL_LOCK_HELD; acquire_lock) 2>&1 || true) )"
     has "a second armctl run is refused" "another armctl command is already running" "$out"
@@ -218,7 +218,7 @@ else
     echo "skip - flock not available"
 fi
 
-# --- config: storage paths --------------------------------------------------------
+# --- config: storage paths ----------------------------------------------------
 for p in "/mnt/nas/raw" "/media/sam/My Passport/rips"; do
     rc=0; valid_storage_path "$p" || rc=$?
     check "storage path accepted: ${p}" "0" "$rc"
@@ -259,7 +259,7 @@ out="$( (prepare_storage "$ro") 2>&1 || true)"
 has "storage: an unwritable folder is an error" "is not writable" "$out"
 check "storage: a folder outside arm keeps its mode" "555" "$(stat -c '%a' "$ro")"
 
-# --- config: profile ---------------------------------------------------------------
+# --- config: profile ----------------------------------------------------------
 new_install profile-choice; : > "${ENV_FILE}"
 check "profile: a flag wins" "ripper-only" "$( (PROFILE_ARG=ripper-only; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
 check "profile: ripper-only sets RIPPER_ONLY" "1" "$( (PROFILE_ARG=ripper-only; choose_profile >/dev/null </dev/null; echo "${RIPPER_ONLY}") )"
@@ -274,7 +274,7 @@ has "profile: an invalid saved profile is reported" "ignoring the saved ARMCTL_P
 set +e; out="$( ( set -e; PROFILE_ARG=everything; choose_profile ) </dev/null 2>&1 )"; set -e
 has "profile: an unknown profile is rejected" "must be full, ripper-only or offload" "$out"
 
-# --- config: host overlay (a path with spaces) ----------------------
+# --- config: host overlay (a path with spaces) --------------------------------
 new_install overlay
 PROFILE=full; RAW_PATH="/media/sam/My Passport/rips"; MEDIA_PATH="/mnt/nas/media"; write_host_overlay
 ov="$(cat "${HOST_OVERLAY}")"
@@ -287,7 +287,7 @@ has "overlay: offload publishes the callback port" '      - "8080:8443"' "$ov"
 has "overlay: offload mounts the ssh folder read-only" "      - \"${ARM_DIR}/ssh:/home/arm/.ssh:ro\"" "$ov"
 check "overlay: one ports key after a re-run" "1" "$(grep -c '^    ports:$' "${HOST_OVERLAY}")"
 
-# --- config: .env -------------------------------------------------------------------
+# --- config: .env -------------------------------------------------------------
 REL="${TMPROOT}/rel"; mkdir -p "${REL}"; cp "${DEPLOY}/../.env.example" "${REL}/.env.example"
 # env_case <install name> <profile> [keep]: run write_env; print the .env.
 # `keep` re-runs on the existing .env instead of starting fresh.
@@ -382,7 +382,7 @@ has "pins: the images armctl set still move" "ARM_TRANSCODE_IMAGE_VAAPI=docker.i
 has "pins: a new prefix moves the images armctl set" "ARM_RIPPER_IMAGE=ghcr.io/fork/arm-ripper:v3.2.0" "$(cat "$pin")"
 has "pins: a new prefix keeps a hand-set image" "ARM_TRANSCODE_IMAGE_QSV=myregistry/arm-transcode:custom-intel" "$(cat "$pin")"
 
-# --- GPUs set by hand ---------------------------------------------------------------
+# --- GPUs set by hand ---------------------------------------------------------
 gpu_env="${TMPROOT}/gpu-manual.env"
 printf 'ARM_GPUS_MANUAL=true\nARM_GPUS=[{"vendor":"qsv","device_path":"/dev/dri/renderD129","encoder_kinds":[]}]\n' > "${gpu_env}"
 out="$( ENV_FILE="${gpu_env}"; RIPPER_ONLY=0; DETECTED_GPUS_SET=0
@@ -415,7 +415,7 @@ lacks "gpus: a first detection stays quiet" "delete the rows in Settings > GPUs"
 out="$( (write_image_pins "" "$pin") 2>&1 || true)"
 has "pins: an empty version is refused" "no release version" "$out"
 
-# --- docker diagnosis ---------------------------------------------------------------
+# --- docker diagnosis ---------------------------------------------------------
 # dstate <stub code>: run docker_state with `command -v docker` succeeding and
 # `docker` replaced by the given stub body.
 dstate() {
@@ -453,7 +453,7 @@ printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$osr"
 check "os: a derivative is not automated" "other" "$(OS_RELEASE_FILE="$osr" os_family)"
 check "os: no os-release file" "other" "$(OS_RELEASE_FILE="${TMPROOT}/absent" os_family)"
 
-# --- docker group restart --------------------------------------------
+# --- docker group restart -----------------------------------------------------
 # regroup <ARMCTL_SG_REEXEC value> <sg available: yes|no>
 regroup() {
     (
@@ -482,7 +482,7 @@ rc=0; out="$(regroup "" no 2>&1)" || rc=$?
 check "regroup: without sg it stops" "1" "$rc"
 has "regroup: without sg it names the command to run after login" "armctl up --force" "$out"
 
-# --- ensure_docker -----------------------------------------------------------------
+# --- ensure_docker ------------------------------------------------------------
 # edocker <first state> <os id> <ARMCTL_ASSUME>
 edocker() {
     (
@@ -532,7 +532,7 @@ out="$(edocker_seq daemon-down daemon-down)"
 has "ensure_docker: the retries are bounded" "Docker is still not usable (daemon-down)" "$out"
 check "ensure_docker: at most three waits" "3" "$(grep -c '^SLEEP' <<<"$out")"
 
-# --- PATH link ---------------------------------------------------------------------
+# --- PATH link ----------------------------------------------------------------
 # plink <case name> <PATH has ~/.local/bin: yes|no> <ARMCTL_ASSUME> [pre-existing: foreign|own]
 plink() {
     (
@@ -583,7 +583,7 @@ has "path link: a failed ln keeps the full path" "CMD=${TMPROOT}/plink-lnfail/ar
 has "path link: a failed ln is recorded" "could not create" "$out"
 chmod -R u+w "${TMPROOT}/plink-lnfail" 2>/dev/null || true
 
-# --- install flow ----------------------------------------------------------------------
+# --- install flow -------------------------------------------------------------
 echo v3.1.0 > "${REL}/VERSION"
 FLOW_STEPS=(ensure_docker refuse_second_stack acquire_lock ensure_layout choose_storage ensure_ca write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
 # flow <install name> [install args...]: run cmd_install with every stage
@@ -808,7 +808,7 @@ has "udev, no sudo: command to reload the rules" "sudo udevadm control --reload-
 has "udev, no sudo: command to trigger the block subsystem" "sudo udevadm trigger --subsystem-match=block" "$out"
 lacks "udev, no sudo: no heredoc to paste" "<<'RULE'" "$out"
 
-# --- prompt_valid at end of input ------------------------------------------------------
+# --- prompt_valid at end of input ---------------------------------------------
 # errexit off, as in the $(...) the walkthrough calls it from.
 ( set +e; prompt_valid "Host" valid_https_url "https://host:port" ) </dev/null >"${TMPROOT}/pv.out" 2>&1 &
 pid=$!
@@ -823,7 +823,7 @@ fi
 check "prompt_valid: end of input (Ctrl-D) stops instead of asking forever" "1" "${rc}"
 has "prompt_valid: end of input is reported" "end of input" "$(cat "${TMPROOT}/pv.out")"
 
-# --- remote GPU detection over ssh -------------------------------------------------------
+# --- remote GPU detection over ssh --------------------------------------------
 # ssh's stderr is discarded by the function, so the stub records its arguments in a file.
 out="$( (
     ssh() { cat >/dev/null; echo "ARGS $*" > "${TMPROOT}/ssh.args"; printf '[]\n\n'; }
@@ -836,7 +836,7 @@ out="$( ( ssh() { cat >/dev/null; echo "ARGS $*" > "${TMPROOT}/ssh.args"; printf
 has "remote GPUs: the destination without a port" "accept-new sam@h bash -s" "$out"
 lacks "remote GPUs: no -p without a port" " -p " "$out"
 
-# --- CA: a run stopped half way ------------------------------------------------------------
+# --- CA: a run stopped half way -----------------------------------------------
 if command -v openssl >/dev/null 2>&1; then
     out="$( (
         ARM_CERTS_DIR="${TMPROOT}/half-ca"; mkdir -p "${ARM_CERTS_DIR}"
@@ -850,7 +850,7 @@ else
     echo "skip - openssl not available"
 fi
 
-# --- UI certificate refresh -------------------------------------------------------------
+# --- UI certificate refresh ---------------------------------------------------
 # ui_refresh <name> <SANs on the certificate, 'none' for no certificate, '' for
 # one openssl cannot read> <hostname -I output>: run refresh_ui_leaf with
 # openssl, hostname and make_leaf stubbed; print what it said and did.
@@ -890,7 +890,7 @@ check "UI leaf: a re-issued leaf restarts arm-ui once the stack is up" \
 compose restart arm-ui" "$out"
 check "UI leaf: no re-issue, no restart" "" "$( (UI_SERVICE=arm-ui; compose() { echo "compose $*"; }; UI_LEAF_REISSUED=0; restart_ui_for_new_leaf) )"
 
-# --- NVIDIA container toolkit -----------------------------------------------------------
+# --- NVIDIA container toolkit -------------------------------------------------
 # nv_case: an NVIDIA GPU on an apt host. NV_* variables shape docker and curl.
 # Run standalone with errexit live, as in armctl, then report what was called.
 nv_case() {
@@ -949,7 +949,7 @@ has "nvidia: the keyring is written without an overwrite question" "sudo gpg --b
 has "nvidia: a good install skips nothing" "CONTINUED SKIPPED=" "$out"
 lacks "nvidia: a good install skips nothing (no entry)" "CONTINUED SKIPPED=NVIDIA" "$out"
 
-# --- upgrade: the old release fetches, then hands over ------------------------------
+# --- upgrade: the old release fetches, then hands over ------------------------
 # upgrade_case <name> <resolved tag> <fetch: ok|fail> [upgrade args...]
 upgrade_case() {
     (
@@ -1046,7 +1046,7 @@ out="$(upgrade_case upg-down-rc v3.1.0-rc2 ok)"
 has "upgrade: an implicit move to a pre-release of the installed version is refused" "rc=1" "$out"
 lacks "upgrade: that refusal hands nothing over" "handover" "$out"
 
-# --- upgrade: the new release applies it ----------------------------------------------
+# --- upgrade: the new release applies it --------------------------------------
 # apply_case <name> <FAIL_AT step or ''> [<setup code> [apply-upgrade args...]]
 apply_case() {
     (
@@ -1175,7 +1175,7 @@ has "upgrade: a path-like --version is refused" "is not a valid release tag" "$o
 has "upgrade: a path-like --version exits 2" "rc=2" "$out"
 lacks "upgrade: a path-like --version fetches nothing" "fetch " "$out"
 
-# --- dispatch -----------------------------------------------------------------------
+# --- dispatch -----------------------------------------------------------------
 rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_main frobnicate) >/dev/null 2>&1 || rc=$?
 check "an unknown command exits 2" "2" "$rc"
 has "help lists the commands" "upgrade" "$(armctl_main help)"

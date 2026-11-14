@@ -93,14 +93,14 @@ def test_custom_tolerance() -> None:
 
 
 def test_unknown_runtimes_with_120s_skip() -> None:
-    # Regression 1: 120s title should be skipped (ref_rt ~2600)
+    # 120s title should be skipped (ref_rt ~2600)
     r = align(titles(2600, 120, 2600, 2600), eps(None, None, None, None, None, None, None, None, None, None))
     assert mapping(r) == {"0": (1, None), "2": (2, None), "3": (3, None)}
     assert r.skipped == ("1",)
 
 
 def test_unknown_runtimes_play_all_and_others() -> None:
-    # Regression 2: 15000 title doesn't match; five 2600s map E1-E5
+    # 15000 title doesn't match; five 2600s map E1-E5
     r = align(
         titles(15000, 2600, 2600, 2600, 2600, 2600),
         eps(None, None, None, None, None, None, None, None, None, None),
@@ -111,28 +111,28 @@ def test_unknown_runtimes_play_all_and_others() -> None:
 
 
 def test_play_all_by_other_titles() -> None:
-    # Regression 3: 7800 = 2600*3, so "0" is play-all; E1-E3 match others
+    # 7800 = 2600*3, so "0" is play-all; E1-E3 match others
     r = align(titles(7800, 2600, 2600, 2600), eps(2600, 2600, 2600, 2600))
     assert r.play_all == ("0",)
     assert mapping(r) == {"1": (1, None), "2": (2, None), "3": (3, None)}
 
 
 def test_interior_episode_skip() -> None:
-    # Regression 4: E3 (3500) is skipped, E1-2 and E4 match
+    # E3 (3500) is skipped, E1-2 and E4 match
     r = align(titles(2600, 2600, 2600), eps(2600, 2600, 3500, 2600))
     assert mapping(r) == {"0": (1, None), "1": (2, None), "2": (4, None)}
     assert r.skipped == ()
 
 
 def test_skipped_title_in_middle() -> None:
-    # Regression 5: 1100 title is skipped (ref_rt ~1320)
+    # 1100 title is skipped (ref_rt ~1320)
     r = align(titles(1320, 1100, 1320, 1320), eps(1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320, 1320))
     assert mapping(r) == {"0": (1, None), "2": (2, None), "3": (3, None)}
     assert r.skipped == ("1",)
 
 
 def test_tolerance_zero_raises() -> None:
-    # Regression 6a: tolerance < 1 raises ValueError
+    # tolerance < 1 raises ValueError
     try:
         align(titles(2600), eps(2600), tolerance=0)
         assert False, "Should raise ValueError"
@@ -141,7 +141,7 @@ def test_tolerance_zero_raises() -> None:
 
 
 def test_duplicate_refs_raises() -> None:
-    # Regression 6b: duplicate refs raise ValueError
+    # duplicate refs raise ValueError
     try:
         align([TitleIn(ref="0", seconds=2600), TitleIn(ref="0", seconds=2600)], eps(2600))
         assert False, "Should raise ValueError"
@@ -150,7 +150,7 @@ def test_duplicate_refs_raises() -> None:
 
 
 def test_two_episode_confidence() -> None:
-    # Regression 7: two-episode match confidence = round(1 - delta/eff_tol, 3)
+    # two-episode match confidence = round(1 - delta/eff_tol, 3)
     r = align(titles(6010), eps(3000, 3000))
     assert len(r.matches) == 1
     match = r.matches[0]
@@ -171,11 +171,8 @@ def test_play_all_by_other_titles_only() -> None:
     assert "1" in r.skipped
 
 
-# Final review fix wave
-
-
 def test_two_episode_match_never_spans_a_numbering_hole() -> None:
-    # Important 1: siblings claimed E5-E6; the 5280 s title must not become "E04-E07"
+    # Siblings claimed E5-E6; the 5280 s title must not become "E04-E07"
     remaining = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2640) for n in range(1, 11) if n not in (5, 6)]
     r = align(titles(2600, 2610, 2620, 5280), remaining)
     assert all(not (m.episode == 4 and m.episode_end == 7) for m in r.matches)
@@ -183,7 +180,7 @@ def test_two_episode_match_never_spans_a_numbering_hole() -> None:
 
 
 def test_two_episode_match_skips_provider_gap() -> None:
-    # Important 1: a provider list missing E3 must not yield "E02-E04"
+    # A provider list missing E3 must not yield "E02-E04"
     listed = [Episode(season=1, number=n, name=f"E{n}", runtime_s=2640) for n in (1, 2, 4, 5)]
     r = align(titles(2640, 5280), listed)
     assert (2, 4) not in mapping(r).values()
@@ -199,7 +196,7 @@ def test_run_does_not_cross_a_sibling_claimed_hole() -> None:
     r = align_runs(titles(*[2600] * 6), remaining, claimed=frozenset(range(12, 22)), anchor=0)
     assert [m.episode for m in r.matches] == [7, 8, 9, 10, 11]
     # 6 identical-runtime titles against 5 identical-runtime episodes is a genuine
-    # DP tie on which title is left over; align()'s existing (pre-Task-1) tie-break
+    # DP tie on which title is left over; align()'s tie-break
     # keeps title "0" unmatched here. The property under test is that none of the
     # 6 titles maps across the sibling-claimed E12-E21 hole onto E22.
     assert r.skipped == ("0",)
@@ -244,7 +241,7 @@ def test_leading_extra_before_a_gap_does_not_drop_the_first_episode() -> None:
 
 
 def test_identical_runtimes_with_anchor_are_ambiguous() -> None:
-    # Important 4b: an anchor alone decided E6-E10; E5-E9 or E7-E11 fit equally well
+    # An anchor alone decided E6-E10; E5-E9 or E7-E11 fit equally well
     r = align(titles(*[3000] * 5), eps(*[3000] * 20), anchor=5)
     assert [m.episode for m in r.matches] == [6, 7, 8, 9, 10]
     assert r.ambiguous is True
@@ -307,7 +304,7 @@ def test_no_single_episode_match_is_not_ambiguous() -> None:
 
 
 def test_play_all_of_exactly_two_other_titles() -> None:
-    # Minor 4: 6970 is the sum of the two other titles, not an E1-E2 double
+    # 6970 is the sum of the two other titles, not an E1-E2 double
     r = align(titles(3480, 3490, 6970), eps(3600, 3600, 3600, 3600))
     assert r.play_all == ("2",)
     assert mapping(r) == {"0": (1, None), "1": (2, None)}

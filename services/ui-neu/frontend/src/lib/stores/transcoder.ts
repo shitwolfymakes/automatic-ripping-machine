@@ -11,8 +11,7 @@ export const emptyStats: TranscodeStatsView = {
 	gpus_available: 0,
 	max_parallel: 0
 };
-// Was WorkersResponse { max_concurrent, active_count, workers }; v3 is a bare
-// worker array.
+// The bare worker array.
 const emptyWorkers: TranscodeWorkerView[] = [];
 
 /**

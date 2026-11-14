@@ -1870,9 +1870,8 @@ def test_resolve_explicit_null_disc_forgets_the_operator_value_only(signing_key:
 
 
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
-    """The transitional lift (season/disc inside a free-form `metadata`
-    bag) is retired now that season/disc are first-class request fields:
-    the old wire shape 422s instead of being silently lifted."""
+    """Season/disc inside a free-form `metadata` bag are not lifted;
+    season/disc are first-class request fields, so that wire shape 422s."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]

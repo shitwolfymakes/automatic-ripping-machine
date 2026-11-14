@@ -3,7 +3,8 @@
 // tones: danger/warning/success/info). Movie/Music/Data map onto the
 // nearest existing tone (info/success/warning); Series and the unidentified
 // Video fallback have no tone at all, so they take the fixed accent tokens
-// (accent-3 violet, accent-4 cyan) the disc-type icons already use. Each // config carries CSS custom-property VALUES (not Tailwind classes):
+// (accent-3 violet, accent-4 cyan) the disc-type icons already use. Each
+// config carries CSS custom-property VALUES (not Tailwind classes):
 // consumers bind them via `style:--jt-*` and a shared scoped/`badge`-family
 // rule reads the vars, so no component hand-rolls its own colour switch.
 export interface VideoTypeConfig {

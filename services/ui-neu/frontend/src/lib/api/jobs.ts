@@ -23,7 +23,7 @@ import type {
 import { apiFetch, apiFetchResponse, post } from './client';
 
 // ---------------------------------------------------------------------------
-// Job listing / detail (EXISTS in v3)
+// Job listing / detail
 // ---------------------------------------------------------------------------
 
 // GET /api/jobs supports status/drive_id/limit/offset only. Callers pass a thin local param type,
@@ -105,9 +105,8 @@ export function bulkDeleteJobs(params: { job_ids?: string[]; status?: string }):
 // v3 collapses every per-job and per-track edit into ONE atomic call:
 //   PATCH /api/jobs/{job_id}  body: JobUpdateRequest
 //     { poster_url_manual?, tracks?: TrackEditRequest[] }
-// A single-track edit is wrapped into the `tracks` array; there are // no dedicated /tracks/:id
-// endpoints. `track_id` selects the row, every
-// other field is an optional operator edit (omitted=untouched, null=clear).
+// A single-track edit is wrapped into the `tracks` array; there are no dedicated /tracks/:id
+// endpoints. `track_id` selects the row, every other field is an optional operator edit (omitted=untouched, null=clear).
 
 export function patchJob(jobId: string, body: JobUpdateRequest): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${jobId}`, {
@@ -146,7 +145,7 @@ export function setJobMediaType(jobId: string, mediaType: 'movie' | 'tv'): Promi
 }
 
 // ---------------------------------------------------------------------------
-// Identify / resolve + apply-session (EXISTS in v3)
+// Identify / resolve + apply-session
 // ---------------------------------------------------------------------------
 
 export interface ResolveJobBody {
@@ -218,7 +217,7 @@ export function applySession(
 }
 
 // ---------------------------------------------------------------------------
-// Metadata search / lookup (EXISTS in v3)
+// Metadata search / lookup
 // ---------------------------------------------------------------------------
 
 export type MatchProvider = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
@@ -280,7 +279,7 @@ export function fetchMusicDetail(releaseId: string): Promise<MetadataReleaseDeta
 }
 
 // ---------------------------------------------------------------------------
-// Naming (EXISTS in v3 — note the reshaped request/response contracts)
+// Naming (note the reshaped request/response contracts)
 // ---------------------------------------------------------------------------
 
 // v3 per-job naming preview: { job_output_dir, job_output_name, items[] }.

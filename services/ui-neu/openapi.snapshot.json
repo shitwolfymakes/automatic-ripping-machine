@@ -865,7 +865,7 @@
           "ripper"
         ],
         "summary": "Get Held Job",
-        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by\nreview-pause). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed review gate). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by\nreview-pause). The ripper uses `paused` to choose re-park vs. abandon on restart.\n404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
         "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
         "security": [
           {

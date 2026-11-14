@@ -899,8 +899,8 @@
 }
 
 /* Posters and cover art get a hard orange frame. data-poster is the
-   PosterImage theme hook; the old img.object-cover selector died with the
-   utility classes and img[alt*="Poster"] only ever matched untitled jobs. */
+   PosterImage theme hook; matching img[alt*="Poster"] would only ever hit
+   untitled jobs. */
 [data-scheme="lcars"] main [data-poster] {
 	border: 2px solid #f90;
 	border-radius: 0;

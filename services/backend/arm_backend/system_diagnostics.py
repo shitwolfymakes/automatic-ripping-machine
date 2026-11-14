@@ -5,8 +5,8 @@ created at startup and re-ensured before every read — see `ensure_roots`);
 this endpoint reports only what cannot be healed from inside a container:
 a mount that is read-only or wrong-owner (v3 never chowns user mounts —
 docs/developers/architecture/06-deployment.md), no rippers registered yet, a missing config
-row. The ported UI's settings System-Health panel and first-run wizard
-render it (Tier-12)."""
+row. The settings System-Health panel and the first-run walkthrough
+render it."""
 
 import asyncio
 import os

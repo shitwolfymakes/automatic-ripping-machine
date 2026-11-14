@@ -703,8 +703,8 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
 
     Returns the held job plus `paused` (true when the disc should survive a ripper
     reboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by
-    review-pause). The ripper uses `paused` to choose re-park vs. abandon on restart
-    (timed review gate). 404 when the drive is unknown or no held job
+    review-pause). The ripper uses `paused` to choose re-park vs. abandon on restart.
+    404 when the drive is unknown or no held job
     exists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery
     paths stay separate.
     """

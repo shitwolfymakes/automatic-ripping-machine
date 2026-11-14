@@ -81,8 +81,7 @@ class JobIdentity(BaseModel):
     external_ids: ExternalIds = Field(default_factory=ExternalIds)
     overview: str | None = None
     identified_at: datetime | None = None
-    # Snapshot of the picked match's facts. Not
-    # refreshed; a later identify or accept replaces the whole identity.
+    # Snapshot of the picked match's facts. Not refreshed; a later identify or accept replaces the whole identity.
     facts: IdentityFacts | None = None
     facts_fetched_at: datetime | None = None
 

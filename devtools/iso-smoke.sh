@@ -3,8 +3,7 @@
 #
 # Runs the full scan → identify → rip → transcode pipeline against a
 # Sintel ISO fixture (no physical disc required), driven entirely through
-# the `/api/iso` "Rip from ISO" API: the
-# backend spawns and tears down its own one-shot ripper container, so the
+# the `/api/iso` "Rip from ISO" API: the backend spawns and tears down its own one-shot ripper container, so the
 # smoke never borrows (pauses/resumes) a real enrolled drive.
 #
 # Pipeline:
@@ -253,9 +252,10 @@ resolve_makemkv_key() {
 }
 
 apply_makemkv_key() {
-    # The ripper does not read MAKEMKV_KEY from its own environment — the
-    # backend spawns it and the pipeline fetches the key from
-    # Config.makemkv_key at start (job_controller._configured_makemkv_key).
+    # The backend gives its spawned rippers no MAKEMKV_KEY env (the ripper's
+    # env-var fallback is only for hand-run containers); the pipeline fetches
+    # the key from Config.makemkv_key at start
+    # (job_controller._configured_makemkv_key).
     # PATCH it onto the backend config instead of injecting it into a container.
     local jwt="$1" key="$2"
     log "setting the backend's MakeMKV key (PATCH /api/config)" >&2

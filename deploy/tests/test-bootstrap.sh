@@ -28,12 +28,12 @@ lacks() { check "$1" "no"  "$( [[ "$3" == *"$2"* ]] && echo yes || echo no )"; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# --- where the arm folder goes -----------------------------------
+# --- where the arm folder goes ------------------------------------------------
 check "prefix names the parent folder" "/srv/arm" "$(bootstrap_arm_dir /srv)"
 check "a prefix that already ends in arm is the arm folder itself" "/srv/arm" "$(bootstrap_arm_dir /srv/arm)"
 check "a trailing slash changes nothing" "/srv/arm" "$(bootstrap_arm_dir /srv/arm/)"
 
-# --- an existing folder that is not ours -------------------------
+# --- an existing folder that is not ours --------------------------------------
 rc=0; (bootstrap_check_target "${TMP}/absent/arm") >/dev/null 2>&1 || rc=$?
 check "a folder that does not exist yet is fine" "0" "$rc"
 mkdir -p "${TMP}/empty/arm"
@@ -55,7 +55,7 @@ mkdir -p "${TMP}/file"; echo x > "${TMP}/file/arm"
 rc=0; (bootstrap_check_target "${TMP}/file/arm") >/dev/null 2>&1 || rc=$?
 check "a file named arm is refused" "1" "$rc"
 
-# --- picking the release ----------------------------------------------------------
+# --- picking the release ------------------------------------------------------
 tagfor() {  # tagfor <curl stub body>
     ( eval "curl() { $1; }"; bootstrap_resolve_tag )
 }
@@ -67,7 +67,7 @@ rc=0; out="$(tagfor 'return 22' 2>&1)" || rc=$?
 check "an unreachable GitHub is an error" "1" "$rc"
 has "the error says what to try" "--version" "$out"
 
-# --- fetching and verifying a bundle ----------------------------------------------
+# --- fetching and verifying a bundle ------------------------------------------
 archive="$(bash "${DEPLOY}/build-bundle.sh" v3.9.9 "${TMP}/out")"
 ( bootstrap_fetch_bundle v3.9.9 "${TMP}/rel/v3.9.9" "${archive}" ) >/dev/null
 check "a good bundle is unpacked" "yes" "$( [[ -x "${TMP}/rel/v3.9.9/armctl.sh" && -f "${TMP}/rel/v3.9.9/lib/common.sh" ]] && echo yes || echo no )"
@@ -112,7 +112,7 @@ mkdir -p "${TMP}/rel/keep"; echo old > "${TMP}/rel/keep/marker"
 ( bootstrap_fetch_bundle v3.9.9 "${TMP}/rel/keep" "${TMP}/bad/b.tar.gz" ) >/dev/null 2>&1 || true
 check "a failed fetch leaves an existing release as it was" "old" "$(cat "${TMP}/rel/keep/marker")"
 
-# --- the whole bootstrap, with the handover recorded ------------------------------
+# --- the whole bootstrap, with the handover recorded --------------------------
 # boot <case name> [install.sh args...]
 boot() {
     (
@@ -156,7 +156,7 @@ check "a foreign arm folder stops the bootstrap" "1" "$rc"
 lacks "nothing is handed over" "HANDOVER" "$out"
 check "nothing was added to the foreign folder" "media" "$(cd "${TMP}/v2home/home/arm" && echo *)"
 
-# --- a failed bootstrap leaves the target as it was -------------------------------
+# --- a failed bootstrap leaves the target as it was ---------------------------
 # failboot <case> : run bootstrap_main with a tampered bundle (checksum mismatch), report "rc=<n> <output>"
 failboot() {
     local rc=0 o
@@ -183,7 +183,7 @@ check "the existing install's marker is intact" "keep" "$(cat "${TMP}/fx/home/ar
 check "current is unchanged" "releases/v1" "$(readlink "${TMP}/fx/home/arm/.armctl/current")"
 check "no release or partial folder was added" "v1" "$(ls "${TMP}/fx/home/arm/.armctl/releases")"
 
-# --- the generated launcher -------------------------------------------------------
+# --- the generated launcher ---------------------------------------------------
 L="${TMP}/launch/arm"; mkdir -p "${L}/.armctl/releases/v1"
 # shellcheck disable=SC2016 # the fake armctl.sh must expand these itself, at run time
 printf '#!/usr/bin/env bash\necho "ARM_DIR=${ARM_DIR} ARGS=$*"\n' > "${L}/.armctl/releases/v1/armctl.sh"
@@ -194,7 +194,7 @@ check "the launcher runs the current release with ARM_DIR set" "ARM_DIR=${L} ARG
 mkdir -p "${TMP}/bin"; ln -s "${L}/armctl" "${TMP}/bin/armctl"
 check "the launcher works through a PATH link" "ARM_DIR=${L} ARGS=down" "$(cd / && "${TMP}/bin/armctl" down)"
 
-# --- piped into bash with ARM_INSTALL_SOURCE_ONLY leaked into the environment ---------
+# --- piped into bash with ARM_INSTALL_SOURCE_ONLY leaked into the environment ---
 # Under `curl | bash` BASH_SOURCE is empty; the seam must not abort with
 # "unbound variable", and the installer must run (here: its --help).
 rc=0; out="$(ARM_INSTALL_SOURCE_ONLY=1 bash -s -- --help <"${ROOT}/install.sh" 2>&1)" || rc=$?
@@ -202,7 +202,7 @@ check "piped with a leaked ARM_INSTALL_SOURCE_ONLY: exits 0" "0" "$rc"
 lacks "piped with a leaked ARM_INSTALL_SOURCE_ONLY: no unbound variable" "unbound variable" "$out"
 has "piped with a leaked ARM_INSTALL_SOURCE_ONLY: the installer runs" "Usage: install.sh" "$out"
 
-# --- usage and the install drill ----------------------------------------------------
+# --- usage and the install drill ----------------------------------------------
 usage="$(bootstrap_usage)"
 has "usage shows how to pass options through the pipe" "| bash -s -- --version <tag>" "${usage}"
 has "usage shows --prefix through the pipe" "| bash -s -- --prefix /srv --version <tag>" "${usage}"

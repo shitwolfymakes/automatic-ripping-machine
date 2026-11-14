@@ -4,7 +4,7 @@ Mirrors the FakeSession + db_factory shape used by the transcode
 dispatcher tests. The Apprise lib itself is bypassed — tests inject a
 `_FakeNotifier` that records `(urls, title, body)` calls and can be
 configured to raise. The end-to-end channel routing / dispatch-log /
-`last_*` behaviour now lives in `AppriseListener`; the dispatcher feeds it.
+`last_*` behaviour lives in `AppriseListener`; the dispatcher feeds it.
 """
 
 from __future__ import annotations
@@ -190,7 +190,7 @@ async def test_enabled_with_subscribed_channel_dispatches_event() -> None:
 async def test_enabled_but_no_subscribed_channels_marks_without_calling() -> None:
     # Channel exists but is subscribed to a different event type, so the
     # rip.completed event has no target: it is still marked notified_at and
-    # the notifier is never called (the old "URL list empty → skip" intent).
+    # the notifier is never called (an empty URL list means skip).
     db = FakeSession()
     _seed_config(db, enabled=True)
     _seed_channel(db, subscribed=["rip.failed"])

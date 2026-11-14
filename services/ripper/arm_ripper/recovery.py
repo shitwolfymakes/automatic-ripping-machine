@@ -51,9 +51,8 @@ async def boot_probe(
     if job is None:
         logger.debug("boot probe: no in-flight RIPPING job for drive_id=%s", drive_id)
         # No crashed rip — but a disc may have been HELD in the review gate when
-        # the ripper restarted. Recover it: a paused
-        # hold re-parks; a counting-down hold is abandoned so the seated disc
-        # re-fires the InsertDetector and re-enters review with a fresh countdown.
+        # the ripper restarted. Recover it: a paused hold re-parks;
+        # a counting-down hold is abandoned so the seated disc re-fires the InsertDetector and re-enters review with a fresh countdown.
         await _recover_held_job(client, drive_id, device_path, controller)
         return
 
