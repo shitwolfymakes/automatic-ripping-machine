@@ -154,7 +154,7 @@ def test_create_non_handbrake_tool_rejects_codec_encoder_422(signing_key: bytes)
 
 
 def test_vaapi_encoder_with_webm_is_refused_on_create_and_patch(signing_key: bytes) -> None:
-    """D-071: the ffmpeg VAAPI engine muxes only MKV/MP4, so the pairing would
+    """The ffmpeg VAAPI engine muxes only MKV/MP4, so the pairing would
     fail every task at run time; refuse it whichever field the patch changes."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -234,7 +234,7 @@ def test_patch_null_encoder_leaves_it_unchanged(signing_key: bytes) -> None:
 
 
 def test_patch_null_not_null_fields_leaves_them_unchanged(signing_key: bytes) -> None:
-    # D-154: tool/container/name are nullable in the update schema but NOT
+    # Tool/container/name are nullable in the update schema but NOT
     # NULL in the table; an explicit null must not reach the row (500).
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -308,7 +308,7 @@ def test_patch_404(signing_key: bytes) -> None:
 
 
 def test_patch_builtin_is_read_only(signing_key: bytes) -> None:
-    # `name` included: the seeder re-syncs it on every boot (D-146).
+    # `name` included: the seeder re-syncs it on every boot.
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["transcode_presets"] = [_preset("tpr_b", name="builtin", is_builtin=True)]

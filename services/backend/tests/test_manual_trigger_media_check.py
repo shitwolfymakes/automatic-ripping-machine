@@ -9,7 +9,7 @@ at click-time instead of a doomed identify landing an empty scan_result.
 A row without a heartbeat inside _MEDIA_STATUS_FRESHNESS means no ripper
 is listening, a detached drive has nothing to rip from, and a ripper that
 owns any live job drops the trigger: each of those is a 409 with a detail
-the DriveCard can show (D-241).
+the DriveCard can show.
 """
 
 from __future__ import annotations

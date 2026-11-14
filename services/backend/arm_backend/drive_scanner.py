@@ -48,7 +48,7 @@ def _apply_scan(row: Drive, d: ScannedDrive) -> None:
         ):
             # An enrolled port-identity row is adopting a by-id identity it
             # didn't have before — a different physical drive in this port
-            # may be the one actually publishing the link (Plan 3's
+            # may be the one actually publishing the link (the
             # register-time identity check is the safety net, not this).
             logger.warning(
                 "enrolled drive %s in port %s is adopting by-id identity %s",
@@ -82,7 +82,7 @@ def _new_drive_row(d: ScannedDrive) -> Drive:
     drive_id = new_id("drv")
     row = Drive(
         id=drive_id,
-        hostname=f"scan-{drive_id}",  # placeholder until Plan 3 names the ripper by drive id
+        hostname=f"scan-{drive_id}",  # placeholder until the ripper registers by drive id
         device_path=d.device_path,
         lifecycle=DriveLifecycle.DETECTED,
         present=True,

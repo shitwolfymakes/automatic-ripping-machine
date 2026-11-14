@@ -187,7 +187,7 @@ async def test_retire_marks_retired_offline_absent_and_removes_the_container() -
 
 @pytest.mark.asyncio
 async def test_retire_commits_before_removing_the_container() -> None:
-    """I1: the commit lands first, so a slow docker stop never holds the
+    """The commit lands first, so a slow docker stop never holds the
     transaction (and the drive's row lock) open."""
     db = FakeSession()
     drive = _virtual()
@@ -499,7 +499,7 @@ async def test_sweep_fails_unfinished_job_and_retires() -> None:
 
 @pytest.mark.asyncio
 async def test_sweep_cancels_the_failed_jobs_parked_applications() -> None:
-    """D-082 follow-up: the watchdog's fail path cancels parked applications,
+    """The watchdog's fail path cancels parked applications,
     like every other FAILED or ABANDONED transition."""
     db = FakeSession()
     db.rows["drives"] = [_virtual()]
@@ -547,7 +547,7 @@ async def test_sweep_ignores_optical_and_retired() -> None:
 
 @pytest.mark.asyncio
 async def test_sweep_skips_a_drive_retired_after_the_listing() -> None:
-    """I1: a cancel abandoned the job and retired the drive between the
+    """A cancel abandoned the job and retired the drive between the
     sweep's listing and its action. The locked re-read sees that, so the
     abandoned job is not turned into a failure and nothing is removed twice."""
     job = _job("job_1", "drv_iso1", JobStatus.RIPPING)
@@ -570,7 +570,7 @@ async def test_sweep_skips_a_drive_retired_after_the_listing() -> None:
 
 @pytest.mark.asyncio
 async def test_sweep_does_not_fail_a_job_that_became_terminal_after_the_listing() -> None:
-    """I1: the job went terminal after the listing while the drive is still
+    """The job went terminal after the listing while the drive is still
     enrolled. The fresh job read wins: retire only, no `rip.failed`."""
     job = _job("job_1", "drv_iso1", JobStatus.RIPPING)
     drive = _virtual()
@@ -601,7 +601,7 @@ async def test_sweep_skips_a_drive_deleted_after_the_listing() -> None:
 
 @pytest.mark.asyncio
 async def test_cancel_commits_the_abandon_before_removing_the_container() -> None:
-    """I1: cancel locks the drive, stages abandon + retire, commits, and
+    """Cancel locks the drive, stages abandon + retire, commits, and
     only then removes the container."""
     db = FakeSession()
     drive = _virtual()

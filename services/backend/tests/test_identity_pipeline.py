@@ -101,7 +101,7 @@ async def test_resolve_job_idempotent_second_call_changes_nothing() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_job_resets_when_config_disables_the_winning_source() -> None:
-    """End-to-end (PR 4): episodes_tmdb's claim applied the track's episode;
+    """End-to-end: episodes_tmdb's claim applied the track's episode;
     the operator's config then enables only tvmaze, and the next resolve_job
     clears the field episodes_tmdb no longer gets to hold."""
     db = FakeSession()
@@ -137,7 +137,7 @@ def test_hint_title_prefers_bd_title() -> None:
 
 
 def test_run_disc_hints_sources_param_limits_which_sources_run() -> None:
-    """PR 4: `sources` narrows run_disc_hints to the operator's enabled
+    """`sources` narrows run_disc_hints to the operator's enabled
     disc-hint sources -- an unlisted source is neither run nor recorded."""
     from arm_backend.identity.sources.registry import LABEL
 
@@ -150,7 +150,7 @@ def test_run_disc_hints_sources_param_limits_which_sources_run() -> None:
 
 
 def test_hint_title_sources_param_ignores_other_stored_entries() -> None:
-    """PR 4: hint_title only reads the passed `sources`, so a stored bd_title
+    """`hint_title` only reads the passed `sources`, so a stored bd_title
     entry (from a prior, differently-configured run) is not consulted."""
     from arm_backend.identity.sources.registry import LABEL
 
@@ -193,7 +193,7 @@ def test_hint_is_tv_false_for_cd() -> None:
 
 
 def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
-    """PR 4: hint_is_tv only consults the passed `sources` -- a label claim with
+    """`hint_is_tv` only consults the passed `sources` -- a label claim with
     a season (stored from a prior, differently-configured run) does not make
     the job TV-shaped when `sources` narrows to bd_title alone."""
     from arm_backend.identity.sources.registry import BD_TITLE, LABEL
@@ -206,8 +206,7 @@ def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:
     # Pathological BD name (a disc-number digit run past int()'s digit-count
-    # limit) no longer raises: parse_label's bounds check (finding 2, PR2
-    # final review) catches the ValueError and drops the disc number, so
+    # limit) no longer raises: parse_label's bounds check catches the ValueError and drops the disc number, so
     # bd_title still runs to completion (status "ok", no disc claim).
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
     pathological_name = "X D" + "9" * 4301

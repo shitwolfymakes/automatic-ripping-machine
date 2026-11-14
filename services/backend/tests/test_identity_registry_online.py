@@ -1,4 +1,4 @@
-"""Online-source order and enablement live in one place (spec §5.2)."""
+"""Online-source order and enablement live in one place."""
 
 import os
 

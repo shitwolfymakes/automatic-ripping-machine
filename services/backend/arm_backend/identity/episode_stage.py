@@ -112,7 +112,7 @@ def operator_placed(tracks: Sequence[Track]) -> dict[int, frozenset[int]]:
 
 def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
     """Selected video titles with a length whose role is unknown or episode
-    (C6), other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
+    other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
     episode source, e.g. `extra` for a skipped title) does not count as known,
     so a re-run can still place that title."""
     out: list[TitleIn] = []
@@ -164,7 +164,7 @@ def season_scan_order(
 
 
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
-    """C4: every known runtime is a whole number of broadcast slots, and fewer
+    """Every known runtime is a whole number of broadcast slots, and fewer
     than half the episode-shaped titles fit any of them (extras never count; a
     disc with no episode-shaped title is judged on all of them)."""
     known = {e.runtime_s for e in remaining if e.runtime_s}
@@ -418,7 +418,7 @@ async def _match(
     inputs: dict[str, Any],
 ) -> SourceOutcome:
     """One provider's outcome. Fills `inputs` as soon as they are known so an
-    error raised later still carries them (C7)."""
+    error raised later still carries them."""
     source_id = provider.source_id
     reason = provider.configured(ctx.cfg)
     if reason is not None:
@@ -465,7 +465,7 @@ async def _match(
 def _error(job: Job, source_id: str, e: Exception, inputs: dict[str, Any], now: datetime) -> SourceOutcome:
     """An error entry carrying the request inputs; `nominal_runtimes` (known
     only after a fetch) is carried from the last stored entry so put_source
-    keeps the last good claims exactly when the request is unchanged (C7)."""
+    keeps the last good claims exactly when the request is unchanged."""
     if inputs:
         previous = claims_of(job).sources.get(source_id)
         inputs = {**inputs, "nominal_runtimes": previous.inputs.get("nominal_runtimes") if previous else None}

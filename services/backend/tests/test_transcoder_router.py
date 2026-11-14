@@ -1,6 +1,6 @@
 """End-to-end tests for the `/api/transcoder/*` endpoints.
 
-Uses the same FakeSession + TestClient pattern as the Phase 6 router tests.
+Uses the same FakeSession + TestClient pattern as the other router tests.
 Service-token auth (no JWT plumbing required).
 """
 
@@ -212,7 +212,7 @@ def test_claim_transitions_task_and_application() -> None:
     assert body["task"]["status"] == "in_progress"
     assert body["task"]["claimed_by"] == _HOSTNAME
     assert body["task"]["attempts"] == 1
-    # started_at marks the claim so the UI measures encode time, not queue wait (D-130/D-202).
+    # started_at marks the claim so the UI measures encode time, not queue wait.
     assert db.rows["transcode_tasks"][0].started_at is not None
     assert body["task"]["started_at"] is not None
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
@@ -220,7 +220,7 @@ def test_claim_transitions_task_and_application() -> None:
 
 def test_claim_resets_the_previous_attempts_telemetry() -> None:
     # A retry must not show the failed attempt's ETA or frame rate until its
-    # own first heartbeat (D-242, D-248).
+    # own first heartbeat.
     db = FakeSession()
     _seed(db)
     row = db.rows["transcode_tasks"][0]
@@ -363,7 +363,7 @@ def test_heartbeat_updates_progress_and_timestamp() -> None:
     row = db.rows["transcode_tasks"][0]
     assert row.progress_pct == 42
     # The reported telemetry lands on the row and the view, so a polling
-    # client sees the same ETA and frame rate as the live event (D-242, D-248).
+    # client sees the same ETA and frame rate as the live event.
     assert (row.current_pass, row.eta_seconds, row.fps, row.avg_fps) == ("main", 600, 45.7, 23.5)
     assert (body["current_pass"], body["eta_seconds"], body["fps"], body["avg_fps"]) == ("main", 600, 45.7, 23.5)
 

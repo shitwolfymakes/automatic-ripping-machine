@@ -1,7 +1,7 @@
-"""Phase 8: rip-complete auto-session hook (`maybe_auto_apply_session`).
+"""Rip-complete auto-session hook (`maybe_auto_apply_session`).
 
 Tests the hook in isolation — the surrounding rip-complete route is unchanged
-from Phase 3 and already exercised through the higher-level integration paths.
+and already exercised through the higher-level integration paths.
 """
 
 from __future__ import annotations
@@ -380,7 +380,7 @@ async def test_after_rip_strict_token_surfaces_as_parked_failure_not_exception(t
 
 @pytest.mark.asyncio
 async def test_after_rip_promoted_parked_application_suppresses_drive_default(tmp_path: Path) -> None:
-    """Fix 75-4: a parked application Y (explicit, applied before rip-start)
+    """A parked application Y (explicit, applied before rip-start)
     that the drain successfully promotes to queued IS the operator's choice
     winning -- the drive default X must NOT also auto-apply, even though
     auto_transcode_on_idle is on. Before the fix, after_rip always ran

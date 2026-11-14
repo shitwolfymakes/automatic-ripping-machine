@@ -1,4 +1,4 @@
-"""Setup router: first-run walkthrough state (setup spec 2026-10-01 §6.1)."""
+"""Setup router: first-run walkthrough state."""
 
 from __future__ import annotations
 
@@ -333,7 +333,7 @@ async def test_diagnostics_ok_uses_collect_diagnostics(monkeypatch) -> None:
     assert await setup_router._diagnostics_ok(object(), object()) is True
 
 
-# --- disc-routes summary (setup step 6, read-only) ---
+# --- disc-routes summary (read-only) ---
 
 
 def _session(sid: str, name: str, media_type, *, builtin: bool = True, tp: str | None = None, tpl: str = "x/{title}"):

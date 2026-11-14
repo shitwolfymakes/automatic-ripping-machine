@@ -1,4 +1,4 @@
-"""Drives router: GET list + PATCH default_session_id / display_name (Phase 8)."""
+"""Drives router: GET list + PATCH default_session_id / display_name."""
 
 from __future__ import annotations
 
@@ -694,7 +694,7 @@ def test_current_job_handles_none_created_at(signing_key: bytes) -> None:
 
 
 def test_patch_drive_mode_null_returns_to_global_default(signing_key: bytes) -> None:
-    """drive_mode NULL means "follow the global auto-rip default" (setup spec D1);
+    """drive_mode NULL means "follow the global auto-rip default";
     an explicit null must clear an override, not be ignored."""
     db = FakeSession()
     _seed(db)
@@ -717,7 +717,7 @@ def test_patch_drive_mode_null_returns_to_global_default(signing_key: bytes) -> 
     ],
 )
 def test_drive_view_connection_from_by_id_prefix(by_id: str | None, expected: str | None) -> None:
-    """The setup drive card's USB / SATA chip (setup spec §6.6): derived, not stored."""
+    """The setup drive card's USB / SATA chip: derived, not stored."""
     from arm_backend.routers import drives as drives_router
 
     d = Drive(id="drv_1", hostname="h", device_path="/dev/sr0", status=DriveStatus.ONLINE, by_id_name=by_id)

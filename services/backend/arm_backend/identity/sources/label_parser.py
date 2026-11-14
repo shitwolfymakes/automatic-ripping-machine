@@ -1,6 +1,6 @@
 """Parse an ISO volume label into a cleaned search title and its season / disc markers.
 
-Ported from neu arm/ripper/arm_matcher.py parse_label. Only trailing markers
+Only trailing markers
 count, and each needs an explicit S / D / P / DISC / SEASON prefix, so movie
 titles that end in a number (APOLLO_13, BLADE_RUNNER_2049) yield no hint.
 PART is deliberately not a disc marker: PART_2 is usually title content.

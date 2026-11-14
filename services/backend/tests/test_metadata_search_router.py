@@ -711,7 +711,7 @@ def test_omdb_candidates_carry_imdb_without_tmdb_kind(signing_key: bytes) -> Non
 
 
 def test_search_provider_literal_matches_registry() -> None:
-    """One spelling of the movie/TV source ids (spec S-8): the OpenAPI enum
+    """One spelling of the movie/TV source ids: the OpenAPI enum
     and the registry cannot drift apart."""
     from typing import get_args
 

@@ -69,7 +69,7 @@ class TvmazeEpisodes:
             raise SourceError("tvmaze malformed response")
         if not body:
             # An existing show with a genuinely empty episode list is a
-            # degenerate/transient response (C7, mirroring TMDb's empty-season
+            # degenerate/transient response (mirroring TMDb's empty-season
             # rule), not a definitive miss.
             raise SourceError(f"tvmaze show {show_id} returned no episodes")
         return body

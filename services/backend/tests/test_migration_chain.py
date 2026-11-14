@@ -92,7 +92,7 @@ def test_0028_downgrade_drops_the_user_role_columns() -> None:
 
 
 def test_0028_matches_the_user_model() -> None:
-    """Model↔migration parity for the columns this branch adds. A field renamed
+    """Model↔migration agreement for the columns this branch adds. A field renamed
     or made nullable on `User` without touching 0028 leaves the app querying a
     column the schema doesn't have — a boot-time failure, not a test failure,
     without this."""
@@ -165,7 +165,7 @@ def test_0045_matches_the_config_model() -> None:
 
 
 def test_0049_matches_the_transcode_task_model() -> None:
-    """The heartbeat telemetry columns (D-242, D-248) exist on both sides,
+    """The heartbeat telemetry columns exist on both sides,
     nullable, so a row from before the revision reads back as null."""
     sql = _render_sql("0048_drive_status_ripping", "0049_transcode_task_telemetry")
     for name in ("current_pass", "eta_seconds", "fps", "avg_fps"):

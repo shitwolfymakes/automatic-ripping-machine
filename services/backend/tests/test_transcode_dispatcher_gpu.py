@@ -556,7 +556,7 @@ async def test_any_encoder_prefers_vendor_rank() -> None:
 
 
 async def test_any_webm_encoder_skips_vaapi_devices() -> None:
-    """D-071: an any_* WebM preset must not land on a VAAPI device, whose
+    """An any_* WebM preset must not land on a VAAPI device, whose
     ffmpeg engine cannot write WebM; it takes another vendor or CPU."""
     db = _build_db(
         encoder="any_av1",
@@ -1108,7 +1108,7 @@ async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None
     docker_client.images.get.assert_not_called()
 
 
-# --- claim-time HandBrake settings check (spec 4.4 Claim row, 4.5; R1, M4) -----------------------
+# --- claim-time HandBrake settings check -----------------------
 
 
 def _store_with_fixture_schema() -> Any:
@@ -1240,7 +1240,7 @@ async def test_without_a_loaded_schema_settings_are_not_checked(store: Any) -> N
 
 @pytest.mark.parametrize("store", [None, "empty"])
 async def test_without_a_loaded_schema_a_settings_preset_never_lands_on_vaapi(store: Any) -> None:
-    """M4 needs no schema: the ffmpeg VAAPI engine cannot apply HandBrake settings (spec 7 DoD)."""
+    """M4 needs no schema: the ffmpeg VAAPI engine cannot apply HandBrake settings."""
     from arm_backend.handbrake_schema_store import SchemaStore
 
     db = _settings_db(_invalid_blocks("x265"), gpus=_AMD_ONLY)

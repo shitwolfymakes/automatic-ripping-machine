@@ -1,4 +1,4 @@
-"""Phase 11 — `MessageDispatcher._tick` exhaustive cases (via AppriseListener).
+"""`MessageDispatcher._tick` exhaustive cases (via AppriseListener).
 
 Mirrors the FakeSession + db_factory shape used by the transcode
 dispatcher tests. The Apprise lib itself is bypassed — tests inject a

@@ -237,7 +237,7 @@ class MusicBrainzSource(_Adapter):
 
 class ArmServerSource(_Adapter):
     """The ARM community database: DVD CRC64 → title. A fingerprint source
-    only (spec Step 2), never a title-search source."""
+    only, never a title-search source."""
 
     id = "arm_server"
 

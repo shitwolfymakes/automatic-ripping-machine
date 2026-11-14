@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from arm_backend.identity.episodes.model import MatchResult
 
-# Suggestion thresholds (C2).
+# Suggestion thresholds.
 MIN_COVERAGE = 0.5
 MIN_MEAN_CONFIDENCE = 0.4
 NEAR_TIE_COST_RATIO = 0.1

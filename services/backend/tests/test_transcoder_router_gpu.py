@@ -1,4 +1,4 @@
-"""Phase 7b: complete/fail handlers must release the claimed GPU.
+"""Complete/fail handlers must release the claimed GPU.
 
 When a task moves to a terminal state, any `gpus.claimed_by_task_id` row
 matching that task is flipped back to AVAILABLE so a queued sibling task

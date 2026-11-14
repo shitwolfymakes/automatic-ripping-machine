@@ -94,7 +94,7 @@ def test_get_exposes_transcode_flags(client: TestClient, config_row: Config) -> 
 def test_null_parallel_cap_reads_as_the_env_value_the_dispatcher_uses(
     client: TestClient, config_row: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-060: before the backfill, Settings shows the cap the dispatcher
+    """Before the backfill, Settings shows the cap the dispatcher
     actually uses (the env value), not a hardcoded 1."""
     from arm_backend.config import settings
 
