@@ -4,7 +4,7 @@ from typing import Any
 
 from arm_backend.metadata.base import MetadataResult
 
-# TMDB serves posters from a CDN; `w500` (500px-wide) is the v2 default
+# TMDB serves posters from a CDN; `w500` (500px-wide) is the default
 # and renders fine for thumbnail and detail-card use. Full hashed path is
 # `{base}{poster_path}` where poster_path is the leading-slash fragment
 # returned in the API payload.

@@ -1,4 +1,4 @@
-"""TMDb episode-list provider (design spec 6.2, source `episodes_tmdb`).
+"""TMDb episode-list provider (source `episodes_tmdb`).
 
 Show ids come from `ExternalIds.tmdb` when already known, else are resolved
 via TMDb's `/find` endpoint from an IMDb or TVDB id. Auth is the v4 bearer

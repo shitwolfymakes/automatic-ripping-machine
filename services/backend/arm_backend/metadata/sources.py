@@ -1,4 +1,4 @@
-"""Online metadata sources (spec §5.1): one adapter per HTTP client.
+"""Online metadata sources: one adapter per HTTP client.
 
 An adapter knows which client method implements which capability and which
 Config key it needs. It reads the key off `cfg` on every call, so a key saved

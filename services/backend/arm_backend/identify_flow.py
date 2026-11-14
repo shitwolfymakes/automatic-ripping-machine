@@ -61,12 +61,12 @@ logger = logging.getLogger("arm_backend.identify_flow")
 
 
 async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
-    """Persist the scan's titles as Track rows for the timed review gate (§4.3).
+    """Persist the scan's titles as Track rows for the timed review gate.
 
     Uses the default rip preset for the disc type to compute keep/drop defaults
     (`excluded`); the operator overrides per title in review. Idempotent on
     `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
-    doesn't double-insert (audit M1) — Track rows have no unique constraint.
+    doesn't double-insert — Track rows have no unique constraint.
     """
     try:
         preset = await resolve_rip_preset_for_job(db, job)
@@ -197,7 +197,7 @@ class IdentifyFlow:
         # When the timed review gate is on, a paused machine still scans + identifies
         # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
         # below); it does not reject the job. With the gate off, pause keeps its
-        # original meaning: reject new jobs outright. (timed-review-gate spec §3)
+        # its plain meaning: reject new jobs outright.
         if cfg.ripping_paused and not cfg.hold_for_review:
             raise RippingPausedError()
 
@@ -291,10 +291,10 @@ class IdentifyFlow:
         return match
 
     async def _adopt_pending_session(self, job: Job) -> None:
-        # Fix 75-1: pending_session_id must land BEFORE anything below that resolves
+        # pending_session_id must land BEFORE anything below that resolves
         # the job's rip preset — _persist_review_tracks (hold_for_review branch)
         # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
-        # reads this column. Assigning it after (as before) meant a manual-trigger
+        # reads this column. Assigning it after would mean a manual-trigger
         # rip with an explicit session and hold_for_review on would persist review
         # tracks chosen by the drive/disc-type default preset instead of the routed
         # session's preset — the exact held-vs-unattended divergence
@@ -439,7 +439,7 @@ class IdentifyFlow:
                 await self.session.commit()
 
     async def _schedule_episode_stage(self, job: Job) -> None:
-        # Background episode stage trigger (Task 8): only after the final commit
+        # Background episode stage trigger: only after the final commit
         # above (whichever branch made it), and only when it's worth the async
         # DB round-trip — the runner itself re-checks is_tv_candidate against
         # freshly loaded tracks before doing any work.
@@ -467,7 +467,7 @@ class IdentifyFlow:
         # for operator review when hold_for_review is on, stamping the countdown
         # anchor and persisting the scan's titles as Track rows so the review UI
         # shows the full title list. Otherwise it proceeds straight to rip as
-        # today (tracks created at rip-start). (spec §5.1, §4.3)
+        # today (tracks created at rip-start).
         if cfg.hold_for_review:
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = datetime.now(timezone.utc)
@@ -478,7 +478,7 @@ class IdentifyFlow:
     async def _hold_hit(
         self, job: Job, scan: ScanResult, result: MetadataResult, miss_title: str | None, ambiguous_toc: bool
     ) -> None:
-        # D-10: this kind's "Apply confident matches" switch is off. Keep
+        # This kind's "Apply confident matches" switch is off. Keep
         # the hit for the operator to confirm; the disc waits with no
         # countdown (the ripper treats a null wait_start_time as "no
         # countdown") and stays unidentified until they accept or
@@ -587,7 +587,7 @@ class IdentifyFlow:
         if not self.already_identified:
             # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
             # total proposals plus a cleaner search title for the dispatcher, in
-            # the operator's configured source order (PR 4).
+            # the operator's configured source order.
             run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=self.hints)
 
         self.thediscdb_match = None

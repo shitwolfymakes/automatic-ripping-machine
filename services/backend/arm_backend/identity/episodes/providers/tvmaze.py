@@ -1,4 +1,4 @@
-"""TVmaze episode-list provider (design spec 6.2, source `episodes_tvmaze`).
+"""TVmaze episode-list provider (source `episodes_tvmaze`).
 
 TVmaze needs no API key (`configured` is always usable). Show ids come from
 `ExternalIds.tvmaze` when already known, else are resolved via TVmaze's

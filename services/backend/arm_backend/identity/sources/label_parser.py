@@ -33,7 +33,7 @@ _DISC_RE = re.compile(r"[\s-](P|D|DISC)[\s-]?(\d+)(?:[\s-]OF[\s-]?(\d+))?$", re.
 _SEASON_KEYWORD_RE = re.compile(r"[\s-]SEASON[\s-]?(\d+)$", re.IGNORECASE)
 _SEASON_RE = re.compile(r"[\s-]S(\d+)$", re.IGNORECASE)
 # Bounded space run: an unbounded ` *` before SKU backtracks polynomially (ReDoS).
-# `\d*\b` (rather than the old bare `\w*`) requires SKU to be its own token,
+# `\d*\b` (rather than a bare `\w*`) requires SKU to be its own token,
 # optionally followed by digits — "SKU1234" still strips, but "Skull" (which
 # begins with the same three letters) is left alone.
 _SKU_RE = re.compile(r" {0,4}\bSKU\d*\b", re.IGNORECASE)

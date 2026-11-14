@@ -11,7 +11,7 @@ from arm_backend.identity.episodes.model import MatchResult
 MIN_COVERAGE = 0.5
 MIN_MEAN_CONFIDENCE = 0.4
 NEAR_TIE_COST_RATIO = 0.1
-# I5: a scanned season wins thinly when the runner-up's mean cost is within
+# A scanned season wins thinly when the runner-up's mean cost is within
 # max(THIN_WIN_RATIO * runner-up, THIN_WIN_MIN_S) seconds of the best.
 THIN_WIN_RATIO = 0.1
 THIN_WIN_MIN_S = 30
@@ -46,7 +46,7 @@ def hold_reasons(
     """Why `fit` (the best-ranked season's) is held as a suggestion, in a
     fixed order; empty when it applies on its own. `near_tie` and `thin_win`
     compare against the runner-up in `ranked`; `thin_win` only for a scanned
-    season (I5)."""
+    season."""
     result = fit.result
     runner_up = ranked[1][1] if len(ranked) > 1 else None
     mean_conf = sum(m.confidence for m in result.matches) / max(1, len(result.matches))

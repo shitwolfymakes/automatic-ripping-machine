@@ -94,7 +94,7 @@ def _parked_apps_are_settled(job: Job) -> bool:
     a failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
     (or an unidentified RIPPED_PARTIAL one's) parked application is still
     waiting for resolve to drain it, but it is waiting on identity, not
-    transcoding, so it is settled for the rollup too (D-142);
+    transcoding, so it is settled for the rollup too;
     `parked_session_ids` shows it as waiting."""
     return job.status in TERMINAL_JOB_STATUSES
 

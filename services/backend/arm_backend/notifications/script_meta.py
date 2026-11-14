@@ -5,7 +5,7 @@ A hook script may declare itself in its first 60 lines:
     # arm-hook: <one-line description>
     # arm-input: KEY label="..." [required] [secret] [default="..."] [values=a,b,c]
 
-Lines that do not match are ignored, so a plain v2 BASH_SCRIPT works with no
+Lines that do not match are ignored, so a plain BASH_SCRIPT works with no
 inputs. Keys must match ``INPUT_KEY_RE``, must not use the reserved ``ARM_``
 prefix, and must not be one of ``RESERVED_INPUT_KEYS`` (shell-sensitive names
 such as ``PATH`` or ``BASH_ENV``); a later line for the same key keeps its
