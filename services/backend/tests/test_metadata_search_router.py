@@ -971,7 +971,7 @@ def test_music_search_needs_no_config_row(signing_key: bytes) -> None:
 
 @respx.mock
 def test_tv_search_uses_omdb_when_it_is_the_chosen_provider(signing_key: bytes) -> None:
-    """The automatic TV order leaves OMDb off the automatic TV order, but the job page's TV search
+    """The automatic TV order leaves OMDb off, but the job page's TV search
     select offers it, so choosing it must reach OMDb `type=series` rather than
     silently falling back to the ranked list's first entry."""
     omdb = respx.get("https://www.omdbapi.com/").mock(
