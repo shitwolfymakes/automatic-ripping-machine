@@ -17,7 +17,7 @@ class SessionRoute(SQLModel, table=True):
 
     Sits behind the per-rip explicit choice (`Job.pending_session_id`) and
     the per-drive default (`Drive.default_session_id`) in
-    `resolve_routed_session_id` (gap analysis G-02/G-17): a route only
+    `resolve_routed_session_id`: a route only
     applies when neither of those wins. `disc_type=None` is the wildcard row
     for a `media_type` (matches any disc type); an exact
     `(media_type, disc_type)` row is preferred over the wildcard.

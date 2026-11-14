@@ -11622,7 +11622,7 @@
           "cpu_count"
         ],
         "title": "HardwareCaps",
-        "description": "Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;\nPhase 7b consumes them for GPU dispatch + `gpus` row writes."
+        "description": "Self-reported transcoder capabilities. The Backend does not dispatch on\nthese; GPU eligibility comes from the probed `gpus` rows."
       },
       "HealthResponse": {
         "properties": {
@@ -11959,7 +11959,7 @@
           "suggested_at"
         ],
         "title": "IdentitySuggestion",
-        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off (identification-sources\nspec D-10). The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off. The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
       },
       "IdentityView": {
         "properties": {
@@ -13355,13 +13355,13 @@
           "looks_episodic": {
             "type": "boolean",
             "title": "Looks Episodic",
-            "description": "The stored scan looks like a TV disc (several same-length episode\ntitles, no feature): the title search defaults to TV (spec 3.3).",
+            "description": "The stored scan looks like a TV disc (several same-length episode\ntitles, no feature): the title search defaults to TV.",
             "readOnly": true
           },
           "has_series": {
             "type": "boolean",
             "title": "Has Series",
-            "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved (spec 3.4). False means the\nMatch Episodes tab asks for the series first.",
+            "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved. False means the\nMatch Episodes tab asks for the series first.",
             "readOnly": true
           },
           "episodes_unsure": {
@@ -15631,7 +15631,7 @@
           "provider"
         ],
         "title": "ResolveMatch",
-        "description": "A search result the operator picked (match picker spec 3.6). Its\npresence makes `external_ids` replace the stored show ids wholesale."
+        "description": "A search result the operator picked (from the match picker). Its\npresence makes `external_ids` replace the stored show ids wholesale."
       },
       "ResolveRequest": {
         "properties": {
@@ -16896,7 +16896,7 @@
           "finish"
         ],
         "title": "SetupStep",
-        "description": "First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).\n\nStored as VARCHAR keys inside Config.setup_progress JSON, validated in the app."
+        "description": "First-run setup walkthrough steps, in walkthrough order.\n\nStored as VARCHAR keys inside Config.setup_progress JSON, validated in the app."
       },
       "SetupStepProgress": {
         "properties": {
@@ -18031,7 +18031,7 @@
           "other"
         ],
         "title": "TrackRole",
-        "description": "What one title on a disc is. Set by identity sources via the resolver\n(arm_backend.identity) or by the operator; replaces the old free-text\nrole and the per-track video_type."
+        "description": "What one title on a disc is. Set by identity sources via the resolver\n(arm_backend.identity) or by the operator."
       },
       "TrackSelection": {
         "type": "string",
@@ -19069,7 +19069,7 @@
           "guest"
         ],
         "title": "UserRole",
-        "description": "Fixed two-account model (spec 2026-07-12-basic-user-management-design).\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
+        "description": "Fixed two-account model.\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
       },
       "UserView": {
         "properties": {

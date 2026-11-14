@@ -46,7 +46,7 @@ class DriveLifecycle(StrEnum):
 
     DETECTED = "detected"  # seen by the scanner, no decision yet
     IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
-    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it
     RETIRED = "retired"  # a virtual (ISO) drive whose one-shot rip has ended
 
 
@@ -186,8 +186,7 @@ class TrackKind(StrEnum):
 
 class TrackRole(StrEnum):
     """What one title on a disc is. Set by identity sources via the resolver
-    (arm_backend.identity) or by the operator; replaces the old free-text
-    role and the per-track video_type."""
+    (arm_backend.identity) or by the operator."""
 
     MAIN = "main"
     EPISODE = "episode"
@@ -351,7 +350,7 @@ class MakemkvSdfState(StrEnum):
 
 
 class UserRole(StrEnum):
-    """Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+    """Fixed two-account model.
 
     ADMIN — the single writer; the only account that can hold a session.
     GUEST — read-everything/write-nothing; acquired by having no token at all
@@ -366,7 +365,7 @@ class UserRole(StrEnum):
 
 
 class SetupStep(StrEnum):
-    """First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+    """First-run setup walkthrough steps, in walkthrough order.
 
     Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
     """
