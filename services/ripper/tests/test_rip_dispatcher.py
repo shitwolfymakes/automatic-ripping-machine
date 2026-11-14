@@ -3,10 +3,9 @@
 Two surfaces:
 
 (1) `probe_drive_media` — the heartbeat/manual-trigger pre-check probe.
-    Pure ioctl, no read-verify — the per-title rip loop that needed
-    verify-read no longer exists.
+    Pure ioctl, no read-verify.
 
-(2) `rip_all` for DVD/BD discs — the single-invocation v2-style flow.
+(2) `rip_all` for DVD/BD discs — the single-invocation flow.
     Faked `rip_disc` simulates per-title outcomes (a TitleStart hook
     fires, then a per-title RipResult comes back); the dispatcher
     fans the lifecycle hooks out to the right TrackView and handles
@@ -966,7 +965,7 @@ async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
 
 
 async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkeypatch, tmp_path):
-    """D-125: the makemkv path hashes each title in the background as soon
+    """The makemkv path hashes each title in the background as soon
     as it is written (rip_disc is told not to re-read everything after the
     rip) and PATCHes DONE with the digest, live titles and post-rip ones
     alike. Whatever is still hashing after the rip is reported as a
@@ -1076,7 +1075,7 @@ async def test_title_hasher_passes_none_for_an_unreadable_file(tmp_path):
 
 
 async def test_rip_all_resume_pass_skips_titles_an_earlier_pass_settled(monkeypatch, tmp_path):
-    """D-133: a resume after the drive dropped off the bus runs one more
+    """A resume after the drive dropped off the bus runs one more
     `mkv all`, which rips every title again. Titles already settled get no
     callbacks and their duplicate files are deleted; the rest attribute by
     position exactly as in a first pass."""
@@ -1150,7 +1149,7 @@ async def test_rip_all_stopped_pass_reports_the_rest_without_touching_settled_tr
 
 
 async def test_rip_all_does_not_finalise_a_title_the_drive_dropped_under(monkeypatch, tmp_path):
-    """D-133: makemkvcon moves on from the title the drive dropped under (a
+    """makemkvcon moves on from the title the drive dropped under (a
     PRGC transition) before the poll loop notices. That title's file is cut
     short, so it and the rest are reported stopped, never DONE, and `stop` is
     set to kill makemkvcon."""
