@@ -37,8 +37,8 @@ class Job(SQLModel, table=True):
     year: int | None = Field(sa_column=Column(Integer, nullable=True))
     # What the disc IS (movie/tv/music/data/iso) — set at identify from the
     # provider's kind, correctable at resolve. Null = never identified. This
-    # is the routing input session defaults key on;
-    # VARCHAR + app-side validation like every enum here.
+    # is the routing input that session defaults key on. Stored as VARCHAR with
+    # app-side validation, like every enum here.
     media_type: MediaType | None = Field(default=None, sa_column=enum_column(MediaType, "media_type", nullable=True))
     # TV box sets: user-supplied season (identify can't know it — see
     # docs/developers/architecture/02 § TV). Null = not a season-shaped disc / unknown.
