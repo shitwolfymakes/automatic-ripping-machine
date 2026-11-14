@@ -1,4 +1,4 @@
-"""Cross-disc continuity (spec 6.3) and season ranking, incl. neu defects 1 and 2."""
+"""Cross-disc continuity and season ranking, incl. regressions."""
 
 import pytest
 
@@ -37,13 +37,12 @@ def test_mrs_bradley_last_disc() -> None:
 
 
 def test_unknown_total_is_not_treated_as_last_disc() -> None:
-    # neu defect 2
     assert run(1, None, []) == [1, 2, 3, 4, 5]
     assert run(2, None, []) == [6, 7, 8, 9, 10]
 
 
 def test_exclusion_does_not_shift_the_window() -> None:
-    # neu defect 1: disc 1 already holds E1-5
+    # Regression case: disc 1 already holds E1-5
     assert run(2, 4, [SiblingDisc(1, frozenset(range(1, 6)))]) == [6, 7, 8, 9, 10]
     assert run(3, 4, [SiblingDisc(1, frozenset(range(1, 6))), SiblingDisc(2, frozenset(range(6, 11)))]) == [
         11,
@@ -71,7 +70,7 @@ def test_anchor_past_end_is_clamped() -> None:
 
 
 def test_lower_sibling_sentinel_is_len_remaining_not_minus_one() -> None:
-    # fix round 1: the "nothing remaining reaches the target" sentinel is
+    # The "nothing remaining reaches the target" sentinel is
     # len(remaining), not len(remaining) - 1 - regression with a NON-empty
     # remaining list (season(10) minus {8, 9, 10} leaves 7 episodes).
     remaining, anchor = start_anchor(

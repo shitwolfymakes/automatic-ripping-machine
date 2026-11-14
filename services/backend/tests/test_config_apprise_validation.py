@@ -1,6 +1,6 @@
 """`PATCH /api/config` notification + view round-trip.
 
-As of the settings audit (§1.2), `notification_apprise_urls` is no longer on
+`notification_apprise_urls` is no longer on
 the editable surface — it's dropped from `ConfigUpdateRequest`, so a PATCH that
 sends it is silently ignored (the legacy flat list never dispatches; channels
 do). It still round-trips in `ConfigView` for read back-compat. These tests

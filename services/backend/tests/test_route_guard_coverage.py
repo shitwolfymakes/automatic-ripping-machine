@@ -47,9 +47,8 @@ _UNGUARDED_ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/naming/preview"): "pure template compute, no persistence",
     ("POST", "/api/sessions/preview"): "pure template compute, no persistence",
     ("POST", "/api/notifications/services/{service_id}/compose-url"): "pure URL compute, no persistence",
-    # Read-only today (recomputes online/stale counts). Its own docstring says a
-    # follow-up will add ripper-side hardware re-enumeration behind this verb —
-    # when that lands this entry must go and the route becomes require_writer.
+    # Read-only (recomputes online/stale counts). If it ever triggers ripper-side
+    # hardware re-enumeration this entry must go and the route becomes require_writer.
     ("POST", "/api/drives/rescan"): "read-only recount; see drives.py rescan_drives docstring",
 }
 

@@ -1,4 +1,4 @@
-"""Ordered-alignment episode matcher (spec 6.2) incl. neu defect regressions."""
+"""Ordered-alignment episode matcher incl. regressions."""
 
 from arm_backend.identity.episodes.continuity import align_runs
 from arm_backend.identity.episodes.matcher import _is_ambiguous, align
@@ -30,14 +30,13 @@ def test_varied_runtimes_pick_the_matching_window() -> None:
 
 
 def test_out_of_tolerance_is_never_paired() -> None:
-    # neu defect 4: a greedy re-zip paired T0(2700)->E1(1500)
+    # A greedy re-zip paired T0(2700)->E1(1500)
     r = align(titles(2700, 1500), eps(1500, 2700))
     assert len(r.matches) == 1
     assert all(m.delta_s is not None and m.delta_s <= 300 for m in r.matches)
 
 
 def test_play_all_first_does_not_shift_episodes() -> None:
-    # neu defect 3
     r = align(titles(15000, 3000, 3000, 3000, 3000, 3000), eps(3000, 3000, 3000, 3000, 3000))
     assert r.play_all == ("0",)
     assert mapping(r) == {"1": (1, None), "2": (2, None), "3": (3, None), "4": (4, None), "5": (5, None)}
@@ -55,7 +54,7 @@ def test_two_episode_title() -> None:
 
 
 def test_unknown_and_zero_runtimes_match_at_mid_confidence() -> None:
-    # neu defect 6: 0 s runtime must not be a real runtime
+    # A 0 s runtime must not be a real runtime
     r = align(titles(2600, 2600, 2600), eps(None, 0, None))
     assert mapping(r) == {"0": (1, None), "1": (2, None), "2": (3, None)}
     assert {m.confidence for m in r.matches} == {0.5}
@@ -90,7 +89,7 @@ def test_custom_tolerance() -> None:
     assert align(titles(2700), eps(3000), tolerance=200).matches == ()
 
 
-# Regression tests from fix round 1
+# Regression tests
 
 
 def test_unknown_runtimes_with_120s_skip() -> None:

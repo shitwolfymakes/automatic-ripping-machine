@@ -201,8 +201,7 @@ def test_unranked_sorts_after_sparse_ranks() -> None:
 
 
 def test_hint_does_not_overwrite_unowned_job_season() -> None:
-    """Review Focus 4 (resolver guard): a job-level season set before this PR
-    (no provenance) is not overwritten by a lower-tier disc-hint claim."""
+    """Resolver guard: a job-level season with no provenance is not overwritten by a lower-tier disc-hint claim."""
     job = _job()
     job.season = 7
     res = resolve(_claims(label=SourceClaims(job=JobClaim(season=2))), tiers={**TIERS, "label": 4})
@@ -265,7 +264,7 @@ def test_no_episode_source_means_not_unsure() -> None:
 
 
 def test_pinned_ok_suggestion_is_applied() -> None:
-    """Task 9 F4 round 2: the resolver (not a stored-claims rewrite) lets a
+    """The resolver (not a stored-claims rewrite) lets a
     pinned "episode" source's suggestion through when its status is ok."""
     res = resolve(
         IdentityClaims(
@@ -321,7 +320,7 @@ def test_tier_beats_pin() -> None:
     assert res.tracks["1"]["episode"].source == "thediscdb"
 
 
-# --- I1: the episode-match tier is winner-takes-all ---------------------------
+# --- The episode-match tier is winner-takes-all ---------------------------
 
 
 def _multi_provider() -> dict[str, SourceClaims]:
@@ -367,7 +366,7 @@ def test_pinned_episode_source_leaves_the_other_sources_claims_unused() -> None:
     assert {ref: slot["episode"].value for ref, slot in res.tracks.items()} == {str(i): 3 + i for i in range(5)}
 
 
-# --- PR 4: the operator's disabled sources ------------------------------------
+# --- The operator's disabled sources ------------------------------------
 
 
 def test_disabled_source_claims_do_not_resolve() -> None:

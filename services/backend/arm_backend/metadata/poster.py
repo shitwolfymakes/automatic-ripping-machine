@@ -10,7 +10,7 @@ from arm_backend.metadata.base import MetadataResult
 # returned in the API payload.
 TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
 # Cover Art Archive front-cover endpoints (sized `front-250` variant, matching
-# neu). Both 404 for entities with no uploaded art.
+# the web UI). Both 404 for entities with no uploaded art.
 #
 # Cover-art strategy (the canonical MusicBrainz Picard model): use the
 # per-RELEASE cover as the primary so distinct pressings show distinct covers,

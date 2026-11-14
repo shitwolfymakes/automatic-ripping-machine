@@ -38,7 +38,7 @@ def test_browser_origin_with_empty_allowlist_rejected() -> None:
     assert _origin_allowed("https://arm.local:8081", []) is False
 
 
-# --- same-origin default (G-28) ----------------------------------------------
+# --- same-origin default ----------------------------------------------
 
 
 def test_same_origin_via_request_host_accepted() -> None:

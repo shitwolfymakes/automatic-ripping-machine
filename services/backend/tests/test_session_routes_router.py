@@ -1,4 +1,4 @@
-"""Session-routes CRUD router tests (G-02/G-17) — list/upsert/delete,
+"""Session-routes CRUD router tests — list/upsert/delete,
 media-type-mismatch 422, non-writer 403. Modeled on test_rip_presets_router.py."""
 
 from __future__ import annotations
