@@ -5,8 +5,7 @@
 #   Any value MakeMKV accepts — a purchased perma-key, a monthly beta
 #   pasted in by the operator, or a beta key already scraped externally.
 # - Otherwise scrape the current month's free beta key from the public
-#   MakeMKV forum thread, mirroring v2's behaviour
-#   (see scripts/update_key.sh in the v2 tree).
+#   MakeMKV forum thread.
 #
 # Idempotent. Safe to invoke on every container start. Failures are
 # non-fatal — the entrypoint masks the exit code so a transient scrape

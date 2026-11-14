@@ -1,7 +1,7 @@
 """Single-invocation MakeMKV rip.
 
 `rip_disc` shells out to `makemkvcon mkv ... all <outdir>` exactly once
-per disc — the v2 pattern. The drive stays open for the entire rip, so
+per disc. The drive stays open for the entire rip, so
 the between-titles SCSI NOT_READY / USB-autosuspend gap that plagued
 the per-title implementation simply doesn't exist anymore.
 
