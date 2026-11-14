@@ -36,7 +36,7 @@ describe('fetchSettings composition edge cases', () => {
 		const data = await fetchSettings();
 		expect(data.arm_config.omdb_api_key).toBeNull();
 		expect(data.arm_config.tmdb_api_key).toBe('k');
-		// BFF-only panels are not populated under v3.
+		// The optional panels are not populated.
 		expect(data.transcoder_config).toBeNull();
 		expect(data.naming_variables).toBeNull();
 	});

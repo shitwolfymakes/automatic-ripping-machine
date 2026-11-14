@@ -97,7 +97,7 @@ export function encoderCards(
 	return families.map((family) => cardFor(family, anyCodec, availability));
 }
 
-// Block keys that only some families have (R6, rule 11): HandBrake's multi-pass
+// Block keys that only some families have: HandBrake's multi-pass
 // and turbo flags, and advanced options on x264 only.
 const FAMILY_GATES: Record<string, (family: SlimFamily) => boolean> = {
 	VideoMultiPass: (f) => f.multipass,

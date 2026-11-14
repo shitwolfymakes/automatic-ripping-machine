@@ -9,8 +9,7 @@ import { fetchNotificationCount } from './notifications';
 // ---------------------------------------------------------------------------
 // Client-side dashboard composition.
 //
-// v3 has NO single dashboard/BFF endpoint — the legacy `DashboardResponse`
-// aggregation is gone. We FAN OUT across the v3 endpoints and compose the
+// There is no single dashboard endpoint, so this fans out across the v3 endpoints and composes the
 // shape the dashboard store + sidebar components consume. Each field
 // degrades independently (Promise.allSettled): one failing endpoint nulls/zeros
 // that field instead of taking the whole dashboard down, and the store layer

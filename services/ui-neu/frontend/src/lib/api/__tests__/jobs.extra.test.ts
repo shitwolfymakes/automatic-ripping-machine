@@ -173,7 +173,7 @@ describe('resolveJob', () => {
 		);
 	});
 
-	// Review Focus 5 (identity-disc-hints PR2, Task 6): a disc-hint source can
+	// A disc-hint source can
 	// fill job.disc_number/disc_total before the operator ever opens the
 	// identify dialog. resolveJob must not send those keys unless the caller
 	// actually passed them, or every hint-filled disc number would be wiped

@@ -92,11 +92,11 @@ export function readJobMetadata(
 	const md = (metadata_json ?? {}) as Record<string, unknown>;
 	const out: JobMetadata = {};
 
-	// Step 2 (backend): season and pending_session_id are job COLUMNS now.
+	// season and pending_session_id are job COLUMNS.
 	if (job?.season != null) out.season = String(job.season).padStart(2, '0');
 	if (job?.pending_session_id) out.pending_session_id = job.pending_session_id;
 
-	// Step 2 (§3.4): the typed sections are authoritative — external ids
+	// The typed sections are authoritative — external ids
 	// live under identity.external_ids, the 1337-server extras under
 	// provider_raw.arm_server, music naming under music.
 	const identity = asRecord(md.identity);

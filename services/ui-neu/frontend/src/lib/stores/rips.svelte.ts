@@ -2,10 +2,9 @@
 // `ripProgress.value[jobId]?.progress_pct` to render the bar and
 // `?.eta_seconds` for the ETA. The backend publishes on
 // `ripper.progress.{job_id}` with `{track_id, progress_pct}`; ETA is computed
-// here on the receiving side (matches the legacy UI's approach).
+// here on the receiving side.
 //
-// Ported from the removed Vue UI's Pinia rips store into ui-neu's Svelte-5
-// runes idiom (module-level $state, like lib/stores/toast.svelte.ts).
+// Module-level $state in the Svelte-5 runes idiom, like lib/stores/toast.svelte.ts.
 
 import { wsClient, type WSEnvelope } from '$lib/api/ws';
 
@@ -41,8 +40,7 @@ export interface RipLiveProgress {
 }
 
 // Mask early per-track samples — the first tick has no rate yet, and the
-// second can mislead if the drive stalls briefly. Matches the legacy
-// "wait a bit before showing ETA" behaviour.
+// second can mislead if the drive stalls briefly.
 const ETA_MIN_ELAPSED_MS = 5_000;
 const ETA_MIN_DELTA = 0.5;
 
