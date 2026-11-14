@@ -80,8 +80,8 @@ def _db_factory(db: FakeSession) -> Any:
 
 def _app_with_one_task(status: TranscodeTaskStatus, *, passthrough: bool = False, **task_kwargs: Any) -> FakeSession:
     """One session_application + one task. Defaults to an ENCODE task (a real
-    HANDBRAKE preset resolves via the session), matching the pre-Task-6
-    container-spawn tests. `passthrough=True` gives the session no
+    HANDBRAKE preset resolves via the session), the container-spawn
+    path. `passthrough=True` gives the session no
     transcode_preset_id, so `is_passthrough_preset` routes the task through
     `execute_passthrough_task` instead of the container-spawn path.
     """
@@ -402,8 +402,8 @@ async def test_spawn_caps_at_max_parallel() -> None:
 
 
 async def test_spawn_holds_encode_when_host_paths_unset() -> None:
-    # No-transcode-mode contract: unset ARM_HOST_*_PATH no longer disables the
-    # whole dispatcher tick; it just holds ENCODE tasks (which need the
+    # No-transcode-mode contract: unset ARM_HOST_*_PATH does not disable the
+    # whole dispatcher tick; it only holds ENCODE tasks (which need the
     # container volume mounts) in QUEUED for a later tick.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED, created_at=datetime.now(UTC))
     docker = MagicMock()

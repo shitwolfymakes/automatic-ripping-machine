@@ -68,7 +68,7 @@ describe('updateTrack (bulk-PATCH wrap)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Naming (EXISTS in v3, reshaped contracts)
+// Naming (reshaped contracts)
 // ---------------------------------------------------------------------------
 
 describe('fetchNamingPreview', () => {
@@ -141,7 +141,7 @@ describe('fetchNamingVariables', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Identify / resolve + apply-session (EXISTS in v3)
+// Identify / resolve + apply-session
 // ---------------------------------------------------------------------------
 
 describe('resolveJob', () => {

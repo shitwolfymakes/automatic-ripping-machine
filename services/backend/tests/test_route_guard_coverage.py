@@ -25,8 +25,8 @@ from arm_backend.main import app
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # A mutating route is considered guarded if any of these appears anywhere in
-# its dependency tree. `require_jwt` is deliberately NOT here: since the
-# anonymous->guest fallback landed it authenticates but no longer authorizes,
+# its dependency tree. `require_jwt` is deliberately NOT here: because the
+# anonymous->guest fallback means it authenticates but does not authorize,
 # so it can't gate a write on its own.
 _WRITE_GUARDS = frozenset(
     {

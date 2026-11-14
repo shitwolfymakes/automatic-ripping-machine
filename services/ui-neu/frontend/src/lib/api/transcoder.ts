@@ -8,13 +8,12 @@ export function fetchTranscoderStats(): Promise<TranscodeStatsView> {
 	return get<TranscodeStatsView>('/api/transcodes/stats');
 }
 
-// Was WorkersResponse { max_concurrent, active_count, workers }; v3 returns the
-// bare worker array.
+// The bare worker array.
 export function fetchTranscoderWorkers(): Promise<TranscodeWorkerView[]> {
 	return get<TranscodeWorkerView[]>('/api/transcodes/workers');
 }
 
-// Was TranscoderJobListResponse { jobs, total }; v3 returns the bare task array.
+// The bare task array.
 export function fetchTranscoderJobs(params?: {
 	status?: string;
 	limit?: number;

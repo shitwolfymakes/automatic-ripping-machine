@@ -50,9 +50,9 @@ class Settings(BaseSettings):
     # picked explicitly.
     ARM_SOURCE_PATH: str | None = None
     ARM_SOURCE_SESSION_ID: str | None = None
-    # Tier-4: how often the ripper re-probes makemkv key validity (daily default).
+    # How often the ripper re-probes makemkv key validity (daily default).
     MAKEMKV_KEYCHECK_INTERVAL_SECONDS: int = 86400
-    # Tier-4: consecutive NOT_READY polls before re-arming insert detection.
+    # Consecutive NOT_READY polls before re-arming insert detection.
     # Flaky USB-BD vs cheap optical need different swap-detection windows.
     ARM_NOT_READY_REARM_POLLS: int = 3
 

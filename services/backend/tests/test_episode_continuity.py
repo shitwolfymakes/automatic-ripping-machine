@@ -157,7 +157,7 @@ def test_align_runs_equal_runs_are_ambiguous() -> None:
 
 
 def test_rank_seasons_breaks_coverage_ties_by_match_count() -> None:
-    # Minor 2: equal coverage (a play-all excluded in one season shrinks its
+    # Equal coverage (a play-all excluded in one season shrinks its
     # denominator); more matched titles wins over a lower mean cost.
     def match(n: int) -> TitleMatch:
         return TitleMatch(str(n), 1, n, None, None, 0, 1.0)

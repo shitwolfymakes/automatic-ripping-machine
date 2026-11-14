@@ -19,8 +19,8 @@ interface InfraInfo {
 	[key: string]: unknown;
 }
 
-// The composed shape the settings page consumes. There is no SettingsResponse // type; three reads
-// are fanned into this. `arm_config` / `transcoder_config` /
+// The composed shape the settings page consumes. There is no SettingsResponse
+// type; three reads are fanned into this. `arm_config` / `transcoder_config` /
 // `naming_variables` are the panel shapes the page renders from
 // — none exist on the v3 wire, so they are best-effort projections.
 export interface SettingsData {
