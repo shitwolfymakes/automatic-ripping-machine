@@ -1,5 +1,4 @@
-"""Background runner for the episode stage (design spec 5, 6.2, 6.3, 9;
-plan Task 8): runs the episode stage off the request path so identify /
+"""Background runner for the episode stage: runs the episode stage off the request path so identify /
 resolve / PATCH never block on a provider round-trip.
 
 `EpisodeStageRunner.schedule(job_id)` is the only trigger surface routers
@@ -10,7 +9,7 @@ started on stale inputs, without ever running the stage twice concurrently
 for the same job or piling up more than one extra run. A second call for a
 run that is merely queued (not yet started) is a no-op.
 
-Each run splits fetch from apply across two sessions (fix rounds 1 and 2).
+Each run splits fetch from apply across two sessions.
 Phase 1 loads a snapshot (job + tracks + config) and runs the network phase
 (`compute_episode_claims`) against it, all on one session that is then
 closed with no further query, flush, or commit — so any in-memory mutation
@@ -20,7 +19,7 @@ reaching the DB. A single shared session for fetch-then-apply is not safe:
 autoflush would otherwise write that stale mutation as a full-row UPDATE
 the moment the apply phase's own re-select ran on the same session — a
 lost-update window a concurrent PATCH/resolve could fall into just as
-easily as the one round 1 fixed. Phase 2 opens a fresh session, re-selects
+easily as a stale write on a shared session. Phase 2 opens a fresh session, re-selects
 the job (`with_for_update` + `populate_existing`), folds in only the show
 ids phase 1 newly resolved (`merge_new_ids`, never overwriting a field the
 fresh row already has), then applies outcomes, commits, and emits. If the
@@ -69,18 +68,18 @@ from arm_common.schemas import ExternalIds
 
 logger = logging.getLogger("arm_backend.identity.stage_runner")
 
-# Most jobs whose episode stage computes and applies at once (M5): bounds
+# Most jobs whose episode stage computes and applies at once bounds
 # provider load and DB connections when many jobs are scheduled together
 # (e.g. the startup sweep).
 MAX_CONCURRENT_RUNS = 2
 
-# Statuses `sweep_startup` considers (Review Focus 5): a job that has been
+# Statuses `sweep_startup` considers: a job that has been
 # identified but never had a chance to run the episode stage in-process
 # (e.g. the backend restarted between identify and the runner picking it
-# up, or PR 3b lands on a deployment with jobs already sitting here).
+# up, or the stage is first enabled on a deployment with jobs already sitting here).
 # RIPPING covers a restart mid-rip: the run rip-start scheduled is lost, and
 # crash recovery keeps the job RIPPING. RIPPED is left out on purpose: it is
-# terminal, so including it would match every pre-PR-3b TV job on upgrade.
+# terminal, so including it would match every already-ripped TV job on upgrade.
 _SWEEP_STATUSES: frozenset[JobStatus] = frozenset(
     {JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW, JobStatus.AWAITING_USER_ID, JobStatus.RIPPING}
 )
@@ -199,22 +198,22 @@ class EpisodeStageRunner:
 
     def invalidate(self, job_id: str) -> None:
         """Discard an in-flight background run's about-to-be-stale outcome
-        for `job_id` (Task 9 F4): a caller about to commit its own identity
+        for `job_id`: a caller about to commit its own identity
         write for this job (the identity router's `apply=True` path, before
         it computes) calls this first, so a run that already computed
         against pre-write state writes nothing when it reaches its apply
         phase instead of clobbering the write that's about to land.
 
-        Reuses `schedule`'s rerun-once bookkeeping (Task 8): any pending run,
+        Reuses `schedule`'s rerun-once bookkeeping: any pending run,
         started or still queued behind the concurrency cap, gets marked for
-        exactly one rerun. A queued run must be marked too (R1): it can take
+        exactly one rerun. A queued run must be marked too: it can take
         its slot and compute while the caller is still computing, then apply
         after the caller commits.
 
         It also holds the job until the caller calls `release`: the rerun,
         and any `schedule` that arrives meanwhile, waits for it. Starting the
         rerun as soon as the invalidated run finished would snapshot the job
-        before the caller's commit and then overwrite that write (D-093).
+        before the caller's commit and then overwrite that write.
         The caller must `release` in a `finally`. A no-op after `shutdown`."""
         if self._shutdown:
             return
@@ -276,7 +275,7 @@ class EpisodeStageRunner:
     # -- one run ------------------------------------------------------------
 
     async def _run_once(self, job_id: str) -> None:
-        # M5: at most MAX_CONCURRENT_RUNS jobs compute and apply at a time. A
+        # At most MAX_CONCURRENT_RUNS jobs compute and apply at a time. A
         # run waiting for a slot has not started: a `schedule` for it meanwhile
         # stays a no-op, since the run reads the current state once it starts.
         async with self._run_slots:
@@ -286,7 +285,7 @@ class EpisodeStageRunner:
     async def _compute_phase(self, job_id: str) -> tuple[list[SourceOutcome], ExternalIds] | None:
         """Phase 1 (fetch): the outcomes and newly found show ids for
         `job_id`, or None when there is nothing to apply."""
-        # Phase 1 (fetch): load the snapshot and run the network phase
+        # Load the snapshot and run the network phase
         # against ONE session, held open only for this session's own
         # queries — the job/tracks/config load, then compute's own
         # sibling/track reads, all of which happen before any provider
@@ -297,9 +296,8 @@ class EpisodeStageRunner:
         # the session closes below (a rollback, never a write): it can
         # NEVER reach the DB from here, regardless of what a concurrent
         # PATCH/resolve commits while we're waiting on providers. This
-        # is the invariant fix round 2 restores — round 1's fix alone
-        # left a window where the apply phase's own re-select, sharing
-        # this session, would autoflush that mutation as a stale
+        # is the invariant: sharing this session with the apply phase's
+        # own re-select would autoflush that mutation as a stale
         # full-row UPDATE before returning the fresh row.
         async with self._session_factory() as compute_session:
             job = (await compute_session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
@@ -321,7 +319,7 @@ class EpisodeStageRunner:
                 # Nothing to match yet (no eligible titles): no lock,
                 # no resolve, no event.
                 return None
-            # I4: only the ids this compute newly found. An id the
+            # Only the ids this compute newly found. An id the
             # snapshot already had may since have been cleared on the
             # fresh row (e.g. /resolve with a different show) and must
             # not come back.
@@ -332,7 +330,7 @@ class EpisodeStageRunner:
         """Phase 2 (apply): fold `found` into the freshly locked job row and
         apply `outcomes`, unless the job vanished or this run's outcome was
         superseded or dropped."""
-        # Phase 2 (apply): a fresh session. The snapshot `job` is detached now
+        # A fresh session. The snapshot `job` is detached now
         # (its own session closed above without a commit/flush) — never
         # written anywhere itself; only the NEW show ids it resolved
         # (if any) are folded into the fresh row below.
@@ -371,7 +369,7 @@ class EpisodeStageRunner:
     async def sweep_startup(self) -> int:
         """Schedule every eligible job once: identified / awaiting review /
         awaiting user id, a TV candidate, with no episode source entry at
-        all yet in its identity claims (Review Focus 5) and not one the
+        all yet in its identity claims and not one the
         operator cleared (Clear episodes). Returns how many were scheduled."""
         count = 0
         async with self._session_factory() as session:

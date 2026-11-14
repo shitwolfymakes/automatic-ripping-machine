@@ -73,8 +73,8 @@ def gpu_run_kwargs(gpu: Gpu) -> dict[str, Any]:
             kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
         # docker-py is a hard dependency (pyproject) — this fallback is dead.
         except ImportError:  # pragma: no cover
-            # Legacy guard from when docker-py was test-optional. Kept
-            # so the kwarg shape stays correct if that ever regresses.
+            # Defensive guard: keeps the kwarg shape correct if docker-py
+            # is ever missing.
             kwargs["runtime"] = "nvidia"
             fallback = {
                 "Driver": base_kwargs["driver"],
@@ -109,7 +109,7 @@ def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[
         "ARM_BACKEND_URL": backend_url,
         "ARM_SERVICE_TOKEN": settings.ARM_SERVICE_TOKEN,
         "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
-        # Phase 12 — per-task log filename so parallel transcoders don't
+        # Per-task log filename so parallel transcoders don't
         # clobber a shared `/logs/arm-transcode.log` rotation.
         "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
     }

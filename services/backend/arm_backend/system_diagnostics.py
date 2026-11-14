@@ -50,7 +50,7 @@ def system_roots(request: Request) -> dict[str, str]:
 
 
 # Host-side bind source for each container root, so the report can print the
-# exact `chown` the operator runs on the server (setup spec §6.3).
+# exact `chown` the operator runs on the server.
 _HOST_PATH_SETTING = {
     "MEDIA_ROOT": "ARM_HOST_MEDIA_PATH",
     "RAW_ROOT": "ARM_HOST_RAW_PATH",
@@ -303,7 +303,7 @@ async def online_enrolled_drives(db: AsyncSession) -> list[Drive]:
     """Online drives a ripper actually serves.
 
     Scanner-created DETECTED rows and virtual ISO rows are ``online`` by default,
-    so ``status`` alone would count a drive that is merely plugged in (D-149).
+    so ``status`` alone would count a drive that is merely plugged in.
     """
     stmt = (
         select(Drive)

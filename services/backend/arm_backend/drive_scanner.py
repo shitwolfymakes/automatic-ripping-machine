@@ -1,5 +1,5 @@
 """Reconcile a host drive scan into Drive rows, and the periodic scanner
-that runs it (spec §2). The scan itself is `drive_sysfs.enumerate_optical`."""
+that runs it. The scan itself is `drive_sysfs.enumerate_optical`."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class ScanSummary:
 def _apply_scan(row: Drive, d: ScannedDrive) -> None:
     """Refresh the host facts a scan can see. Applies to every lifecycle —
     a port-identity drive that renumbers is followed only because this
-    updates device_path on enrolled rows too (spec §2)."""
+    updates device_path on enrolled rows too."""
     row.device_path = d.device_path
     row.vendor = d.vendor
     row.model = d.model
@@ -94,7 +94,7 @@ def _new_drive_row(d: ScannedDrive) -> Drive:
 def _touch_presence(row: Drive, now: datetime) -> None:
     """Mark a scanned row present as of `now`, unless a ripper owns its
     presence."""
-    # Presence is scanner-owned only for rows without a ripper (spec §1).
+    # Presence is scanner-owned only for rows without a ripper.
     if row.lifecycle is not DriveLifecycle.ENROLLED:
         row.present = True
         row.last_seen_at = now
@@ -169,7 +169,7 @@ async def reconcile_drives(
 ) -> ScanSummary:
     # Virtual (ISO) drives are never scanned, matched, marked absent or
     # pruned here — the host sysfs scan has nothing to say about them; the
-    # watchdog owns their lifecycle (spec: iso-source-rip).
+    # watchdog owns their lifecycle.
     rows = list((await session.execute(select(Drive).where(col(Drive.kind) == DriveKind.OPTICAL))).scalars().all())
     by_id = {r.by_id_name: r for r in rows if r.by_id_name}
     by_port = {r.sysfs_port: r for r in rows if r.sysfs_port and not r.by_id_name}
@@ -210,7 +210,7 @@ async def scan_tunables(session: AsyncSession) -> tuple[int, int]:
 
 
 class DriveScanner:
-    """Periodic + on-demand detection (spec §2). One instance on app.state;
+    """Periodic + on-demand detection. One instance on app.state;
     POST /api/drives/rescan calls scan_once with the request's session, the
     background loop opens its own."""
 

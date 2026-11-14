@@ -1,8 +1,8 @@
 """Deterministic slug helper for `{transcode_slug}` token expansion.
 
 NFKD-normalize, lowercase, collapse non-alphanumerics into single hyphens,
-strip leading/trailing hyphens. Same rule documented in arch §02 path
-templates.
+strip leading/trailing hyphens. Same rule documented in the path
+templates architecture doc.
 """
 
 import re
