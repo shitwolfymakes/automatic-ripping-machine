@@ -8,8 +8,8 @@ import type { EpisodeRow } from '../../../episodes/episode-model';
 // UI copy is ASCII: an empty value is "-", a trailing wait is "...", and joined
 // facts are separated by ", ". Comments and <style> blocks are not copy.
 const FILES = [
-	'DiscReviewWidget.svelte',
-	'JobInfoForm.svelte',
+	'dashboard/DiscReviewWidget.svelte',
+	'jobs/JobInfoForm.svelte',
 	'episodes/EpisodeMatchPanel.svelte',
 	'episodes/EpisodeRows.svelte',
 	'episodes/RerunPanel.svelte',

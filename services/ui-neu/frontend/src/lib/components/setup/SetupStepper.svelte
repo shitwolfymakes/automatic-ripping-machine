@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SetupStep, SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { STEPS, STATE_WORD, uiState, stepIndex, type StepUiState } from '../../setup/steps';
 
 	// Every step with its state as a glyph + word (never colour alone). Done,

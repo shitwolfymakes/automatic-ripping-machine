@@ -5,7 +5,7 @@
 	import type { SystemDiagnosticsResponse, StorageRoot } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
 	import { checkDetail, checkLabel, healthTally, otherChecks, serviceChecks } from '$lib/dashboard/system-health';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import HealthCheckRow from './HealthCheckRow.svelte';
 	import ServiceItem from './ServiceItem.svelte';
 	import StoragePathItem from './StoragePathItem.svelte';

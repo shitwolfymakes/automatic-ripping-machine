@@ -10,13 +10,13 @@
 	import { TranscodeTaskActions } from '$lib/stores/transcode-task-actions.svelte';
 	import { taskCount } from '$lib/transcode/stats';
 	import { transcoderEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
-	import TranscoderUnavailable from '$lib/components/transcoder/TranscoderUnavailable.svelte';
-	import TranscoderStatsSkeleton from '$lib/components/transcoder/TranscoderStatsSkeleton.svelte';
-	import TranscoderOfflineBanner from '$lib/components/transcoder/TranscoderOfflineBanner.svelte';
-	import WorkerPoolPanel from '$lib/components/transcoder/WorkerPoolPanel.svelte';
-	import TranscoderStatTiles from '$lib/components/transcoder/TranscoderStatTiles.svelte';
-	import TranscodeJobList from '$lib/components/transcoder/TranscodeJobList.svelte';
-	import TranscodeJobTabs from '$lib/components/transcoder/TranscodeJobTabs.svelte';
+	import TranscoderUnavailable from '$lib/components/transcode/TranscoderUnavailable.svelte';
+	import TranscoderStatsSkeleton from '$lib/components/transcode/TranscoderStatsSkeleton.svelte';
+	import TranscoderOfflineBanner from '$lib/components/transcode/TranscoderOfflineBanner.svelte';
+	import WorkerPoolPanel from '$lib/components/transcode/WorkerPoolPanel.svelte';
+	import TranscoderStatTiles from '$lib/components/transcode/TranscoderStatTiles.svelte';
+	import TranscodeJobList from '$lib/components/transcode/TranscodeJobList.svelte';
+	import TranscodeJobTabs from '$lib/components/transcode/TranscodeJobTabs.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.

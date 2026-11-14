@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import { reveal } from '$lib/transitions';
 	import { changePassword } from '$lib/api/auth';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { PASSWORD_MIN_LENGTH, passwordProblem } from '$lib/utils/password';
 
 	// Shared by /change-password, Settings > Users and the setup walkthrough's

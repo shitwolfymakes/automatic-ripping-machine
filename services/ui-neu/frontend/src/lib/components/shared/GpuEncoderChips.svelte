@@ -2,7 +2,7 @@
 	// A GPU's encoder chips in Settings > GPUs, saying whether it was tested and
 	// which encoders its probe verified.
 	import type { GpuView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	let { gpu }: { gpu: GpuView } = $props();
 </script>

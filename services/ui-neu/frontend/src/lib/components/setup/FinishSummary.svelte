@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { REVIEWABLE_STEPS, STATE_BADGE, progressState, type SummaryState } from '../../setup/steps';
 
 	// One row per step: what was set up, with a way back to it. Used by the

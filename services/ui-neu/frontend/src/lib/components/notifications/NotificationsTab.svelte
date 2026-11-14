@@ -25,7 +25,7 @@
 		type TestOutcome
 	} from '../../notifications/channel-actions';
 	import { editorPatch, editorTestPayload, type EditorBody } from '../../notifications/channel-edits';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	let channels = $state<Channel[]>([]);
 	let catalog = $state<Catalog>({ featured: [], services: [] });

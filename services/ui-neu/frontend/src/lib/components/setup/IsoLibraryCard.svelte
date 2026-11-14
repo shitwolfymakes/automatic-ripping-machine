@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { plural } from '$lib/utils/plural';
-	import CopyBlock from '$lib/components/CopyBlock.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { IsoStatus } from '$lib/drives/setup-drives';
 
 	// Shows whether the ISO library is on, or how to turn it on.

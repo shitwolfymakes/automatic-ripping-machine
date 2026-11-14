@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
-	import DataTable from '$lib/components/DataTable.svelte';
+	import DataTable from '$lib/components/shared/DataTable.svelte';
 	import { deleteGuard, openLabel, ripPresetColumns, transcodePresetColumns } from '../../sessions/table-columns';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';

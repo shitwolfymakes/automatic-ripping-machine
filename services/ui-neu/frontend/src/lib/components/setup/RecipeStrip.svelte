@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { RecipeCell } from '$lib/sessions/recipe-cell';
 
 	// The rip > transcode > output strip: Settings > Sessions cards and the

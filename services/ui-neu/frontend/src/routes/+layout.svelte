@@ -7,19 +7,19 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { goto } from '$app/navigation';
 	import { isoPickerMode, showIsoPicker } from '$lib/stores/iso-picker';
-	import IsoPicker from '$lib/components/IsoPicker.svelte';
+	import IsoPicker from '$lib/components/drives/IsoPicker.svelte';
 	import { onMount } from 'svelte';
 	import { setUnauthorizedHandler } from '$lib/api/client';
 	import { logoutLocal, initAuth, isGuest, isAdmin } from '$lib/stores/auth';
 	import { uiPrefs } from '$lib/stores/ui-prefs';
 	import { NAV_ITEMS, visibleNavItems } from '$lib/nav';
-	import NavList from '$lib/components/NavList.svelte';
-	import HeaderActions from '$lib/components/HeaderActions.svelte';
-	import HeaderStatus from '$lib/components/HeaderStatus.svelte';
-	import BottomStatsBar from '$lib/components/BottomStatsBar.svelte';
-	import LiveUpdatesBanner from '$lib/components/LiveUpdatesBanner.svelte';
-	import SidebarStats from '$lib/components/SidebarStats.svelte';
-	import MobileStatsPanel from '$lib/components/MobileStatsPanel.svelte';
+	import NavList from '$lib/components/layout/NavList.svelte';
+	import HeaderActions from '$lib/components/layout/HeaderActions.svelte';
+	import HeaderStatus from '$lib/components/layout/HeaderStatus.svelte';
+	import BottomStatsBar from '$lib/components/layout/BottomStatsBar.svelte';
+	import LiveUpdatesBanner from '$lib/components/layout/LiveUpdatesBanner.svelte';
+	import SidebarStats from '$lib/components/layout/SidebarStats.svelte';
+	import MobileStatsPanel from '$lib/components/layout/MobileStatsPanel.svelte';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);

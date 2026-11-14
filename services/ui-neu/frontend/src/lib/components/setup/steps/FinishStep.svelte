@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { ConfigView, DriveView, GpuView, SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import FinishSummary from '../FinishSummary.svelte';
 	import FirstDiscCard from '../FirstDiscCard.svelte';
 	import { fetchDrives } from '$lib/api/drives';

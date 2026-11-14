@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The sessions area's session editor: the session builder in an
 	// EditorSidebar, titled for what it is doing.
-	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
-	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
+	import EditorSidebar from '$lib/components/shared/EditorSidebar.svelte';
+	import EditorFormFooter from '$lib/components/shared/EditorFormFooter.svelte';
 	import { IDLE_STATUS, type EditorStatus } from '$lib/ui/editor-status';
 	import SessionBuilder from './SessionBuilder.svelte';
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';

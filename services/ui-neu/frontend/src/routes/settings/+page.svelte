@@ -2,8 +2,8 @@
 	import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import { onMount, setContext } from 'svelte';
 	import { reveal } from '$lib/transitions';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import { LoadedSettings } from '$lib/stores/loaded-settings.svelte';
 	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
@@ -25,12 +25,12 @@
 	import { ImageCache } from '$lib/stores/image-cache.svelte';
 	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
 	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import SystemSettings from '$lib/components/settings/SystemSettings.svelte';
 	import { setTranscodeRuntimeEnabled } from '$lib/stores/config';
 	import NotificationsSettings from '$lib/components/settings/NotificationsSettings.svelte';
 	import TranscodingSettings from '$lib/components/settings/TranscodingSettings.svelte';
-	import ToastHost from '$lib/components/ToastHost.svelte';
+	import ToastHost from '$lib/components/layout/ToastHost.svelte';
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import ThemesSettings from '$lib/components/settings/ThemesSettings.svelte';

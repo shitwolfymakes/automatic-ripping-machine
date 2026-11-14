@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { StepMeta } from '../../setup/steps';
 
 	// The walkthrough's sticky action bar: Back, the save hint (or why Continue

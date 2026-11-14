@@ -4,7 +4,7 @@
 	import type { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
-	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';
+	import DiagnosticsSection from '$lib/components/settings/DiagnosticsSection.svelte';
 
 	interface Props {
 		settings: SettingsData;

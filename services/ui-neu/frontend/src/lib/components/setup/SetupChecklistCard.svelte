@@ -4,8 +4,8 @@
 	import type { SetupView } from '$lib/types/api.gen';
 	import { fetchSetup, dismissSetupChecklist } from '$lib/api/setup';
 	import { isAdmin } from '$lib/stores/auth';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import CloseButton from '$lib/components/CloseButton.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { REVIEWABLE_STEPS, STATE_BADGE, openSteps } from '../../setup/steps';
 
 	// Dashboard card listing whatever setup left open: steps skipped or needing

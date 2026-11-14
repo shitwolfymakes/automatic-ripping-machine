@@ -5,7 +5,7 @@
 	// unstored text or number field shows the inherited value as a placeholder.
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { docUrlFor } from '$lib/handbrake/docLinks';
 	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
 	import { fieldView, optionLabel, scalarText, type TabId } from '$lib/handbrake/fields';

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
-	import DataTable from '$lib/components/DataTable.svelte';
+	import DataTable from '$lib/components/shared/DataTable.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';
 	import { resolveSample } from '../../sessions/sample-tokens';

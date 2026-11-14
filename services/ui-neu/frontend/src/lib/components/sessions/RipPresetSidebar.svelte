@@ -1,9 +1,9 @@
 <script lang="ts">
 	// The rip preset editor on Settings > Sessions: RipPresetForm in an
 	// EditorSidebar. Built-in presets open read-only, with a Clone action.
-	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
-	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
-	import RipPresetForm from '$lib/components/RipPresetForm.svelte';
+	import EditorSidebar from '$lib/components/shared/EditorSidebar.svelte';
+	import EditorFormFooter from '$lib/components/shared/EditorFormFooter.svelte';
+	import RipPresetForm from '$lib/components/sessions/RipPresetForm.svelte';
 	import { IDLE_STATUS, type EditorStatus } from '$lib/ui/editor-status';
 	import { usageLabel } from '$lib/handbrake/display';
 	import type { RipPresetView } from '$lib/types/api.gen';

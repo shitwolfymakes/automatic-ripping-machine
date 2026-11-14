@@ -16,16 +16,16 @@
 		fixedPermissionsMessage
 	} from '$lib/files/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
-	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import FileRow from '$lib/components/FileRow.svelte';
-	import FilesTable from '$lib/components/FilesTable.svelte';
-	import FilesToolbar from '$lib/components/FilesToolbar.svelte';
-	import FileMoveDialog from '$lib/components/FileMoveDialog.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import OrphanFoldersModal from '$lib/components/OrphanFoldersModal.svelte';
+	import BreadcrumbNav from '$lib/components/files/BreadcrumbNav.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import FileRow from '$lib/components/files/FileRow.svelte';
+	import FilesTable from '$lib/components/files/FilesTable.svelte';
+	import FilesToolbar from '$lib/components/files/FilesToolbar.svelte';
+	import FileMoveDialog from '$lib/components/files/FileMoveDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
-	import NewFolderRow from '$lib/components/NewFolderRow.svelte';
+	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);

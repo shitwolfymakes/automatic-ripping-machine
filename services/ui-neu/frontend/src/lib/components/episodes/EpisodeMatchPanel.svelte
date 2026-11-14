@@ -33,7 +33,7 @@
 	} from '$lib/episodes/sources';
 	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/episodes/hold';
 	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/jobs/rerun-form';
-	import Glyph from '../Glyph.svelte';
+	import Glyph from '../shared/Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import EpisodeStateAlert from './EpisodeStateAlert.svelte';
 	import EpisodeStatusBar from './EpisodeStatusBar.svelte';

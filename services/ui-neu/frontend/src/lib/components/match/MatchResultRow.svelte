@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MetadataCandidate } from '$lib/types/api.gen';
-	import PosterImage from '$lib/components/PosterImage.svelte';
+	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import { candidateSubtitle } from '$lib/match/match';
 
 	interface Props {

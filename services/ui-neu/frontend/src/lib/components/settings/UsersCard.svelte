@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
-	import TimeAgo from '$lib/components/TimeAgo.svelte';
+	import TimeAgo from '$lib/components/shared/TimeAgo.svelte';
 	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
 	import ChangePasswordForm from '$lib/components/shared/ChangePasswordForm.svelte';
-	import CloseButton from '$lib/components/CloseButton.svelte';
+	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { fetchUsers } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 	import { TimedFeedback } from '../../stores/timed-feedback.svelte';

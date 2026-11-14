@@ -2,7 +2,7 @@
 	import { theme, toggleTheme } from '$lib/stores/theme';
 	import { colorScheme, schemeLocksMode, allSchemes } from '$lib/stores/color-scheme';
 	import type { UserThemes } from '$lib/stores/user-themes.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	interface Props {
 		themes: UserThemes;

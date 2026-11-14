@@ -15,7 +15,7 @@
 	import { KeyChecks, keyToTest } from '../../stores/settings-key-checks.svelte';
 	import ConfigSchemaField from './ConfigSchemaField.svelte';
 	import KeyCheckResult from './KeyCheckResult.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import IdentityCard from './IdentityCard.svelte';
 	import SchemaFormSection from './SchemaFormSection.svelte';
 

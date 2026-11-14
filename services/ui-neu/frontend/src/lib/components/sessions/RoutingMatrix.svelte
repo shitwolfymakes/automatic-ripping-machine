@@ -22,7 +22,7 @@
 	import { PendingKeys } from '$lib/stores/pending-keys.svelte';
 	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
 	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
-	import MediaPill from '../MediaPill.svelte';
+	import MediaPill from '../shared/MediaPill.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);

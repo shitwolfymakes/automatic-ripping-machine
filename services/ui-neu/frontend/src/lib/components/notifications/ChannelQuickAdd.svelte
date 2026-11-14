@@ -11,8 +11,8 @@
 		testUnsavedBody,
 		type AddChannelBody
 	} from '../../notifications/channel-actions';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	// One phone or chat channel, added without leaving the setup walkthrough.
 	// The same AddChannelForm Settings > Notifications uses, in its compact

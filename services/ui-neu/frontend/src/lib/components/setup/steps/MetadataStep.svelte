@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
 	import type { StepCommitResult } from '../../../setup/steps';
 

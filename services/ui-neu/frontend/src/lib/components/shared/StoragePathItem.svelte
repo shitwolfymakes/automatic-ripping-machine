@@ -4,8 +4,8 @@
 	// isn't.
 	import type { PathStatus, StorageRoot } from '$lib/types/api.gen';
 	import { freeLabel, pathState, storageHelp, storageLabel } from '$lib/dashboard/system-health';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import CopyBlock from '$lib/components/CopyBlock.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';
 	import HealthItem from './HealthItem.svelte';
 
 	let { folder, storage }: { folder: PathStatus; storage: readonly StorageRoot[] | null } = $props();

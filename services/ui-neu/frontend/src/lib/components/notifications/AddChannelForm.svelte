@@ -11,7 +11,7 @@
 	import BashTestPanel from './BashTestPanel.svelte';
 	import { missingRequirements } from '../../notifications/channel-helpers';
 	import type { AddChannelBody } from '../../notifications/channel-actions';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	// `compact` (setup walkthrough): a service channel only, no header, no
 	// Save/Cancel (the parent saves on Continue through getBody()/isReady()),

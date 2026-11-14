@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { JobView } from '$lib/types/api.gen';
-	import JobFilterBar from '$lib/components/JobFilterBar.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
+	import JobFilterBar from '$lib/components/shared/JobFilterBar.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import LogJobRow from '$lib/components/logs/LogJobRow.svelte';
 	import { filterLogJobs, logCountText, orderByLastModified } from '$lib/logs/list';
 	import { LogListing } from '$lib/stores/log-listing.svelte';

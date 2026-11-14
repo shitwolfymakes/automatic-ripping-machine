@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { plural } from '$lib/utils/plural';
 	import { slide } from 'svelte/transition';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { formatDateTime } from '$lib/utils/format';
 	import type { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
 

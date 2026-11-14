@@ -3,7 +3,7 @@
 	// could not load, no episode source is set up, the match is a guess
 	// (with why, on request), or no source could place the tracks.
 	import type { PanelState } from '../../episodes/episode-model';
-	import Glyph from '../Glyph.svelte';
+	import Glyph from '../shared/Glyph.svelte';
 
 	interface Props {
 		/** The first load is still running: no alert yet. */

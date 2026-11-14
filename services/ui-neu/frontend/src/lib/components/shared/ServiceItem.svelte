@@ -3,7 +3,7 @@
 	// runs, and which of its parts pass.
 	import type { SystemDiagnosticCheck } from '$lib/types/api.gen';
 	import { locationLabel, serviceBadge, serviceDescription, serviceLabel } from '$lib/dashboard/system-health';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import HealthItem from './HealthItem.svelte';
 
 	let { check }: { check: SystemDiagnosticCheck } = $props();

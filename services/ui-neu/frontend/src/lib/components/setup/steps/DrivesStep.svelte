@@ -2,9 +2,9 @@
 	import { plural } from '$lib/utils/plural';
 	import { onMount, onDestroy } from 'svelte';
 	import type { DriveView, SetupView } from '$lib/types/api.gen';
-	import DriveCard from '$lib/components/DriveCard.svelte';
-	import DriveLifecycleLists from '$lib/components/DriveLifecycleLists.svelte';
-	import DriveMaintenance from '$lib/components/DriveMaintenance.svelte';
+	import DriveCard from '$lib/components/drives/DriveCard.svelte';
+	import DriveLifecycleLists from '$lib/components/drives/DriveLifecycleLists.svelte';
+	import DriveMaintenance from '$lib/components/drives/DriveMaintenance.svelte';
 	import IsoLibraryCard from '$lib/components/setup/IsoLibraryCard.svelte';
 	import { fetchDrives } from '$lib/api/drives';
 	import { fetchSystemDiagnostics } from '$lib/api/system';

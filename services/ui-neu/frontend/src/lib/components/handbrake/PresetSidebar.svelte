@@ -6,9 +6,9 @@
 	// tab of the first marked field in form order and focuses it; when no input shows
 	// an issue, focus goes to the banner that lists them.
 	import { onMount, tick } from 'svelte';
-	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
-	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
+	import EditorSidebar from '$lib/components/shared/EditorSidebar.svelte';
+	import EditorFormFooter from '$lib/components/shared/EditorFormFooter.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import PresetBlock from './PresetBlock.svelte';
 	import SettingsPanel from './SettingsPanel.svelte';
 	import ImportPanel from './ImportPanel.svelte';

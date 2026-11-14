@@ -14,11 +14,11 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import Toggle from '$lib/components/shared/Toggle.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import GpuEncoderChips from './GpuEncoderChips.svelte';
-	import GpuInventoryRow from '$lib/components/GpuInventoryRow.svelte';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import GpuInventoryRow from '$lib/components/shared/GpuInventoryRow.svelte';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
 	import { PendingKeys } from '../../stores/pending-keys.svelte';
 	import { ProbeTimers } from '../../stores/settings-probe-timers.svelte';
 

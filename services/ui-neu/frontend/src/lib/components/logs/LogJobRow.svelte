@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import PosterImage from '$lib/components/PosterImage.svelte';
+	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
+	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import { effectiveJobStatus } from '$lib/jobs/status';
 	import { driveLabel } from '$lib/drives/name';
 	import { jobPoster } from '$lib/match/poster';
