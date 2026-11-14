@@ -63,7 +63,7 @@ class Settings(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
-    # --- Phase 7: transcode dispatcher --------------------------------------
+    # --- Transcode dispatcher -----------------------------------------------
     # How many transcode containers may run in parallel. A 1080p HandBrake
     # transcode pegs every CPU core, so the default is conservative; bump it
     # on a many-core host. Counted live against `transcode_tasks WHERE status
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     # "Rip from ISO" is not configured.
     ARM_HOST_ISO_LIBRARY_PATH: str = ""
 
-    # Drive scanner roots (spec §2). /sys is the container's own sysfs mount
+    # Drive scanner roots. /sys is the container's own sysfs mount
     # (host-wide); /host-disk is the read-only bind of the host's /dev/disk —
     # symlink directories only, never device nodes.
     ARM_SYSFS_ROOT: str = "/sys"
@@ -168,7 +168,7 @@ class Settings(BaseSettings):
     # gates whether that toggle may be switched on at all.
     ARM_TRANSCODE_CAPABLE: bool = True
 
-    # --- Drive lifecycle Plan 3: ripper manager (spec §3) --------------------
+    # --- Ripper manager ------------------------------------------------------
     # Image for the durable per-drive ripper containers the backend creates on
     # enroll. Defaults like ARM_TRANSCODE_IMAGE: built locally by compose (the
     # arm-ripper service is deploy.replicas:0 — built, never run).
@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     # and this must name the local one. Empty = same as ARM_HOST_CERTS_PATH.
     ARM_RIPPER_CERTS_PATH: str = ""
 
-    # --- Phase 7b: GPU inventory --------------------------------------------
+    # --- GPU inventory ------------------------------------------------------
     # JSON array of GPUs detected host-side at install time (`armctl install` /
     # `devtools/setup-dev.sh`, both via deploy/lib/detect.sh, enumerate /dev/dri
     # + nvidia-smi and write this). The backend
