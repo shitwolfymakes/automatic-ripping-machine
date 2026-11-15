@@ -87,6 +87,25 @@ def test_slim_color_range_and_hdr_labels(hb_schema):
     assert hdr["off"] == "Off"
 
 
+def test_slim_picker_keys_are_selects_with_labels(hb_schema):
+    for name, values in (
+        ("VideoScaler", ("swscale", "zscale")),
+        ("PictureModulus", (2, 4, 8, 16)),
+        ("VideoColorMatrixCodeOverride", (0, 1, 2, 3, 4)),
+        ("PicturePadColor", ("black", "white", "gray", "red", "green", "blue")),
+    ):
+        key = _key(hb_schema, name)
+        assert (key.source.kind, key.source.ref) == ("static", name)
+        assert tuple(slim_view(hb_schema).static_enums[name]) == values
+    assert _key(hb_schema, "VideoScaler").option_labels == {
+        "swscale": "Software scaler (swscale)",
+        "zscale": "zimg (zscale)",
+    }
+    assert _key(hb_schema, "VideoColorMatrixCodeOverride").option_labels["0"] == "No override"
+    assert _key(hb_schema, "PicturePadColor").option_labels["gray"] == "Gray"
+    assert _key(hb_schema, "PictureModulus").option_labels is None
+
+
 def test_slim_key_without_labels_is_none(hb_schema):
     assert _key(hb_schema, "PictureWidth").option_labels is None
 

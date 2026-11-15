@@ -16,6 +16,7 @@ from arm_common.handbrake_schema.effective import UnknownBasePreset, base_preset
 from arm_common.handbrake_schema.overlay import (
     ARM_OWNED_KEYS,
     ENCODER_SPECIFIC_KEYS,
+    OPEN_ENUMS,
     SELECTOR_FILTER_ALIASES,
     SOURCE_EXTRAS,
     STATIC_ENUMS,
@@ -123,7 +124,7 @@ def _allowed_values(target: _Target) -> tuple[Any, ...] | None:
 
 def _check_source(target: _Target) -> SettingIssue | None:
     allowed = _allowed_values(target)
-    if allowed is None:
+    if allowed is None or (target.spec.name in OPEN_ENUMS and isinstance(target.value, str)):
         return None
     values = target.value if isinstance(target.value, list) else [target.value]
     for value in values:

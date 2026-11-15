@@ -81,7 +81,15 @@ STATIC_ENUMS: dict[str, tuple[Any, ...]] = {
     "VideoFramerateMode": ("vfr", "cfr", "pfr"),
     "VideoPasshtruHDRDynamicMetadata": ("all", "off", "hdr10plus", "dolbyvision"),
     "VideoQualityType": (1, 2),  # average bitrate, constant quality
+    "VideoScaler": ("swscale", "zscale"),
+    "PictureModulus": (2, 4, 8, 16),
+    "VideoColorMatrixCodeOverride": (0, 1, 2, 3, 4),  # codes libhb/preset.c maps to a primaries/transfer/matrix set
+    "PicturePadColor": ("black", "white", "gray", "red", "green", "blue"),  # a few of libhb's X11 colour names
 }
+
+# Enum keys whose list only suggests values: the validator also accepts any other string (a further colour name
+# or a hex code), because libhb resolves those itself.
+OPEN_ENUMS: frozenset[str] = frozenset({"PicturePadColor"})
 
 # Display labels for enum values, keyed by str(value). Values without a label fall back to the raw value in the UI.
 OPTION_LABELS: dict[str, dict[str, str]] = {
@@ -101,6 +109,22 @@ OPTION_LABELS: dict[str, dict[str, str]] = {
         "fill": "Fill",
         "letterbox": "Letterbox",
         "pillarbox": "Pillarbox",
+    },
+    "VideoScaler": {"swscale": "Software scaler (swscale)", "zscale": "zimg (zscale)"},
+    "VideoColorMatrixCodeOverride": {
+        "0": "No override",
+        "1": "BT.601 NTSC (SD)",
+        "2": "BT.601 PAL (SD)",
+        "3": "BT.709 (HD)",
+        "4": "BT.2020 (UHD)",
+    },
+    "PicturePadColor": {
+        "black": "Black",
+        "white": "White",
+        "gray": "Gray",
+        "red": "Red",
+        "green": "Green",
+        "blue": "Blue",
     },
     "PictureCropMode": {"0": "Automatic", "1": "Loose", "2": "None", "3": "Custom"},
     "SubtitleBurnBehavior": {
@@ -204,8 +228,8 @@ KEY_OVERLAY: dict[str, KeyOverlay] = {
         ("PictureUseMaximumSize", "Use the maximum size"),
         ("PictureAllowUpscaling", "Allow upscaling"),
         ("PictureKeepRatio", "Keep aspect ratio"),
-        ("PictureModulus", "Storage alignment (modulus)"),
-        ("VideoScaler", "Scaler"),
+        ("PictureModulus", "Storage alignment (modulus)", _enum("PictureModulus")),
+        ("VideoScaler", "Scaler", _enum("VideoScaler")),
     ),
     **_rows(
         "dimensions",
@@ -230,7 +254,7 @@ KEY_OVERLAY: dict[str, KeyOverlay] = {
         "dimensions",
         "Padding",
         ("PicturePadMode", "Padding mode", _enum("PicturePadMode")),
-        ("PicturePadColor", "Padding color"),
+        ("PicturePadColor", "Padding color", _enum("PicturePadColor")),
         ("PicturePadTop", "Top padding"),
         ("PicturePadBottom", "Bottom padding"),
         ("PicturePadLeft", "Left padding"),
@@ -329,7 +353,7 @@ KEY_OVERLAY: dict[str, KeyOverlay] = {
         "video",
         "Color",
         ("VideoColorRange", "Color range", _enum("VideoColorRange")),
-        ("VideoColorMatrixCodeOverride", "Color matrix override"),
+        ("VideoColorMatrixCodeOverride", "Color matrix override", _enum("VideoColorMatrixCodeOverride")),
         (
             "VideoPasshtruHDRDynamicMetadata",
             "HDR dynamic metadata",

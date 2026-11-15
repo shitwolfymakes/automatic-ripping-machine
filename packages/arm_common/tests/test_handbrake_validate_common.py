@@ -110,6 +110,19 @@ def test_source_extras_are_accepted(hb_schema):
     ]
 
 
+def test_open_enum_accepts_any_string_but_not_other_types(hb_schema):
+    assert check(hb_schema, {"PicturePadColor": "white"}) == []
+    assert check(hb_schema, {"PicturePadColor": "#ff00ff"}) == []
+    assert check(hb_schema, {"PicturePadColor": "navy"}) == []
+    assert check(hb_schema, {"PicturePadColor": 5}) == [("PicturePadColor", "wrong_type")]
+
+
+def test_closed_enum_still_rejects_unknown_values(hb_schema):
+    assert check(hb_schema, {"VideoScaler": "bogus"}) == [("VideoScaler", "not_in_list")]
+    assert check(hb_schema, {"PictureModulus": 3}) == [("PictureModulus", "not_in_list")]
+    assert check(hb_schema, {"VideoColorMatrixCodeOverride": 9}) == [("VideoColorMatrixCodeOverride", "not_in_list")]
+
+
 def test_filter_tune_follows_filter_after_base(hb_schema):
     schema = replace(hb_schema, builtin_presets={"Base": {"PictureSharpenFilter": "unsharp"}})
     lapsharp_only = next(t for t in hb_schema.filters["lapsharp"].tunes if t not in hb_schema.filters["unsharp"].tunes)
