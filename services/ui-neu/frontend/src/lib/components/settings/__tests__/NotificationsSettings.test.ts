@@ -57,4 +57,14 @@ describe('NotificationsSettings', () => {
 		await fireEvent.click(master());
 		expect(ontoggle).toHaveBeenCalledWith(false);
 	});
+
+	it('labels the switch and links it to the notifications settings help', () => {
+		renderComponent(NotificationsSettings, { enabled: false, ontoggle: vi.fn() });
+		expect(document.querySelector('label[for="notifications-enabled"]')).toHaveTextContent('Enable notifications');
+		expect(master()).toHaveAttribute('id', 'notifications-enabled');
+		expect(screen.getByRole('link', { name: 'Docs for Enable notifications' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#notifications'
+		);
+	});
 });

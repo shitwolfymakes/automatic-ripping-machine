@@ -26,4 +26,20 @@ describe('InterfaceSettings', () => {
 		expect(get(uiPrefs).dashboardView).toBe('table');
 		expect(screen.getByRole('radio', { name: /table/i })).toHaveAttribute('aria-checked', 'true');
 	});
+
+	it('selects the card layout back', async () => {
+		setUiPref('dashboardView', 'table');
+		renderComponent(InterfaceSettings);
+		await fireEvent.click(screen.getByRole('radio', { name: /cards/i }));
+		expect(get(uiPrefs).dashboardView).toBe('card');
+	});
+
+	it('links the dashboard layout to the ARM help and shows no link for resource stats', () => {
+		renderComponent(InterfaceSettings);
+		expect(screen.getByRole('link', { name: 'Docs for Default dashboard layout' })).toHaveAttribute(
+			'href',
+			'/help/guide/web-ui#dashboard'
+		);
+		expect(screen.queryByRole('link', { name: 'Docs for Resource stats' })).toBeNull();
+	});
 });

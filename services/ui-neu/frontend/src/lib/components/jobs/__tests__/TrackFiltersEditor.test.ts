@@ -107,4 +107,12 @@ describe('TrackFiltersEditor', () => {
 			title_indices: [2]
 		});
 	});
+
+	it('labels each input by name', () => {
+		renderComponent(TrackFiltersEditor, { props: { value: baseValue, onchange: vi.fn() } });
+		expect(screen.getByLabelText('Min duration (seconds)')).toBe(screen.getByTestId('tf-min-duration'));
+		expect(screen.getByLabelText('Max duration (seconds)')).toBe(screen.getByTestId('tf-max-duration'));
+		expect(screen.getByLabelText('Title indices (allowlist)')).toBe(screen.getByTestId('tf-allowlist'));
+		expect(screen.getByLabelText('Title indices (blocklist)')).toBe(screen.getByTestId('tf-blocklist'));
+	});
 });

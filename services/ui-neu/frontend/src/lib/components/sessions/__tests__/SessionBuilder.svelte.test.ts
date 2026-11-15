@@ -32,9 +32,9 @@ it('Save with nothing filled in makes no call, marks every required field and fo
 	expect(name).toHaveAttribute('aria-invalid', 'true');
 	expect(name).toHaveAttribute('aria-describedby', 'sb-name-error');
 	expect(document.getElementById('sb-name-error')).toHaveTextContent('Name is required');
-	expect(screen.getByLabelText(/rip preset/i)).toHaveAttribute('aria-invalid', 'true');
+	expect(screen.getByLabelText(/^rip preset/i)).toHaveAttribute('aria-invalid', 'true');
 	expect(document.getElementById('sb-rip-error')).toHaveTextContent('Choose a rip preset');
-	const path = screen.getByLabelText(/output path/i);
+	const path = screen.getByLabelText(/^output path/i);
 	expect(path).toHaveAttribute('aria-invalid', 'true');
 	expect(path).toHaveAttribute('aria-describedby', 'sb-path-error');
 	expect(document.getElementById('sb-path-error')).toHaveTextContent('Output path is required');
@@ -44,23 +44,23 @@ it('focuses the first invalid field in form order, and clears each mark once fil
 	renderComponent(SessionBuilder, props());
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
 	await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-	const rip = screen.getByLabelText(/rip preset/i);
+	const rip = screen.getByLabelText(/^rip preset/i);
 	await waitFor(() => expect(document.activeElement).toBe(rip));
 	expect(screen.getByLabelText(/session name/i)).not.toHaveAttribute('aria-invalid');
 	expect(screen.queryByText('Name is required')).toBeNull();
 
 	// movie is default media type; pick rip preset r1
 	await fireEvent.change(rip, { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
+	await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'movies/{title}.{ext}' } });
 	expect(rip).not.toHaveAttribute('aria-invalid');
-	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-invalid');
-	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-describedby');
+	expect(screen.getByLabelText(/^output path/i)).not.toHaveAttribute('aria-invalid');
+	expect(screen.getByLabelText(/^output path/i)).not.toHaveAttribute('aria-describedby');
 	expect(document.querySelector('.field-error')).toBeNull();
 });
 
 it('rip preset dropdown only lists presets of the chosen media type', async () => {
 	renderComponent(SessionBuilder, props());
-	const sel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+	const sel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 	const opts = Array.from(sel.options).map((o) => o.textContent);
 	expect(opts.join()).toMatch(/rip r1/); // movie
 	expect(opts.join()).not.toMatch(/rip r2/); // tv, filtered out
@@ -68,9 +68,9 @@ it('rip preset dropdown only lists presets of the chosen media type', async () =
 
 it('switching media type clears the rip selection', async () => {
 	renderComponent(SessionBuilder, props());
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: 'r1' } });
 	await fireEvent.click(screen.getByRole('button', { name: /^TV$/ }));
-	expect((screen.getByLabelText(/rip preset/i) as HTMLSelectElement).value).toBe('');
+	expect((screen.getByLabelText(/^rip preset/i) as HTMLSelectElement).value).toBe('');
 });
 
 it('submits createSession with the assembled body', async () => {
@@ -78,8 +78,8 @@ it('submits createSession with the assembled body', async () => {
 	const onsaved = vi.fn();
 	renderComponent(SessionBuilder, props({ onsaved }));
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
+	await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'movies/{title}.{ext}' } });
 	await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 	await waitFor(() =>
 		expect(createSession).toHaveBeenCalledWith(
@@ -98,7 +98,7 @@ it('submits createSession with the assembled body', async () => {
 it('selecting "+ Create new rip preset..." fires oncreaterip and reverts select', async () => {
 	const oncreaterip = vi.fn();
 	renderComponent(SessionBuilder, props({ oncreaterip }));
-	const sel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+	const sel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 	await fireEvent.change(sel, { target: { value: '__create_rip__' } });
 	expect(oncreaterip).toHaveBeenCalledOnce();
 });
@@ -106,7 +106,7 @@ it('selecting "+ Create new rip preset..." fires oncreaterip and reverts select'
 it('selecting "+ Create new transcode preset..." fires oncreatetranscode', async () => {
 	const oncreatetranscode = vi.fn();
 	renderComponent(SessionBuilder, props({ oncreatetranscode }));
-	const sel = screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
+	const sel = screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement;
 	await fireEvent.change(sel, { target: { value: '__create_tc__' } });
 	expect(oncreatetranscode).toHaveBeenCalledOnce();
 });
@@ -137,4 +137,15 @@ it('a built-in session offers Close and no save button', () => {
 	renderComponent(SessionBuilder, props({ session: { id: 's', name: 'b', media_type: 'movie', is_builtin: true } }));
 	expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
 	expect(screen.queryByRole('button', { name: /^save/i })).toBeNull();
+});
+
+it('labels every field by name and links the output path to its tokens help', () => {
+	renderComponent(SessionBuilder, props());
+	expect(screen.getByLabelText('Transcode preset')).toHaveAttribute('id', 'sb-tc');
+	expect(screen.getByLabelText('Overrides JSON')).toHaveAttribute('id', 'sb-overrides');
+	expect(screen.getByRole('link', { name: 'Docs for Output path' })).toHaveAttribute(
+		'href',
+		'/help/guide/web-ui#output-path-tokens'
+	);
+	expect(screen.queryByRole('link', { name: 'Docs for Session name' })).toBeNull();
 });

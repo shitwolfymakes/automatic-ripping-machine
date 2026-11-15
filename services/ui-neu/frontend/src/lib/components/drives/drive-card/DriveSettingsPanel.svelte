@@ -4,6 +4,7 @@
 	import type { DriveView as Drive, SessionView } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import {
+		FIELD_IDS,
 		numberInputText,
 		parsePrescanInput,
 		parseRipSpeed,
@@ -13,6 +14,7 @@
 		type PrescanKey
 	} from '$lib/drives/settings';
 	import SlideOver from '../../shared/SlideOver.svelte';
+	import FieldLabel from '../../shared/FieldLabel.svelte';
 
 	interface Props {
 		/** The drive whose settings the panel edits. */
@@ -110,7 +112,7 @@
 <SlideOver bind:open title="{drive.display_name || drive.device_path || 'Drive'} settings" width="max-w-md">
 	<div class="flex flex-col gap-5 drive-card-settings-body">
 		<div class="field">
-			<label for="default-session-{drive.id}" class="field-label">Default session</label>
+			<FieldLabel for="default-session-{drive.id}" label="Default session" docsId={FIELD_IDS.default_session} />
 			<select
 				id="default-session-{drive.id}"
 				data-testid="drive-default-session"
@@ -131,7 +133,7 @@
 
 		<div class="field">
 			<div class="flex items-center justify-between gap-2">
-				<label for="rip-speed-{drive.id}" class="field-label">Rip Speed</label>
+				<FieldLabel for="rip-speed-{drive.id}" label="Rip Speed" docsId={FIELD_IDS.rip_speed} />
 				<input
 					id="rip-speed-{drive.id}"
 					type="number"
@@ -152,9 +154,9 @@
 			{#each PRESCAN_FIELDS as field (field.key)}
 				<div class="field">
 					<div class="flex items-center justify-between gap-2">
-						<label for="prescan-{field.key}-{drive.id}" class="field-label">
-							{field.label}{#if field.unit}&nbsp;<span class="drive-card-unit">({field.unit})</span>{/if}
-						</label>
+						<FieldLabel for="prescan-{field.key}-{drive.id}" label={field.label} docsId={FIELD_IDS[field.key]}>
+							{#if field.unit}<span class="drive-card-unit">({field.unit})</span>{/if}
+						</FieldLabel>
 						<input
 							id="prescan-{field.key}-{drive.id}"
 							type="number"

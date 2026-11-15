@@ -5,6 +5,8 @@
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import { connectionLabel, driveTitle, isRipping, mediaLabel } from '$lib/drives/drives';
+	import { FIELD_IDS } from '$lib/drives/settings';
+	import FieldLabel from '../../shared/FieldLabel.svelte';
 	import StatusStrip from '../../shared/StatusStrip.svelte';
 	import Glyph from '../../shared/Glyph.svelte';
 
@@ -83,9 +85,9 @@
 		<StatusStrip tone="busy" title="Starting ripper..." detail="Usually under 10 seconds" progress />
 	{/if}
 	<div class="field">
-		<label class="field-label" for="drive-name-{drive.id}"
-			>Friendly name <span class="drive-card-essentials-optional">(optional)</span></label
-		>
+		<FieldLabel for="drive-name-{drive.id}" label="Friendly name" docsId={FIELD_IDS.name}>
+			<span class="drive-card-essentials-optional">(optional)</span>
+		</FieldLabel>
 		<input
 			id="drive-name-{drive.id}"
 			class="field-control"

@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import { encoderGroups } from '$lib/transcode/encoder-groups';
-	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panel-view';
+	import { FIELD_IDS, PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panel-view';
 	import { CLEARED_NOTE } from '$lib/handbrake/display';
 	import { isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/draft';
 	import { presetBlockMessages } from '$lib/handbrake/issue-placement';
@@ -74,7 +74,7 @@
 
 <div class="preset-block">
 	<div class="field preset-block-wide">
-		<label class="field-label" for={PRESET_NAME_ID}>Name</label>
+		<FieldLabel for={PRESET_NAME_ID} label="Name" docsId={FIELD_IDS.name} />
 		<input
 			id={PRESET_NAME_ID}
 			data-testid="tp-name"
@@ -88,7 +88,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-media-type">Media type</label>
+		<FieldLabel for="tp-media-type" label="Media type" docsId={FIELD_IDS.media_type} />
 		<select
 			id="tp-media-type"
 			data-testid="tp-media-type"
@@ -107,7 +107,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-tool">Tool</label>
+		<FieldLabel for="tp-tool" label="Tool" docsId={FIELD_IDS.tool} />
 		<select
 			id="tp-tool"
 			data-testid="tp-tool"
@@ -124,7 +124,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-container">Container</label>
+		<FieldLabel for="tp-container" label="Container" docsId={FIELD_IDS.container} />
 		<select
 			id="tp-container"
 			data-testid="tp-container"
@@ -149,7 +149,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-encoder">Encoder</label>
+		<FieldLabel for="tp-encoder" label="Encoder" docsId={FIELD_IDS.encoder} />
 		<select
 			id="tp-encoder"
 			data-testid="tp-encoder"
@@ -219,7 +219,11 @@
 	{/if}
 
 	<div class="field">
-		<label class="field-label" for="tp-extra-args">{view.extraArgsLabel}</label>
+		<FieldLabel
+			for="tp-extra-args"
+			label={view.extraArgsLabel}
+			docsId={view.showCliDocLink ? FIELD_IDS.extra_args : undefined}
+		/>
 		<input
 			id="tp-extra-args"
 			data-testid="tp-extra-args"
@@ -242,11 +246,7 @@
 
 <!-- HandBrake's official presets explain the base preset; other tools have no such list. -->
 {#snippet refLabel(text: string)}
-	<FieldLabel
-		for={REF_ID}
-		label={text}
-		docsId={view.showPresetsDocLink ? 'form.transcode_preset.preset_ref' : undefined}
-	/>
+	<FieldLabel for={REF_ID} label={text} docsId={view.showPresetsDocLink ? FIELD_IDS.preset_ref : undefined} />
 {/snippet}
 
 {#snippet refNotes()}

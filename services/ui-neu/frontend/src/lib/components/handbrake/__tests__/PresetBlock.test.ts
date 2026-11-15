@@ -128,7 +128,32 @@ describe('fields', () => {
 		expect(screen.getByRole('link', { name: 'Docs for Preset ref' })).toBeInTheDocument();
 		cleanup();
 		mount({ tool: 'abcde' });
-		expect(screen.queryByRole('link', { name: /^Docs for/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: /^Docs for (Base preset|Preset ref)$/ })).not.toBeInTheDocument();
+	});
+
+	it("links extra args to HandBrake's command line reference only when HandBrake runs the preset", () => {
+		mount();
+		const link = screen.getByRole('link', { name: 'Docs for Extra args' });
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/cli/command-line-reference.html');
+		expect(link).toHaveAttribute('data-field-id', 'form.transcode_preset.extra_args');
+		cleanup();
+		mount({ tool: 'abcde' });
+		expect(screen.queryByRole('link', { name: 'Docs for Extra args' })).not.toBeInTheDocument();
+		cleanup();
+		mount({ encoder: 'vaapi_h264' });
+		expect(screen.queryByRole('link', { name: 'Docs for ffmpeg arguments' })).not.toBeInTheDocument();
+	});
+
+	it('links the tool and the encoder to the ARM help', () => {
+		mount();
+		expect(screen.getByRole('link', { name: 'Docs for Tool' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip-presets-transcode-presets-and-sessions'
+		);
+		expect(screen.getByRole('link', { name: 'Docs for Encoder' })).toHaveAttribute(
+			'href',
+			'/help/guide/hardware-transcoding#the-encoder-catalog'
+		);
 	});
 
 	it('notes that extra args win over the settings while the tabs show', () => {
