@@ -151,12 +151,10 @@ class Settings(BaseSettings):
     # (no NAT hairpin, split DNS).
     ARM_TRANSCODE_BACKEND_URL_CHECK: Literal["hold", "warn"] = "hold"
 
-    # PUID/PGID the spawned transcoder drops to (the entrypoint reads these;
-    # empty = its own default, current behavior unchanged). Set these when the
-    # transcoder writes to shared storage owned by a uid/gid that differs from
-    # the backend's PUID — e.g. a remote NFS export whose media dir is owned by
-    # a specific NAS user. Without this the entrypoint chowns /media to its
-    # default uid every run, which can revert externally-set ownership.
+    # PUID/PGID the spawned transcoder drops to instead of the stack's
+    # PUID/PGID (empty = use those). Set these when the transcoder writes to
+    # shared storage owned by a uid/gid that differs from the backend's PUID,
+    # e.g. a remote NFS export whose media dir is owned by a specific NAS user.
     ARM_TRANSCODE_PUID: str = ""
     ARM_TRANSCODE_PGID: str = ""
 

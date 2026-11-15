@@ -19,13 +19,16 @@ logger = logging.getLogger(__name__)
 
 def container_identity_env(settings: Settings, gpu_vendor: GpuVendor | None) -> dict[str, str]:
     env: dict[str, str] = {}
-    # Override the drop uid/gid so the transcoder writes /media as the
-    # owner of the (possibly remote) media export, instead of the
-    # entrypoint's default uid. Empty settings leave the default in place.
-    if settings.ARM_TRANSCODE_PUID:
-        env["PUID"] = settings.ARM_TRANSCODE_PUID
-    if settings.ARM_TRANSCODE_PGID:
-        env["PGID"] = settings.ARM_TRANSCODE_PGID
+    # The transcoder writes the same raw/logs/media dirs as every other
+    # service, so it drops to the stack's PUID/PGID. ARM_TRANSCODE_PUID/PGID
+    # override that, e.g. for a remote media export owned by a NAS user.
+    # Nothing set at all leaves the entrypoint's default in place.
+    puid = settings.ARM_TRANSCODE_PUID or settings.PUID
+    pgid = settings.ARM_TRANSCODE_PGID or settings.PGID
+    if puid:
+        env["PUID"] = puid
+    if pgid:
+        env["PGID"] = pgid
     # VAAPI/QSV: the entrypoint self-derives the render gid from the
     # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
     # (passed through as RENDER_GID, which wins in the entrypoint).
