@@ -120,8 +120,9 @@ describe('presetSidebarView', () => {
 		expect(presetSidebarView(input())).toMatchObject({ showImport: false, showFooter: true, importDisabled: false });
 	});
 
-	it('disables import on a read-only preset', () => {
-		expect(presetSidebarView(input({ mode: 'view' })).importDisabled).toBe(true);
+	it('hides the import button on a read-only preset', () => {
+		expect(presetSidebarView(input({ mode: 'view' })).showImportButton).toBe(false);
+		expect(presetSidebarView(input({ mode: 'edit' })).showImportButton).toBe(true);
 	});
 
 	it('offers Clone only on a read-only preset it can clone', () => {

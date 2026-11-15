@@ -46,12 +46,14 @@
 								{#if view.pill?.kind === 'media'}
 									<MediaPill mediaType={view.pill.tone as MediaType} />
 								{:else if view.pill}
-									<span class="badge badge-sm data-table-tag" data-tone={view.pill.tone}>{view.pill.text}</span>
+									<span class="badge badge-sm data-table-tag" data-tone={view.pill.tone} title={view.pill.text}
+										>{view.pill.text}</span
+									>
 								{:else}
 									<span class={view.textClass} title={view.title}>{view.text}</span>
 								{/if}
 								{#each view.badges ?? [] as badge (badge.text)}
-									<span class={BADGE_CLASS[badge.tone]}>{badge.text}</span>
+									<span class={BADGE_CLASS[badge.tone]} title={badge.text}>{badge.text}</span>
 								{/each}
 							</div>
 							{#if view.sub}<div class="data-table-sub" title={view.sub}>{view.sub}</div>{/if}

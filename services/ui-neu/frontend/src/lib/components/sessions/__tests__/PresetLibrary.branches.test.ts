@@ -326,4 +326,15 @@ describe('PresetLibrary table', () => {
 		expect(within(rowOf('Music Transcode')).getByText('Needs review')).toBeInTheDocument();
 		expect(within(rowOf('H.265 MKV')).queryByText('Needs review')).not.toBeInTheDocument();
 	});
+
+	it('gives truncatable, pill and badge cells their full text as a title', () => {
+		const [first, second, third] = defaultProps().transcodePresets;
+		const flagged = { ...third, issues: [{ key: 'k', code: 'unknown_key' as const, message: 'm' }] };
+		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode', transcodePresets: [first, second, flagged] }));
+		const row = within(rowOf('Music Transcode'));
+		expect(row.getByText('Music Transcode')).toHaveAttribute('title', 'Music Transcode');
+		expect(row.getByText('Needs review')).toHaveAttribute('title', 'Needs review');
+		expect(row.getByText('Music')).toHaveAttribute('title', 'Music');
+		expect(row.getByText('Custom')).toHaveAttribute('title', 'Custom');
+	});
 });

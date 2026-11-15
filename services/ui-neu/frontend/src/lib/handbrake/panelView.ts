@@ -103,6 +103,7 @@ export interface PresetSidebarView {
 	showImport: boolean;
 	showFooter: boolean;
 	showClone: boolean;
+	showImportButton: boolean;
 	importDisabled: boolean;
 	failure: SaveFailure | null;
 	showRetry: boolean;
@@ -123,7 +124,8 @@ export function presetSidebarView(input: PresetSidebarInput): PresetSidebarView 
 		showImport: input.importing,
 		showFooter: !input.importing,
 		showClone: readonly && input.cloneAvailable,
-		importDisabled: readonly || input.importing,
+		showImportButton: !readonly,
+		importDisabled: input.importing,
 		failure: input.failure,
 		showRetry: input.failure?.schemaMissing === true,
 		showUnplaced: input.unplacedCount > 0,

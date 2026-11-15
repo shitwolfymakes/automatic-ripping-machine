@@ -53,7 +53,7 @@ async function paste(text: string) {
 }
 
 async function readFile() {
-	await fireEvent.click(screen.getByRole('button', { name: 'Read file' }));
+	await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 }
 
 afterEach(() => {
@@ -80,9 +80,9 @@ describe('step 1', () => {
 		expect(screen.queryByText(/is checked against HandBrake/)).toBeNull();
 	});
 
-	it('disables Read file while the text is empty', async () => {
+	it('disables Import while the text is empty', async () => {
 		mount();
-		const button = screen.getByRole('button', { name: 'Read file' });
+		const button = screen.getByRole('button', { name: 'Import' });
 		expect(button).toBeDisabled();
 		await paste('{}');
 		expect(button).toBeEnabled();
@@ -106,12 +106,12 @@ describe('step 1', () => {
 		expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the file');
 	});
 
-	it('disables Read file while the request is in flight', async () => {
+	it('disables Import while the request is in flight', async () => {
 		vi.mocked(parseHandbrakeImport).mockReturnValue(new Promise(() => {}));
 		mount();
 		await paste('x');
 		await readFile();
-		expect(await screen.findByRole('button', { name: 'Reading...' })).toBeDisabled();
+		expect(await screen.findByRole('button', { name: 'Importing...' })).toBeDisabled();
 	});
 
 	it('loads a chosen file into the text box', async () => {

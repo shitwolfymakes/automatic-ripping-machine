@@ -118,9 +118,9 @@ describe('header', () => {
 		expect(await screen.findByRole('dialog', { name: title })).toBeInTheDocument();
 	});
 
-	it('offers Import HandBrake preset, disabled in view mode', () => {
+	it('offers no Import HandBrake preset in view mode', () => {
 		mount({ mode: 'view', preset: preset() });
-		expect(screen.getByRole('button', { name: 'Import HandBrake preset' })).toBeDisabled();
+		expect(screen.queryByRole('button', { name: 'Import HandBrake preset' })).not.toBeInTheDocument();
 	});
 
 	it('Close and Cancel call onclose', async () => {
@@ -650,7 +650,7 @@ describe('import', () => {
 		vi.mocked(createTranscodePreset).mockResolvedValue(preset());
 		const { onsaved } = mount({});
 		await openImport();
-		await fireEvent.click(screen.getByRole('button', { name: 'Read file' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 		await fireEvent.click(await screen.findByRole('button', { name: 'Use these settings' }));
 		expect(await screen.findByRole('tablist')).toBeInTheDocument();
 		expect(screen.getByLabelText('Name')).toHaveValue('Custom_Plex_720p');

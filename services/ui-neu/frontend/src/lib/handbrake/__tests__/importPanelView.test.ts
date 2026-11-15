@@ -13,13 +13,13 @@ function view(over: Partial<Parameters<typeof importPanelView>[0]> = {}) {
 }
 
 describe('importPanelView step 1', () => {
-	it('is step 1 with the version line and Read file enabled', () => {
+	it('is step 1 with the version line and Import enabled', () => {
 		expect(view()).toMatchObject({
 			step: 1,
 			showVersionLine: true,
 			versionTag: '1.9.0',
 			canRead: true,
-			readLabel: 'Read file',
+			readLabel: 'Import',
 			showPicks: false,
 			showSingleReason: false,
 			singleReason: ''
@@ -35,7 +35,7 @@ describe('importPanelView step 1', () => {
 	});
 
 	it('cannot read while loading, and says so', () => {
-		expect(view({ loading: true })).toMatchObject({ canRead: false, readLabel: 'Reading...' });
+		expect(view({ loading: true })).toMatchObject({ canRead: false, readLabel: 'Importing...' });
 	});
 });
 

@@ -167,9 +167,11 @@
 		{#if view.showClone}
 			<button type="button" class="btn btn-sm" onclick={cloneAction}>Clone</button>
 		{/if}
-		<button type="button" class="btn btn-sm" disabled={view.importDisabled} onclick={() => (importing = true)}
-			>Import HandBrake preset</button
-		>
+		{#if view.showImportButton}
+			<button type="button" class="btn btn-sm" disabled={view.importDisabled} onclick={() => (importing = true)}
+				>Import HandBrake preset</button
+			>
+		{/if}
 	{/snippet}
 
 	{#if view.showImport}

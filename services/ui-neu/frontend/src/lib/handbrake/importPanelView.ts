@@ -42,7 +42,7 @@ export function importPanelView(input: ImportPanelInput): ImportPanelView {
 		showVersionLine: schema !== null,
 		versionTag: schema?.handbrake_tag ?? '',
 		canRead: text.trim() !== '' && !loading,
-		readLabel: loading ? 'Reading...' : 'Read file',
+		readLabel: loading ? 'Importing...' : 'Import',
 		showPicks: reviewing && presets.length > 1,
 		showSingleReason,
 		singleReason: showSingleReason ? (presets[0]?.reason ?? '') : '',

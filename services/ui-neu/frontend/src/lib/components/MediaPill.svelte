@@ -13,7 +13,7 @@
 	let { mediaType }: Props = $props();
 </script>
 
-<span class="badge badge-sm media-pill" data-media={mediaType}>
+<span class="badge badge-sm media-pill" data-media={mediaType} title={humanizeMediaType(mediaType)}>
 	{humanizeMediaType(mediaType)}
 </span>
 
