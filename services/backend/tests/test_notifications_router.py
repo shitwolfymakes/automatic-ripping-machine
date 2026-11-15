@@ -45,6 +45,7 @@ def _fake_catalog(monkeypatch):
                 "id": "discord",
                 "name": "Discord",
                 "docs_url": "",
+                "setup_url": "https://appriseit.com/services/discord/",
                 "url_scheme": "discord",
                 "required_fields": [
                     {"key": "webhook_id", "label": "Webhook ID", "type": "string", "private": True, "required": True},

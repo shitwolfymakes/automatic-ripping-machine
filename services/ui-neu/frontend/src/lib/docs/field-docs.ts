@@ -21,9 +21,17 @@ export function docsLinkFor(id: string, fallbackId?: string): DocsLink | null {
 	return isLink(fallback) ? fallback : null;
 }
 
-// The link for one HandBrake setting: its own entry when it has one, else its group's.
-export function handbrakeKeyDocs(tab: string, group: string, name: string): DocsLink | null {
-	return docsLinkFor(`handbrake.key.${name}`, `handbrake.group.${tab}.${group}`);
+// Whether any entry's id starts with `prefix` (a notification service's `notify.<id>.`).
+export function hasFieldDocs(prefix: string): boolean {
+	return Object.keys(FIELDS).some((id) => id.startsWith(prefix));
+}
+
+// The registry ids for one HandBrake setting: its own entry, with its group's as the fallback.
+export function handbrakeDocsIds(key: { tab: string; group: string; name: string }): {
+	id: string;
+	fallbackId: string;
+} {
+	return { id: `handbrake.key.${key.name}`, fallbackId: `handbrake.group.${key.tab}.${key.group}` };
 }
 
 // Encoder family ids start with the hardware family (nvenc_h264, qsv_av1, vce_h265);
@@ -34,9 +42,9 @@ const FAMILY_PREFIXES: Array<[RegExp, string]> = [
 	[/^(vce|vcn)/, 'vcn']
 ];
 
-export function familyDocs(family: string): DocsLink | null {
+export function familyDocsId(family: string): string {
 	const name = FAMILY_PREFIXES.find(([prefix]) => prefix.test(family))?.[1] ?? 'default';
-	return docsLinkFor(`handbrake.family.${name}`);
+	return `handbrake.family.${name}`;
 }
 
 // The anchor the docs site gives a heading (github-slugger): lowercase, drop

@@ -54,4 +54,14 @@ describe('FieldDocsLink', () => {
 		renderComponent(FieldDocsLink, { props: { id: 'handbrake.group.video.Color', label: 'X', link: null } });
 		expect(screen.queryByRole('link')).toBeNull();
 	});
+
+	it('takes a title from the caller in place of the default', () => {
+		renderComponent(FieldDocsLink, {
+			props: { id: 'handbrake.group.dimensions.Size', label: 'Width', title: 'HandBrake key: PictureWidth' }
+		});
+		expect(screen.getByRole('link', { name: 'Docs for Width' })).toHaveAttribute(
+			'title',
+			'HandBrake key: PictureWidth'
+		);
+	});
 });

@@ -36,6 +36,7 @@ function appriseService(
 		id: 'discord',
 		name: 'Discord',
 		docs_url: '',
+		setup_url: '',
 		url_scheme: 'discord',
 		required_fields: over.required_fields ?? [],
 		advanced_fields: over.advanced_fields ?? []
@@ -255,5 +256,71 @@ describe('ConfigureSection bash', () => {
 		const select = screen.getByLabelText('Script') as HTMLSelectElement;
 		expect(select.value).toBe('gone.sh');
 		expect(select.options[1].textContent).toContain('missing');
+	});
+});
+
+describe('ConfigureSection docs links', () => {
+	afterEach(() => cleanup());
+
+	const fields = {
+		required_fields: [
+			{ key: 'webhook_id', label: 'Webhook ID', type: 'string' as const, private: true, required: true }
+		],
+		advanced_fields: [
+			{ key: 'thread', label: 'Thread ID', type: 'string' as const, private: false, required: false },
+			{ key: 'tts', label: 'Text To Speech', type: 'bool' as const, private: false, required: false }
+		]
+	};
+
+	it('links each field of a featured service to its own docs, with no service-wide link', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'apprise' as const, name: '', enabled: true, config: {}, service: appriseService(fields) }
+		});
+		const ids = screen.getAllByRole('link', { name: /^Docs for/ }).map((a) => a.getAttribute('data-field-id'));
+		expect(ids).toEqual(['notify.discord.webhook_id', 'notify.discord.thread', 'notify.discord.tts']);
+		expect(screen.getByRole('link', { name: 'Docs for Webhook ID *' })).toHaveAttribute(
+			'href',
+			'https://appriseit.com/services/discord/#parameter-breakdown'
+		);
+		expect(screen.queryByRole('link', { name: 'Docs for Discord' })).toBeNull();
+	});
+
+	it("gives any other service one link, to Apprise's setup page for it", () => {
+		const service = {
+			...appriseService(fields),
+			id: 'zulip',
+			name: 'Zulip',
+			setup_url: 'https://appriseit.com/services/zulip/'
+		};
+		renderComponent(ConfigureSection, {
+			props: { type: 'apprise' as const, name: '', enabled: true, config: {}, service }
+		});
+		const links = screen.getAllByRole('link', { name: /^Docs for/ });
+		expect(links).toHaveLength(1);
+		expect(links[0]).toHaveAccessibleName('Docs for Zulip');
+		expect(links[0]).toHaveAttribute('href', 'https://appriseit.com/services/zulip/');
+		expect(links[0]).toHaveAttribute('target', '_blank');
+	});
+
+	it('shows no docs link on the webhook form', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'webhook' as const, name: '', enabled: true, config: {}, service: null }
+		});
+		expect(screen.queryByRole('link')).toBeNull();
+	});
+
+	it('writes each Apprise field it renders, required, advanced text and advanced bool, into config', async () => {
+		const props = $state({
+			type: 'apprise' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: appriseService(fields)
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.input(screen.getByLabelText('Webhook ID'), { target: { value: 'w1' } });
+		await fireEvent.input(screen.getByLabelText('Thread ID'), { target: { value: 't1' } });
+		await fireEvent.click(screen.getByLabelText('Text To Speech'));
+		expect(props.config).toEqual({ webhook_id: 'w1', thread: 't1', tts: true });
 	});
 });

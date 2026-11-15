@@ -42,7 +42,7 @@ describe('ConfigSchemaField', () => {
 		renderComponent(ConfigSchemaField, {
 			props: { field: f({ key: 'tmdb_api_key', type: 'string', tier: 'secret', label: 'TMDb key' }), value: '<hidden>' }
 		});
-		const input = screen.getByLabelText(/tmdb key/i) as HTMLInputElement;
+		const input = screen.getByLabelText(/^tmdb key$/i) as HTMLInputElement;
 		expect(input.type).toBe('password');
 		expect(input.value).toBe('');
 		expect(input.placeholder).toMatch(/set, leave blank to keep/i);

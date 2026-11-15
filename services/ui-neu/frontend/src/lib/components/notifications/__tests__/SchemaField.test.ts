@@ -104,4 +104,34 @@ describe('SchemaField', () => {
 		expect(input.type).toBe('password');
 		expect(input.value).toBe('normal-secret');
 	});
+
+	it('labels the control through for and shows the docs link for its docs id', () => {
+		renderComponent(SchemaField, {
+			props: {
+				field: field({ key: 'webhook_id', label: 'Webhook ID', required: true }),
+				value: '',
+				docsId: 'notify.discord.webhook_id'
+			}
+		});
+		const input = screen.getByRole('textbox', { name: 'Webhook ID' });
+		expect(screen.getByText('Webhook ID *')).toHaveAttribute('for', input.id);
+		expect(screen.getByRole('link', { name: 'Docs for Webhook ID *' })).toHaveAttribute(
+			'data-field-id',
+			'notify.discord.webhook_id'
+		);
+	});
+
+	it('labels a checkbox through for, with its docs link outside the label', () => {
+		renderComponent(SchemaField, {
+			props: { field: field({ type: 'bool', label: 'TTS' }), value: false, docsId: 'notify.discord.tts' }
+		});
+		const label = screen.getByText('TTS');
+		expect(label).toHaveAttribute('for', screen.getByRole('checkbox', { name: 'TTS' }).id);
+		expect(label).not.toContainElement(screen.getByRole('link', { name: 'Docs for TTS' }));
+	});
+
+	it('shows no docs link without a docs id', () => {
+		renderComponent(SchemaField, { props: { field: field({}), value: '' } });
+		expect(screen.queryByRole('link')).toBeNull();
+	});
 });

@@ -6,6 +6,7 @@ afterEach(cleanup);
 
 const props = (over: Record<string, unknown> = {}) => ({
 	label: 'Use TMDB',
+	docsId: 'config.thediscdb_enabled',
 	describedby: 'help-id',
 	checked: false,
 	disabled: false,
@@ -61,5 +62,20 @@ describe('IdentityCheckbox', () => {
 		renderComponent(IdentityCheckbox, props({ checked: true, onchange }));
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Use TMDB' }));
 		expect(onchange).toHaveBeenCalledWith(false);
+	});
+
+	it('labels the checkbox through for and links its setting docs beside the label', () => {
+		renderComponent(IdentityCheckbox, props());
+		const box = screen.getByRole('checkbox', { name: 'Use TMDB' });
+		const label = screen.getByText('Use TMDB');
+		expect(label).toHaveAttribute('for', box.id);
+		const link = screen.getByRole('link', { name: 'Docs for Use TMDB' });
+		expect(link).toHaveAttribute('data-field-id', 'config.thediscdb_enabled');
+		expect(label).not.toContainElement(link);
+	});
+
+	it('shows no docs link for a setting without a registry entry', () => {
+		renderComponent(IdentityCheckbox, props({ docsId: 'config.NOT_A_FIELD' }));
+		expect(screen.queryByRole('link')).toBeNull();
 	});
 });

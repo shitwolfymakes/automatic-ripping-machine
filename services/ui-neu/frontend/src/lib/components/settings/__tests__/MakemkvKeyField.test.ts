@@ -41,6 +41,14 @@ afterEach(() => {
 });
 
 describe('MakemkvKeyField', () => {
+	it("links the field title to the MakeMKV help page's key section", () => {
+		renderComponent(MakemkvKeyField, { props: { field, value: null } });
+		expect(screen.getByRole('link', { name: 'Docs for MakeMKV key' })).toHaveAttribute(
+			'href',
+			'/help/guide/makemkv#how-the-key-works'
+		);
+	});
+
 	it('defaults to the beta key and says a drive will check it', async () => {
 		renderComponent(MakemkvKeyField, { props: { field, value: null } });
 		expect(screen.getByRole('radio', { name: /free beta key/i })).toBeChecked();
