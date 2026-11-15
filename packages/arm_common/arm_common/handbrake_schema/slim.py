@@ -6,6 +6,7 @@ from typing import Any
 
 from arm_common.handbrake_schema.overlay import (
     ARM_OWNED_KEYS,
+    HIDDEN_KEYS,
     ENCODER_SPECIFIC_KEYS,
     OPTION_LABELS,
     SELECTOR_FILTER_ALIASES,
@@ -121,4 +122,5 @@ def slim_view(schema: HandbrakeSchema) -> HandbrakeSchemaSlimView:
         selector_filter_aliases=dict(SELECTOR_FILTER_ALIASES),
         arm_owned_keys=sorted(ARM_OWNED_KEYS),
         encoder_specific_keys=sorted(ENCODER_SPECIFIC_KEYS),
+        hidden_keys=sorted(HIDDEN_KEYS),
     )

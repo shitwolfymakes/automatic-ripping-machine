@@ -89,7 +89,6 @@ def test_slim_color_range_and_hdr_labels(hb_schema):
 
 def test_slim_picker_keys_are_selects_with_labels(hb_schema):
     for name, values in (
-        ("VideoScaler", ("swscale", "zscale")),
         ("PictureModulus", (2, 4, 8, 16)),
         ("VideoColorMatrixCodeOverride", (0, 1, 2, 3, 4)),
         ("PicturePadColor", ("black", "white", "gray", "red", "green", "blue")),
@@ -97,10 +96,6 @@ def test_slim_picker_keys_are_selects_with_labels(hb_schema):
         key = _key(hb_schema, name)
         assert (key.source.kind, key.source.ref) == ("static", name)
         assert tuple(slim_view(hb_schema).static_enums[name]) == values
-    assert _key(hb_schema, "VideoScaler").option_labels == {
-        "swscale": "Software scaler (swscale)",
-        "zscale": "zimg (zscale)",
-    }
     assert _key(hb_schema, "VideoColorMatrixCodeOverride").option_labels["0"] == "No override"
     assert _key(hb_schema, "PicturePadColor").option_labels["gray"] == "Gray"
     assert _key(hb_schema, "PictureModulus").option_labels is None
@@ -119,3 +114,9 @@ def test_slim_labels_only_for_allowed_values(hb_schema, monkeypatch):
         if key.option_labels:
             allowed = {str(v) for v in (*slim.STATIC_ENUMS.get(key.name, ()), *slim.SOURCE_EXTRAS.get(key.name, ()))}
             assert set(key.option_labels) <= allowed
+
+
+def test_slim_exposes_hidden_keys(hb_schema):
+    assert slim_view(hb_schema).hidden_keys == ["VideoScaler"]
+    assert _key(hb_schema, "VideoScaler").source is None
+    assert _key(hb_schema, "VideoScaler").option_labels is None

@@ -290,6 +290,13 @@ describe('commonKeys reads the schema', () => {
 	});
 });
 
+describe('commonKeys hides what the schema hides', () => {
+	it('never lists a hidden key', () => {
+		expect(schema.hidden_keys).toContain('VideoScaler');
+		expect(commonKeys(schema, 'dimensions').map((k) => k.name)).not.toContain('VideoScaler');
+	});
+});
+
 describe('sidebarTitle and usageLabel', () => {
 	it('names each mode', () => {
 		expect(sidebarTitle('new')).toBe('New transcode preset');

@@ -2539,5 +2539,6 @@
 		"VideoTurboMultiPass",
 		"x264Option",
 		"x264UseAdvancedOptions"
-	]
+	],
+	"hidden_keys": ["VideoScaler"]
 }

@@ -138,3 +138,4 @@ class HandbrakeSchemaSlimView(BaseModel):
     # Keys ARM sets itself (never stored as settings) and keys that live in a per-encoder block.
     arm_owned_keys: list[str]
     encoder_specific_keys: list[str]
+    hidden_keys: list[str]

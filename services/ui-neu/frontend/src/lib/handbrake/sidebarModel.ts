@@ -237,9 +237,13 @@ export function inheritedDepth(family: SlimFamily, base: BaseValues): { depth: n
 	return variant ? { depth: variant.depth, source: 'base' } : { depth: DEFAULT_DEPTH, source: 'default' };
 }
 
-// Neither ARM-owned nor encoder-specific: a field of the preset's common settings.
+// Neither ARM-owned, encoder-specific nor hidden: a field of the preset's common settings.
 function isCommonKey(schema: HandbrakeSchemaSlimView, name: string): boolean {
-	return !schema.arm_owned_keys.includes(name) && !schema.encoder_specific_keys.includes(name);
+	return (
+		!schema.arm_owned_keys.includes(name) &&
+		!schema.encoder_specific_keys.includes(name) &&
+		!schema.hidden_keys.includes(name)
+	);
 }
 
 export function commonKeys(schema: HandbrakeSchemaSlimView, tab: TabId): SlimKey[] {

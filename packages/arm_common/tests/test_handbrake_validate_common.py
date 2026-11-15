@@ -117,8 +117,12 @@ def test_open_enum_accepts_any_string_but_not_other_types(hb_schema):
     assert check(hb_schema, {"PicturePadColor": 5}) == [("PicturePadColor", "wrong_type")]
 
 
+def test_hidden_key_is_still_a_valid_setting(hb_schema):
+    assert check(hb_schema, {"VideoScaler": "swscale"}) == []
+    assert check(hb_schema, {"VideoScaler": "zscale"}) == []
+
+
 def test_closed_enum_still_rejects_unknown_values(hb_schema):
-    assert check(hb_schema, {"VideoScaler": "bogus"}) == [("VideoScaler", "not_in_list")]
     assert check(hb_schema, {"PictureModulus": 3}) == [("PictureModulus", "not_in_list")]
     assert check(hb_schema, {"VideoColorMatrixCodeOverride": 9}) == [("VideoColorMatrixCodeOverride", "not_in_list")]
 

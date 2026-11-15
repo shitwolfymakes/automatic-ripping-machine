@@ -1945,6 +1945,10 @@ export type HandbrakeSchemaSlimView = {
      * Encoder Specific Keys
      */
     encoder_specific_keys: Array<string>;
+    /**
+     * Hidden Keys
+     */
+    hidden_keys: Array<string>;
 };
 
 /**

@@ -31,6 +31,10 @@ ARM_OWNED_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Keys the editor never shows. They stay valid settings: a stored value validates, imports and is saved as is.
+# libhb 1.11.1 only ever writes VideoScaler and never reads it.
+HIDDEN_KEYS: frozenset[str] = frozenset({"VideoScaler"})
+
 # Keys whose meaning depends on the encoder: libhb drops them when --encoder overrides the preset.
 ENCODER_SPECIFIC_KEYS: frozenset[str] = frozenset(
     {
@@ -81,7 +85,6 @@ STATIC_ENUMS: dict[str, tuple[Any, ...]] = {
     "VideoFramerateMode": ("vfr", "cfr", "pfr"),
     "VideoPasshtruHDRDynamicMetadata": ("all", "off", "hdr10plus", "dolbyvision"),
     "VideoQualityType": (1, 2),  # average bitrate, constant quality
-    "VideoScaler": ("swscale", "zscale"),
     "PictureModulus": (2, 4, 8, 16),
     "VideoColorMatrixCodeOverride": (0, 1, 2, 3, 4),  # codes libhb/preset.c maps to a primaries/transfer/matrix set
     "PicturePadColor": ("black", "white", "gray", "red", "green", "blue"),  # a few of libhb's X11 colour names
@@ -110,7 +113,6 @@ OPTION_LABELS: dict[str, dict[str, str]] = {
         "letterbox": "Letterbox",
         "pillarbox": "Pillarbox",
     },
-    "VideoScaler": {"swscale": "Software scaler (swscale)", "zscale": "zimg (zscale)"},
     "VideoColorMatrixCodeOverride": {
         "0": "No override",
         "1": "BT.601 NTSC (SD)",
@@ -229,7 +231,7 @@ KEY_OVERLAY: dict[str, KeyOverlay] = {
         ("PictureAllowUpscaling", "Allow upscaling"),
         ("PictureKeepRatio", "Keep aspect ratio"),
         ("PictureModulus", "Storage alignment (modulus)", _enum("PictureModulus")),
-        ("VideoScaler", "Scaler", _enum("VideoScaler")),
+        ("VideoScaler", "Scaler"),
     ),
     **_rows(
         "dimensions",

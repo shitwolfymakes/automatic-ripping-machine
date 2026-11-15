@@ -11543,6 +11543,13 @@
             },
             "type": "array",
             "title": "Encoder Specific Keys"
+          },
+          "hidden_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hidden Keys"
           }
         },
         "type": "object",
@@ -11561,7 +11568,8 @@
           "source_extras",
           "selector_filter_aliases",
           "arm_owned_keys",
-          "encoder_specific_keys"
+          "encoder_specific_keys",
+          "hidden_keys"
         ],
         "title": "HandbrakeSchemaSlimView",
         "description": "What the UI needs to render the settings sidebar; no built-in preset values."
