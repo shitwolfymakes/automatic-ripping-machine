@@ -7,7 +7,7 @@ import { storedCount } from './settingsEdit';
 
 type Candidate = { name: string; label: string; tab: TabId; stored: boolean };
 
-function textMatches(name: string, label: string, text: string): boolean {
+export function textMatches(name: string, label: string, text: string): boolean {
 	const needle = text.trim().toLowerCase();
 	return name.toLowerCase().includes(needle) || label.toLowerCase().includes(needle);
 }
