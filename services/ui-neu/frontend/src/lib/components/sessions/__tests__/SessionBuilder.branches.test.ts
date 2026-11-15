@@ -81,14 +81,24 @@ describe('SessionBuilder overrides', () => {
 		);
 	});
 
-	it('shows an error for invalid JSON, sends nothing, and clears it on the next submit', async () => {
+	it('Save with invalid JSON sends nothing, opens Advanced, marks the field and focuses it; valid JSON clears it', async () => {
 		vi.mocked(createSession).mockResolvedValue({ id: 's1' } as any);
-		renderComponent(SessionBuilder, props());
+		const { container } = renderComponent(SessionBuilder, props());
 		await fillRequired();
 		await setOverrides('{nope');
+		const details = container.querySelector('details') as HTMLDetailsElement;
+		expect(details.open).toBe(false);
 		await submit();
-		expect(screen.getByText('Invalid JSON in overrides field')).toBeInTheDocument();
+		const field = screen.getByLabelText(/overrides json/i);
+		await waitFor(() => expect(document.activeElement).toBe(field));
+		expect(details.open).toBe(true);
+		expect(field).toHaveAttribute('aria-invalid', 'true');
+		expect(field).toHaveAttribute('aria-describedby', 'sb-overrides-error');
+		expect(document.getElementById('sb-overrides-error')).toHaveTextContent('Invalid JSON in overrides field');
 		expect(createSession).not.toHaveBeenCalled();
+
+		await setOverrides('{"ok": true}');
+		expect(field).not.toHaveAttribute('aria-invalid');
 
 		await setOverrides('{"ok": true}');
 		await submit();

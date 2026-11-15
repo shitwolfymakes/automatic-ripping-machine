@@ -58,7 +58,8 @@
 	let tcId = $state(session?.transcode_preset_id ?? '');
 	let template = $state(session?.output_path_template ?? '');
 	let overridesJson = $state(session?.overrides_json ? JSON.stringify(session.overrides_json, null, 2) : '');
-	let jsonError = $state<string | null>(null);
+	// The Advanced section opens itself when Save sends focus to the overrides field inside it.
+	let advancedOpen = $state(false);
 	let submitError = $state<string | null>(null);
 	let submitting = $state(false);
 
@@ -81,9 +82,10 @@
 	const isEdit = $derived(!!session);
 	// Built-in sessions are read-only — every field is locked, no save path.
 	const readOnly = $derived(session?.is_builtin ?? false);
-	// Marks show from the first Save on, and each clears once its field is filled.
+	// Marks show from the first Save on, and each clears once its field is valid.
 	let attempted = $state(false);
-	const errors = $derived(attempted ? sessionErrors({ name, ripId, template }) : {});
+	const inputs = $derived({ name, ripId, template, overridesText: overridesJson });
+	const errors = $derived(attempted ? sessionErrors(inputs) : {});
 
 	$effect(() => {
 		onstatus?.({ submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
@@ -121,19 +123,12 @@
 		e.preventDefault();
 		if (readOnly) return; // built-ins can't be saved
 		attempted = true;
-		if (await focusFirstInvalid(sessionErrors({ name, ripId, template }), SESSION_FIELD_ORDER)) return;
-		jsonError = null;
+		const found = sessionErrors(inputs);
+		if (SESSION_FIELDS.overrides in found) advancedOpen = true;
+		if (await focusFirstInvalid(found, SESSION_FIELD_ORDER)) return;
 		submitError = null;
 
-		let parsedOverrides: Record<string, unknown> | null;
-		try {
-			parsedOverrides = parseOverrides(overridesJson);
-		} catch {
-			jsonError = 'Invalid JSON in overrides field';
-			return;
-		}
-
-		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parsedOverrides };
+		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parseOverrides(overridesJson) };
 
 		submitting = true;
 		try {
@@ -242,20 +237,21 @@
 		</div>
 
 		<!-- Advanced (collapsed) -->
-		<details class="session-builder-advanced">
+		<details class="session-builder-advanced" bind:open={advancedOpen}>
 			<summary class="session-builder-advanced-summary"> Advanced </summary>
 			<div class="stack stack-sm session-builder-advanced-body">
-				<label for="sb-overrides" class="field-label session-builder-overrides-label"> Overrides JSON </label>
+				<label for={SESSION_FIELDS.overrides} class="field-label session-builder-overrides-label">
+					Overrides JSON
+				</label>
 				<textarea
-					id="sb-overrides"
+					id={SESSION_FIELDS.overrides}
 					class="mono field-control"
 					rows="4"
 					bind:value={overridesJson}
 					placeholder={`{"key": "value"}`}
-					disabled={readOnly}></textarea>
-				{#if jsonError}
-					<p class="field-error">{jsonError}</p>
-				{/if}
+					disabled={readOnly}
+					{...invalidAttrs(SESSION_FIELDS.overrides, errors[SESSION_FIELDS.overrides])}></textarea>
+				{@render fieldError(SESSION_FIELDS.overrides)}
 			</div>
 		</details>
 

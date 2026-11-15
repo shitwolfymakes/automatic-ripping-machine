@@ -100,6 +100,20 @@ describe('AudioTrackList', () => {
 		expect(within(row(2)).getByText('Bad mixdown')).toBeTruthy();
 		expect(within(row(1)).queryByText('Bad mixdown')).toBeNull();
 		expect(screen.getByText('List is wrong')).toBeTruthy();
+		const list = screen.getByRole('group', { name: 'Audio tracks' });
+		expect(list).toHaveAttribute('id', 'tunable-AudioList');
+		expect(list).toHaveAttribute('tabindex', '-1');
+		expect(list).toHaveAttribute('aria-invalid', 'true');
+		expect(list).toHaveAttribute('aria-describedby', 'tunable-AudioList-error');
+		expect(document.getElementById('tunable-AudioList-error')).toHaveTextContent('List is wrong');
+	});
+
+	it('leaves the list unmarked with no whole-list issue', () => {
+		mount();
+		const list = screen.getByRole('group', { name: 'Audio tracks' });
+		expect(list).not.toHaveAttribute('aria-invalid');
+		expect(list).not.toHaveAttribute('aria-describedby');
+		expect(document.getElementById('tunable-AudioList-error')).toBeNull();
 	});
 
 	it('hides the row controls and disables fields when readonly', () => {

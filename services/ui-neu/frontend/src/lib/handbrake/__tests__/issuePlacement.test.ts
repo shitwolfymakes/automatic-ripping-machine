@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
 import type { EncoderCard } from '../encoderCards';
+import { AUDIO_LIST_ID } from '../audioTracks';
 import {
 	firstIssueTarget,
 	issueTarget,
 	placedIssues,
+	presetBlockMessages,
 	unplacedIssues,
 	unplacedText,
 	type PanelInput
@@ -120,6 +122,10 @@ describe('issueTarget', () => {
 		});
 	});
 
+	it('targets the whole audio track list on the Audio tab', () => {
+		expect(issueTarget(issue('AudioList'), schema)).toEqual({ id: AUDIO_LIST_ID, tab: 'audio' });
+	});
+
 	it('targets a common field on its key tab', () => {
 		expect(issueTarget(issue('PictureWidth'), schema)).toEqual({ id: 'tunable-PictureWidth', tab: 'dimensions' });
 	});
@@ -148,5 +154,14 @@ describe('firstIssueTarget', () => {
 	it('is null when no issue is placed', () => {
 		expect(firstIssueTarget([issue('PictureTopCrop')], panel())).toBeNull();
 		expect(firstIssueTarget([], panel())).toBeNull();
+	});
+});
+
+describe('presetBlockMessages', () => {
+	it('keys preset-block issues by input id, first issue per field, skipping settings and encoder issues', () => {
+		const first = { ...issue('name'), message: 'Taken' };
+		const second = { ...issue('name'), message: 'Too long' };
+		const list = [first, second, issue('extra_args'), issue('PictureWidth'), issue('name', 'x264')];
+		expect(presetBlockMessages(list)).toEqual({ 'tp-name': 'Taken', 'tp-extra-args': 'extra_args' });
 	});
 });

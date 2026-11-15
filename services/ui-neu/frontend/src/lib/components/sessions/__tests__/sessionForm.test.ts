@@ -66,18 +66,21 @@ describe('sessionCreate', () => {
 
 describe('sessionErrors', () => {
 	it('flags each empty required field by its input id', () => {
-		expect(sessionErrors({ name: '', ripId: '', template: '' })).toEqual({
+		expect(sessionErrors({ name: '', ripId: '', template: '', overridesText: '{nope' })).toEqual({
 			'sb-name': 'Name is required',
 			'sb-rip': 'Choose a rip preset',
-			'sb-path': 'Output path is required'
+			'sb-path': 'Output path is required',
+			'sb-overrides': 'Invalid JSON in overrides field'
 		});
 	});
 
-	it('has no errors once name, rip preset and template are set', () => {
-		expect(sessionErrors(form)).toEqual({});
+	it('has no errors once name, rip preset and template are set and the overrides are blank or JSON', () => {
+		const filled = { name: 'Movies', ripId: 'rip-1', template: 't' };
+		expect(sessionErrors({ ...filled, overridesText: '' })).toEqual({});
+		expect(sessionErrors({ ...filled, overridesText: '{"a": 1}' })).toEqual({});
 	});
 
-	it('lists the required inputs in form order', () => {
-		expect(SESSION_FIELD_ORDER).toEqual(['sb-name', 'sb-rip', 'sb-path']);
+	it('lists the checked inputs in form order', () => {
+		expect(SESSION_FIELD_ORDER).toEqual(['sb-name', 'sb-rip', 'sb-path', 'sb-overrides']);
 	});
 });

@@ -7,7 +7,8 @@
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import { encoderGroups } from '$lib/utils/encoder-groups';
 	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panelView';
-	import { CLEARED_NOTE, isVaapiEncoder, issuesFor, type Draft, type PresetField } from '$lib/handbrake/sidebarModel';
+	import { CLEARED_NOTE, isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/sidebarModel';
+	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';
 	import { errorId, invalidAttrs, type FieldErrors } from '$lib/utils/formValidation';
 	import type { SettingIssue } from '$lib/types/api.gen';
 
@@ -18,7 +19,7 @@
 		/** HandBrake's built-in preset names, or null while no schema is loaded. */
 		builtinNames: string[] | null;
 		issues: SettingIssue[];
-		/** The sidebar's own checks on Save (a blank name), by input id. */
+		/** The sidebar's own checks on Save (a blank name), by input id; they win over a save issue on the same field. */
 		errors?: FieldErrors;
 		onfield: (field: PresetField, value: string) => void;
 	}
@@ -46,10 +47,10 @@
 			presetEncoderId: PRESET_ENCODER_ID
 		})
 	);
-	const refIssue = $derived(issuesFor(issues, 'preset_ref'));
 	const REF_ID = 'tp-preset-ref';
-	const refInvalid = $derived(invalidAttrs(REF_ID, refIssue?.message));
-	const nameError = $derived(errors[PRESET_NAME_ID]);
+	// What each field shows under it: the sidebar's own check, else a save issue on that field.
+	const messages = $derived({ ...presetBlockMessages(issues), ...errors });
+	const aria = (id: string) => invalidAttrs(id, messages[id]);
 
 	// A stored name this HandBrake build does not have stays listed, so it is not lost on save.
 	function withStoredName(names: string[], stored: string | null): string[] {
@@ -79,9 +80,9 @@
 			value={draft.name}
 			disabled={readonly}
 			oninput={(e) => onfield('name', value(e))}
-			{...invalidAttrs(PRESET_NAME_ID, nameError)}
+			{...aria(PRESET_NAME_ID)}
 		/>
-		{#if nameError}<p class="field-error" id={errorId(PRESET_NAME_ID)}>{nameError}</p>{/if}
+		{@render fieldError(PRESET_NAME_ID)}
 	</div>
 
 	<div class="field">
@@ -92,6 +93,7 @@
 			value={draft.media_type}
 			disabled={readonly || editing}
 			onchange={(e) => onfield('media_type', value(e))}
+			{...aria('tp-media-type')}
 		>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
@@ -99,6 +101,7 @@
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>
 		</select>
+		{@render fieldError('tp-media-type')}
 	</div>
 
 	<div class="field">
@@ -109,11 +112,13 @@
 			value={draft.tool}
 			disabled={readonly}
 			onchange={(e) => onfield('tool', value(e))}
+			{...aria('tp-tool')}
 		>
 			<option value="handbrake">HandBrake</option>
 			<option value="abcde">abcde</option>
 			<option value="none">None</option>
 		</select>
+		{@render fieldError('tp-tool')}
 	</div>
 
 	<div class="field">
@@ -124,6 +129,7 @@
 			value={draft.container}
 			disabled={readonly}
 			onchange={(e) => onfield('container', value(e))}
+			{...aria('tp-container')}
 		>
 			<option value="mkv">MKV</option>
 			<option value="mp4">MP4</option>
@@ -134,6 +140,7 @@
 			<option value="iso">ISO</option>
 			<option value="none">None</option>
 		</select>
+		{@render fieldError('tp-container')}
 		{#if view.usesFfmpegVaapi}
 			<p class="field-help" data-testid="tp-container-vaapi-note">AMD VAAPI encoders write MKV or MP4.</p>
 		{/if}
@@ -147,6 +154,7 @@
 			value={draft.encoder}
 			disabled={view.encoderDisabled}
 			onchange={onEncoder}
+			{...aria('tp-encoder')}
 		>
 			{#if view.encoderList === 'loading'}
 				<option value={draft.encoder} disabled>Loading encoders...</option>
@@ -164,6 +172,7 @@
 				{/each}
 			{/if}
 		</select>
+		{@render fieldError('tp-encoder')}
 		{#if encodersStore.error}
 			<p class="field-error" data-testid="tp-encoder-error">Could not load encoders; the current encoder is kept.</p>
 		{/if}
@@ -182,7 +191,7 @@
 				value={draft.preset_ref ?? ''}
 				disabled={readonly}
 				onchange={(e) => onfield('preset_ref', value(e))}
-				{...refInvalid}
+				{...aria(REF_ID)}
 			>
 				<option value="">None (HandBrake defaults)</option>
 				{#each withStoredName(view.baseNames, draft.preset_ref) as name (name)}
@@ -201,7 +210,7 @@
 				value={draft.preset_ref ?? ''}
 				disabled={readonly}
 				onchange={(e) => onfield('preset_ref', value(e))}
-				{...refInvalid}
+				{...aria(REF_ID)}
 			/>
 			{@render refNotes()}
 		</div>
@@ -216,7 +225,9 @@
 			value={draft.extra_args}
 			disabled={readonly}
 			oninput={(e) => onfield('extra_args', value(e))}
+			{...aria('tp-extra-args')}
 		/>
+		{@render fieldError('tp-extra-args')}
 		{#if view.showOverrideHelp}
 			<p class="field-help">Flags here are added last and override the settings below.</p>
 		{/if}
@@ -231,7 +242,11 @@
 	{#if view.usesFfmpegVaapi}
 		<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
 	{/if}
-	{#if refIssue}<p class="field-error" id={errorId(REF_ID)} role="alert">{refIssue.message}</p>{/if}
+	{@render fieldError(REF_ID)}
+{/snippet}
+
+{#snippet fieldError(id: string)}
+	{#if messages[id]}<p class="field-error" id={errorId(id)} role="alert">{messages[id]}</p>{/if}
 {/snippet}
 
 <style>

@@ -1,21 +1,40 @@
-// What the session builder makes of its form: the required-field rules, the
+// What the session builder makes of its form: the field rules, the
 // overrides field read as JSON, and the create and update requests.
 import type { MediaType, SessionCreateRequest, SessionUpdateRequest } from '$lib/types/api.gen';
 import { NAME_REQUIRED, type FieldErrors } from '$lib/utils/formValidation';
 
-/** The builder's required inputs, by element id, in form order. */
-export const SESSION_FIELDS = { name: 'sb-name', rip: 'sb-rip', path: 'sb-path' } as const;
+/** The builder's checked inputs, by element id, in form order. */
+export const SESSION_FIELDS = { name: 'sb-name', rip: 'sb-rip', path: 'sb-path', overrides: 'sb-overrides' } as const;
 export const SESSION_FIELD_ORDER: string[] = Object.values(SESSION_FIELDS);
 
 export const RIP_PRESET_REQUIRED = 'Choose a rip preset';
 export const OUTPUT_PATH_REQUIRED = 'Output path is required';
+export const OVERRIDES_INVALID = 'Invalid JSON in overrides field';
 
-/** The required fields left empty, each keyed by its input's id. */
-export function sessionErrors(form: Pick<SessionForm, 'name' | 'ripId' | 'template'>): FieldErrors {
+/** The builder's inputs as typed, before the overrides text is parsed. */
+export interface SessionInputs {
+	name: string;
+	ripId: string;
+	template: string;
+	overridesText: string;
+}
+
+function overridesValid(text: string): boolean {
+	try {
+		parseOverrides(text);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** The required fields left empty and an overrides text that is not JSON, each keyed by its input's id. */
+export function sessionErrors(inputs: SessionInputs): FieldErrors {
 	const errors: FieldErrors = {};
-	if (!form.name) errors[SESSION_FIELDS.name] = NAME_REQUIRED;
-	if (!form.ripId) errors[SESSION_FIELDS.rip] = RIP_PRESET_REQUIRED;
-	if (!form.template) errors[SESSION_FIELDS.path] = OUTPUT_PATH_REQUIRED;
+	if (!inputs.name) errors[SESSION_FIELDS.name] = NAME_REQUIRED;
+	if (!inputs.ripId) errors[SESSION_FIELDS.rip] = RIP_PRESET_REQUIRED;
+	if (!inputs.template) errors[SESSION_FIELDS.path] = OUTPUT_PATH_REQUIRED;
+	if (!overridesValid(inputs.overridesText)) errors[SESSION_FIELDS.overrides] = OVERRIDES_INVALID;
 	return errors;
 }
 

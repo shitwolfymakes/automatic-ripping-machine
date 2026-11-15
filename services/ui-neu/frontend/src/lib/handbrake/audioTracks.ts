@@ -111,6 +111,9 @@ export function rowIssue(issues: SettingIssue[], index: number, name: string): S
 	return issues.find((i) => i.key === `AudioList[${index}].${name}`);
 }
 
+// The track list's element id: the focus target of a whole-list issue, named like a common key's input.
+export const AUDIO_LIST_ID = 'tunable-AudioList';
+
 export function listIssues(issues: SettingIssue[]): SettingIssue[] {
 	return issues.filter((i) => i.key === 'AudioList');
 }

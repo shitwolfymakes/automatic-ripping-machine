@@ -4,6 +4,7 @@
 // another setting hides, a card the encoder cannot reach or a collapsed card leaves it unplaced.
 
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
+import type { FieldErrors } from '$lib/utils/formValidation';
 import { BIT_DEPTH_FIELD } from './encoderCards';
 import { TABS, type TabId } from './fields';
 import { visibleTab, type TabVisible, type VisibleInput } from './filter';
@@ -75,6 +76,17 @@ export function issueTarget(i: SettingIssue, schema: HandbrakeSchemaSlimView | n
 export function firstIssueTarget(issues: SettingIssue[], input: PanelInput | null): IssueTarget | null {
 	const first = placedIssues(issues, input)[0];
 	return first ? issueTarget(first, input?.schema ?? null) : null;
+}
+
+/** The messages of the issues on preset-block fields, keyed by input id; the first issue per field wins. */
+export function presetBlockMessages(issues: SettingIssue[]): FieldErrors {
+	const messages: FieldErrors = {};
+	for (const i of issues) {
+		if (i.encoder || !PRESET_FIELDS.has(i.key)) continue;
+		const { id } = issueTarget(i, null);
+		messages[id] ??= i.message;
+	}
+	return messages;
 }
 
 function trackLabel(schema: HandbrakeSchemaSlimView, index: string, name: string): string | null {

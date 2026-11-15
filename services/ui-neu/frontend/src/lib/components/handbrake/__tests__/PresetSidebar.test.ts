@@ -594,6 +594,32 @@ describe('editing and saving', () => {
 		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
 	});
 
+	it('a 422 on the name shows its message under the name and focuses it', async () => {
+		const issues = [{ key: 'name', encoder: null, code: 'wrong_type' as const, message: 'Name taken' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await save();
+		const name = screen.getByTestId('tp-name');
+		await waitFor(() => expect(document.activeElement).toBe(name));
+		expect(name).toHaveAttribute('aria-invalid', 'true');
+		expect(name).toHaveAttribute('aria-describedby', 'tp-name-error');
+		expect(document.getElementById('tp-name-error')).toHaveTextContent('Name taken');
+	});
+
+	it('a 422 on the whole audio track list opens the Audio tab and focuses the list', async () => {
+		const issues = [{ key: 'AudioList', encoder: null, code: 'wrong_type' as const, message: 'Too many tracks' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await save();
+		const list = await screen.findByRole('group', { name: 'Audio tracks' });
+		await waitFor(() => expect(document.activeElement).toBe(list));
+		expect(screen.getByRole('tab', { name: /^Audio/ })).toHaveAttribute('aria-selected', 'true');
+		expect(list).toHaveAttribute('aria-invalid', 'true');
+		expect(document.getElementById('tunable-AudioList-error')).toHaveTextContent('Too many tracks');
+	});
+
 	it('a 422 whose issues no input shows leaves focus and the tab alone', async () => {
 		const issues = [
 			{ key: 'handbrake_settings', encoder: null, code: 'engine_ignores_settings' as const, message: 'Ignored' }

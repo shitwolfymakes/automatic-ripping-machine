@@ -123,6 +123,39 @@ describe('fields', () => {
 	});
 });
 
+describe('field messages', () => {
+	it.each(['name', 'media_type', 'tool', 'container', 'encoder', 'preset_ref', 'extra_args'])(
+		'shows a save issue on %s under its input and marks the input',
+		(key) => {
+			const id = `tp-${key.replaceAll('_', '-')}`;
+			mount({}, { issues: [{ key, encoder: null, code: 'wrong_type', message: `Bad ${key}` }] });
+			const input = document.getElementById(id) as HTMLElement;
+			expect(input).toHaveAttribute('aria-invalid', 'true');
+			expect(input).toHaveAttribute('aria-describedby', `${id}-error`);
+			const message = document.getElementById(`${id}-error`) as HTMLElement;
+			expect(message).toHaveTextContent(`Bad ${key}`);
+			expect(message).toHaveClass('field-error');
+		}
+	);
+
+	it("puts the sidebar's own name check before a save issue on the name", () => {
+		mount(
+			{},
+			{
+				issues: [{ key: 'name', encoder: null, code: 'wrong_type', message: 'Taken' }],
+				errors: { 'tp-name': 'Name is required' }
+			}
+		);
+		expect(document.getElementById('tp-name-error')).toHaveTextContent('Name is required');
+	});
+
+	it('marks no field without issues or errors', () => {
+		mount();
+		expect(document.querySelector('[aria-invalid]')).toBeNull();
+		expect(document.querySelector('.field-error')).toBeNull();
+	});
+});
+
 describe('settings that will be cleared', () => {
 	const note = "This preset's HandBrake settings will be cleared when you save.";
 	const settings = { common: { ChapterMarkers: true }, encoders: {} };

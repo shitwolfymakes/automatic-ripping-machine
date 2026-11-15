@@ -2,8 +2,11 @@
 	// Row editor for HandBrake's AudioList: one card per output track with
 	// reorder and remove controls, and an Add track button below the list.
 	// Each track renders the fields `visibleKeys` holds for it, and a track with none stays out.
+	// A whole-list issue marks the list itself, which takes focus (tabindex -1) when Save sends it there.
 	import type { HandbrakeSchemaSlimView, SettingIssue, SlimKey } from '$lib/types/api.gen';
+	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
 	import {
+		AUDIO_LIST_ID,
 		addTrack,
 		clearTrackField,
 		listIssues,
@@ -31,10 +34,21 @@
 	const wholeList = $derived(listIssues(issues));
 </script>
 
-<div class="audio-tracks">
-	{#each wholeList as issue (issue.message)}
-		<p class="field-error" role="alert">{issue.message}</p>
-	{/each}
+<div
+	class="audio-tracks"
+	id={AUDIO_LIST_ID}
+	role="group"
+	aria-label="Audio tracks"
+	tabindex="-1"
+	{...invalidAttrs(AUDIO_LIST_ID, wholeList[0]?.message)}
+>
+	{#if wholeList.length > 0}
+		<div id={errorId(AUDIO_LIST_ID)}>
+			{#each wholeList as issue (issue.message)}
+				<p class="field-error" role="alert">{issue.message}</p>
+			{/each}
+		</div>
+	{/if}
 	{#each value as item, i (i)}
 		{@const keys = visibleKeys[i] ?? []}
 		{#if keys.length > 0}
