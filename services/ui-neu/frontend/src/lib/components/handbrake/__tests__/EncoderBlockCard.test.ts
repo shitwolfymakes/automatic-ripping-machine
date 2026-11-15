@@ -65,6 +65,11 @@ function mount(name: string, over: Record<string, unknown> = {}) {
 describe('EncoderBlockCard', () => {
 	afterEach(() => cleanup());
 
+	it('carries the shared form card class', () => {
+		mount('x264');
+		expect(screen.getByRole('region', { name: 'x264' })).toHaveClass('form-card', 'encoder-card');
+	});
+
 	it('shows multi-pass, turbo and advanced options on x264', () => {
 		mount('x264');
 		expect(screen.getByLabelText('Multi-pass encoding')).toBeTruthy();

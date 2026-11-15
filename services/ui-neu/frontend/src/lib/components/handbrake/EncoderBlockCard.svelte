@@ -107,7 +107,7 @@
 	}
 </script>
 
-<section class="encoder-card" data-state={card.state} aria-label={card.label}>
+<section class="form-card encoder-card" data-state={card.state} aria-label={card.label}>
 	{#if !open}
 		<div class="encoder-card-collapsed">
 			<div class="encoder-card-summary">
@@ -127,7 +127,7 @@
 					<div class="tunable-field-head">
 						<span class="tunable-field-inline">
 							<label class="field-label" for={depthId}>Bit depth</label>
-							{#if depthStored}<span class="tunable-field-changed">Changed</span>{/if}
+							{#if depthStored}<span class="changed-chip">Changed</span>{/if}
 						</span>
 						{#if depthStored}
 							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset(BIT_DEPTH_FIELD.name)}
@@ -175,13 +175,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 0.875rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-primary-tint-1);
-	}
-	.encoder-card[data-state='verified'] {
-		border-color: var(--color-border-strong);
 	}
 	.encoder-card-head,
 	.encoder-card-collapsed {
@@ -248,13 +241,5 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-	.tunable-field-changed {
-		padding: 0 0.375rem;
-		border-radius: 999px;
-		font-size: 0.625rem;
-		font-weight: 700;
-		background: var(--color-info-soft);
-		color: var(--color-on-info-soft);
 	}
 </style>

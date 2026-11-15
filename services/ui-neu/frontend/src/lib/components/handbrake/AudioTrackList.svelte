@@ -52,7 +52,7 @@
 	{#each value as item, i (i)}
 		{@const keys = visibleKeys[i] ?? []}
 		{#if keys.length > 0}
-			<section class="audio-track" aria-label={`Audio track ${i + 1}`}>
+			<section class="form-card form-card-nested audio-track" aria-label={`Audio track ${i + 1}`}>
 				<header class="audio-track-head">
 					<h4 class="audio-track-title">Track {i + 1}</h4>
 					{#if !readonly}
@@ -122,9 +122,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 0.75rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
 	}
 	.audio-track-head {
 		display: flex;

@@ -34,6 +34,11 @@ const optionsOf = (el: HTMLElement) => Array.from((el as HTMLSelectElement).opti
 describe('AudioTrackList', () => {
 	afterEach(() => cleanup());
 
+	it('draws each track as a nested form card', () => {
+		mount();
+		expect(row(1)).toHaveClass('form-card', 'form-card-nested');
+	});
+
 	it('renders one row per track with unique ids and the fields in order', () => {
 		mount();
 		const labels = Array.from(row(1).querySelectorAll('label.field-label')).map((l) => l.textContent);

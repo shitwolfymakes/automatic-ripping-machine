@@ -141,7 +141,7 @@
 {/if}
 
 {#snippet labelExtras()}
-	{#if view.stored}<span class="tunable-field-changed">Changed</span>{/if}
+	{#if view.stored}<span class="changed-chip">Changed</span>{/if}
 	<a
 		class="tunable-field-info"
 		{href}
@@ -257,14 +257,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-	}
-	.tunable-field-changed {
-		padding: 0 0.375rem;
-		border-radius: 999px;
-		font-size: 0.625rem;
-		font-weight: 700;
-		background: var(--color-info-soft);
-		color: var(--color-on-info-soft);
 	}
 	.tunable-field-info {
 		display: inline-flex;

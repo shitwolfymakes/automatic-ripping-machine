@@ -13,6 +13,7 @@
 	import { fieldOptions, groupsForTab, type TabId } from '$lib/handbrake/fields';
 	import { ALL_ENCODERS_LINE, perEncoderLine } from '$lib/handbrake/encoderCards';
 	import { visibleTab, type TabVisible, type VisibleInput } from '$lib/handbrake/filter';
+	import { changedCount, changedLabel } from '$lib/handbrake/groupSummary';
 	import { settingsPanelView } from '$lib/handbrake/panelView';
 	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settingsEdit';
 	import {
@@ -120,8 +121,12 @@
 
 {#snippet fields(shown: TabVisible)}
 	{#each groupsForTab(shown.rows.map((r) => r.key)) as { group, keys } (group)}
-		<div class="settings-panel-group">
-			<h5 class="settings-panel-group-heading">{group}</h5>
+		{@const changed = changedLabel(changedCount(keys, (name) => name in common))}
+		<section class="form-card settings-panel-group" aria-label={group}>
+			<header class="form-card-head">
+				<h5 class="settings-panel-group-heading">{group}</h5>
+				{#if changed}<span class="changed-chip">{changed}</span>{/if}
+			</header>
 			<div class="settings-panel-grid">
 				{#each shown.rows.filter((r) => keys.includes(r.key)) as { key, row } (key.name)}
 					{#if row === 'audio-list'}
@@ -150,7 +155,7 @@
 					{/if}
 				{/each}
 			</div>
-		</div>
+		</section>
 	{/each}
 {/snippet}
 
@@ -180,7 +185,7 @@
 		margin-top: 0.75rem;
 	}
 	.settings-panel-group-heading {
-		margin: 0 0 0.5rem;
+		margin: 0;
 		font-size: 0.6875rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
@@ -189,6 +194,7 @@
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 0.75rem 1rem;
+		margin-top: 0.625rem;
 	}
 	.settings-panel-wide {
 		grid-column: 1 / -1;
