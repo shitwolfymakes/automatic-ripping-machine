@@ -201,10 +201,29 @@ describe('TunableField fidelity', () => {
 		expect([input.value, input.placeholder]).toEqual(['', '1920']);
 	});
 
-	it('keeps the checkbox and its label on one line', () => {
-		mount('ChapterMarkers');
+	it('lays a checkbox out like an input: the label, then a control line holding the box', () => {
+		mount('ChapterMarkers', { stored: true, value: true });
+		const label = screen.getByText(key('ChapterMarkers').label);
 		const box = screen.getByRole('checkbox', { name: key('ChapterMarkers').label });
-		expect(box.closest('.tunable-field-inline')).toContainElement(screen.getByText(key('ChapterMarkers').label));
+		const line = box.closest('.field-control-line')!;
+		expect(label).toHaveAttribute('for', box.id);
+		expect(line).not.toBeNull();
+		expect(label.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(line).not.toContainElement(label);
+		expect(screen.getByText('Changed')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: /HandBrake docs for/ })).toBeInTheDocument();
+	});
+
+	it('marks a checkbox invalid and points it at its issue', () => {
+		mount('ChapterMarkers', { issue: { message: 'nope' } });
+		const box = screen.getByRole('checkbox', { name: key('ChapterMarkers').label });
+		expect(box).toHaveAttribute('aria-invalid', 'true');
+		expect(box).toHaveAttribute('aria-describedby', screen.getByRole('alert').id);
+	});
+
+	it('leaves the flip checkbox outside a control line', () => {
+		mount('PictureRotate');
+		expect(screen.getByRole('checkbox', { name: 'Flip horizontally' }).closest('.field-control-line')).toBeNull();
 	});
 
 	it('has no raw key line; an info link carries the key and opens the docs for its group', () => {

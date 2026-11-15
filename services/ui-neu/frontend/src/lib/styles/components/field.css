@@ -2,6 +2,8 @@
    Elements: field-label, field-help (muted note), field-error (danger note),
    field-control (the input class for controls used outside a .field wrapper).
    Native input/select/textarea inside .field are styled by descendant rule.
+   field-control-line (a control-height line that centres a bare control, e.g. a checkbox,
+   level with the inputs beside it).
    Modifiers: field-row (label beside the control).
    State: [aria-invalid="true"] on the control, :disabled, :focus-visible.
    Also here: form-card (a bordered group of fields; form-card-head, form-card-nested)
@@ -11,6 +13,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+	.field-control-line {
+		display: flex;
+		align-items: center;
+		min-height: var(--control-h);
 	}
 	.field-row {
 		flex-direction: row;

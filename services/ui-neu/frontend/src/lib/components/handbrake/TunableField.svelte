@@ -90,51 +90,35 @@
 <!-- The audio track list has its own editor (AudioTrackList); this field draws nothing for it. -->
 {#if view.kind !== 'audio-list'}
 	<div class="tunable-field" data-changed={view.stored || undefined}>
+		<div class="tunable-field-head">
+			<span class="tunable-field-inline">
+				<label class="field-label" for={id}>{key.label}</label>
+				{@render labelExtras()}
+			</span>
+			{@render resetLink()}
+		</div>
 		{#if view.kind === 'checkbox'}
-			<div class="tunable-field-head">
-				<span class="tunable-field-inline">
-					<input
-						{id}
-						type="checkbox"
-						checked={view.shown === true}
-						{disabled}
-						onchange={(e) => onchange(e.currentTarget.checked)}
-						{...invalid}
-					/>
-					<label class="field-label" for={id}>{key.label}</label>
-					{@render labelExtras()}
-				</span>
-				{@render resetLink()}
-			</div>
+			{@render checkboxControl()}
+		{:else if view.kind === 'select'}
+			{@render selectControl()}
+		{:else if view.kind === 'rotate'}
+			{@render rotateControl()}
+		{:else if view.kind === 'pad-color'}
+			{@render padColorControl()}
+		{:else if view.kind === 'number'}
+			{@render numberControl()}
+		{:else if view.kind === 'chips'}
+			<ChipPicker
+				{id}
+				values={view.chipValues}
+				{options}
+				{choices}
+				{disabled}
+				{invalid}
+				onchange={(v) => onchange(v)}
+			/>
 		{:else}
-			<div class="tunable-field-head">
-				<span class="tunable-field-inline">
-					<label class="field-label" for={id}>{key.label}</label>
-					{@render labelExtras()}
-				</span>
-				{@render resetLink()}
-			</div>
-			{#if view.kind === 'select'}
-				{@render selectControl()}
-			{:else if view.kind === 'rotate'}
-				{@render rotateControl()}
-			{:else if view.kind === 'pad-color'}
-				{@render padColorControl()}
-			{:else if view.kind === 'number'}
-				{@render numberControl()}
-			{:else if view.kind === 'chips'}
-				<ChipPicker
-					{id}
-					values={view.chipValues}
-					{options}
-					{choices}
-					{disabled}
-					{invalid}
-					onchange={(v) => onchange(v)}
-				/>
-			{:else}
-				{@render textControl()}
-			{/if}
+			{@render textControl()}
 		{/if}
 		{#if issue}<p class="field-error" id={errorId(id)} role="alert">{issue.message}</p>{/if}
 	</div>
@@ -158,6 +142,19 @@
 	{#if view.stored}
 		<button type="button" class="btn-link tunable-field-reset" {disabled} onclick={onResetField}>Reset</button>
 	{/if}
+{/snippet}
+
+{#snippet checkboxControl()}
+	<div class="field-control-line">
+		<input
+			{id}
+			type="checkbox"
+			checked={view.shown === true}
+			{disabled}
+			onchange={(e) => onchange(e.currentTarget.checked)}
+			{...invalid}
+		/>
+	</div>
 {/snippet}
 
 {#snippet selectControl()}
