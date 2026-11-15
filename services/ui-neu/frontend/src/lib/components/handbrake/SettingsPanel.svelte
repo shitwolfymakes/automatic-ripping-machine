@@ -10,7 +10,7 @@
 		HandbrakeSettings,
 		SettingIssue
 	} from '$lib/types/api.gen';
-	import { fieldOptions, type TabId } from '$lib/handbrake/fields';
+	import { fieldOptions, groupsForTab, type TabId } from '$lib/handbrake/fields';
 	import { ALL_ENCODERS_LINE, perEncoderLine } from '$lib/handbrake/encoderCards';
 	import { visibleTab, type TabVisible, type VisibleInput } from '$lib/handbrake/filter';
 	import { settingsPanelView } from '$lib/handbrake/panelView';
@@ -115,34 +115,39 @@
 </SettingsTabs>
 
 {#snippet fields(shown: TabVisible)}
-	<div class="settings-panel-grid">
-		{#each shown.rows as { key, row } (key.name)}
-			{#if row === 'audio-list'}
-				<div class="settings-panel-wide">
-					<AudioTrackList
-						value={audioListValue(key, settings, base)}
-						visibleKeys={shown.tracks}
-						{schema}
-						{issues}
-						{readonly}
-						onchange={(v) => onsettings(setCommon(settings, key.name, v))}
-					/>
-				</div>
-			{:else}
-				<TunableField
-					{key}
-					value={common[key.name]}
-					inherited={inheritedValue(key, base)}
-					stored={key.name in common}
-					options={fieldOptions(key, schema, context)}
-					issue={issuesFor(issues, key.name)}
-					disabled={readonly}
-					onchange={(v) => onsettings(setCommon(settings, key.name, v))}
-					onreset={() => onsettings(resetCommon(settings, key.name))}
-				/>
-			{/if}
-		{/each}
-	</div>
+	{#each groupsForTab(shown.rows.map((r) => r.key)) as { group, keys } (group)}
+		<div class="settings-panel-group">
+			<h5 class="settings-panel-group-heading">{group}</h5>
+			<div class="settings-panel-grid">
+				{#each shown.rows.filter((r) => keys.includes(r.key)) as { key, row } (key.name)}
+					{#if row === 'audio-list'}
+						<div class="settings-panel-wide">
+							<AudioTrackList
+								value={audioListValue(key, settings, base)}
+								visibleKeys={shown.tracks}
+								{schema}
+								{issues}
+								{readonly}
+								onchange={(v) => onsettings(setCommon(settings, key.name, v))}
+							/>
+						</div>
+					{:else}
+						<TunableField
+							{key}
+							value={common[key.name]}
+							inherited={inheritedValue(key, base)}
+							stored={key.name in common}
+							options={fieldOptions(key, schema, context)}
+							issue={issuesFor(issues, key.name)}
+							disabled={readonly}
+							onchange={(v) => onsettings(setCommon(settings, key.name, v))}
+							onreset={() => onsettings(resetCommon(settings, key.name))}
+						/>
+					{/if}
+				{/each}
+			</div>
+		</div>
+	{/each}
 {/snippet}
 
 <style>
@@ -165,6 +170,15 @@
 		margin: 0.1875rem 0 0.5rem;
 		font-size: 0.8125rem;
 		line-height: 1.45;
+		color: var(--color-text-secondary);
+	}
+	.settings-panel-group {
+		margin-top: 0.75rem;
+	}
+	.settings-panel-group-heading {
+		margin: 0 0 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
 		color: var(--color-text-secondary);
 	}
 	.settings-panel-grid {

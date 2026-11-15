@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, SlimKey } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
-import { TABS, fieldKind, fieldOptions, fieldView, keysForTab, numberLimits, optionLabel } from '../fields';
+import {
+	TABS,
+	fieldKind,
+	fieldOptions,
+	fieldView,
+	groupsForTab,
+	keysForTab,
+	numberLimits,
+	optionLabel
+} from '../fields';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 const key = (name: string): SlimKey => {
@@ -226,5 +235,21 @@ describe('fieldView', () => {
 	it('lists chip values as strings, and none for a non-list value', () => {
 		expect(fieldView(key('AudioLanguageList'), { ...base, inherited: ['eng', 2] }).chipValues).toEqual(['eng', '2']);
 		expect(fieldView(key('AudioLanguageList'), { ...base, inherited: null }).chipValues).toEqual([]);
+	});
+});
+
+describe('groupsForTab', () => {
+	const k = (name: string, group: string) => ({ name, group }) as unknown as SlimKey;
+
+	it('groups keys by group in first-appearance order, keeping the key order', () => {
+		const groups = groupsForTab([k('a', 'Size'), k('b', 'Cropping'), k('c', 'Size'), k('d', 'Cropping')]);
+		expect(groups.map((g) => [g.group, g.keys.map((x) => x.name)])).toEqual([
+			['Size', ['a', 'c']],
+			['Cropping', ['b', 'd']]
+		]);
+	});
+
+	it('is empty for no keys', () => {
+		expect(groupsForTab([])).toEqual([]);
 	});
 });

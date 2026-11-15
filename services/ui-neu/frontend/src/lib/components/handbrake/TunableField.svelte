@@ -1,10 +1,13 @@
 <script lang="ts">
-	// One schema-rendered field: label row with Reset (once the preset stores a
-	// value), the control for the key's kind, the key name, and its issue. An
+	// One schema-rendered field: label row with a Changed mark and Reset (once the
+	// preset stores a value) and an info link to the HandBrake docs (its title is
+	// the HandBrake key), the control for the key's kind, and its issue. An
 	// unstored text or number field shows the inherited value as a placeholder.
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
-	import { fieldView } from '$lib/handbrake/fields';
+	import Glyph from '$lib/components/Glyph.svelte';
+	import { docUrlFor } from '$lib/handbrake/docLinks';
+	import { fieldView, type TabId } from '$lib/handbrake/fields';
 
 	interface Props {
 		key: SlimKey;
@@ -18,6 +21,8 @@
 		idPrefix?: string;
 		// A range and step the schema key does not carry (a quality scale).
 		range?: { min: number; max: number; step: number };
+		// The HandBrake docs page for the key's input values; defaults to its tab group's page.
+		docUrl?: string;
 		onchange: (v: unknown) => void;
 		onreset: () => void;
 	}
@@ -32,12 +37,14 @@
 		disabled = false,
 		idPrefix = '',
 		range,
+		docUrl,
 		onchange,
 		onreset
 	}: Props = $props();
 
 	const view = $derived(fieldView(key, { value, inherited, stored, options, range }));
 	const id = $derived(`${idPrefix}tunable-${key.name}`);
+	const href = $derived(docUrl ?? docUrlFor(key.tab as TabId, key.group));
 
 	function onSelect(e: Event) {
 		const raw = (e.currentTarget as HTMLSelectElement).value;
@@ -51,7 +58,10 @@
 
 <!-- The audio track list has its own editor (AudioTrackList); this field draws nothing for it. -->
 {#if view.kind !== 'audio-list'}
-	<div class={view.stored ? 'tunable-field tunable-field-stored' : 'tunable-field'}>
+	<div
+		class={view.stored ? 'tunable-field tunable-field-stored' : 'tunable-field'}
+		data-changed={view.stored || undefined}
+	>
 		{#if view.kind === 'checkbox'}
 			<div class="tunable-field-head">
 				<span class="tunable-field-inline">
@@ -63,12 +73,16 @@
 						onchange={(e) => onchange(e.currentTarget.checked)}
 					/>
 					<label class="field-label" for={id}>{key.label}</label>
+					{@render labelExtras()}
 				</span>
 				{@render resetLink()}
 			</div>
 		{:else}
 			<div class="tunable-field-head">
-				<label class="field-label" for={id}>{key.label}</label>
+				<span class="tunable-field-inline">
+					<label class="field-label" for={id}>{key.label}</label>
+					{@render labelExtras()}
+				</span>
 				{@render resetLink()}
 			</div>
 			{#if view.kind === 'select'}
@@ -81,10 +95,23 @@
 				{@render textControl()}
 			{/if}
 		{/if}
-		<p class="tunable-field-key">{key.name}</p>
 		{#if issue}<p class="field-error" role="alert">{issue.message}</p>{/if}
 	</div>
 {/if}
+
+{#snippet labelExtras()}
+	{#if view.stored}<span class="tunable-field-changed">Changed</span>{/if}
+	<a
+		class="tunable-field-info"
+		{href}
+		target="_blank"
+		rel="noopener noreferrer"
+		title={`HandBrake key: ${key.name}`}
+		aria-label={`HandBrake docs for ${key.label} (${key.name})`}
+	>
+		<Glyph name="info" class="h-3 w-3" />
+	</a>
+{/snippet}
 
 {#snippet resetLink()}
 	{#if view.stored}
@@ -151,10 +178,20 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.tunable-field-key {
-		font-size: 0.6875rem;
+	.tunable-field-changed {
+		padding: 0 0.375rem;
+		border-radius: 999px;
+		font-size: 0.625rem;
+		font-weight: 700;
+		background: var(--color-info-soft);
+		color: var(--color-on-info-soft);
+	}
+	.tunable-field-info {
+		display: inline-flex;
 		color: var(--color-text-faint);
-		overflow-wrap: anywhere;
+	}
+	.tunable-field-info:hover {
+		color: var(--color-text);
 	}
 	.tunable-field-reset {
 		font-size: 0.75rem;

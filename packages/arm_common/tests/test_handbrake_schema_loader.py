@@ -209,3 +209,21 @@ def test_content_hash_is_stable_and_order_independent(hb_raw):
     changed = copy.deepcopy(hb_raw)
     changed["handbrake_tag"] = "other"
     assert content_hash(changed) != content_hash(hb_raw)
+
+
+def test_keys_follow_overlay_row_order_with_unknown_keys_last(hb_schema):
+    from arm_common.handbrake_schema.overlay import KEY_OVERLAY
+
+    names = list(hb_schema.keys)
+    known = [n for n in names if n in KEY_OVERLAY]
+    assert known == [n for n in KEY_OVERLAY if n in hb_schema.keys]
+    assert names[: len(known)] == known
+
+
+def test_dimensions_keys_are_grouped_in_purpose_order(hb_schema):
+    dimensions = [k for k in hb_schema.keys.values() if k.tab == "dimensions"]
+    groups = list(dict.fromkeys(k.group for k in dimensions))
+    assert groups == ["Size", "Cropping", "Pixel aspect", "Padding", "Orientation"]
+    sides = ("Top", "Bottom", "Left", "Right")
+    crop = [k.name for k in dimensions if k.name in {f"Picture{s}Crop" for s in sides}]
+    assert crop == [f"Picture{s}Crop" for s in sides]

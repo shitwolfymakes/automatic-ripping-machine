@@ -224,6 +224,27 @@ describe('which settings show', () => {
 		).toBeInTheDocument();
 	});
 
+	it('a tab shows a group heading only for a group with a visible field', async () => {
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await openTab('Dimensions');
+		for (const group of ['Size', 'Cropping', 'Pixel aspect', 'Padding', 'Orientation']) {
+			expect(screen.getByRole('heading', { name: group })).toBeInTheDocument();
+		}
+		await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'Rotate' } });
+		expect(screen.getByRole('heading', { name: 'Orientation' })).toBeInTheDocument();
+		expect(screen.queryByRole('heading', { name: 'Size' })).toBeNull();
+	});
+
+	it('an encoder card field links to its family docs page', async () => {
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await openTab('Video');
+		const card = await screen.findByRole('region', { name: 'NVIDIA H.264' });
+		const link = within(card).getAllByRole('link')[0];
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/video-nvenc.html');
+	});
+
 	it('names the preset as This preset when the encoder is not in the catalog', async () => {
 		encoders.list = [];
 		mount({ mode: 'edit', preset: preset({ encoder: 'nvenc_h264' }) });

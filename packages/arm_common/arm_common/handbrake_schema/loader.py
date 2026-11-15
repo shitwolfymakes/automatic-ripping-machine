@@ -110,7 +110,11 @@ def _key_spec(name: str, default: Any) -> KeySpec:
 
 
 def _build_keys(defaults: dict[str, Any]) -> dict[str, KeySpec]:
-    return {name: _key_spec(name, default) for name, default in defaults.items()}
+    """Overlay-known keys in overlay row order (tab, group, row), then the rest in dump order."""
+    overlay_order = {name: index for index, name in enumerate(KEY_OVERLAY)}
+    # sorted() is stable, so keys the overlay does not know keep the dump order after the known ones.
+    names = sorted(defaults, key=lambda name: overlay_order.get(name, len(overlay_order)))
+    return {name: _key_spec(name, defaults[name]) for name in names}
 
 
 def _quality(item: dict[str, Any]) -> QualityLimits:

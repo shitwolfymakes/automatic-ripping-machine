@@ -76,6 +76,13 @@ export function keysForTab(schema: HandbrakeSchemaSlimView, tab: TabId): SlimKey
 	return schema.keys.filter((k) => k.tab === tab);
 }
 
+// Keys grouped by their schema group, in the order the groups first appear.
+export function groupsForTab(keys: SlimKey[]): { group: string; keys: SlimKey[] }[] {
+	const groups = new Map<string, SlimKey[]>();
+	for (const key of keys) groups.set(key.group, [...(groups.get(key.group) ?? []), key]);
+	return [...groups].map(([group, members]) => ({ group, keys: members }));
+}
+
 export interface FieldViewOption {
 	value: string;
 	label: string;

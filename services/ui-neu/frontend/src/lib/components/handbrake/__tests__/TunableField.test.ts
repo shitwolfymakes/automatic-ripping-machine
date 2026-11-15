@@ -207,9 +207,32 @@ describe('TunableField fidelity', () => {
 		expect(box.closest('.tunable-field-inline')).toContainElement(screen.getByText(key('ChapterMarkers').label));
 	});
 
-	it('shows the key name under the control', () => {
-		mount('VideoQualityType', { options: [1, 2] });
-		expect(screen.getByText('VideoQualityType')).toHaveClass('tunable-field-key');
+	it('has no raw key line; an info link carries the key and opens the docs for its group', () => {
+		mount('PictureTopCrop');
+		expect(screen.queryByText('PictureTopCrop')).toBeNull();
+		const link = screen.getByRole('link', { name: 'HandBrake docs for Top crop (PictureTopCrop)' });
+		expect(link).toHaveAttribute('title', 'HandBrake key: PictureTopCrop');
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/advanced/resizing-video.html');
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+	});
+
+	it('links to the docUrl it is given in place of the group page', () => {
+		mount('VideoPreset', { docUrl: 'https://example.test/docs.html' });
+		expect(screen.getByRole('link', { name: /HandBrake docs for/ })).toHaveAttribute(
+			'href',
+			'https://example.test/docs.html'
+		);
+	});
+
+	it('marks a stored field as Changed on the field and beside the label; an unstored one is not', () => {
+		const stored = mount('PictureWidth', { stored: true, value: 1 });
+		expect(stored.container.querySelector('.tunable-field')).toHaveAttribute('data-changed');
+		expect(screen.getByText('Changed')).toBeInTheDocument();
+		stored.unmount();
+		const inherited = mount('PictureWidth', { inherited: 2 });
+		expect(inherited.container.querySelector('.tunable-field')).not.toHaveAttribute('data-changed');
+		expect(screen.queryByText('Changed')).toBeNull();
 	});
 
 	it('marks a stored field and offers Reset; an inherited one has neither', () => {
