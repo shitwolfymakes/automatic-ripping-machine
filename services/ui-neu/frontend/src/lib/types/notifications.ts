@@ -82,6 +82,8 @@ export interface CatalogService {
 	id: string;
 	name: string;
 	docs_url: string;
+	// Apprise's documentation page for setting the service up.
+	setup_url: string;
 	url_scheme: string;
 	required_fields: CatalogField[];
 	advanced_fields: CatalogField[];

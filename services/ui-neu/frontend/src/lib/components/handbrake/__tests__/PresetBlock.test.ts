@@ -116,19 +116,19 @@ describe('fields', () => {
 
 	it("links the base preset to HandBrake's official presets page for a HandBrake preset", () => {
 		mount();
-		const link = screen.getByTestId('tp-preset-ref-docs');
+		const link = screen.getByRole('link', { name: 'Docs for Base preset' });
 		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/official-presets.html');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-		expect(link).toHaveAccessibleName('HandBrake docs: official presets');
+		expect(link).toHaveAttribute('data-field-id', 'form.transcode_preset.preset_ref');
 		expect(screen.getByLabelText('Base preset')).toBe(screen.getByTestId('tp-preset-ref'));
 		cleanup();
 		mount({}, { builtinNames: null });
 		expect(screen.getByLabelText('Preset ref')).toBe(screen.getByTestId('tp-preset-ref'));
-		expect(screen.getByTestId('tp-preset-ref-docs')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Docs for Preset ref' })).toBeInTheDocument();
 		cleanup();
 		mount({ tool: 'abcde' });
-		expect(screen.queryByTestId('tp-preset-ref-docs')).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: /^Docs for/ })).not.toBeInTheDocument();
 	});
 
 	it('notes that extra args win over the settings while the tabs show', () => {

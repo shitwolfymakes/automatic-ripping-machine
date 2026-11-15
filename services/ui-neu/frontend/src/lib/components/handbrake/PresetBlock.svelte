@@ -12,10 +12,7 @@
 	import { presetBlockMessages } from '$lib/handbrake/issue-placement';
 	import { errorId, invalidAttrs, type FieldErrors } from '$lib/ui/form-validation';
 	import type { SettingIssue } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/shared/Glyph.svelte';
-	import { docsHref, docsLinkFor } from '$lib/docs/field-docs';
-
-	const OFFICIAL_PRESETS_URL = docsHref(docsLinkFor('form.transcode_preset.preset_ref'));
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	interface Props {
 		draft: Draft;
@@ -243,23 +240,13 @@
 	{/if}
 </div>
 
+<!-- HandBrake's official presets explain the base preset; other tools have no such list. -->
 {#snippet refLabel(text: string)}
-	<span class="preset-block-label">
-		<label class="field-label" for={REF_ID}>{text}</label>
-		{#if view.showPresetsDocLink}
-			<a
-				class="preset-block-info"
-				href={OFFICIAL_PRESETS_URL}
-				target="_blank"
-				rel="noopener noreferrer"
-				title="HandBrake's official presets"
-				aria-label="HandBrake docs: official presets"
-				data-testid="tp-preset-ref-docs"
-			>
-				<Glyph name="info" class="h-3 w-3" />
-			</a>
-		{/if}
-	</span>
+	<FieldLabel
+		for={REF_ID}
+		label={text}
+		docsId={view.showPresetsDocLink ? 'form.transcode_preset.preset_ref' : undefined}
+	/>
 {/snippet}
 
 {#snippet refNotes()}
@@ -281,17 +268,5 @@
 	}
 	.preset-block-wide {
 		grid-column: 1 / -1;
-	}
-	.preset-block-label {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-	}
-	.preset-block-info {
-		display: inline-flex;
-		color: var(--color-text-faint);
-	}
-	.preset-block-info:hover {
-		color: var(--color-text);
 	}
 </style>

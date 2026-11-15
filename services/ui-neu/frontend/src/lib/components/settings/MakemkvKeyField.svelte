@@ -3,6 +3,7 @@
 	import type { ConfigFieldMeta, ConfigView, DriveView } from '$lib/types/api.gen';
 	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
 	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
 	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
@@ -46,7 +47,10 @@
 
 <div class="makemkv-key-field stack">
 	<div>
-		<div class="field-label makemkv-key-field-title">{field.label}</div>
+		<div class="makemkv-key-field-head">
+			<div class="field-label makemkv-key-field-title">{field.label}</div>
+			<FieldDocsLink id={`config.${field.key}`} label={field.label} />
+		</div>
 		<p class="field-help">MakeMKV reads and decrypts DVDs and Blu-rays. Both kinds of key work the same for ripping.</p>
 	</div>
 	<ChoiceCard
@@ -102,6 +106,11 @@
 	}
 	.makemkv-key-field {
 		gap: 0.75rem;
+	}
+	.makemkv-key-field-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.makemkv-key-field-title {
 		color: var(--color-text);

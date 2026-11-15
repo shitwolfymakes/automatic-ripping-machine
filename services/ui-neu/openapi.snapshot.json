@@ -8467,6 +8467,10 @@
             "type": "string",
             "title": "Docs Url"
           },
+          "setup_url": {
+            "type": "string",
+            "title": "Setup Url"
+          },
           "url_scheme": {
             "type": "string",
             "title": "Url Scheme"
@@ -8491,6 +8495,7 @@
           "id",
           "name",
           "docs_url",
+          "setup_url",
           "url_scheme",
           "required_fields",
           "advanced_fields"

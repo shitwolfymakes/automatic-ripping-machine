@@ -13,9 +13,11 @@
 		label: string;
 		// A link resolved by the caller; takes the place of the registry lookup.
 		link?: DocsLink | null;
+		// Hover text in place of the default (a HandBrake setting names its key).
+		title?: string;
 	}
 
-	let { id, fallbackId, label, link }: Props = $props();
+	let { id, fallbackId, label, link, title }: Props = $props();
 
 	const target = $derived(link === undefined ? docsLinkFor(id, fallbackId) : link);
 	const external = $derived(target?.type === 'external');
@@ -27,7 +29,7 @@
 		href={docsHref(target)}
 		target={external ? '_blank' : undefined}
 		rel={external ? 'noopener noreferrer' : undefined}
-		title={external ? 'Open the documentation' : 'Open the ARM help'}
+		title={title ?? (external ? 'Open the documentation' : 'Open the ARM help')}
 		aria-label={`Docs for ${label}`}
 		data-field-id={id}
 	>

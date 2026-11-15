@@ -1,12 +1,11 @@
 <script lang="ts">
-	// One schema-rendered field: label row with a Changed mark and Reset (once the
-	// preset stores a value) and an info link to the HandBrake docs (its title is
-	// the HandBrake key), the control for the key's kind, and its issue. An
+	// One schema-rendered field: label row with its docs link (hover names the
+	// HandBrake key), a Changed mark and Reset (once the preset stores a value), the control for the key's kind, and its issue. An
 	// unstored text or number field shows the inherited value as a placeholder.
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
-	import Glyph from '$lib/components/shared/Glyph.svelte';
-	import { docsHref, handbrakeKeyDocs } from '$lib/docs/field-docs';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import { handbrakeDocsIds } from '$lib/docs/field-docs';
 	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
 	import { fieldView, optionLabel, scalarText } from '$lib/handbrake/fields';
 	import { languageChoices } from '$lib/handbrake/languages';
@@ -25,8 +24,9 @@
 		idPrefix?: string;
 		// A range and step the schema key does not carry (a quality scale).
 		range?: { min: number; max: number; step: number };
-		// The HandBrake docs page for the key's input values; defaults to its tab group's page.
-		docUrl?: string;
+		// Registry id of the docs for the key's input values (an encoder family);
+		// defaults to the key's own entry, else its tab group's.
+		docsId?: string;
 		onchange: (v: unknown) => void;
 		onreset: () => void;
 	}
@@ -41,7 +41,7 @@
 		disabled = false,
 		idPrefix = '',
 		range,
-		docUrl,
+		docsId,
 		onchange,
 		onreset
 	}: Props = $props();
@@ -50,7 +50,7 @@
 	const id = $derived(`${idPrefix}tunable-${key.name}`);
 	// Marks the control invalid and points it at the issue line while there is an issue.
 	const invalid = $derived(invalidAttrs(id, issue?.message));
-	const href = $derived(docUrl ?? docsHref(handbrakeKeyDocs(key.tab, key.group, key.name)));
+	const docs = $derived(handbrakeDocsIds(key));
 
 	const choices = $derived(languageChoices(key.name));
 	const rotate = $derived(parseRotate(scalarText(view.shown)));
@@ -90,13 +90,16 @@
 <!-- The audio track list has its own editor (AudioTrackList); this field draws nothing for it. -->
 {#if view.kind !== 'audio-list'}
 	<div class="tunable-field" data-changed={view.stored || undefined}>
-		<div class="tunable-field-head">
-			<span class="tunable-field-inline">
-				<label class="field-label" for={id}>{key.label}</label>
-				{@render labelExtras()}
-			</span>
+		<FieldLabel
+			for={id}
+			label={key.label}
+			docsId={docsId ?? docs.id}
+			docsFallbackId={docs.fallbackId}
+			docsTitle={`HandBrake key: ${key.name}`}
+		>
+			{#if view.stored}<span class="changed-chip">Changed</span>{/if}
 			{@render resetLink()}
-		</div>
+		</FieldLabel>
 		{#if view.kind === 'checkbox'}
 			{@render checkboxControl()}
 		{:else if view.kind === 'select'}
@@ -123,20 +126,6 @@
 		{#if issue}<p class="field-error" id={errorId(id)} role="alert">{issue.message}</p>{/if}
 	</div>
 {/if}
-
-{#snippet labelExtras()}
-	{#if view.stored}<span class="changed-chip">Changed</span>{/if}
-	<a
-		class="tunable-field-info"
-		{href}
-		target="_blank"
-		rel="noopener noreferrer"
-		title={`HandBrake key: ${key.name}`}
-		aria-label={`HandBrake docs for ${key.label} (${key.name})`}
-	>
-		<Glyph name="info" class="h-3 w-3" />
-	</a>
-{/snippet}
 
 {#snippet resetLink()}
 	{#if view.stored}
@@ -239,12 +228,6 @@
 		gap: 0.25rem;
 		min-width: 0;
 	}
-	.tunable-field-head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
 	.tunable-field-inline {
 		display: flex;
 		align-items: center;
@@ -255,14 +238,9 @@
 		align-items: center;
 		gap: 0.75rem;
 	}
-	.tunable-field-info {
-		display: inline-flex;
-		color: var(--color-text-faint);
-	}
-	.tunable-field-info:hover {
-		color: var(--color-text);
-	}
+	/* Reset sits at the end of the label row. */
 	.tunable-field-reset {
+		margin-left: auto;
 		font-size: 0.75rem;
 	}
 </style>

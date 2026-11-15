@@ -2,11 +2,12 @@ from arm_backend.notifications import catalog as cat
 
 
 class _FakePlugin:
-    def __init__(self, *, scheme, name, tokens=None, args=None, url="https://docs"):
+    def __init__(self, *, scheme, name, tokens=None, args=None, url="https://docs", setup_url=None):
         self.secure_protocol = scheme
         self.protocol = None
         self.service_name = name
         self.service_url = url
+        self.setup_url = setup_url
         self.template_tokens = tokens or {}
         self.template_args = args or {}
 
@@ -50,6 +51,18 @@ def test_catalog_builds_required_and_advanced(monkeypatch) -> None:
     assert adv["type"] == "choice"
     assert adv["values"] == ["markdown", "text"]
     assert adv["default"] == "text"
+
+
+def test_catalog_carries_the_apprise_setup_page(monkeypatch) -> None:
+    p = _FakePlugin(scheme="discord", name="Discord", setup_url="https://appriseit.com/services/discord/")
+    _patch(monkeypatch, [p])
+    assert cat.build_catalog()["services"][0]["setup_url"] == "https://appriseit.com/services/discord/"
+
+
+def test_catalog_falls_back_to_the_apprise_wiki_page(monkeypatch) -> None:
+    p = _FakePlugin(scheme="jira", name="Jira")
+    _patch(monkeypatch, [p])
+    assert cat.build_catalog()["services"][0]["setup_url"] == "https://github.com/caronc/apprise/wiki/Notify_jira"
 
 
 def test_catalog_blocklist_and_alias_skipped(monkeypatch) -> None:

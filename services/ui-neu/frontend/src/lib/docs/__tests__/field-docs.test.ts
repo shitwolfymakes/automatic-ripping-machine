@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import registry from '../field-docs.json';
-import { docsHref, docsLinkFor, familyDocs, handbrakeKeyDocs, headingAnchor, helpHref } from '../field-docs';
+import {
+	docsHref,
+	docsLinkFor,
+	familyDocsId,
+	handbrakeDocsIds,
+	hasFieldDocs,
+	headingAnchor,
+	helpHref
+} from '../field-docs';
 
 const BASE = 'https://handbrake.fr/docs/en/latest/';
 const FIELDS = registry.fields as Record<string, Record<string, unknown>>;
@@ -49,7 +59,19 @@ describe('docsLinkFor', () => {
 	});
 });
 
-describe('handbrakeKeyDocs', () => {
+function handbrakeLink(tab: string, group: string, name: string) {
+	const { id, fallbackId } = handbrakeDocsIds({ tab, group, name });
+	return docsLinkFor(id, fallbackId);
+}
+
+describe('handbrakeDocsIds', () => {
+	it('names the key entry first and its group entry as the fallback', () => {
+		expect(handbrakeDocsIds({ tab: 'dimensions', group: 'Size', name: 'PictureWidth' })).toEqual({
+			id: 'handbrake.key.PictureWidth',
+			fallbackId: 'handbrake.group.dimensions.Size'
+		});
+	});
+
 	it.each([
 		['dimensions', 'Size', 'advanced/resizing-video.html'],
 		['dimensions', 'Orientation', 'advanced/resizing-video.html'],
@@ -66,15 +88,15 @@ describe('handbrakeKeyDocs', () => {
 		['chapters', 'Chapters', 'advanced/chapter-markers.html'],
 		['summary', 'Container', 'advanced/metadata-passthru.html']
 	])('%s / %s resolves to its group page', (tab, group, page) => {
-		expect(handbrakeKeyDocs(tab, group, 'NoOverrideKey')).toEqual(external(page));
+		expect(handbrakeLink(tab, group, 'NoOverrideKey')).toEqual(external(page));
 	});
 
 	it('returns null for a group the registry does not know', () => {
-		expect(handbrakeKeyDocs('video', 'Unknown group', 'NoOverrideKey')).toBeNull();
+		expect(handbrakeLink('video', 'Unknown group', 'NoOverrideKey')).toBeNull();
 	});
 });
 
-describe('familyDocs', () => {
+describe('familyDocsId', () => {
 	it.each([
 		['nvenc_h264', 'technical/video-nvenc.html'],
 		['qsv_av1', 'technical/video-qsv.html'],
@@ -84,7 +106,7 @@ describe('familyDocs', () => {
 		['svt_av1', 'technical/video-presets-tunes.html'],
 		['mf_h264', 'technical/video-presets-tunes.html']
 	])('%s -> %s', (family, page) => {
-		expect(familyDocs(family)).toEqual(external(page));
+		expect(docsLinkFor(familyDocsId(family))).toEqual(external(page));
 	});
 
 	it('maps onto exactly the family ids the registry declares', () => {
@@ -94,10 +116,17 @@ describe('familyDocs', () => {
 			.sort();
 		expect(declared).toEqual(['default', 'nvenc', 'qsv', 'vcn']);
 		const probes = ['nvenc_h264', 'qsv_av1', 'vcn_h264', 'x264'];
-		const resolved = probes.map((p) => familyDocs(p));
-		for (const [i, name] of ['nvenc', 'qsv', 'vcn', 'default'].entries()) {
-			expect(resolved[i]).toEqual(docsLinkFor(`handbrake.family.${name}`));
-		}
+		expect(probes.map((p) => familyDocsId(p)).sort()).toEqual(declared.map((name) => `handbrake.family.${name}`));
+	});
+});
+
+describe('hasFieldDocs', () => {
+	it('is true when some entry starts with the prefix', () => {
+		expect(hasFieldDocs('notify.discord.')).toBe(true);
+	});
+
+	it('is false when none does', () => {
+		expect(hasFieldDocs('notify.not_a_service.')).toBe(false);
 	});
 });
 
@@ -144,11 +173,10 @@ describe('helpHref and docsHref', () => {
 });
 
 describe('committed copy', () => {
-	it('is byte-identical to the registry in arm_common (devtools/regen-field-docs.sh)', async () => {
-		const { readFileSync } = await import('node:fs');
-		// vitest runs from services/ui-neu/frontend.
-		const copy = readFileSync('src/lib/docs/field-docs.json');
-		const source = readFileSync('../../../packages/arm_common/arm_common/field_docs.json');
+	it('is byte-identical to the registry in arm_common (devtools/regen-field-docs.sh)', () => {
+		const at = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
+		const copy = readFileSync(at('../field-docs.json'));
+		const source = readFileSync(at('../../../../../../../packages/arm_common/arm_common/field_docs.json'));
 		expect(copy.equals(source)).toBe(true);
 	});
 });

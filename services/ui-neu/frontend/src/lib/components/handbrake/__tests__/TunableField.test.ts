@@ -211,7 +211,7 @@ describe('TunableField fidelity', () => {
 		expect(label.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(line).not.toContainElement(label);
 		expect(screen.getByText('Changed')).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: /HandBrake docs for/ })).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: /^Docs for/ })).toBeInTheDocument();
 	});
 
 	it('marks a checkbox invalid and points it at its issue', () => {
@@ -229,19 +229,38 @@ describe('TunableField fidelity', () => {
 	it('has no raw key line; an info link carries the key and opens the docs for its group', () => {
 		mount('PictureTopCrop');
 		expect(screen.queryByText('PictureTopCrop')).toBeNull();
-		const link = screen.getByRole('link', { name: 'HandBrake docs for Top crop (PictureTopCrop)' });
+		const link = screen.getByRole('link', { name: 'Docs for Top crop' });
 		expect(link).toHaveAttribute('title', 'HandBrake key: PictureTopCrop');
+		expect(link).toHaveAttribute('data-field-id', 'handbrake.key.PictureTopCrop');
 		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/advanced/resizing-video.html');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 	});
 
-	it('links to the docUrl it is given in place of the group page', () => {
-		mount('VideoPreset', { docUrl: 'https://example.test/docs.html' });
-		expect(screen.getByRole('link', { name: /HandBrake docs for/ })).toHaveAttribute(
-			'href',
-			'https://example.test/docs.html'
-		);
+	it('links to the docs id it is given in place of the group page', () => {
+		mount('VideoPreset', { docsId: 'handbrake.family.nvenc' });
+		const link = screen.getByRole('link', { name: /^Docs for/ });
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/video-nvenc.html');
+		expect(link).toHaveAttribute('data-field-id', 'handbrake.family.nvenc');
+	});
+
+	it('shows no docs link for a key whose group has no registry entry (the derived Other group)', () => {
+		renderComponent(TunableField, {
+			props: {
+				key: { ...key('PictureWidth'), group: 'Other' },
+				value: undefined,
+				inherited: undefined,
+				stored: true,
+				options: null,
+				onchange: vi.fn(),
+				onreset: vi.fn()
+			}
+		});
+		expect(screen.getByLabelText(key('PictureWidth').label)).toBeInTheDocument();
+		expect(screen.queryByRole('link')).toBeNull();
+		expect(document.querySelector('a:not([href])')).toBeNull();
+		expect(screen.getByText('Changed')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument();
 	});
 
 	it('marks a stored field as Changed on the field and beside the label; an unstored one is not', () => {

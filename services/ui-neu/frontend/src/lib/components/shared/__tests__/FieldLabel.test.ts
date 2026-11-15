@@ -45,4 +45,20 @@ describe('FieldLabel', () => {
 		renderComponent(FieldLabel, { props: { for: 'a', label: 'A', children: chip } });
 		expect(screen.getByText('Changed')).toBeInTheDocument();
 	});
+
+	it('names a field with no single control in a plain caption, still with its docs link', () => {
+		const { container } = renderComponent(FieldLabel, {
+			props: { label: 'Movie sources', docsId: 'config.auto_rip_on_insert' }
+		});
+		expect(container.querySelector('label')).toBeNull();
+		expect(container.querySelector('span.field-label')).toHaveTextContent('Movie sources');
+		expect(screen.getByRole('link', { name: 'Docs for Movie sources' })).toBeInTheDocument();
+	});
+
+	it('passes a docs title through to the docs link', () => {
+		renderComponent(FieldLabel, {
+			props: { for: 'a', label: 'Width', docsId: 'handbrake.group.dimensions.Size', docsTitle: 'HandBrake key: W' }
+		});
+		expect(screen.getByRole('link', { name: 'Docs for Width' })).toHaveAttribute('title', 'HandBrake key: W');
+	});
 });
