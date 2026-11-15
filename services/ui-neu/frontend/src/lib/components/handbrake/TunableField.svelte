@@ -6,9 +6,9 @@
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
-	import { docUrlFor } from '$lib/handbrake/doc-links';
+	import { docsHref, handbrakeKeyDocs } from '$lib/docs/field-docs';
 	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
-	import { fieldView, optionLabel, scalarText, type TabId } from '$lib/handbrake/fields';
+	import { fieldView, optionLabel, scalarText } from '$lib/handbrake/fields';
 	import { languageChoices } from '$lib/handbrake/languages';
 	import { PAD_CUSTOM, padColorView } from '$lib/handbrake/pad-color';
 	import { formatRotate, parseRotate, ROTATE_ANGLES, type RotateAngle } from '$lib/handbrake/rotate';
@@ -50,7 +50,7 @@
 	const id = $derived(`${idPrefix}tunable-${key.name}`);
 	// Marks the control invalid and points it at the issue line while there is an issue.
 	const invalid = $derived(invalidAttrs(id, issue?.message));
-	const href = $derived(docUrl ?? docUrlFor(key.tab as TabId, key.group));
+	const href = $derived(docUrl ?? docsHref(handbrakeKeyDocs(key.tab, key.group, key.name)));
 
 	const choices = $derived(languageChoices(key.name));
 	const rotate = $derived(parseRotate(scalarText(view.shown)));

@@ -219,6 +219,14 @@ jobs:
             echo "::error::ui-neu api.gen.ts is out of sync with services/ui-neu/openapi.snapshot.json; run bash services/ui-neu/scripts/codegen.sh and commit."
             exit 1
           fi
+      - name: Regenerate the UI copy of the field docs registry
+        run: bash devtools/regen-field-docs.sh
+      - name: Fail if the UI copy drifted from field_docs.json
+        run: |
+          if ! git diff --exit-code services/ui-neu/frontend/src/lib/docs/field-docs.json; then
+            echo "::error::the UI copy of the field docs registry is out of sync with packages/arm_common/arm_common/field_docs.json; run bash devtools/regen-field-docs.sh and commit."
+            exit 1
+          fi
 
   openapi-drift:
     # Live OpenAPI from the FastAPI app must match the committed snapshot

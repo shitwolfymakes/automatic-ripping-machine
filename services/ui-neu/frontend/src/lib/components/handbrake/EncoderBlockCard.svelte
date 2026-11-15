@@ -17,7 +17,7 @@
 		VARIANT_LISTS,
 		type EncoderCard
 	} from '$lib/handbrake/encoder-cards';
-	import { docUrlForFamily } from '$lib/handbrake/doc-links';
+	import { docsHref, familyDocs } from '$lib/docs/field-docs';
 	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
 	import type { BaseValues } from '$lib/handbrake/base-values';
 	import TunableField from './TunableField.svelte';
@@ -161,7 +161,7 @@
 					disabled={readonly}
 					idPrefix={prefix}
 					range={row.range}
-					docUrl={docUrlForFamily(family.name)}
+					docUrl={docsHref(familyDocs(family.name))}
 					onchange={(v) => onchange(row.name, v)}
 					onreset={() => onreset(row.name)}
 				/>

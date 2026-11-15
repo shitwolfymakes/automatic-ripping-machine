@@ -13,7 +13,9 @@
 	import { errorId, invalidAttrs, type FieldErrors } from '$lib/ui/form-validation';
 	import type { SettingIssue } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
-	import { OFFICIAL_PRESETS_URL } from '$lib/handbrake/doc-links';
+	import { docsHref, docsLinkFor } from '$lib/docs/field-docs';
+
+	const OFFICIAL_PRESETS_URL = docsHref(docsLinkFor('form.transcode_preset.preset_ref'));
 
 	interface Props {
 		draft: Draft;
