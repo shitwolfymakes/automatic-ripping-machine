@@ -24,8 +24,9 @@
 		onBaseChange,
 		saveFailure,
 		schemaLoadError,
+		panelCards,
+		showTabs,
 		sidebarTitle,
-		unplacedIssues,
 		usageLabel,
 		type Bases,
 		type PresetField,
@@ -33,6 +34,7 @@
 		type SidebarMode
 	} from '$lib/handbrake/sidebarModel';
 	import { applyProposal } from '$lib/handbrake/importReview';
+	import { unplacedIssues, unplacedText } from '$lib/handbrake/issuePlacement';
 	import type {
 		HandbrakeSchemaSlimView,
 		ImportedPresetView,
@@ -61,11 +63,19 @@
 	let submitting = $state(false);
 	let failure = $state<SaveFailure | null>(null);
 	let importing = $state(false);
+	// The families whose collapsed encoder card the user chose to set values on anyway.
+	let expanded = $state<string[]>([]);
 	// Built-in names already asked for, so each is fetched once.
 	let requested: string[] = [];
 
 	const schema = $derived(handbrakeSchema.schema);
-	const loose = $derived(unplacedIssues(issues, schema));
+	const base = $derived(bases[draft.preset_ref ?? ''] ?? null);
+	const cards = $derived(schema ? panelCards(schema, draft.encoder, draft.preset_ref, encodersStore.list, base) : []);
+	// Issues on inputs the panel does not render go to the banner; with no panel, all of them.
+	const panel = $derived(
+		schema && showTabs(draft) ? { schema, settings: draft.settings, base, cards, expanded } : null
+	);
+	const loose = $derived(unplacedIssues(issues, panel));
 	const cloneAction = $derived(preset && onclone ? () => onclone(preset) : null);
 	const view = $derived(
 		presetSidebarView({
@@ -79,7 +89,6 @@
 		})
 	);
 	const readonly = $derived(view.readonly);
-	const base = $derived(bases[draft.preset_ref ?? ''] ?? null);
 	const note = $derived(footerNote(preset));
 
 	onMount(() => {
@@ -177,7 +186,7 @@
 			{/if}
 			{#if view.showUnplaced}
 				<ul class="alert alert-warning preset-sidebar-issues">
-					{#each loose as issue, i (i)}<li>{issue.message}</li>{/each}
+					{#each loose as issue, i (i)}<li>{unplacedText(issue, schema)}</li>{/each}
 				</ul>
 			{/if}
 			{#if readonly}
@@ -217,9 +226,11 @@
 								{issues}
 								{readonly}
 								encoder={draft.encoder}
-								presetRef={draft.preset_ref}
 								availability={encodersStore.list}
+								{cards}
+								{expanded}
 								onsettings={(next) => (draft = { ...draft, settings: next })}
+								onexpand={(family) => (expanded = [...expanded, family])}
 							/>
 						{/snippet}
 					</LoadState>

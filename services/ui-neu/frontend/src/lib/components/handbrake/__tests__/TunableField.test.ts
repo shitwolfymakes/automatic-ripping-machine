@@ -141,11 +141,10 @@ describe('TunableField', () => {
 		expect(onreset).toHaveBeenCalledTimes(1);
 	});
 
-	it('shows the issue and the hint', () => {
+	it('shows the issue', () => {
 		const issue = { key: 'ChapterMarkers', code: 'wrong_type', message: 'Not a boolean' } as SettingIssue;
-		mount('ChapterMarkers', { issue, hint: 'Applies to MKV' });
+		mount('ChapterMarkers', { issue });
 		expect(screen.getByRole('alert')).toHaveTextContent('Not a boolean');
-		expect(screen.getByText('Applies to MKV')).toBeInTheDocument();
 	});
 
 	it('disables the control and Reset', () => {

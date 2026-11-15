@@ -3,7 +3,7 @@
 
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SlimFamily, SlimKey } from '$lib/types/api.gen';
 import { rowKeys, visibleTrackKeys } from './audioTracks';
-import { cardOpen, visibleCardFields, type EncoderCard } from './encoderCards';
+import { cardOpen, cardVariant, visibleCardFields, type EncoderCard } from './encoderCards';
 import { fieldKind, TABS, type TabId } from './fields';
 import {
 	audioListShown,
@@ -11,6 +11,7 @@ import {
 	blockOf,
 	commonKeys,
 	commonOf,
+	inheritedDepth,
 	keyShown,
 	panelContext,
 	type BaseValues,
@@ -63,10 +64,11 @@ function visibleCards(input: VisibleInput, ctx: Context): VisibleCard[] {
 	return input.cards
 		.map(({ card, family }) => {
 			const block = blockOf(input.settings, family.name);
+			const variant = cardVariant(family, block, inheritedDepth(family, input.base).depth);
 			return {
 				card,
 				family,
-				fields: visibleCardFields(input.schema, family, block, ctx, input.filter),
+				fields: visibleCardFields(input.schema, family, variant, block, ctx, input.filter),
 				open: cardOpen(card, block, input.expanded.includes(family.name))
 			};
 		})

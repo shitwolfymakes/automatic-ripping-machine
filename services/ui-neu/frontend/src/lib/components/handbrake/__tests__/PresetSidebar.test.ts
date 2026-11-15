@@ -513,6 +513,25 @@ describe('editing and saving', () => {
 		expect(screen.getByRole('dialog', { name: 'Edit transcode preset' })).toBeInTheDocument();
 	});
 
+	it('lists an issue on a field another setting hides in the banner, named by its label', async () => {
+		const issues = [{ key: 'PictureTopCrop', encoder: null, code: 'out_of_range' as const, message: 'Too large' }];
+		const handbrake_settings = { common: { PictureCropMode: 0, PictureTopCrop: 9999 }, encoders: {} };
+		mount({ mode: 'edit', preset: preset({ handbrake_settings, issues }) });
+		await ready();
+		const banner = document.querySelector('.preset-sidebar-issues') as HTMLElement;
+		expect(banner).toHaveTextContent('Top crop: Too large');
+		await openTab('Dimensions');
+		expect(screen.queryByLabelText('Top crop')).not.toBeInTheDocument();
+	});
+
+	it('keeps an issue on a rendered field out of the banner', async () => {
+		const issues = [{ key: 'PictureTopCrop', encoder: null, code: 'out_of_range' as const, message: 'Too large' }];
+		const handbrake_settings = { common: { PictureCropMode: 3, PictureTopCrop: 9999 }, encoders: {} };
+		mount({ mode: 'edit', preset: preset({ handbrake_settings, issues }) });
+		await ready();
+		expect(document.querySelector('.preset-sidebar-issues')).toBeNull();
+	});
+
 	it('shows the read-time issues of the preset', async () => {
 		const issues = [{ key: 'preset_ref', encoder: null, code: 'not_in_list' as const, message: 'No such preset' }];
 		mount({ mode: 'edit', preset: preset({ preset_ref: 'Gone 1080p', issues }) });

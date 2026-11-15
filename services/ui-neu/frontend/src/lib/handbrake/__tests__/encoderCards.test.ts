@@ -4,7 +4,9 @@ import fixture from './fixtures/slim-schema.json';
 import {
 	blockDefault,
 	blockFields,
+	cardKey,
 	cardOpen,
+	cardVariant,
 	cardStatusLine,
 	encoderCards,
 	perEncoderLine,
@@ -210,10 +212,11 @@ describe('blockDefault', () => {
 
 describe('visibleCardFields', () => {
 	const all = { text: '', changedOnly: false };
+	const v8 = family('x264').variants[0];
 	const cq = { VideoQualityType: 2 };
 
 	it('lists bit depth and every applicable block field, in display order', () => {
-		expect(visibleCardFields(schema, family('x264'), {}, cq, all)).toEqual([
+		expect(visibleCardFields(schema, family('x264'), v8, {}, cq, all)).toEqual([
 			'bit_depth',
 			...blockFields(schema, family('x264'))
 				.map((k) => k.name)
@@ -222,29 +225,29 @@ describe('visibleCardFields', () => {
 	});
 
 	it('hides multi-pass and turbo under constant quality, the quality slider under average bitrate', () => {
-		const vbr = visibleCardFields(schema, family('x264'), {}, { VideoQualityType: 1 }, all);
+		const vbr = visibleCardFields(schema, family('x264'), v8, {}, { VideoQualityType: 1 }, all);
 		expect(vbr).toContain('VideoMultiPass');
 		expect(vbr).toContain('VideoTurboMultiPass');
 		expect(vbr).not.toContain('VideoQualitySlider');
 	});
 
 	it('reads gates from the block over the panel context', () => {
-		const shown = visibleCardFields(schema, family('x264'), { x264UseAdvancedOptions: true }, cq, all);
+		const shown = visibleCardFields(schema, family('x264'), v8, { x264UseAdvancedOptions: true }, cq, all);
 		expect(shown).toContain('x264Option');
 	});
 
 	it('keeps only the fields matching the filter text', () => {
-		expect(visibleCardFields(schema, family('x264'), {}, cq, { text: 'preset', changedOnly: false })).toEqual([
+		expect(visibleCardFields(schema, family('x264'), v8, {}, cq, { text: 'preset', changedOnly: false })).toEqual([
 			'VideoPreset'
 		]);
-		expect(visibleCardFields(schema, family('x264'), {}, cq, { text: 'bit depth', changedOnly: false })).toEqual([
+		expect(visibleCardFields(schema, family('x264'), v8, {}, cq, { text: 'bit depth', changedOnly: false })).toEqual([
 			'bit_depth'
 		]);
 	});
 
 	it('keeps only stored fields under Changed only', () => {
 		const block = { bit_depth: 10, VideoTune: 'film' };
-		expect(visibleCardFields(schema, family('x264'), block, cq, { text: '', changedOnly: true })).toEqual([
+		expect(visibleCardFields(schema, family('x264'), v8, block, cq, { text: '', changedOnly: true })).toEqual([
 			'bit_depth',
 			'VideoTune'
 		]);
@@ -263,5 +266,35 @@ describe('cardOpen', () => {
 	it('opens every other card', () => {
 		expect(cardOpen(c('open'), {}, false)).toBe(true);
 		expect(cardOpen(c('cpu-fallback'), {}, false)).toBe(true);
+	});
+});
+
+describe('card labels', () => {
+	const x264 = family('x264');
+	const key = (name: string) => schema.keys.find((k) => k.name === name)!;
+
+	it('resolves the variant from the block depth, then the inherited depth, else the first variant', () => {
+		expect(cardVariant(x264, { bit_depth: 10 }, 8).depth).toBe(10);
+		expect(cardVariant(x264, {}, 10).depth).toBe(10);
+		expect(cardVariant(x264, { bit_depth: 99 }, 8)).toBe(x264.variants[0]);
+	});
+
+	it('shows variant lists as selects, renames extra options and names the quality scale', () => {
+		const v = x264.variants[0];
+		expect(cardKey(key('VideoPreset'), v).source).toEqual({ kind: 'variant', ref: 'VideoPreset' });
+		expect(cardKey(key('VideoOptionExtra'), v).label).toBe('Extra encoder options');
+		expect(cardKey(key('VideoQualitySlider'), v).label).toBe('Quality (RF, 0 to 51)');
+		expect(cardKey(key('VideoMultiPass'), v)).toBe(key('VideoMultiPass'));
+	});
+
+	it('filters card fields by the label the card shows, not the schema label', () => {
+		const v = x264.variants[0];
+		const fields = (text: string) =>
+			visibleCardFields(schema, x264, v, {}, { VideoQualityType: 2 }, { text, changedOnly: false });
+		expect(key('VideoOptionExtra').label).toBe('Additional encoder options');
+		expect(fields('extra encoder')).toEqual(['VideoOptionExtra']);
+		expect(fields('additional')).toEqual([]);
+		expect(fields('(rf')).toEqual(['VideoQualitySlider']);
+		expect(fields('constant')).toEqual([]);
 	});
 });

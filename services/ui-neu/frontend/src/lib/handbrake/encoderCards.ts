@@ -137,20 +137,38 @@ export function cardOpen(card: EncoderCard, block: Record<string, unknown>, expa
 	return expanded || card.state !== 'collapsed' || Object.keys(block).length > 0;
 }
 
-const BIT_DEPTH = { name: 'bit_depth', label: 'Bit depth' };
+export const BIT_DEPTH_FIELD = { name: 'bit_depth', label: 'Bit depth' };
 
-// The names of the inputs a card shows, bit depth first: the block's values override the panel context.
+// The variant a card edits: the block's bit depth, else the inherited one; the family's first variant
+// when no variant has that depth.
+export function cardVariant(family: SlimFamily, block: Record<string, unknown>, inheritedDepth: number): SlimVariant {
+	const depth = typeof block.bit_depth === 'number' ? block.bit_depth : inheritedDepth;
+	return family.variants.find((v) => v.depth === depth) ?? family.variants[0];
+}
+
+// A block key as the card shows it. The variant supplies the preset, tune, profile and level lists, so those
+// render as selects though the schema names no source; the quality label names the variant's scale.
+export function cardKey(key: SlimKey, variant: SlimVariant): SlimKey {
+	if (key.name in VARIANT_LISTS) return { ...key, source: { kind: 'variant', ref: key.name } };
+	if (key.name === 'VideoOptionExtra') return { ...key, label: 'Extra encoder options' };
+	if (key.name !== 'VideoQualitySlider') return key;
+	const q = variant.quality;
+	return { ...key, label: `Quality (${q.name}, ${q.low} to ${q.high})` };
+}
+
+// The names of the inputs a card shows, bit depth first. The filter matches the labels the card shows,
+// and the block's values override the panel context.
 export function visibleCardFields(
 	schema: HandbrakeSchemaSlimView,
 	family: SlimFamily,
+	variant: SlimVariant,
 	block: Record<string, unknown>,
 	ctx: Context,
 	f: FilterState
 ): string[] {
 	const cardCtx = { ...ctx, ...block };
-	return [BIT_DEPTH, ...blockFields(schema, family)]
-		.filter((k) => fieldVisible(k.name, k.label, f, block[k.name] !== undefined, cardCtx))
-		.map((k) => k.name);
+	const keys = [BIT_DEPTH_FIELD, ...blockFields(schema, family).map((k) => cardKey(k, variant))];
+	return keys.filter((k) => fieldVisible(k.name, k.label, f, block[k.name] !== undefined, cardCtx)).map((k) => k.name);
 }
 
 // The block keys whose choices come from the encoder variant, and which variant list holds them.

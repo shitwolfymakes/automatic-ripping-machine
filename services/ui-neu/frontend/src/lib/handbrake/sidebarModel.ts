@@ -5,6 +5,7 @@
 import { ApiError, saveErrorMessage } from '$lib/api/client';
 import type {
 	ContainerFormat,
+	EncoderAvailabilityView,
 	HandbrakeSchemaSlimView,
 	HandbrakeSettings,
 	MediaType,
@@ -55,7 +56,6 @@ const TITLES: Record<SidebarMode, string> = {
 	edit: 'Edit transcode preset',
 	view: 'View transcode preset'
 };
-const PRESET_FIELDS = new Set(['name', 'media_type', 'tool', 'preset_ref', 'container', 'encoder', 'extra_args']);
 
 function settingsOf(s: HandbrakeSettings | null): Required<HandbrakeSettings> {
 	return { common: s?.common ?? {}, encoders: s?.encoders ?? {} };
@@ -257,6 +257,17 @@ export function audioListShown(f: FilterState, listStored: boolean, tracks: Slim
 	return f.text.trim() === '' || tracks.some((keys) => keys.length > 0);
 }
 
+// The encoder cards the Video tab renders for this encoder, base preset and host.
+export function panelCards(
+	schema: HandbrakeSchemaSlimView,
+	encoder: string,
+	presetRef: string | null,
+	availability: EncoderAvailabilityView[],
+	base: BaseValues
+): Array<{ card: EncoderCard; family: SlimFamily }> {
+	return cardFamilies(encoderCards(encoder, presetRef, schema, availability, baseVideoEncoder(base)), schema);
+}
+
 // Each card with its schema family; a card for a family this HandBrake build lacks has nothing to edit.
 export function cardFamilies(
 	cards: EncoderCard[],
@@ -274,20 +285,6 @@ export function issuesFor(
 	encoder: string | null = null
 ): SettingIssue | undefined {
 	return issues.find((i) => i.key === key && (i.encoder ?? null) === encoder);
-}
-
-function isPlaced(i: SettingIssue, rendered: Set<string>, blockKeys: string[]): boolean {
-	if (i.encoder) return blockKeys.includes(i.key);
-	return PRESET_FIELDS.has(i.key) || rendered.has(i.key);
-}
-
-// Issues no field shows (the whole settings object, unknown keys, bit depth):
-// the sidebar lists these in its banner instead.
-export function unplacedIssues(issues: SettingIssue[], schema: HandbrakeSchemaSlimView | null): SettingIssue[] {
-	if (!schema) return issues.filter((i) => !isPlaced(i, new Set(), []));
-	const keys = [...schema.keys, ...schema.audio_item_keys].map((k) => k.name);
-	const rendered = new Set(keys.filter((name) => isCommonKey(schema, name)));
-	return issues.filter((i) => !isPlaced(i, rendered, schema.encoder_specific_keys));
 }
 
 // What LoadState shows while the schema store is unavailable; null otherwise.

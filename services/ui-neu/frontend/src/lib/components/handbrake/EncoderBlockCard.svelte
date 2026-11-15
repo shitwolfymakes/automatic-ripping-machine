@@ -7,7 +7,9 @@
 	import {
 		blockDefault,
 		blockFields,
+		cardKey,
 		cardStatusLine,
+		cardVariant,
 		VARIANT_LISTS,
 		type EncoderCard
 	} from '$lib/handbrake/encoderCards';
@@ -52,8 +54,7 @@
 
 	const prefix = $derived(`${family.name}-`);
 	const depthId = $derived(`${family.name}-bit-depth`);
-	const depth = $derived(typeof block.bit_depth === 'number' ? block.bit_depth : inheritedDepth);
-	const variant = $derived(family.variants.find((v) => v.depth === depth) ?? family.variants[0]);
+	const variant = $derived(cardVariant(family, block, inheritedDepth));
 	const depthText = (d: number) => `${d}-bit`;
 	const defaultDepthLabel = $derived(
 		depthSource === 'base' ? `${depthText(inheritedDepth)}, from base preset` : `${depthText(inheritedDepth)}, default`
@@ -66,7 +67,7 @@
 			.filter((key) => fields.includes(key.name))
 			.map((key) => ({
 				name: key.name,
-				shown: shownKey(key),
+				shown: cardKey(key, variant),
 				options: options(key),
 				inherited: blockDefault(key, variant, base),
 				range: rangeFor(key),
@@ -78,15 +79,6 @@
 		const list = VARIANT_LISTS[key.name];
 		if (!list) return null;
 		return variant[list] as string[];
-	}
-
-	// The variant supplies these lists, so the key renders as a select though the schema names no source.
-	function shownKey(key: SlimKey): SlimKey {
-		if (key.name in VARIANT_LISTS) return { ...key, source: { kind: 'variant', ref: key.name } };
-		if (key.name === 'VideoOptionExtra') return { ...key, label: 'Extra encoder options' };
-		if (key.name !== 'VideoQualitySlider') return key;
-		const q = variant.quality;
-		return { ...key, label: `Quality (${q.name}, ${q.low} to ${q.high})` };
 	}
 
 	function rangeFor(key: SlimKey) {

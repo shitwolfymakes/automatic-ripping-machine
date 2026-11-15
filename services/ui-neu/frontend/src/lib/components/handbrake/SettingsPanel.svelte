@@ -11,16 +11,14 @@
 		SettingIssue
 	} from '$lib/types/api.gen';
 	import { fieldOptions, type TabId } from '$lib/handbrake/fields';
-	import { ALL_ENCODERS_LINE, encoderCards, perEncoderLine } from '$lib/handbrake/encoderCards';
-	import { visibleTab, type TabVisible } from '$lib/handbrake/filter';
+	import { ALL_ENCODERS_LINE, perEncoderLine } from '$lib/handbrake/encoderCards';
+	import { visibleTab, type TabVisible, type VisibleInput } from '$lib/handbrake/filter';
 	import { settingsPanelView } from '$lib/handbrake/panelView';
 	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settingsEdit';
 	import {
 		AMD_NOTE,
 		audioListValue,
-		baseVideoEncoder,
 		blockOf,
-		cardFamilies,
 		commonOf,
 		inheritedDepth,
 		inheritedValue,
@@ -41,24 +39,34 @@
 		issues: SettingIssue[];
 		readonly: boolean;
 		encoder: string;
-		presetRef: string | null;
 		availability: EncoderAvailabilityView[];
+		// The encoder cards the Video tab renders, and the collapsed ones the user expanded.
+		cards: VisibleInput['cards'];
+		expanded: string[];
 		onsettings: (s: HandbrakeSettings) => void;
+		onexpand: (family: string) => void;
 	}
 
-	let { schema, settings, base, issues, readonly, encoder, presetRef, availability, onsettings }: Props = $props();
+	let {
+		schema,
+		settings,
+		base,
+		issues,
+		readonly,
+		encoder,
+		availability,
+		cards,
+		expanded,
+		onsettings,
+		onexpand
+	}: Props = $props();
 
 	let tab = $state<TabId>('summary');
-	// The families whose collapsed card the user chose to set values on anyway.
-	let expanded = $state<string[]>([]);
 
 	const common = $derived(commonOf(settings));
 	// Selects whose options hang off another key (a filter's presets) read the value in effect.
 	const context = $derived(panelContext(schema, settings, base));
 	const view = $derived(settingsPanelView({ tab, encoder, availability }));
-	const cards = $derived(
-		cardFamilies(encoderCards(encoder, presetRef, schema, availability, baseVideoEncoder(base)), schema)
-	);
 </script>
 
 <SettingsTabs {schema} {settings} {base} {cards} {expanded} {issues} {tab} ontab={(t) => (tab = t)}>
@@ -95,7 +103,7 @@
 							{readonly}
 							onchange={(k, v) => onsettings(setBlock(settings, family.name, k, v))}
 							onreset={(k) => onsettings(resetBlock(settings, family.name, k))}
-							onexpand={() => (expanded = [...expanded, family.name])}
+							onexpand={() => onexpand(family.name)}
 						/>
 					{/each}
 				</div>

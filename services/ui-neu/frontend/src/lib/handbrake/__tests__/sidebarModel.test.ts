@@ -37,7 +37,7 @@ import {
 	settingsCount,
 	showTabs,
 	sidebarTitle,
-	unplacedIssues,
+	panelCards,
 	usageLabel,
 	type Draft
 } from '../sidebarModel';
@@ -420,9 +420,9 @@ describe('issues', () => {
 		expect(issuesFor(list, 'preset_ref')?.message).toBe('ref');
 	});
 
-	it('lists the ones no field shows', () => {
-		expect(unplacedIssues(list, schema).map((i) => i.message)).toEqual(['whole', 'unknown', 'depth']);
-		expect(unplacedIssues(list, null).map((i) => i.message)).toEqual(['w', 'p', 'whole', 'unknown', 'mix', 'depth']);
+	it('pairs the reachable encoder cards with their families', () => {
+		expect(panelCards(schema, 'cpu_h264', null, [], null).map((c) => c.family.name)).toEqual(['x264']);
+		expect(panelCards(schema, 'preset', 'Fast 1080p30', [], { VideoEncoder: 'x265' })[0].card.family).toBe('x265');
 	});
 });
 

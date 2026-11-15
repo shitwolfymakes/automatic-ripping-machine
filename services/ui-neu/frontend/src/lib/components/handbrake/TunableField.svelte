@@ -14,7 +14,6 @@
 		options: Array<string | number> | null;
 		issue?: SettingIssue;
 		disabled?: boolean;
-		hint?: string;
 		// Prefixes the control id so one key in two cards stays unique.
 		idPrefix?: string;
 		// A range and step the schema key does not carry (a quality scale).
@@ -31,7 +30,6 @@
 		options,
 		issue,
 		disabled = false,
-		hint,
 		idPrefix = '',
 		range,
 		onchange,
@@ -85,7 +83,6 @@
 		{/if}
 		<p class="tunable-field-key">{key.name}</p>
 		{#if issue}<p class="field-error" role="alert">{issue.message}</p>{/if}
-		{#if hint}<p class="field-help">{hint}</p>{/if}
 	</div>
 {/if}
 
