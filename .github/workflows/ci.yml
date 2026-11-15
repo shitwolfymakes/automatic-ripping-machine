@@ -136,7 +136,7 @@ jobs:
       - run: npm run check
       # style lint: bans inline utility styling outside the allowed layout
       # families (see devtools/ui-neu-style-lint.mjs and docs/developers/ui/ui-neu-theming.md)
-      - run: node --test devtools/ui-neu-style-lint.test.mjs
+      - run: node --test devtools/ui-neu-style-lint.test.mjs devtools/check-field-docs-links.test.mjs
         working-directory: .
       - run: npm run lint:styles
 
