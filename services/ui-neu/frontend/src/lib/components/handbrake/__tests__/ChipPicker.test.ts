@@ -66,8 +66,33 @@ describe('ChipPicker', () => {
 		await fireEvent.input(box(), { target: { value: 'english' } });
 		await fireEvent.keyDown(box(), { key: 'Enter' });
 		expect(onchange).toHaveBeenLastCalledWith(['fre', 'xx', 'eng']);
+	});
+
+	it('keeps unmatched text with a message until typing resumes', async () => {
+		const onchange = mount({ choices: [{ value: 'eng', label: 'English (eng)' }] });
 		await fireEvent.input(box(), { target: { value: 'klingon' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-		expect(onchange).toHaveBeenCalledTimes(1);
+		expect(screen.getByRole('status')).toHaveTextContent('No matching language');
+		expect(box().value).toBe('klingon');
+		expect(onchange).not.toHaveBeenCalled();
+		await fireEvent.input(box(), { target: { value: 'kling' } });
+		expect(screen.queryByRole('status')).toBeNull();
+	});
+
+	it('adds a picked suggestion at once, and a stored B code is not added twice', async () => {
+		const choices = [{ value: 'fra', label: 'French (fra)', alias: 'fre' }];
+		const onchange = mount({ values: ['fre'], choices });
+		expect(screen.getByText('French (fra)')).toBeInTheDocument();
+		await fireEvent.input(box(), { target: { value: 'French (fra)' } });
+		expect(onchange).not.toHaveBeenCalled();
+		expect(box().value).toBe('');
+	});
+
+	it('adds an exactly picked suggestion without Enter or Add', async () => {
+		const onchange = mount({ values: [], choices: [{ value: 'eng', label: 'English (eng)' }] });
+		await fireEvent.input(box(), { target: { value: 'Engl' } });
+		expect(onchange).not.toHaveBeenCalled();
+		await fireEvent.input(box(), { target: { value: 'English (eng)' } });
+		expect(onchange).toHaveBeenCalledWith(['eng']);
 	});
 });

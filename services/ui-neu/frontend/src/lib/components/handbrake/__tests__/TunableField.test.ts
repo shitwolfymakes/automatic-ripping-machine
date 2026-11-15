@@ -103,7 +103,7 @@ describe('TunableField', () => {
 		expect(screen.getByText('English (eng)')).toBeInTheDocument();
 		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'fre' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-		expect(onchange).toHaveBeenCalledWith(['eng', 'fre']);
+		expect(onchange).toHaveBeenCalledWith(['eng', 'fra']);
 	});
 
 	it('treats a non-list value as no chips', () => {
@@ -326,18 +326,34 @@ describe('TunableField fidelity', () => {
 			expect(custom()).toBeNull();
 		});
 
+		it('closes the custom input when the field is reset', async () => {
+			const { onreset } = mountPad({ value: 'red', stored: true });
+			await fireEvent.change(select(), { target: { value: '__custom__' } });
+			expect(custom()).not.toBeNull();
+			await fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+			expect(onreset).toHaveBeenCalled();
+			expect(custom()).toBeNull();
+		});
+
 		it('tolerates no options', () => {
 			mountPad({ options: null });
 			expect(select().options).toHaveLength(1);
 		});
 	});
 
+	it('shows a stored B code as its language and stores the T code on a pick', async () => {
+		const { onchange } = mount('SubtitleLanguageList', { value: ['fre'], stored: true });
+		expect(screen.getByText('French (fra)')).toBeInTheDocument();
+		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'German' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+		expect(onchange).toHaveBeenLastCalledWith(['fre', 'deu']);
+	});
+
 	it('picks a language by label and shows a stored unknown code raw until removed', async () => {
 		const { onchange } = mount('AudioLanguageList', { value: ['zzz'], stored: true });
 		expect(screen.getByText('zzz')).toBeInTheDocument();
-		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'German (ger)' } });
-		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-		expect(onchange).toHaveBeenLastCalledWith(['zzz', 'ger']);
+		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'German (deu)' } });
+		expect(onchange).toHaveBeenLastCalledWith(['zzz', 'deu']);
 		await fireEvent.click(screen.getByRole('button', { name: 'Remove zzz' }));
 		expect(onchange).toHaveBeenLastCalledWith([]);
 	});

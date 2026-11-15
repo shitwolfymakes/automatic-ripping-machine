@@ -54,6 +54,10 @@
 	let padCustomOpen = $state(false);
 	const pad = $derived(padColorView(scalarText(view.shown), (options ?? []).map(String), padCustomOpen));
 
+	function onResetField() {
+		padCustomOpen = false;
+		onreset();
+	}
 	function onAngle(e: Event) {
 		const angle = Number((e.currentTarget as HTMLSelectElement).value) as RotateAngle;
 		onchange(formatRotate({ ...rotate, angle }));
@@ -143,7 +147,7 @@
 
 {#snippet resetLink()}
 	{#if view.stored}
-		<button type="button" class="btn-link tunable-field-reset" {disabled} onclick={onreset}>Reset</button>
+		<button type="button" class="btn-link tunable-field-reset" {disabled} onclick={onResetField}>Reset</button>
 	{/if}
 {/snippet}
 

@@ -3,7 +3,7 @@
 	// the key offers options, a searchable input over `choices` (chips show the
 	// choice label; a value no choice carries shows raw), free text otherwise.
 	// Emits the whole new list.
-	import { choiceLabel, findChoice, type Choice } from '$lib/handbrake/languages';
+	import { canonicalValue, choiceLabel, findChoice, unchosenChoices, type Choice } from '$lib/handbrake/languages';
 	interface Props {
 		id: string;
 		values: string[];
@@ -20,16 +20,28 @@
 		return list.map(String).filter((o) => !values.includes(o));
 	}
 
-	function resolve(raw: string): string {
-		return choices ? (findChoice(choices, raw)?.value ?? '') : raw.trim();
-	}
+	let unmatched = $state(false);
 	function add(raw: string) {
-		const value = resolve(raw);
+		const text = raw.trim();
+		const choice = choices ? findChoice(choices, text) : undefined;
+		if (choices && text !== '' && !choice) {
+			unmatched = true;
+			return;
+		}
+		unmatched = false;
 		draft = '';
-		if (value !== '' && !values.includes(value)) onchange([...values, value]);
+		const value = choice?.value ?? text;
+		const stored = values.map((v) => canonicalValue(choices, v));
+		if (value !== '' && !stored.includes(value)) onchange([...values, value]);
 	}
 	function remove(value: string) {
 		onchange(values.filter((v) => v !== value));
+	}
+	// Picking a datalist suggestion fills the input with its exact label and adds it at once.
+	function oninput(e: Event) {
+		unmatched = false;
+		const text = (e.currentTarget as HTMLInputElement).value;
+		if (choices?.some((c) => c.label === text)) add(text);
 	}
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key !== 'Enter') return;
@@ -66,17 +78,19 @@
 				list={choices ? `${id}-choices` : undefined}
 				bind:value={draft}
 				{disabled}
+				{oninput}
 				{onkeydown}
 			/>
 			{#if choices}
 				<datalist id={`${id}-choices`}>
-					{#each choices.filter((c) => !values.includes(c.value)) as choice (choice.value)}
+					{#each unchosenChoices(choices, values) as choice (choice.value)}
 						<option value={choice.label}></option>
 					{/each}
 				</datalist>
 			{/if}
 			<button type="button" class="btn btn-sm" {disabled} onclick={() => add(draft)}>Add</button>
 		</div>
+		{#if unmatched}<p class="field-error" role="status">No matching language</p>{/if}
 	{/if}
 </div>
 

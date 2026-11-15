@@ -1,26 +1,30 @@
-// ISO 639-2/B codes and English names from HandBrake 1.11.1 libhb/lang.c (the set HandBrake's language table accepts).
+// Codes and English names from HandBrake 1.11.1 libhb/lang.c. `code` is the table's ISO 639-2 (T) code, which
+// HandBrake stores; `alias` is the ISO 639-2/B code it also accepts when that differs.
 export interface Language {
 	code: string;
 	name: string;
+	alias?: string;
 }
 
 export interface Choice {
 	value: string;
 	label: string;
+	alias?: string;
 }
 
 const ANY_CHOICE: Choice = { value: 'any', label: 'Any language' };
 
 export const LANGUAGES: readonly Language[] = [
+	{ code: 'und', name: 'Unknown' },
 	{ code: 'aar', name: 'Afar' },
 	{ code: 'abk', name: 'Abkhaz' },
 	{ code: 'afr', name: 'Afrikaans' },
 	{ code: 'aka', name: 'Akan' },
-	{ code: 'alb', name: 'Albanian' },
+	{ code: 'sqi', name: 'Albanian', alias: 'alb' },
 	{ code: 'amh', name: 'Amharic' },
 	{ code: 'ara', name: 'Arabic' },
 	{ code: 'arg', name: 'Aragonese' },
-	{ code: 'arm', name: 'Armenian' },
+	{ code: 'hye', name: 'Armenian', alias: 'arm' },
 	{ code: 'asm', name: 'Assamese' },
 	{ code: 'ava', name: 'Avar' },
 	{ code: 'ave', name: 'Avestan' },
@@ -28,7 +32,7 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'aze', name: 'Azerbaijani' },
 	{ code: 'bak', name: 'Bashkir' },
 	{ code: 'bam', name: 'Bambara' },
-	{ code: 'baq', name: 'Basque' },
+	{ code: 'eus', name: 'Basque', alias: 'baq' },
 	{ code: 'bel', name: 'Belarusian' },
 	{ code: 'ben', name: 'Bengali' },
 	{ code: 'bih', name: 'Bihari' },
@@ -36,21 +40,21 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'bos', name: 'Bosnian' },
 	{ code: 'bre', name: 'Breton' },
 	{ code: 'bul', name: 'Bulgarian' },
-	{ code: 'bur', name: 'Burmese' },
+	{ code: 'mya', name: 'Burmese', alias: 'bur' },
 	{ code: 'cat', name: 'Catalan' },
 	{ code: 'cha', name: 'Chamorro' },
 	{ code: 'che', name: 'Chechen' },
-	{ code: 'chi', name: 'Chinese' },
+	{ code: 'zho', name: 'Chinese', alias: 'chi' },
 	{ code: 'chu', name: 'Church Slavonic' },
 	{ code: 'chv', name: 'Chuvash' },
 	{ code: 'cor', name: 'Cornish' },
 	{ code: 'cos', name: 'Corsican' },
 	{ code: 'cre', name: 'Cree' },
-	{ code: 'hrv', name: 'Croatian' },
-	{ code: 'cze', name: 'Czech' },
+	{ code: 'hrv', name: 'Croatian', alias: 'scr' },
+	{ code: 'ces', name: 'Czech', alias: 'cze' },
 	{ code: 'dan', name: 'Danish' },
 	{ code: 'div', name: 'Divehi' },
-	{ code: 'dut', name: 'Dutch' },
+	{ code: 'nld', name: 'Dutch', alias: 'dut' },
 	{ code: 'dzo', name: 'Dzongkha' },
 	{ code: 'eng', name: 'English' },
 	{ code: 'epo', name: 'Esperanto' },
@@ -59,34 +63,37 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'fao', name: 'Faroese' },
 	{ code: 'fij', name: 'Fijian' },
 	{ code: 'fin', name: 'Finnish' },
-	{ code: 'fre', name: 'French' },
+	{ code: 'fra', name: 'French', alias: 'fre' },
 	{ code: 'fil', name: 'Filipino' },
 	{ code: 'fry', name: 'Western Frisian' },
 	{ code: 'ful', name: 'Fulah' },
-	{ code: 'geo', name: 'Georgian' },
-	{ code: 'ger', name: 'German' },
+	{ code: 'kat', name: 'Georgian', alias: 'geo' },
+	{ code: 'deu', name: 'German', alias: 'ger' },
 	{ code: 'gla', name: 'Gaelic (Scots)' },
 	{ code: 'glg', name: 'Galician' },
 	{ code: 'glv', name: 'Manx' },
-	{ code: 'gre', name: 'Greek, Modern' },
+	{ code: 'ell', name: 'Greek, Modern', alias: 'gre' },
 	{ code: 'kal', name: 'Greenlandic' },
 	{ code: 'grn', name: 'Guarani' },
 	{ code: 'guj', name: 'Gujarati' },
 	{ code: 'hat', name: 'Haitian' },
 	{ code: 'hau', name: 'Hausa' },
+	{ code: 'heb', name: 'Hebrew' },
 	{ code: 'her', name: 'Herero' },
 	{ code: 'hin', name: 'Hindi' },
 	{ code: 'hmo', name: 'Hiri Motu' },
 	{ code: 'hun', name: 'Hungarian' },
 	{ code: 'ibo', name: 'Igbo' },
-	{ code: 'ice', name: 'Icelandic' },
+	{ code: 'isl', name: 'Icelandic', alias: 'ice' },
 	{ code: 'ido', name: 'Ido' },
 	{ code: 'iku', name: 'Inuktitut' },
 	{ code: 'ile', name: 'Interlingue' },
 	{ code: 'ina', name: 'Interlingua' },
+	{ code: 'ind', name: 'Indonesian' },
 	{ code: 'ipk', name: 'Inupiaq' },
 	{ code: 'gle', name: 'Irish' },
 	{ code: 'ita', name: 'Italian' },
+	{ code: 'jav', name: 'Javanese' },
 	{ code: 'jpn', name: 'Japanese' },
 	{ code: 'kan', name: 'Kannada' },
 	{ code: 'kas', name: 'Kashmiri' },
@@ -110,12 +117,12 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'ltz', name: 'Luxembourgish' },
 	{ code: 'lub', name: 'Luba-Katanga' },
 	{ code: 'lug', name: 'Ganda' },
-	{ code: 'mac', name: 'Macedonian' },
+	{ code: 'mkd', name: 'Macedonian', alias: 'mac' },
 	{ code: 'mah', name: 'Marshallese' },
 	{ code: 'mal', name: 'Malayalam' },
-	{ code: 'mao', name: 'Maori' },
+	{ code: 'mri', name: 'Maori', alias: 'mao' },
 	{ code: 'mar', name: 'Marathi' },
-	{ code: 'may', name: 'Malay' },
+	{ code: 'msa', name: 'Malay', alias: 'may' },
 	{ code: 'mlg', name: 'Malagasy' },
 	{ code: 'mlt', name: 'Maltese' },
 	{ code: 'mol', name: 'Moldavian' },
@@ -136,14 +143,14 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'ori', name: 'Oriya' },
 	{ code: 'orm', name: 'Oromo' },
 	{ code: 'oss', name: 'Ossetian; Ossetic' },
-	{ code: 'per', name: 'Persian' },
+	{ code: 'fas', name: 'Persian', alias: 'per' },
 	{ code: 'pli', name: 'Pali' },
 	{ code: 'pol', name: 'Polish' },
 	{ code: 'por', name: 'Portuguese' },
 	{ code: 'pan', name: 'Punjabi' },
 	{ code: 'pus', name: 'Pashto' },
 	{ code: 'que', name: 'Quechua' },
-	{ code: 'rum', name: 'Romanian' },
+	{ code: 'ron', name: 'Romanian', alias: 'rum' },
 	{ code: 'roh', name: 'Romansh' },
 	{ code: 'run', name: 'Rundi' },
 	{ code: 'rus', name: 'Russian' },
@@ -151,9 +158,9 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'sag', name: 'Sango' },
 	{ code: 'san', name: 'Sanskrit' },
 	{ code: 'srd', name: 'Sardinian' },
-	{ code: 'scc', name: 'Serbian' },
+	{ code: 'srp', name: 'Serbian', alias: 'scc' },
 	{ code: 'sin', name: 'Sinhala' },
-	{ code: 'slo', name: 'Slovak' },
+	{ code: 'slk', name: 'Slovak', alias: 'slo' },
 	{ code: 'slv', name: 'Slovenian' },
 	{ code: 'sme', name: 'Northern Sami' },
 	{ code: 'sna', name: 'Shona' },
@@ -172,7 +179,7 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'tel', name: 'Telugu' },
 	{ code: 'tgl', name: 'Tagalog' },
 	{ code: 'tha', name: 'Thai' },
-	{ code: 'tib', name: 'Tibetan' },
+	{ code: 'bod', name: 'Tibetan', alias: 'tib' },
 	{ code: 'tir', name: 'Tigrinya' },
 	{ code: 'ton', name: 'Tonga (Tonga Islands)' },
 	{ code: 'tsn', name: 'Tswana' },
@@ -187,16 +194,21 @@ export const LANGUAGES: readonly Language[] = [
 	{ code: 'ven', name: 'Venda' },
 	{ code: 'vie', name: 'Vietnamese' },
 	{ code: 'vol', name: 'Volapük' },
-	{ code: 'wel', name: 'Welsh' },
+	{ code: 'cym', name: 'Welsh', alias: 'wel' },
 	{ code: 'wln', name: 'Walloon' },
 	{ code: 'wol', name: 'Wolof' },
 	{ code: 'xho', name: 'Xhosa' },
+	{ code: 'yid', name: 'Yiddish' },
 	{ code: 'yor', name: 'Yoruba' },
 	{ code: 'zha', name: 'Zhuang' },
 	{ code: 'zul', name: 'Zulu' }
 ];
 
-const LANGUAGE_CHOICES: readonly Choice[] = LANGUAGES.map((l) => ({ value: l.code, label: `${l.name} (${l.code})` }));
+const LANGUAGE_CHOICES: readonly Choice[] = LANGUAGES.map((l) => ({
+	value: l.code,
+	label: `${l.name} (${l.code})`,
+	alias: l.alias
+}));
 
 // The picker's choices for a language list key; `any` is offered for audio only. Null for every other key.
 export function languageChoices(keyName: string): Choice[] | null {
@@ -205,18 +217,30 @@ export function languageChoices(keyName: string): Choice[] | null {
 	return null;
 }
 
-// The choice a typed or picked text names: its label, its value or its language name, ignoring case.
+// The choice a typed or picked text names: its label, its value, its alias or its language name, ignoring case.
 export function findChoice(choices: readonly Choice[], text: string): Choice | undefined {
 	const wanted = text.trim().toLowerCase();
 	return choices.find(
 		(c) =>
 			c.label.toLowerCase() === wanted ||
-			c.value.toLowerCase() === wanted ||
+			c.value === wanted ||
+			c.alias === wanted ||
 			c.label.toLowerCase().startsWith(`${wanted} (`)
 	);
 }
 
+// A stored value as the choice's own code (a B alias becomes its T code); a value no choice carries stays as it is.
+export function canonicalValue(choices: readonly Choice[] | null | undefined, value: string): string {
+	return choices?.find((c) => c.value === value || c.alias === value)?.value ?? value;
+}
+
 // A chip's text: the choice label, or the raw value when no choice carries it.
 export function choiceLabel(choices: readonly Choice[] | null | undefined, value: string): string {
-	return choices?.find((c) => c.value === value)?.label ?? value;
+	return choices?.find((c) => c.value === canonicalValue(choices, value))?.label ?? value;
+}
+
+// The choices no stored value (by code or alias) already names.
+export function unchosenChoices(choices: readonly Choice[], values: readonly string[]): Choice[] {
+	const chosen = new Set(values.map((v) => canonicalValue(choices, v)));
+	return choices.filter((c) => !chosen.has(c.value));
 }
