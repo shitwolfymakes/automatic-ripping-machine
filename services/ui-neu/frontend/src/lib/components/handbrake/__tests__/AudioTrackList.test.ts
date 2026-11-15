@@ -3,6 +3,7 @@ import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
+import { rowKeys } from '$lib/handbrake/audioTracks';
 import AudioTrackList from '../AudioTrackList.svelte';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
@@ -14,7 +15,15 @@ const tracks = [
 function mount(over: Record<string, unknown> = {}) {
 	const onchange = vi.fn();
 	const result = renderComponent(AudioTrackList, {
-		props: { value: tracks, schema, issues: [], readonly: false, onchange, ...over }
+		props: {
+			value: tracks,
+			visibleKeys: tracks.map(() => rowKeys(schema)),
+			schema,
+			issues: [],
+			readonly: false,
+			onchange,
+			...over
+		}
 	});
 	return { onchange, ...result };
 }
@@ -111,6 +120,27 @@ describe('AudioTrackList', () => {
 	it('renders just the Add track button for an empty list', () => {
 		mount({ value: [] });
 		expect(screen.getByRole('button', { name: 'Add track' })).toBeTruthy();
+		expect(screen.queryByRole('region')).toBeNull();
+	});
+
+	it('renders only the fields each track is given', () => {
+		const gain = rowKeys(schema).filter((k) => k.name === 'AudioTrackGainSlider');
+		mount({ visibleKeys: [gain, gain] });
+		for (const n of [1, 2]) {
+			const labels = Array.from(row(n).querySelectorAll('label.field-label')).map((l) => l.textContent);
+			expect(labels).toEqual(['Gain (dB)']);
+		}
+	});
+
+	it('leaves out a track with no fields to show', () => {
+		const gain = rowKeys(schema).filter((k) => k.name === 'AudioTrackGainSlider');
+		mount({ visibleKeys: [[], gain] });
+		expect(screen.queryByRole('region', { name: 'Audio track 1' })).toBeNull();
+		expect(row(2)).toBeTruthy();
+	});
+
+	it('leaves out a track the visible keys do not reach', () => {
+		mount({ visibleKeys: [] });
 		expect(screen.queryByRole('region')).toBeNull();
 	});
 });

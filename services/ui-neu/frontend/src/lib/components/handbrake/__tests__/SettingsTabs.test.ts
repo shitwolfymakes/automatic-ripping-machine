@@ -10,7 +10,17 @@ const schema = fixture as unknown as HandbrakeSchemaSlimView;
 function mount(over: Record<string, unknown> = {}) {
 	const ontab = vi.fn();
 	const result = renderComponent(SettingsTabs, {
-		props: { schema, settings: { common: {}, encoders: {} }, issues: [], tab: 'summary', ontab, ...over }
+		props: {
+			schema,
+			settings: { common: {}, encoders: {} },
+			base: null,
+			cards: [],
+			expanded: [],
+			issues: [],
+			tab: 'summary',
+			ontab,
+			...over
+		}
 	});
 	return { ontab, ...result };
 }
@@ -32,12 +42,11 @@ describe('SettingsTabs', () => {
 		expect(ontab).toHaveBeenCalledWith('filters');
 	});
 
-	it('shows stored counts without a filter, dimming only the zero counts', () => {
-		mount({ settings: { common: { PictureWidth: 1, PictureHeight: 2 }, encoders: {} } });
-		expect(tab('Dimensions')).toHaveTextContent('2');
-		expect(tab('Audio')).toHaveTextContent('0');
-		expect(tab('Audio').querySelector('.settings-tab-count')).toHaveClass('settings-tab-count-zero');
-		expect(tab('Dimensions').querySelector('.settings-tab-count')).not.toHaveClass('settings-tab-count-zero');
+	it('counts the inputs each tab shows without a filter, though nothing is stored', () => {
+		mount();
+		expect(tab('Summary')).toHaveTextContent('5');
+		expect(tab('Chapters')).toHaveTextContent('1');
+		expect(tab('Summary').querySelector('.settings-tab-count')).not.toHaveClass('settings-tab-count-zero');
 		expect(tab('Audio')).not.toHaveClass('settings-tab-dim');
 	});
 

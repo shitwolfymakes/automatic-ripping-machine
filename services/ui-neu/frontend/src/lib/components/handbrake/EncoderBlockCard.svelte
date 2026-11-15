@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One per-encoder settings card on the Video tab: the title with its hardware
-	// status, then the family's bit depth and block fields, which show the encoder's
-	// defaults as inherited. A card for a device the host cannot verify stays
+	// status, then the family's bit depth and block fields that `fields` names, which
+	// show the encoder's defaults as inherited. A card for a device the host cannot verify stays
 	// collapsed until the user chooses to set values anyway.
 	import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily, SlimKey } from '$lib/types/api.gen';
 	import {
@@ -20,13 +20,17 @@
 		card: EncoderCard;
 		block: Record<string, unknown>;
 		base: BaseValues;
+		// False while the card shows only its title and the Set values anyway button.
+		open: boolean;
+		// The inputs the card shows: 'bit_depth' and block key names.
+		fields: string[];
 		inheritedDepth: number;
 		depthSource: 'block' | 'base' | 'default';
-		qualityType: number;
 		issues: SettingIssue[];
 		readonly: boolean;
 		onchange: (key: string, value: unknown) => void;
 		onreset: (key: string) => void;
+		onexpand: () => void;
 	}
 
 	let {
@@ -35,23 +39,19 @@
 		card,
 		block,
 		base,
+		open,
+		fields,
 		inheritedDepth,
 		depthSource,
-		qualityType,
 		issues,
 		readonly,
 		onchange,
-		onreset
+		onreset,
+		onexpand
 	}: Props = $props();
 
-	// HandBrake's VideoQualityType: 1 is average bitrate, 2 is constant quality.
-	const CONSTANT_QUALITY = 2;
-	const AVERAGE_BITRATE_ONLY = ['VideoMultiPass', 'VideoTurboMultiPass'];
-
-	let expanded = $state(false);
 	const prefix = $derived(`${family.name}-`);
 	const depthId = $derived(`${family.name}-bit-depth`);
-	const open = $derived(expanded || card.state !== 'collapsed' || Object.keys(block).length > 0);
 	const depth = $derived(typeof block.bit_depth === 'number' ? block.bit_depth : inheritedDepth);
 	const variant = $derived(family.variants.find((v) => v.depth === depth) ?? family.variants[0]);
 	const depthText = (d: number) => `${d}-bit`;
@@ -62,15 +62,16 @@
 
 	// Resolved eagerly: TunableField only reads the props its kind needs, which would leave these branches lazy.
 	const rows = $derived(
-		blockFields(schema, family).map((key) => ({
-			name: key.name,
-			shown: shownKey(key),
-			options: options(key),
-			inherited: blockDefault(key, variant, base),
-			range: rangeFor(key),
-			averageOnly: isAverageOnly(key),
-			issue: issueFor(key)
-		}))
+		blockFields(schema, family)
+			.filter((key) => fields.includes(key.name))
+			.map((key) => ({
+				name: key.name,
+				shown: shownKey(key),
+				options: options(key),
+				inherited: blockDefault(key, variant, base),
+				range: rangeFor(key),
+				issue: issueFor(key)
+			}))
 	);
 
 	function options(key: SlimKey): string[] | null {
@@ -94,10 +95,6 @@
 		return { min: q.low, max: q.high, step: q.step };
 	}
 
-	function isAverageOnly(key: SlimKey): boolean {
-		return AVERAGE_BITRATE_ONLY.includes(key.name);
-	}
-
 	function issueFor(key: SlimKey): SettingIssue | undefined {
 		return issues.find((i) => i.encoder === family.name && i.key === key.name);
 	}
@@ -117,9 +114,7 @@
 				<h4 class="encoder-card-title">{card.label}</h4>
 				<p class="encoder-card-status">{status}</p>
 			</div>
-			<button type="button" class="btn-link encoder-card-anyway" onclick={() => (expanded = true)}
-				>Set values anyway</button
-			>
+			<button type="button" class="btn-link encoder-card-anyway" onclick={onexpand}>Set values anyway</button>
 		</div>
 	{:else}
 		<header class="encoder-card-head">
@@ -127,24 +122,25 @@
 			{#if status}<span class="encoder-card-badge" data-state={card.state}>{status}</span>{/if}
 		</header>
 		<div class="encoder-card-fields">
-			<div class="tunable-field" data-stored={block.bit_depth !== undefined}>
-				<div class="tunable-field-head">
-					<label class="field-label" for={depthId}>Bit depth</label>
-					{#if block.bit_depth !== undefined}
-						<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset('bit_depth')}
-							>Reset</button
-						>
-					{/if}
+			{#if fields.includes('bit_depth')}
+				<div class="tunable-field" data-stored={block.bit_depth !== undefined}>
+					<div class="tunable-field-head">
+						<label class="field-label" for={depthId}>Bit depth</label>
+						{#if block.bit_depth !== undefined}
+							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset('bit_depth')}
+								>Reset</button
+							>
+						{/if}
+					</div>
+					<select id={depthId} class="field-control" disabled={readonly} onchange={onDepth}>
+						<option value="" selected={block.bit_depth === undefined}>{defaultDepthLabel}</option>
+						{#each family.variants as v (v.depth)}
+							<option selected={block.bit_depth === v.depth}>{depthText(v.depth)}</option>
+						{/each}
+					</select>
 				</div>
-				<select id={depthId} class="field-control" disabled={readonly} onchange={onDepth}>
-					<option value="" selected={block.bit_depth === undefined}>{defaultDepthLabel}</option>
-					{#each family.variants as v (v.depth)}
-						<option selected={block.bit_depth === v.depth}>{depthText(v.depth)}</option>
-					{/each}
-				</select>
-			</div>
+			{/if}
 			{#each rows as row (row.name)}
-				{@const gated = row.averageOnly && qualityType === CONSTANT_QUALITY}
 				<TunableField
 					key={row.shown}
 					value={block[row.name]}
@@ -152,8 +148,7 @@
 					stored={block[row.name] !== undefined}
 					options={row.options}
 					issue={row.issue}
-					disabled={readonly || gated}
-					hint={gated ? 'Applies with average bitrate only' : undefined}
+					disabled={readonly}
 					idPrefix={prefix}
 					range={row.range}
 					onchange={(v) => onchange(row.name, v)}

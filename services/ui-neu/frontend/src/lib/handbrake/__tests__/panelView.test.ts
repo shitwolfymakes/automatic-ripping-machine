@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, SlimKey } from '$lib/types/api.gen';
-import fixture from './fixtures/slim-schema.json';
+import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 import {
 	HARDWARE_HINT,
-	keyRow,
 	presetBlockView,
 	presetSidebarView,
 	settingsPanelView,
@@ -12,16 +10,9 @@ import {
 } from '../panelView';
 import { initialDraft, type Draft } from '../sidebarModel';
 
-const schema = fixture as unknown as HandbrakeSchemaSlimView;
-const key = (name: string): SlimKey => {
-	const found = [...schema.keys, ...schema.audio_item_keys].find((k) => k.name === name);
-	if (!found) throw new Error(name);
-	return found;
-};
 const draft = (over: Partial<Draft> = {}): Draft => ({ ...initialDraft(null), name: 'Movies', ...over });
 const avail = (over: Partial<EncoderAvailabilityView>): EncoderAvailabilityView =>
 	({ id: 'any_h264', label: 'H.264 (any)', vendor: 'cpu', available: true, ...over }) as EncoderAvailabilityView;
-const OFF = { text: '', changedOnly: false };
 
 describe('settingsPanelView', () => {
 	const base = { tab: 'summary' as const, encoder: 'preset', availability: [] };
@@ -42,17 +33,6 @@ describe('settingsPanelView', () => {
 		expect(settingsPanelView({ ...base, encoder: 'any_h264', availability: list }).showAmdNote).toBe(true);
 		expect(settingsPanelView({ ...base, encoder: 'any_h264', availability: [avail({})] }).showAmdNote).toBe(false);
 		expect(settingsPanelView({ ...base, encoder: 'preset', availability: list }).showAmdNote).toBe(false);
-	});
-});
-
-describe('keyRow', () => {
-	it('hides a key the filter excludes', () => {
-		expect(keyRow(key('PictureWidth'), false, { text: 'zzzz-no-match', changedOnly: false }, schema)).toBe('hidden');
-	});
-
-	it('shows the audio list as its own row and every other key as a field', () => {
-		expect(keyRow(key('AudioList'), false, OFF, schema)).toBe('audio-list');
-		expect(keyRow(key('PictureWidth'), false, OFF, schema)).toBe('field');
 	});
 });
 

@@ -16,10 +16,10 @@ import type {
 	TranscodePresetView,
 	TranscodeTool
 } from '$lib/types/api.gen';
-import { blockFields, encoderCards, type EncoderCard } from './encoderCards';
+import { encoderCards, type EncoderCard } from './encoderCards';
 import { keysForTab, type TabId } from './fields';
-import { matchesFilter } from './filter';
 import { pruneUnreachable, toPayload } from './settingsEdit';
+import { fieldVisible, type Context } from './visibility';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
 export type BaseValues = Record<string, unknown> | null;
@@ -49,8 +49,6 @@ export const MARKED_ISSUES_MESSAGE = 'Fix the marked settings and save again.';
 
 const PRESET_ENCODER = 'preset';
 const LOCKED_TOOLS = new Set<TranscodeTool>(['abcde', 'none']);
-// HandBrake's VideoQualityType when neither the preset, the base nor the template names one: constant quality.
-const CONSTANT_QUALITY = 2;
 const DEFAULT_DEPTH = 8;
 const TITLES: Record<SidebarMode, string> = {
 	new: 'New transcode preset',
@@ -223,12 +221,9 @@ export function inheritedValue(key: SlimKey, base: BaseValues): unknown {
 	return base && key.name in base ? base[key.name] : key.default;
 }
 
-export function effectiveQualityType(s: HandbrakeSettings, base: BaseValues, schema: HandbrakeSchemaSlimView): number {
-	const stored = settingsOf(s).common.VideoQualityType;
-	if (typeof stored === 'number') return stored;
-	const template = schema.keys.find((k) => k.name === 'VideoQualityType');
-	const inherited = template ? inheritedValue(template, base) : base?.VideoQualityType;
-	return typeof inherited === 'number' ? inherited : CONSTANT_QUALITY;
+// The value of every key in effect: the preset's, else the base preset's, else the schema default.
+export function panelContext(schema: HandbrakeSchemaSlimView, s: HandbrakeSettings, base: BaseValues): Context {
+	return { ...Object.fromEntries(schema.keys.map((k) => [k.name, k.default])), ...base, ...commonOf(s) };
 }
 
 export function baseVideoEncoder(base: BaseValues): string | null {
@@ -251,14 +246,15 @@ export function commonKeys(schema: HandbrakeSchemaSlimView, tab: TabId): SlimKey
 	return keysForTab(schema, tab).filter((k) => isCommonKey(schema, k.name));
 }
 
-function textMatch(key: SlimKey, text: string, schema?: HandbrakeSchemaSlimView): boolean {
-	if (matchesFilter(key, text)) return true;
-	return key.type === 'list_obj' && (schema?.audio_item_keys ?? []).some((k) => matchesFilter(k, text));
+export function keyShown(key: SlimKey, stored: boolean, f: FilterState, ctx: Context): boolean {
+	return fieldVisible(key.name, key.label, f, stored, ctx);
 }
 
-export function keyShown(key: SlimKey, stored: boolean, f: FilterState, schema?: HandbrakeSchemaSlimView): boolean {
-	if (f.changedOnly && !stored) return false;
-	return f.text.trim() === '' || textMatch(key, f.text, schema);
+// The audio track list holds inputs rather than being one. Under Changed only it shows when the preset
+// stores its own list; while filtering, when a track still shows a field.
+export function audioListShown(f: FilterState, listStored: boolean, tracks: SlimKey[][]): boolean {
+	if (f.changedOnly && !listStored) return false;
+	return f.text.trim() === '' || tracks.some((keys) => keys.length > 0);
 }
 
 // Each card with its schema family; a card for a family this HandBrake build lacks has nothing to edit.
@@ -270,19 +266,6 @@ export function cardFamilies(
 		const family = schema.families.find((f) => f.name === card.family);
 		return family ? [{ card, family }] : [];
 	});
-}
-
-const BIT_DEPTH_KEY = { name: 'bit_depth', label: 'Bit depth' } as SlimKey;
-
-export function cardShown(
-	schema: HandbrakeSchemaSlimView,
-	family: SlimFamily,
-	block: Record<string, unknown>,
-	f: FilterState
-): boolean {
-	if (f.changedOnly && Object.keys(block).length === 0) return false;
-	if (f.text.trim() === '') return true;
-	return [BIT_DEPTH_KEY, ...blockFields(schema, family)].some((k) => matchesFilter(k, f.text));
 }
 
 export function issuesFor(

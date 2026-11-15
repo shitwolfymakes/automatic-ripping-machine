@@ -1,17 +1,19 @@
 <script lang="ts">
 	// The preset sidebar's HandBrake settings: the tab strip and each tab's
 	// schema-rendered fields. The Video tab holds the common keys under "All
-	// encoders", then one card per reachable encoder family.
+	// encoders", then one card per reachable encoder family. Only the inputs the
+	// filter and the other settings leave visible render, and a section heading
+	// only when something under it does.
 	import type {
 		EncoderAvailabilityView,
 		HandbrakeSchemaSlimView,
 		HandbrakeSettings,
-		SettingIssue,
-		SlimKey
+		SettingIssue
 	} from '$lib/types/api.gen';
 	import { fieldOptions, type TabId } from '$lib/handbrake/fields';
 	import { ALL_ENCODERS_LINE, encoderCards, perEncoderLine } from '$lib/handbrake/encoderCards';
-	import { keyRow, settingsPanelView } from '$lib/handbrake/panelView';
+	import { visibleTab, type TabVisible } from '$lib/handbrake/filter';
+	import { settingsPanelView } from '$lib/handbrake/panelView';
 	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settingsEdit';
 	import {
 		AMD_NOTE,
@@ -19,13 +21,11 @@
 		baseVideoEncoder,
 		blockOf,
 		cardFamilies,
-		cardShown,
-		commonKeys,
 		commonOf,
-		effectiveQualityType,
 		inheritedDepth,
 		inheritedValue,
 		issuesFor,
+		panelContext,
 		type BaseValues,
 		type FilterState
 	} from '$lib/handbrake/sidebarModel';
@@ -49,79 +49,83 @@
 	let { schema, settings, base, issues, readonly, encoder, presetRef, availability, onsettings }: Props = $props();
 
 	let tab = $state<TabId>('summary');
+	// The families whose collapsed card the user chose to set values on anyway.
+	let expanded = $state<string[]>([]);
 
 	const common = $derived(commonOf(settings));
 	// Selects whose options hang off another key (a filter's presets) read the value in effect.
-	const context = $derived({ ...base, ...common });
-	const qualityType = $derived(effectiveQualityType(settings, base, schema));
+	const context = $derived(panelContext(schema, settings, base));
 	const view = $derived(settingsPanelView({ tab, encoder, availability }));
 	const cards = $derived(
 		cardFamilies(encoderCards(encoder, presetRef, schema, availability, baseVideoEncoder(base)), schema)
 	);
 </script>
 
-<SettingsTabs {schema} {settings} {issues} {tab} ontab={(t) => (tab = t)}>
+<SettingsTabs {schema} {settings} {base} {cards} {expanded} {issues} {tab} ontab={(t) => (tab = t)}>
 	{#snippet children(f: FilterState)}
+		{@const shown = visibleTab({ schema, settings, base, filter: f, cards, expanded }, tab)}
 		{#if view.section === 'video'}
-			<div class="settings-panel-section">
-				<h4 class="settings-panel-heading">All encoders</h4>
-				<p class="settings-panel-line">{ALL_ENCODERS_LINE}</p>
-			</div>
-			{@render fields(commonKeys(schema, 'video'), f)}
-			<div class="settings-panel-section settings-panel-divided">
-				<h4 class="settings-panel-heading">Per encoder</h4>
-				<p class="settings-panel-line">{perEncoderLine(view.encoderLabel)}</p>
-			</div>
-			{#if view.showAmdNote}<p class="field-help">{AMD_NOTE}</p>{/if}
-			<div class="settings-panel-cards">
-				{#each cards as { card, family } (card.family)}
-					{@const block = blockOf(settings, family.name)}
-					{@const depth = inheritedDepth(family, base)}
-					{#if cardShown(schema, family, block, f)}
+			{#if shown.rows.length > 0}
+				<div class="settings-panel-section">
+					<h4 class="settings-panel-heading">All encoders</h4>
+					<p class="settings-panel-line">{ALL_ENCODERS_LINE}</p>
+				</div>
+			{/if}
+			{@render fields(shown)}
+			{#if shown.cards.length > 0}
+				<div class="settings-panel-section settings-panel-divided">
+					<h4 class="settings-panel-heading">Per encoder</h4>
+					<p class="settings-panel-line">{perEncoderLine(view.encoderLabel)}</p>
+				</div>
+				{#if view.showAmdNote}<p class="field-help">{AMD_NOTE}</p>{/if}
+				<div class="settings-panel-cards">
+					{#each shown.cards as { card, family, fields: visible, open } (card.family)}
+						{@const depth = inheritedDepth(family, base)}
 						<EncoderBlockCard
 							{schema}
 							{family}
 							{card}
-							{block}
+							block={blockOf(settings, family.name)}
 							{base}
+							{open}
+							fields={visible}
 							inheritedDepth={depth.depth}
 							depthSource={depth.source}
-							{qualityType}
 							{issues}
 							{readonly}
 							onchange={(k, v) => onsettings(setBlock(settings, family.name, k, v))}
 							onreset={(k) => onsettings(resetBlock(settings, family.name, k))}
+							onexpand={() => (expanded = [...expanded, family.name])}
 						/>
-					{/if}
-				{/each}
-			</div>
+					{/each}
+				</div>
+			{/if}
 		{:else}
-			{@render fields(commonKeys(schema, tab), f)}
+			{@render fields(shown)}
 		{/if}
 	{/snippet}
 </SettingsTabs>
 
-{#snippet fields(keys: SlimKey[], f: FilterState)}
+{#snippet fields(shown: TabVisible)}
 	<div class="settings-panel-grid">
-		{#each keys as key (key.name)}
-			{@const stored = key.name in common}
-			{@const row = keyRow(key, stored, f, schema)}
+		{#each shown.rows as { key, row } (key.name)}
 			{#if row === 'audio-list'}
 				<div class="settings-panel-wide">
 					<AudioTrackList
 						value={audioListValue(key, settings, base)}
+						visibleKeys={shown.tracks}
 						{schema}
 						{issues}
 						{readonly}
 						onchange={(v) => onsettings(setCommon(settings, key.name, v))}
 					/>
 				</div>
-			{:else if row === 'field'}
+			{:else}
 				<TunableField
 					{key}
 					value={common[key.name]}
 					inherited={inheritedValue(key, base)}
-					{stored}
+					stored={key.name in common}
 					options={fieldOptions(key, schema, context)}
 					issue={issuesFor(issues, key.name)}
 					disabled={readonly}

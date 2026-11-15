@@ -3,6 +3,8 @@
 
 import type { HandbrakeSchemaSlimView, SettingIssue, SlimKey } from '$lib/types/api.gen';
 import { fieldOptions, scalarText } from './fields';
+import type { FilterState } from './sidebarModel';
+import { fieldVisible, type Context } from './visibility';
 
 export type AudioItem = Record<string, unknown>;
 
@@ -85,6 +87,13 @@ export function rowKeys(schema: HandbrakeSchemaSlimView): SlimKey[] {
 		return at === -1 ? ROW_ORDER.length : at;
 	};
 	return [...schema.audio_item_keys].sort((a, b) => rank(a) - rank(b));
+}
+
+// The fields one track shows, in the order of `keys`. The track's own values, then the item defaults,
+// override the panel context, so a track's quality toggle decides between its bitrate and its quality.
+export function visibleTrackKeys(keys: SlimKey[], track: AudioItem, ctx: Context, f: FilterState): SlimKey[] {
+	const trackCtx = { ...ctx, ...Object.fromEntries(keys.map((k) => [k.name, k.default])), ...track };
+	return keys.filter((k) => fieldVisible(k.name, k.label, f, track[k.name] !== undefined, trackCtx));
 }
 
 // Options for one field of one row: mixdowns follow the row's encoder.

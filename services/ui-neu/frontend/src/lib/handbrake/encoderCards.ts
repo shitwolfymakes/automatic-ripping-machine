@@ -9,6 +9,8 @@ import type {
 	SlimKey,
 	SlimVariant
 } from '$lib/types/api.gen';
+import type { FilterState } from './sidebarModel';
+import { fieldVisible, type Context } from './visibility';
 
 // 'open' is a card with no hardware state to report: a pinned or base-preset family.
 export type CardState = 'verified' | 'cpu-fallback' | 'collapsed' | 'open';
@@ -128,6 +130,27 @@ export function blockFields(schema: HandbrakeSchemaSlimView, family: SlimFamily)
 		.map((name) => schema.keys.find((k) => k.name === name))
 		.filter((k): k is SlimKey => k !== undefined)
 		.sort((a, b) => rank(a.name) - rank(b.name));
+}
+
+// A card for a device the host cannot verify stays collapsed until the user expands it, or it stores a value.
+export function cardOpen(card: EncoderCard, block: Record<string, unknown>, expanded: boolean): boolean {
+	return expanded || card.state !== 'collapsed' || Object.keys(block).length > 0;
+}
+
+const BIT_DEPTH = { name: 'bit_depth', label: 'Bit depth' };
+
+// The names of the inputs a card shows, bit depth first: the block's values override the panel context.
+export function visibleCardFields(
+	schema: HandbrakeSchemaSlimView,
+	family: SlimFamily,
+	block: Record<string, unknown>,
+	ctx: Context,
+	f: FilterState
+): string[] {
+	const cardCtx = { ...ctx, ...block };
+	return [BIT_DEPTH, ...blockFields(schema, family)]
+		.filter((k) => fieldVisible(k.name, k.label, f, block[k.name] !== undefined, cardCtx))
+		.map((k) => k.name);
 }
 
 // The block keys whose choices come from the encoder variant, and which variant list holds them.

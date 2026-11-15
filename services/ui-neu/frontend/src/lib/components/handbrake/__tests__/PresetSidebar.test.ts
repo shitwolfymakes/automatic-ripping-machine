@@ -233,7 +233,8 @@ describe('which settings show', () => {
 	});
 
 	it('x264 advanced options appear on the x264 card only', async () => {
-		mount({ mode: 'edit', preset: preset() });
+		const encoders = { x264: { x264UseAdvancedOptions: true } };
+		mount({ mode: 'edit', preset: preset({ handbrake_settings: { common: {}, encoders } }) });
 		await ready();
 		await openTab('Video');
 		await screen.findByRole('region', { name: 'x264' });
@@ -264,6 +265,97 @@ describe('which settings show', () => {
 		expect(screen.queryByLabelText('Rate control mode')).not.toBeInTheDocument();
 		expect(screen.getByRole('region', { name: 'x264' })).toBeInTheDocument();
 		expect(screen.queryByRole('region', { name: 'NVIDIA H.264' })).not.toBeInTheDocument();
+	});
+
+	it('Changed only drops the All encoders heading when no common video key is stored', async () => {
+		mount({
+			mode: 'edit',
+			preset: preset({ handbrake_settings: { common: {}, encoders: { x264: { VideoTune: 'film' } } } })
+		});
+		await ready();
+		await openTab('Video');
+		await fireEvent.click(screen.getByLabelText('Changed only'));
+		expect(screen.queryByRole('heading', { name: 'All encoders' })).not.toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Per encoder' })).toBeInTheDocument();
+	});
+
+	async function filterBy(text: string) {
+		await fireEvent.input(screen.getByPlaceholderText('Filter settings'), { target: { value: text } });
+	}
+	const fieldLabels = (el: HTMLElement) =>
+		Array.from(el.querySelectorAll('label.field-label')).map((l) => l.textContent);
+
+	it('filtering by "track" shows only matching inputs, inside each audio track too, and nothing on Video', async () => {
+		const AudioList = [{ AudioEncoder: 'av_aac' }, { AudioEncoder: 'ac3' }];
+		mount({ mode: 'edit', preset: preset({ handbrake_settings: { common: { AudioList }, encoders: {} } }) });
+		await ready();
+		await filterBy('track');
+		expect(screen.getByRole('tab', { name: /^Audio/ })).toHaveAttribute('aria-selected', 'true');
+		expect(screen.getByRole('tab', { name: /^Audio/ })).toHaveTextContent('9');
+		expect(screen.getByLabelText('Pass through track names')).toBeInTheDocument();
+		expect(screen.queryByLabelText('Fallback encoder')).not.toBeInTheDocument();
+		for (const n of [1, 2]) {
+			expect(fieldLabels(screen.getByRole('region', { name: `Audio track ${n}` }))).toEqual([
+				'Use quality instead of bitrate',
+				'Gain (dB)',
+				'Dynamic range compression'
+			]);
+		}
+		await openTab('Video');
+		expect(screen.getByRole('tab', { name: /^Video/ })).toHaveTextContent('0');
+		expect(screen.queryByRole('heading', { name: 'All encoders' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('heading', { name: 'Per encoder' })).not.toBeInTheDocument();
+		expect(screen.queryByRole('region', { name: 'x264' })).not.toBeInTheDocument();
+		expect(screen.queryByText(/do not apply to AMD|AMD devices encode/)).not.toBeInTheDocument();
+	});
+
+	it('filtering by "gain" shows each track with its gain only', async () => {
+		const AudioList = [{ AudioEncoder: 'av_aac' }, { AudioEncoder: 'ac3' }];
+		mount({ mode: 'edit', preset: preset({ handbrake_settings: { common: { AudioList }, encoders: {} } }) });
+		await ready();
+		await filterBy('gain');
+		expect(screen.getByRole('tab', { name: /^Audio/ })).toHaveTextContent('2');
+		for (const n of [1, 2]) {
+			expect(fieldLabels(screen.getByRole('region', { name: `Audio track ${n}` }))).toEqual(['Gain (dB)']);
+		}
+	});
+
+	it('filtering by "preset" shows only the encoder preset inside each card', async () => {
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await openTab('Video');
+		await filterBy('preset');
+		const x264 = await screen.findByRole('region', { name: 'x264' });
+		expect(fieldLabels(x264)).toEqual(['Encoder preset']);
+		expect(fieldLabels(screen.getByRole('region', { name: 'NVIDIA H.264' }))).toEqual(['Encoder preset']);
+		expect(screen.queryByRole('heading', { name: 'All encoders' })).not.toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Per encoder' })).toBeInTheDocument();
+		expect(screen.getByRole('tab', { name: /^Video/ })).toHaveTextContent('2');
+	});
+
+	it('counts a collapsed card once Set values anyway opens it', async () => {
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await openTab('Video');
+		await filterBy('preset');
+		const qsv = await screen.findByRole('region', { name: 'qsv_h264' });
+		expect(screen.getByRole('tab', { name: /^Video/ })).toHaveTextContent('2');
+		await fireEvent.click(within(qsv).getByRole('button', { name: 'Set values anyway' }));
+		expect(fieldLabels(screen.getByRole('region', { name: 'qsv_h264' }))).toEqual(['Encoder preset']);
+		expect(screen.getByRole('tab', { name: /^Video/ })).toHaveTextContent('3');
+	});
+
+	it('hides a gated field that holds a value, and still saves the value', async () => {
+		vi.mocked(updateTranscodePreset).mockResolvedValue(preset());
+		const common = { VideoQualityType: 2, VideoAvgBitrate: 5000 };
+		mount({ mode: 'edit', preset: preset({ handbrake_settings: { common, encoders: {} } }) });
+		await ready();
+		await openTab('Video');
+		expect(screen.queryByLabelText('Average bitrate (kbit/s)')).not.toBeInTheDocument();
+		expect(screen.queryByLabelText('Multi-pass encoding')).not.toBeInTheDocument();
+		await save();
+		await waitFor(() => expect(updateTranscodePreset).toHaveBeenCalled());
+		expect(vi.mocked(updateTranscodePreset).mock.calls[0][1].handbrake_settings?.common?.VideoAvgBitrate).toBe(5000);
 	});
 
 	it('the Audio tab edits the output tracks', async () => {

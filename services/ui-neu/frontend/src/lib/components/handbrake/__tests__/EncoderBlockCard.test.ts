@@ -3,11 +3,12 @@ import { renderComponent, screen, cleanup } from '$lib/test-utils';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
-import type { EncoderCard } from '$lib/handbrake/encoderCards';
+import { blockFields, type EncoderCard } from '$lib/handbrake/encoderCards';
 import EncoderBlockCard from '../EncoderBlockCard.svelte';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 const family = (name: string): SlimFamily => schema.families.find((f) => f.name === name)!;
+const allFields = (name: string) => ['bit_depth', ...blockFields(schema, family(name)).map((k) => k.name)];
 const card = (over: Partial<EncoderCard> = {}): EncoderCard => ({
 	family: 'x264',
 	label: 'x264',
@@ -25,11 +26,13 @@ function baseProps(name: string, over: Record<string, unknown> = {}) {
 		base: null,
 		inheritedDepth: 8,
 		depthSource: 'default',
-		qualityType: 1,
+		open: true,
+		fields: allFields(name),
 		issues: [] as SettingIssue[],
 		readonly: false,
 		onchange: vi.fn(),
 		onreset: vi.fn(),
+		onexpand: vi.fn(),
 		...over
 	};
 }
@@ -46,11 +49,13 @@ function mount(name: string, over: Record<string, unknown> = {}) {
 			base: null,
 			inheritedDepth: 8,
 			depthSource: 'default',
-			qualityType: 1,
+			open: true,
+			fields: allFields(name),
 			issues: [] as SettingIssue[],
 			readonly: false,
 			onchange,
 			onreset,
+			onexpand: vi.fn(),
 			...over
 		}
 	});
@@ -82,15 +87,22 @@ describe('EncoderBlockCard', () => {
 		expect(screen.getByLabelText('Quality (RF, 0 to 51)')).toBeTruthy();
 	});
 
-	it('disables multi-pass and turbo with a hint under constant quality', () => {
-		mount('x264', { qualityType: 2 });
-		expect((screen.getByLabelText('Multi-pass encoding') as HTMLInputElement).disabled).toBe(true);
-		expect((screen.getByLabelText('Turbo first pass') as HTMLInputElement).disabled).toBe(true);
-		expect(screen.getAllByText('Applies with average bitrate only')).toHaveLength(2);
+	it('renders only the fields it is given', () => {
+		mount('x264', { fields: ['VideoPreset'] });
+		expect(screen.getByLabelText('Encoder preset')).toBeTruthy();
+		expect(screen.queryByLabelText('Bit depth')).toBeNull();
+		expect(screen.queryByLabelText('Multi-pass encoding')).toBeNull();
+		expect(screen.queryByLabelText('Encoder tune')).toBeNull();
 	});
 
-	it('enables multi-pass and turbo under average bitrate', () => {
-		mount('x264', { qualityType: 1 });
+	it('renders bit depth alone when it is the only field', () => {
+		mount('x264', { fields: ['bit_depth'] });
+		expect(screen.getByLabelText('Bit depth')).toBeTruthy();
+		expect(screen.queryByLabelText('Encoder preset')).toBeNull();
+	});
+
+	it('enables multi-pass and turbo when shown', () => {
+		mount('x264');
 		expect((screen.getByLabelText('Multi-pass encoding') as HTMLInputElement).disabled).toBe(false);
 		expect((screen.getByLabelText('Turbo first pass') as HTMLInputElement).disabled).toBe(false);
 		expect(screen.queryByText('Applies with average bitrate only')).toBeNull();
@@ -188,17 +200,17 @@ describe('EncoderBlockCard', () => {
 		expect(screen.getByText('Fallback when no GPU is free')).toBeTruthy();
 	});
 
-	it('collapses an untouched card until Set values anyway', async () => {
-		mount('qsv_h264', { card: card({ family: 'qsv_h264', state: 'collapsed' }) });
+	it('shows a closed card as its title and Set values anyway, which asks to expand it', async () => {
+		const onexpand = vi.fn();
+		const { rerender } = renderComponent(EncoderBlockCard, {
+			props: baseProps('qsv_h264', { card: card({ family: 'qsv_h264', state: 'collapsed' }), open: false, onexpand })
+		});
 		expect(screen.queryByLabelText('Encoder preset')).toBeNull();
 		await fireEvent.click(screen.getByRole('button', { name: 'Set values anyway' }));
+		expect(onexpand).toHaveBeenCalledOnce();
+		await rerender(baseProps('qsv_h264', { card: card({ family: 'qsv_h264', state: 'collapsed' }), open: true }));
 		expect(screen.getByLabelText('Encoder preset')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Set values anyway' })).toBeNull();
-	});
-
-	it('opens a collapsed card that already stores values', () => {
-		mount('qsv_h264', { card: card({ family: 'qsv_h264', state: 'collapsed' }), block: { VideoPreset: 'quality' } });
-		expect(screen.getByLabelText('Encoder preset')).toBeTruthy();
 	});
 
 	it('keeps x264 advanced options off the x265 card', () => {
@@ -231,7 +243,10 @@ describe('EncoderBlockCard', () => {
 	});
 
 	it('puts the status line under a collapsed title, beside a link-styled button', () => {
-		mount('qsv_h264', { card: card({ family: 'qsv_h264', label: 'Intel QSV H.264', state: 'collapsed' }) });
+		mount('qsv_h264', {
+			card: card({ family: 'qsv_h264', label: 'Intel QSV H.264', state: 'collapsed' }),
+			open: false
+		});
 		expect(screen.getByRole('heading', { name: 'Intel QSV H.264' })).toBeTruthy();
 		expect(screen.getByText('No verified device')).toBeTruthy();
 		const button = screen.getByRole('button', { name: 'Set values anyway' });

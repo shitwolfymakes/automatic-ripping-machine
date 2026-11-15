@@ -1,35 +1,44 @@
 <script lang="ts">
 	// The sidebar's tab strip: filter box and "Changed only" above it, a count
-	// per tab (stored values, or matches while filtering), a warning glyph on
+	// per tab of the inputs it shows under the current filter, a warning glyph on
 	// tabs with an issue, a count of zero dimmed. The body renders through children, handed the current filter.
 	import type { Snippet } from 'svelte';
 	import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { TABS, type TabId } from '$lib/handbrake/fields';
-	import { firstTabWithMatch, tabMatchCounts } from '$lib/handbrake/filter';
+	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
+	import type { BaseValues } from '$lib/handbrake/sidebarModel';
 
 	interface Props {
 		schema: HandbrakeSchemaSlimView;
 		settings: HandbrakeSettings;
+		base: BaseValues;
+		cards: VisibleInput['cards'];
+		expanded: string[];
 		issues: SettingIssue[];
 		tab: TabId;
 		ontab: (t: TabId) => void;
 		children: Snippet<[{ text: string; changedOnly: boolean }]>;
 	}
 
-	let { schema, settings, issues, tab, ontab, children }: Props = $props();
+	let { schema, settings, base, cards, expanded, issues, tab, ontab, children }: Props = $props();
 
 	let text = $state('');
 	let changedOnly = $state(false);
 
-	const counts = $derived(tabMatchCounts(schema, settings, text, changedOnly));
+	const counts = $derived(tabVisibleCounts({ schema, settings, base, cards, expanded, filter: { text, changedOnly } }));
 	const tabByKey = $derived(new Map([...schema.keys, ...schema.audio_item_keys].map((k) => [k.name, k.tab])));
 	const issueTabs = $derived(new Set(issues.map((i) => tabByKey.get(i.key))));
 
 	// Only while filtering: clearing the box leaves the user where they are.
 	function jumpToMatch() {
 		if (text.trim() === '') return;
-		ontab(firstTabWithMatch(tabMatchCounts(schema, settings, text, changedOnly), tab));
+		ontab(
+			firstTabWithMatch(
+				tabVisibleCounts({ schema, settings, base, cards, expanded, filter: { text, changedOnly } }),
+				tab
+			)
+		);
 	}
 	function onfilter(e: Event) {
 		text = (e.currentTarget as HTMLInputElement).value;

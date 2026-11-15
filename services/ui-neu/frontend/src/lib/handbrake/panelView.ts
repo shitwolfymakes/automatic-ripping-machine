@@ -1,16 +1,14 @@
 // What the preset sidebar's panels show, as flat flags the templates branch on
 // one at a time. Pure functions; the components call them inside $derived.
 
-import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, SlimKey } from '$lib/types/api.gen';
+import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 import { showsAmdNote } from './encoderCards';
-import { fieldKind, type TabId } from './fields';
+import type { TabId } from './fields';
 import {
 	clearsSettings,
 	isVaapiEncoder,
-	keyShown,
 	showTabs,
 	type Draft,
-	type FilterState,
 	type SaveFailure,
 	type SidebarMode
 } from './sidebarModel';
@@ -34,13 +32,6 @@ export function settingsPanelView(input: SettingsPanelInput): SettingsPanelView 
 		showAmdNote: showsAmdNote(input.encoder, input.availability),
 		encoderLabel: known?.label ?? 'This preset'
 	};
-}
-
-export type KeyRow = 'hidden' | 'audio-list' | 'field';
-
-export function keyRow(key: SlimKey, stored: boolean, filter: FilterState, schema: HandbrakeSchemaSlimView): KeyRow {
-	if (!keyShown(key, stored, filter, schema)) return 'hidden';
-	return fieldKind(key) === 'audio-list' ? 'audio-list' : 'field';
 }
 
 // A HandBrake preset name that names a hardware encoder does nothing on its

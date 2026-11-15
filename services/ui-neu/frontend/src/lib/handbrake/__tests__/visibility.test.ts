@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEPENDENCY_RULES, fieldVisible, isApplicable } from '../visibility';
+import { DEPENDENCY_RULES, fieldVisible, isApplicable, textMatches } from '../visibility';
 
 const cases: [string, Record<string, unknown>, boolean][] = [
 	['PictureTopCrop', { PictureCropMode: 3 }, true],
@@ -84,5 +84,17 @@ describe('fieldVisible', () => {
 
 	it('shows an applicable field for empty text', () => {
 		expect(fieldVisible('Anything', 'Anything', open, false, {})).toBe(true);
+	});
+});
+
+describe('textMatches', () => {
+	it('matches the label, case-insensitively, ignoring surrounding spaces', () => {
+		expect(textMatches('AlignAVStart', 'Align audio and video start', ' ALIGN AUDIO ')).toBe(true);
+	});
+	it('matches the key name', () => {
+		expect(textMatches('AlignAVStart', 'Align audio and video start', 'avstart')).toBe(true);
+	});
+	it('does not match something else', () => {
+		expect(textMatches('AlignAVStart', 'Align audio and video start', 'zzz')).toBe(false);
 	});
 });

@@ -18,17 +18,17 @@ import {
 	cardFamilies,
 	clearsSettings,
 	isVaapiEncoder,
-	cardShown,
 	commonKeys,
 	draftToCreate,
 	draftToUpdate,
-	effectiveQualityType,
 	footerNote,
 	inheritedDepth,
 	inheritedValue,
 	initialDraft,
 	issuesFor,
 	keyShown,
+	audioListShown,
+	panelContext,
 	onEncoderChange,
 	onToolChange,
 	rowFlags,
@@ -311,13 +311,16 @@ describe('inherited values', () => {
 		expect(inheritedValue(key('VideoQualityType'), null)).toBe(2);
 	});
 
-	it('takes the quality type from the preset, the base, then the template', () => {
-		const vqt = (common: Record<string, unknown>, base: Record<string, unknown> | null) =>
-			effectiveQualityType({ common, encoders: {} }, base, schema);
-		expect(vqt({ VideoQualityType: 1 }, { VideoQualityType: 2 })).toBe(1);
-		expect(vqt({}, { VideoQualityType: 1 })).toBe(1);
-		expect(vqt({}, null)).toBe(2);
-		expect(effectiveQualityType({}, null, { ...schema, keys: [] })).toBe(2);
+	it('builds the panel context from the schema defaults, then the base, then the preset', () => {
+		const ctx = panelContext(
+			schema,
+			{ common: { VideoQualityType: 1 } },
+			{ PicturePadMode: 'custom', VideoQualityType: 2 }
+		);
+		expect(ctx.VideoQualityType).toBe(1);
+		expect(ctx.PicturePadMode).toBe('custom');
+		expect(ctx.PictureCropMode).toBe(0);
+		expect(panelContext(schema, {}, null).VideoQualityType).toBe(2);
 	});
 
 	it('reads the base video encoder only when it is text', () => {
@@ -362,29 +365,32 @@ describe('commonKeys', () => {
 
 describe('filtering', () => {
 	const none = { text: '', changedOnly: false };
+	const ctx = panelContext(schema, {}, null);
 
 	it('shows a key matching the text, and only stored ones under Changed only', () => {
-		expect(keyShown(key('VideoQualityType'), false, none)).toBe(true);
-		expect(keyShown(key('VideoQualityType'), false, { text: 'rate control', changedOnly: false })).toBe(true);
-		expect(keyShown(key('VideoQualityType'), false, { text: 'denoise', changedOnly: false })).toBe(false);
-		expect(keyShown(key('VideoQualityType'), false, { text: '', changedOnly: true })).toBe(false);
-		expect(keyShown(key('VideoQualityType'), true, { text: '', changedOnly: true })).toBe(true);
+		expect(keyShown(key('VideoQualityType'), false, none, ctx)).toBe(true);
+		expect(keyShown(key('VideoQualityType'), false, { text: 'rate control', changedOnly: false }, ctx)).toBe(true);
+		expect(keyShown(key('VideoQualityType'), false, { text: 'denoise', changedOnly: false }, ctx)).toBe(false);
+		expect(keyShown(key('VideoQualityType'), false, { text: '', changedOnly: true }, ctx)).toBe(false);
+		expect(keyShown(key('VideoQualityType'), true, { text: '', changedOnly: true }, ctx)).toBe(true);
 	});
 
-	it('shows the audio track list when a track key matches', () => {
-		expect(keyShown(key('AudioList'), false, { text: 'mixdown', changedOnly: false }, schema)).toBe(true);
-		expect(keyShown(key('AudioList'), false, { text: 'zzz', changedOnly: false }, schema)).toBe(false);
-		expect(keyShown(key('AudioList'), false, { text: 'mixdown', changedOnly: false })).toBe(false);
+	it('hides a key another setting gates off, even when it is stored', () => {
+		expect(keyShown(key('VideoAvgBitrate'), true, none, ctx)).toBe(false);
+		expect(keyShown(key('VideoAvgBitrate'), true, none, { ...ctx, VideoQualityType: 1 })).toBe(true);
 	});
 
-	it('shows a card when a block field matches or, under Changed only, it stores something', () => {
-		expect(cardShown(schema, family('x264'), {}, none)).toBe(true);
-		expect(cardShown(schema, family('x264'), {}, { text: 'tune', changedOnly: false })).toBe(true);
-		expect(cardShown(schema, family('x264'), {}, { text: 'bit depth', changedOnly: false })).toBe(true);
-		expect(cardShown(schema, family('x264'), {}, { text: 'denoise', changedOnly: false })).toBe(false);
-		expect(cardShown(schema, family('x264'), {}, { text: '', changedOnly: true })).toBe(false);
-		expect(cardShown(schema, family('x264'), { VideoTune: 'film' }, { text: 'tune', changedOnly: true })).toBe(true);
-		expect(cardShown(schema, family('x264'), { VideoTune: 'film' }, { text: '', changedOnly: true })).toBe(true);
+	it('shows the audio track list unfiltered, and while filtering only when a track shows a field', () => {
+		const shown = [[key('AlignAVStart')]];
+		expect(audioListShown(none, false, [])).toBe(true);
+		expect(audioListShown({ text: 'gain', changedOnly: false }, false, [[], []])).toBe(false);
+		expect(audioListShown({ text: 'gain', changedOnly: false }, false, [[], ...shown])).toBe(true);
+	});
+
+	it('under Changed only shows the audio track list only when the preset stores its own', () => {
+		const shown = [[key('AlignAVStart')]];
+		expect(audioListShown({ text: '', changedOnly: true }, false, shown)).toBe(false);
+		expect(audioListShown({ text: '', changedOnly: true }, true, shown)).toBe(true);
 	});
 });
 

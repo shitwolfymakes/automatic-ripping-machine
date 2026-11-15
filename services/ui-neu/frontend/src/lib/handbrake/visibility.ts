@@ -1,7 +1,6 @@
 // Which settings apply given the other settings' effective values, and
 // whether a field is shown under the current filter.
 
-import { textMatches } from './filter';
 import type { FilterState } from './sidebarModel';
 
 export type Context = Record<string, unknown>;
@@ -56,6 +55,12 @@ export const DEPENDENCY_RULES: readonly DependencyRule[] = [
 
 export function isApplicable(name: string, ctx: Context): boolean {
 	return DEPENDENCY_RULES.every((rule) => !rule.keys.includes(name) || rule.applies(ctx));
+}
+
+// The filter box matches the key name or its label, ignoring case.
+export function textMatches(name: string, label: string, text: string): boolean {
+	const needle = text.trim().toLowerCase();
+	return name.toLowerCase().includes(needle) || label.toLowerCase().includes(needle);
 }
 
 export function fieldVisible(name: string, label: string, f: FilterState, stored: boolean, ctx: Context): boolean {

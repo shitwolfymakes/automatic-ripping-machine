@@ -13,7 +13,8 @@ import {
 	rowKeys,
 	rowOptions,
 	samplerates,
-	setTrackField
+	setTrackField,
+	visibleTrackKeys
 } from '../audioTracks';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
@@ -134,5 +135,39 @@ describe('audioTracks', () => {
 		expect(rowIssue(issues, 0, 'AudioMixdown')?.message).toBe('m');
 		expect(rowIssue(issues, 1, 'AudioMixdown')).toBeUndefined();
 		expect(listIssues(issues).map((i) => i.message)).toEqual(['whole']);
+	});
+});
+
+describe('visibleTrackKeys', () => {
+	const all = { text: '', changedOnly: false };
+	const names = (track: Record<string, unknown>, f = all, ctx: Record<string, unknown> = {}) =>
+		visibleTrackKeys(rowKeys(schema), track, ctx, f).map((k) => k.name);
+
+	it('shows bitrate, not quality, while the track does not use quality', () => {
+		expect(names({})).toContain('AudioBitrate');
+		expect(names({})).not.toContain('AudioTrackQuality');
+	});
+
+	it('shows quality, not bitrate, once the track uses quality', () => {
+		const shown = names({ AudioTrackQualityEnable: true, AudioBitrate: 128 });
+		expect(shown).toContain('AudioTrackQuality');
+		expect(shown).not.toContain('AudioBitrate');
+	});
+
+	it('lets the track override the panel context', () => {
+		expect(names({ AudioTrackQualityEnable: false }, all, { AudioTrackQualityEnable: true })).toContain('AudioBitrate');
+	});
+
+	it('keeps only the fields matching the filter text', () => {
+		expect(names({}, { text: 'gain', changedOnly: false })).toEqual(['AudioTrackGainSlider']);
+		expect(names({}, { text: 'track', changedOnly: false })).toEqual([
+			'AudioTrackQualityEnable',
+			'AudioTrackGainSlider',
+			'AudioTrackDRCSlider'
+		]);
+	});
+
+	it('keeps only the fields the track sets under Changed only', () => {
+		expect(names({ AudioMixdown: 'stereo' }, { text: '', changedOnly: true })).toEqual(['AudioMixdown']);
 	});
 });

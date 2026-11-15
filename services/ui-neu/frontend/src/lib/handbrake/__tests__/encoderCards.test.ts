@@ -4,10 +4,12 @@ import fixture from './fixtures/slim-schema.json';
 import {
 	blockDefault,
 	blockFields,
+	cardOpen,
 	cardStatusLine,
 	encoderCards,
 	perEncoderLine,
 	showsAmdNote,
+	visibleCardFields,
 	type EncoderCard
 } from '../encoderCards';
 
@@ -203,5 +205,63 @@ describe('blockDefault', () => {
 
 	it('has no default for a key that is not a variant list', () => {
 		expect(blockDefault(key('VideoQualitySlider'), x264, null)).toBeNull();
+	});
+});
+
+describe('visibleCardFields', () => {
+	const all = { text: '', changedOnly: false };
+	const cq = { VideoQualityType: 2 };
+
+	it('lists bit depth and every applicable block field, in display order', () => {
+		expect(visibleCardFields(schema, family('x264'), {}, cq, all)).toEqual([
+			'bit_depth',
+			...blockFields(schema, family('x264'))
+				.map((k) => k.name)
+				.filter((n) => n !== 'VideoMultiPass' && n !== 'VideoTurboMultiPass' && n !== 'x264Option')
+		]);
+	});
+
+	it('hides multi-pass and turbo under constant quality, the quality slider under average bitrate', () => {
+		const vbr = visibleCardFields(schema, family('x264'), {}, { VideoQualityType: 1 }, all);
+		expect(vbr).toContain('VideoMultiPass');
+		expect(vbr).toContain('VideoTurboMultiPass');
+		expect(vbr).not.toContain('VideoQualitySlider');
+	});
+
+	it('reads gates from the block over the panel context', () => {
+		const shown = visibleCardFields(schema, family('x264'), { x264UseAdvancedOptions: true }, cq, all);
+		expect(shown).toContain('x264Option');
+	});
+
+	it('keeps only the fields matching the filter text', () => {
+		expect(visibleCardFields(schema, family('x264'), {}, cq, { text: 'preset', changedOnly: false })).toEqual([
+			'VideoPreset'
+		]);
+		expect(visibleCardFields(schema, family('x264'), {}, cq, { text: 'bit depth', changedOnly: false })).toEqual([
+			'bit_depth'
+		]);
+	});
+
+	it('keeps only stored fields under Changed only', () => {
+		const block = { bit_depth: 10, VideoTune: 'film' };
+		expect(visibleCardFields(schema, family('x264'), block, cq, { text: '', changedOnly: true })).toEqual([
+			'bit_depth',
+			'VideoTune'
+		]);
+	});
+});
+
+describe('cardOpen', () => {
+	const c = (state: EncoderCard['state']): EncoderCard => ({ family: 'qsv_h264', label: 'QSV', state, device: null });
+
+	it('keeps a collapsed card closed until expanded or it stores a value', () => {
+		expect(cardOpen(c('collapsed'), {}, false)).toBe(false);
+		expect(cardOpen(c('collapsed'), {}, true)).toBe(true);
+		expect(cardOpen(c('collapsed'), { VideoPreset: 'quality' }, false)).toBe(true);
+	});
+
+	it('opens every other card', () => {
+		expect(cardOpen(c('open'), {}, false)).toBe(true);
+		expect(cardOpen(c('cpu-fallback'), {}, false)).toBe(true);
 	});
 });
