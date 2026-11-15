@@ -209,11 +209,38 @@ describe('RipPresetForm', () => {
 	});
 
 	describe('validation', () => {
-		it('disables submit when name is empty', () => {
+		it('keeps Save clickable; an empty name blocks the save, marks the field and focuses it', async () => {
 			renderComponent(RipPresetFormHarness, {
 				props: { preset: null, onsaved: vi.fn() }
 			});
-			expect(screen.getByRole('button', { name: /^save/i })).toBeDisabled();
+			const save = screen.getByRole('button', { name: /^save/i });
+			expect(save).not.toBeDisabled();
+			const name = screen.getByTestId('preset-name');
+			expect(name).not.toHaveAttribute('aria-invalid');
+
+			await fireEvent.click(save);
+
+			await waitFor(() => expect(document.activeElement).toBe(name));
+			expect(createRipPresetMock).not.toHaveBeenCalled();
+			expect(name).toHaveAttribute('aria-invalid', 'true');
+			expect(name).toHaveAttribute('aria-describedby', 'preset-name-error');
+			const message = document.getElementById('preset-name-error');
+			expect(message).toHaveTextContent('Name is required');
+			expect(message).toHaveClass('field-error');
+		});
+
+		it('clears the mark once the name is filled in', async () => {
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved: vi.fn() }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			const name = screen.getByTestId('preset-name');
+			await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+
+			await fireEvent.input(name, { target: { value: 'Movies' } });
+
+			expect(name).not.toHaveAttribute('aria-invalid');
+			expect(screen.queryByText('Name is required')).toBeNull();
 		});
 	});
 

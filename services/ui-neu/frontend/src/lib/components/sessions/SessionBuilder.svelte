@@ -4,7 +4,16 @@
 	import { createSession, updateSession } from '$lib/api/sessions';
 	import type { EditorStatus } from '$lib/components/editorStatus';
 	import OutputPathField from './OutputPathField.svelte';
-	import { parseOverrides, sessionUpdate, sessionCreate, type SessionForm } from './sessionForm';
+	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/utils/formValidation';
+	import {
+		SESSION_FIELDS,
+		SESSION_FIELD_ORDER,
+		parseOverrides,
+		sessionErrors,
+		sessionUpdate,
+		sessionCreate,
+		type SessionForm
+	} from './sessionForm';
 
 	interface Props {
 		session?: JoinedSession | null;
@@ -17,7 +26,7 @@
 		preselectTranscodeId?: string;
 		/** The hosting EditorSidebar's footer owns the buttons and submits this form by id. */
 		formId: string;
-		/** Reports the Save button's state to the hosting footer, whenever it changes. */
+		/** Reports the save state to the hosting footer, whenever it changes. */
 		onstatus?: (status: EditorStatus) => void;
 	}
 
@@ -72,10 +81,12 @@
 	const isEdit = $derived(!!session);
 	// Built-in sessions are read-only — every field is locked, no save path.
 	const readOnly = $derived(session?.is_builtin ?? false);
-	const canSubmit = $derived(!readOnly && !!(name && ripId && template));
+	// Marks show from the first Save on, and each clears once its field is filled.
+	let attempted = $state(false);
+	const errors = $derived(attempted ? sessionErrors({ name, ripId, template }) : {});
 
 	$effect(() => {
-		onstatus?.({ canSubmit, submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
+		onstatus?.({ submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
 	});
 
 	function switchMediaType(mt: MediaType) {
@@ -109,6 +120,8 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (readOnly) return; // built-ins can't be saved
+		attempted = true;
+		if (await focusFirstInvalid(sessionErrors({ name, ripId, template }), SESSION_FIELD_ORDER)) return;
 		jsonError = null;
 		submitError = null;
 
@@ -145,17 +158,18 @@
 		{/if}
 
 		<!-- Session name -->
-		<label for="sb-name" class="field">
-			<span class="field-label">Session name</span>
+		<div class="field">
+			<label for={SESSION_FIELDS.name} class="field-label">Session name</label>
 			<input
-				id="sb-name"
+				id={SESSION_FIELDS.name}
 				type="text"
 				bind:value={name}
 				placeholder="e.g. Movies: Archive"
 				disabled={readOnly}
-				required
+				{...invalidAttrs(SESSION_FIELDS.name, errors[SESSION_FIELDS.name])}
 			/>
-		</label>
+			{@render fieldError(SESSION_FIELDS.name)}
+		</div>
 
 		<!-- Media type segmented control -->
 		<div class="field">
@@ -176,16 +190,25 @@
 		</div>
 
 		<!-- Rip preset -->
-		<label for="sb-rip" class="field">
-			<span class="field-label">Rip preset <span class="session-builder-required">*</span></span>
-			<select id="sb-rip" value={ripId} onchange={handleRipChange} disabled={readOnly} required>
+		<div class="field">
+			<label for={SESSION_FIELDS.rip} class="field-label"
+				>Rip preset <span class="session-builder-required">*</span></label
+			>
+			<select
+				id={SESSION_FIELDS.rip}
+				value={ripId}
+				onchange={handleRipChange}
+				disabled={readOnly}
+				{...invalidAttrs(SESSION_FIELDS.rip, errors[SESSION_FIELDS.rip])}
+			>
 				<option value="">Select a rip preset</option>
 				{#each ripOptions as rp (rp.id)}
 					<option value={rp.id}>{rp.name}</option>
 				{/each}
 				<option value="__create_rip__">+ Create new rip preset...</option>
 			</select>
-		</label>
+			{@render fieldError(SESSION_FIELDS.rip)}
+		</div>
 
 		<!-- Transcode preset (optional) -->
 		<label for="sb-tc" class="field">
@@ -201,9 +224,12 @@
 
 		<!-- Output path template -->
 		<div class="field">
-			<label class="field-label" for="sb-path">Output path <span class="session-builder-required">*</span></label>
+			<label class="field-label" for={SESSION_FIELDS.path}
+				>Output path <span class="session-builder-required">*</span></label
+			>
 			<OutputPathField
-				id="sb-path"
+				id={SESSION_FIELDS.path}
+				errorId={errors[SESSION_FIELDS.path] ? errorId(SESSION_FIELDS.path) : undefined}
 				value={template}
 				{mediaType}
 				onchange={(v) => {
@@ -212,6 +238,7 @@
 				has_transcode_preset={!!tcId}
 				disabled={readOnly}
 			/>
+			{@render fieldError(SESSION_FIELDS.path)}
 		</div>
 
 		<!-- Advanced (collapsed) -->
@@ -237,6 +264,10 @@
 		{/if}
 	</form>
 </div>
+
+{#snippet fieldError(id: string)}
+	{#if errors[id]}<p class="field-error" id={errorId(id)}>{errors[id]}</p>{/if}
+{/snippet}
 
 <style>
 	/* original: ml-1 text-red-500 (no dark: variant - same shade in both modes).

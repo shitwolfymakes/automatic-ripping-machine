@@ -35,11 +35,21 @@ it('New: titled "New rip preset", with the shell footer holding the usage line, 
 	const footer = screen.getByTestId('editor-sidebar-footer');
 	expect(within(footer).getByText('Used by 0 sessions')).toBeInTheDocument();
 	expect(within(footer).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-	expect(within(footer).getByRole('button', { name: 'Save' })).toBeDisabled();
+	expect(within(footer).getByRole('button', { name: 'Save' })).not.toBeDisabled();
 	// the form's own title and buttons are not repeated in the body
 	expect(within(dialog).getAllByRole('heading')).toHaveLength(1);
 	expect(screen.queryByTestId('preset-submit')).toBeNull();
 	expect(dialog).toHaveAttribute('data-stacked', 'false');
+});
+
+it('Save with an empty name makes no call, marks the name and focuses it', async () => {
+	renderComponent(RipPresetSidebar, { props: props() });
+	await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	const name = screen.getByTestId('preset-name');
+	await waitFor(() => expect(document.activeElement).toBe(name));
+	expect(createRipPreset).not.toHaveBeenCalled();
+	expect(name).toHaveAttribute('aria-invalid', 'true');
+	expect(document.getElementById('preset-name-error')).toHaveTextContent('Name is required');
 });
 
 it('Edit: titled "Edit rip preset", shows the usage count', () => {

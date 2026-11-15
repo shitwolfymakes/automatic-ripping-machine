@@ -21,15 +21,41 @@ const props = (over = {}) => ({
 
 afterEach(cleanup);
 
-it('create is disabled until name + rip preset + template are set', async () => {
+it('Save with nothing filled in makes no call, marks every required field and focuses the name', async () => {
 	renderComponent(SessionBuilder, props());
-	const submit = () => screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement;
-	expect(submit().disabled).toBe(true);
+	const submit = screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement;
+	expect(submit.disabled).toBe(false);
+	await fireEvent.click(submit);
+	const name = screen.getByLabelText(/session name/i);
+	await waitFor(() => expect(document.activeElement).toBe(name));
+	expect(createSession).not.toHaveBeenCalled();
+	expect(name).toHaveAttribute('aria-invalid', 'true');
+	expect(name).toHaveAttribute('aria-describedby', 'sb-name-error');
+	expect(document.getElementById('sb-name-error')).toHaveTextContent('Name is required');
+	expect(screen.getByLabelText(/rip preset/i)).toHaveAttribute('aria-invalid', 'true');
+	expect(document.getElementById('sb-rip-error')).toHaveTextContent('Choose a rip preset');
+	const path = screen.getByLabelText(/output path/i);
+	expect(path).toHaveAttribute('aria-invalid', 'true');
+	expect(path).toHaveAttribute('aria-describedby', 'sb-path-error');
+	expect(document.getElementById('sb-path-error')).toHaveTextContent('Output path is required');
+});
+
+it('focuses the first invalid field in form order, and clears each mark once filled', async () => {
+	renderComponent(SessionBuilder, props());
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
+	await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+	const rip = screen.getByLabelText(/rip preset/i);
+	await waitFor(() => expect(document.activeElement).toBe(rip));
+	expect(screen.getByLabelText(/session name/i)).not.toHaveAttribute('aria-invalid');
+	expect(screen.queryByText('Name is required')).toBeNull();
+
 	// movie is default media type; pick rip preset r1
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.change(rip, { target: { value: 'r1' } });
 	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
-	expect(submit().disabled).toBe(false);
+	expect(rip).not.toHaveAttribute('aria-invalid');
+	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-invalid');
+	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-describedby');
+	expect(document.querySelector('.field-error')).toBeNull();
 });
 
 it('rip preset dropdown only lists presets of the chosen media type', async () => {

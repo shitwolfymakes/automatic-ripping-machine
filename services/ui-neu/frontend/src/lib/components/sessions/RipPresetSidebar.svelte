@@ -42,13 +42,6 @@
 	<RipPresetForm {preset} {onsaved} formId={FORM_ID} onstatus={(s) => (status = s)} />
 
 	{#snippet footer()}
-		<EditorFormFooter
-			note={usageLabel(usage)}
-			{readOnly}
-			formId={FORM_ID}
-			canSubmit={status.canSubmit}
-			submitting={status.submitting}
-			{onclose}
-		/>
+		<EditorFormFooter note={usageLabel(usage)} {readOnly} formId={FORM_ID} submitting={status.submitting} {onclose} />
 	{/snippet}
 </EditorSidebar>

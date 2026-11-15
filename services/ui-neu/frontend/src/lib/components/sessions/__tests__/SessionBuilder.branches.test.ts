@@ -8,14 +8,11 @@ vi.mock('$lib/api/sessions', () => ({
 import { createSession, updateSession, previewTemplate } from '$lib/api/sessions';
 import SessionBuilder from './SessionBuilderHarness.svelte';
 
-// Branch pins for SessionBuilder, beside SessionBuilder.svelte.test.ts. Two
-// branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - switchMediaType's guard, `if (isEdit || readOnly) return;`: the media chips
-//   are disabled exactly when it would return, and a disabled button's click
-//   never reaches its handler.
-// - handleSubmit's guard, `if (readOnly) return;`: a read-only builder renders
-//   no submit button and disables every field, so the form cannot be submitted.
+// Branch pins for SessionBuilder, beside SessionBuilder.svelte.test.ts. One
+// branch cannot be reached from the rendered component, so nothing here
+// forces it: switchMediaType's guard, `if (isEdit || readOnly) return;`. The
+// media chips are disabled exactly when it would return, and a disabled
+// button's click never reaches its handler.
 
 const rip = (id: string, mt = 'movie') => ({ id, name: `rip ${id}`, media_type: mt }) as any;
 const props = (over = {}) => ({
@@ -55,6 +52,14 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+it('a submit event on a built-in session sends nothing and marks nothing', async () => {
+	const { container } = renderComponent(SessionBuilder, props({ session: { ...editSession, is_builtin: true } }));
+	await fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+	expect(createSession).not.toHaveBeenCalled();
+	expect(updateSession).not.toHaveBeenCalled();
+	expect(container.querySelector('[aria-invalid]')).toBeNull();
+});
 
 describe('SessionBuilder overrides', () => {
 	it('sends overrides_json null when the field is blank', async () => {

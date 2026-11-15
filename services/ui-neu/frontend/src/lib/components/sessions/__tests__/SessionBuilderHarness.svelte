@@ -16,7 +16,6 @@
 	note={status.note}
 	readOnly={props.session?.is_builtin ?? false}
 	formId="harness-form"
-	canSubmit={status.canSubmit}
 	submitting={status.submitting}
 	onclose={() => {}}
 />

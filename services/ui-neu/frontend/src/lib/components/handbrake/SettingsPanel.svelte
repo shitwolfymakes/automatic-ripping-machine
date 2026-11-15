@@ -45,6 +45,8 @@
 		expanded: string[];
 		onsettings: (s: HandbrakeSettings) => void;
 		onexpand: (family: string) => void;
+		/** The open tab; bound by the sidebar, which opens the tab of a field it focuses. */
+		tab?: TabId;
 	}
 
 	let {
@@ -58,10 +60,9 @@
 		cards,
 		expanded,
 		onsettings,
-		onexpand
+		onexpand,
+		tab = $bindable('summary')
 	}: Props = $props();
-
-	let tab = $state<TabId>('summary');
 
 	const common = $derived(commonOf(settings));
 	// Selects whose options hang off another key (a filter's presets) read the value in effect.

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseOverrides, sessionUpdate, sessionCreate, type SessionForm } from '../sessionForm';
+import {
+	SESSION_FIELD_ORDER,
+	parseOverrides,
+	sessionErrors,
+	sessionUpdate,
+	sessionCreate,
+	type SessionForm
+} from '../sessionForm';
 
 const form: SessionForm = {
 	name: 'Movies',
@@ -54,5 +61,23 @@ describe('sessionCreate', () => {
 			output_path_template: '{title}',
 			overrides_json: { a: 1 }
 		});
+	});
+});
+
+describe('sessionErrors', () => {
+	it('flags each empty required field by its input id', () => {
+		expect(sessionErrors({ name: '', ripId: '', template: '' })).toEqual({
+			'sb-name': 'Name is required',
+			'sb-rip': 'Choose a rip preset',
+			'sb-path': 'Output path is required'
+		});
+	});
+
+	it('has no errors once name, rip preset and template are set', () => {
+		expect(sessionErrors(form)).toEqual({});
+	});
+
+	it('lists the required inputs in form order', () => {
+		expect(SESSION_FIELD_ORDER).toEqual(['sb-name', 'sb-rip', 'sb-path']);
 	});
 });

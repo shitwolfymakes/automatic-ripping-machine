@@ -6,8 +6,9 @@
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import { encoderGroups } from '$lib/utils/encoder-groups';
-	import { presetBlockView } from '$lib/handbrake/panelView';
+	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panelView';
 	import { CLEARED_NOTE, isVaapiEncoder, issuesFor, type Draft, type PresetField } from '$lib/handbrake/sidebarModel';
+	import { errorId, invalidAttrs, type FieldErrors } from '$lib/utils/formValidation';
 	import type { SettingIssue } from '$lib/types/api.gen';
 
 	interface Props {
@@ -17,10 +18,12 @@
 		/** HandBrake's built-in preset names, or null while no schema is loaded. */
 		builtinNames: string[] | null;
 		issues: SettingIssue[];
+		/** The sidebar's own checks on Save (a blank name), by input id. */
+		errors?: FieldErrors;
 		onfield: (field: PresetField, value: string) => void;
 	}
 
-	let { draft, readonly, editing, builtinNames, issues, onfield }: Props = $props();
+	let { draft, readonly, editing, builtinNames, issues, errors = {}, onfield }: Props = $props();
 
 	// Availability-aware encoder catalog (GET /api/encoders, cached by the
 	// shared store), in catalog order. Refreshed on open: availability moves
@@ -44,6 +47,9 @@
 		})
 	);
 	const refIssue = $derived(issuesFor(issues, 'preset_ref'));
+	const REF_ID = 'tp-preset-ref';
+	const refInvalid = $derived(invalidAttrs(REF_ID, refIssue?.message));
+	const nameError = $derived(errors[PRESET_NAME_ID]);
 
 	// A stored name this HandBrake build does not have stays listed, so it is not lost on save.
 	function withStoredName(names: string[], stored: string | null): string[] {
@@ -65,16 +71,17 @@
 
 <div class="preset-block">
 	<div class="field preset-block-wide">
-		<label class="field-label" for="tp-name">Name</label>
+		<label class="field-label" for={PRESET_NAME_ID}>Name</label>
 		<input
-			id="tp-name"
+			id={PRESET_NAME_ID}
 			data-testid="tp-name"
 			type="text"
-			required
 			value={draft.name}
 			disabled={readonly}
 			oninput={(e) => onfield('name', value(e))}
+			{...invalidAttrs(PRESET_NAME_ID, nameError)}
 		/>
+		{#if nameError}<p class="field-error" id={errorId(PRESET_NAME_ID)}>{nameError}</p>{/if}
 	</div>
 
 	<div class="field">
@@ -168,13 +175,14 @@
 	<!-- The base preset is a select of HandBrake's built-ins once a schema is loaded; free text otherwise. -->
 	{#if view.baseNames}
 		<div class="field">
-			<label class="field-label" for="tp-preset-ref">Base preset</label>
+			<label class="field-label" for={REF_ID}>Base preset</label>
 			<select
-				id="tp-preset-ref"
+				id={REF_ID}
 				data-testid="tp-preset-ref"
 				value={draft.preset_ref ?? ''}
 				disabled={readonly}
 				onchange={(e) => onfield('preset_ref', value(e))}
+				{...refInvalid}
 			>
 				<option value="">None (HandBrake defaults)</option>
 				{#each withStoredName(view.baseNames, draft.preset_ref) as name (name)}
@@ -185,14 +193,15 @@
 		</div>
 	{:else}
 		<div class="field">
-			<label class="field-label" for="tp-preset-ref">Preset ref</label>
+			<label class="field-label" for={REF_ID}>Preset ref</label>
 			<input
-				id="tp-preset-ref"
+				id={REF_ID}
 				data-testid="tp-preset-ref"
 				type="text"
 				value={draft.preset_ref ?? ''}
 				disabled={readonly}
 				onchange={(e) => onfield('preset_ref', value(e))}
+				{...refInvalid}
 			/>
 			{@render refNotes()}
 		</div>
@@ -222,7 +231,7 @@
 	{#if view.usesFfmpegVaapi}
 		<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
 	{/if}
-	{#if refIssue}<p class="field-error" role="alert">{refIssue.message}</p>{/if}
+	{#if refIssue}<p class="field-error" id={errorId(REF_ID)} role="alert">{refIssue.message}</p>{/if}
 {/snippet}
 
 <style>

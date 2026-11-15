@@ -62,7 +62,6 @@
 			note={status.note}
 			{readOnly}
 			formId={FORM_ID}
-			canSubmit={status.canSubmit}
 			submitting={status.submitting}
 			onclose={oncancel}
 		/>

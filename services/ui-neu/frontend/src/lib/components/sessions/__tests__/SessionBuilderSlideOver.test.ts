@@ -35,7 +35,7 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
-it('New session: shell header and footer with the note, Cancel and a Save that waits for the form to be valid', async () => {
+it('New session: shell header and footer with the note, Cancel and a clickable Save', async () => {
 	renderComponent(SessionBuilderSlideOver, { props: props() });
 	const dialog = screen.getByRole('dialog', { name: 'New session' });
 	expect(within(dialog).getByRole('heading', { name: 'New session' })).toBeInTheDocument();
@@ -43,13 +43,19 @@ it('New session: shell header and footer with the note, Cancel and a Save that w
 	expect(within(footer).getByText('Rips only, no transcode step.')).toBeInTheDocument();
 	expect(within(footer).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
 	const save = within(footer).getByRole('button', { name: 'Save' });
-	expect(save).toBeDisabled();
-	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'Mine' } });
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'm/{title}.{ext}' } });
 	expect(save).toBeEnabled();
 	// the builder's own footer is not repeated in the body
 	expect(within(dialog).getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
+});
+
+it('Save in the footer with an empty name makes no call, marks the name and focuses it', async () => {
+	renderComponent(SessionBuilderSlideOver, { props: props() });
+	await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	const name = screen.getByLabelText(/session name/i);
+	await waitFor(() => expect(document.activeElement).toBe(name));
+	expect(createSession).not.toHaveBeenCalled();
+	expect(name).toHaveAttribute('aria-invalid', 'true');
+	expect(document.getElementById('sb-name-error')).toHaveTextContent('Name is required');
 });
 
 it('Save in the footer submits the form', async () => {

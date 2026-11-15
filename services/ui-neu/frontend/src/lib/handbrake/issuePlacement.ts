@@ -1,10 +1,11 @@
-// Which save issues a rendered input shows, and how the sidebar banner names the rest.
+// Which save issues a rendered input shows, where Save sends focus for them, and how the
+// sidebar banner names the rest.
 // An issue counts as placed only when the panel renders its input with no filter: a field
 // another setting hides, a card the encoder cannot reach or a collapsed card leaves it unplaced.
 
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
 import { BIT_DEPTH_FIELD } from './encoderCards';
-import { TABS } from './fields';
+import { TABS, type TabId } from './fields';
 import { visibleTab, type TabVisible, type VisibleInput } from './filter';
 
 export type PanelInput = Omit<VisibleInput, 'filter'>;
@@ -48,6 +49,32 @@ export function unplacedIssues(issues: SettingIssue[], input: PanelInput | null)
 export function placedIssues(issues: SettingIssue[], input: PanelInput | null): SettingIssue[] {
 	const slots = renderedSlots(issues, input);
 	return issues.filter((i) => isPlaced(i, slots));
+}
+
+/** Where a placed issue's input lives: its element id, and the tab to open first (null outside the tabs). */
+export interface IssueTarget {
+	id: string;
+	tab: TabId | null;
+}
+
+function keyTab(keys: { name: string; tab: string }[] | undefined, name: string): TabId | null {
+	return (keys?.find((k) => k.name === name)?.tab as TabId | undefined) ?? null;
+}
+
+// The ids follow the inputs: tp-<field> in the preset block, <family>-tunable-<key> in an encoder
+// card (the Video tab), audio-<track>-tunable-<key> in a track and tunable-<key> for a common key.
+export function issueTarget(i: SettingIssue, schema: HandbrakeSchemaSlimView | null): IssueTarget {
+	if (i.encoder) return { id: `${i.encoder}-tunable-${i.key}`, tab: 'video' };
+	if (PRESET_FIELDS.has(i.key)) return { id: `tp-${i.key.replaceAll('_', '-')}`, tab: null };
+	const track = TRACK_ITEM.exec(i.key);
+	if (track) return { id: `audio-${track[1]}-tunable-${track[2]}`, tab: keyTab(schema?.audio_item_keys, track[2]) };
+	return { id: `tunable-${i.key}`, tab: keyTab(schema?.keys, i.key) };
+}
+
+/** The target of the first issue a rendered input shows; null when none does. */
+export function firstIssueTarget(issues: SettingIssue[], input: PanelInput | null): IssueTarget | null {
+	const first = placedIssues(issues, input)[0];
+	return first ? issueTarget(first, input?.schema ?? null) : null;
 }
 
 function trackLabel(schema: HandbrakeSchemaSlimView, index: string, name: string): string | null {

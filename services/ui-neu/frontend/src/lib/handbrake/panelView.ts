@@ -2,6 +2,7 @@
 // one at a time. Pure functions; the components call them inside $derived.
 
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
+import { nameErrors, type FieldErrors } from '$lib/utils/formValidation';
 import { showsAmdNote } from './encoderCards';
 import type { TabId } from './fields';
 import {
@@ -109,7 +110,8 @@ export interface PresetSidebarView {
 	showRetry: boolean;
 	showUnplaced: boolean;
 	settings: 'tabs' | 'vaapi-note' | 'none';
-	canSubmit: boolean;
+	// Save runs on an editable, idle draft; the name rule then decides whether it is sent.
+	canSave: boolean;
 }
 
 function settingsArea(draft: Draft): PresetSidebarView['settings'] {
@@ -130,6 +132,14 @@ export function presetSidebarView(input: PresetSidebarInput): PresetSidebarView 
 		showRetry: input.failure?.schemaMissing === true,
 		showUnplaced: input.unplacedCount > 0,
 		settings: settingsArea(input.draft),
-		canSubmit: !readonly && !input.submitting && input.draft.name.trim().length > 0
+		canSave: !readonly && !input.submitting
 	};
+}
+
+/** The preset block's name input, the one field the sidebar checks before sending. */
+export const PRESET_NAME_ID = 'tp-name';
+
+/** What the sidebar marks on Save before any request: a blank name. */
+export function presetErrors(draft: Draft): FieldErrors {
+	return nameErrors(PRESET_NAME_ID, draft.name);
 }

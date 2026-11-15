@@ -7,6 +7,7 @@
 	import ChipPicker from './ChipPicker.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { docUrlFor } from '$lib/handbrake/docLinks';
+	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
 	import { fieldView, optionLabel, scalarText, type TabId } from '$lib/handbrake/fields';
 	import { languageChoices } from '$lib/handbrake/languages';
 	import { PAD_CUSTOM, padColorView } from '$lib/handbrake/padColor';
@@ -47,6 +48,8 @@
 
 	const view = $derived(fieldView(key, { value, inherited, stored, options, range }));
 	const id = $derived(`${idPrefix}tunable-${key.name}`);
+	// Marks the control invalid and points it at the issue line while there is an issue.
+	const invalid = $derived(invalidAttrs(id, issue?.message));
 	const href = $derived(docUrl ?? docUrlFor(key.tab as TabId, key.group));
 
 	const choices = $derived(languageChoices(key.name));
@@ -99,6 +102,7 @@
 						checked={view.shown === true}
 						{disabled}
 						onchange={(e) => onchange(e.currentTarget.checked)}
+						{...invalid}
 					/>
 					<label class="field-label" for={id}>{key.label}</label>
 					{@render labelExtras()}
@@ -122,12 +126,20 @@
 			{:else if view.kind === 'number'}
 				{@render numberControl()}
 			{:else if view.kind === 'chips'}
-				<ChipPicker {id} values={view.chipValues} {options} {choices} {disabled} onchange={(v) => onchange(v)} />
+				<ChipPicker
+					{id}
+					values={view.chipValues}
+					{options}
+					{choices}
+					{disabled}
+					{invalid}
+					onchange={(v) => onchange(v)}
+				/>
 			{:else}
 				{@render textControl()}
 			{/if}
 		{/if}
-		{#if issue}<p class="field-error" role="alert">{issue.message}</p>{/if}
+		{#if issue}<p class="field-error" id={errorId(id)} role="alert">{issue.message}</p>{/if}
 	</div>
 {/if}
 
@@ -152,7 +164,7 @@
 {/snippet}
 
 {#snippet selectControl()}
-	<select {id} class="field-control" {disabled} onchange={onSelect}>
+	<select {id} class="field-control" {disabled} onchange={onSelect} {...invalid}>
 		{#if view.shown == null}<option value="" selected></option>{/if}
 		{#each view.options as option (option.raw)}
 			<option value={option.value} selected={option.selected}>{option.label}</option>
@@ -162,7 +174,7 @@
 
 {#snippet rotateControl()}
 	<div class="tunable-field-rotate">
-		<select {id} class="field-control" {disabled} onchange={onAngle}>
+		<select {id} class="field-control" {disabled} onchange={onAngle} {...invalid}>
 			{#each ROTATE_ANGLES as angle (angle)}
 				<option value={angle} selected={angle === rotate.angle}>{angle}&deg;</option>
 			{/each}
@@ -175,7 +187,7 @@
 {/snippet}
 
 {#snippet padColorControl()}
-	<select {id} class="field-control" value={pad.selected} {disabled} onchange={onPadSelect}>
+	<select {id} class="field-control" value={pad.selected} {disabled} onchange={onPadSelect} {...invalid}>
 		{#each options ?? [] as name (name)}
 			<option value={String(name)}>{optionLabel(key, name)}</option>
 		{/each}
@@ -207,6 +219,7 @@
 		step={view.step}
 		{disabled}
 		onchange={onNumber}
+		{...invalid}
 	/>
 {/snippet}
 
@@ -219,6 +232,7 @@
 		placeholder={view.placeholder}
 		{disabled}
 		onchange={(e) => onchange(e.currentTarget.value)}
+		{...invalid}
 	/>
 {/snippet}
 

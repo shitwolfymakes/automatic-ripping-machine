@@ -8,6 +8,7 @@
 	import type { EditorStatus } from './editorStatus';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
 	import { trackFiltersBody, type TrackFilters } from '$lib/utils/track-filters';
+	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/utils/formValidation';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
 
 	let {
@@ -20,7 +21,7 @@
 		onsaved: (p: RipPresetView) => void;
 		/** The hosting EditorSidebar's footer owns the title and the buttons, and submits this form by id. */
 		formId: string;
-		/** Reports the Save button's state to the hosting footer, whenever it changes. */
+		/** Reports the save state to the hosting footer, whenever it changes. */
 		onstatus?: (status: EditorStatus) => void;
 	} = $props();
 
@@ -37,11 +38,15 @@
 
 	const save = new PresetSave();
 
+	const NAME_ID = 'preset-name';
+
 	const showFilters = $derived(trackSelection === 'custom' && !isBuiltin);
-	const canSubmit = $derived(!save.submitting && name.trim().length > 0);
+	// Marks show from the first Save on, and each clears once its field is valid.
+	let attempted = $state(false);
+	const errors = $derived(attempted ? nameErrors(NAME_ID, name) : {});
 
 	$effect(() => {
-		onstatus?.({ canSubmit: !isBuiltin && canSubmit, submitting: save.submitting, note: '' });
+		onstatus?.({ submitting: save.submitting, note: '' });
 	});
 
 	function savePreset(): Promise<RipPresetView> {
@@ -67,7 +72,9 @@
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		// Built-ins are read-only — no save path (Enter is a no-op too).
-		if (isBuiltin || !canSubmit) return;
+		if (isBuiltin || save.submitting) return;
+		attempted = true;
+		if (await focusFirstInvalid(nameErrors(NAME_ID, name), [NAME_ID])) return;
 		await save.run(savePreset, (p) => onsaved(p));
 	}
 
@@ -86,17 +93,18 @@
 		<p class="field-error" data-testid="preset-error">{save.error}</p>
 	{/if}
 
-	<label class="field">
-		<span class="field-label">Name</span>
+	<div class="field">
+		<label class="field-label" for={NAME_ID}>Name</label>
 		<input
-			id="preset-name"
+			id={NAME_ID}
 			data-testid="preset-name"
 			type="text"
-			required
 			bind:value={name}
 			disabled={save.submitting || isBuiltin}
+			{...invalidAttrs(NAME_ID, errors[NAME_ID])}
 		/>
-	</label>
+		{#if errors[NAME_ID]}<p class="field-error" id={errorId(NAME_ID)}>{errors[NAME_ID]}</p>{/if}
+	</div>
 
 	<label class="field">
 		<span class="field-label">Media type</span>

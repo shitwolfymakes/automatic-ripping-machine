@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 import {
 	HARDWARE_HINT,
+	PRESET_NAME_ID,
 	presetBlockView,
+	presetErrors,
 	presetSidebarView,
 	settingsPanelView,
 	type PresetBlockInput,
@@ -152,10 +154,21 @@ describe('presetSidebarView', () => {
 		expect(presetSidebarView(input({ draft: draft({ tool: 'abcde' }) })).settings).toBe('none');
 	});
 
-	it('submits only an editable, named, idle draft', () => {
-		expect(presetSidebarView(input()).canSubmit).toBe(true);
-		expect(presetSidebarView(input({ mode: 'view' })).canSubmit).toBe(false);
-		expect(presetSidebarView(input({ submitting: true })).canSubmit).toBe(false);
-		expect(presetSidebarView(input({ draft: draft({ name: '  ' }) })).canSubmit).toBe(false);
+	it('saves an editable, idle draft, whatever its name (the name rule marks it instead)', () => {
+		expect(presetSidebarView(input()).canSave).toBe(true);
+		expect(presetSidebarView(input({ draft: draft({ name: '  ' }) })).canSave).toBe(true);
+		expect(presetSidebarView(input({ mode: 'view' })).canSave).toBe(false);
+		expect(presetSidebarView(input({ submitting: true })).canSave).toBe(false);
+	});
+});
+
+describe('presetErrors', () => {
+	it('requires a name on the name input', () => {
+		expect(presetErrors(draft({ name: '  ' }))).toEqual({ [PRESET_NAME_ID]: 'Name is required' });
+		expect(PRESET_NAME_ID).toBe('tp-name');
+	});
+
+	it('has no errors for a named draft', () => {
+		expect(presetErrors(draft())).toEqual({});
 	});
 });

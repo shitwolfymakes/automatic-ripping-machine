@@ -419,9 +419,20 @@ describe('editing and saving', () => {
 		);
 	});
 
-	it('disables Save without a name', async () => {
+	it('Save without a name makes no call, marks the name and focuses it; typing a name clears the mark', async () => {
 		mount({});
-		expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+		await ready();
+		expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+		await save();
+		const name = screen.getByTestId('tp-name');
+		await waitFor(() => expect(document.activeElement).toBe(name));
+		expect(createTranscodePreset).not.toHaveBeenCalled();
+		expect(name).toHaveAttribute('aria-invalid', 'true');
+		expect(name).toHaveAttribute('aria-describedby', 'tp-name-error');
+		expect(document.getElementById('tp-name-error')).toHaveTextContent('Name is required');
+		await fireEvent.input(name, { target: { value: 'Named' } });
+		expect(name).not.toHaveAttribute('aria-invalid');
+		expect(screen.queryByText('Name is required')).toBeNull();
 	});
 
 	it('offers Clone on a read-only preset only when a clone handler is given', async () => {
@@ -532,6 +543,69 @@ describe('editing and saving', () => {
 		expect(screen.getByText('Must be a boolean')).toBeInTheDocument();
 		expect(onsaved).not.toHaveBeenCalled();
 		expect(screen.getByRole('dialog', { name: 'Edit transcode preset' })).toBeInTheDocument();
+	});
+
+	it('a 422 with an issue on the Video tab opens that tab and focuses the field', async () => {
+		const issues = [
+			{ key: 'PictureTopCrop', encoder: null, code: 'out_of_range' as const, message: 'Hidden' },
+			{ key: 'VideoFramerate', encoder: null, code: 'not_in_list' as const, message: 'No such rate' }
+		];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
+		await save();
+		const field = await waitFor(() => {
+			const el = document.getElementById('tunable-VideoFramerate');
+			expect(document.activeElement).toBe(el);
+			return el as HTMLElement;
+		});
+		expect(screen.getByRole('tab', { name: /^Video/ })).toHaveAttribute('aria-selected', 'true');
+		expect(field).toHaveAttribute('aria-invalid', 'true');
+		expect(field).toHaveAttribute('aria-describedby', 'tunable-VideoFramerate-error');
+		expect(document.getElementById('tunable-VideoFramerate-error')).toHaveTextContent('No such rate');
+		// The hidden field's issue stays in the banner.
+		expect(document.querySelector('.preset-sidebar-issues')).toHaveTextContent('Top crop: Hidden');
+	});
+
+	it('a 422 on an encoder card field opens the Video tab and focuses it inside the card', async () => {
+		const issues = [{ key: 'VideoOptionExtra', encoder: 'x264', code: 'wrong_type' as const, message: 'Bad options' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await save();
+		const card = await screen.findByRole('region', { name: 'x264' });
+		const field = within(card).getByLabelText('Extra encoder options');
+		await waitFor(() => expect(document.activeElement).toBe(field));
+		expect(field).toHaveAttribute('aria-invalid', 'true');
+	});
+
+	it('a 422 on the base preset focuses it in the preset block without changing tab', async () => {
+		const issues = [{ key: 'preset_ref', encoder: null, code: 'not_in_list' as const, message: 'No such preset' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset({ preset_ref: 'Gone 1080p' }) });
+		await ready();
+		await save();
+		const ref = screen.getByTestId('tp-preset-ref');
+		await waitFor(() => expect(document.activeElement).toBe(ref));
+		expect(ref).toHaveAttribute('aria-invalid', 'true');
+		expect(ref).toHaveAttribute('aria-describedby', 'tp-preset-ref-error');
+		expect(document.getElementById('tp-preset-ref-error')).toHaveTextContent('No such preset');
+		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
+	});
+
+	it('a 422 whose issues no input shows leaves focus and the tab alone', async () => {
+		const issues = [
+			{ key: 'handbrake_settings', encoder: null, code: 'engine_ignores_settings' as const, message: 'Ignored' }
+		];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		const before = document.activeElement;
+		await save();
+		expect(await screen.findByText('Ignored')).toBeInTheDocument();
+		expect(document.activeElement).toBe(before);
+		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
 	});
 
 	it('lists an issue on a field another setting hides in the banner, named by its label', async () => {

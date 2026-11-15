@@ -1,8 +1,10 @@
 <script lang="ts">
 	// The transcode preset sidebar on Settings > Sessions: the preset block,
 	// the schema-driven HandBrake settings below it, and one Save that writes
-	// both. Built-in presets open read-only.
-	import { onMount } from 'svelte';
+	// both. Built-in presets open read-only. A Save with a blank name, or one the
+	// backend refuses with per-setting issues, opens the tab of the first marked
+	// field and focuses it.
+	import { onMount, tick } from 'svelte';
 	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
 	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
 	import LoadState from '$lib/components/LoadState.svelte';
@@ -13,7 +15,9 @@
 	import { createTranscodePreset, updateTranscodePreset } from '$lib/api/transcodePresets';
 	import { handbrakeSchema } from '$lib/stores/handbrakeSchema.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
-	import { presetSidebarView } from '$lib/handbrake/panelView';
+	import { PRESET_NAME_ID, presetErrors, presetSidebarView } from '$lib/handbrake/panelView';
+	import type { TabId } from '$lib/handbrake/fields';
+	import { focusField, focusFirstInvalid } from '$lib/utils/formValidation';
 	import {
 		VAAPI_NOTE,
 		applyField,
@@ -34,7 +38,7 @@
 		type SidebarMode
 	} from '$lib/handbrake/sidebarModel';
 	import { applyProposal } from '$lib/handbrake/importReview';
-	import { unplacedIssues, unplacedText } from '$lib/handbrake/issuePlacement';
+	import { firstIssueTarget, unplacedIssues, unplacedText } from '$lib/handbrake/issuePlacement';
 	import type {
 		HandbrakeSchemaSlimView,
 		ImportedPresetView,
@@ -63,6 +67,9 @@
 	let submitting = $state(false);
 	let failure = $state<SaveFailure | null>(null);
 	let importing = $state(false);
+	let tab = $state<TabId>('summary');
+	// The name mark shows from the first Save on, and clears once the name is filled in.
+	let attempted = $state(false);
 	// The families whose collapsed encoder card the user chose to set values on anyway.
 	let expanded = $state<string[]>([]);
 	// Built-in names already asked for, so each is fetched once.
@@ -76,6 +83,7 @@
 		schema && showTabs(draft) ? { schema, settings: draft.settings, base, cards, expanded } : null
 	);
 	const loose = $derived(unplacedIssues(issues, panel));
+	const errors = $derived(attempted ? presetErrors(draft) : {});
 	const cloneAction = $derived(preset && onclone ? () => onclone(preset) : null);
 	const view = $derived(
 		presetSidebarView({
@@ -127,9 +135,20 @@
 		return createTranscodePreset(draftToCreate(draft));
 	}
 
+	// Opens the tab of the first issue an input shows and focuses that input; the banner keeps the rest.
+	async function focusFirstIssue(list: SettingIssue[]) {
+		const target = firstIssueTarget(list, panel);
+		if (!target) return;
+		if (target.tab) tab = target.tab;
+		await tick();
+		focusField(target.id);
+	}
+
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
-		if (!view.canSubmit) return;
+		if (!view.canSave) return;
+		attempted = true;
+		if (await focusFirstInvalid(presetErrors(draft), [PRESET_NAME_ID])) return;
 		submitting = true;
 		failure = null;
 		try {
@@ -140,19 +159,13 @@
 		} finally {
 			submitting = false;
 		}
+		if (failure?.issues) await focusFirstIssue(failure.issues);
 	}
 </script>
 
 {#snippet footer()}
 	{#if note}<p class="preset-sidebar-note">{note}</p>{/if}
-	<EditorFormFooter
-		note={usageLabel(usage)}
-		readOnly={readonly}
-		formId={FORM_ID}
-		canSubmit={view.canSubmit}
-		{submitting}
-		{onclose}
-	/>
+	<EditorFormFooter note={usageLabel(usage)} readOnly={readonly} formId={FORM_ID} {submitting} {onclose} />
 {/snippet}
 
 <EditorSidebar
@@ -203,6 +216,7 @@
 				editing={mode !== 'new'}
 				builtinNames={schema?.builtin_names ?? null}
 				{issues}
+				{errors}
 				{onfield}
 			/>
 
@@ -233,6 +247,7 @@
 								{expanded}
 								onsettings={(next) => (draft = { ...draft, settings: next })}
 								onexpand={(family) => (expanded = [...expanded, family])}
+								bind:tab
 							/>
 						{/snippet}
 					</LoadState>

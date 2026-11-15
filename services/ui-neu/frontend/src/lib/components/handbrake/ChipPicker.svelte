@@ -4,16 +4,19 @@
 	// choice label; a value no choice carries shows raw), free text otherwise.
 	// Emits the whole new list.
 	import { canonicalValue, choiceLabel, findChoice, unchosenChoices, type Choice } from '$lib/handbrake/languages';
+	import type { invalidAttrs } from '$lib/utils/formValidation';
 	interface Props {
 		id: string;
 		values: string[];
 		options: Array<string | number> | null;
 		choices?: Choice[] | null;
 		disabled?: boolean;
+		/** The aria-invalid and aria-describedby the add control carries while its field has an issue. */
+		invalid?: ReturnType<typeof invalidAttrs>;
 		onchange: (values: string[]) => void;
 	}
 
-	let { id, values, options, choices = null, disabled = false, onchange }: Props = $props();
+	let { id, values, options, choices = null, disabled = false, invalid = {}, onchange }: Props = $props();
 
 	let draft = $state('');
 	function unchosen(list: Array<string | number>): string[] {
@@ -63,7 +66,7 @@
 		{/each}
 	</ul>
 	{#if options}
-		<select {id} class="field-control" aria-label="Add value" {disabled} onchange={onpick}>
+		<select {id} class="field-control" aria-label="Add value" {disabled} onchange={onpick} {...invalid}>
 			<option value="" selected>Add...</option>
 			{#each unchosen(options) as choice (choice)}
 				<option>{String(choice)}</option>
@@ -80,6 +83,7 @@
 				{disabled}
 				{oninput}
 				{onkeydown}
+				{...invalid}
 			/>
 			{#if choices}
 				<datalist id={`${id}-choices`}>

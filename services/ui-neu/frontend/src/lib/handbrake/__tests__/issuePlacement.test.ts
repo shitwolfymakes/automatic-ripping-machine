@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
 import type { EncoderCard } from '../encoderCards';
-import { placedIssues, unplacedIssues, unplacedText, type PanelInput } from '../issuePlacement';
+import {
+	firstIssueTarget,
+	issueTarget,
+	placedIssues,
+	unplacedIssues,
+	unplacedText,
+	type PanelInput
+} from '../issuePlacement';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 const family = (name: string): SlimFamily => schema.families.find((f) => f.name === name)!;
@@ -92,5 +99,54 @@ describe('unplacedText', () => {
 		expect(text('handbrake_settings')).toBe('Bad');
 		expect(text('AudioList[0].Nope')).toBe('Bad');
 		expect(text('PictureTopCrop', null, null)).toBe('Bad');
+	});
+});
+
+describe('issueTarget', () => {
+	it('targets a preset-block field by its tp- id, with no tab', () => {
+		expect(issueTarget(issue('name'), schema)).toEqual({ id: 'tp-name', tab: null });
+		expect(issueTarget(issue('preset_ref'), null)).toEqual({ id: 'tp-preset-ref', tab: null });
+		expect(issueTarget(issue('extra_args'), schema)).toEqual({ id: 'tp-extra-args', tab: null });
+	});
+
+	it('targets an encoder card field on the Video tab, prefixed by the family', () => {
+		expect(issueTarget(issue('VideoPreset', 'x264'), schema)).toEqual({ id: 'x264-tunable-VideoPreset', tab: 'video' });
+	});
+
+	it('targets a track field by track index, on its key tab', () => {
+		expect(issueTarget(issue('AudioList[1].AudioBitrate'), schema)).toEqual({
+			id: 'audio-1-tunable-AudioBitrate',
+			tab: 'audio'
+		});
+	});
+
+	it('targets a common field on its key tab', () => {
+		expect(issueTarget(issue('PictureWidth'), schema)).toEqual({ id: 'tunable-PictureWidth', tab: 'dimensions' });
+	});
+
+	it('has no tab for a key the schema lacks, or with no schema', () => {
+		expect(issueTarget(issue('NotAKey'), schema)).toEqual({ id: 'tunable-NotAKey', tab: null });
+		expect(issueTarget(issue('PictureWidth'), null).tab).toBeNull();
+		expect(issueTarget(issue('AudioList[0].Nope'), schema).tab).toBeNull();
+		expect(issueTarget(issue('AudioList[0].AudioBitrate'), null).tab).toBeNull();
+	});
+});
+
+describe('firstIssueTarget', () => {
+	it('targets the first issue a rendered input shows, skipping unplaced ones', () => {
+		const list = [issue('PictureTopCrop'), issue('VideoPreset', 'x264'), issue('PictureWidth')];
+		expect(firstIssueTarget(list, panel())).toEqual({ id: 'x264-tunable-VideoPreset', tab: 'video' });
+	});
+
+	it('targets a preset-block issue with no panel', () => {
+		expect(firstIssueTarget([issue('PictureWidth'), issue('preset_ref')], null)).toEqual({
+			id: 'tp-preset-ref',
+			tab: null
+		});
+	});
+
+	it('is null when no issue is placed', () => {
+		expect(firstIssueTarget([issue('PictureTopCrop')], panel())).toBeNull();
+		expect(firstIssueTarget([], panel())).toBeNull();
 	});
 });
