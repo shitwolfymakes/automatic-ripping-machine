@@ -131,3 +131,21 @@ def test_catalog_skips_plugin_that_raises(monkeypatch) -> None:
     _patch(monkeypatch, [bad, good])
     c = cat.build_catalog()
     assert [s["id"] for s in c["services"]] == ["good"]
+
+
+def test_featured_notify_fields_match_the_live_apprise_catalog() -> None:
+    """The docs registry declares each featured service's fields without importing
+    Apprise; this holds that list to the catalog the real Apprise plugins build."""
+    from arm_common.field_docs import FEATURED_NOTIFY_FIELDS
+
+    cat.build_catalog.cache_clear()
+    try:
+        services = {s["id"]: s for s in cat.build_catalog()["services"]}
+    finally:
+        cat.build_catalog.cache_clear()
+    assert list(FEATURED_NOTIFY_FIELDS) == cat.FEATURED_SERVICES
+    live = {
+        sid: tuple(f["key"] for f in services[sid]["required_fields"] + services[sid]["advanced_fields"])
+        for sid in cat.FEATURED_SERVICES
+    }
+    assert live == FEATURED_NOTIFY_FIELDS
