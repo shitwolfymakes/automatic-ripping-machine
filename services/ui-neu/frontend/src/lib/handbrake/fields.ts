@@ -3,7 +3,7 @@
 
 import type { HandbrakeSchemaSlimView, SlimKey } from '$lib/types/api.gen';
 
-export type FieldKind = 'checkbox' | 'select' | 'number' | 'text' | 'chips' | 'audio-list';
+export type FieldKind = 'checkbox' | 'select' | 'number' | 'text' | 'chips' | 'audio-list' | 'rotate' | 'pad-color';
 export type TabId = 'summary' | 'dimensions' | 'filters' | 'video' | 'audio' | 'subtitles' | 'chapters';
 
 export const TABS: readonly { id: TabId; label: string }[] = [
@@ -24,9 +24,17 @@ const KIND_BY_TYPE: Record<string, FieldKind> = {
 	float: 'number'
 };
 
+// Keys whose value is built from more than one control.
+const KIND_BY_NAME: Record<string, FieldKind> = {
+	PictureRotate: 'rotate',
+	PicturePadColor: 'pad-color'
+};
+
 // A list of strings stays chips even when a source constrains it; every other
 // type with a source is a select.
 export function fieldKind(key: SlimKey): FieldKind {
+	const byName = KIND_BY_NAME[key.name];
+	if (byName) return byName;
 	const byType = KIND_BY_TYPE[key.type];
 	if (byType && !(byType === 'number' && key.source)) return byType;
 	return key.source ? 'select' : 'text';
@@ -119,6 +127,18 @@ export function scalarText(value: unknown): string {
 	return '';
 }
 
+// A select keeps a stored value its list lacks (a hand-imported preset) as one more option labelled with it.
+function selectOptions(key: SlimKey, text: string, options: Array<string | number>): FieldViewOption[] {
+	const listed = options.map((raw) => ({
+		value: String(raw),
+		label: optionLabel(key, raw),
+		selected: String(raw) === text,
+		raw
+	}));
+	const unlisted = text !== '' && !listed.some((o) => o.selected);
+	return unlisted ? [...listed, { value: text, label: text, selected: true, raw: text }] : listed;
+}
+
 // What a field draws: an unstored text or number field is empty with the inherited
 // value as its placeholder; a select marks the inherited value as selected.
 export function fieldView(key: SlimKey, opts: FieldViewInput): FieldView {
@@ -133,12 +153,7 @@ export function fieldView(key: SlimKey, opts: FieldViewInput): FieldView {
 		min: opts.range?.min ?? limits?.min,
 		max: opts.range?.max ?? limits?.max,
 		step: opts.range?.step,
-		options: (opts.options ?? []).map((raw) => ({
-			value: String(raw),
-			label: optionLabel(key, raw),
-			selected: String(raw) === text,
-			raw
-		})),
+		options: selectOptions(key, text, opts.options ?? []),
 		chipValues: Array.isArray(shown) ? shown.map(String) : [],
 		stored: opts.stored
 	};

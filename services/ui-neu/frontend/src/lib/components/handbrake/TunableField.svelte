@@ -7,7 +7,10 @@
 	import ChipPicker from './ChipPicker.svelte';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { docUrlFor } from '$lib/handbrake/docLinks';
-	import { fieldView, type TabId } from '$lib/handbrake/fields';
+	import { fieldView, optionLabel, scalarText, type TabId } from '$lib/handbrake/fields';
+	import { languageChoices } from '$lib/handbrake/languages';
+	import { PAD_CUSTOM, padColorView } from '$lib/handbrake/padColor';
+	import { formatRotate, parseRotate, ROTATE_ANGLES, type RotateAngle } from '$lib/handbrake/rotate';
 
 	interface Props {
 		key: SlimKey;
@@ -46,6 +49,27 @@
 	const id = $derived(`${idPrefix}tunable-${key.name}`);
 	const href = $derived(docUrl ?? docUrlFor(key.tab as TabId, key.group));
 
+	const choices = $derived(languageChoices(key.name));
+	const rotate = $derived(parseRotate(scalarText(view.shown)));
+	let padCustomOpen = $state(false);
+	const pad = $derived(padColorView(scalarText(view.shown), (options ?? []).map(String), padCustomOpen));
+
+	function onAngle(e: Event) {
+		const angle = Number((e.currentTarget as HTMLSelectElement).value) as RotateAngle;
+		onchange(formatRotate({ ...rotate, angle }));
+	}
+	function onFlip(e: Event) {
+		onchange(formatRotate({ ...rotate, hflip: (e.currentTarget as HTMLInputElement).checked }));
+	}
+	function onPadSelect(e: Event) {
+		const raw = (e.currentTarget as HTMLSelectElement).value;
+		padCustomOpen = raw === PAD_CUSTOM;
+		if (!padCustomOpen) onchange(raw);
+	}
+	function onPadText(e: Event) {
+		const text = (e.currentTarget as HTMLInputElement).value;
+		if (text !== '') onchange(text);
+	}
 	function onSelect(e: Event) {
 		const raw = (e.currentTarget as HTMLSelectElement).value;
 		onchange(view.options.find((o) => o.value === raw)?.raw ?? raw);
@@ -87,10 +111,14 @@
 			</div>
 			{#if view.kind === 'select'}
 				{@render selectControl()}
+			{:else if view.kind === 'rotate'}
+				{@render rotateControl()}
+			{:else if view.kind === 'pad-color'}
+				{@render padColorControl()}
 			{:else if view.kind === 'number'}
 				{@render numberControl()}
 			{:else if view.kind === 'chips'}
-				<ChipPicker {id} values={view.chipValues} {options} {disabled} onchange={(v) => onchange(v)} />
+				<ChipPicker {id} values={view.chipValues} {options} {choices} {disabled} onchange={(v) => onchange(v)} />
 			{:else}
 				{@render textControl()}
 			{/if}
@@ -126,6 +154,40 @@
 			<option value={option.value} selected={option.selected}>{option.label}</option>
 		{/each}
 	</select>
+{/snippet}
+
+{#snippet rotateControl()}
+	<div class="tunable-field-rotate">
+		<select {id} class="field-control" {disabled} onchange={onAngle}>
+			{#each ROTATE_ANGLES as angle (angle)}
+				<option value={angle} selected={angle === rotate.angle}>{angle}&deg;</option>
+			{/each}
+		</select>
+		<label class="tunable-field-inline">
+			<input type="checkbox" checked={rotate.hflip} {disabled} onchange={onFlip} />
+			Flip horizontally
+		</label>
+	</div>
+{/snippet}
+
+{#snippet padColorControl()}
+	<select {id} class="field-control" value={pad.selected} {disabled} onchange={onPadSelect}>
+		{#each options ?? [] as name (name)}
+			<option value={String(name)}>{optionLabel(key, name)}</option>
+		{/each}
+		<option value={PAD_CUSTOM}>Custom&hellip;</option>
+	</select>
+	{#if pad.custom}
+		<input
+			type="text"
+			class="field-control"
+			aria-label="Custom padding color"
+			placeholder="#rrggbb"
+			value={pad.text}
+			{disabled}
+			onchange={onPadText}
+		/>
+	{/if}
 {/snippet}
 
 <!-- Unstored: the control is empty and the inherited value is its placeholder. -->
@@ -177,6 +239,11 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+	.tunable-field-rotate {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
 	}
 	.tunable-field-changed {
 		padding: 0 0.375rem;

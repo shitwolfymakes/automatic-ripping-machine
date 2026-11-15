@@ -52,4 +52,22 @@ describe('ChipPicker', () => {
 		expect(box()).toBeDisabled();
 		expect(screen.getByRole('button', { name: 'Remove a' })).toBeDisabled();
 	});
+
+	it('searches choices by label, code or name and shows chip labels', async () => {
+		const choices = [
+			{ value: 'eng', label: 'English (eng)' },
+			{ value: 'fre', label: 'French (fre)' }
+		];
+		const onchange = mount({ values: ['fre', 'xx'], choices });
+		expect(screen.getByText('French (fre)')).toBeInTheDocument();
+		expect(screen.getByText('xx')).toBeInTheDocument();
+		const listed = [...document.querySelectorAll('datalist option')].map((o) => (o as HTMLOptionElement).value);
+		expect(listed).toEqual(['English (eng)']);
+		await fireEvent.input(box(), { target: { value: 'english' } });
+		await fireEvent.keyDown(box(), { key: 'Enter' });
+		expect(onchange).toHaveBeenLastCalledWith(['fre', 'xx', 'eng']);
+		await fireEvent.input(box(), { target: { value: 'klingon' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+		expect(onchange).toHaveBeenCalledTimes(1);
+	});
 });

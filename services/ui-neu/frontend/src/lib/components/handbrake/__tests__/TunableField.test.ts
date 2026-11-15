@@ -100,10 +100,10 @@ describe('TunableField', () => {
 
 	it('renders a list of strings as chips and emits string[]', async () => {
 		const { onchange } = mount('AudioLanguageList', { inherited: ['eng'] });
-		expect(screen.getByText('eng')).toBeInTheDocument();
-		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'fra' } });
+		expect(screen.getByText('English (eng)')).toBeInTheDocument();
+		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'fre' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-		expect(onchange).toHaveBeenCalledWith(['eng', 'fra']);
+		expect(onchange).toHaveBeenCalledWith(['eng', 'fre']);
 	});
 
 	it('treats a non-list value as no chips', () => {
@@ -253,5 +253,92 @@ describe('TunableField fidelity', () => {
 		expect([input().value, input().placeholder]).toEqual(['5', '']);
 		await rerender({ value: 9 });
 		expect(input().value).toBe('9');
+	});
+
+	it('keeps a stored select value the list lacks as an extra option labelled with it', () => {
+		mount('AudioBitrate', { options: [128, 192], value: 'weird', stored: true });
+		const select = screen.getByLabelText(key('AudioBitrate').label) as HTMLSelectElement;
+		expect([...select.options].map((o) => o.textContent)).toEqual(['128', '192', 'weird']);
+		expect(select.value).toBe('weird');
+	});
+
+	describe('PictureRotate', () => {
+		const angle = () => screen.getByLabelText(key('PictureRotate').label) as HTMLSelectElement;
+		const flip = () => screen.getByLabelText('Flip horizontally') as HTMLInputElement;
+
+		it('shows the angle and flip of the effective value', () => {
+			mount('PictureRotate', { value: 'angle=90:hflip=1', stored: true });
+			expect(angle().value).toBe('90');
+			expect(flip().checked).toBe(true);
+		});
+
+		it('emits the formatted value when the angle or flip changes', async () => {
+			const { onchange } = mount('PictureRotate', { inherited: 'angle=0:hflip=0' });
+			await fireEvent.change(angle(), { target: { value: '180' } });
+			expect(onchange).toHaveBeenLastCalledWith('angle=180:hflip=0');
+			await fireEvent.click(flip());
+			expect(onchange).toHaveBeenLastCalledWith('angle=0:hflip=1');
+		});
+
+		it('reads a malformed value as no rotation', () => {
+			mount('PictureRotate', { value: 'nonsense', stored: true });
+			expect(angle().value).toBe('0');
+			expect(flip().checked).toBe(false);
+		});
+	});
+
+	describe('PicturePadColor', () => {
+		const padKey = { ...key('PicturePadColor'), source: { kind: 'static', ref: 'PicturePadColor' } };
+		const names = ['black', 'white', 'red'];
+		const mountPad = (over: Record<string, unknown> = {}) =>
+			mount('PicturePadColor', { key: padKey, options: names, inherited: 'black', ...over });
+		const select = () => screen.getByLabelText('Padding color') as HTMLSelectElement;
+		const custom = () => screen.queryByLabelText('Custom padding color') as HTMLInputElement | null;
+
+		it('selects a listed name and shows no custom input', () => {
+			mountPad({ value: 'white', stored: true });
+			expect(select().value).toBe('white');
+			expect(custom()).toBeNull();
+		});
+
+		it('emits a picked name', async () => {
+			const { onchange } = mountPad();
+			await fireEvent.change(select(), { target: { value: 'red' } });
+			expect(onchange).toHaveBeenCalledWith('red');
+		});
+
+		it('shows an unlisted stored value as Custom with the value in the text input', () => {
+			mountPad({ value: '#1a2b3c', stored: true });
+			expect(select().selectedOptions[0].textContent).toBe('Custom\u2026');
+			expect(custom()!.value).toBe('#1a2b3c');
+		});
+
+		it('reveals the text input on Custom, stores the hex verbatim, ignores empty and returns on a name', async () => {
+			const { onchange } = mountPad();
+			await fireEvent.change(select(), { target: { value: '__custom__' } });
+			expect(onchange).not.toHaveBeenCalled();
+			await fireEvent.change(custom()!, { target: { value: '#FFaa00' } });
+			expect(onchange).toHaveBeenLastCalledWith('#FFaa00');
+			await fireEvent.change(custom()!, { target: { value: '' } });
+			expect(onchange).toHaveBeenCalledTimes(1);
+			await fireEvent.change(select(), { target: { value: 'white' } });
+			expect(onchange).toHaveBeenLastCalledWith('white');
+			expect(custom()).toBeNull();
+		});
+
+		it('tolerates no options', () => {
+			mountPad({ options: null });
+			expect(select().options).toHaveLength(1);
+		});
+	});
+
+	it('picks a language by label and shows a stored unknown code raw until removed', async () => {
+		const { onchange } = mount('AudioLanguageList', { value: ['zzz'], stored: true });
+		expect(screen.getByText('zzz')).toBeInTheDocument();
+		await fireEvent.input(screen.getByLabelText('Add value'), { target: { value: 'German (ger)' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+		expect(onchange).toHaveBeenLastCalledWith(['zzz', 'ger']);
+		await fireEvent.click(screen.getByRole('button', { name: 'Remove zzz' }));
+		expect(onchange).toHaveBeenLastCalledWith([]);
 	});
 });

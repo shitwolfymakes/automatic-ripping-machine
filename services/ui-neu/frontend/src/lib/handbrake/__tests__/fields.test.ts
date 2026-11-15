@@ -28,7 +28,9 @@ describe('fieldKind', () => {
 		['AudioLanguageList', 'chips'],
 		['AudioCopyMask', 'chips'],
 		['AudioList', 'audio-list'],
-		['PresetName', 'text']
+		['PresetName', 'text'],
+		['PictureRotate', 'rotate'],
+		['PicturePadColor', 'pad-color']
 	])('%s is %s', (name, kind) => {
 		expect(fieldKind(key(name))).toBe(kind);
 	});
@@ -202,6 +204,15 @@ describe('fieldView', () => {
 		expect(fieldView(key('AudioBitrate'), base).options).toEqual([]);
 	});
 
+	it('adds a stored value the options lack as a selected option labelled with it', () => {
+		const view = fieldView(key('AudioBitrate'), { ...base, options: [1, 2], value: 'odd', stored: true });
+		expect(view.options.map((o) => [o.label, o.selected])).toEqual([
+			['1', false],
+			['2', false],
+			['odd', true]
+		]);
+		expect(view.options[2].raw).toBe('odd');
+	});
 	it('labels options through the schema', () => {
 		const labelled = { ...key('AudioBitrate'), option_labels: { '1': 'Average' } } as SlimKey;
 		expect(fieldView(labelled, { ...base, options: [1, 2] }).options.map((o) => o.label)).toEqual(['Average', '2']);

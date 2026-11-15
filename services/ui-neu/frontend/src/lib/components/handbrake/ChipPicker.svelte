@@ -1,23 +1,30 @@
 <script lang="ts">
 	// A list of strings as removable chips plus an add control: a select when
-	// the key offers options, free text otherwise. Emits the whole new list.
+	// the key offers options, a searchable input over `choices` (chips show the
+	// choice label; a value no choice carries shows raw), free text otherwise.
+	// Emits the whole new list.
+	import { choiceLabel, findChoice, type Choice } from '$lib/handbrake/languages';
 	interface Props {
 		id: string;
 		values: string[];
 		options: Array<string | number> | null;
+		choices?: Choice[] | null;
 		disabled?: boolean;
 		onchange: (values: string[]) => void;
 	}
 
-	let { id, values, options, disabled = false, onchange }: Props = $props();
+	let { id, values, options, choices = null, disabled = false, onchange }: Props = $props();
 
 	let draft = $state('');
 	function unchosen(list: Array<string | number>): string[] {
 		return list.map(String).filter((o) => !values.includes(o));
 	}
 
+	function resolve(raw: string): string {
+		return choices ? (findChoice(choices, raw)?.value ?? '') : raw.trim();
+	}
 	function add(raw: string) {
-		const value = raw.trim();
+		const value = resolve(raw);
 		draft = '';
 		if (value !== '' && !values.includes(value)) onchange([...values, value]);
 	}
@@ -38,7 +45,7 @@
 	<ul class="chip-picker-chips">
 		{#each values as value (value)}
 			<li class="chip-picker-chip">
-				{String(value)}
+				{choiceLabel(choices, value)}
 				<button type="button" aria-label={`Remove ${value}`} {disabled} onclick={() => remove(value)}>x</button>
 			</li>
 		{/each}
@@ -52,7 +59,22 @@
 		</select>
 	{:else}
 		<div class="chip-picker-add">
-			<input {id} class="field-control" aria-label="Add value" bind:value={draft} {disabled} {onkeydown} />
+			<input
+				{id}
+				class="field-control"
+				aria-label="Add value"
+				list={choices ? `${id}-choices` : undefined}
+				bind:value={draft}
+				{disabled}
+				{onkeydown}
+			/>
+			{#if choices}
+				<datalist id={`${id}-choices`}>
+					{#each choices.filter((c) => !values.includes(c.value)) as choice (choice.value)}
+						<option value={choice.label}></option>
+					{/each}
+				</datalist>
+			{/if}
 			<button type="button" class="btn btn-sm" {disabled} onclick={() => add(draft)}>Add</button>
 		</div>
 	{/if}
