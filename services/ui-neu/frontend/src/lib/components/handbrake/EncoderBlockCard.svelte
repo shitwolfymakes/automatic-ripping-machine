@@ -117,10 +117,10 @@
 			<button type="button" class="btn-link encoder-card-anyway" onclick={onexpand}>Set values anyway</button>
 		</div>
 	{:else}
-		<header class="encoder-card-head">
+		<div class="form-card-head encoder-card-head">
 			<h4 class="encoder-card-title">{card.label}</h4>
 			{#if status}<span class="encoder-card-badge" data-state={card.state}>{status}</span>{/if}
-		</header>
+		</div>
 		<div class="encoder-card-fields">
 			{#if fields.includes(BIT_DEPTH_FIELD.name)}
 				<div class="tunable-field" data-stored={depthStored}>

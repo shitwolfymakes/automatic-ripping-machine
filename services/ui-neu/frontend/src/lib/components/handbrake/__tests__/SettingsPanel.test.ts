@@ -25,7 +25,7 @@ function mount(tab: string, common: Record<string, unknown> = {}, filter = { tex
 		}
 	});
 }
-const group = (name: string) => screen.getByRole('region', { name });
+const group = (name: string) => screen.getByRole('group', { name });
 
 describe('SettingsPanel group cards', () => {
 	afterEach(() => cleanup());
@@ -38,6 +38,14 @@ describe('SettingsPanel group cards', () => {
 		expect(group('Cropping')).toHaveClass('form-card');
 	});
 
+	it('uses a plain div head so theme header rules cannot reach it, and no landmark', () => {
+		mount('dimensions');
+		const size = group('Size');
+		expect(size.querySelector('header')).toBeNull();
+		expect(size.querySelector('div.form-card-head')).not.toBeNull();
+		expect(screen.queryByRole('region', { name: 'Size' })).toBeNull();
+	});
+
 	it('shows the changed count on a group with stored values and no chip on one without', () => {
 		mount('dimensions', { PictureForceWidth: 1, PictureForceHeight: 2, PictureAutoCrop: true });
 		expect(group('Size').querySelector('.changed-chip')).toHaveTextContent(/^2 changed$/);
@@ -48,7 +56,7 @@ describe('SettingsPanel group cards', () => {
 	it('renders no card for a group with no visible field', () => {
 		mount('dimensions', { PictureForceWidth: 1 }, { text: '', changedOnly: true });
 		expect(group('Size')).toBeInTheDocument();
-		expect(screen.queryByRole('region', { name: 'Cropping' })).toBeNull();
+		expect(screen.queryByRole('group', { name: 'Cropping' })).toBeNull();
 	});
 
 	it('nests the audio track cards inside the Tracks group card', () => {

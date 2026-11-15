@@ -70,6 +70,13 @@ describe('EncoderBlockCard', () => {
 		expect(screen.getByRole('region', { name: 'x264' })).toHaveClass('form-card', 'encoder-card');
 	});
 
+	it('heads the open card with a plain div, not a header element', () => {
+		mount('x264');
+		const card = screen.getByRole('region', { name: 'x264' });
+		expect(card.querySelector('header')).toBeNull();
+		expect(card.querySelector('div.form-card-head.encoder-card-head')).not.toBeNull();
+	});
+
 	it('shows multi-pass, turbo and advanced options on x264', () => {
 		mount('x264');
 		expect(screen.getByLabelText('Multi-pass encoding')).toBeTruthy();

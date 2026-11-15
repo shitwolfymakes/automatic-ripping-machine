@@ -103,7 +103,6 @@
 	}
 	.form-card-nested {
 		padding: 0.75rem;
-		border-color: transparent;
 		border-radius: var(--radius-sm);
 		background: var(--color-surface);
 	}

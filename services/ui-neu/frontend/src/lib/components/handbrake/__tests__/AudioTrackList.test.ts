@@ -39,6 +39,12 @@ describe('AudioTrackList', () => {
 		expect(row(1)).toHaveClass('form-card', 'form-card-nested');
 	});
 
+	it('heads each track with a plain div, not a header element', () => {
+		mount();
+		expect(row(1).querySelector('header')).toBeNull();
+		expect(row(1).querySelector('div.form-card-head.audio-track-head')).not.toBeNull();
+	});
+
 	it('renders one row per track with unique ids and the fields in order', () => {
 		mount();
 		const labels = Array.from(row(1).querySelectorAll('label.field-label')).map((l) => l.textContent);

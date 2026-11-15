@@ -72,6 +72,9 @@
 	// Selects whose options hang off another key (a filter's presets) read the value in effect.
 	const context = $derived(panelContext(schema, settings, base));
 	const view = $derived(settingsPanelView({ tab, encoder, availability }));
+
+	const idPrefix = $props.id();
+	const headingId = (group: string) => `${idPrefix}-group-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 </script>
 
 <SettingsTabs {schema} {settings} {base} {cards} {expanded} {issues} {tab} ontab={(t) => (tab = t)} bind:filter>
@@ -122,11 +125,11 @@
 {#snippet fields(shown: TabVisible)}
 	{#each groupsForTab(shown.rows.map((r) => r.key)) as { group, keys } (group)}
 		{@const changed = changedLabel(changedCount(keys, (name) => name in common))}
-		<section class="form-card settings-panel-group" aria-label={group}>
-			<header class="form-card-head">
-				<h5 class="settings-panel-group-heading">{group}</h5>
+		<div class="form-card settings-panel-group" role="group" aria-labelledby={headingId(group)}>
+			<div class="form-card-head">
+				<h5 class="settings-panel-group-heading" id={headingId(group)}>{group}</h5>
 				{#if changed}<span class="changed-chip">{changed}</span>{/if}
-			</header>
+			</div>
 			<div class="settings-panel-grid">
 				{#each shown.rows.filter((r) => keys.includes(r.key)) as { key, row } (key.name)}
 					{#if row === 'audio-list'}
@@ -155,7 +158,7 @@
 					{/if}
 				{/each}
 			</div>
-		</section>
+		</div>
 	{/each}
 {/snippet}
 
@@ -192,9 +195,14 @@
 	}
 	.settings-panel-grid {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem 1rem;
 		margin-top: 0.625rem;
+	}
+	@media (min-width: 640px) {
+		.settings-panel-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
 	}
 	.settings-panel-wide {
 		grid-column: 1 / -1;

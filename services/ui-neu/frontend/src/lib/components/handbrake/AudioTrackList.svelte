@@ -53,7 +53,7 @@
 		{@const keys = visibleKeys[i] ?? []}
 		{#if keys.length > 0}
 			<section class="form-card form-card-nested audio-track" aria-label={`Audio track ${i + 1}`}>
-				<header class="audio-track-head">
+				<div class="form-card-head audio-track-head">
 					<h4 class="audio-track-title">Track {i + 1}</h4>
 					{#if !readonly}
 						<div class="audio-track-actions">
@@ -79,7 +79,7 @@
 							>
 						</div>
 					{/if}
-				</header>
+				</div>
 				<div class="audio-track-fields">
 					{#each keys as key (key.name)}
 						<TunableField
@@ -139,7 +139,7 @@
 	}
 	.audio-track-fields {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
 		gap: 0.75rem;
 	}
 	.audio-tracks-add {
