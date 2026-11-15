@@ -126,7 +126,7 @@ describe('DrivesStep branches', () => {
 		setup([drive({})]);
 		updateDrive.mockResolvedValue({});
 		renderComponent(DrivesStep, { props: { view: view() } });
-		const name = await screen.findByLabelText(/friendly name/i);
+		const name = await screen.findByLabelText(/^friendly name/i);
 		const before = fetchDrives.mock.calls.length;
 		await fireEvent.input(name, { target: { value: 'Living room' } });
 		await fireEvent.blur(name);

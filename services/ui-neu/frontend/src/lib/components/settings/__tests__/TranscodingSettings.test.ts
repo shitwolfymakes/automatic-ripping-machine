@@ -93,4 +93,14 @@ describe('TranscodingSettings', () => {
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
 		expect(saveArmConfig).toHaveBeenCalledWith({ auto_transcode_on_idle: true });
 	});
+
+	it('labels the locked toggle and links it to the transcode settings help', () => {
+		setTranscoderEnabled(false);
+		render(GROUP);
+		expect(screen.getByRole('switch', { name: 'Enable transcoding' })).toHaveAttribute('id', 'transcode-enabled');
+		expect(screen.getByRole('link', { name: 'Docs for Enable transcoding' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip--transcode-behaviour'
+		);
+	});
 });

@@ -87,6 +87,28 @@ describe('ConfigureSection', () => {
 		expect(screen.getByRole('switch', { name: /enabled/i })).toBeInTheDocument();
 	});
 
+	it('labels the channel label input through its field label, with no docs link', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'webhook', name: '', enabled: true, config: {}, service: null }
+		});
+		const input = screen.getByLabelText('Channel Label');
+		expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent('Channel Label *');
+		expect(screen.queryByRole('link', { name: /^Docs for Channel Label/ })).toBeNull();
+	});
+
+	it('the Enabled switch turns the channel off', async () => {
+		const props = $state({
+			type: 'webhook' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+		expect(props.enabled).toBe(false);
+	});
+
 	it('renders webhook fields (URL) for webhook type', () => {
 		const props = $state({
 			type: 'webhook' as const,
@@ -238,6 +260,56 @@ describe('ConfigureSection bash', () => {
 		vi.mocked(fetchScripts).mockResolvedValue([]);
 		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
 		expect(await screen.findByText(/arm\/scripts/)).toBeTruthy();
+	});
+
+	it('labels the script and timeout and links them to the bash hook scripts help', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
+		await screen.findByText('No scripts found');
+		const script = screen.getByLabelText('Script');
+		const timeout = screen.getByLabelText('Timeout (seconds)');
+		expect(document.querySelector(`label[for="${script.id}"]`)).toHaveTextContent('Script *');
+		expect(document.querySelector(`label[for="${timeout.id}"]`)).toHaveTextContent('Timeout (s)');
+		expect(screen.getByRole('link', { name: 'Docs for Script *' })).toHaveAttribute(
+			'href',
+			'/help/guide/notification-scripts#where-scripts-live'
+		);
+		expect(screen.getByRole('link', { name: 'Docs for Timeout (s)' })).toHaveAttribute(
+			'href',
+			'/help/guide/notification-scripts#failures-and-timeouts'
+		);
+	});
+
+	it('writes a typed timeout into the config', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		const props = $state({
+			type: 'bash' as const,
+			name: 'x',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.input(screen.getByLabelText('Timeout (seconds)'), { target: { value: '45' } });
+		expect(props.config.timeout_seconds).toBe(45);
+	});
+
+	it('shows a failed script listing, and Refresh list lists again', async () => {
+		vi.mocked(fetchScripts).mockRejectedValueOnce(new Error('listing failed')).mockResolvedValueOnce([]);
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
+		expect(await screen.findByText('listing failed')).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
+		expect(await screen.findByText(/arm\/scripts/)).toBeTruthy();
+		expect(screen.queryByText('listing failed')).toBeNull();
+	});
+
+	it('says so when the chosen script declares no inputs', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([{ name: 'send-email.sh', executable: true, description: '' }]);
+		vi.mocked(fetchScript).mockResolvedValue({ ...info, inputs: [] } as never);
+		renderComponent(ConfigureSection, {
+			props: { type: 'bash', name: 'x', enabled: true, config: { script: 'send-email.sh' }, service: null }
+		});
+		expect(await screen.findByText(/This script declares no inputs/)).toBeTruthy();
 	});
 
 	it('keeps a stale script name selectable as missing and masks stored secrets', async () => {

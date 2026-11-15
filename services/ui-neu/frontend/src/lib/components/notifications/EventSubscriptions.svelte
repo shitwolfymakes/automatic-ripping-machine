@@ -3,6 +3,8 @@
 	import type { ChannelTemplate } from '$lib/types/notifications';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 	import { withInput, spliceToken, withText, type TemplateField } from '../../notifications/event-templates';
+	import { FIELD_IDS } from '../../notifications/channel-form';
+	import FieldLabel from '../shared/FieldLabel.svelte';
 
 	let {
 		selected = $bindable(),
@@ -17,6 +19,7 @@
 	} = $props();
 
 	const overridable = $derived(inputs.filter((i) => !i.secret));
+	const uid = $props.id();
 
 	type FocusTarget = {
 		key: string;
@@ -101,29 +104,36 @@
 			</label>
 			{#if selected.includes(et.key)}
 				<div class="stack stack-sm event-subscriptions-detail">
-					<label class="field">
-						<span class="field-label event-subscriptions-sublabel">Title</span>
+					<div class="field">
+						<FieldLabel for="{uid}-{et.key}-title" label="Title" docsId={FIELD_IDS.event_title} />
 						<input
+							id="{uid}-{et.key}-title"
 							aria-label={`${et.key} title`}
 							placeholder={et.default_title}
 							value={templates[et.key]?.title ?? ''}
 							{...fieldHandlers(et.key, 'title')}
 						/>
-					</label>
-					<label class="field">
-						<span class="field-label event-subscriptions-sublabel">Body</span>
+					</div>
+					<div class="field">
+						<FieldLabel for="{uid}-{et.key}-body" label="Body" docsId={FIELD_IDS.event_body} />
 						<textarea
+							id="{uid}-{et.key}-body"
 							aria-label={`${et.key} body`}
 							rows="2"
 							placeholder={et.default_body}
 							value={templates[et.key]?.body ?? ''}
 							{...fieldHandlers(et.key, 'body')}></textarea>
-					</label>
+					</div>
 					{#each overridable as i (i.key)}
-						<label class="field">
-							<span class="field-label event-subscriptions-sublabel">{i.label}{i.required ? ' *' : ''}</span>
+						<div class="field">
+							<FieldLabel
+								for="{uid}-{et.key}-input-{i.key}"
+								label={`${i.label}${i.required ? ' *' : ''}`}
+								docsId={FIELD_IDS.event_input}
+							/>
 							{#if i.values && i.values.length}
 								<select
+									id="{uid}-{et.key}-input-{i.key}"
 									aria-label={`${et.key} ${i.label}`}
 									value={templates[et.key]?.inputs?.[i.key] ?? ''}
 									onchange={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLSelectElement).value)}
@@ -133,13 +143,14 @@
 								</select>
 							{:else}
 								<input
+									id="{uid}-{et.key}-input-{i.key}"
 									aria-label={`${et.key} ${i.label}`}
 									placeholder="inherit"
 									value={templates[et.key]?.inputs?.[i.key] ?? ''}
 									oninput={(e) => setInput(et.key, i.key, (e.currentTarget as HTMLInputElement).value)}
 								/>
 							{/if}
-						</label>
+						</div>
 					{/each}
 					<p class="field-help">
 						Leave blank to use the default shown{overridable.length ? "; blank inputs inherit the hook's values." : '.'}
@@ -174,7 +185,8 @@
 		padding-left: 1.5rem;
 		gap: 0.5rem;
 	}
-	.event-subscriptions-sublabel {
+	/* :global: the label is rendered by the child FieldLabel component, outside this component's own template */
+	.event-subscriptions-detail :global(.field-label) {
 		font-size: 0.75rem;
 		line-height: 1rem;
 	}

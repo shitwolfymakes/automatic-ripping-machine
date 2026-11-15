@@ -195,9 +195,166 @@
       "type": "external",
       "url": "https://github.com/thetvdb/v4-api"
     },
+    "form.change_password.confirm": {
+      "none": "Self-explanatory: the new password typed again."
+    },
+    "form.change_password.current": {
+      "none": "Self-explanatory: the password you sign in with now."
+    },
+    "form.change_password.new": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "1. Secure your account"
+    },
+    "form.drive.default_session": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.drive.disc_enum_timeout": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.name": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
+    "form.drive.prescan_cache_mb": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.prescan_retries": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.prescan_timeout": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.rip_speed": {
+      "none": "Explained by the help text under the field; no docs page covers drive read speed."
+    },
+    "form.interface.dashboard_view": {
+      "type": "internal",
+      "page": "guide/web-ui",
+      "section": "Dashboard"
+    },
+    "form.interface.show_stats": {
+      "none": "Explained by the card text; a display preference kept in this browser only."
+    },
+    "form.notify_channel.event_body": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.event_input": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.event_title": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.label": {
+      "none": "Self-explanatory: the channel's display name."
+    },
+    "form.notify_channel.script": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Where scripts live"
+    },
+    "form.notify_channel.timeout": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Failures and timeouts"
+    },
+    "form.rip_preset.identification_mode": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.rip_preset.max_duration": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.rip_preset.min_duration": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.name": {
+      "none": "Self-explanatory: the preset's display name."
+    },
+    "form.rip_preset.output_mode": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.rip_preset.title_allowlist": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.title_blocklist": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.track_selection": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.session.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.session.name": {
+      "none": "Self-explanatory: the session's display name."
+    },
+    "form.session.output_path": {
+      "type": "internal",
+      "page": "guide/web-ui",
+      "section": "Output path tokens"
+    },
+    "form.session.overrides": {
+      "none": "Advanced field with no docs page yet; the placeholder shows the JSON shape it takes."
+    },
+    "form.session.rip_preset": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.session.transcode_preset": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.transcode_preset.container": {
+      "none": "Self-explanatory: the output file format, listed by its extension."
+    },
+    "form.transcode_preset.encoder": {
+      "type": "internal",
+      "page": "guide/hardware-transcoding",
+      "section": "The encoder catalog"
+    },
+    "form.transcode_preset.extra_args": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/cli/command-line-reference.html"
+    },
+    "form.transcode_preset.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.transcode_preset.name": {
+      "none": "Self-explanatory: the preset's display name."
+    },
     "form.transcode_preset.preset_ref": {
       "type": "external",
       "url": "https://handbrake.fr/docs/en/latest/technical/official-presets.html"
+    },
+    "form.transcode_preset.tool": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.users.guest_access": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "1. Secure your account"
     },
     "handbrake.family.default": {
       "type": "external",

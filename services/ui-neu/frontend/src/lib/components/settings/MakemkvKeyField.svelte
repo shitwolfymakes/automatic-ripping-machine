@@ -4,6 +4,7 @@
 	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
 	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
 	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
@@ -75,7 +76,8 @@
 	</p>
 	{#if mode === 'own'}
 		<div class="field">
-			<label class="field-label" for="makemkv-key-input">Registration key</label>
+			<!-- The field's docs link sits on the heading above. -->
+			<FieldLabel for="makemkv-key-input" label="Registration key" />
 			<div class="makemkv-key-field-row">
 				<SecretInput
 					id="makemkv-key-input"

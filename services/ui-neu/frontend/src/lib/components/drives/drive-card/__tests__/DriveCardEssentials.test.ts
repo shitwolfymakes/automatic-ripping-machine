@@ -21,7 +21,7 @@ function renderEssentials(overrides: Partial<Drive> = {}, props: Record<string, 
 }
 
 function nameInput() {
-	return screen.getByLabelText(/Friendly name/) as HTMLInputElement;
+	return screen.getByLabelText(/^Friendly name/) as HTMLInputElement;
 }
 
 function uhdCheckbox() {
@@ -249,5 +249,15 @@ describe('DriveCardEssentials 4K checkbox', () => {
 		await fireEvent.click(uhdCheckbox());
 		await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('denied'));
 		expect(screen.queryByText('4K setting saved')).toBeNull();
+	});
+});
+
+describe('DriveCardEssentials docs link', () => {
+	it('links the friendly name to the drives step of the setup walkthrough', () => {
+		renderEssentials();
+		expect(screen.getByRole('link', { name: 'Docs for Friendly name' })).toHaveAttribute(
+			'href',
+			'/help/guide/setup-walkthrough#3-drives'
+		);
 	});
 });

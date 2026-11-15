@@ -121,4 +121,22 @@ describe('EventSubscriptions', () => {
 		await fireEvent.input(field, { target: { value: 'oncall@x' } });
 		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
 	});
+
+	it('labels the overrides by name and links them to the per-event overrides help', () => {
+		const inputs = [{ key: 'TO', label: 'Recipient', required: false, secret: false, default: '', values: ['a', 'b'] }];
+		renderComponent(EventSubscriptions, {
+			props: { selected: ['rip.completed'], templates: {}, eventTypes: catalogEventTypes, inputs }
+		});
+		expect(screen.getByLabelText('Title', { selector: 'input' })).toBe(screen.getByLabelText('rip.completed title'));
+		expect(screen.getByLabelText('Body', { selector: 'textarea' })).toBe(screen.getByLabelText('rip.completed body'));
+		expect(screen.getByLabelText('Recipient', { selector: 'select' })).toBe(
+			screen.getByLabelText('rip.completed Recipient')
+		);
+		for (const name of ['Title', 'Body', 'Recipient']) {
+			expect(screen.getByRole('link', { name: `Docs for ${name}` })).toHaveAttribute(
+				'href',
+				'/help/guide/notification-scripts#per-event-overrides'
+			);
+		}
+	});
 });
