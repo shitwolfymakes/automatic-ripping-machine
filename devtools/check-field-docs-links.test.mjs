@@ -115,6 +115,15 @@ test('checkUrl: persistent network errors report the error message', async () =>
   assert.deepEqual(sleep.waits, [1000, 2000]);
 });
 
+test('checkUrl: keeps the HEAD status when GET then throws', async () => {
+  const fetchFn = async (_u, { method }) => {
+    if (method === 'HEAD') return res(405);
+    throw new Error('reset');
+  };
+  const out = await checkUrl('https://x.test', { fetchFn, sleep: noSleep() });
+  assert.equal(out.reason, 'HTTP 405 on HEAD, GET failed: reset');
+});
+
 test('checkUrl: non-Error throw is stringified', async () => {
   const fetchFn = async () => {
     throw 'boom'; // eslint-disable-line no-throw-literal
@@ -147,60 +156,110 @@ test('renderDryRun summarises clean and broken runs', () => {
   assert.match(renderDryRun(3, BROKEN), /^2\/3 URLs ok, 1 broken\n\n/);
 });
 
-/** Fake GitHub API recording calls; `state` seeds label/issue presence. */
-function fakeGithub({ label = true, issue = null } = {}) {
+/**
+ * Fake GitHub API. Records every call as {method, route, body}; `issues` seeds
+ * the open-issue list, `label` the label lookup, `labelPost` the POST /labels status.
+ */
+function fakeGithub({ label = true, issues = [], labelPost = 201 } = {}) {
   const calls = [];
   const fetchFn = async (url, init) => {
     const route = url.replace('https://api.github.com/repos/o/r', '');
-    calls.push(`${init.method} ${route}`);
-    calls.at(-1) && init.body && calls.push(JSON.parse(init.body));
+    calls.push({ method: init.method, route, body: init.body ? JSON.parse(init.body) : undefined });
     assert.equal(init.headers.authorization, 'Bearer tok');
     if (route.startsWith('/labels/')) return label ? res(200, {}) : res(404);
-    if (init.method === 'GET') return res(200, issue ? [issue] : []);
+    if (route === '/labels') return res(labelPost, {});
+    if (init.method === 'GET') return res(200, issues);
     if (route === '/issues') return res(201, { number: 9 });
     return res(init.method === 'PATCH' ? 200 : 201, {});
   };
   return { calls, fetchFn };
 }
+const opts = (fetchFn) => ({ fetchFn, repo: 'o/r', token: 'tok' });
+const LIST = '/issues?labels=docs-links&state=open&per_page=100';
 
-test('syncIssue opens an issue and creates the missing label', async () => {
+test('syncIssue opens an issue, creating the missing label', async () => {
   const { calls, fetchFn } = fakeGithub({ label: false });
-  assert.equal(await syncIssue(BROKEN, { fetchFn, repo: 'o/r', token: 'tok' }), 'opened #9');
-  assert.ok(calls.includes('POST /labels'));
-  assert.ok(calls.includes('POST /issues'));
+  assert.equal(await syncIssue(BROKEN, opts(fetchFn)), 'opened #9');
+  assert.deepEqual(calls, [
+    { method: 'GET', route: '/labels/docs-links', body: undefined },
+    {
+      method: 'POST',
+      route: '/labels',
+      body: { name: 'docs-links', color: 'd93f0b', description: 'Broken field docs links' },
+    },
+    { method: 'GET', route: LIST, body: undefined },
+    {
+      method: 'POST',
+      route: '/issues',
+      body: { title: 'Broken field docs links', body: renderIssueBody(BROKEN), labels: ['docs-links'] },
+    },
+  ]);
 });
 
-test('syncIssue updates the existing open issue', async () => {
-  const { calls, fetchFn } = fakeGithub({ issue: { number: 4 } });
-  assert.equal(await syncIssue(BROKEN, { fetchFn, repo: 'o/r', token: 'tok' }), 'updated #4');
-  assert.ok(calls.includes('PATCH /issues/4'));
-  assert.ok(!calls.includes('POST /labels'));
+test('syncIssue treats a 422 from the label POST as already created', async () => {
+  const { fetchFn } = fakeGithub({ label: false, labelPost: 422 });
+  assert.equal(await syncIssue(BROKEN, opts(fetchFn)), 'opened #9');
 });
 
-test('syncIssue comments and closes the open issue on a clean run', async () => {
-  const { calls, fetchFn } = fakeGithub({ issue: { number: 4 } });
-  assert.equal(await syncIssue([], { fetchFn, repo: 'o/r', token: 'tok' }), 'closed #4');
-  assert.ok(calls.includes('POST /issues/4/comments'));
-  assert.ok(calls.includes('PATCH /issues/4'));
+test('syncIssue fails on other label POST errors', async () => {
+  const { fetchFn } = fakeGithub({ label: false, labelPost: 403 });
+  await assert.rejects(syncIssue(BROKEN, opts(fetchFn)), /POST \/labels failed: HTTP 403/);
+});
+
+test('syncIssue updates the first real open issue and skips pull requests', async () => {
+  const { calls, fetchFn } = fakeGithub({
+    issues: [{ number: 3, pull_request: {} }, { number: 4 }, { number: 5 }],
+  });
+  assert.equal(await syncIssue(BROKEN, opts(fetchFn)), 'updated #4');
+  assert.deepEqual(calls.slice(1), [
+    { method: 'GET', route: LIST, body: undefined },
+    { method: 'PATCH', route: '/issues/4', body: { body: renderIssueBody(BROKEN) } },
+  ]);
+});
+
+test('syncIssue comments on and closes every open issue on a clean run', async () => {
+  const { calls, fetchFn } = fakeGithub({
+    issues: [{ number: 4 }, { number: 3, pull_request: {} }, { number: 6 }],
+  });
+  assert.equal(await syncIssue([], opts(fetchFn)), 'closed #4, #6');
+  const comment = { body: 'All field docs links resolve again; closing.' };
+  assert.deepEqual(calls.slice(2), [
+    { method: 'POST', route: '/issues/4/comments', body: comment },
+    { method: 'PATCH', route: '/issues/4', body: { state: 'closed' } },
+    { method: 'POST', route: '/issues/6/comments', body: comment },
+    { method: 'PATCH', route: '/issues/6', body: { state: 'closed' } },
+  ]);
 });
 
 test('syncIssue does nothing on a clean run with no open issue', async () => {
-  const { fetchFn } = fakeGithub();
-  assert.equal(
-    await syncIssue([], { fetchFn, repo: 'o/r', token: 'tok' }),
-    'clean, nothing to close',
-  );
+  const { calls, fetchFn } = fakeGithub();
+  assert.equal(await syncIssue([], opts(fetchFn)), 'clean, nothing to close');
+  assert.equal(calls.length, 2);
 });
 
-test('syncIssue surfaces API failures', async () => {
-  const fetchFn = async () => res(500);
-  await assert.rejects(syncIssue(BROKEN, { fetchFn, repo: 'o/r', token: 'tok' }), /HTTP 500/);
+test('syncIssue surfaces API failures, including a 404 outside the label lookup', async () => {
+  await assert.rejects(syncIssue(BROKEN, opts(async () => res(500))), /HTTP 500/);
+  const fetchFn = async (url) => (url.includes('/labels/') ? res(200, {}) : res(404));
+  await assert.rejects(syncIssue(BROKEN, opts(fetchFn)), /GET .*issues.* failed: HTTP 404/);
 });
 
 test('syncIssue handles a 204 response', async () => {
   const fetchFn = async (url, init) =>
     url.includes('/labels/') ? res(200, {}) : init.method === 'GET' ? res(200, [{ number: 1 }]) : res(204);
-  assert.equal(await syncIssue([], { fetchFn, repo: 'o/r', token: 'tok' }), 'closed #1');
+  assert.equal(await syncIssue([], opts(fetchFn)), 'closed #1');
+});
+
+test('response bodies are cancelled when not read', async () => {
+  let cancelled = 0;
+  const withBody = (status) => ({ ...res(status), body: { cancel: async () => void cancelled++ } });
+  await checkUrl('https://x.test', { fetchFn: async () => withBody(200), sleep: noSleep() });
+  assert.equal(cancelled, 1);
+  await assert.rejects(syncIssue(BROKEN, opts(async () => withBody(500))));
+  assert.equal(cancelled, 2);
+  const labelMissing = async (url) =>
+    url.includes('/labels/') ? withBody(404) : url.endsWith('/labels') ? withBody(422) : { ...res(200, []) };
+  await syncIssue([], opts(labelMissing));
+  assert.equal(cancelled, 4);
 });
 
 test('main --dry-run checks the real registry and touches no issue API', async () => {
@@ -226,4 +285,16 @@ test('main without --dry-run syncs the issue then prints the summary', async () 
     log: (s) => out.push(s),
   });
   assert.equal(out[0], 'clean, nothing to close');
+});
+
+test('main without --dry-run fails fast when the token or repository is unset', async () => {
+  const fetchFn = async () => res(200);
+  await assert.rejects(
+    main({ argv: [], env: { GITHUB_REPOSITORY: 'o/r' }, fetchFn, sleep: noSleep(), log() {} }),
+    /GITHUB_TOKEN must be set/,
+  );
+  await assert.rejects(
+    main({ argv: [], env: {}, fetchFn, sleep: noSleep(), log() {} }),
+    /GITHUB_TOKEN and GITHUB_REPOSITORY must be set/,
+  );
 });

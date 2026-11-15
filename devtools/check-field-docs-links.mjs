@@ -52,14 +52,16 @@ async function requestOnce(fetchFn, url, method) {
     headers: { 'user-agent': USER_AGENT },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  await res.body?.cancel();
   return res.status;
 }
 
 /** HEAD first; GET when HEAD is refused or errors (some hosts reject HEAD). */
 async function probe(fetchFn, url) {
+  let headStatus;
   try {
-    const status = await requestOnce(fetchFn, url, 'HEAD');
-    if (classifyStatus(status) === 'ok') return { verdict: 'ok', status };
+    headStatus = await requestOnce(fetchFn, url, 'HEAD');
+    if (classifyStatus(headStatus) === 'ok') return { verdict: 'ok', status: headStatus };
   } catch {
     // fall through to GET
   }
@@ -67,8 +69,13 @@ async function probe(fetchFn, url) {
     const status = await requestOnce(fetchFn, url, 'GET');
     return { verdict: classifyStatus(status), status };
   } catch (err) {
-    return { verdict: 'retry', error: err?.message ?? String(err) };
+    return { verdict: 'retry', status: headStatus, error: err?.message ?? String(err) };
   }
+}
+
+function describeFailure({ status, error }) {
+  if (status && error) return `HTTP ${status} on HEAD, GET failed: ${error}`;
+  return status ? `HTTP ${status}` : error;
 }
 
 /** Check one URL with up to RETRIES retries (exponential backoff) on 5xx/network errors. */
@@ -80,7 +87,7 @@ export async function checkUrl(url, { fetchFn = fetch, sleep = sleepReal } = {})
     if (attempt < RETRIES) await sleep(BACKOFF_MS * 2 ** attempt);
   }
   if (result.verdict === 'ok') return { url, ok: true };
-  return { url, ok: false, reason: result.status ? `HTTP ${result.status}` : result.error };
+  return { url, ok: false, reason: describeFailure(result) };
 }
 
 /** Check every URL in the map; returns the failures with their field ids. */
@@ -113,7 +120,8 @@ export function renderDryRun(total, broken) {
 }
 
 function ghClient(fetchFn, repo, token) {
-  const call = async (method, route, body) => {
+  // `tolerate` lists statuses that mean "not an error" and yield null.
+  return async (method, route, body, tolerate = []) => {
     const res = await fetchFn(`${API}/repos/${repo}${route}`, {
       method,
       headers: {
@@ -124,37 +132,53 @@ function ghClient(fetchFn, repo, token) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 404 && method === 'GET') return null;
-    if (!res.ok) throw new Error(`${method} ${route} failed: HTTP ${res.status}`);
-    return res.status === 204 ? null : res.json();
+    if (tolerate.includes(res.status)) {
+      await res.body?.cancel();
+      return null;
+    }
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new Error(`GitHub API ${method} ${route} failed: HTTP ${res.status}`);
+    }
+    if (res.status === 204) return null;
+    return res.json();
   };
-  return call;
 }
 
-/** Open or update the one open `docs-links` issue, or comment and close it when clean. */
+async function ensureLabel(call) {
+  if ((await call('GET', `/labels/${LABEL}`, undefined, [404])) !== null) return;
+  // 422 means a concurrent run created it first.
+  await call(
+    'POST',
+    '/labels',
+    { name: LABEL, color: 'd93f0b', description: 'Broken field docs links' },
+    [422],
+  );
+}
+
+async function closeIssue(call, number) {
+  await call('POST', `/issues/${number}/comments`, {
+    body: 'All field docs links resolve again; closing.',
+  });
+  await call('PATCH', `/issues/${number}`, { state: 'closed' });
+}
+
+/** Open or update the one open `docs-links` issue, or comment and close every one when clean. */
 export async function syncIssue(broken, { fetchFn = fetch, repo, token }) {
   const call = ghClient(fetchFn, repo, token);
-  if ((await call('GET', `/labels/${LABEL}`)) === null) {
-    await call('POST', '/labels', {
-      name: LABEL,
-      color: 'd93f0b',
-      description: 'Broken field docs links',
-    });
-  }
-  const open = await call('GET', `/issues?labels=${LABEL}&state=open&per_page=1`);
-  const issue = open[0];
+  await ensureLabel(call);
+  const listed = await call('GET', `/issues?labels=${LABEL}&state=open&per_page=100`);
+  const issues = listed.filter((item) => !item.pull_request);
   if (broken.length === 0) {
-    if (!issue) return 'clean, nothing to close';
-    await call('POST', `/issues/${issue.number}/comments`, {
-      body: 'All field docs links resolve again; closing.',
-    });
-    await call('PATCH', `/issues/${issue.number}`, { state: 'closed' });
-    return `closed #${issue.number}`;
+    for (const { number } of issues) await closeIssue(call, number);
+    return issues.length
+      ? `closed ${issues.map((i) => `#${i.number}`).join(', ')}`
+      : 'clean, nothing to close';
   }
   const body = renderIssueBody(broken);
-  if (issue) {
-    await call('PATCH', `/issues/${issue.number}`, { body });
-    return `updated #${issue.number}`;
+  if (issues.length) {
+    await call('PATCH', `/issues/${issues[0].number}`, { body });
+    return `updated #${issues[0].number}`;
   }
   const created = await call('POST', '/issues', { title: ISSUE_TITLE, body, labels: [LABEL] });
   return `opened #${created.number}`;
@@ -168,6 +192,8 @@ export async function main({ argv, env, fetchFn = fetch, sleep = sleepReal, log 
     log(renderDryRun(urls.size, broken));
     return 0;
   }
+  const missing = ['GITHUB_TOKEN', 'GITHUB_REPOSITORY'].filter((name) => !env[name]);
+  if (missing.length) throw new Error(`${missing.join(' and ')} must be set (or use --dry-run)`);
   log(await syncIssue(broken, { fetchFn, repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN }));
   log(renderDryRun(urls.size, broken));
   return 0;
