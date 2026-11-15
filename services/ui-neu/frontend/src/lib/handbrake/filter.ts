@@ -7,7 +7,7 @@ import { cardOpen, cardVariant, visibleCardFields, type EncoderCard } from './en
 import { fieldKind, TABS, type TabId } from './fields';
 import { audioListValue, blockOf, commonOf, inheritedDepth, panelContext, type BaseValues } from './base-values';
 import { audioListShown, commonKeys, keyShown, type FilterState } from './visibility';
-import type { Context } from './dependencyRules';
+import type { Context } from './dependency-rules';
 
 export interface VisibleInput {
 	schema: HandbrakeSchemaSlimView;

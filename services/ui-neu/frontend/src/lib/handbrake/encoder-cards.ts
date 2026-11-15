@@ -10,7 +10,7 @@ import type {
 	SlimVariant
 } from '$lib/types/api.gen';
 import type { FilterState } from './visibility';
-import { fieldVisible, type Context } from './dependencyRules';
+import { fieldVisible, type Context } from './dependency-rules';
 import { PRESET_ENCODER_ID, findAvailability } from './encoder-availability';
 
 // 'open' is a card with no hardware state to report: a pinned or base-preset family.

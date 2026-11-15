@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SlimKey } from '$lib/types/api.gen';
-import { changedCount, changedLabel } from '../groupSummary';
+import { changedCount, changedLabel } from '../group-summary';
 
 const keys = [{ name: 'A' }, { name: 'B' }, { name: 'C' }] as SlimKey[];
 

@@ -5,7 +5,7 @@
 	import { createSession, updateSession } from '$lib/api/sessions';
 	import type { EditorStatus } from '$lib/ui/editor-status';
 	import OutputPathField from './OutputPathField.svelte';
-	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/utils/formValidation';
+	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
 	import {
 		SESSION_FIELDS,
 		SESSION_FIELD_ORDER,

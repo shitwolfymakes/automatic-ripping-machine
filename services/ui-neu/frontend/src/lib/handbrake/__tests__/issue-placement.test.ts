@@ -11,7 +11,7 @@ import {
 	unplacedIssues,
 	unplacedText,
 	type PanelInput
-} from '../issuePlacement';
+} from '../issue-placement';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 const family = (name: string): SlimFamily => schema.families.find((f) => f.name === name)!;

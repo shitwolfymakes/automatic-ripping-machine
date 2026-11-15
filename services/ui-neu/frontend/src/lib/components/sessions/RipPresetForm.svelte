@@ -8,7 +8,7 @@
 	import type { EditorStatus } from '../../ui/editor-status';
 	import TrackFiltersEditor from '../jobs/TrackFiltersEditor.svelte';
 	import { trackFiltersBody, type TrackFilters } from '$lib/jobs/track-filters';
-	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/utils/formValidation';
+	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/ui/form-validation';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
 
 	let {

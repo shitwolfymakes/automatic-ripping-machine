@@ -1,7 +1,7 @@
 // What the session builder makes of its form: the field rules, the
 // overrides field read as JSON, and the create and update requests.
 import type { MediaType, SessionCreateRequest, SessionUpdateRequest } from '$lib/types/api.gen';
-import { NAME_REQUIRED, type FieldErrors } from '$lib/utils/formValidation';
+import { NAME_REQUIRED, type FieldErrors } from '$lib/ui/form-validation';
 
 /** The builder's checked inputs, by element id, in form order. */
 export const SESSION_FIELDS = { name: 'sb-name', rip: 'sb-rip', path: 'sb-path', overrides: 'sb-overrides' } as const;

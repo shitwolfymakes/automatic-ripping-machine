@@ -3,7 +3,7 @@
 
 import type { EncoderAvailabilityView, HandbrakeSchemaSlimView, SlimFamily, SlimKey } from '$lib/types/api.gen';
 import { baseVideoEncoder, type BaseValues } from './base-values';
-import { fieldVisible, type Context } from './dependencyRules';
+import { fieldVisible, type Context } from './dependency-rules';
 import { encoderCards, type EncoderCard } from './encoder-cards';
 import { keysForTab, type TabId } from './fields';
 

@@ -5,7 +5,7 @@
 // Form order is the preset block, then the tabs in strip order, each in render order.
 
 import type { HandbrakeSchemaSlimView, SettingIssue } from '$lib/types/api.gen';
-import type { FieldErrors } from '$lib/utils/formValidation';
+import type { FieldErrors } from '$lib/ui/form-validation';
 import { BIT_DEPTH_FIELD } from './encoder-cards';
 import { TABS, type TabId } from './fields';
 import { visibleTab, type TabVisible, type VisibleInput } from './filter';

@@ -2,7 +2,7 @@
 // Pure functions.
 
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SlimFamily, SlimKey } from '$lib/types/api.gen';
-import type { Context } from './dependencyRules';
+import type { Context } from './dependency-rules';
 
 export type BaseValues = Record<string, unknown> | null;
 

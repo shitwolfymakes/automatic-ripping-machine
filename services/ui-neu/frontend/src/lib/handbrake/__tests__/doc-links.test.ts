@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docUrlFor, docUrlForFamily, OFFICIAL_PRESETS_URL } from '../docLinks';
+import { docUrlFor, docUrlForFamily, OFFICIAL_PRESETS_URL } from '../doc-links';
 
 const BASE = 'https://handbrake.fr/docs/en/latest/';
 

@@ -8,7 +8,7 @@
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { TABS, type TabId } from '$lib/handbrake/fields';
 	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
-	import { issueTarget, placedIssues } from '$lib/handbrake/issuePlacement';
+	import { issueTarget, placedIssues } from '$lib/handbrake/issue-placement';
 	import type { BaseValues } from '$lib/handbrake/base-values';
 	import type { FilterState } from '$lib/handbrake/visibility';
 

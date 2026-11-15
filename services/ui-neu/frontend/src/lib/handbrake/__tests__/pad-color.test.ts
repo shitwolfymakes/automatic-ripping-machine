@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PAD_CUSTOM, padColorView } from '../padColor';
+import { PAD_CUSTOM, padColorView } from '../pad-color';
 
 const names = ['black', 'white'];
 

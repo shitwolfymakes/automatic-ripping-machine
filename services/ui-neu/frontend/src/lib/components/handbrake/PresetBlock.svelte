@@ -9,11 +9,11 @@
 	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panel-view';
 	import { CLEARED_NOTE } from '$lib/handbrake/display';
 	import { isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/draft';
-	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';
-	import { errorId, invalidAttrs, type FieldErrors } from '$lib/utils/formValidation';
+	import { presetBlockMessages } from '$lib/handbrake/issue-placement';
+	import { errorId, invalidAttrs, type FieldErrors } from '$lib/ui/form-validation';
 	import type { SettingIssue } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import { OFFICIAL_PRESETS_URL } from '$lib/handbrake/docLinks';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import { OFFICIAL_PRESETS_URL } from '$lib/handbrake/doc-links';
 
 	interface Props {
 		draft: Draft;

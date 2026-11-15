@@ -18,7 +18,7 @@
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { PRESET_NAME_ID, presetErrors, presetSidebarView } from '$lib/handbrake/panel-view';
 	import type { TabId } from '$lib/handbrake/fields';
-	import { focusField, focusFirstInvalid } from '$lib/utils/formValidation';
+	import { focusField, focusFirstInvalid } from '$lib/ui/form-validation';
 	import {
 		VAAPI_NOTE,
 		footerNote,
@@ -32,7 +32,7 @@
 	import { panelCards, type FilterState } from '$lib/handbrake/visibility';
 	import { saveFailure, type SaveFailure } from '$lib/api/save-failure';
 	import { applyProposal } from '$lib/handbrake/import-review';
-	import { firstIssueTarget, unplacedIssues, unplacedText, type IssueTarget } from '$lib/handbrake/issuePlacement';
+	import { firstIssueTarget, unplacedIssues, unplacedText, type IssueTarget } from '$lib/handbrake/issue-placement';
 	import type {
 		HandbrakeSchemaSlimView,
 		ImportedPresetView,

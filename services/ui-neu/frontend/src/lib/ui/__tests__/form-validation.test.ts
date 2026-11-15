@@ -7,7 +7,7 @@ import {
 	focusFirstInvalid,
 	invalidAttrs,
 	nameErrors
-} from '$lib/utils/formValidation';
+} from '$lib/ui/form-validation';
 
 afterEach(() => {
 	document.body.innerHTML = '';

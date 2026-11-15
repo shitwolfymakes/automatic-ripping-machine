@@ -2,7 +2,7 @@
 // one at a time. Pure functions; the components call them inside $derived.
 
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
-import { nameErrors, type FieldErrors } from '$lib/utils/formValidation';
+import { nameErrors, type FieldErrors } from '$lib/ui/form-validation';
 import { availabilityLabel } from './encoder-availability';
 import { showsAmdNote } from './encoder-cards';
 import type { TabId } from './fields';
