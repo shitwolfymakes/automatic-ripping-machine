@@ -53,13 +53,24 @@ describe('SettingsTabs', () => {
 	it('shows a warning glyph on a tab with an issue', () => {
 		const issues = [
 			{ key: 'PictureWidth', code: 'out_of_range', message: 'x' },
-			{ key: 'AudioBitrate', code: 'not_in_list', message: 'y' }
+			{ key: 'AudioList', code: 'not_in_list', message: 'y' }
 		] as SettingIssue[];
 		mount({ issues });
 		expect(tab('Dimensions').querySelector('svg')).not.toBeNull();
 		expect(tab('Audio').querySelector('svg')).not.toBeNull();
 		expect(tab('Video').querySelector('svg')).toBeNull();
 		expect(within(tab('Dimensions')).getByRole('img', { name: 'Has issues' })).toBeInTheDocument();
+	});
+
+	it('shows no glyph for an issue on a field another setting hides', () => {
+		mount({ issues: [{ key: 'PictureTopCrop', code: 'out_of_range', message: 'x' }] as SettingIssue[] });
+		expect(tab('Dimensions').querySelector('svg')).toBeNull();
+	});
+
+	it('shows the glyph once the setting that hides the field lets it show', () => {
+		const issues = [{ key: 'PictureTopCrop', code: 'out_of_range', message: 'x' }] as SettingIssue[];
+		mount({ issues, settings: { common: { PictureCropMode: 3 }, encoders: {} } });
+		expect(tab('Dimensions').querySelector('svg')).not.toBeNull();
 	});
 
 	it('counts matches per tab, dims the count of tabs with none and jumps to the first match', async () => {

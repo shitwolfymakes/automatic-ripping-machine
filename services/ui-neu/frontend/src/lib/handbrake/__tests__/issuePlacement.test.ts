@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
 import type { EncoderCard } from '../encoderCards';
-import { unplacedIssues, unplacedText, type PanelInput } from '../issuePlacement';
+import { placedIssues, unplacedIssues, unplacedText, type PanelInput } from '../issuePlacement';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
 const family = (name: string): SlimFamily => schema.families.find((f) => f.name === name)!;
@@ -62,6 +62,18 @@ describe('unplacedIssues', () => {
 		];
 		expect(unplaced(list, panel())).toEqual(['x265|VideoPreset', 'qsv_h264|VideoPreset', 'x264|bit_depth']);
 		expect(unplaced(list, panel({}, ['qsv_h264']))).toEqual(['x265|VideoPreset', 'x264|bit_depth']);
+	});
+});
+
+describe('placedIssues', () => {
+	it('keeps the issues a rendered input shows', () => {
+		const list = [issue('PictureWidth'), issue('PictureTopCrop'), issue('preset_ref')];
+		expect(placedIssues(list, panel()).map((i) => i.key)).toEqual(['PictureWidth', 'preset_ref']);
+	});
+
+	it('has nothing to place without issues', () => {
+		expect(placedIssues([], panel())).toEqual([]);
+		expect(unplacedIssues([], panel())).toEqual([]);
 	});
 });
 

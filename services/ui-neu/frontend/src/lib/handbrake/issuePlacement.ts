@@ -27,8 +27,8 @@ function tabSlots(v: TabVisible): string[] {
 	return [...rows, ...tracks, ...cards];
 }
 
-function renderedSlots(input: PanelInput | null): Set<string> {
-	if (!input) return new Set();
+function renderedSlots(issues: SettingIssue[], input: PanelInput | null): Set<string> {
+	if (!input || issues.length === 0) return new Set();
 	return new Set(TABS.flatMap((t) => tabSlots(visibleTab({ ...input, filter: UNFILTERED }, t.id))));
 }
 
@@ -40,8 +40,14 @@ function isPlaced(i: SettingIssue, slots: Set<string>): boolean {
 // Issues no rendered input shows; the sidebar lists these in its banner. `input` is null while the
 // settings panel is not shown.
 export function unplacedIssues(issues: SettingIssue[], input: PanelInput | null): SettingIssue[] {
-	const slots = renderedSlots(input);
+	const slots = renderedSlots(issues, input);
 	return issues.filter((i) => !isPlaced(i, slots));
+}
+
+// Issues a rendered input shows: the complement of unplacedIssues.
+export function placedIssues(issues: SettingIssue[], input: PanelInput | null): SettingIssue[] {
+	const slots = renderedSlots(issues, input);
+	return issues.filter((i) => isPlaced(i, slots));
 }
 
 function trackLabel(schema: HandbrakeSchemaSlimView, index: string, name: string): string | null {

@@ -1,12 +1,13 @@
 <script lang="ts">
 	// The sidebar's tab strip: filter box and "Changed only" above it, a count
 	// per tab of the inputs it shows under the current filter, a warning glyph on
-	// tabs with an issue, a count of zero dimmed. The body renders through children, handed the current filter.
+	// tabs with an issue one of their inputs shows (the banner lists the rest), a count of zero dimmed. The body renders through children, handed the current filter.
 	import type { Snippet } from 'svelte';
 	import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { TABS, type TabId } from '$lib/handbrake/fields';
 	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
+	import { placedIssues } from '$lib/handbrake/issuePlacement';
 	import type { BaseValues } from '$lib/handbrake/sidebarModel';
 
 	interface Props {
@@ -28,17 +29,13 @@
 
 	const counts = $derived(tabVisibleCounts({ schema, settings, base, cards, expanded, filter: { text, changedOnly } }));
 	const tabByKey = $derived(new Map([...schema.keys, ...schema.audio_item_keys].map((k) => [k.name, k.tab])));
-	const issueTabs = $derived(new Set(issues.map((i) => tabByKey.get(i.key))));
+	const placed = $derived(placedIssues(issues, { schema, settings, base, cards, expanded }));
+	const issueTabs = $derived(new Set(placed.map((i) => tabByKey.get(i.key))));
 
 	// Only while filtering: clearing the box leaves the user where they are.
 	function jumpToMatch() {
 		if (text.trim() === '') return;
-		ontab(
-			firstTabWithMatch(
-				tabVisibleCounts({ schema, settings, base, cards, expanded, filter: { text, changedOnly } }),
-				tab
-			)
-		);
+		ontab(firstTabWithMatch(counts, tab));
 	}
 	function onfilter(e: Event) {
 		text = (e.currentTarget as HTMLInputElement).value;

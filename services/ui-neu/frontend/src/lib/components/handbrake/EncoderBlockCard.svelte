@@ -5,6 +5,7 @@
 	// collapsed until the user chooses to set values anyway.
 	import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily, SlimKey } from '$lib/types/api.gen';
 	import {
+		BIT_DEPTH_FIELD,
 		blockDefault,
 		blockFields,
 		cardKey,
@@ -24,7 +25,7 @@
 		base: BaseValues;
 		// False while the card shows only its title and the Set values anyway button.
 		open: boolean;
-		// The inputs the card shows: 'bit_depth' and block key names.
+		// The inputs the card shows: bit depth and block key names.
 		fields: string[];
 		inheritedDepth: number;
 		depthSource: 'block' | 'base' | 'default';
@@ -94,8 +95,8 @@
 	function onDepth(e: Event) {
 		const raw = (e.currentTarget as HTMLSelectElement).value;
 		const chosen = family.variants.find((v) => depthText(v.depth) === raw);
-		if (chosen) onchange('bit_depth', chosen.depth);
-		else onreset('bit_depth');
+		if (chosen) onchange(BIT_DEPTH_FIELD.name, chosen.depth);
+		else onreset(BIT_DEPTH_FIELD.name);
 	}
 </script>
 
@@ -114,12 +115,12 @@
 			{#if status}<span class="encoder-card-badge" data-state={card.state}>{status}</span>{/if}
 		</header>
 		<div class="encoder-card-fields">
-			{#if fields.includes('bit_depth')}
+			{#if fields.includes(BIT_DEPTH_FIELD.name)}
 				<div class="tunable-field" data-stored={block.bit_depth !== undefined}>
 					<div class="tunable-field-head">
 						<label class="field-label" for={depthId}>Bit depth</label>
 						{#if block.bit_depth !== undefined}
-							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset('bit_depth')}
+							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset(BIT_DEPTH_FIELD.name)}
 								>Reset</button
 							>
 						{/if}
