@@ -153,6 +153,39 @@ describe('EncoderBlockCard', () => {
 		expect((screen.getByLabelText('Bit depth') as HTMLSelectElement).value).toBe('10-bit');
 	});
 
+	it('marks a stored bit depth as Changed; an unstored one is not', () => {
+		mount('x265', { block: { bit_depth: 10 } });
+		expect(screen.getByText('Changed')).toBeTruthy();
+		cleanup();
+		mount('x265');
+		expect(screen.queryByText('Changed')).toBeNull();
+	});
+
+	it('keeps a stored bit depth no variant offers as a selected extra option', () => {
+		mount('x264', { block: { bit_depth: 12 } });
+		const select = screen.getByLabelText('Bit depth') as HTMLSelectElement;
+		expect(select.value).toBe('12-bit');
+		expect(Array.from(select.options).map((o) => o.text)).toEqual(['8-bit, default', '8-bit', '10-bit', '12-bit']);
+	});
+
+	it('marks the bit depth select with its issue and shows the message under it', () => {
+		const issues = [
+			{ key: 'bit_depth', encoder: 'x264', code: 'not_in_list', message: 'bad depth' },
+			{ key: 'bit_depth', encoder: 'x265', code: 'not_in_list', message: 'other depth' }
+		] as SettingIssue[];
+		mount('x264', { block: { bit_depth: 12 }, issues });
+		const select = screen.getByLabelText('Bit depth');
+		expect(select).toHaveAttribute('aria-invalid', 'true');
+		expect(select).toHaveAttribute('aria-describedby', 'x264-bit-depth-error');
+		expect(document.getElementById('x264-bit-depth-error')).toHaveTextContent('bad depth');
+		expect(screen.queryByText('other depth')).toBeNull();
+	});
+
+	it('leaves the bit depth select unmarked without an issue', () => {
+		mount('x264');
+		expect(screen.getByLabelText('Bit depth')).not.toHaveAttribute('aria-invalid');
+	});
+
 	it('resets a stored bit depth from its Reset link', async () => {
 		const { onreset } = mount('x265', { block: { bit_depth: 10 } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Reset' }));

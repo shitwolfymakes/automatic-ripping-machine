@@ -620,17 +620,70 @@ describe('editing and saving', () => {
 		expect(document.getElementById('tunable-AudioList-error')).toHaveTextContent('Too many tracks');
 	});
 
-	it('a 422 whose issues no input shows leaves focus and the tab alone', async () => {
+	it('a 422 whose issues no input shows focuses the banner and leaves the tab alone', async () => {
 		const issues = [
 			{ key: 'handbrake_settings', encoder: null, code: 'engine_ignores_settings' as const, message: 'Ignored' }
 		];
 		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
 		mount({ mode: 'edit', preset: preset() });
 		await ready();
-		const before = document.activeElement;
 		await save();
-		expect(await screen.findByText('Ignored')).toBeInTheDocument();
-		expect(document.activeElement).toBe(before);
+		const banner = await screen.findByRole('list', { name: 'Settings issues not shown below' });
+		expect(banner).toHaveTextContent('Ignored');
+		await waitFor(() => expect(document.activeElement).toBe(banner));
+		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
+	});
+
+	it('a 422 clears a filter that hides the field, then focuses it', async () => {
+		const issues = [{ key: 'VideoFramerate', encoder: null, code: 'not_in_list' as const, message: 'No such rate' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		const box = screen.getByLabelText('Filter settings') as HTMLInputElement;
+		await fireEvent.input(box, { target: { value: 'gain' } });
+		expect(document.getElementById('tunable-VideoFramerate')).toBeNull();
+		await save();
+		await waitFor(() => expect(document.activeElement).toBe(document.getElementById('tunable-VideoFramerate')));
+		expect(box.value).toBe('');
+	});
+
+	it('a 422 clears Changed only when it hides an inherited field, then focuses it', async () => {
+		const issues = [{ key: 'VideoFramerate', encoder: null, code: 'not_in_list' as const, message: 'No such rate' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		const changed = screen.getByLabelText('Changed only') as HTMLInputElement;
+		await fireEvent.click(changed);
+		await save();
+		await waitFor(() => expect(document.activeElement).toBe(document.getElementById('tunable-VideoFramerate')));
+		expect(changed.checked).toBe(false);
+	});
+
+	it('a 422 on an encoder bit depth opens the Video tab and focuses the marked select', async () => {
+		const issues = [{ key: 'bit_depth', encoder: 'x264', code: 'not_in_list' as const, message: 'No such depth' }];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		const handbrake_settings = { common: {}, encoders: { x264: { bit_depth: 12 } } };
+		mount({ mode: 'edit', preset: preset({ handbrake_settings }) });
+		await ready();
+		await save();
+		const card = await screen.findByRole('region', { name: 'x264' });
+		const depth = within(card).getByLabelText('Bit depth');
+		await waitFor(() => expect(document.activeElement).toBe(depth));
+		expect(depth).toHaveAttribute('aria-invalid', 'true');
+		expect(document.getElementById('x264-bit-depth-error')).toHaveTextContent('No such depth');
+		expect(document.querySelector('.preset-sidebar-issues')).toBeNull();
+	});
+
+	it('a 422 focuses the first issue in form order, not the order the backend lists them', async () => {
+		const issues = [
+			{ key: 'VideoFramerate', encoder: null, code: 'not_in_list' as const, message: 'No such rate' },
+			{ key: 'name', encoder: null, code: 'wrong_type' as const, message: 'Name taken' }
+		];
+		vi.mocked(updateTranscodePreset).mockRejectedValue(new ApiError(422, 'API 422', { detail: { issues } }));
+		mount({ mode: 'edit', preset: preset() });
+		await ready();
+		await save();
+		await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('tp-name')));
 		expect(screen.getByRole('tab', { name: /^Summary/ })).toHaveAttribute('aria-selected', 'true');
 	});
 

@@ -62,22 +62,42 @@ describe('unplacedIssues', () => {
 		]);
 	});
 
-	it('places block fields of open reachable cards only, and never bit depth', () => {
+	it('places block fields and bit depth of open reachable cards only', () => {
 		const list = [
 			issue('VideoPreset', 'x264'),
 			issue('VideoPreset', 'x265'),
 			issue('VideoPreset', 'qsv_h264'),
-			issue('bit_depth', 'x264')
+			issue('bit_depth', 'x264'),
+			issue('bit_depth', 'qsv_h264')
 		];
-		expect(unplaced(list, panel())).toEqual(['x265|VideoPreset', 'qsv_h264|VideoPreset', 'x264|bit_depth']);
-		expect(unplaced(list, panel({}, ['qsv_h264']))).toEqual(['x265|VideoPreset', 'x264|bit_depth']);
+		expect(unplaced(list, panel())).toEqual(['x265|VideoPreset', 'qsv_h264|VideoPreset', 'qsv_h264|bit_depth']);
+		expect(unplaced(list, panel({}, ['qsv_h264']))).toEqual(['x265|VideoPreset']);
 	});
 });
 
 describe('placedIssues', () => {
-	it('keeps the issues a rendered input shows', () => {
+	it('keeps the issues a rendered input shows, in form order', () => {
 		const list = [issue('PictureWidth'), issue('PictureTopCrop'), issue('preset_ref')];
-		expect(placedIssues(list, panel()).map((i) => i.key)).toEqual(['PictureWidth', 'preset_ref']);
+		expect(placedIssues(list, panel()).map((i) => i.key)).toEqual(['preset_ref', 'PictureWidth']);
+	});
+
+	it('orders the preset block by its render order, then tabs by strip order', () => {
+		const list = [
+			issue('VideoPreset', 'x264'),
+			issue('extra_args'),
+			issue('PictureWidth'),
+			issue('preset_ref'),
+			issue('bit_depth', 'x264'),
+			issue('name')
+		];
+		expect(placedIssues(list, panel()).map((i) => `${i.encoder ?? ''}|${i.key}`)).toEqual([
+			'|name',
+			'|preset_ref',
+			'|extra_args',
+			'|PictureWidth',
+			'x264|bit_depth',
+			'x264|VideoPreset'
+		]);
 	});
 
 	it('has nothing to place without issues', () => {
@@ -115,6 +135,10 @@ describe('issueTarget', () => {
 		expect(issueTarget(issue('VideoPreset', 'x264'), schema)).toEqual({ id: 'x264-tunable-VideoPreset', tab: 'video' });
 	});
 
+	it("targets an encoder card's bit depth select", () => {
+		expect(issueTarget(issue('bit_depth', 'x265'), schema)).toEqual({ id: 'x265-bit-depth', tab: 'video' });
+	});
+
 	it('targets a track field by track index, on its key tab', () => {
 		expect(issueTarget(issue('AudioList[1].AudioBitrate'), schema)).toEqual({
 			id: 'audio-1-tunable-AudioBitrate',
@@ -139,9 +163,9 @@ describe('issueTarget', () => {
 });
 
 describe('firstIssueTarget', () => {
-	it('targets the first issue a rendered input shows, skipping unplaced ones', () => {
+	it('targets the first issue in form order a rendered input shows, skipping unplaced ones', () => {
 		const list = [issue('PictureTopCrop'), issue('VideoPreset', 'x264'), issue('PictureWidth')];
-		expect(firstIssueTarget(list, panel())).toEqual({ id: 'x264-tunable-VideoPreset', tab: 'video' });
+		expect(firstIssueTarget(list, panel())).toEqual({ id: 'tunable-PictureWidth', tab: 'dimensions' });
 	});
 
 	it('targets a preset-block issue with no panel', () => {

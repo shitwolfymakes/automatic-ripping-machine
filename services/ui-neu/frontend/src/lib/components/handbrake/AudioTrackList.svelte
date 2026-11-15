@@ -112,6 +112,12 @@
 		flex-direction: column;
 		gap: 0.75rem;
 	}
+	/* A whole-list issue outlines the list, focused or not. */
+	.audio-tracks[aria-invalid='true'] {
+		outline: 1px solid var(--color-danger);
+		outline-offset: 4px;
+		border-radius: var(--radius-sm);
+	}
 	.audio-track {
 		display: flex;
 		flex-direction: column;

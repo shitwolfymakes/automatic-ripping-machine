@@ -8,6 +8,8 @@ import {
 	cardOpen,
 	cardVariant,
 	cardStatusLine,
+	depthOptions,
+	depthText,
 	encoderCards,
 	perEncoderLine,
 	showsAmdNote,
@@ -277,6 +279,22 @@ describe('card labels', () => {
 		expect(cardVariant(x264, { bit_depth: 10 }, 8).depth).toBe(10);
 		expect(cardVariant(x264, {}, 10).depth).toBe(10);
 		expect(cardVariant(x264, { bit_depth: 99 }, 8)).toBe(x264.variants[0]);
+	});
+
+	it('offers each variant depth, selecting the stored one', () => {
+		expect(depthText(10)).toBe('10-bit');
+		expect(depthOptions(x264, {})).toEqual([
+			{ text: '8-bit', selected: false },
+			{ text: '10-bit', selected: false }
+		]);
+		expect(depthOptions(x264, { bit_depth: 10 }).filter((o) => o.selected)).toEqual([
+			{ text: '10-bit', selected: true }
+		]);
+	});
+
+	it('adds a stored depth no variant offers as a selected extra option', () => {
+		expect(depthOptions(x264, { bit_depth: 12 }).at(-1)).toEqual({ text: '12-bit', selected: true });
+		expect(depthOptions(x264, { bit_depth: 12 })).toHaveLength(3);
 	});
 
 	it('shows variant lists as selects, renames extra options and names the quality scale', () => {

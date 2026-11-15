@@ -89,10 +89,7 @@
 
 <!-- The audio track list has its own editor (AudioTrackList); this field draws nothing for it. -->
 {#if view.kind !== 'audio-list'}
-	<div
-		class={view.stored ? 'tunable-field tunable-field-stored' : 'tunable-field'}
-		data-changed={view.stored || undefined}
-	>
+	<div class="tunable-field" data-changed={view.stored || undefined}>
 		{#if view.kind === 'checkbox'}
 			<div class="tunable-field-head">
 				<span class="tunable-field-inline">
@@ -194,6 +191,7 @@
 		<option value={PAD_CUSTOM}>Custom&hellip;</option>
 	</select>
 	{#if pad.custom}
+		<!-- With Custom chosen the rejected value sits here, so an issue marks this input too. -->
 		<input
 			type="text"
 			class="field-control"
@@ -202,6 +200,7 @@
 			value={pad.text}
 			{disabled}
 			onchange={onPadText}
+			{...invalid}
 		/>
 	{/if}
 {/snippet}
@@ -248,10 +247,6 @@
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 0.5rem;
-	}
-	/* :global because the stored border must beat the shared .field-control border. */
-	.tunable-field-stored :global(.field-control) {
-		border-color: var(--color-border-strong);
 	}
 	.tunable-field-inline {
 		display: flex;

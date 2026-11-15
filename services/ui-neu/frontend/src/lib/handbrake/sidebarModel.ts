@@ -20,7 +20,7 @@ import type {
 import { encoderCards, type EncoderCard } from './encoderCards';
 import { keysForTab, type TabId } from './fields';
 import { pruneUnreachable, toPayload } from './settingsEdit';
-import { fieldVisible, type Context } from './visibility';
+import { fieldVisible, type Context } from './dependencyRules';
 
 export type SidebarMode = 'new' | 'edit' | 'view';
 export type BaseValues = Record<string, unknown> | null;

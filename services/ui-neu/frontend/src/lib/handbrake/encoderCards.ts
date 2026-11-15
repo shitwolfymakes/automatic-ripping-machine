@@ -10,7 +10,7 @@ import type {
 	SlimVariant
 } from '$lib/types/api.gen';
 import type { FilterState } from './sidebarModel';
-import { fieldVisible, type Context } from './visibility';
+import { fieldVisible, type Context } from './dependencyRules';
 
 // 'open' is a card with no hardware state to report: a pinned or base-preset family.
 export type CardState = 'verified' | 'cpu-fallback' | 'collapsed' | 'open';
@@ -144,6 +144,25 @@ export const BIT_DEPTH_FIELD = { name: 'bit_depth', label: 'Bit depth' };
 export function cardVariant(family: SlimFamily, block: Record<string, unknown>, inheritedDepth: number): SlimVariant {
 	const depth = typeof block.bit_depth === 'number' ? block.bit_depth : inheritedDepth;
 	return family.variants.find((v) => v.depth === depth) ?? family.variants[0];
+}
+
+/** A bit depth as the card's select names it. */
+export function depthText(depth: unknown): string {
+	return `${String(depth)}-bit`;
+}
+
+export interface DepthOption {
+	text: string;
+	selected: boolean;
+}
+
+// The bit depth select's options after its default one: each variant's depth, then a stored depth no
+// variant offers, so the select still shows what the block holds.
+export function depthOptions(family: SlimFamily, block: Record<string, unknown>): DepthOption[] {
+	const stored = block.bit_depth;
+	const listed = family.variants.map((v) => ({ text: depthText(v.depth), selected: stored === v.depth }));
+	if (stored === undefined || listed.some((o) => o.selected)) return listed;
+	return [...listed, { text: depthText(stored), selected: true }];
 }
 
 // A block key as the card shows it. The variant supplies the preset, tune, profile and level lists, so those

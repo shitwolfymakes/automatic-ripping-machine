@@ -1,14 +1,15 @@
 <script lang="ts">
 	// The sidebar's tab strip: filter box and "Changed only" above it, a count
 	// per tab of the inputs it shows under the current filter, a warning glyph on
-	// tabs with an issue one of their inputs shows (the banner lists the rest), a count of zero dimmed. The body renders through children, handed the current filter.
+	// tabs with an issue one of their inputs shows (the banner lists the rest), a count of zero dimmed.
+	// The body renders through children, handed the current filter, which the owner can bind and clear.
 	import type { Snippet } from 'svelte';
 	import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/Glyph.svelte';
 	import { TABS, type TabId } from '$lib/handbrake/fields';
 	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
-	import { placedIssues } from '$lib/handbrake/issuePlacement';
-	import type { BaseValues } from '$lib/handbrake/sidebarModel';
+	import { issueTarget, placedIssues } from '$lib/handbrake/issuePlacement';
+	import type { BaseValues, FilterState } from '$lib/handbrake/sidebarModel';
 
 	interface Props {
 		schema: HandbrakeSchemaSlimView;
@@ -19,26 +20,39 @@
 		issues: SettingIssue[];
 		tab: TabId;
 		ontab: (t: TabId) => void;
-		children: Snippet<[{ text: string; changedOnly: boolean }]>;
+		filter?: FilterState;
+		children: Snippet<[FilterState]>;
 	}
 
-	let { schema, settings, base, cards, expanded, issues, tab, ontab, children }: Props = $props();
+	let {
+		schema,
+		settings,
+		base,
+		cards,
+		expanded,
+		issues,
+		tab,
+		ontab,
+		filter = $bindable({ text: '', changedOnly: false }),
+		children
+	}: Props = $props();
 
-	let text = $state('');
-	let changedOnly = $state(false);
-
-	const counts = $derived(tabVisibleCounts({ schema, settings, base, cards, expanded, filter: { text, changedOnly } }));
-	const tabByKey = $derived(new Map([...schema.keys, ...schema.audio_item_keys].map((k) => [k.name, k.tab])));
+	const counts = $derived(tabVisibleCounts({ schema, settings, base, cards, expanded, filter }));
 	const placed = $derived(placedIssues(issues, { schema, settings, base, cards, expanded }));
-	const issueTabs = $derived(new Set(placed.map((i) => tabByKey.get(i.key))));
+	// The same tab Save opens for the issue, so track and encoder issues mark Audio and Video.
+	const issueTabs = $derived(new Set(placed.map((i) => issueTarget(i, schema).tab)));
 
 	// Only while filtering: clearing the box leaves the user where they are.
 	function jumpToMatch() {
-		if (text.trim() === '') return;
+		if (filter.text.trim() === '') return;
 		ontab(firstTabWithMatch(counts, tab));
 	}
 	function onfilter(e: Event) {
-		text = (e.currentTarget as HTMLInputElement).value;
+		filter = { ...filter, text: (e.currentTarget as HTMLInputElement).value };
+		jumpToMatch();
+	}
+	function onchanged(e: Event) {
+		filter = { ...filter, changedOnly: (e.currentTarget as HTMLInputElement).checked };
 		jumpToMatch();
 	}
 </script>
@@ -50,11 +64,11 @@
 			class="field-control"
 			placeholder="Filter settings"
 			aria-label="Filter settings"
-			value={text}
+			value={filter.text}
 			oninput={onfilter}
 		/>
 		<label class="settings-tabs-changed"
-			><input type="checkbox" bind:checked={changedOnly} onchange={jumpToMatch} /> Changed only</label
+			><input type="checkbox" checked={filter.changedOnly} onchange={onchanged} /> Changed only</label
 		>
 	</div>
 	<div role="tablist" class="settings-tabs-strip">
@@ -68,7 +82,7 @@
 			</button>
 		{/each}
 	</div>
-	<div role="tabpanel">{@render children({ text, changedOnly })}</div>
+	<div role="tabpanel">{@render children(filter)}</div>
 </div>
 
 <style>

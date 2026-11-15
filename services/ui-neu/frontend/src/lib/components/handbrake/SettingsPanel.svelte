@@ -47,6 +47,8 @@
 		onexpand: (family: string) => void;
 		/** The open tab; bound by the sidebar, which opens the tab of a field it focuses. */
 		tab?: TabId;
+		/** The filter text and Changed only; bound by the sidebar, which clears them before it focuses a field. */
+		filter: FilterState;
 	}
 
 	let {
@@ -61,7 +63,8 @@
 		expanded,
 		onsettings,
 		onexpand,
-		tab = $bindable('summary')
+		tab = $bindable('summary'),
+		filter = $bindable()
 	}: Props = $props();
 
 	const common = $derived(commonOf(settings));
@@ -70,7 +73,7 @@
 	const view = $derived(settingsPanelView({ tab, encoder, availability }));
 </script>
 
-<SettingsTabs {schema} {settings} {base} {cards} {expanded} {issues} {tab} ontab={(t) => (tab = t)}>
+<SettingsTabs {schema} {settings} {base} {cards} {expanded} {issues} {tab} ontab={(t) => (tab = t)} bind:filter>
 	{#snippet children(f: FilterState)}
 		{@const shown = visibleTab({ schema, settings, base, filter: f, cards, expanded }, tab)}
 		{#if view.section === 'video'}

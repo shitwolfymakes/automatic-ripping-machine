@@ -2,8 +2,9 @@
 	// The transcode preset sidebar on Settings > Sessions: the preset block,
 	// the schema-driven HandBrake settings below it, and one Save that writes
 	// both. Built-in presets open read-only. A Save with a blank name, or one the
-	// backend refuses with per-setting issues, opens the tab of the first marked
-	// field and focuses it.
+	// backend refuses with per-setting issues, clears the settings filter, opens the
+	// tab of the first marked field in form order and focuses it; when no input shows
+	// an issue, focus goes to the banner that lists them.
 	import { onMount, tick } from 'svelte';
 	import EditorSidebar from '$lib/components/EditorSidebar.svelte';
 	import EditorFormFooter from '$lib/components/EditorFormFooter.svelte';
@@ -33,12 +34,13 @@
 		sidebarTitle,
 		usageLabel,
 		type Bases,
+		type FilterState,
 		type PresetField,
 		type SaveFailure,
 		type SidebarMode
 	} from '$lib/handbrake/sidebarModel';
 	import { applyProposal } from '$lib/handbrake/importReview';
-	import { firstIssueTarget, unplacedIssues, unplacedText } from '$lib/handbrake/issuePlacement';
+	import { firstIssueTarget, unplacedIssues, unplacedText, type IssueTarget } from '$lib/handbrake/issuePlacement';
 	import type {
 		HandbrakeSchemaSlimView,
 		ImportedPresetView,
@@ -59,6 +61,7 @@
 	let { preset, mode, usage, onclone, onclose, onsaved }: Props = $props();
 
 	const FORM_ID = 'transcode-preset-sidebar-form';
+	const ISSUES_ID = 'transcode-preset-sidebar-issues';
 
 	let open = $state(true);
 	let draft = $state(initialDraft(preset));
@@ -68,6 +71,7 @@
 	let failure = $state<SaveFailure | null>(null);
 	let importing = $state(false);
 	let tab = $state<TabId>('summary');
+	let filter = $state<FilterState>({ text: '', changedOnly: false });
 	// The name mark shows from the first Save on, and clears once the name is filled in.
 	let attempted = $state(false);
 	// The families whose collapsed encoder card the user chose to set values on anyway.
@@ -135,13 +139,18 @@
 		return createTranscodePreset(draftToCreate(draft));
 	}
 
-	// Opens the tab of the first issue an input shows and focuses that input; the banner keeps the rest.
+	// Clears the filter, so the target's input renders whatever was typed or ticked, and opens its tab.
+	function revealTarget(target: IssueTarget) {
+		filter = { text: '', changedOnly: false };
+		if (target.tab) tab = target.tab;
+	}
+
+	// Focuses the first issue's input in form order; with none placed, the banner listing them.
 	async function focusFirstIssue(list: SettingIssue[]) {
 		const target = firstIssueTarget(list, panel);
-		if (!target) return;
-		if (target.tab) tab = target.tab;
+		if (target) revealTarget(target);
 		await tick();
-		focusField(target.id);
+		focusField(target?.id ?? ISSUES_ID);
 	}
 
 	async function save(event: SubmitEvent) {
@@ -200,7 +209,12 @@
 				</div>
 			{/if}
 			{#if view.showUnplaced}
-				<ul class="alert alert-warning preset-sidebar-issues">
+				<ul
+					id={ISSUES_ID}
+					class="alert alert-warning preset-sidebar-issues"
+					tabindex="-1"
+					aria-label="Settings issues not shown below"
+				>
 					{#each loose as issue, i (i)}<li>{unplacedText(issue, schema)}</li>{/each}
 				</ul>
 			{/if}
@@ -248,6 +262,7 @@
 								onsettings={(next) => (draft = { ...draft, settings: next })}
 								onexpand={(family) => (expanded = [...expanded, family])}
 								bind:tab
+								bind:filter
 							/>
 						{/snippet}
 					</LoadState>

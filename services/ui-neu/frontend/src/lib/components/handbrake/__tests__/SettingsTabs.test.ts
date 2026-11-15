@@ -62,6 +62,26 @@ describe('SettingsTabs', () => {
 		expect(within(tab('Dimensions')).getByRole('img', { name: 'Has issues' })).toBeInTheDocument();
 	});
 
+	it('puts the glyph for a track issue on Audio and for an encoder issue on Video', () => {
+		const x264 = schema.families.find((f) => f.name === 'x264')!;
+		const cards = [{ card: { family: 'x264', label: 'x264', state: 'open', device: null }, family: x264 }];
+		const issues = [
+			{ key: 'AudioList[0].AudioBitrate', encoder: null, code: 'out_of_range', message: 'x' },
+			{ key: 'VideoPreset', encoder: 'x264', code: 'not_in_list', message: 'y' }
+		] as SettingIssue[];
+		mount({ issues, cards });
+		expect(tab('Audio').querySelector('svg')).not.toBeNull();
+		expect(tab('Video').querySelector('svg')).not.toBeNull();
+		expect(tab('Summary').querySelector('svg')).toBeNull();
+	});
+
+	it('starts from the filter it is given', () => {
+		mount({ filter: { text: 'gain', changedOnly: true } });
+		expect(screen.getByLabelText('Filter settings')).toHaveValue('gain');
+		expect(screen.getByLabelText('Changed only')).toBeChecked();
+		expect(screen.getByText('body gain|true')).toBeInTheDocument();
+	});
+
 	it('shows no glyph for an issue on a field another setting hides', () => {
 		mount({ issues: [{ key: 'PictureTopCrop', code: 'out_of_range', message: 'x' }] as SettingIssue[] });
 		expect(tab('Dimensions').querySelector('svg')).toBeNull();

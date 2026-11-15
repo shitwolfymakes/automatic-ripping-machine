@@ -235,14 +235,26 @@ describe('TunableField fidelity', () => {
 		expect(screen.queryByText('Changed')).toBeNull();
 	});
 
-	it('marks a stored field and offers Reset; an inherited one has neither', () => {
+	it('offers Reset on a stored field; an inherited one has none', () => {
 		const stored = mount('PictureWidth', { stored: true, value: 1 });
-		expect(stored.container.querySelector('.tunable-field')).toHaveClass('tunable-field-stored');
 		expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument();
 		stored.unmount();
-		const inherited = mount('PictureWidth', { inherited: 2 });
-		expect(inherited.container.querySelector('.tunable-field')).not.toHaveClass('tunable-field-stored');
+		mount('PictureWidth', { inherited: 2 });
 		expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull();
+	});
+
+	// The danger border is field.css's .field-control[aria-invalid='true'] rule; no field-level class
+	// or component rule restyles the control's border, so the stored state cannot override it.
+	it('marks a stored field with an issue invalid, with nothing restyling its control', () => {
+		const issue = { key: 'PictureWidth', code: 'out_of_range', message: 'Too wide' } as SettingIssue;
+		const { container } = mount('PictureWidth', { stored: true, value: 99999, issue });
+		const input = screen.getByLabelText(key('PictureWidth').label);
+		expect(input).toHaveAttribute('aria-invalid', 'true');
+		expect(input).toHaveAttribute('aria-describedby', 'tunable-PictureWidth-error');
+		// Svelte's scoping hash (svelte-xxxx) is not a styling class of its own.
+		const classes = (el: Element) => [...el.classList].filter((c) => !c.startsWith('svelte-'));
+		expect(classes(input)).toEqual(['field-control']);
+		expect(classes(container.querySelector('.tunable-field')!)).toEqual(['tunable-field']);
 	});
 
 	it('updates the shown value when stored and value props change', async () => {
@@ -333,6 +345,16 @@ describe('TunableField fidelity', () => {
 			await fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
 			expect(onreset).toHaveBeenCalled();
 			expect(custom()).toBeNull();
+		});
+
+		it('marks the custom text input invalid alongside the select when the field has an issue', () => {
+			const issue = { key: 'PicturePadColor', code: 'not_in_list', message: 'Bad colour' } as SettingIssue;
+			mountPad({ value: '#zz', stored: true, issue });
+			for (const control of [select(), custom()!]) {
+				expect(control).toHaveAttribute('aria-invalid', 'true');
+				expect(control).toHaveAttribute('aria-describedby', 'tunable-PicturePadColor-error');
+			}
+			expect(document.getElementById('tunable-PicturePadColor-error')).toHaveTextContent('Bad colour');
 		});
 
 		it('tolerates no options', () => {

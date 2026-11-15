@@ -17,7 +17,7 @@ import {
 	type BaseValues,
 	type FilterState
 } from './sidebarModel';
-import type { Context } from './visibility';
+import type { Context } from './dependencyRules';
 
 export interface VisibleInput {
 	schema: HandbrakeSchemaSlimView;

@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One per-encoder settings card on the Video tab: the title with its hardware
 	// status, then the family's bit depth and block fields that `fields` names, which
-	// show the encoder's defaults as inherited. A card for a device the host cannot verify stays
+	// show the encoder's defaults as inherited. A stored bit depth shows a Changed mark,
+	// one no variant offers stays selectable as an extra option, and its issue marks the select. A card for a device the host cannot verify stays
 	// collapsed until the user chooses to set values anyway.
 	import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily, SlimKey } from '$lib/types/api.gen';
 	import {
@@ -11,10 +12,13 @@
 		cardKey,
 		cardStatusLine,
 		cardVariant,
+		depthOptions,
+		depthText,
 		VARIANT_LISTS,
 		type EncoderCard
 	} from '$lib/handbrake/encoderCards';
 	import { docUrlForFamily } from '$lib/handbrake/docLinks';
+	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
 	import type { BaseValues } from '$lib/handbrake/sidebarModel';
 	import TunableField from './TunableField.svelte';
 
@@ -57,11 +61,13 @@
 	const prefix = $derived(`${family.name}-`);
 	const depthId = $derived(`${family.name}-bit-depth`);
 	const variant = $derived(cardVariant(family, block, inheritedDepth));
-	const depthText = (d: number) => `${d}-bit`;
 	const defaultDepthLabel = $derived(
 		depthSource === 'base' ? `${depthText(inheritedDepth)}, from base preset` : `${depthText(inheritedDepth)}, default`
 	);
 	const status = $derived(cardStatusLine(card));
+	const depthStored = $derived(block.bit_depth !== undefined);
+	const depthChoices = $derived(depthOptions(family, block));
+	const depthIssue = $derived(issueFor(BIT_DEPTH_FIELD.name));
 
 	// Resolved eagerly: TunableField only reads the props its kind needs, which would leave these branches lazy.
 	const rows = $derived(
@@ -73,7 +79,7 @@
 				options: options(key),
 				inherited: blockDefault(key, variant, base),
 				range: rangeFor(key),
-				issue: issueFor(key)
+				issue: issueFor(key.name)
 			}))
 	);
 
@@ -89,8 +95,8 @@
 		return { min: q.low, max: q.high, step: q.step };
 	}
 
-	function issueFor(key: SlimKey): SettingIssue | undefined {
-		return issues.find((i) => i.encoder === family.name && i.key === key.name);
+	function issueFor(name: string): SettingIssue | undefined {
+		return issues.find((i) => i.encoder === family.name && i.key === name);
 	}
 
 	function onDepth(e: Event) {
@@ -117,21 +123,31 @@
 		</header>
 		<div class="encoder-card-fields">
 			{#if fields.includes(BIT_DEPTH_FIELD.name)}
-				<div class="tunable-field" data-stored={block.bit_depth !== undefined}>
+				<div class="tunable-field" data-stored={depthStored}>
 					<div class="tunable-field-head">
-						<label class="field-label" for={depthId}>Bit depth</label>
-						{#if block.bit_depth !== undefined}
+						<span class="tunable-field-inline">
+							<label class="field-label" for={depthId}>Bit depth</label>
+							{#if depthStored}<span class="tunable-field-changed">Changed</span>{/if}
+						</span>
+						{#if depthStored}
 							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset(BIT_DEPTH_FIELD.name)}
 								>Reset</button
 							>
 						{/if}
 					</div>
-					<select id={depthId} class="field-control" disabled={readonly} onchange={onDepth}>
-						<option value="" selected={block.bit_depth === undefined}>{defaultDepthLabel}</option>
-						{#each family.variants as v (v.depth)}
-							<option selected={block.bit_depth === v.depth}>{depthText(v.depth)}</option>
+					<select
+						id={depthId}
+						class="field-control"
+						disabled={readonly}
+						onchange={onDepth}
+						{...invalidAttrs(depthId, depthIssue?.message)}
+					>
+						<option value="" selected={!depthStored}>{defaultDepthLabel}</option>
+						{#each depthChoices as choice (choice.text)}
+							<option selected={choice.selected}>{choice.text}</option>
 						{/each}
 					</select>
+					{#if depthIssue}<p class="field-error" id={errorId(depthId)} role="alert">{depthIssue.message}</p>{/if}
 				</div>
 			{/if}
 			{#each rows as row (row.name)}
@@ -227,5 +243,18 @@
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 0.5rem;
+	}
+	.tunable-field-inline {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.tunable-field-changed {
+		padding: 0 0.375rem;
+		border-radius: 999px;
+		font-size: 0.625rem;
+		font-weight: 700;
+		background: var(--color-info-soft);
+		color: var(--color-on-info-soft);
 	}
 </style>

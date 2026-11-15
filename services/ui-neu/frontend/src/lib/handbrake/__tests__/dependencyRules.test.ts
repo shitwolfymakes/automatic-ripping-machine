@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEPENDENCY_RULES, fieldVisible, isApplicable, textMatches } from '../visibility';
+import { DEPENDENCY_RULES, fieldVisible, isApplicable, textMatches } from '../dependencyRules';
 
 const cases: [string, Record<string, unknown>, boolean][] = [
 	['PictureTopCrop', { PictureCropMode: 3 }, true],

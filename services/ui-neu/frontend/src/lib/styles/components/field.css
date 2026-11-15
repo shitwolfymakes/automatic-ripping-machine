@@ -68,6 +68,12 @@
 	.field-control[aria-invalid='true'] {
 		border-color: var(--color-danger);
 	}
+	/* Focus keeps the invalid state visible: a danger ring in place of the primary one. */
+	.field [aria-invalid='true']:focus,
+	.field-control[aria-invalid='true']:focus {
+		border-color: var(--color-danger);
+		box-shadow: 0 0 0 1px var(--color-danger);
+	}
 	.field :disabled,
 	.field-control:disabled {
 		opacity: 0.5;
