@@ -57,6 +57,8 @@ export interface PresetBlockView {
 	encoderHint: string | null;
 	// HandBrake's built-in names when the base preset is a select; null for free text.
 	baseNames: string[] | null;
+	// A HandBrake preset links its base preset field to HandBrake's official presets page.
+	showPresetsDocLink: boolean;
 	extraArgsLabel: string;
 	showOverrideHelp: boolean;
 	showClearedNote: boolean;
@@ -83,6 +85,7 @@ export function presetBlockView(input: PresetBlockInput): PresetBlockView {
 		encoderList: encoderListState(input.encodersLoading, input.encoderCount),
 		encoderHint: hardwareHint(draft, input.presetEncoderId),
 		baseNames: draft.tool === 'handbrake' ? input.builtinNames : null,
+		showPresetsDocLink: draft.tool === 'handbrake',
 		extraArgsLabel: usesFfmpegVaapi ? 'ffmpeg arguments' : 'Extra args',
 		showOverrideHelp: showTabs(draft),
 		showClearedNote: clearsSettings(draft)

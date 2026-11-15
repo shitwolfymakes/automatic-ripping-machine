@@ -114,6 +114,23 @@ describe('fields', () => {
 		}
 	});
 
+	it("links the base preset to HandBrake's official presets page for a HandBrake preset", () => {
+		mount();
+		const link = screen.getByTestId('tp-preset-ref-docs');
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/official-presets.html');
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+		expect(link).toHaveAccessibleName('HandBrake docs: official presets');
+		expect(screen.getByLabelText('Base preset')).toBe(screen.getByTestId('tp-preset-ref'));
+		cleanup();
+		mount({}, { builtinNames: null });
+		expect(screen.getByLabelText('Preset ref')).toBe(screen.getByTestId('tp-preset-ref'));
+		expect(screen.getByTestId('tp-preset-ref-docs')).toBeInTheDocument();
+		cleanup();
+		mount({ tool: 'abcde' });
+		expect(screen.queryByTestId('tp-preset-ref-docs')).not.toBeInTheDocument();
+	});
+
 	it('notes that extra args win over the settings while the tabs show', () => {
 		mount({ encoder: 'any_h265' });
 		expect(screen.getByText('Flags here are added last and override the settings below.')).toBeInTheDocument();

@@ -51,6 +51,9 @@ const FAMILY_PAGES: Array<[RegExp, string]> = [
 	[/^(vce|vcn)/, 'technical/video-vcn.html']
 ];
 
+// HandBrake's page listing its official presets: the names the base preset offers.
+export const OFFICIAL_PRESETS_URL = DOCS + 'technical/official-presets.html';
+
 export function docUrlForFamily(family: string): string {
 	return DOCS + (FAMILY_PAGES.find(([prefix]) => prefix.test(family))?.[1] ?? PRESETS_TUNES);
 }

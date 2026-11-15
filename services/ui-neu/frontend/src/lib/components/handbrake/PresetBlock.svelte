@@ -11,6 +11,8 @@
 	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';
 	import { errorId, invalidAttrs, type FieldErrors } from '$lib/utils/formValidation';
 	import type { SettingIssue } from '$lib/types/api.gen';
+	import Glyph from '$lib/components/Glyph.svelte';
+	import { OFFICIAL_PRESETS_URL } from '$lib/handbrake/docLinks';
 
 	interface Props {
 		draft: Draft;
@@ -184,7 +186,7 @@
 	<!-- The base preset is a select of HandBrake's built-ins once a schema is loaded; free text otherwise. -->
 	{#if view.baseNames}
 		<div class="field">
-			<label class="field-label" for={REF_ID}>Base preset</label>
+			{@render refLabel('Base preset')}
 			<select
 				id={REF_ID}
 				data-testid="tp-preset-ref"
@@ -202,7 +204,7 @@
 		</div>
 	{:else}
 		<div class="field">
-			<label class="field-label" for={REF_ID}>Preset ref</label>
+			{@render refLabel('Preset ref')}
 			<input
 				id={REF_ID}
 				data-testid="tp-preset-ref"
@@ -238,6 +240,25 @@
 	{/if}
 </div>
 
+{#snippet refLabel(text: string)}
+	<span class="preset-block-label">
+		<label class="field-label" for={REF_ID}>{text}</label>
+		{#if view.showPresetsDocLink}
+			<a
+				class="preset-block-info"
+				href={OFFICIAL_PRESETS_URL}
+				target="_blank"
+				rel="noopener noreferrer"
+				title="HandBrake's official presets"
+				aria-label="HandBrake docs: official presets"
+				data-testid="tp-preset-ref-docs"
+			>
+				<Glyph name="info" class="h-3 w-3" />
+			</a>
+		{/if}
+	</span>
+{/snippet}
+
 {#snippet refNotes()}
 	{#if view.usesFfmpegVaapi}
 		<p class="field-help" data-testid="tp-preset-ref-note">Not used by this encoder.</p>
@@ -257,5 +278,17 @@
 	}
 	.preset-block-wide {
 		grid-column: 1 / -1;
+	}
+	.preset-block-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	.preset-block-info {
+		display: inline-flex;
+		color: var(--color-text-faint);
+	}
+	.preset-block-info:hover {
+		color: var(--color-text);
 	}
 </style>

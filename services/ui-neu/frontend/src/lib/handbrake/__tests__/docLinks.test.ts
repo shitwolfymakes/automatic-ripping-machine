@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docUrlFor, docUrlForFamily } from '../docLinks';
+import { docUrlFor, docUrlForFamily, OFFICIAL_PRESETS_URL } from '../docLinks';
 
 const BASE = 'https://handbrake.fr/docs/en/latest/';
 
@@ -25,6 +25,12 @@ describe('docUrlFor', () => {
 		['video', 'Unknown group', 'cli/command-line-reference.html']
 	] as const)('%s / %s -> %s', (tab, group, page) => {
 		expect(docUrlFor(tab, group)).toBe(BASE + page);
+	});
+});
+
+describe('OFFICIAL_PRESETS_URL', () => {
+	it("is HandBrake's official presets page", () => {
+		expect(OFFICIAL_PRESETS_URL).toBe(BASE + 'technical/official-presets.html');
 	});
 });
 

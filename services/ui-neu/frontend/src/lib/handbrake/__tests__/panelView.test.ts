@@ -56,6 +56,12 @@ describe('presetBlockView', () => {
 		expect(presetBlockView(input({ encodersLoading: true })).encoderDisabled).toBe(true);
 	});
 
+	it("links the base preset to HandBrake's official presets for a HandBrake preset only", () => {
+		expect(presetBlockView(input()).showPresetsDocLink).toBe(true);
+		expect(presetBlockView(input({ draft: draft({ tool: 'abcde' }) })).showPresetsDocLink).toBe(false);
+		expect(presetBlockView(input({ draft: draft({ tool: 'none' }) })).showPresetsDocLink).toBe(false);
+	});
+
 	it('lists encoders as loading, empty or grouped', () => {
 		expect(presetBlockView(input({ encodersLoading: true })).encoderList).toBe('loading');
 		expect(presetBlockView(input({ encoderCount: 0 })).encoderList).toBe('empty');
