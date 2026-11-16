@@ -114,6 +114,8 @@ async def latest_stable_release(client: httpx.AsyncClient, repo: str) -> Release
         )
     except httpx.HTTPError as e:
         raise ReleaseCheckError(f"{type(e).__name__}: {e}") from e
+    if response.status_code == 404:
+        raise ReleaseCheckError("HTTP 404, the repository has no published releases")
     if response.status_code != 200:
         raise ReleaseCheckError(f"HTTP {response.status_code}")
     try:
@@ -128,7 +130,7 @@ async def _check_once(client: httpx.AsyncClient, repo: str, failing: bool) -> bo
     when a failure streak starts."""
     try:
         cache.release = await latest_stable_release(client, repo)
-    except ReleaseCheckError as e:
+    except Exception as e:  # noqa: BLE001 — a failed check must never end the loop (cancellation is a BaseException)
         if not failing:
             logger.warning("release check against %s failed: %s", repo, e)
         return True
