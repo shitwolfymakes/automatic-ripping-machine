@@ -1257,10 +1257,9 @@ describe('tracks table', () => {
 			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith(JOB, 'trk_2', { excluded: false }));
 		});
 
-		// Pins today's behaviour: the failure escapes as an unhandled rejection
-		// (#543). The test swaps in its own listener so vitest does not fail the
-		// run on it, and puts vitest's back afterwards.
-		it('reloads the job even when the update fails, and leaves the failure unhandled', async () => {
+		// The test swaps in its own listener so a rejection that escaped would
+		// be counted instead of failing the run, and puts vitest's back afterwards.
+		it('reloads the job when the update fails and shows the failure on the row, handled', async () => {
 			const rejections: unknown[] = [];
 			const previous = process.listeners('unhandledRejection');
 			process.removeAllListeners('unhandledRejection');
@@ -1271,8 +1270,8 @@ describe('tracks table', () => {
 				await screen.findByText('Tracks (1)');
 				await fireEvent.click(screen.getByRole('checkbox'));
 				await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('update failed');
+				expect(await screen.findByRole('alert')).toHaveTextContent('update failed');
+				expect(rejections).toEqual([]);
 			} finally {
 				process.removeAllListeners('unhandledRejection');
 				previous.forEach((l) => process.on('unhandledRejection', l));

@@ -36,6 +36,7 @@ interface Overrides {
 	tracksAreSeries?: boolean;
 	preview?: NamingPreviewItem;
 	editing?: boolean;
+	excludeError?: string | null;
 }
 
 function renderRow(track: TrackView, overrides: Overrides = {}) {
@@ -48,6 +49,7 @@ function renderRow(track: TrackView, overrides: Overrides = {}) {
 		ontoggleedit,
 		oncloseedit,
 		onexcludedchange,
+		excludeError: overrides.excludeError,
 		ontitleapplied
 	});
 }
@@ -303,6 +305,17 @@ describe('JobTrackRow', () => {
 			expect(other.checked).toBe(false);
 			await fireEvent.click(other);
 			expect(onexcludedchange).toHaveBeenLastCalledWith('trk_2', false);
+		});
+
+		it('shows why the last toggle failed under the checkbox', () => {
+			renderRow(pilot(), { excludeError: 'denied' });
+			expect(screen.getByRole('alert')).toHaveTextContent('denied');
+			expect(screen.getByRole('checkbox')).toBeInTheDocument();
+		});
+
+		it('shows no toggle error by default', () => {
+			renderRow(pilot());
+			expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 		});
 
 		it('shows a non-admin Included or Excluded as text', () => {
