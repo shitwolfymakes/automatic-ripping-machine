@@ -211,7 +211,7 @@ describe('DiscReviewWidget sections', () => {
 				year: 1974,
 				metadata_json: { ...IMDB, identity: { ...IMDB.identity, facts: { end_year: 1975 } } } as never
 			});
-			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049 , TV Series, 1974-1975');
+			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049, TV Series, 1974-1975');
 		});
 
 		it('appends one year when the show ended the year it began', async () => {
@@ -220,14 +220,14 @@ describe('DiscReviewWidget sections', () => {
 				year: 1974,
 				metadata_json: { identity: { ...IMDB.identity, facts: { end_year: 1974 } } } as never
 			});
-			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049 , TV Series, 1974');
+			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049, TV Series, 1974');
 			expect(screen.getByTestId('match-row')).not.toHaveTextContent('1974-');
 		});
 
 		it('appends no year when a series has none', async () => {
 			renderCard({ ...TV_SOURCE_OK, year: null, metadata_json: IMDB as never });
 			const row = await screen.findByTestId('match-row');
-			expect(row).toHaveTextContent('tt0071049 , TV Series');
+			expect(row).toHaveTextContent('tt0071049, TV Series');
 			expect(row).not.toHaveTextContent(/, \d{4}/);
 		});
 
