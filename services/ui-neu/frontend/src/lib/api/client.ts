@@ -1,20 +1,22 @@
-// Single API client core. JWT in localStorage, attached on every request;
+// Single API client core. JWT in site storage (see safe-storage), attached on every request;
 // a 401 fires the unauthorized handler (which redirects to /login), except
 // on a request that checks credentials.
 // Same-origin by default — nginx proxies /api/* to the v3 backend.
 
+import { readStorage, removeStorage, writeStorage } from '$lib/utils/safe-storage';
+
 const TOKEN_KEY = 'arm_token';
 
 export function getToken(): string | null {
-	return localStorage.getItem(TOKEN_KEY);
+	return readStorage(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
-	localStorage.setItem(TOKEN_KEY, token);
+	writeStorage(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
-	localStorage.removeItem(TOKEN_KEY);
+	removeStorage(TOKEN_KEY);
 }
 
 export class ApiError extends Error {
