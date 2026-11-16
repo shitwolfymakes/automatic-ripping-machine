@@ -57,12 +57,14 @@ describe('ProbeTimers', () => {
 		expect(probes.timedOut('a')).toBe(false);
 	});
 
-	it('leaves a timed-out device timed out on stop (the late-probe defect)', () => {
+	it('clears a timed-out flag on stop, for a result that arrives after the timeout', () => {
 		const probes = new ProbeTimers();
-		probes.start(['a']);
+		probes.start(['a', 'b']);
 		vi.advanceTimersByTime(PROBE_TIMEOUT_MS);
 		probes.stop('a');
-		expect(probes.timedOut('a')).toBe(true);
+		expect(probes.timedOut('a')).toBe(false);
+		expect(probes.isProbing('a')).toBe(false);
+		expect(probes.timedOut('b')).toBe(true);
 	});
 
 	it('does nothing on stop for a device never started', () => {
