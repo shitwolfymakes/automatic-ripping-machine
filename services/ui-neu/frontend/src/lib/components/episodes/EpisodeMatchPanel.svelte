@@ -170,7 +170,7 @@
 			rerunOpen = false;
 			onchanged?.();
 		} catch (e) {
-			if (job.id === jobId) runner.error = `Could not clear the episodes (${errorMessage(e, 'error')}).`;
+			if (job.id === jobId) runner.fail(`Could not clear the episodes (${errorMessage(e, 'error')}).`, clearEpisodes);
 		} finally {
 			clearing = false;
 		}
@@ -295,12 +295,7 @@
 	{#if runner.error}
 		<div class="alert alert-danger episode-panel-error" role="alert">
 			<p class="alert-body">{runner.error}</p>
-			<button
-				type="button"
-				class="btn btn-sm"
-				disabled={runner.busy}
-				onclick={() => runner.lastRequest && runner.run(runner.lastRequest)}>Try again</button
-			>
+			<button type="button" class="btn btn-sm" disabled={runner.busy} onclick={runner.retry}>Try again</button>
 		</div>
 	{/if}
 {/snippet}
