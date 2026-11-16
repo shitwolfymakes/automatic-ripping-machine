@@ -3,6 +3,8 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 	import { isRipped } from '$lib/jobs/status-groups';
+	import { onDestroy } from 'svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
 
 	interface Props {
 		job: JobView;
@@ -14,17 +16,14 @@
 	let { job, onaction, ondelete, compact = false }: Props = $props();
 
 	let loading = $state<string | null>(null);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback(3000);
+	onDestroy(() => feedback.dispose());
 
 	let canAbandon = $derived(job.actions.can_abandon);
 	let canDelete = $derived(job.actions.can_delete);
 	// A ripped disc that the previously-ripped setting would hold or reject
 	// on its next insert: let it through (or start the copy already held).
 	let canRipAgain = $derived(isRipped(job.status));
-
-	function clearFeedback() {
-		setTimeout(() => (feedback = null), 3000);
-	}
 
 	function jobLabel(): string {
 		return job.title || job.id;
@@ -35,17 +34,16 @@
 	// when the action handed off and shows no line (a delete with ondelete).
 	async function runAction(name: string, failed: string, act: () => Promise<string | null>): Promise<void> {
 		loading = name;
-		feedback = null;
+		feedback.clear();
 		try {
 			const message = await act();
 			if (message === null) return;
-			feedback = { type: 'success', message };
+			feedback.show('success', message);
 			onaction?.();
 		} catch (e) {
-			feedback = { type: 'error', message: errorMessage(e, failed) };
+			feedback.show('error', errorMessage(e, failed));
 		} finally {
 			loading = null;
-			clearFeedback();
 		}
 	}
 
@@ -112,9 +110,9 @@
 				{loading === 'delete' ? 'Deleting...' : 'Delete'}
 			</button>
 		{/if}
-		{#if feedback}
-			<span class="job-actions-feedback" data-tone={feedback.type}>
-				{feedback.message}
+		{#if feedback.current}
+			<span class="job-actions-feedback" data-tone={feedback.current.type}>
+				{feedback.current.message}
 			</span>
 		{/if}
 	</div>
