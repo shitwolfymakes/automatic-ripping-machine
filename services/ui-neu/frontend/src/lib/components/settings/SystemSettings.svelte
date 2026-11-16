@@ -5,6 +5,7 @@
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
 	import DiagnosticsSection from '$lib/components/settings/DiagnosticsSection.svelte';
+	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
 
 	interface Props {
 		settings: SettingsData;
@@ -21,6 +22,7 @@
 
 		<!-- Health check (API keys + path permissions) -->
 		<!-- First-run walkthrough re-entry -->
+		<FeedbackAlert feedback={setup.feedback.current} />
 		<section class="panel settings-page-setup-again" data-testid="run-setup-again">
 			<div>
 				<h3 class="settings-page-section-title">Setup walkthrough</h3>

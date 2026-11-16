@@ -651,28 +651,14 @@ describe('Settings page sections', () => {
 			expect(setupAgain()).not.toBeDisabled();
 		});
 
-		// Pins today's behaviour: a failed restart escapes the click handler as
-		// an unhandled rejection and shows no error (#588). The test swaps in
-		// its own listener so vitest does not fail the run on it, and puts
-		// vitest's back afterwards.
-		it('the button comes back after a failed restart, which does not navigate', async () => {
-			const rejections: unknown[] = [];
-			const previous = process.listeners('unhandledRejection');
-			process.removeAllListeners('unhandledRejection');
-			process.on('unhandledRejection', (r) => rejections.push(r));
-			try {
-				vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
-				await openTab('System');
-				await fireEvent.click(setupAgain());
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('restart failed');
-				expect(goto).not.toHaveBeenCalled();
-				expect(setupAgain()).toHaveTextContent('Run setup again');
-				expect(setupAgain()).not.toBeDisabled();
-			} finally {
-				process.removeAllListeners('unhandledRejection');
-				previous.forEach((l) => process.on('unhandledRejection', l));
-			}
+		it('a failed restart shows its error, does not navigate, and the button comes back', async () => {
+			vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
+			await openTab('System');
+			await fireEvent.click(setupAgain());
+			expect(await screen.findByText('restart failed')).toHaveClass('alert-danger');
+			expect(goto).not.toHaveBeenCalled();
+			expect(setupAgain()).toHaveTextContent('Run setup again');
+			expect(setupAgain()).not.toBeDisabled();
 		});
 
 		it('lists the read-only configuration rows from the config value', async () => {
