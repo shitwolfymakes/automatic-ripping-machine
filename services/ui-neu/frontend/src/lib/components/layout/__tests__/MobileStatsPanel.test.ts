@@ -53,6 +53,9 @@ vi.mock('$lib/stores/resources.svelte', async () => {
 	};
 });
 
+// SidebarStats also waits for the version read before it draws.
+vi.mock('$lib/api/system', () => ({ fetchSystemVersion: () => Promise.resolve({ version: '1' }) }));
+
 import MobileStatsPanel from '$lib/components/layout/MobileStatsPanel.svelte';
 
 // jsdom can't navigate; prevent the default so anchor clicks don't log
@@ -98,9 +101,9 @@ describe('MobileStatsPanel', () => {
 		expect(screen.getByText(/3 notifications/)).toBeInTheDocument();
 	});
 
-	it('renders the resource stats panel (CPU/Mem/Storage)', () => {
+	it('renders the resource stats panel (CPU/Mem/Storage)', async () => {
 		renderComponent(MobileStatsPanel);
-		expect(screen.getByText('CPU')).toBeInTheDocument();
+		expect(await screen.findByText('CPU')).toBeInTheDocument();
 		expect(screen.getByText(/42/)).toBeInTheDocument();
 		expect(screen.getByText('Raw')).toBeInTheDocument();
 	});
@@ -115,7 +118,7 @@ describe('MobileStatsPanel', () => {
 	it('does not fire onnavigate for non-link clicks', async () => {
 		const onnavigate = vi.fn();
 		renderComponent(MobileStatsPanel, { props: { onnavigate } });
-		await fireEvent.click(screen.getByText('CPU'));
+		await fireEvent.click(await screen.findByText('CPU'));
 		expect(onnavigate).not.toHaveBeenCalled();
 	});
 });
