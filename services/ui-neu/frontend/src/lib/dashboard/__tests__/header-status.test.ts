@@ -1,63 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { transcoderDotStatus, serviceRows, makemkvKeyTitle } from '../header-status';
 
-type Input = Parameters<typeof transcoderDotStatus>[0];
-
 describe('transcoderDotStatus', () => {
-	it('is ok when online and the worker is running', () => {
-		expect(
-			transcoderDotStatus({
-				transcoder_online: true,
-				transcoder_stats: { worker_running: true }
-			} as Input)
-		).toBe('ok');
-	});
-
-	it('is ok when online and worker_running is absent', () => {
-		expect(transcoderDotStatus({ transcoder_online: true, transcoder_stats: {} } as Input)).toBe('ok');
-	});
-
-	it('is ok when online and there are no stats', () => {
-		expect(transcoderDotStatus({ transcoder_online: true, transcoder_stats: null } as Input)).toBe('ok');
-	});
-
-	it('is warn when online but the worker is stopped', () => {
-		expect(
-			transcoderDotStatus({
-				transcoder_online: true,
-				transcoder_stats: { worker_running: false }
-			} as Input)
-		).toBe('warn');
+	it('is ok when online', () => {
+		expect(transcoderDotStatus({ transcoder_online: true })).toBe('ok');
 	});
 
 	it('is off when offline', () => {
-		expect(transcoderDotStatus({ transcoder_online: false, transcoder_stats: null } as Input)).toBe('off');
-	});
-
-	it('is ok when online and worker_running is null', () => {
-		expect(
-			transcoderDotStatus({
-				transcoder_online: true,
-				transcoder_stats: { worker_running: null }
-			} as unknown as Input)
-		).toBe('ok');
-	});
-
-	it('is ok when online and the stats are missing', () => {
-		expect(transcoderDotStatus({ transcoder_online: true } as Input)).toBe('ok');
-	});
-
-	it.each([true, false, null, undefined])('is off when offline with worker_running %s', (running) => {
-		expect(
-			transcoderDotStatus({
-				transcoder_online: false,
-				transcoder_stats: { worker_running: running }
-			} as unknown as Input)
-		).toBe('off');
-	});
-
-	it('is off when offline with empty stats', () => {
-		expect(transcoderDotStatus({ transcoder_online: false, transcoder_stats: {} } as Input)).toBe('off');
+		expect(transcoderDotStatus({ transcoder_online: false })).toBe('off');
 	});
 });
 
@@ -67,7 +17,6 @@ describe('serviceRows', () => {
 		arm_online: true,
 		db_available: true,
 		transcoder_online: true,
-		transcoder_stats: null,
 		makemkv_key_valid: true
 	} as Rows;
 	const statuses = (d: Partial<Rows>) => serviceRows({ ...base, ...d }).map((r) => r.status);
@@ -93,7 +42,6 @@ describe('serviceRows', () => {
 
 	it('takes the Transcode status from transcoderDotStatus', () => {
 		expect(statuses({})[2]).toBe('ok');
-		expect(statuses({ transcoder_stats: { worker_running: false } } as Partial<Rows>)[2]).toBe('warn');
 		expect(statuses({ transcoder_online: false })[2]).toBe('off');
 	});
 

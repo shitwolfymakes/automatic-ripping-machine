@@ -206,18 +206,6 @@ describe('Layout header service dots', () => {
 		expect(dotStatus('Transcode')).toBe('ok');
 	});
 
-	it('shows the transcoder ok when online with a running worker', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: true } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('ok');
-	});
-
-	it('shows the transcoder warn when online but the worker is not running', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: false } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('warn');
-	});
-
 	it('shows the transcoder off when offline', () => {
 		setDash({ transcoder_online: false });
 		renderLayout();
