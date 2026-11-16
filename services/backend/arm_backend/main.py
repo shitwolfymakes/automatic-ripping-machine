@@ -33,6 +33,7 @@ from arm_backend.notifications.apprise_notifier import RealAppriseNotifier
 from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.virtual_drive_lifecycle import run_virtual_drive_watchdog
+from arm_backend import release_check
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
 from arm_backend.routers import (
@@ -68,7 +69,6 @@ from arm_backend.routers import (
 )
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.seeders import run_seeders
-from arm_backend import release_check
 from arm_backend.thediscdb_schedule import thediscdb_refresh_loop
 from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
 from arm_backend.utils import ensure_roots, default_roots

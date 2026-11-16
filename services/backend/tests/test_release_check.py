@@ -227,3 +227,65 @@ def test_prerelease_answer_clears_the_cache() -> None:
         stop_after=1,
     )
     assert release_check.cache.release is None
+
+
+def test_unexpected_exception_does_not_end_the_loop_and_warns_once(caplog: pytest.LogCaptureFixture) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(200, json={"tag_name": "v3.1.0", "html_url": "u"})
+        raise httpx.InvalidURL("bad repo")
+
+    sleeps: list[float] = []
+    with caplog.at_level(logging.WARNING, logger="arm_backend.release_check"):
+        _run_loop(handler, sleeps, stop_after=4)
+    assert sleeps == [6 * 3600] * 4
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+    assert release_check.cache.release == Release(tag="v3.1.0", url="u")
+
+
+def test_cancellation_is_not_swallowed() -> None:
+    async def handler_cancel(request: httpx.Request) -> httpx.Response:
+        raise asyncio.CancelledError
+
+    async def go() -> None:
+        async with _client(handler_cancel) as client:
+            await release_check.release_check_loop(client, "o/r")
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(go())
+
+
+def test_404_warning_says_there_are_no_published_releases() -> None:
+    with pytest.raises(ReleaseCheckError, match="no published releases"):
+        asyncio.run(_fetch(lambda _: httpx.Response(404)))
+
+
+def test_lifespan_starts_and_cancels_the_release_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from arm_backend import main as main_mod
+
+    started: list[tuple[object, str]] = []
+
+    async def fake_loop(client: object, repo: str) -> None:
+        started.append((client, repo))
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(release_check, "release_check_loop", fake_loop)
+    monkeypatch.setenv("ARMCTL_RELEASE_REPO", "me/fork")
+
+    async def go() -> asyncio.Task[None]:
+        app = SimpleNamespace(state=SimpleNamespace(http="client"))
+        services = main_mod._BackendServices(app)  # type: ignore[arg-type]
+        services._start_release_check()
+        await asyncio.sleep(0)
+        task = services._release_check_task
+        await services._stop_release_check()
+        return task
+
+    task = asyncio.run(go())
+    assert started == [("client", "me/fork")]
+    assert task.cancelled()
