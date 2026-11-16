@@ -17611,6 +17611,17 @@
               }
             ],
             "title": "Release Url"
+          },
+          "repo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Url"
           }
         },
         "type": "object",

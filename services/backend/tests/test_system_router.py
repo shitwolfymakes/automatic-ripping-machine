@@ -983,10 +983,19 @@ def _get_version(signing_key: bytes, tmp_path, monkeypatch, running: str) -> dic
     return r.json()
 
 
+REPO_URL = "https://github.com/automatic-ripping-machine/automatic-ripping-machine"
+
+
 def test_system_version_without_a_known_release_has_null_fields(signing_key: bytes, tmp_path, monkeypatch) -> None:
     release_check.cache.release = None
     body = _get_version(signing_key, tmp_path, monkeypatch, "3.0.0")
-    assert body == {"version": "3.0.0", "latest_version": None, "update_available": None, "release_url": None}
+    assert body == {
+        "version": "3.0.0",
+        "latest_version": None,
+        "update_available": None,
+        "release_url": None,
+        "repo_url": REPO_URL,
+    }
 
 
 @pytest.mark.parametrize(
@@ -1007,13 +1016,20 @@ def test_system_version_reports_the_cached_release(
         "latest_version": tag,
         "update_available": available,
         "release_url": "https://x/rel",
+        "repo_url": REPO_URL,
     }
 
 
 def test_system_version_with_an_unparseable_version_shows_it_alone(signing_key: bytes, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(release_check.cache, "release", release_check.Release(tag="v3.0.0", url="https://x/rel"))
     body = _get_version(signing_key, tmp_path, monkeypatch, "0.0.0+unknown")
-    assert body == {"version": "0.0.0+unknown", "latest_version": None, "update_available": None, "release_url": None}
+    assert body == {
+        "version": "0.0.0+unknown",
+        "latest_version": None,
+        "update_available": None,
+        "release_url": None,
+        "repo_url": REPO_URL,
+    }
 
 
 def test_system_version_never_calls_github(signing_key: bytes, tmp_path, monkeypatch) -> None:

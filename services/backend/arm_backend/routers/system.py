@@ -166,10 +166,12 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
     running = _app_version()
     release = release_check.cache.release
     # A version that doesn't parse (a dev build's 0.0.0+unknown) can't be compared: version alone.
+    repo_url = release_check.repo_url()
     if release is None or release_check.parse_version(running) is None:
-        return SystemVersionResponse(version=running)
+        return SystemVersionResponse(version=running, repo_url=repo_url)
     return SystemVersionResponse(
         version=running,
+        repo_url=repo_url,
         latest_version=release.tag,
         update_available=release_check.update_available(running, release),
         release_url=release.url,

@@ -102,6 +102,13 @@ def test_release_repo_defaults_and_overrides(monkeypatch: pytest.MonkeyPatch) ->
     assert release_check.release_repo() == "me/fork"
 
 
+def test_repo_url_follows_the_release_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ARMCTL_RELEASE_REPO", raising=False)
+    assert release_check.repo_url() == f"https://github.com/{release_check.DEFAULT_REPO}"
+    monkeypatch.setenv("ARMCTL_RELEASE_REPO", "me/fork")
+    assert release_check.repo_url() == "https://github.com/me/fork"
+
+
 def _client(handler) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 

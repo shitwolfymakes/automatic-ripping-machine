@@ -26,6 +26,7 @@ vi.mock('$lib/api/system', () => ({
 }));
 
 import SidebarStats from '../SidebarStats.svelte';
+import { DEFAULT_REPO_URL } from '$lib/layout/version-chip';
 import type { Writable } from 'svelte/store';
 
 const initialized = () => h.store.initialized as Writable<boolean>;
@@ -95,6 +96,17 @@ describe('SidebarStats version chip', () => {
 		expect(await screen.findByText('v2.10.1')).toBeTruthy();
 		expect(screen.getByText('Up to date')).toBeTruthy();
 		expect(screen.queryByRole('link', { name: /Update available/ })).toBeNull();
+		const link = screen.getByRole('link', { name: 'ARM v2.10.1 on GitHub (opens in a new tab)' });
+		expect(link.getAttribute('href')).toBe(DEFAULT_REPO_URL);
+		expect(link.getAttribute('target')).toBe('_blank');
+		expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+	});
+
+	it('links to the repo_url the backend reports', async () => {
+		respond = () => Promise.resolve({ version: '2.10.1', repo_url: 'https://github.com/me/fork' });
+		renderComponent(SidebarStats);
+		const link = await screen.findByRole('link', { name: 'ARM v2.10.1 on GitHub (opens in a new tab)' });
+		expect(link.getAttribute('href')).toBe('https://github.com/me/fork');
 	});
 
 	it('does not double a leading v', async () => {
@@ -117,6 +129,8 @@ describe('SidebarStats version chip', () => {
 		expect(link.getAttribute('target')).toBe('_blank');
 		expect(link.getAttribute('rel')).toBe('noopener noreferrer');
 		expect(screen.queryByText('Up to date')).toBeNull();
+		expect(link.textContent).toContain('Update available');
+		expect(link.querySelectorAll('a')).toHaveLength(0);
 	});
 
 	it('shows the version alone when nothing was checked', async () => {
@@ -125,6 +139,7 @@ describe('SidebarStats version chip', () => {
 		expect(await screen.findByText('v2.10.1')).toBeTruthy();
 		expect(screen.queryByText('Up to date')).toBeNull();
 		expect(screen.queryByRole('link', { name: /Update available/ })).toBeNull();
+		expect(screen.getByRole('link', { name: /on GitHub/ }).getAttribute('href')).toBe(DEFAULT_REPO_URL);
 	});
 
 	it('still draws the panel, without a chip, when the fetch fails', async () => {
