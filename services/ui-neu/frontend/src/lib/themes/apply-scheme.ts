@@ -1,6 +1,7 @@
 // Writes a resolved color scheme onto the document: the inline token
 // properties, the dark class, the dataset and the injected theme <style>.
 import type { ColorScheme } from '$lib/themes/builtin-schemes';
+import { readStorage } from '$lib/utils/safe-storage';
 
 /**
  * `--color-primary` keeps the same value in light and dark mode, and tokens.css's own `.dark {}`
@@ -74,7 +75,7 @@ function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: bool
 function resolveEffectiveDark(scheme: ColorScheme): boolean {
 	if (scheme.mode === 'dark') return true;
 	if (scheme.mode === 'light') return false;
-	const saved = localStorage.getItem('theme');
+	const saved = readStorage('theme');
 	if (saved === 'dark') return true;
 	if (saved === 'light') return false;
 	return window.matchMedia('(prefers-color-scheme: dark)').matches;
