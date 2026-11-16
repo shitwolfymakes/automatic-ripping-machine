@@ -3,8 +3,10 @@
 # Production runs docker-compose.yml.example exactly as committed, layered
 # with this file. The template builds these three services from source and
 # gives them no image name, so this overlay names the published image for
-# each. Everything else in the template (environment, mounts, the ripper and
-# transcode images, which are already variables) reaches production unchanged.
+# each, and passes the backend the one production-only setting it needs
+# (ARMCTL_RELEASE_REPO, which armctl writes to .env for forks). Everything else
+# in the template (environment, mounts, the ripper and transcode images, which
+# are already variables) reaches production unchanged.
 #
 # A new service that the template builds from source needs one entry here;
 # deploy/tests/test-stack-contract.sh fails until it has one.
