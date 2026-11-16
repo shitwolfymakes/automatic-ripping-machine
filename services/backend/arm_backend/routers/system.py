@@ -165,7 +165,8 @@ def _app_version() -> str:
 async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
     running = _app_version()
     release = release_check.cache.release
-    if release is None:
+    # A version that doesn't parse (a dev build's 0.0.0+unknown) can't be compared: version alone.
+    if release is None or release_check.parse_version(running) is None:
         return SystemVersionResponse(version=running)
     return SystemVersionResponse(
         version=running,

@@ -995,7 +995,6 @@ def test_system_version_without_a_known_release_has_null_fields(signing_key: byt
         ("3.0.0-rc3", "v3.0.0", True),
         ("3.0.0-rc3", "2.24.4", False),
         ("3.0.0", "v3.0.0", False),
-        ("0.0.0+unknown", "v3.0.0", False),
     ],
 )
 def test_system_version_reports_the_cached_release(
@@ -1009,6 +1008,12 @@ def test_system_version_reports_the_cached_release(
         "update_available": available,
         "release_url": "https://x/rel",
     }
+
+
+def test_system_version_with_an_unparseable_version_shows_it_alone(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(release_check.cache, "release", release_check.Release(tag="v3.0.0", url="https://x/rel"))
+    body = _get_version(signing_key, tmp_path, monkeypatch, "0.0.0+unknown")
+    assert body == {"version": "0.0.0+unknown", "latest_version": None, "update_available": None, "release_url": None}
 
 
 def test_system_version_never_calls_github(signing_key: bytes, tmp_path, monkeypatch) -> None:
