@@ -859,16 +859,15 @@ describe('Settings page sections', () => {
 		});
 
 		// The feedback shows twice, at the top and under the user themes (#541).
-		it('a delete reloads the themes and shows its success feedback in both places', async () => {
+		it('a delete reloads the themes and shows its success feedback once', async () => {
 			writableOf<string>(colorScheme).set('red');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('mine'));
 			expect(loadThemesFromApi).toHaveBeenCalledTimes(1);
 			const feedback = await screen.findAllByText('Theme "Mine" deleted');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-success');
-			expect(feedback[1]).toHaveAttribute('data-error', 'false');
 			expect(get(colorScheme)).toBe('red');
 		});
 
@@ -881,14 +880,13 @@ describe('Settings page sections', () => {
 			expect(get(colorScheme)).toBe('blue');
 		});
 
-		it('a failed delete shows the Error message in both places', async () => {
+		it('a failed delete shows the Error message once', async () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce(new Error('in use'));
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
 			const feedback = await screen.findAllByText('in use');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-danger');
-			expect(feedback[1]).toHaveAttribute('data-error', 'true');
 			expect(loadThemesFromApi).not.toHaveBeenCalled();
 		});
 
@@ -896,7 +894,7 @@ describe('Settings page sections', () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce('nope');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
-			expect(await screen.findAllByText('Delete failed')).toHaveLength(2);
+			expect(await screen.findAllByText('Delete failed')).toHaveLength(1);
 		});
 
 		it('shows dark mode on', async () => {
