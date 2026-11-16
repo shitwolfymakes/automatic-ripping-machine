@@ -66,7 +66,7 @@ describe('TrackTitleSearch', () => {
 			});
 			await fireEvent.click(screen.getByText('Search'));
 			await waitFor(() => {
-				expect(mockSearchMetadata).toHaveBeenCalledWith('t00');
+				expect(mockSearchMetadata).toHaveBeenCalledWith('t00', undefined, undefined, null);
 				expect(screen.getByText('Found Title')).toBeInTheDocument();
 			});
 		});

@@ -24,6 +24,8 @@
 	let query = $state(track.title || (track.source_ref?.replace(/\.\w+$/, '') ?? ''));
 	let yearInput = $state(track.year != null ? String(track.year) : '');
 	let imdbInput = $state('');
+	// The Year field as a search filter: a four-digit year, else none.
+	let parsedSearchYear = $derived(/^\d{4}$/.test(yearInput.trim()) ? Number(yearInput.trim()) : null);
 	const search = new MetadataSearch();
 	let results = $state<MetadataCandidate[]>([]);
 
@@ -67,7 +69,7 @@
 		if (!query.trim()) return;
 		detail = null;
 		await search.run(
-			() => searchMetadata(query.trim()),
+			() => searchMetadata(query.trim(), undefined, undefined, parsedSearchYear),
 			TEXT_SEARCH,
 			(found) => (results = found)
 		);

@@ -255,12 +255,29 @@ describe('TrackTitleSearch IMDb search', () => {
 // ---- search: text path ------------------------------------------------
 
 describe('TrackTitleSearch text search', () => {
-	it('sends only the trimmed query to searchMetadata, not the year', async () => {
+	it('sends the trimmed query and the trimmed four-digit year to searchMetadata', async () => {
 		show();
-		await type(yearInput(), '2020');
+		await type(yearInput(), ' 2020 ');
 		await runTextSearch([cand()], '  Some Film  ');
 		expect(mockSearch).toHaveBeenCalledTimes(1);
-		expect(mockSearch.mock.calls[0]).toEqual(['Some Film']);
+		expect(mockSearch.mock.calls[0]).toEqual(['Some Film', undefined, undefined, 2020]);
+	});
+
+	it('sends the year seeded from the track', async () => {
+		show({ track: { year: 1999 } });
+		await runTextSearch([cand()], 'q');
+		expect(mockSearch.mock.calls[0]).toEqual(['q', undefined, undefined, 1999]);
+	});
+
+	it.each([
+		['blank', ''],
+		['not four digits', '99'],
+		['not a number', 'abcd']
+	])('sends no year when the Year field is %s', async (_n, value) => {
+		show();
+		await type(yearInput(), value);
+		await runTextSearch([cand()], 'q');
+		expect(mockSearch.mock.calls[0]).toEqual(['q', undefined, undefined, null]);
 	});
 
 	it('shows "No results found." for no candidates', async () => {
@@ -324,7 +341,7 @@ describe('TrackTitleSearch search triggers', () => {
 		mockSearch.mockResolvedValue({ candidates: [] } as never);
 		show({ track: { title: 'Seeded' } });
 		await fireEvent.keyDown(get(), { key: 'Enter' });
-		await waitFor(() => expect(mockSearch).toHaveBeenCalledWith('Seeded'));
+		await waitFor(() => expect(mockSearch).toHaveBeenCalledWith('Seeded', undefined, undefined, null));
 	});
 
 	it('another key does not search', async () => {
