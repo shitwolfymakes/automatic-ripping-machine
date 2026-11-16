@@ -32,6 +32,7 @@ const ontitleapplied = vi.fn();
 interface Overrides {
 	tracksAreSeries?: boolean;
 	previews?: NamingPreviewItem[];
+	excludeError?: { trackId: string; message: string } | null;
 }
 
 function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
@@ -41,6 +42,7 @@ function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
 		tracksAreSeries: overrides.tracksAreSeries ?? false,
 		previewByTrack: new Map((overrides.previews ?? []).map((p) => [p.track_id, p])),
 		onexcludedchange,
+		excludeError: overrides.excludeError,
 		ontitleapplied
 	});
 }
@@ -101,6 +103,38 @@ describe('JobTracksTable', () => {
 		renderTable(series());
 		await fireEvent.click(screen.getAllByRole('checkbox')[1]);
 		expect(onexcludedchange).toHaveBeenLastCalledWith('trk_2', false);
+	});
+
+	it('shows a failed exclusion change on its own row only', () => {
+		renderTable(series(), { excludeError: { trackId: 'trk_2', message: 'denied' } });
+		const rows = trackRows();
+		expect(text(cellOf(rows[1], 'Include'))).toBe('denied');
+		expect(text(cellOf(rows[0], 'Include'))).toBe('');
+		expect(screen.getAllByRole('alert')).toHaveLength(1);
+	});
+
+	it('moves the exclusion error and the track count with the props', async () => {
+		const props = {
+			job: createJob({}),
+			tracks: series(),
+			tracksAreSeries: false,
+			previewByTrack: new Map(),
+			onexcludedchange,
+			ontitleapplied
+		};
+		const { rerender } = renderComponent(JobTracksTable, {
+			...props,
+			excludeError: { trackId: 'trk_2', message: 'denied' }
+		});
+		await rerender({ ...props, tracks: series().slice(0, 2), excludeError: { trackId: 'trk_1', message: 'nope' } });
+		expect(screen.getByText('Tracks (2)')).toBeInTheDocument();
+		expect(text(cellOf(trackRows()[0], 'Include'))).toBe('nope');
+		expect(text(cellOf(trackRows()[1], 'Include'))).toBe('');
+	});
+
+	it('shows no exclusion error when none is given', () => {
+		renderTable(series());
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 	});
 
 	describe('per-track title search', () => {

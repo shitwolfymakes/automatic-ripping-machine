@@ -17,6 +17,8 @@
 		ontoggleedit: () => void;
 		oncloseedit: () => void;
 		onexcludedchange: (trackId: string, excluded: boolean) => void;
+		/** Why this track's last include toggle failed, or null. */
+		excludeError?: string | null;
 		ontitleapplied: () => void;
 	}
 
@@ -29,6 +31,7 @@
 		ontoggleedit,
 		oncloseedit,
 		onexcludedchange,
+		excludeError = null,
 		ontitleapplied
 	}: Props = $props();
 </script>
@@ -129,6 +132,7 @@
 				title="Include this track in transcode output (the disc still rips in full)"
 				class="job-detail-track-checkbox"
 			/>
+			{#if excludeError}<span class="field-error job-detail-track-exclude-error" role="alert">{excludeError}</span>{/if}
 		{:else}
 			<span class="job-detail-track-untitled">{track.excluded ? 'Excluded' : 'Included'}</span>
 		{/if}
@@ -246,6 +250,10 @@
 		height: 1rem;
 		border-radius: var(--radius-sm);
 		accent-color: var(--color-primary);
+	}
+	.job-detail-track-exclude-error {
+		display: block;
+		margin-top: 0.25rem;
 	}
 	.job-detail-track-attempts {
 		font-size: 10px;
