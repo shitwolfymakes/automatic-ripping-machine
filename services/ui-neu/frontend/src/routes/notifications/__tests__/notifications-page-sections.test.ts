@@ -126,10 +126,12 @@ describe('Notifications Page sections', () => {
 
 	describe('dismiss all', () => {
 		it('keeps an already dismissed row dismissed after Dismiss All', async () => {
-			vi.mocked(fetchNotifications).mockResolvedValueOnce([
-				row({ id: 'n-1', title: 'First' }),
-				row({ id: 'n-2', title: 'Second' })
-			] as never);
+			vi.mocked(fetchNotifications)
+				.mockResolvedValueOnce([row({ id: 'n-1', title: 'First' }), row({ id: 'n-2', title: 'Second' })] as never)
+				.mockResolvedValueOnce([
+					row({ id: 'n-1', title: 'First', seen: true, cleared: true }),
+					row({ id: 'n-2', title: 'Second', seen: true, cleared: true })
+				] as never);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('First')).toBeInTheDocument();
@@ -224,7 +226,7 @@ describe('Notifications Page sections', () => {
 
 	describe('empty text', () => {
 		it('says "No notifications" when Show dismissed is on and the list is empty', async () => {
-			vi.mocked(fetchNotifications).mockResolvedValueOnce([]);
+			vi.mocked(fetchNotifications).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('No new notifications')).toBeInTheDocument();
