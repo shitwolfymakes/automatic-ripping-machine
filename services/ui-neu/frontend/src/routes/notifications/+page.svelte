@@ -9,10 +9,9 @@
 	import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 
 	const inbox = new NotificationInbox();
-	let showCleared = $state(false);
 	let purgeConfirmOpen = $state(false);
 
-	let filtered = $derived(showCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
+	let filtered = $derived(inbox.includeCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
 
 	function handlePurge() {
 		purgeConfirmOpen = false;
@@ -42,7 +41,7 @@
 		unseenCount={inbox.unseenCount}
 		clearedCount={inbox.clearedCount}
 		purging={inbox.purging}
-		bind:showCleared
+		bind:showCleared={() => inbox.includeCleared, inbox.setIncludeCleared}
 		onpurge={() => (purgeConfirmOpen = true)}
 		ondismissall={inbox.dismissAll}
 	/>
@@ -57,7 +56,7 @@
 		{/snippet}
 		{#snippet ready(_items)}
 			{#if filtered.length === 0}
-				<InboxEmptyState {showCleared} />
+				<InboxEmptyState showCleared={inbox.includeCleared} />
 			{:else}
 				<div class="stack stack-sm notifications-page-list">
 					{#each filtered as notif (notif.id)}

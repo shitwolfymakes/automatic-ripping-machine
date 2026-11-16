@@ -7,8 +7,10 @@ import { get, patch, post } from './client';
 
 // Notifications inbox: NotificationInboxView rows keyed by string id.
 
-export function fetchNotifications(): Promise<NotificationInboxView[]> {
-	return get<NotificationInboxView[]>('/api/notifications/inbox');
+/** The inbox rows; dismissed (cleared) rows only when includeCleared is set. */
+export function fetchNotifications(includeCleared = false): Promise<NotificationInboxView[]> {
+	const query = includeCleared ? '?include_cleared=true' : '';
+	return get<NotificationInboxView[]>(`/api/notifications/inbox${query}`);
 }
 
 export function fetchNotificationCount(): Promise<NotificationInboxCountView> {
