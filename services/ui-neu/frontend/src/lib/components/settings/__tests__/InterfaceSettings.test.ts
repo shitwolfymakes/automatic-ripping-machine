@@ -36,10 +36,9 @@ describe('InterfaceSettings', () => {
 
 	it('links the dashboard layout to the ARM help and shows no link for resource stats', () => {
 		renderComponent(InterfaceSettings);
-		expect(screen.getByRole('link', { name: 'Docs for Default dashboard layout' })).toHaveAttribute(
-			'href',
-			'/help/guide/web-ui#dashboard'
-		);
-		expect(screen.queryByRole('link', { name: 'Docs for Resource stats' })).toBeNull();
+		expect(
+			screen.getByRole('link', { name: 'Docs for Default dashboard layout (opens in a new tab)' })
+		).toHaveAttribute('href', '/help/guide/web-ui#dashboard');
+		expect(screen.queryByRole('link', { name: 'Docs for Resource stats (opens in a new tab)' })).toBeNull();
 	});
 });

@@ -210,10 +210,11 @@ describe('EventSubscriptions branches', () => {
 			expect(props.templates['rip.completed'].inputs).toBeNull();
 		});
 
-		it('a required input label ends with " *" and an optional one does not', () => {
+		it('a required input is marked with "*" outside its label and an optional one is not', () => {
 			renderComponent(EventSubscriptions, { props: makeProps(['rip.completed'], {}, [recipient, subject]) });
-			expect(screen.getByText('Recipient *')).toBeTruthy();
+			expect(screen.getByText('Recipient')).toBeTruthy();
 			expect(screen.getByText('Subject')).toBeTruthy();
+			expect(screen.getAllByText('*')).toHaveLength(1);
 		});
 
 		it('the help line mentions inheriting hook values only when there are inputs', () => {

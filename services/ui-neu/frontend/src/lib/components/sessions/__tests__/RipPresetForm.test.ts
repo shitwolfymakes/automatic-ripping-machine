@@ -297,11 +297,11 @@ describe('RipPresetForm inside a sidebar (formId)', () => {
 			expect(screen.getByLabelText(label)).toBe(screen.getByTestId(testId));
 		}
 		for (const label of ['Track selection', 'Identification mode', 'Output mode']) {
-			expect(screen.getByRole('link', { name: `Docs for ${label}` })).toHaveAttribute(
+			expect(screen.getByRole('link', { name: `Docs for ${label} (opens in a new tab)` })).toHaveAttribute(
 				'href',
 				'/help/guide/configuring-arm#rip-presets-transcode-presets-and-sessions'
 			);
 		}
-		expect(screen.queryByRole('link', { name: 'Docs for Name' })).toBeNull();
+		expect(screen.queryByRole('link', { name: 'Docs for Name (opens in a new tab)' })).toBeNull();
 	});
 });

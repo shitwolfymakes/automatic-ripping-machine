@@ -86,7 +86,7 @@
 	{/if}
 	<div class="field">
 		<FieldLabel for="drive-name-{drive.id}" label="Friendly name" docsId={FIELD_IDS.name}>
-			<span class="drive-card-essentials-optional">(optional)</span>
+			{#snippet marks()}<span class="drive-card-essentials-optional">(optional)</span>{/snippet}
 		</FieldLabel>
 		<input
 			id="drive-name-{drive.id}"
@@ -101,17 +101,19 @@
 		/>
 		<p class="field-help">Shown on the dashboard and in notifications.</p>
 	</div>
-	<label class="field field-row drive-card-essentials-uhd">
+	<div class="field field-row drive-card-essentials-uhd">
 		<input
+			id="drive-uhd-{drive.id}"
 			type="checkbox"
+			aria-describedby="drive-uhd-help-{drive.id}"
 			checked={!!drive.uhd_capable}
 			onchange={(e) => saveEssentialUhd((e.currentTarget as HTMLInputElement).checked)}
 		/>
-		<span>
-			<span class="drive-card-essentials-uhd-label">This drive can read 4K UHD discs</span>
-			<span class="field-help">Only some drives can. Leave it off if you're not sure.</span>
-		</span>
-	</label>
+		<div>
+			<FieldLabel for="drive-uhd-{drive.id}" label="This drive can read 4K UHD discs" docsId={FIELD_IDS.uhd_capable} />
+			<p id="drive-uhd-help-{drive.id}" class="field-help">Only some drives can. Leave it off if you're not sure.</p>
+		</div>
+	</div>
 	{#if essentialsError}
 		<p class="field-error" role="alert">{essentialsError}</p>
 	{:else if essentialsSaved}
@@ -169,9 +171,5 @@
 	}
 	.drive-card-essentials-uhd input {
 		margin-top: 0.25rem;
-	}
-	.drive-card-essentials-uhd-label {
-		display: block;
-		color: var(--color-text);
 	}
 </style>

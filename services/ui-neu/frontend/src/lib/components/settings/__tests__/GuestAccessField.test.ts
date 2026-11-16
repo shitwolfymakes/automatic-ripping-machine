@@ -35,7 +35,7 @@ describe('GuestAccessField', () => {
 
 	it('links guest access to the setup walkthrough', () => {
 		renderComponent(GuestAccessField, { props: { guest } });
-		expect(screen.getByRole('link', { name: 'Docs for Guest access' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Guest access (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/setup-walkthrough#1-secure-your-account'
 		);

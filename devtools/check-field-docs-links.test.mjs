@@ -288,7 +288,11 @@ test('main without --dry-run syncs the issue then prints the summary', async () 
 });
 
 test('main without --dry-run fails fast when the token or repository is unset', async () => {
-  const fetchFn = async () => res(200);
+  let calls = 0;
+  const fetchFn = async () => {
+    calls += 1;
+    return res(200);
+  };
   await assert.rejects(
     main({ argv: [], env: { GITHUB_REPOSITORY: 'o/r' }, fetchFn, sleep: noSleep(), log() {} }),
     /GITHUB_TOKEN must be set/,
@@ -297,4 +301,5 @@ test('main without --dry-run fails fast when the token or repository is unset', 
     main({ argv: [], env: {}, fetchFn, sleep: noSleep(), log() {} }),
     /GITHUB_TOKEN and GITHUB_REPOSITORY must be set/,
   );
+  assert.equal(calls, 0, 'no link is probed before the environment is checked');
 });

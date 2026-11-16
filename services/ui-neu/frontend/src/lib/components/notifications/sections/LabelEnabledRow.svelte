@@ -9,7 +9,7 @@
 
 <div class="label-enabled-row">
 	<div class="field">
-		<FieldLabel for="{uid}-label" label="Channel Label *" docsId={FIELD_IDS.label} />
+		<FieldLabel for="{uid}-label" label="Channel Label" docsId={FIELD_IDS.label} required />
 		<input id="{uid}-label" aria-label="Channel Label" bind:value={name} required />
 	</div>
 	<div class="cluster label-enabled-row-toggle">

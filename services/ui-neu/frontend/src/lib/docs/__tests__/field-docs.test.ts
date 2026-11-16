@@ -5,17 +5,19 @@ import registry from '../field-docs.json';
 import {
 	docsHref,
 	docsLinkFor,
+	docsTitle,
 	familyDocsId,
 	handbrakeDocsIds,
 	hasFieldDocs,
 	headingAnchor,
-	helpHref
+	helpHref,
+	type DocsLink
 } from '../field-docs';
 
 const BASE = 'https://handbrake.fr/docs/en/latest/';
 const FIELDS = registry.fields as Record<string, Record<string, unknown>>;
 
-function external(page: string) {
+function external(page: string): DocsLink {
 	return { type: 'external', url: BASE + page };
 }
 
@@ -128,6 +130,14 @@ describe('hasFieldDocs', () => {
 	it('is false when none does', () => {
 		expect(hasFieldDocs('notify.not_a_service.')).toBe(false);
 	});
+
+	it('ignores opt-outs: a prefix whose entries are all opt-outs has no field docs', () => {
+		const prefix = 'form.drive.prescan_';
+		const matching = Object.keys(FIELDS).filter((id) => id.startsWith(prefix));
+		expect(matching.length).toBeGreaterThan(0);
+		expect(matching.every((id) => 'none' in FIELDS[id])).toBe(true);
+		expect(hasFieldDocs(prefix)).toBe(false);
+	});
 });
 
 describe('official presets entry', () => {
@@ -169,6 +179,31 @@ describe('helpHref and docsHref', () => {
 
 	it('has no href for no link', () => {
 		expect(docsHref(null)).toBeUndefined();
+	});
+});
+
+describe('docsTitle', () => {
+	it("names an external link's host and page", () => {
+		expect(docsTitle(external('advanced/resizing-video.html'))).toBe(
+			'Docs: handbrake.fr/docs/en/latest/advanced/resizing-video.html'
+		);
+	});
+
+	it('drops a trailing slash, so a site root reads as the host', () => {
+		expect(docsTitle({ type: 'external', url: 'https://example.test/' })).toBe('Docs: example.test');
+		expect(docsTitle({ type: 'external', url: 'https://example.test/a/' })).toBe('Docs: example.test/a');
+	});
+
+	it('shows the raw url when it does not parse', () => {
+		expect(docsTitle({ type: 'external', url: '' })).toBe('Docs: ');
+		expect(docsTitle({ type: 'external', url: 'not a url' })).toBe('Docs: not a url');
+	});
+
+	it('names an internal link by its help page and section', () => {
+		expect(docsTitle({ type: 'internal', page: 'guide/configuring-arm', section: 'Rip / transcode behaviour' })).toBe(
+			'ARM help: guide/configuring-arm, Rip / transcode behaviour'
+		);
+		expect(docsTitle({ type: 'internal', page: 'guide/home' })).toBe('ARM help: guide/home');
 	});
 });
 

@@ -21,9 +21,11 @@ export function docsLinkFor(id: string, fallbackId?: string): DocsLink | null {
 	return isLink(fallback) ? fallback : null;
 }
 
-// Whether any entry's id starts with `prefix` (a notification service's `notify.<id>.`).
+// Whether any link entry's id starts with `prefix` (a notification service's
+// `notify.<id>.`). Opt-outs don't count, so a service whose fields are all
+// opted out keeps its one service-wide docs link.
 export function hasFieldDocs(prefix: string): boolean {
-	return Object.keys(FIELDS).some((id) => id.startsWith(prefix));
+	return Object.entries(FIELDS).some(([id, entry]) => id.startsWith(prefix) && isLink(entry));
 }
 
 // The registry ids for one HandBrake setting: its own entry, with its group's as the fallback.
@@ -61,6 +63,17 @@ export function headingAnchor(text: string): string {
 export function helpHref(link: Extract<DocsLink, { type: 'internal' }>): string {
 	const route = `/help/${link.page}`;
 	return link.section === undefined ? route : `${route}#${headingAnchor(link.section)}`;
+}
+
+// Hover text naming where a link goes: the external page's host and path (the
+// raw url when it doesn't parse), or the help page and section.
+export function docsTitle(link: DocsLink): string {
+	if (link.type === 'internal') {
+		return link.section === undefined ? `ARM help: ${link.page}` : `ARM help: ${link.page}, ${link.section}`;
+	}
+	if (!URL.canParse(link.url)) return `Docs: ${link.url}`;
+	const url = new URL(link.url);
+	return `Docs: ${url.host}${url.pathname.replace(/\/$/, '')}`;
 }
 
 // The href a link opens; undefined for no link, so a caller can bind it directly.

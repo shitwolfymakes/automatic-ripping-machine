@@ -128,7 +128,8 @@
 						<div class="field">
 							<FieldLabel
 								for="{uid}-{et.key}-input-{i.key}"
-								label={`${i.label}${i.required ? ' *' : ''}`}
+								label={i.label}
+								required={i.required}
 								docsId={FIELD_IDS.event_input}
 							/>
 							{#if i.values && i.values.length}

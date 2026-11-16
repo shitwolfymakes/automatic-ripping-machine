@@ -13,7 +13,7 @@ afterEach(() => {
 describe('DiscHandlingField', () => {
 	it('links its title to the rip behaviour help section', () => {
 		renderComponent(DiscHandlingField, { props: { values: {} } });
-		expect(screen.getByRole('link', { name: 'Docs for When you insert a disc' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for When you insert a disc (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/configuring-arm#rip--transcode-behaviour'
 		);

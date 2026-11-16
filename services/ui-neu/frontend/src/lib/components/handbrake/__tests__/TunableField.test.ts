@@ -229,7 +229,7 @@ describe('TunableField fidelity', () => {
 	it('has no raw key line; an info link carries the key and opens the docs for its group', () => {
 		mount('PictureTopCrop');
 		expect(screen.queryByText('PictureTopCrop')).toBeNull();
-		const link = screen.getByRole('link', { name: 'Docs for Top crop' });
+		const link = screen.getByRole('link', { name: 'Docs for Top crop (opens in a new tab)' });
 		expect(link).toHaveAttribute('title', 'HandBrake key: PictureTopCrop');
 		expect(link).toHaveAttribute('data-field-id', 'handbrake.key.PictureTopCrop');
 		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/advanced/resizing-video.html');

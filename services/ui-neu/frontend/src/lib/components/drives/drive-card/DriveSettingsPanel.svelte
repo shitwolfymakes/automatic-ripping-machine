@@ -155,7 +155,9 @@
 				<div class="field">
 					<div class="flex items-center justify-between gap-2">
 						<FieldLabel for="prescan-{field.key}-{drive.id}" label={field.label} docsId={FIELD_IDS[field.key]}>
-							{#if field.unit}<span class="drive-card-unit">({field.unit})</span>{/if}
+							{#snippet marks()}
+								{#if field.unit}<span class="drive-card-unit">({field.unit})</span>{/if}
+							{/snippet}
 						</FieldLabel>
 						<input
 							id="prescan-{field.key}-{drive.id}"

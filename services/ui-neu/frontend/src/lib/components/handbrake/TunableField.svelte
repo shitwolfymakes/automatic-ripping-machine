@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One schema-rendered field: label row with its docs link (hover names the
-	// HandBrake key), a Changed mark and Reset (once the preset stores a value), the control for the key's kind, and its issue. An
-	// unstored text or number field shows the inherited value as a placeholder.
+	// HandBrake key), a Changed mark and Reset (once the preset stores a value),
+	// the control for the key's kind, and its issue. An unstored text or number
+	// field shows the inherited value as a placeholder.
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
 	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';

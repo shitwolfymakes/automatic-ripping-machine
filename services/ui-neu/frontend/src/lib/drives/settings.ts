@@ -119,7 +119,7 @@ export function prescanInputTexts(d: { [K in PrescanKey]?: number | null } | und
 	};
 }
 
-/** The drive settings fields, the friendly name included, in the field docs registry. */
+/** The drive settings fields, the friendly name and 4K setting included, in the field docs registry. */
 export const FIELD_IDS = {
 	name: 'form.drive.name',
 	default_session: 'form.drive.default_session',
@@ -127,5 +127,6 @@ export const FIELD_IDS = {
 	prescan_cache_mb: 'form.drive.prescan_cache_mb',
 	prescan_timeout: 'form.drive.prescan_timeout',
 	prescan_retries: 'form.drive.prescan_retries',
-	disc_enum_timeout: 'form.drive.disc_enum_timeout'
-} as const satisfies Record<'name' | 'default_session' | 'rip_speed' | PrescanKey, string>;
+	disc_enum_timeout: 'form.drive.disc_enum_timeout',
+	uhd_capable: 'form.drive.uhd_capable'
+} as const satisfies Record<'name' | 'default_session' | 'rip_speed' | 'uhd_capable' | PrescanKey, string>;

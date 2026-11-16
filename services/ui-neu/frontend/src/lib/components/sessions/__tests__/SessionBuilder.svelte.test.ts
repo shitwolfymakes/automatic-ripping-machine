@@ -143,9 +143,9 @@ it('labels every field by name and links the output path to its tokens help', ()
 	renderComponent(SessionBuilder, props());
 	expect(screen.getByLabelText('Transcode preset')).toHaveAttribute('id', 'sb-tc');
 	expect(screen.getByLabelText('Overrides JSON')).toHaveAttribute('id', 'sb-overrides');
-	expect(screen.getByRole('link', { name: 'Docs for Output path' })).toHaveAttribute(
+	expect(screen.getByRole('link', { name: 'Docs for Output path (opens in a new tab)' })).toHaveAttribute(
 		'href',
 		'/help/guide/web-ui#output-path-tokens'
 	);
-	expect(screen.queryByRole('link', { name: 'Docs for Session name' })).toBeNull();
+	expect(screen.queryByRole('link', { name: 'Docs for Session name (opens in a new tab)' })).toBeNull();
 });

@@ -473,7 +473,7 @@ describe('DriveCard', () => {
 			await fireEvent.input(name, { target: { value: 'Living room' } });
 			await fireEvent.blur(name);
 			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Living room' }));
-			await fireEvent.click(screen.getByLabelText(/4k uhd/i));
+			await fireEvent.click(screen.getByLabelText(/^this drive can read 4k uhd/i));
 			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { uhd_capable: true }));
 		});
 

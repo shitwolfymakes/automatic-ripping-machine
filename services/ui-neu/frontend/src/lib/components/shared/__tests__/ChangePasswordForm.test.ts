@@ -176,11 +176,11 @@ describe('ChangePasswordForm (setup walkthrough additions)', () => {
 
 	it('links the new password to the setup walkthrough, and the other two fields to nothing', () => {
 		renderComponent(ChangePasswordForm, { props: { onsuccess: vi.fn() } });
-		expect(screen.getByRole('link', { name: 'Docs for New password' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for New password (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/setup-walkthrough#1-secure-your-account'
 		);
-		expect(screen.queryByRole('link', { name: 'Docs for Current password' })).toBeNull();
-		expect(screen.queryByRole('link', { name: 'Docs for Confirm new password' })).toBeNull();
+		expect(screen.queryByRole('link', { name: 'Docs for Current password (opens in a new tab)' })).toBeNull();
+		expect(screen.queryByRole('link', { name: 'Docs for Confirm new password (opens in a new tab)' })).toBeNull();
 	});
 });

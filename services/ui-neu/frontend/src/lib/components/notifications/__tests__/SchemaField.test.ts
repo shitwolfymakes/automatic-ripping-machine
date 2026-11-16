@@ -114,8 +114,9 @@ describe('SchemaField', () => {
 			}
 		});
 		const input = screen.getByRole('textbox', { name: 'Webhook ID' });
-		expect(screen.getByText('Webhook ID *')).toHaveAttribute('for', input.id);
-		expect(screen.getByRole('link', { name: 'Docs for Webhook ID *' })).toHaveAttribute(
+		expect(screen.getByText('Webhook ID')).toHaveAttribute('for', input.id);
+		expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true');
+		expect(screen.getByRole('link', { name: 'Docs for Webhook ID (opens in a new tab)' })).toHaveAttribute(
 			'data-field-id',
 			'notify.discord.webhook_id'
 		);
@@ -127,7 +128,7 @@ describe('SchemaField', () => {
 		});
 		const label = screen.getByText('TTS');
 		expect(label).toHaveAttribute('for', screen.getByRole('checkbox', { name: 'TTS' }).id);
-		expect(label).not.toContainElement(screen.getByRole('link', { name: 'Docs for TTS' }));
+		expect(label).not.toContainElement(screen.getByRole('link', { name: 'Docs for TTS (opens in a new tab)' }));
 	});
 
 	it('shows no docs link without a docs id', () => {
