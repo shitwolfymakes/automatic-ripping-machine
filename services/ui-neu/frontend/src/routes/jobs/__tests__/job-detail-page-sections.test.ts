@@ -254,10 +254,17 @@ describe('loading', () => {
 		expect(await screen.findByText('Failed to load: Failed to load job')).toBeInTheDocument();
 	});
 
-	it('redirects home for any Error whose message mentions 404', async () => {
-		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+	it('redirects home when the Backend answers 404 for the job', async () => {
+		mockFetchJob.mockRejectedValue(new ApiError(404, 'unknown job_id: job_1', null));
 		renderComponent(Page);
 		await waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/'));
+	});
+
+	it('shows a plain Error whose message mentions 404 instead of redirecting', async () => {
+		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+		renderComponent(Page);
+		expect(await screen.findByText('Failed to load: Request for job failed (404)')).toBeInTheDocument();
+		expect(mockGoto).not.toHaveBeenCalled();
 	});
 
 	it('does not redirect for a 404 that is not an Error object', async () => {
