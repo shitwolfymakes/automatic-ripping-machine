@@ -26,18 +26,27 @@ export class TranscodeJobs {
 	loading = $state(getJobsCache('all') == null);
 	error = $state<Error | null>(null);
 	#timer: ReturnType<typeof setInterval> | null = null;
+	#request = 0;
 
+	// Loads the active tab. Loads overlap (poll, tab switches, actions), so
+	// only the latest request's response is applied; an earlier one, which
+	// may be for another tab, is dropped.
 	load = async (showLoading = true): Promise<void> => {
+		const request = ++this.#request;
+		const tab = this.activeTab;
 		if (showLoading) this.loading = true;
 		this.error = null;
 		try {
-			this.jobs = await fetchTranscoderJobs({ status: TAB_STATUS[this.activeTab] });
-			setJobsCache(this.activeTab, this.jobs);
+			const jobs = await fetchTranscoderJobs({ status: TAB_STATUS[tab] });
+			if (request !== this.#request) return;
+			this.jobs = jobs;
+			setJobsCache(tab, jobs);
 		} catch (e) {
+			if (request !== this.#request) return;
 			this.error = e instanceof Error ? e : new Error('Failed to load jobs');
 			this.jobs = emptyJobs;
 		} finally {
-			this.loading = false;
+			if (request === this.#request) this.loading = false;
 		}
 	};
 
@@ -58,5 +67,16 @@ export class TranscodeJobs {
 			clearInterval(this.#timer);
 			this.#timer = null;
 		}
+	};
+
+	/**
+	 * Stops a running poll and loads once more, so the tasks that finished
+	 * since the last tick show their final state. Does nothing when no poll
+	 * runs.
+	 */
+	finishPolling = (): void => {
+		if (!this.#timer) return;
+		this.stopPolling();
+		this.load(false);
 	};
 }

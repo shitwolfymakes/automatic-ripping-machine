@@ -30,12 +30,13 @@
 
 	const taskActions = new TranscodeTaskActions(() => transcodeJobs.load());
 
-	// Auto-refresh jobs when any are queued or in progress.
+	// Auto-refresh jobs when any are queued or in progress; when the queue
+	// goes idle, load once more so the last finished task shows its final state.
 	$effect(() => {
 		if (taskCount(s, 'in_progress') > 0 || taskCount(s, 'queued') > 0) {
 			transcodeJobs.startPolling();
 		} else {
-			transcodeJobs.stopPolling();
+			transcodeJobs.finishPolling();
 		}
 	});
 
