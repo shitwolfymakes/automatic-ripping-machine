@@ -16,9 +16,9 @@ import { handSetTrackCount, isSeriesTrackList } from '$lib/jobs/track-fields';
 // so a route added elsewhere still shows up; explicit reloads always ask.
 const PREVIEW_UNROUTED_EVERY_N_POLLS = 6;
 
-// The check reads the error message for '404'; #536 covers it.
+// The job is gone (deleted, or an unknown id): the Backend answered 404.
 function isNotFound(e: unknown): boolean {
-	return e instanceof Error && e.message.includes('404');
+	return e instanceof ApiError && e.status === 404;
 }
 
 export class JobDetail {

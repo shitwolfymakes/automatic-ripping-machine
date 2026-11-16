@@ -106,13 +106,29 @@ describe('JobDetail load', () => {
 		expect(d.error?.message).toBe('Failed to load job');
 	});
 
-	it('redirects to the dashboard when the message mentions 404', async () => {
+	it('redirects to the dashboard when the job is not found', async () => {
 		const d = newDetail();
-		mockFetchJob.mockRejectedValueOnce(new Error('404 not found'));
+		mockFetchJob.mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 		await d.load();
 		expect(mockGoto).toHaveBeenCalledWith('/');
 		expect(d.error).toBeNull();
 		expect(d.loading).toBe(false);
+	});
+
+	it('shows an ApiError that is not a 404 instead of redirecting', async () => {
+		const d = newDetail();
+		mockFetchJob.mockRejectedValueOnce(new ApiError(500, 'server error 404', null));
+		await d.load();
+		expect(mockGoto).not.toHaveBeenCalled();
+		expect(d.error?.message).toBe('server error 404');
+	});
+
+	it('does not read a 404 from a plain Error message', async () => {
+		const d = newDetail();
+		mockFetchJob.mockRejectedValueOnce(new Error('404 not found'));
+		await d.load();
+		expect(mockGoto).not.toHaveBeenCalled();
+		expect(d.error?.message).toBe('404 not found');
 	});
 
 	it('clears an earlier error when the next load starts', async () => {
