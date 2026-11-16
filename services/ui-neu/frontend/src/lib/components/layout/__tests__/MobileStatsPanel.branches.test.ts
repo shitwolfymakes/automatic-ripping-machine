@@ -27,12 +27,16 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/stores/resources.svelte', async () => {
 	const { readable } = await import('svelte/store');
 	return {
-		resources: readable({
-			cpu_percent: 42,
-			cpu_temp: 0,
-			memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
-			storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
-		}),
+		// SidebarStats draws once the first poll has landed (initialized).
+		resources: Object.assign(
+			readable({
+				cpu_percent: 42,
+				cpu_temp: 0,
+				memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
+				storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
+			}),
+			{ initialized: readable(true) }
+		),
 		startResources: vi.fn(),
 		stopResources: vi.fn()
 	};

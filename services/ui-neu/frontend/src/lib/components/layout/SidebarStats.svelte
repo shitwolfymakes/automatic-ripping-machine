@@ -8,74 +8,82 @@
 	// until BottomStatsBar mounts and starts the poll.
 	import { resources } from '$lib/stores/resources.svelte';
 	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
+	import { fade } from 'svelte/transition';
+	import { fadeIn } from '$lib/ui/transitions';
+
+	// The panel is bottom-anchored, so the Storage rows arriving with the first
+	// poll would shove CPU and Mem upward. Draw it once that poll has landed.
+	const ready = resources.initialized;
 </script>
 
-<div data-sidebar-stats class="stats-bar-side">
-	<div class="stack stack-sm">
-		<!-- CPU -->
-		<div>
-			<div class="stats-bar-side-label flex items-center justify-between">
-				<span>CPU</span>
-				<span class="whitespace-nowrap">
-					{$resources.cpu_percent.toFixed(0)}%
-					{#if ($resources.cpu_temp ?? 0) > 0}
-						<span class="stats-bar-side-temp">&nbsp;{($resources.cpu_temp ?? 0).toFixed(0)}&deg;C</span>
-					{/if}
-				</span>
-			</div>
-			<div class="progress progress-sm">
-				<div class="progress-track">
-					<div
-						class="progress-fill"
-						data-bar={barColor($resources.cpu_percent, 'cpu')}
-						style:--progress="{Math.min(100, $resources.cpu_percent)}%"
-					></div>
+{#if $ready}
+	<div data-sidebar-stats class="stats-bar-side" in:fade={fadeIn}>
+		<div class="stack stack-sm">
+			<!-- CPU -->
+			<div>
+				<div class="stats-bar-side-label flex items-center justify-between">
+					<span>CPU</span>
+					<span class="whitespace-nowrap">
+						{$resources.cpu_percent.toFixed(0)}%
+						{#if ($resources.cpu_temp ?? 0) > 0}
+							<span class="stats-bar-side-temp">&nbsp;{($resources.cpu_temp ?? 0).toFixed(0)}&deg;C</span>
+						{/if}
+					</span>
 				</div>
-			</div>
-		</div>
-
-		<!-- Memory -->
-		<div>
-			<div class="stats-bar-side-label flex items-center justify-between">
-				<span>Mem</span>
-				<span>{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span>
-			</div>
-			<div class="progress progress-sm">
-				<div class="progress-track">
-					<div
-						class="progress-fill"
-						data-bar={barColor($resources.memory.percent, 'mem')}
-						style:--progress="{Math.min(100, $resources.memory.percent)}%"
-					></div>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<!-- Storage -->
-	{#if $resources.storage.length}
-		<div class="stack stack-sm stats-bar-side-storage">
-			<p class="eyebrow sidebar-stats-heading">Storage</p>
-			{#each $resources.storage as s (s.path)}
-				<a href={filesHref(s.name)} class="stats-bar-side-row">
-					<div class="stats-bar-side-label flex items-center justify-between">
-						<span>{s.name}</span>
-						<span>{s.free_gb} GB free</span>
+				<div class="progress progress-sm">
+					<div class="progress-track">
+						<div
+							class="progress-fill"
+							data-bar={barColor($resources.cpu_percent, 'cpu')}
+							style:--progress="{Math.min(100, $resources.cpu_percent)}%"
+						></div>
 					</div>
-					<div class="progress progress-sm">
-						<div class="progress-track">
-							<div
-								class="progress-fill"
-								data-bar={barColor(s.percent, 'disk')}
-								style:--progress="{Math.min(100, s.percent)}%"
-							></div>
+				</div>
+			</div>
+
+			<!-- Memory -->
+			<div>
+				<div class="stats-bar-side-label flex items-center justify-between">
+					<span>Mem</span>
+					<span>{$resources.memory.used_gb} / {$resources.memory.total_gb} GB</span>
+				</div>
+				<div class="progress progress-sm">
+					<div class="progress-track">
+						<div
+							class="progress-fill"
+							data-bar={barColor($resources.memory.percent, 'mem')}
+							style:--progress="{Math.min(100, $resources.memory.percent)}%"
+						></div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Storage -->
+		{#if $resources.storage.length}
+			<div class="stack stack-sm stats-bar-side-storage">
+				<p class="eyebrow sidebar-stats-heading">Storage</p>
+				{#each $resources.storage as s (s.path)}
+					<a href={filesHref(s.name)} class="stats-bar-side-row">
+						<div class="stats-bar-side-label flex items-center justify-between">
+							<span>{s.name}</span>
+							<span>{s.free_gb} GB free</span>
 						</div>
-					</div>
-				</a>
-			{/each}
-		</div>
-	{/if}
-</div>
+						<div class="progress progress-sm">
+							<div class="progress-track">
+								<div
+									class="progress-fill"
+									data-bar={barColor(s.percent, 'disk')}
+									style:--progress="{Math.min(100, s.percent)}%"
+								></div>
+							</div>
+						</div>
+					</a>
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.stats-bar-side {

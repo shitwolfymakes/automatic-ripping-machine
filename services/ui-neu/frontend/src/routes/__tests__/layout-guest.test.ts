@@ -24,7 +24,8 @@ async function setPathname(pathname: string) {
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({
-	goto: (...args: unknown[]) => gotoMock(...args)
+	goto: (...args: unknown[]) => gotoMock(...args),
+	onNavigate: vi.fn()
 }));
 
 const getTokenMock = vi.fn(() => null as string | null);
