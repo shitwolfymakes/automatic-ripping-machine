@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTracksTable from '../JobTracksTable.svelte';
 import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { NamingPreviewItem, TrackView } from '$lib/types/api.gen';
@@ -50,6 +50,7 @@ function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
 const trackRows = () => Array.from(document.querySelectorAll<HTMLElement>('tr.table-row'));
 const cellOf = (row: HTMLElement, label: string) => row.querySelector<HTMLElement>(`td[data-label="${label}"]`)!;
+const titleButtonOf = (row: HTMLElement) => within(cellOf(row, 'Title')).getByRole('button');
 
 const series = () => [
 	createTrack({ id: 'trk_1', index: 1, title: 'Pilot', status: 'done' }),
@@ -143,7 +144,7 @@ describe('JobTracksTable', () => {
 
 		it('opens under the row when an admin clicks the title cell and closes on the next click', async () => {
 			renderTable([createTrack({ id: 'trk_1', status: 'done' })]);
-			const cell = cellOf(trackRows()[0], 'Title');
+			const cell = titleButtonOf(trackRows()[0]);
 			await fireEvent.click(cell);
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 			await fireEvent.click(cell);
@@ -153,14 +154,14 @@ describe('JobTracksTable', () => {
 		it('moves from one track to another when a second title cell is clicked', async () => {
 			renderTable(two());
 			const rows = trackRows();
-			await fireEvent.click(cellOf(rows[0], 'Title'));
-			await fireEvent.click(cellOf(rows[1], 'Title'));
+			await fireEvent.click(titleButtonOf(rows[0]));
+			await fireEvent.click(titleButtonOf(rows[1]));
 			expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
 		});
 
 		it('closes from its close button', async () => {
 			renderTable(two());
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByTitle('Close'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});
@@ -169,7 +170,7 @@ describe('JobTracksTable', () => {
 			vi.mocked(searchMetadata).mockResolvedValue({ candidates: [picked] });
 			vi.mocked(updateTrack).mockResolvedValue(undefined as never);
 			renderTable(two());
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
@@ -180,6 +181,7 @@ describe('JobTracksTable', () => {
 		it('opens nothing when a guest clicks a title cell', async () => {
 			setRole('guest');
 			renderTable(two());
+			expect(within(cellOf(trackRows()[0], 'Title')).queryByRole('button')).not.toBeInTheDocument();
 			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});

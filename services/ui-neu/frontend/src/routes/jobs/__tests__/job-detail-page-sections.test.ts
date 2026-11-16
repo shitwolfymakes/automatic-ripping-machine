@@ -169,6 +169,7 @@ function trackRows(): HTMLElement[] {
 function cellOf(row: HTMLElement, label: string): HTMLElement {
 	return row.querySelector(`[data-label="${label}"]`) as HTMLElement;
 }
+const titleButtonOf = (row: HTMLElement) => within(cellOf(row, 'Title')).getByRole('button');
 
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
 
@@ -1295,7 +1296,7 @@ describe('tracks table', () => {
 		it('opens under the row when an admin clicks the title cell and closes on the next click', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			const cell = cellOf(trackRows()[0], 'Title');
+			const cell = titleButtonOf(trackRows()[0]);
 			await fireEvent.click(cell);
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 			await fireEvent.click(cell);
@@ -1306,15 +1307,15 @@ describe('tracks table', () => {
 			loadJobPage(detailOf({}, [createTrack({ id: 'trk_1', status: 'done' }), createTrack({ id: 'trk_2', index: 1 })]));
 			await screen.findByText('Tracks (2)');
 			const rows = trackRows();
-			await fireEvent.click(cellOf(rows[0], 'Title'));
-			await fireEvent.click(cellOf(rows[1], 'Title'));
+			await fireEvent.click(titleButtonOf(rows[0]));
+			await fireEvent.click(titleButtonOf(rows[1]));
 			expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
 		});
 
 		it('closes from its close button', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByTitle('Close'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});
@@ -1324,7 +1325,7 @@ describe('tracks table', () => {
 			mockUpdateTrack.mockResolvedValue(undefined as never);
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));

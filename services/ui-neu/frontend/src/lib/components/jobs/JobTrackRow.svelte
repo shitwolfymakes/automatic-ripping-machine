@@ -6,6 +6,7 @@
 	import { trackKindLabel, trackSizeLabel } from '$lib/jobs/track-fields';
 	import { formatTrackLength } from '$lib/utils/format';
 	import { isAdmin } from '$lib/stores/auth';
+	import type { Snippet } from 'svelte';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
 
 	interface Props {
@@ -36,14 +37,36 @@
 	}: Props = $props();
 </script>
 
+<!-- An admin opens the title search from the title: a button whose overlay
+     covers the cell, so the whole cell stays the click target. -->
+{#snippet editTrigger(content: Snippet)}
+	{#if $isAdmin}
+		<button type="button" class="job-detail-track-title-edit" aria-expanded={editing} onclick={ontoggleedit}
+			>{@render content()}</button
+		>
+	{:else}
+		{@render content()}
+	{/if}
+{/snippet}
+
+{#snippet titleText()}
+	<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
+	{#if track.year}
+		<span class="job-detail-track-year"> ({track.year})</span>
+	{/if}
+{/snippet}
+
+{#snippet untitledText()}
+	<span class="job-detail-track-untitled"
+		>{job.title || 'Untitled'}{#if job.year}
+			({job.year}){/if}</span
+	>
+{/snippet}
+
 <tr class="table-row" data-disabled={track.excluded}>
 	<td class="table-cell" data-label="#">{track.index}</td>
 	<td class="table-cell job-detail-track-kind" data-label="Kind">{trackKindLabel(track.kind)}</td>
-	<td
-		class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}"
-		data-label="Title"
-		onclick={$isAdmin ? ontoggleedit : undefined}
-	>
+	<td class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}" data-label="Title">
 		{#if track.title}
 			<div class="flex items-center gap-1.5">
 				{#if track.poster_url}
@@ -56,17 +79,13 @@
 					/>
 				{/if}
 				<div>
-					<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
-					{#if track.year}
-						<span class="job-detail-track-year"> ({track.year})</span>
-					{/if}
+					{@render editTrigger(titleText)}
 					<div class="mt-0.5 flex flex-wrap items-center gap-1">
 						{#if track.imdb_id}
 							<a
 								href="https://www.imdb.com/title/{track.imdb_id}"
 								target="_blank"
 								rel="noopener noreferrer"
-								onclick={(e) => e.stopPropagation()}
 								class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a
 							>
 						{/if}
@@ -80,10 +99,7 @@
 				</div>
 			</div>
 		{:else}
-			<span class="job-detail-track-untitled"
-				>{job.title || 'Untitled'}{#if job.year}
-					({job.year}){/if}</span
-			>
+			{@render editTrigger(untitledText)}
 		{/if}
 	</td>
 	{#if tracksAreSeries}
@@ -189,7 +205,22 @@
 		color: var(--color-text-secondary);
 	}
 	.job-detail-track-title-cell {
+		position: relative;
 		cursor: pointer;
+	}
+	.job-detail-track-title-edit {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.job-detail-track-title-edit::after {
+		content: '';
+		position: absolute;
+		inset: 0;
 	}
 	.job-detail-track-title-cell:hover {
 		background: var(--color-primary-tint-1);
@@ -213,6 +244,8 @@
 		color: var(--color-text-faint);
 	}
 	.job-detail-track-imdb-badge {
+		position: relative;
+		z-index: 1;
 		border-radius: 9999px;
 		padding: 0.125rem 0.375rem;
 		font-size: 9px;

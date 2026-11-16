@@ -182,17 +182,35 @@ describe('JobTrackRow', () => {
 			expect(ontoggleedit).not.toHaveBeenCalled();
 		});
 
-		it('calls ontoggleedit when an admin clicks the title cell', async () => {
+		it('gives an admin a title button that calls ontoggleedit and reports the edit state', async () => {
 			renderRow(pilot());
-			await fireEvent.click(cell('Title'));
+			const button = within(cell('Title')).getByRole('button', { name: 'Pilot (2008)' });
+			expect(button).toHaveAttribute('aria-expanded', 'false');
+			await fireEvent.click(button);
+			expect(ontoggleedit).toHaveBeenCalledTimes(1);
+			cleanup();
+			renderRow(pilot(), { editing: true });
+			expect(within(cell('Title')).getByRole('button', { name: 'Pilot (2008)' })).toHaveAttribute(
+				'aria-expanded',
+				'true'
+			);
+		});
+
+		it('opens the edit from the job title of an untitled track too', async () => {
+			renderRow(bare(), { job: { title: 'Show', year: 2001 } });
+			await fireEvent.click(within(cell('Title')).getByRole('button', { name: /^Show/ }));
 			expect(ontoggleedit).toHaveBeenCalledTimes(1);
 		});
 
-		it('calls nothing when a guest clicks the title cell', async () => {
+		it('gives a guest no title button, and a click on the cell calls nothing', async () => {
 			setRole('guest');
 			renderRow(pilot());
+			expect(within(cell('Title')).queryByRole('button')).not.toBeInTheDocument();
 			await fireEvent.click(cell('Title'));
 			expect(ontoggleedit).not.toHaveBeenCalled();
+			cleanup();
+			renderRow(bare());
+			expect(within(cell('Title')).queryByRole('button')).not.toBeInTheDocument();
 		});
 	});
 
