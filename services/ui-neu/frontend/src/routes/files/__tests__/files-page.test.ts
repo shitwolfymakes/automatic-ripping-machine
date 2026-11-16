@@ -184,6 +184,17 @@ describe('Files Page', () => {
 			});
 		});
 
+		it('says no media directories are configured when there are no roots', async () => {
+			vi.mocked(fetchRoots).mockResolvedValueOnce([]);
+			const { container } = renderComponent(FilesPage);
+			await waitFor(() => {
+				expect(screen.getByText('No media directories configured')).toBeInTheDocument();
+			});
+			expect(container.querySelector('.files-page-listing')).toBeNull();
+			expect(container.querySelector('[data-file-roots]')).toBeNull();
+			expect(mockFetchDirectory).not.toHaveBeenCalled();
+		});
+
 		it('shows error when fetchDirectory fails', async () => {
 			mockFetchDirectory.mockRejectedValueOnce(new Error('Permission denied'));
 			renderComponent(FilesPage);
