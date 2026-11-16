@@ -69,7 +69,7 @@ describe('IdentityCheckbox', () => {
 		const box = screen.getByRole('checkbox', { name: 'Use TMDB' });
 		const label = screen.getByText('Use TMDB');
 		expect(label).toHaveAttribute('for', box.id);
-		const link = screen.getByRole('link', { name: 'Docs for Use TMDB' });
+		const link = screen.getByRole('link', { name: 'Docs for Use TMDB (opens in a new tab)' });
 		expect(link).toHaveAttribute('data-field-id', 'config.thediscdb_enabled');
 		expect(label).not.toContainElement(link);
 	});

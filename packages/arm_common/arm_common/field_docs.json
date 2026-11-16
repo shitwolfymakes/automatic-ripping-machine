@@ -231,6 +231,11 @@
     "form.drive.rip_speed": {
       "none": "Explained by the help text under the field; no docs page covers drive read speed."
     },
+    "form.drive.uhd_capable": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
     "form.interface.dashboard_view": {
       "type": "internal",
       "page": "guide/web-ui",

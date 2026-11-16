@@ -96,7 +96,7 @@
 
 <div class="bash-script-fields-grid">
 	<div class="field">
-		<FieldLabel for="{uid}-script" label="Script *" docsId={FIELD_IDS.script} />
+		<FieldLabel for="{uid}-script" label="Script" docsId={FIELD_IDS.script} required />
 		<select
 			id="{uid}-script"
 			aria-label="Script"
@@ -116,7 +116,9 @@
 		</select>
 	</div>
 	<div class="field">
-		<FieldLabel for="{uid}-timeout" label="Timeout (s)" docsId={FIELD_IDS.timeout} />
+		<FieldLabel for="{uid}-timeout" label="Timeout" docsId={FIELD_IDS.timeout}>
+			{#snippet marks()}<span class="bash-script-fields-unit">(s)</span>{/snippet}
+		</FieldLabel>
 		<input
 			id="{uid}-timeout"
 			type="number"
@@ -203,6 +205,10 @@
 </p>
 
 <style>
+	.bash-script-fields-unit {
+		font-size: 0.75rem;
+		color: var(--color-text-faint);
+	}
 	.bash-script-fields-grid {
 		display: grid;
 		grid-template-columns: 1fr;

@@ -187,13 +187,15 @@ export async function syncIssue(broken, { fetchFn = fetch, repo, token }) {
 export async function main({ argv, env, fetchFn = fetch, sleep = sleepReal, log = console.log }) {
   const registry = JSON.parse(readFileSync(REGISTRY, 'utf8'));
   const urls = collectUrls(registry);
+  const dryRun = argv.includes('--dry-run');
+  // Checked before any probe, so a misconfigured run fails at once.
+  const missing = dryRun ? [] : ['GITHUB_TOKEN', 'GITHUB_REPOSITORY'].filter((name) => !env[name]);
+  if (missing.length) throw new Error(`${missing.join(' and ')} must be set (or use --dry-run)`);
   const broken = await findBroken(urls, { fetchFn, sleep });
-  if (argv.includes('--dry-run')) {
+  if (dryRun) {
     log(renderDryRun(urls.size, broken));
     return 0;
   }
-  const missing = ['GITHUB_TOKEN', 'GITHUB_REPOSITORY'].filter((name) => !env[name]);
-  if (missing.length) throw new Error(`${missing.join(' and ')} must be set (or use --dry-run)`);
   log(await syncIssue(broken, { fetchFn, repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN }));
   log(renderDryRun(urls.size, broken));
   return 0;

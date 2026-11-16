@@ -18,7 +18,6 @@
 
 	const controlId = $props.id();
 	const inputType = $derived(field.private ? 'password' : 'text');
-	const label = $derived(`${field.label}${field.required ? ' *' : ''}`);
 
 	let boolValue = $derived(Boolean(value));
 
@@ -46,11 +45,11 @@
 			checked={boolValue}
 			onchange={(e) => setValue(e.currentTarget.checked)}
 		/>
-		<FieldLabel for={controlId} {label} {docsId} />
+		<FieldLabel for={controlId} label={field.label} {docsId} required={field.required} />
 	</div>
 {:else}
 	<div class="field">
-		<FieldLabel for={controlId} {label} {docsId} />
+		<FieldLabel for={controlId} label={field.label} {docsId} required={field.required} />
 		{#if field.type === 'choice'}
 			<select
 				id={controlId}

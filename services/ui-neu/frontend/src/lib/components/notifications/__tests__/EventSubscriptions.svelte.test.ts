@@ -116,7 +116,8 @@ describe('EventSubscriptions', () => {
 		renderComponent(EventSubscriptions, { props });
 		const field = screen.getByLabelText('rip.completed Recipient') as HTMLInputElement;
 		expect(field.placeholder).toBe('inherit');
-		expect(screen.getByText('Recipient *')).toBeTruthy();
+		expect(screen.getByText('Recipient')).toBeTruthy();
+		expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true');
 		expect(screen.queryByLabelText('rip.completed SMTP password')).toBeNull();
 		await fireEvent.input(field, { target: { value: 'oncall@x' } });
 		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
@@ -133,7 +134,7 @@ describe('EventSubscriptions', () => {
 			screen.getByLabelText('rip.completed Recipient')
 		);
 		for (const name of ['Title', 'Body', 'Recipient']) {
-			expect(screen.getByRole('link', { name: `Docs for ${name}` })).toHaveAttribute(
+			expect(screen.getByRole('link', { name: `Docs for ${name} (opens in a new tab)` })).toHaveAttribute(
 				'href',
 				'/help/guide/notification-scripts#per-event-overrides'
 			);

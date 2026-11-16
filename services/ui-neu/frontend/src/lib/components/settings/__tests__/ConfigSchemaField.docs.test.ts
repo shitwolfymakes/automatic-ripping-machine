@@ -16,7 +16,7 @@ const f = (over: Partial<ConfigFieldMeta>): ConfigFieldMeta => ({
 	...over
 });
 
-const docs = (label: string) => screen.getByRole('link', { name: `Docs for ${label}` });
+const docs = (label: string) => screen.getByRole('link', { name: `Docs for ${label} (opens in a new tab)` });
 
 afterEach(() => cleanup());
 

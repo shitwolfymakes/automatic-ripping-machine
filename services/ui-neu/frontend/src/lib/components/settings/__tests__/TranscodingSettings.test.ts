@@ -98,9 +98,20 @@ describe('TranscodingSettings', () => {
 		setTranscoderEnabled(false);
 		render(GROUP);
 		expect(screen.getByRole('switch', { name: 'Enable transcoding' })).toHaveAttribute('id', 'transcode-enabled');
-		expect(screen.getByRole('link', { name: 'Docs for Enable transcoding' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Enable transcoding (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/configuring-arm#rip--transcode-behaviour'
 		);
+	});
+
+	it('points its label at the locked switch, and clicking the label leaves the switch off', async () => {
+		setTranscoderEnabled(false);
+		render(GROUP);
+		const label = document.querySelector('label[for="transcode-enabled"]') as HTMLLabelElement;
+		const toggle = screen.getByRole('switch', { name: 'Enable transcoding' });
+		expect(label.control).toBe(toggle);
+		await fireEvent.click(label);
+		expect(toggle).toHaveAttribute('aria-checked', 'false');
+		expect(saveArmConfig).not.toHaveBeenCalled();
 	});
 });

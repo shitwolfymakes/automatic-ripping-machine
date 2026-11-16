@@ -308,7 +308,7 @@ describe('EncoderBlockCard', () => {
 		mount('nvenc_h264', { card: card({ family: 'nvenc_h264', state: 'verified', device: 'NVIDIA H.264' }) });
 		const links = screen.getAllByRole('link', { name: /^Docs for/ });
 		expect(links.length).toBeGreaterThan(1);
-		expect(screen.getByRole('link', { name: 'Docs for Bit depth' })).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Docs for Bit depth (opens in a new tab)' })).toBeInTheDocument();
 		for (const link of links) {
 			expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/video-nvenc.html');
 			expect(link).toHaveAttribute('data-field-id', 'handbrake.family.nvenc');

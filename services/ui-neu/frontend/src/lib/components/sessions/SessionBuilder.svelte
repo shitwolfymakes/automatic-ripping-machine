@@ -94,8 +94,9 @@
 		onstatus?.({ submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
 	});
 
+	// The media chips are disabled on edit and for a built-in session, so this
+	// only runs while the media type may still change.
 	function switchMediaType(mt: MediaType) {
-		if (isEdit || readOnly) return; // immutable on edit / locked when built-in
 		mediaType = mt;
 		ripId = '';
 		tcId = '';
@@ -189,9 +190,7 @@
 
 		<!-- Rip preset -->
 		<div class="field">
-			<FieldLabel for={SESSION_FIELDS.rip} label="Rip preset" docsId={FIELD_IDS.rip_preset}>
-				<span class="session-builder-required">*</span>
-			</FieldLabel>
+			<FieldLabel for={SESSION_FIELDS.rip} label="Rip preset" docsId={FIELD_IDS.rip_preset} required />
 			<select
 				id={SESSION_FIELDS.rip}
 				value={ripId}
@@ -211,7 +210,7 @@
 		<!-- Transcode preset (optional) -->
 		<div class="field">
 			<FieldLabel for="sb-tc" label="Transcode preset" docsId={FIELD_IDS.transcode_preset}>
-				<span class="session-builder-optional">(optional)</span>
+				{#snippet marks()}<span class="session-builder-optional">(optional)</span>{/snippet}
 			</FieldLabel>
 			<select id="sb-tc" value={tcId} onchange={handleTcChange} disabled={readOnly}>
 				<option value="">No transcode, rip only</option>
@@ -224,9 +223,7 @@
 
 		<!-- Output path template -->
 		<div class="field">
-			<FieldLabel for={SESSION_FIELDS.path} label="Output path" docsId={FIELD_IDS.output_path}>
-				<span class="session-builder-required">*</span>
-			</FieldLabel>
+			<FieldLabel for={SESSION_FIELDS.path} label="Output path" docsId={FIELD_IDS.output_path} required />
 			<OutputPathField
 				id={SESSION_FIELDS.path}
 				errorId={errors[SESSION_FIELDS.path] ? errorId(SESSION_FIELDS.path) : undefined}
@@ -271,9 +268,6 @@
 <style>
 	/* text-red-500 (same shade in both modes). --color-danger is red-600 in light / red-400 in
 	   dark, a mode-dependent shift; accepted since no mode-independent danger role exists. */
-	.session-builder-required {
-		color: var(--color-danger);
-	}
 	/* text-xs text-gray-400 (gray-500 in dark) - text-faint
 	   already flips gray-400/gray-500 across modes, matching exactly. */
 	.session-builder-optional {

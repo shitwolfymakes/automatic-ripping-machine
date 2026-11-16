@@ -7,20 +7,20 @@ describe('FieldDocsLink', () => {
 
 	it('opens an external link in a new tab without opener access', () => {
 		renderComponent(FieldDocsLink, { props: { id: 'handbrake.group.dimensions.Size', label: 'Width' } });
-		const link = screen.getByRole('link', { name: 'Docs for Width' });
+		const link = screen.getByRole('link', { name: 'Docs for Width (opens in a new tab)' });
 		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/advanced/resizing-video.html');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-		expect(link).toHaveAttribute('title', 'Open the documentation');
+		expect(link).toHaveAttribute('title', 'Docs: handbrake.fr/docs/en/latest/advanced/resizing-video.html');
 	});
 
-	it('opens an internal link in the same tab at its help anchor', () => {
+	it('opens an internal link in a new tab too, at its help anchor, so a half-filled form stays open', () => {
 		renderComponent(FieldDocsLink, { props: { id: 'config.auto_rip_on_insert', label: 'Rip policy' } });
-		const link = screen.getByRole('link', { name: 'Docs for Rip policy' });
+		const link = screen.getByRole('link', { name: 'Docs for Rip policy (opens in a new tab)' });
 		expect(link).toHaveAttribute('href', '/help/guide/configuring-arm#rip--transcode-behaviour');
-		expect(link).not.toHaveAttribute('target');
-		expect(link).not.toHaveAttribute('rel');
-		expect(link).toHaveAttribute('title', 'Open the ARM help');
+		expect(link).toHaveAttribute('target', '_blank');
+		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+		expect(link).toHaveAttribute('title', 'ARM help: guide/configuring-arm, Rip / transcode behaviour');
 	});
 
 	it('renders nothing for an unknown id', () => {
@@ -37,7 +37,7 @@ describe('FieldDocsLink', () => {
 		renderComponent(FieldDocsLink, {
 			props: { id: 'handbrake.key.Nope', fallbackId: 'handbrake.group.video.Color', label: 'Color' }
 		});
-		expect(screen.getByRole('link', { name: 'Docs for Color' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Color (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'https://handbrake.fr/docs/en/latest/technical/hdr.html'
 		);
@@ -47,7 +47,10 @@ describe('FieldDocsLink', () => {
 		renderComponent(FieldDocsLink, {
 			props: { id: 'config.NOT_A_FIELD', label: 'X', link: { type: 'external', url: 'https://example.test/x' } }
 		});
-		expect(screen.getByRole('link', { name: 'Docs for X' })).toHaveAttribute('href', 'https://example.test/x');
+		expect(screen.getByRole('link', { name: 'Docs for X (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'https://example.test/x'
+		);
 	});
 
 	it('renders nothing for a resolved link of null', () => {
@@ -59,7 +62,7 @@ describe('FieldDocsLink', () => {
 		renderComponent(FieldDocsLink, {
 			props: { id: 'handbrake.group.dimensions.Size', label: 'Width', title: 'HandBrake key: PictureWidth' }
 		});
-		expect(screen.getByRole('link', { name: 'Docs for Width' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Width (opens in a new tab)' })).toHaveAttribute(
 			'title',
 			'HandBrake key: PictureWidth'
 		);

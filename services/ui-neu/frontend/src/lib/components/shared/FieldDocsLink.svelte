@@ -1,15 +1,16 @@
 <script lang="ts">
 	import Glyph from './Glyph.svelte';
-	import { docsHref, docsLinkFor, type DocsLink } from '$lib/docs/field-docs';
+	import { docsHref, docsLinkFor, docsTitle, type DocsLink } from '$lib/docs/field-docs';
 
-	// The info "i" that opens the documentation for one field. Renders nothing
-	// when the field has no link (an opt-out or an unknown id).
+	// The info "i" that opens the documentation for one field in a new tab, so a
+	// half-filled form stays open (the UI has no unsaved-changes guard). Renders
+	// nothing when the field has no link (an opt-out or an unknown id).
 	interface Props {
 		// Registry id of the field (config.<KEY>, form.<form>.<field>, ...).
 		id: string;
 		// Broader registry id used when `id` has no entry of its own.
 		fallbackId?: string;
-		// The field's visible label, for the accessible name.
+		// The field's bare label (no "*", units or "(optional)"), for the accessible name.
 		label: string;
 		// A link resolved by the caller; takes the place of the registry lookup.
 		link?: DocsLink | null;
@@ -20,17 +21,16 @@
 	let { id, fallbackId, label, link, title }: Props = $props();
 
 	const target = $derived(link === undefined ? docsLinkFor(id, fallbackId) : link);
-	const external = $derived(target?.type === 'external');
 </script>
 
 {#if target}
 	<a
 		class="field-docs-link"
 		href={docsHref(target)}
-		target={external ? '_blank' : undefined}
-		rel={external ? 'noopener noreferrer' : undefined}
-		title={title ?? (external ? 'Open the documentation' : 'Open the ARM help')}
-		aria-label={`Docs for ${label}`}
+		target="_blank"
+		rel="noopener noreferrer"
+		title={title ?? docsTitle(target)}
+		aria-label={`Docs for ${label} (opens in a new tab)`}
 		data-field-id={id}
 	>
 		<Glyph name="info" class="h-3 w-3" />

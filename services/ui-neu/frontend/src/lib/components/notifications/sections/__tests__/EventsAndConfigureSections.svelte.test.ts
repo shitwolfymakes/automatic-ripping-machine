@@ -92,7 +92,8 @@ describe('ConfigureSection', () => {
 			props: { type: 'webhook', name: '', enabled: true, config: {}, service: null }
 		});
 		const input = screen.getByLabelText('Channel Label');
-		expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent('Channel Label *');
+		expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent(/^Channel Label$/);
+		expect(document.querySelector('.field-label-required')).toHaveAttribute('aria-hidden', 'true');
 		expect(screen.queryByRole('link', { name: /^Docs for Channel Label/ })).toBeNull();
 	});
 
@@ -268,13 +269,14 @@ describe('ConfigureSection bash', () => {
 		await screen.findByText('No scripts found');
 		const script = screen.getByLabelText('Script');
 		const timeout = screen.getByLabelText('Timeout (seconds)');
-		expect(document.querySelector(`label[for="${script.id}"]`)).toHaveTextContent('Script *');
-		expect(document.querySelector(`label[for="${timeout.id}"]`)).toHaveTextContent('Timeout (s)');
-		expect(screen.getByRole('link', { name: 'Docs for Script *' })).toHaveAttribute(
+		expect(document.querySelector(`label[for="${script.id}"]`)).toHaveTextContent(/^Script$/);
+		expect(document.querySelector(`label[for="${timeout.id}"]`)).toHaveTextContent(/^Timeout$/);
+		expect(screen.getByText('(s)')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Docs for Script (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/notification-scripts#where-scripts-live'
 		);
-		expect(screen.getByRole('link', { name: 'Docs for Timeout (s)' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Timeout (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/notification-scripts#failures-and-timeouts'
 		);
@@ -350,11 +352,11 @@ describe('ConfigureSection docs links', () => {
 		});
 		const ids = screen.getAllByRole('link', { name: /^Docs for/ }).map((a) => a.getAttribute('data-field-id'));
 		expect(ids).toEqual(['notify.discord.webhook_id', 'notify.discord.thread', 'notify.discord.tts']);
-		expect(screen.getByRole('link', { name: 'Docs for Webhook ID *' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for Webhook ID (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'https://appriseit.com/services/discord/#parameter-breakdown'
 		);
-		expect(screen.queryByRole('link', { name: 'Docs for Discord' })).toBeNull();
+		expect(screen.queryByRole('link', { name: 'Docs for Discord (opens in a new tab)' })).toBeNull();
 	});
 
 	it("gives any other service one link, to Apprise's setup page for it", () => {
@@ -369,7 +371,7 @@ describe('ConfigureSection docs links', () => {
 		});
 		const links = screen.getAllByRole('link', { name: /^Docs for/ });
 		expect(links).toHaveLength(1);
-		expect(links[0]).toHaveAccessibleName('Docs for Zulip');
+		expect(links[0]).toHaveAccessibleName('Docs for Zulip (opens in a new tab)');
 		expect(links[0]).toHaveAttribute('href', 'https://appriseit.com/services/zulip/');
 		expect(links[0]).toHaveAttribute('target', '_blank');
 	});

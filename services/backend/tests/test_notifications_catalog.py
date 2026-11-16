@@ -157,8 +157,10 @@ def test_featured_notify_fields_match_the_live_apprise_catalog() -> None:
     finally:
         cat.build_catalog.cache_clear()
     assert list(FEATURED_NOTIFY_FIELDS) == cat.FEATURED_SERVICES
+    # Field order follows Apprise's template args, which a version bump may
+    # reorder without changing coverage, so the fields compare as sets.
     live = {
-        sid: tuple(f["key"] for f in services[sid]["required_fields"] + services[sid]["advanced_fields"])
+        sid: {f["key"] for f in services[sid]["required_fields"] + services[sid]["advanced_fields"]}
         for sid in cat.FEATURED_SERVICES
     }
-    assert live == FEATURED_NOTIFY_FIELDS
+    assert live == {sid: set(keys) for sid, keys in FEATURED_NOTIFY_FIELDS.items()}

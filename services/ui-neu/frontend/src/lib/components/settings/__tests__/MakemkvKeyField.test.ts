@@ -43,7 +43,7 @@ afterEach(() => {
 describe('MakemkvKeyField', () => {
 	it("links the field title to the MakeMKV help page's key section", () => {
 		renderComponent(MakemkvKeyField, { props: { field, value: null } });
-		expect(screen.getByRole('link', { name: 'Docs for MakeMKV key' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Docs for MakeMKV key (opens in a new tab)' })).toHaveAttribute(
 			'href',
 			'/help/guide/makemkv#how-the-key-works'
 		);
