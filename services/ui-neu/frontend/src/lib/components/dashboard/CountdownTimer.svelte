@@ -7,13 +7,26 @@
 		paused?: boolean;
 		/** Render with white text/track for use on colored backgrounds */
 		inverted?: boolean;
+		/** Pauses the countdown; with no handler for the current state, no control shows. */
 		onpause?: () => void;
+		/** Resumes the countdown; with no handler for the current state, no control shows. */
 		onresume?: () => void;
+		/** A pause or resume is in flight: the control shows, disabled. */
+		busy?: boolean;
 		/** A hold the operator cannot toggle here, named: the ripper is holding the countdown for this reason. */
 		held?: string | null;
 	}
 
-	let { startTime, waitSeconds, paused = false, inverted = false, onpause, onresume, held = null }: Props = $props();
+	let {
+		startTime,
+		waitSeconds,
+		paused = false,
+		inverted = false,
+		onpause,
+		onresume,
+		busy = false,
+		held = null
+	}: Props = $props();
 
 	let now = $state(Date.now());
 	let deadline = $derived(new Date(startTime).getTime() + waitSeconds * 1000);
@@ -23,13 +36,8 @@
 	let progress = $derived(waitSeconds > 0 ? Math.min(1, Math.max(0, 1 - remaining / waitSeconds)) : 1);
 	let expired = $derived(remaining <= 0);
 
-	function handleClick() {
-		if (paused) {
-			onresume?.();
-		} else {
-			onpause?.();
-		}
-	}
+	// The control for the current state: resume while paused, else pause.
+	let toggle = $derived(paused ? onresume : onpause);
 
 	onMount(() => {
 		const id = setInterval(() => {
@@ -42,10 +50,11 @@
 </script>
 
 <div class="countdown-timer" data-inverted={inverted} data-held={held ? 'true' : undefined}>
-	{#if !held}
+	{#if !held && toggle}
 		<button
 			type="button"
-			onclick={handleClick}
+			onclick={toggle}
+			disabled={busy}
 			class="countdown-timer-btn"
 			title={paused ? 'Resume timer' : 'Pause timer'}
 		>
