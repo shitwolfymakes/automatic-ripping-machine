@@ -341,7 +341,7 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		expect(screen.queryByRole('alert')).toBeNull();
 	});
 
-	it('Try again after a failed clear with no match run calls neither matchIdentity nor clearEpisodeMatch', async () => {
+	it('Try again after a failed clear with no match run retries the clear', async () => {
 		vi.mocked(clearEpisodeMatch).mockRejectedValue(new Error('HTTP 500'));
 		renderComponent(EpisodeMatchPanel, { props: panelProps() });
 		await fireEvent.click(await screen.findByRole('button', { name: 'Clear episodes' }));
@@ -350,11 +350,11 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 		await settle();
 		expect(matchIdentity).not.toHaveBeenCalled();
-		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
+		expect(clearEpisodeMatch).toHaveBeenCalledTimes(2);
 		expect(screen.getByRole('alert')).toHaveTextContent('Could not clear the episodes (HTTP 500).');
 	});
 
-	it('Try again after a failed preview and a failed clear reruns the preview request, not the clear', async () => {
+	it('Try again after a failed preview and a failed clear retries the clear, not the preview', async () => {
 		vi.mocked(matchIdentity).mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValueOnce(tvmazePreview);
 		vi.mocked(clearEpisodeMatch).mockRejectedValue(new Error('HTTP 500'));
 		renderComponent(EpisodeMatchPanel, { props: panelProps() });
@@ -365,10 +365,9 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		await screen.findByText('Could not clear the episodes (HTTP 500).');
 		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
 		await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-		await screen.findByText(/1 track changes if you apply TMDb/);
-		expect(matchIdentity).toHaveBeenCalledTimes(2);
-		expect(vi.mocked(matchIdentity).mock.calls[1]).toEqual(['job_1', { source: 'tmdb', apply: false }]);
-		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
+		await settle();
+		expect(matchIdentity).toHaveBeenCalledTimes(1);
+		expect(clearEpisodeMatch).toHaveBeenCalledTimes(2);
 	});
 });
 
