@@ -21,11 +21,11 @@ export interface ReleaseApplyPlan {
 	/** The body of the resolve request. */
 	resolveBody: ResolveBody;
 	/**
-	 * The body of the PATCH, or null for none. Called only after the resolve
-	 * succeeds, since it reads the release and the mapping open at that time
-	 * (#595).
+	 * The body of the PATCH sent once the resolve succeeds, or null for none.
+	 * Built from the applied release before the resolve, so leaving or
+	 * switching releases while it is pending cannot change it.
 	 */
-	patchBody: () => JobUpdateRequest | null;
+	patchBody: JobUpdateRequest | null;
 }
 
 export class MusicReleaseApply {
@@ -85,7 +85,7 @@ export class MusicReleaseApply {
 		try {
 			await resolveJob(plan.jobId, plan.resolveBody);
 			this.feedback = { type: 'success', message: 'Release applied' };
-			await this.#savePatch(plan.jobId, plan.patchBody());
+			await this.#savePatch(plan.jobId, plan.patchBody);
 			onapply?.();
 		} catch (e) {
 			this.feedback = { type: 'error', message: errorMessage(e, 'Apply failed') };

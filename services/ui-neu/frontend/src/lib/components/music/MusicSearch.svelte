@@ -87,9 +87,8 @@
 				resolveBody: musicReleaseBody(fields, visibleTracks),
 				// Persist the release cover + any track-title mappings in one PATCH so
 				// the cover art shows on the job's cards/rows (resolve doesn't set it).
-				// The body is built after the resolve, from whatever release is open
-				// then (#595).
-				patchBody: () => releasePatchBody(detail!.poster_url ?? null, trackMapping)
+				// Built now, from the release being applied.
+				patchBody: releasePatchBody(detail.poster_url ?? null, trackMapping)
 			},
 			onapply
 		);
