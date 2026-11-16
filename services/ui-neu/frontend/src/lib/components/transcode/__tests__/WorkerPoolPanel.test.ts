@@ -142,7 +142,7 @@ describe('WorkerPoolPanel', () => {
 
 	it('shows the percentage and the time since the heartbeat', () => {
 		renderPanel({ workers: [makeWorker({ progress_pct: 42 })] });
-		expect(screen.getByText(/42%/)).toHaveTextContent('42%· 30s since heartbeat');
+		expect(screen.getByText(/42%/)).toHaveTextContent('42% · 30s since heartbeat');
 	});
 
 	it('shows only the percentage when the heartbeat cannot be parsed', () => {
