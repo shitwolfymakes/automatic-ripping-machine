@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, func, select
 
+from arm_backend import release_check
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import settings
 from arm_backend.db import get_session
@@ -162,7 +163,16 @@ def _app_version() -> str:
 
 @router.get("/version", response_model=SystemVersionResponse)
 async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
-    return SystemVersionResponse(version=_app_version())
+    running = _app_version()
+    release = release_check.cache.release
+    if release is None:
+        return SystemVersionResponse(version=running)
+    return SystemVersionResponse(
+        version=running,
+        latest_version=release.tag,
+        update_available=release_check.update_available(running, release),
+        release_url=release.url,
+    )
 
 
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])

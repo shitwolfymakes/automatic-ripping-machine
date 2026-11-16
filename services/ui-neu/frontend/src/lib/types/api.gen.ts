@@ -5308,6 +5308,18 @@ export type SystemVersionResponse = {
      * Version
      */
     version: string;
+    /**
+     * Latest Version
+     */
+    latest_version?: string | null;
+    /**
+     * Update Available
+     */
+    update_available?: boolean | null;
+    /**
+     * Release Url
+     */
+    release_url?: string | null;
 };
 
 /**
