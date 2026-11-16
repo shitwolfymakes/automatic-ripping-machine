@@ -169,7 +169,7 @@ afterEach(async () => {
 	cleanup();
 	gotoMock.mockClear();
 	vi.mocked(setRippingEnabled).mockReset();
-	vi.mocked(setRippingEnabled).mockResolvedValue(undefined as never);
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
 	vi.mocked(toggleTheme).mockClear();
 	startIsoRipMock.mockClear();
 	theme.set('dark');
@@ -382,8 +382,8 @@ describe('Layout Auto-Start toggle', () => {
 	it('ignores a click while a toggle is still in flight', async () => {
 		let release!: () => void;
 		vi.mocked(setRippingEnabled).mockReturnValueOnce(
-			new Promise<undefined>((resolve) => {
-				release = () => resolve(undefined);
+			new Promise((resolve) => {
+				release = () => resolve({ ripping_paused: true });
 			}) as never
 		);
 		renderLayout();
