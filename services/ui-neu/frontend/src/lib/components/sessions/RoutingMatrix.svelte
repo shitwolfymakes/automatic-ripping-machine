@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	// The Routing view: a media-type by disc-type matrix, each cell the session
 	// a disc of that kind routes to. Loads and saves its own routes.
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/session-routes';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -28,6 +28,7 @@
 	let sessions = $state<SessionView[]>([]);
 	let loading = $state(true);
 	const feedback = new TimedFeedback();
+	onDestroy(() => feedback.dispose());
 	// Cell keys in flight (upsert or delete), keyed by "media_type/disc_type".
 	const pending = new PendingKeys();
 
