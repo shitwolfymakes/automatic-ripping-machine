@@ -53,6 +53,11 @@ def release_repo() -> str:
     return os.environ.get("ARMCTL_RELEASE_REPO", "").strip() or DEFAULT_REPO
 
 
+def repo_url() -> str:
+    """The GitHub page of the repo release_repo() names."""
+    return f"https://github.com/{release_repo()}"
+
+
 def parse_version(version: str) -> tuple[tuple[int, ...], str] | None:
     """Split a release tag into (numeric core, pre-release). A leading v is
     ignored. Returns None when the core is not dotted numbers (for example

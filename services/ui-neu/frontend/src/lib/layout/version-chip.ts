@@ -7,7 +7,13 @@ export interface VersionChipView {
 	state: VersionChipState;
 	releaseUrl: string;
 	latestVersion: string;
+	/** Where the whole chip links. */
+	href: string;
+	/** The chip link's accessible name. */
+	label: string;
 }
+
+export const DEFAULT_REPO_URL = 'https://github.com/automatic-ripping-machine/automatic-ripping-machine';
 
 /** Prefix a single leading "v" without doubling an existing one. */
 export function withV(version: string): string {
@@ -23,10 +29,19 @@ function chipState(resp: SystemVersionResponse): VersionChipState {
 /** Decide what the sidebar version chip shows; null means the version fetch failed. */
 export function versionChipView(resp: SystemVersionResponse | null): VersionChipView | null {
 	if (!resp) return null;
+	const version = withV(resp.version);
+	const state = chipState(resp);
+	const releaseUrl = resp.release_url ?? '';
+	const latestVersion = resp.latest_version ?? '';
+	const update = state === 'update';
 	return {
-		version: withV(resp.version),
-		state: chipState(resp),
-		releaseUrl: resp.release_url ?? '',
-		latestVersion: resp.latest_version ?? ''
+		version,
+		state,
+		releaseUrl,
+		latestVersion,
+		href: update ? releaseUrl : (resp.repo_url ?? DEFAULT_REPO_URL),
+		label: update
+			? `Update available: ${withV(latestVersion)} (opens in a new tab)`
+			: `ARM ${version} on GitHub (opens in a new tab)`
 	};
 }
