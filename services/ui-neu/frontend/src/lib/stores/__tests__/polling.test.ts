@@ -111,6 +111,26 @@ describe('createPollingStore', () => {
 		expect(get(store)).toBe(6);
 	});
 
+	it('drops a fetch result that started before an update()', async () => {
+		let resolve!: (v: number) => void;
+		const fetcher = vi.fn().mockReturnValueOnce(new Promise<number>((r) => (resolve = r)));
+		const store = createPollingStore(fetcher, 0);
+		const pending = store.refresh();
+		store.update(() => 7);
+		resolve(1);
+		await pending;
+		expect(get(store)).toBe(7);
+		expect(get(store.loading)).toBe(false);
+		expect(get(store.initialized)).toBe(true);
+	});
+
+	it('applies a fetch result that started after an update()', async () => {
+		const store = createPollingStore(vi.fn().mockResolvedValue(1), 0);
+		store.update(() => 7);
+		await store.refresh();
+		expect(get(store)).toBe(1);
+	});
+
 	it('pauses on visibility hidden and resumes on visible', async () => {
 		const fetcher = vi.fn().mockResolvedValue('data');
 		const store = createPollingStore(fetcher, 'initial', 1000);
