@@ -9,4 +9,9 @@ describe('StatusDot', () => {
 		renderComponent(StatusDot, { props: { status: 'error' } });
 		expect(screen.getByTitle('error')).toBeInTheDocument();
 	});
+
+	it('is an image named by its status, so the label is allowed', () => {
+		renderComponent(StatusDot, { props: { status: 'error' } });
+		expect(screen.getByRole('img', { name: 'error' })).toHaveClass('status-dot');
+	});
 });
