@@ -1119,6 +1119,43 @@ describe('PATCH after resolve', () => {
 	});
 });
 
+describe('leaving a release while its apply is pending', () => {
+	async function applyPending(onapply = vi.fn()) {
+		mount({ onapply, discTracks: [disc(0, null, { kind: 'audio_track' })] });
+		await searchFor([cand({ title: 'Alpha' }), cand({ title: 'Beta', provider_id: 'rel-2' })]);
+		mockDetail.mockResolvedValue(rel({ title: 'Alpha', poster_url: 'http://a.jpg', tracks: [trk(1, 'A-1', null)] }));
+		await openCard('Alpha');
+		const pending = deferred<never>();
+		mockResolve.mockReturnValue(pending.promise);
+		await fireEvent.click(applyBtn());
+		await fireEvent.click(applyTitles());
+		return { onapply, pending };
+	}
+
+	const ALPHA_PATCH = { poster_url_manual: 'http://a.jpg', tracks: [{ track_id: 'trk_0', title: 'A-1' }] };
+
+	it("saves the applied release's cover and titles after Back to results", async () => {
+		const { onapply, pending } = await applyPending();
+		await backToResults();
+		pending.resolve({ job: {}, fan_out: [] } as never);
+		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
+		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
+	});
+
+	it("saves the applied release's cover and titles after opening another release", async () => {
+		const { onapply, pending } = await applyPending();
+		await backToResults();
+		mockDetail.mockResolvedValue(
+			rel({ release_id: 'rel-2', title: 'Beta', poster_url: 'http://b.jpg', tracks: [trk(1, 'B-1', null)] })
+		);
+		await openCard('Beta');
+		pending.resolve({ job: {}, fan_out: [] } as never);
+		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
+		expect(mockPatchJob).toHaveBeenCalledTimes(1);
+		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
+	});
+});
+
 describe('apply outcome', () => {
 	it('shows "Release applied" and calls onapply', async () => {
 		const onapply = vi.fn();
