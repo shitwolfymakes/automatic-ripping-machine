@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend import release_check
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import system as system_router
@@ -969,3 +970,51 @@ def test_diagnostics_transcoder_location_none_when_ripper_only(signing_key: byte
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     tc = _transcoder(_diag(app, token))
     assert tc["location"] == "none" and tc["details"] == []
+
+
+def _get_version(signing_key: bytes, tmp_path, monkeypatch, running: str) -> dict:
+    monkeypatch.setattr(system_router, "_app_version", lambda: running)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/api/system/version", headers=_auth(token))
+    assert r.status_code == 200
+    return r.json()
+
+
+def test_system_version_without_a_known_release_has_null_fields(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    release_check.cache.release = None
+    body = _get_version(signing_key, tmp_path, monkeypatch, "3.0.0")
+    assert body == {"version": "3.0.0", "latest_version": None, "update_available": None, "release_url": None}
+
+
+@pytest.mark.parametrize(
+    ("running", "tag", "available"),
+    [
+        ("3.0.0-rc3", "v3.0.0", True),
+        ("3.0.0-rc3", "2.24.4", False),
+        ("3.0.0", "v3.0.0", False),
+        ("0.0.0+unknown", "v3.0.0", False),
+    ],
+)
+def test_system_version_reports_the_cached_release(
+    signing_key: bytes, tmp_path, monkeypatch, running: str, tag: str, available: bool
+) -> None:
+    monkeypatch.setattr(release_check.cache, "release", release_check.Release(tag=tag, url="https://x/rel"))
+    body = _get_version(signing_key, tmp_path, monkeypatch, running)
+    assert body == {
+        "version": running,
+        "latest_version": tag,
+        "update_available": available,
+        "release_url": "https://x/rel",
+    }
+
+
+def test_system_version_never_calls_github(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("the endpoint must not fetch")
+
+    monkeypatch.setattr("httpx.AsyncClient.send", boom)
+    monkeypatch.setattr("httpx.AsyncClient.get", boom)
+    _get_version(signing_key, tmp_path, monkeypatch, "3.0.0")

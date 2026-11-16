@@ -13,6 +13,9 @@
 services:
   arm-backend:
     image: ${ARM_IMAGE_PREFIX:?armctl writes ARM_IMAGE_PREFIX to .env}/arm-backend:${ARM_IMAGE_TAG:?armctl writes ARM_IMAGE_TAG to .env}
+    environment:
+      # The repo the running version is compared against; empty means upstream.
+      ARMCTL_RELEASE_REPO: ${ARMCTL_RELEASE_REPO:-}
   arm-data-init:
     image: ${ARM_IMAGE_PREFIX:?armctl writes ARM_IMAGE_PREFIX to .env}/arm-backend:${ARM_IMAGE_TAG:?armctl writes ARM_IMAGE_TAG to .env}
   arm-ui:
