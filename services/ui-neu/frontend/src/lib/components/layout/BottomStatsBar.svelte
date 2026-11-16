@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
 	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
+	import { reveal } from '$lib/ui/transitions';
 
 	// Auth pages (/login, /change-password) have no usable session, so the
 	// resources poll would 401 or 403 every tick there (D-137). Same rule as
@@ -58,7 +59,7 @@
 		<!-- Storage per root -->
 		{#if $resources.storage.length}
 			<div class="stats-bar-divider shrink-0"></div>
-			<div class="stats-bar-group flex items-center gap-3 overflow-hidden">
+			<div in:reveal class="stats-bar-group flex items-center gap-3 overflow-hidden">
 				{#each $resources.storage as s (s.path)}
 					<a href={filesHref(s.name)} class="stats-bar-link flex shrink-0 items-center gap-1.5">
 						<span class="stats-bar-name">{s.name}</span>
