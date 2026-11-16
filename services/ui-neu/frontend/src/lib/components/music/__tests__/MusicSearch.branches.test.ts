@@ -784,22 +784,22 @@ describe('edit fields', () => {
 		expect(discTotalInput()).toHaveValue('7');
 	});
 
-	it('resets Album, Artist and Year when Disc total is typed on a multi-disc release (today)', async () => {
+	it('keeps Album, Artist and Year when Disc total is typed on a multi-disc release', async () => {
 		await openRelease(rel({ disc_count: 2 }));
 		await typeInto(albumInput(), 'Edited');
 		await typeInto(editArtist(), 'Someone');
 		await typeInto(yearInput(), '2001');
 		await typeInto(discTotalInput(), '4');
-		expect(albumInput()).toHaveValue('Abbey Road');
-		expect(editArtist()).toHaveValue('The Beatles');
-		expect(yearInput()).toHaveValue('1969');
+		expect(albumInput()).toHaveValue('Edited');
+		expect(editArtist()).toHaveValue('Someone');
+		expect(yearInput()).toHaveValue('2001');
 		expect(discTotalInput()).toHaveValue('4');
 	});
 
-	it('refills Disc total with the disc count when it is cleared (today)', async () => {
+	it('leaves Disc total blank when it is cleared on a multi-disc release', async () => {
 		await openRelease(rel({ disc_count: 2 }), { job: { disc_total: 5 } });
 		await typeInto(discTotalInput(), '');
-		expect(discTotalInput()).toHaveValue('2');
+		expect(discTotalInput()).toHaveValue('');
 	});
 
 	it('keeps edits when Disc total is typed on a single-disc release', async () => {
