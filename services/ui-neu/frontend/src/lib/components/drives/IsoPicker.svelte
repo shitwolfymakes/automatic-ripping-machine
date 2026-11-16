@@ -73,11 +73,12 @@
 		return modified ? new Date(modified).toLocaleDateString() : '--';
 	}
 
-	// Every load but the first after the picker opens puts focus back on the
-	// first row once the rows are shown, because LoadState's skeleton swap
-	// unmounts whatever row held it.
-	async function browseTo(path: string): Promise<void> {
-		if (!(await browser.loadLibrary(path))) return;
+	// Every load but the first after the picker opens, in either mode, puts
+	// focus back on the first row once the rows are shown, because LoadState's
+	// skeleton swap unmounts whatever row held it. `loaded` is false when the
+	// load failed or a newer one superseded it.
+	async function refocusAfterLoad(loaded: boolean): Promise<void> {
+		if (!loaded) return;
 		const shouldRefocus = loadedOnce;
 		loadedOnce = true;
 		if (shouldRefocus) {
@@ -87,6 +88,14 @@
 			await tick();
 			focusRow(0);
 		}
+	}
+
+	async function browseTo(path: string): Promise<void> {
+		await refocusAfterLoad(await browser.loadLibrary(path));
+	}
+
+	async function loadFolders(): Promise<void> {
+		await refocusAfterLoad(await browser.loadFolders());
 	}
 
 	function openFolder(name: string): void {
@@ -215,7 +224,7 @@
 		if (open) {
 			reset();
 			if (isFolderMode) {
-				browser.loadFolders();
+				loadFolders();
 			} else {
 				browseTo('');
 			}
@@ -241,13 +250,7 @@
 						<section class="panel stack stack-sm iso-picker-panel" aria-labelledby="iso-picker-folder-title">
 							<div class="iso-picker-panel-head">
 								<h3 id="iso-picker-folder-title" class="panel-title iso-picker-panel-title">Disc folder</h3>
-								<button
-									type="button"
-									class="btn btn-icon"
-									onclick={() => browser.loadFolders()}
-									title="Refresh"
-									aria-label="Refresh"
-								>
+								<button type="button" class="btn btn-icon" onclick={loadFolders} title="Refresh" aria-label="Refresh">
 									<Glyph name="refresh" />
 								</button>
 							</div>
@@ -293,9 +296,7 @@
 											Couldn't load the library
 										</p>
 										<p class="alert-body">{err.message}</p>
-										<button type="button" class="btn btn-sm iso-picker-retry" onclick={() => browser.loadFolders()}
-											>Retry</button
-										>
+										<button type="button" class="btn btn-sm iso-picker-retry" onclick={loadFolders}>Retry</button>
 									</div>
 								{/snippet}
 								{#snippet ready(data)}
