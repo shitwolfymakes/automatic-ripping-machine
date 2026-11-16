@@ -8,7 +8,7 @@ export interface LoginResult {
 }
 
 export function login(username: string, password: string): Promise<LoginResult> {
-	return post<LoginResult>('/api/auth/login', { username, password });
+	return post<LoginResult>('/api/auth/login', { username, password }, { checksCredentials: true });
 }
 
 export function logout(): Promise<unknown> {
@@ -16,5 +16,9 @@ export function logout(): Promise<unknown> {
 }
 
 export function changePassword(currentPassword: string, newPassword: string): Promise<unknown> {
-	return post('/api/auth/password', { current_password: currentPassword, new_password: newPassword });
+	return post(
+		'/api/auth/password',
+		{ current_password: currentPassword, new_password: newPassword },
+		{ checksCredentials: true }
+	);
 }
