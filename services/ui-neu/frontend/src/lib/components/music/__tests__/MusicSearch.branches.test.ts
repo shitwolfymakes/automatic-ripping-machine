@@ -579,16 +579,31 @@ describe('opening a release', () => {
 	it.each([
 		['an Error', new Error('Detail exploded'), 'Detail exploded'],
 		['a non-Error', 'nope', 'Load failed']
-	])('keeps the results and shows no message when the fetch rejects with %s (today)', async (_n, err, text) => {
+	])('keeps the results and shows the message when the fetch rejects with %s', async (_n, err, text) => {
 		mount();
 		await searchFor([cand()]);
 		mockDetail.mockRejectedValue(err);
 		await fireEvent.click(screen.getByText('Abbey Road'));
-		await waitFor(() => expect(mockDetail).toHaveBeenCalledTimes(1));
-		await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+		expect(await screen.findByText(text)).toHaveClass('music-search-meta');
+		expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
 		expect(cards()).toHaveLength(1);
-		expect(screen.queryByText(text)).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /Back to results/ })).not.toBeInTheDocument();
+	});
+
+	it('clears a failed load message when the next load starts and when a search runs', async () => {
+		mount();
+		await searchFor([cand()]);
+		mockDetail.mockRejectedValue(new Error('Detail exploded'));
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		await screen.findByText('Detail exploded');
+		const d = deferred<MetadataReleaseDetail>();
+		mockDetail.mockReturnValue(d.promise);
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		expect(screen.queryByText('Detail exploded')).not.toBeInTheDocument();
+		d.reject(new Error('Again'));
+		await screen.findByText('Again');
+		await searchFor([cand()]);
+		expect(screen.queryByText('Again')).not.toBeInTheDocument();
 	});
 
 	it('shows the full header', async () => {

@@ -177,6 +177,11 @@
 	<!-- Track output options: custom filename + (series) episode -->
 	<TrackOutputOptions {jobId} {track} {isSeries} onfeedback={(f) => (feedback = f)} onsaved={() => onapply?.()} />
 
+	<!-- The outcome line sits in the editor's Apply row while it is open, here otherwise -->
+	{#if !detail && feedback}
+		<p class="track-title-search-feedback" data-tone={feedback.type}>{feedback.message}</p>
+	{/if}
+
 	{#if search.error}
 		{#if search.error.toLowerCase().includes('api key')}
 			<div class="alert alert-warning">
