@@ -50,8 +50,7 @@
 						{#if worker.claim_heartbeat_at}
 							{@const dur = formatElapsed(worker.claim_heartbeat_at)}
 							<p class="transcoder-page-worker-heartbeat">
-								{worker.progress_pct}%{#if dur}
-									&middot; {dur} since heartbeat{/if}
+								{worker.progress_pct}%{#if dur}&nbsp;&middot; {dur} since heartbeat{/if}
 							</p>
 						{:else}
 							<p class="transcoder-page-worker-heartbeat-idle">{worker.progress_pct}%</p>

@@ -193,8 +193,8 @@ describe('formatDuration through the worker pool', () => {
 		h.renderComponent(h.Page);
 		await h.waitFor(() => expect(document.querySelectorAll('.transcoder-page-worker-card')).toHaveLength(2));
 		const text = document.body.textContent ?? '';
-		expect(text).toMatch(/50%\s*·\s*30s since heartbeat/);
-		expect(text).toMatch(/50%\s*·\s*1m 30s since heartbeat/);
+		expect(text).toMatch(/50%\s·\s30s since heartbeat/);
+		expect(text).toMatch(/50%\s·\s1m 30s since heartbeat/);
 	});
 
 	it('omits "since heartbeat" when the heartbeat is unparsable', async () => {
