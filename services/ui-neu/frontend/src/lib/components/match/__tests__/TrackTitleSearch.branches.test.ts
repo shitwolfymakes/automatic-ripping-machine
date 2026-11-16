@@ -642,17 +642,15 @@ describe('TrackTitleSearch save options', () => {
 		expect(await screen.findByText('Track options saved')).toBeInTheDocument();
 	});
 
-	it("shows no outcome line when no editor is open (today's behaviour)", async () => {
+	it('shows the outcome line when no editor is open', async () => {
 		const onapply = vi.fn();
 		show({ onapply });
 		await fireEvent.click(saveButton());
-		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
-		expect(screen.queryByText('Track options saved')).toBeNull();
-		mockUpdateTrack.mockRejectedValue(new Error('hidden failure'));
+		expect(await screen.findByText('Track options saved')).toHaveAttribute('data-tone', 'success');
+		expect(onapply).toHaveBeenCalledTimes(1);
+		mockUpdateTrack.mockRejectedValue(new Error('save failure'));
 		await fireEvent.click(saveButton());
-		await waitFor(() => expect(saveButton()).toHaveTextContent('Save options'));
-		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(2));
-		expect(screen.queryByText('hidden failure')).toBeNull();
+		expect(await screen.findByText('save failure')).toHaveAttribute('data-tone', 'error');
 	});
 
 	it.each([
@@ -720,13 +718,18 @@ describe('TrackTitleSearch clear override', () => {
 		expect(onclear).not.toHaveBeenCalled();
 	});
 
-	it("shows nothing on failure when no editor is open (today's behaviour)", async () => {
+	it('shows the failure when no editor is open', async () => {
 		show({ track: { title: 'Old' } });
-		mockClear.mockRejectedValue(new Error('hidden clear failure'));
+		mockClear.mockRejectedValue(new Error('clear failure'));
 		await fireEvent.click(clearButton());
-		await waitFor(() => expect(clearButton()).toHaveTextContent('Clear Override'));
-		await waitFor(() => expect(mockClear).toHaveBeenCalledTimes(1));
-		expect(screen.queryByText('hidden clear failure')).toBeNull();
-		expect(screen.queryByText('Clear failed')).toBeNull();
+		expect(await screen.findByText('clear failure')).toHaveAttribute('data-tone', 'error');
+	});
+
+	it('shows "Reverted to job title" after a clear closes the editor', async () => {
+		show({ track: { title: 'Old' } });
+		await openEditorViaImdb();
+		await fireEvent.click(clearButton());
+		expect(await screen.findByText('Reverted to job title')).toHaveAttribute('data-tone', 'success');
+		expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
 	});
 });

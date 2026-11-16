@@ -31,7 +31,7 @@ export interface ReleaseApplyPlan {
 export class MusicReleaseApply {
 	/** An apply is in flight. */
 	applying = $state(false);
-	/** The outcome line of the last apply or detail load. */
+	/** The outcome line of the last apply. */
 	feedback = $state<ApplyFeedback | null>(null);
 	/** The total-mismatch gate is open. */
 	confirmMismatch = $state(false);

@@ -26,6 +26,8 @@
 
 	let detail = $state<MetadataReleaseDetail | null>(null);
 	let loadingDetail = $state(false);
+	// A failed release load, shown with the results it was opened from.
+	let loadError = $state<string | null>(null);
 
 	// Cards flipped to show their tracklist on the back face.
 	const flips = new MusicFlipCards();
@@ -44,6 +46,7 @@
 		searching = true;
 		results = [];
 		searchError = null;
+		loadError = null;
 		detail = null;
 		flips.clear();
 		try {
@@ -61,11 +64,12 @@
 	async function openDetail(c: MetadataCandidate) {
 		if (!c.provider_id) return;
 		loadingDetail = true;
+		loadError = null;
 		release.feedback = null;
 		try {
 			detail = await fetchMusicDetail(c.provider_id);
 		} catch (e) {
-			release.feedback = { type: 'error', message: errorMessage(e, 'Load failed') };
+			loadError = errorMessage(e, 'Load failed');
 		} finally {
 			loadingDetail = false;
 		}
@@ -100,6 +104,10 @@
 
 	{#if searchError}
 		<p class="music-search-meta">{searchError}</p>
+	{/if}
+
+	{#if loadError}
+		<p class="music-search-meta">{loadError}</p>
 	{/if}
 
 	<!-- Results grid -->
