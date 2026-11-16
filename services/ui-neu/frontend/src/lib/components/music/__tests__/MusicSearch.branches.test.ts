@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { JobView, MetadataCandidate, MetadataReleaseDetail, TrackView } from '$lib/types/api.gen';
 import MusicSearch from '../MusicSearch.svelte';
@@ -544,7 +545,7 @@ describe('card flip', () => {
 		expect(mockDetail).toHaveBeenCalledTimes(2);
 	});
 
-	it('flips again when the fetch resolves after a flip back (today)', async () => {
+	it('stays flipped back when the fetch resolves after a flip back', async () => {
 		mount();
 		await searchFor([cand({ track_count: 2 })]);
 		const d = deferred<MetadataReleaseDetail>();
@@ -553,8 +554,10 @@ describe('card flip', () => {
 		await fireEvent.click(backBtn());
 		expect(isFlipped()).toBe(false);
 		d.resolve(rel());
-		await waitFor(() => expect(isFlipped()).toBe(true));
-		await waitFor(() => expect(backRows()).toHaveLength(2));
+		await d.promise;
+		await tick();
+		expect(isFlipped()).toBe(false);
+		expect(backRows()).toHaveLength(0);
 	});
 });
 
