@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import AllJobsPanel from '../AllJobsPanel.svelte';
 import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 import { createJob } from '$lib/__fixtures__/job';
@@ -51,6 +51,11 @@ async function renderPanel(jobs: JobView[] = [JOB], total = jobs.length) {
 }
 
 type JobView = ReturnType<typeof createJob>;
+
+// Confirms the open bulk-delete dialog.
+async function confirmDelete() {
+	await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+}
 
 async function renderLoaded(jobs: JobView[] = [JOB], total = jobs.length) {
 	const r = await renderPanel(jobs, total);
@@ -158,47 +163,57 @@ describe('AllJobsPanel', () => {
 	});
 
 	it('Delete selected bulk-deletes the selection, reports it and reloads', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		const { list, bulkDeleteJobs, fetchJobsPage } = await renderLoaded();
 		bulkDeleteJobs.mockResolvedValue({ deleted_ids: ['job_2'], skipped_non_terminal: [] });
 		list.selected.add('job_2');
 		fetchJobsPage.mockClear();
 		await fireEvent.click(await screen.findByText('Delete selected'));
+		await confirmDelete();
 		await waitFor(() => expect(screen.getByText('Deleted 1 job(s)')).toBeInTheDocument());
-		expect(window.confirm).toHaveBeenCalledWith('Are you sure you want to delete 1 selected job(s)?');
 		expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['job_2'] });
 		expect(list.selected.size).toBe(0);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(1);
 		expect(document.querySelector('.dashboard-jobs-feedback')).toHaveAttribute('data-tone', 'success');
 	});
 
-	it('does nothing when the confirmation is declined', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(false);
+	it('asks through the confirm dialog before deleting', async () => {
 		const { list, bulkDeleteJobs } = await renderLoaded();
 		list.selected.add('job_2');
 		await fireEvent.click(await screen.findByText('Delete selected'));
+		const dialog = screen.getByRole('dialog');
+		expect(within(dialog).getByText('Delete jobs')).toBeInTheDocument();
+		expect(within(dialog).getByText('Are you sure you want to delete 1 selected job(s)?')).toBeInTheDocument();
+		expect(bulkDeleteJobs).not.toHaveBeenCalled();
+	});
+
+	it('does nothing when the confirmation is cancelled', async () => {
+		const { list, bulkDeleteJobs } = await renderLoaded();
+		list.selected.add('job_2');
+		await fireEvent.click(await screen.findByText('Delete selected'));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
 		expect(bulkDeleteJobs).not.toHaveBeenCalled();
 		expect(document.querySelector('.dashboard-jobs-feedback')).toBeNull();
 		expect(list.selected.size).toBe(1);
 	});
 
 	it('the Actions menu bulk-deletes by status', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		const { bulkDeleteJobs } = await renderLoaded();
 		bulkDeleteJobs.mockResolvedValue({ deleted_ids: ['a'], skipped_non_terminal: ['b'] });
 		await fireEvent.click(screen.getByText(/Actions/));
 		await fireEvent.click(await screen.findByText('Delete All Failed'));
+		await confirmDelete();
 		await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ status: 'failed' }));
 		await waitFor(() => expect(screen.getByText('Deleted 1, skipped 1 in-flight job(s)')).toBeInTheDocument());
 		expect(document.querySelector('.dashboard-jobs-feedback')).toHaveAttribute('data-tone', 'error');
 	});
 
 	it('shows the error message when the bulk delete fails, and Dismiss closes it', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		const { list, bulkDeleteJobs } = await renderLoaded();
 		bulkDeleteJobs.mockRejectedValue(new Error('boom'));
 		list.selected.add('job_2');
 		await fireEvent.click(await screen.findByText('Delete selected'));
+		await confirmDelete();
 		await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
 		expect(document.querySelector('.dashboard-jobs-feedback')).toHaveAttribute('data-tone', 'error');
 		await fireEvent.click(screen.getByLabelText('Dismiss'));
@@ -206,11 +221,11 @@ describe('AllJobsPanel', () => {
 	});
 
 	it('falls back to a generic message when a non-Error is thrown', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		const { list, bulkDeleteJobs } = await renderLoaded();
 		bulkDeleteJobs.mockRejectedValue('nope');
 		list.selected.add('job_2');
 		await fireEvent.click(await screen.findByText('Delete selected'));
+		await confirmDelete();
 		await waitFor(() => expect(screen.getByText('Bulk action failed')).toBeInTheDocument());
 	});
 
