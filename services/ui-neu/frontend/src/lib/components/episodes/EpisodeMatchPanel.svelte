@@ -19,6 +19,7 @@
 		failedSources,
 		pickerOptions,
 		parseHandPick,
+		placementValue,
 		pickedEpisodeName,
 		usedEpisodeNumbers,
 		ROLE_OPTIONS,
@@ -256,9 +257,23 @@
 		return true;
 	}
 
+	// A seasonless placement picked back (its value is no list's): saved again
+	// as it is, still seasonless and with its name. Any other value saves nothing.
+	async function keepSeasonlessPlacement(trackId: string, value: string) {
+		const t = placed.get(trackId);
+		if (t?.episode_number == null || value !== placementValue(t.season, t.episode_number)) return;
+		const data = {
+			role: 'episode' as const,
+			season: null,
+			episode_number: t.episode_number,
+			episode_name: t.episode_name ?? null
+		};
+		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
+	}
+
 	async function setByHand(trackId: string, value: string) {
 		const pick = parseHandPick(value);
-		if (!pick) return;
+		if (!pick) return keepSeasonlessPlacement(trackId, value);
 		if ('role' in pick) return saveTrack(trackId, { role: pick.role });
 		const row = rows.find((r) => r.trackId === trackId);
 		const listSeason = row ? seasonOf(row) : null;
