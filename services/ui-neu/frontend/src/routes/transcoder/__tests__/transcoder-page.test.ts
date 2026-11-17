@@ -135,7 +135,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 0,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		makemkv_key_valid: null,

@@ -5,6 +5,7 @@ import { discTypeLabel } from '$lib/jobs/type';
 import { isAwaitingIdentity, isInProgress, isLive } from '$lib/jobs/status-groups';
 import { parkedSessionLine } from '$lib/sessions/parked-session';
 import { driveLabel } from '$lib/drives/name';
+import type { DriveSummary } from '$lib/api/dashboard';
 
 export type EditableJobField = 'year' | 'season' | 'disc_number' | 'disc_total';
 
@@ -45,12 +46,12 @@ function editableNumberField(label: string, edit: EditableJobField, value: numbe
 	};
 }
 
-function baseFields(job: JobView, driveNames?: Record<string, string> | null): MetadataField[] {
+function baseFields(job: JobView, drives?: Record<string, DriveSummary> | null): MetadataField[] {
 	const fields: MetadataField[] = [
 		{ label: 'Disc Type', value: discTypeLabel(job.disc_type) },
 		{ label: 'Status', value: statusLabel(job.status) },
 		editableNumberField('Year', 'year', job.year),
-		{ label: 'Drive', value: driveLabel(job.drive_id, driveNames), mono: true }
+		{ label: 'Drive', value: driveLabel(job.drive_id, drives), mono: true }
 	];
 	if (job.resumed_from_crash) {
 		fields.push({ label: 'Recovery', value: 'Resumed from crash' });
@@ -159,12 +160,12 @@ function padToRow(fields: MetadataField[], width: number): MetadataField[] {
 // v3 equivalent, so those fields are dropped here rather than synthesized.
 export function buildMetadataFields(
 	job: JobView,
-	driveNames?: Record<string, string> | null,
+	drives?: Record<string, DriveSummary> | null,
 	sessionNames?: Map<string, string>
 ): MetadataField[] {
 	const tv = job.media_type === 'tv';
 	const fields = [
-		...baseFields(job, driveNames),
+		...baseFields(job, drives),
 		...stateFields(job, sessionNames),
 		...discPositionFields(job, tv),
 		...posterFields(job),

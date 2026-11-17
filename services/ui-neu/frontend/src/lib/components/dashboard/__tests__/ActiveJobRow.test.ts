@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import ActiveJobRow from '../ActiveJobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
+import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
 
 const live = vi.hoisted(() => ({ value: { rip: null, transcode: null } as Record<string, unknown> }));
 vi.mock('$lib/stores/job-live.svelte', () => ({
@@ -96,7 +97,7 @@ describe('ActiveJobRow', () => {
 	describe('ISO source', () => {
 		it('shows the ISO chip and Cancel for an ISO rip', async () => {
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'Blade_Runner_2049_UHD.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('Blade_Runner_2049_UHD.iso') }
 			});
 			expect(screen.getByText('ISO')).toBeInTheDocument();
 			expect(screen.getAllByText('Blade_Runner_2049_UHD.iso').length).toBeGreaterThan(0);
@@ -109,10 +110,25 @@ describe('ActiveJobRow', () => {
 			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
 		});
 
+		it('omits the ISO chip and Cancel for an optical drive record', () => {
+			renderComponent(ActiveJobRow, { props: { job: createJob(), drive: createDriveSummary({ name: 'Front' }) } });
+			expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+		});
+
+		it('omits the ISO chip, Cancel and data-source once the virtual drive retires', () => {
+			const { container } = renderComponent(ActiveJobRow, {
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso', 'iso', { retired: true }) }
+			});
+			expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+			expect(container.querySelector('.job-active-row')?.hasAttribute('data-source')).toBe(false);
+		});
+
 		it('cancels through cancelIsoRip without expanding the row', async () => {
 			const { cancelIsoRip } = await import('$lib/api/iso');
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() => expect(cancelIsoRip).toHaveBeenCalledWith('drv_iso_1'));
@@ -121,7 +137,7 @@ describe('ActiveJobRow', () => {
 
 		it('marks the row root data-source="iso" for an ISO rip only', () => {
 			const { container, unmount } = renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso') }
 			});
 			expect(container.querySelector('.job-active-row')?.getAttribute('data-source')).toBe('iso');
 			unmount();
@@ -134,7 +150,7 @@ describe('ActiveJobRow', () => {
 			const { addToast } = await import('$lib/stores/toast.svelte');
 			vi.mocked(cancelIsoRip).mockRejectedValueOnce(new Error('cannot cancel: not an active ISO rip'));
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() =>

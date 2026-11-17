@@ -16,7 +16,7 @@
 	import { fadeIn } from '$lib/ui/transitions';
 	import { fade } from 'svelte/transition';
 	import { groupActiveJobs } from '$lib/dashboard/groups';
-	import { isoSourceFor, isoKindFor } from '$lib/drives/iso-source';
+	import { driveSummary } from '$lib/drives/summary';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
@@ -132,9 +132,7 @@
 		{#snippet row(job)}
 			<DiscReviewWidget
 				{job}
-				driveNames={dash.drive_names}
-				isoSources={dash.iso_sources}
-				isoSourceKinds={dash.iso_source_kinds}
+				drive={driveSummary(dash.drives, job.drive_id)}
 				paused={!dash.ripping_enabled}
 				manualWaitSeconds={dash.review_wait_seconds}
 				onrefresh={refreshDashboard}
@@ -163,11 +161,7 @@
 		label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
 	>
 		{#snippet row(job)}
-			<ActiveJobRow
-				{job}
-				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-			/>
+			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
 		{/snippet}
 	</DashboardSection>
 
@@ -179,11 +173,7 @@
 		label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
 	>
 		{#snippet row(job)}
-			<ActiveJobRow
-				{job}
-				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-			/>
+			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
 		{/snippet}
 	</DashboardSection>
 
