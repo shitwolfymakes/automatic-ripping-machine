@@ -15,6 +15,7 @@
 		"codegen": "cd .. && bash scripts/codegen.sh",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
+		"test:lint-rules": "node --test eslint-rules/rules.test.js",
 		"lint:styles": "node ../../../devtools/ui-neu-style-lint.mjs",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
