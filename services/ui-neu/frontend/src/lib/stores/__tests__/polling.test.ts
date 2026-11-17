@@ -54,24 +54,62 @@ describe('createPollingStore', () => {
 		expect(get(store.error)).toBe('Unknown error');
 	});
 
-	it('refresh() debounces concurrent calls', async () => {
-		let resolve: (v: string) => void;
-		const fetcher = vi.fn().mockImplementation(
+	/** A fetcher whose calls each wait for `release()`, resolving to 'r1', 'r2', ... */
+	function heldFetcher() {
+		const pending: (() => void)[] = [];
+		let n = 0;
+		const fetcher = vi.fn(
 			() =>
 				new Promise<string>((r) => {
-					resolve = r;
+					const value = `r${++n}`;
+					pending.push(() => r(value));
 				})
 		);
+		const release = async () => {
+			pending.shift()?.();
+			await vi.advanceTimersByTimeAsync(0);
+		};
+		return { fetcher, release };
+	}
+
+	it('refresh() asked for mid-fetch fetches once more after it, however many times it is asked', async () => {
+		const { fetcher, release } = heldFetcher();
 		const store = createPollingStore(fetcher, 'initial');
 
 		const p1 = store.refresh();
-		const p2 = store.refresh(); // should be skipped
-
-		resolve!('result');
-		await p1;
-		await p2;
-
+		const p2 = store.refresh();
+		void store.refresh();
 		expect(fetcher).toHaveBeenCalledTimes(1);
+
+		await release();
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(get(store)).toBe('r1');
+
+		await release();
+		await Promise.all([p1, p2]);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(get(store)).toBe('r2');
+
+		// Nothing in flight now: the next refresh() fetches straight away.
+		void store.refresh();
+		expect(fetcher).toHaveBeenCalledTimes(3);
+		await release();
+		expect(get(store)).toBe('r3');
+	});
+
+	it('a timer tick during a slow fetch is skipped, not queued', async () => {
+		const { fetcher, release } = heldFetcher();
+		const store = createPollingStore(fetcher, 'initial', 1000);
+
+		store.start();
+		await vi.advanceTimersByTimeAsync(2500);
+		expect(fetcher).toHaveBeenCalledTimes(1);
+
+		await release();
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(500);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		store.stop();
 	});
 
 	it('start() calls refresh and begins polling', async () => {

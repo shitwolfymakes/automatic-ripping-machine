@@ -13,7 +13,7 @@ beforeEach(() => {
 	mockApiFetch.mockClear();
 });
 
-// fetchDashboard is no longer a thin BFF wrapper — v3 has no /api/dashboard
+// The dashboard is not a thin BFF wrapper — v3 has no /api/dashboard
 // endpoint, so it composes client-side by fanning out across the drives/jobs/
 // transcoder/notifications/config modules (each routes through its own get/post
 // helper, not the mocked apiFetch here). Its composition + sticky-merge
