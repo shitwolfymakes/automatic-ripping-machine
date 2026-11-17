@@ -89,20 +89,20 @@ export function formatDateTime(dateString: string | null | undefined): string {
 }
 
 export function elapsedTime(startTime: string | null | undefined): string {
-	if (!startTime) return 'N/A';
-	const totalSeconds = (Date.now() - new Date(startTime).getTime()) / 1000;
-	return formatDuration(totalSeconds, { cap: false });
+	const start = startTime ? new Date(startTime).getTime() : NaN;
+	if (Number.isNaN(start)) return 'N/A';
+	return formatDuration((Date.now() - start) / 1000, { cap: false });
 }
 
 /**
- * A length of time in seconds as `Xh Ym`, `Ym Zs` or `Zs`; negatives read as
- * 0s. `coarse` is the glanceable form for a rip ETA: `< 1m` under a minute,
+ * A length of time in seconds as `Xh Ym`, `Ym Zs` or `Zs`; negatives and
+ * non-finite values read as 0. `coarse` is the glanceable form for a rip ETA: `< 1m` under a minute,
  * whole minutes from five on. At 24h or more it reads `24h+` unless `cap` is
  * false (an elapsed time has no upper bound).
  */
 export function formatDuration(seconds: number, opts: { coarse?: boolean; cap?: boolean } = {}): string {
 	const { coarse = false, cap = true } = opts;
-	const sec = Math.max(0, Math.floor(seconds));
+	const sec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
 	if (cap && sec >= 24 * 3600) return '24h+';
 	if (coarse && sec < 60) return '< 1m';
 	const h = Math.floor(sec / 3600);

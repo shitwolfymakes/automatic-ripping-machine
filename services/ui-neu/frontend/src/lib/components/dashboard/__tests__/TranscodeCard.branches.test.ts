@@ -112,10 +112,16 @@ describe('TranscodeCard branches', () => {
 			expect(etaEl()).toHaveTextContent('~15m');
 		});
 
-		it('shows an ETA of zero seconds rather than falling back', () => {
+		it('shows an ETA of zero seconds as "< 1m" without the "~", rather than falling back', () => {
 			h.task.mockReturnValue(taskLive({ etaSeconds: 0 }));
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
-			expect(etaEl()).toHaveTextContent('~< 1m');
+			expect(etaEl().textContent?.trim()).toBe('< 1m');
+		});
+
+		it('shows an ETA under a minute as "< 1m" without the "~"', () => {
+			h.task.mockReturnValue(taskLive({ etaSeconds: 45 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
+			expect(etaEl().textContent?.trim()).toBe('< 1m');
 		});
 
 		it('falls back to the dash when the store has no record at all', () => {

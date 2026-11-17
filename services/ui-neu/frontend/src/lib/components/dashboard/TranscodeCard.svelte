@@ -35,6 +35,12 @@
 	let live = $derived(job ? jobLive.task(job.id, job) : null);
 	let etaSeconds = $derived(live?.etaSeconds ?? null);
 
+	/** An estimate reads "~12m"; under a minute "< 1m" already says it is rough. */
+	function etaLabel(seconds: number): string {
+		const text = formatDuration(seconds, { coarse: true });
+		return text.startsWith('<') ? text : `~${text}`;
+	}
+
 	function toggle(e: MouseEvent) {
 		if ((e.target as HTMLElement).closest('a, button:not(.row-toggle)')) return;
 		expanded = !expanded;
@@ -76,11 +82,7 @@
 						<span class="shrink-0 transcode-card-meta" title="Encoder frame rate">{fpsDisplay}</span>
 					{/if}
 					<span class="shrink-0 transcode-card-meta" title="Estimated time remaining">
-						{etaSeconds !== null
-							? `~${formatDuration(etaSeconds, { coarse: true })}`
-							: job.started_at
-								? elapsedTime(job.started_at)
-								: '-'}
+						{etaSeconds !== null ? etaLabel(etaSeconds) : job.started_at ? elapsedTime(job.started_at) : '-'}
 					</span>
 				{:else if job.created_at}
 					<span class="shrink-0 transcode-card-meta">{elapsedTime(job.created_at)}</span>
