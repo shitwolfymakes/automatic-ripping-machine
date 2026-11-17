@@ -20,16 +20,6 @@ export function etaTime(startTime: string | null | undefined, progressPct: numbe
 }
 
 /**
- * The words for a rip's live progress stage: the two copy stages get plain
- * words and any other stage is shown as the ripper named it.
- */
-export function formatRipStage(stage: string): string {
-	if (stage === 'scratch-to-media') return 'Copying to shared storage';
-	if (stage === 'work-to-completed') return 'Moving to completed';
-	return stage;
-}
-
-/**
  * Map a status to a themeable CSS variable reference suitable for inline
  * `style="background: ${statusAccentVar(status)}"` use. Falls back to the
  * primary brand color so unrecognized statuses still pick up theme tinting.

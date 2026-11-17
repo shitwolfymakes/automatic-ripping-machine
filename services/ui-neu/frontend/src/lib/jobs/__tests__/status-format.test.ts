@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { statusColor, statusLabel, statusAccentVar, etaTime, formatRipStage } from '../status-format';
+import { statusColor, statusLabel, statusAccentVar, etaTime } from '../status-format';
 
 describe('statusColor', () => {
 	it.each<[string | null, string]>([
@@ -139,17 +139,5 @@ describe('etaTime', () => {
 	it('caps absurdly long estimates at 24h+', () => {
 		// 5m elapsed at 0.1% → ~83h. Cap.
 		expect(etaTime('2025-06-15T11:55:00Z', 0.1)).toBe('24h+');
-	});
-});
-
-describe('formatRipStage', () => {
-	it('words the scratch-to-media copy stage plainly', () => {
-		expect(formatRipStage('scratch-to-media')).toBe('Copying to shared storage');
-	});
-	it('words the work-to-completed move stage plainly', () => {
-		expect(formatRipStage('work-to-completed')).toBe('Moving to completed');
-	});
-	it('shows any other stage as the ripper named it', () => {
-		expect(formatRipStage('ripping')).toBe('ripping');
 	});
 });
