@@ -8,7 +8,7 @@ export interface LiveSample {
 	etaSeconds: number | null;
 	fps: number | null;
 	avgFps: number | null;
-	pass: number | null;
+	pass: string | null;
 	bytesDone: number | null;
 	bytesTotal: number | null;
 	rateBps: number | null;
@@ -109,7 +109,7 @@ export function transcodeSample(payload: Payload): LiveSample {
 		etaSeconds: num(payload.eta_seconds),
 		fps: num(payload.fps),
 		avgFps: num(payload.avg_fps),
-		pass: num(payload.pass)
+		pass: str(payload.current_pass)
 	};
 }
 
