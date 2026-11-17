@@ -101,6 +101,25 @@ describe('ActiveJobRow', () => {
 			});
 			expect(screen.getByText('77%')).toBeInTheDocument();
 		});
+
+		const transcodingAt = (percent: number) =>
+			createJob({
+				status: 'ripped',
+				transcode_progress: { state: 'transcoding', tasks_total: 1, tasks_done: 0, tasks_failed: 0, percent } as never
+			});
+
+		it('shows the snapshot percent for a transcoding job with no live sample, as the card does', () => {
+			renderComponent(ActiveJobRow, { props: { job: transcodingAt(35) } });
+			expect(screen.getByText('35%')).toBeInTheDocument();
+			expect(screen.queryByText('Waiting for the first progress report')).not.toBeInTheDocument();
+		});
+
+		it('shows the snapshot percent when the live transcode sample has no percent', () => {
+			live.value = { rip: null, transcode: { ...sample({ pct: null, etaSeconds: 150 }), taskId: 't1' } };
+			renderComponent(ActiveJobRow, { props: { job: transcodingAt(35) } });
+			expect(screen.getByText('35%')).toBeInTheDocument();
+			expect(screen.getByText('2m 30s left')).toBeInTheDocument();
+		});
 	});
 
 	describe('watching', () => {

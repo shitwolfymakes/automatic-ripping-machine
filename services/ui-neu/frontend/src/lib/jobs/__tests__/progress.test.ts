@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { jobProgress, isCountingDown, ripStageWords, type ProgressJob, type ProgressContext } from '../progress';
+import {
+	jobProgress,
+	isCountingDown,
+	progressSample,
+	ripStageWords,
+	type ProgressJob,
+	type ProgressContext
+} from '../progress';
 import { EMPTY_LIVE, type JobLive } from '$lib/stores/job-live.svelte';
 import type { LiveSample } from '$lib/live/feeds';
 
@@ -405,5 +412,42 @@ describe('ripStageWords', () => {
 	});
 	it('is null for no stage', () => {
 		expect(ripStageWords(null)).toBeNull();
+	});
+});
+
+describe('progressSample', () => {
+	const transcoding = (percent: number | null) =>
+		job({ status: 'transcoding', transcode_progress: percent == null ? null : tp({ percent }) });
+
+	it('prefers the rip sample', () => {
+		const live = { rip: sample({ pct: 10 }), transcode: encLive({ pct: 70 }).transcode };
+		expect(progressSample(transcoding(30), live)).toBe(live.rip);
+	});
+
+	it('uses the live transcode sample when it has a percent', () => {
+		const live = encLive({ pct: 70 });
+		expect(progressSample(transcoding(30), live)).toBe(live.transcode);
+	});
+
+	it('falls back to the snapshot percent with no live transcode sample', () => {
+		expect(progressSample(transcoding(30), EMPTY_LIVE)).toEqual({ ...sample(), pct: 30 });
+	});
+
+	it('keeps the live fields and takes the snapshot percent when the live percent is missing', () => {
+		const out = progressSample(transcoding(30), encLive({ pct: null, etaSeconds: 90 }));
+		expect(out).toMatchObject({ pct: 30, etaSeconds: 90 });
+	});
+
+	it('a non-finite live percent also falls back', () => {
+		expect(progressSample(transcoding(30), encLive({ pct: NaN }))?.pct).toBe(30);
+	});
+
+	it('has nothing to fall back to without a snapshot percent', () => {
+		expect(progressSample(transcoding(null), EMPTY_LIVE)).toBeNull();
+	});
+
+	it('does not fall back for a job that is not transcoding', () => {
+		expect(progressSample(job({ status: 'ripped', transcode_progress: null }), EMPTY_LIVE)).toBeNull();
+		expect(progressSample(job({ status: 'complete', transcode_progress: tp({ percent: 30 }) }), EMPTY_LIVE)).toBeNull();
 	});
 });

@@ -117,6 +117,22 @@ describe('JobLiveStore', () => {
 		expect(handlers.size).toBe(0);
 	});
 
+	it('a status change from ripping to ripped releases the rip topic with no leak', () => {
+		// The order a surface's $effect runs on a status change: the old watch's
+		// cleanup, then the new watch.
+		const store = new JobLiveStore();
+		const offRipping = store.watch({ id: 'j1', status: 'ripping' });
+		tick('ripper.progress.j1', { progress_pct: 42 });
+		expect(store.get('j1').rip?.pct).toBe(42);
+		offRipping();
+		const offRipped = store.watch({ id: 'j1', status: 'ripped' });
+		expect(handlers.has('ripper.progress.j1')).toBe(false);
+		expect(subscribe.mock.calls.filter(([topic]) => topic === 'ripper.progress.j1')).toHaveLength(1);
+		expect(store.get('j1').rip).toBeNull();
+		offRipped();
+		expect(handlers.size).toBe(0);
+	});
+
 	it('holds no rip topic for a job that is not ripping', () => {
 		const store = new JobLiveStore();
 		const off = store.watch({ id: 'j1', status: 'identified' });

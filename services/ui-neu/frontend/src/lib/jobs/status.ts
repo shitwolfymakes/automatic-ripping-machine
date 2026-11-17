@@ -22,8 +22,8 @@ export function effectiveJobStatus(job: JobLike): string {
 				return 'complete';
 			// A partially- or fully-FAILED transcode is NOT "complete" — the disc
 			// ripped fine but some/all tracks failed to transcode. Surface that
-			// honestly as a transcode failure (the lifecycle stepper paints the
-			// transcode stage red; the rip stage stays done).
+			// honestly as a transcode failure (the stage rail keeps RIP done and
+			// marks ENCODE failed, or DONE partial when some tasks succeeded).
 			case 'done_partial':
 			case 'failed':
 				return 'transcode_failed';
