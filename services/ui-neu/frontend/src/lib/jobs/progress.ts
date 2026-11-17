@@ -2,6 +2,7 @@
 // live record. Every progress surface renders from jobProgress.
 import type { IdentitySuggestion, JobView } from '$lib/types/api.gen';
 import type { JobLive } from '$lib/stores/job-live.svelte';
+import type { LiveSample } from '$lib/live/feeds';
 import { effectiveJobStatus } from '$lib/jobs/status';
 import { identitySuggestionOf, isIdentifyMiss, previouslyRippedJobId } from '$lib/jobs/review';
 import { formatDuration } from '$lib/utils/format';
@@ -289,4 +290,30 @@ export function jobProgress(job: ProgressJob, live: JobLive, ctx: ProgressContex
 	const build = POSITION[status];
 	const pos = withIdentityOwed(job, status, build ? build(job, live, ctx) : UNKNOWN);
 	return { segments: segmentsFor(pos), readout: pos.readout };
+}
+
+const NO_SAMPLE: LiveSample = {
+	pct: null,
+	etaSeconds: null,
+	fps: null,
+	avgFps: null,
+	pass: null,
+	bytesDone: null,
+	bytesTotal: null,
+	rateBps: null,
+	phase: null,
+	trackId: null
+};
+
+/**
+ * The live sample a progress line draws: the rip's, else the transcode's. A
+ * transcoding job with no live percent shows its snapshot percent, the same
+ * fallback the stage rail uses.
+ */
+export function progressSample(job: ProgressJob, live: JobLive): LiveSample | null {
+	if (live.rip) return live.rip;
+	const snapshot = finite(job.transcode_progress?.percent);
+	const livePctMissing = finite(live.transcode?.pct) == null;
+	if (snapshot == null || !livePctMissing || effectiveJobStatus(job) !== 'transcoding') return live.transcode;
+	return { ...NO_SAMPLE, ...live.transcode, pct: snapshot };
 }

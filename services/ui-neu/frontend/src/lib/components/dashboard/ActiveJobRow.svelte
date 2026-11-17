@@ -14,7 +14,7 @@
 	import SkeletonCard from '../shared/SkeletonCard.svelte';
 	import IsoSourceChip from '../drives/IsoSourceChip.svelte';
 	import { jobLive } from '$lib/stores/job-live.svelte';
-	import { ripStageWords } from '$lib/jobs/progress';
+	import { progressSample, ripStageWords } from '$lib/jobs/progress';
 	import { slide } from 'svelte/transition';
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
@@ -183,7 +183,7 @@
 		<!-- Progress row: own line below a divider, indented under content -->
 		{#if active}
 			<div class="job-active-row-progress">
-				<LiveProgressLine sample={live.rip ?? live.transcode} colorVar={accentVar} />
+				<LiveProgressLine sample={progressSample(job, live)} colorVar={accentVar} />
 			</div>
 		{/if}
 
