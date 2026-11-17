@@ -80,15 +80,16 @@ describe('JobCard', () => {
 		);
 
 		it('shows no Done X/Y badge for a partial transcode', () => {
-			renderComponent(JobCard, {
+			const { container } = renderComponent(JobCard, {
 				props: {
 					job: createJob({
 						status: 'ripped',
-						transcode_progress: { state: 'transcoding', tasks_total: 3, tasks_done: 1, tasks_failed: 1, percent: 33 }
+						transcode_progress: { state: 'done_partial', tasks_total: 3, tasks_done: 2, tasks_failed: 1, percent: 100 }
 					})
 				}
 			});
-			expect(screen.queryByText(/Done 1\/3/)).not.toBeInTheDocument();
+			expect(screen.queryByText(/Done \d+\/\d+/)).not.toBeInTheDocument();
+			expect(container.querySelector('.badge-warning')).toBeNull();
 		});
 	});
 
@@ -99,8 +100,8 @@ describe('JobCard', () => {
 		});
 
 		it('renders no stage rail while the job is loading', () => {
-			renderComponent(JobCard, { props: {} });
-			expect(screen.queryByRole('list', { name: 'Job stages' })).not.toBeInTheDocument();
+			const { container } = renderComponent(JobCard, { props: {} });
+			expect(container.querySelector('ol[aria-label="Job stages"]')).toBeNull();
 		});
 	});
 });
