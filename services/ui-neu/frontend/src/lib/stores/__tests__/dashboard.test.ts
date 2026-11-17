@@ -48,6 +48,21 @@ describe('dashboard store sticky merge', () => {
 		expect(get(dashboard).notification_count).toBe(7);
 	});
 
+	it('review_wait_seconds is 60 on a first failed config read, then holds the last read value', async () => {
+		fetchDashboardMock
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: null }))
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: 300 }))
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: null }));
+
+		const { dashboard } = await import('../dashboard');
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(60);
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(300);
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(300);
+	});
+
 	it('keeps prior drives_online + drive_names when BFF sends null', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ drives_online: 3, drive_names: { '/dev/sr0': 'A' } }))

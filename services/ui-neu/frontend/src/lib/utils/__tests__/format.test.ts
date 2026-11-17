@@ -55,7 +55,11 @@ describe('elapsedTime', () => {
 		[null, 'N/A'],
 		['2025-06-15T11:59:45Z', '15s'],
 		['2025-06-15T11:57:30Z', '2m 30s'],
-		['2025-06-15T09:45:00Z', '2h 15m']
+		['2025-06-15T09:45:00Z', '2h 15m'],
+		// Uncapped past 24h: an elapsed time has no upper bound.
+		['2025-06-14T11:00:00Z', '25h 0m'],
+		// An unparseable start is as good as none.
+		['garbage', 'N/A']
 	])('elapsedTime(%s) = %s', (input, expected) => {
 		expect(elapsedTime(input)).toBe(expected);
 	});
@@ -154,6 +158,11 @@ describe('formatDuration', () => {
 	it('coarse clamps negatives and still caps at 24h+', () => {
 		expect(formatDuration(-5, { coarse: true })).toBe('< 1m');
 		expect(formatDuration(24 * 3600, { coarse: true })).toBe('24h+');
+	});
+	it.each([NaN, Infinity, -Infinity])('reads %s as 0, never "NaNs"', (value) => {
+		expect(formatDuration(value)).toBe('0s');
+		expect(formatDuration(value, { coarse: true })).toBe('< 1m');
+		expect(formatDuration(value, { cap: false })).toBe('0s');
 	});
 });
 

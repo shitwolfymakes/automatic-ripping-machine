@@ -253,8 +253,14 @@ describe('fetchDashboardSnapshot endpoint failures', () => {
 		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBe(300);
 	});
 
-	it('review_wait_seconds is 60 when the config read fails', async () => {
+	it('review_wait_seconds is null (sticky) when the config read fails', async () => {
 		vi.mocked(apiFetch).mockRejectedValueOnce(new Error('down'));
+
+		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBeNull();
+	});
+
+	it('review_wait_seconds is 60 when the config has no manual_wait_seconds', async () => {
+		vi.mocked(apiFetch).mockResolvedValueOnce({ ripping_paused: false });
 
 		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBe(60);
 	});
@@ -327,5 +333,12 @@ describe('fetchDashboard defaults for failed reads', () => {
 		expect(dash.drive_source_kinds).toEqual({});
 		expect(dash.notification_count).toBe(0);
 		expect(dash.ripping_enabled).toBe(true);
+		expect(dash.review_wait_seconds).toBe(60);
+	});
+
+	it('keeps a read review_wait_seconds', async () => {
+		vi.mocked(apiFetch).mockResolvedValueOnce({ ripping_paused: false, manual_wait_seconds: 300 });
+
+		expect((await fetchDashboard()).review_wait_seconds).toBe(300);
 	});
 });
