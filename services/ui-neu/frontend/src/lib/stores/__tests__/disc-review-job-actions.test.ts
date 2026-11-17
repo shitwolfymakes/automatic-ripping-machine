@@ -78,7 +78,7 @@ describe('DiscReviewJobActions', () => {
 	describe('cancel', () => {
 		it('does nothing without a job', async () => {
 			const a = make();
-			await a.cancel(undefined, null);
+			await a.cancel(undefined, false);
 			expect(abandonJobMock).not.toHaveBeenCalled();
 			expect(cancelIsoRipMock).not.toHaveBeenCalled();
 			expectIdle(a);
@@ -89,7 +89,7 @@ describe('DiscReviewJobActions', () => {
 			abandonJobMock.mockReturnValue(d.promise);
 			const a = make();
 			a.errorMessage = 'old';
-			const p = a.cancel(createJob({ id: 'j1' }), null);
+			const p = a.cancel(createJob({ id: 'j1' }), false);
 			expect(a.cancelling).toBe(true);
 			expect(a.errorMessage).toBeNull();
 			d.resolve();
@@ -101,14 +101,14 @@ describe('DiscReviewJobActions', () => {
 
 		it('cancels the ISO rip by drive for an ISO name with a drive_id', async () => {
 			cancelIsoRipMock.mockResolvedValue(undefined);
-			await make().cancel(createJob({ id: 'j1', drive_id: 'drv_9' }), 'disc.iso');
+			await make().cancel(createJob({ id: 'j1', drive_id: 'drv_9' }), true);
 			expect(cancelIsoRipMock).toHaveBeenCalledWith('drv_9');
 			expect(abandonJobMock).not.toHaveBeenCalled();
 		});
 
 		it('abandons the job for an ISO name without a drive_id', async () => {
 			abandonJobMock.mockResolvedValue(undefined);
-			await make().cancel(createJob({ id: 'j1', drive_id: null }), 'disc.iso');
+			await make().cancel(createJob({ id: 'j1', drive_id: null }), true);
 			expect(abandonJobMock).toHaveBeenCalledWith('j1');
 			expect(cancelIsoRipMock).not.toHaveBeenCalled();
 		});
@@ -116,7 +116,7 @@ describe('DiscReviewJobActions', () => {
 		it('shows an Error failure message', async () => {
 			abandonJobMock.mockRejectedValue(new Error('nope'));
 			const a = make();
-			await a.cancel(createJob(), null);
+			await a.cancel(createJob(), false);
 			expect(a.errorMessage).toBe('nope');
 			expect(a.cancelling).toBe(false);
 			expect(calls).toEqual([]);
@@ -125,7 +125,7 @@ describe('DiscReviewJobActions', () => {
 		it('shows the fallback for a non-Error failure', async () => {
 			abandonJobMock.mockRejectedValue('x');
 			const a = make();
-			await a.cancel(createJob(), null);
+			await a.cancel(createJob(), false);
 			expect(a.errorMessage).toBe('Failed to cancel the job');
 			expect(a.cancelling).toBe(false);
 			expect(calls).toEqual([]);

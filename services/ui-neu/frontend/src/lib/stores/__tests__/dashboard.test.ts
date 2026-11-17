@@ -23,7 +23,7 @@ describe('dashboard store sticky merge', () => {
 			arm_online: true,
 			active_jobs: [{ id: 1 } as unknown],
 			drives_online: 2,
-			drive_names: { '/dev/sr0': 'Drive 1' },
+			drives: { drv_1: { name: 'Drive 1', kind: 'optical', retired: false, source: null } },
 			notification_count: 7,
 			ripping_enabled: true,
 			makemkv_key_valid: null,
@@ -63,16 +63,21 @@ describe('dashboard store sticky merge', () => {
 		expect(get(dashboard).review_wait_seconds).toBe(300);
 	});
 
-	it('keeps prior drives_online + drive_names when BFF sends null', async () => {
+	it('keeps prior drives_online + drives when BFF sends null', async () => {
 		fetchDashboardMock
-			.mockResolvedValueOnce(fullPayload({ drives_online: 3, drive_names: { '/dev/sr0': 'A' } }))
-			.mockResolvedValueOnce(fullPayload({ drives_online: null, drive_names: null }));
+			.mockResolvedValueOnce(
+				fullPayload({
+					drives_online: 3,
+					drives: { drv_1: { name: 'A', kind: 'optical', retired: false, source: null } }
+				})
+			)
+			.mockResolvedValueOnce(fullPayload({ drives_online: null, drives: null }));
 
 		const { dashboard } = await import('../dashboard');
 		await dashboard.refresh();
 		await dashboard.refresh();
 		expect(get(dashboard).drives_online).toBe(3);
-		expect(get(dashboard).drive_names).toEqual({ '/dev/sr0': 'A' });
+		expect(get(dashboard).drives).toEqual({ drv_1: { name: 'A', kind: 'optical', retired: false, source: null } });
 	});
 
 	it('uses fresh value when BFF sends a non-null value', async () => {

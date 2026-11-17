@@ -10,6 +10,7 @@ import {
 	reviewStatusLabel,
 	type StatusLabelFlags
 } from '../review-card';
+import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
 
 const none: StatusLabelFlags = { previouslyRipped: false, suggestion: false, reviewGate: false, postRip: false };
 
@@ -142,31 +143,28 @@ describe('discFactsLine', () => {
 });
 
 describe('reviewSourceRow', () => {
-	const drive = { drive_id: 'drv_1' };
-	const names = { drv_1: 'Drive A' };
+	const job = { drive_id: 'drv_1' };
 	it('names the drive when there is no ISO', () => {
-		expect(reviewSourceRow(drive, null, null, names)).toEqual({ label: 'Drive', value: 'Drive A' });
+		expect(reviewSourceRow(job, createDriveSummary({ name: 'Drive A' }))).toEqual({ label: 'Drive', value: 'Drive A' });
 	});
-	it('gives an empty value with no ISO and no drive id', () => {
-		expect(reviewSourceRow({ drive_id: null }, null, null, names)).toEqual({ label: 'Drive', value: '' });
+	it('gives an empty value with no drive and no drive id', () => {
+		expect(reviewSourceRow({ drive_id: null }, null)).toEqual({ label: 'Drive', value: '' });
+	});
+	it('falls back to the raw drive id when the drive is unknown', () => {
+		expect(reviewSourceRow(job, null)).toEqual({ label: 'Drive', value: 'drv_1' });
+		expect(reviewSourceRow(job, undefined)).toEqual({ label: 'Drive', value: 'drv_1' });
 	});
 	it('labels an ISO source of kind iso as ISO', () => {
-		expect(reviewSourceRow(drive, 'a.iso', { drv_1: 'iso' }, names)).toEqual({ label: 'ISO', value: 'a.iso' });
+		expect(reviewSourceRow(job, createIsoDrive('a.iso'))).toEqual({ label: 'ISO', value: 'a.iso' });
 	});
 	it('labels an ISO source of kind folder as Folder', () => {
-		expect(reviewSourceRow(drive, 'movie', { drv_1: 'folder' }, names)).toEqual({ label: 'Folder', value: 'movie' });
+		expect(reviewSourceRow(job, createIsoDrive('movie', 'folder'))).toEqual({ label: 'Folder', value: 'movie' });
 	});
-	it('labels an ISO with no kind entry as ISO', () => {
-		expect(reviewSourceRow(drive, 'a.iso', { other: 'folder' }, names)).toEqual({ label: 'ISO', value: 'a.iso' });
-	});
-	it('labels an ISO with no kinds map as ISO', () => {
-		expect(reviewSourceRow(drive, 'a.iso', undefined, names)).toEqual({ label: 'ISO', value: 'a.iso' });
-	});
-	it('shows an empty ISO name as itself under Drive', () => {
-		expect(reviewSourceRow(drive, '', null, names)).toEqual({ label: 'Drive', value: '' });
-	});
-	it('shows an ISO name with no drive id under Drive', () => {
-		expect(reviewSourceRow({ drive_id: null }, 'a.iso', null, names)).toEqual({ label: 'Drive', value: 'a.iso' });
+	it('names a retired virtual drive under Drive', () => {
+		expect(reviewSourceRow(job, createIsoDrive('a.iso', 'iso', { retired: true }))).toEqual({
+			label: 'Drive',
+			value: 'a.iso'
+		});
 	});
 });
 

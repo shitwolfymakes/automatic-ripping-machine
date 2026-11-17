@@ -1,6 +1,7 @@
 // Pure helpers for the Logs page's job list (routes/logs/+page.svelte).
 import type { JobLogFileView, JobView } from '$lib/types/api.gen';
-import type { IsoSourceKind } from '$lib/api/dashboard';
+import type { DriveSummary } from '$lib/api/dashboard';
+import { driveSummary } from '$lib/drives/summary';
 import { discTypeLabel, getVideoTypeConfig, type VideoTypeConfig } from '../jobs/type';
 import { readJobMetadata } from '../jobs/metadata';
 import { plural } from '$lib/utils/plural';
@@ -23,10 +24,10 @@ export function discPosition(job: DiscFields): string {
 
 /**
  * The disc chip: `ISO` / `Folder` when the job's drive is a virtual one (the
- * dashboard's drive_source_kinds, which keeps retired drives), else the disc type.
+ * dashboard's drive records, which keep retired drives), else the disc type.
  */
-export function discKindLabel(job: TypeFields, driveSourceKinds?: Record<string, IsoSourceKind> | null): string {
-	const kind = job.drive_id ? driveSourceKinds?.[job.drive_id] : undefined;
+export function discKindLabel(job: TypeFields, drives?: Record<string, DriveSummary> | null): string {
+	const kind = driveSummary(drives, job.drive_id)?.source;
 	if (kind === 'iso') return 'ISO';
 	if (kind === 'folder') return 'Folder';
 	return discTypeLabel(job.disc_type);
