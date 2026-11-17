@@ -92,11 +92,28 @@ describe('JobLiveStore', () => {
 		off();
 	});
 
-	it('tolerates a second call to the same unwatch', () => {
+	it('a second call to the same unwatch changes nothing', () => {
 		const store = new JobLiveStore();
-		const off = store.watch({ id: 'j1', status: 'ripping' });
-		off();
-		expect(() => off()).not.toThrow();
+		const offA = store.watch({ id: 'j1', status: 'ripping' });
+		const offB = store.watch({ id: 'j1', status: 'ripping' });
+		offA();
+		offA();
+		expect(handlers.has('ripper.progress.j1')).toBe(true);
+		tick('ripper.progress.j1', { progress_pct: 21 });
+		expect(store.get('j1').rip?.pct).toBe(21);
+		offB();
+		expect(handlers.size).toBe(0);
+	});
+
+	it('a second call to the same unfollow changes nothing', () => {
+		const store = new JobLiveStore();
+		const offA = store.followTask('k1');
+		const offB = store.followTask('k1');
+		offA();
+		offA();
+		tick('transcode.progress.k1', { progress_pct: 9 });
+		expect(store.task('k1')?.pct).toBe(9);
+		offB();
 		expect(handlers.size).toBe(0);
 	});
 

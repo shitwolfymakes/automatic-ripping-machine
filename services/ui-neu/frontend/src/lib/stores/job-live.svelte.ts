@@ -8,6 +8,7 @@
 // Transcode: follows transcode.progress.{task} for each in-progress task of a
 // watched job (found from the dashboard store's active_transcodes rows) and for
 // every task passed to followTask.
+import { untrack } from 'svelte';
 import { wsClient } from '$lib/api/ws';
 import { dashboard } from '$lib/stores/dashboard';
 import type { JobView, TranscodeTaskView } from '$lib/types/api.gen';
@@ -66,11 +67,15 @@ function rowSample(row: TranscodeTaskView): LiveSample {
 
 /** Live fields win when non-null; the row fills the rest. */
 function mergeSamples(live: LiveSample, fallback: LiveSample): LiveSample {
-	const reported = Object.entries(live).filter(([, value]) => value !== null);
-	return { ...fallback, ...Object.fromEntries(reported) };
+	const reported: Partial<LiveSample> = Object.fromEntries(Object.entries(live).filter(([, value]) => value !== null));
+	return { ...fallback, ...reported };
 }
 
-function mergeTask(taskId: string, live: LiveSample | undefined, row: TranscodeTaskView | null | undefined) {
+function mergeTask(
+	taskId: string,
+	live: LiveSample | undefined,
+	row: TranscodeTaskView | null | undefined
+): TaskLive | null {
 	if (!row) return live ? { ...live, taskId } : null;
 	return { ...(live ? mergeSamples(live, rowSample(row)) : rowSample(row)), taskId };
 }
@@ -91,24 +96,33 @@ export class JobLiveStore {
 	#heldTasks = new Set<string>();
 	#offDashboard: (() => void) | null = null;
 
-	/** Follow a job's live progress; returns the unwatch. */
+	/**
+	 * Follow a job's live progress; returns the unwatch. Untracked, so a caller's
+	 * $effect depends only on its own arguments, never on dashboard updates.
+	 */
 	watch = (job: Pick<JobView, 'id' | 'status'>): (() => void) => {
-		this.#ensureDashboard();
-		this.#watchedJobs.set(job.id, (this.#watchedJobs.get(job.id) ?? 0) + 1);
+		untrack(() => this.#startWatch(job));
 		const ripping = job.status === 'ripping';
-		if (ripping) this.#acquireRip(job.id);
-		this.#reconcileTasks();
+		let done = false;
 		return () => {
-			if (ripping) this.#releaseRip(job.id);
-			this.#unwatchJob(job.id);
+			if (done) return;
+			done = true;
+			untrack(() => this.#stopWatch(job.id, ripping));
 		};
 	};
 
 	/** Follow one transcode task by id (TranscodeCard); returns the unfollow. */
 	followTask = (taskId: string): (() => void) => {
-		this.#ensureDashboard();
-		this.#acquireTask(taskId);
-		return () => this.#releaseTask(taskId);
+		untrack(() => {
+			this.#ensureDashboard();
+			this.#acquireTask(taskId);
+		});
+		let done = false;
+		return () => {
+			if (done) return;
+			done = true;
+			untrack(() => this.#releaseTask(taskId));
+		};
 	};
 
 	/** The live record for a job; reactive. */
@@ -120,6 +134,18 @@ export class JobLiveStore {
 	task = (taskId: string, row?: TranscodeTaskView | null): TaskLive | null => {
 		return mergeTask(taskId, this.#samples[taskId], row);
 	};
+
+	#startWatch(job: Pick<JobView, 'id' | 'status'>): void {
+		this.#ensureDashboard();
+		this.#watchedJobs.set(job.id, (this.#watchedJobs.get(job.id) ?? 0) + 1);
+		if (job.status === 'ripping') this.#acquireRip(job.id);
+		this.#reconcileTasks();
+	}
+
+	#stopWatch(jobId: string, ripping: boolean): void {
+		if (ripping) this.#releaseRip(jobId);
+		this.#unwatchJob(jobId);
+	}
 
 	#transcodeFor(jobId: string): TaskLive | null {
 		const row = this.#rows.find((t) => t.job_id === jobId && t.status === 'in_progress');
@@ -159,7 +185,7 @@ export class JobLiveStore {
 	}
 
 	#unwatchJob(jobId: string): void {
-		const remaining = (this.#watchedJobs.get(jobId) ?? 1) - 1;
+		const remaining = (this.#watchedJobs.get(jobId) as number) - 1; // guarded: unwatch runs once per watch
 		if (remaining > 0) {
 			this.#watchedJobs.set(jobId, remaining);
 			return;
