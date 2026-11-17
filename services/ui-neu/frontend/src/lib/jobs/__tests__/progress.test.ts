@@ -208,9 +208,13 @@ describe('jobProgress: status table', () => {
 		expect(readout(j)).toEqual({ tone: 'default', label: 'Transcoding', detail: null, figure: null });
 	});
 	it('complete', () => {
-		const j = job({ status: 'ripped', transcode_progress: tp({ state: 'done' }), rip_progress: rp() });
+		const j = job({ status: 'ripped', transcode_progress: tp({ state: 'done' }) });
 		expect(states(j)).toEqual(['done', 'done', 'done', 'done', 'done']);
-		expect(readout(j)).toEqual({ tone: 'success', label: 'Complete', detail: '4 tracks', figure: null });
+		expect(readout(j)).toEqual({ tone: 'success', label: 'Complete', detail: null, figure: null });
+	});
+	it('complete shows the track count only when rip_progress is present', () => {
+		const j = job({ status: 'ripped', transcode_progress: tp({ state: 'done' }), rip_progress: rp() });
+		expect(readout(j).detail).toBe('4 tracks');
 	});
 	it('complete with no track count has no detail', () => {
 		const j = job({ status: 'complete' });
@@ -254,25 +258,29 @@ describe('jobProgress: status table', () => {
 		const j = job({ status: 'transcode_failed' });
 		expect(states(j)).toEqual(['done', 'done', 'done', 'failed', 'pending']);
 	});
-	it('failed after the rip started', () => {
+	it('failed with started tracks in rip_progress places the failure in RIP', () => {
 		const j = job({ status: 'failed', rip_progress: rp() });
 		expect(states(j)).toEqual(['done', 'done', 'failed', 'pending', 'pending']);
 		expect(readout(j)).toEqual({ tone: 'error', label: 'Failed during rip', detail: null, figure: null });
 	});
-	it('failed before the rip started', () => {
+	it('failed without rip_progress (the backend sends none outside ripping) names no stage', () => {
 		const j = job({ status: 'failed' });
 		expect(states(j)).toEqual(['failed', 'pending', 'pending', 'pending', 'pending']);
-		expect(readout(j).label).toBe('Failed during identification');
+		expect(readout(j)).toEqual({ tone: 'error', label: 'Failed', detail: null, figure: null });
 	});
-	it('abandoned', () => {
-		expect(readout(job({ status: 'abandoned' })).label).toBe('Abandoned');
-		expect(states(job({ status: 'abandoned', rip_progress: rp() }))).toEqual([
-			'done',
-			'done',
-			'failed',
-			'pending',
-			'pending'
-		]);
+	it('failed with an empty rip_progress names no stage', () => {
+		const j = job({ status: 'failed', rip_progress: rp({ tracks_total: 0 }) });
+		expect(readout(j).label).toBe('Failed');
+	});
+	it('abandoned without rip_progress fails the ID segment', () => {
+		const j = job({ status: 'abandoned' });
+		expect(states(j)).toEqual(['failed', 'pending', 'pending', 'pending', 'pending']);
+		expect(readout(j)).toEqual({ tone: 'error', label: 'Abandoned', detail: null, figure: null });
+	});
+	it('abandoned with started tracks in rip_progress fails the RIP segment', () => {
+		const j = job({ status: 'abandoned', rip_progress: rp() });
+		expect(states(j)).toEqual(['done', 'done', 'failed', 'pending', 'pending']);
+		expect(readout(j).label).toBe('Abandoned');
 	});
 	it('an unknown status shows every segment pending', () => {
 		const j = job({ status: 'mystery' });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ripProgressFromTracks } from '../rip-progress';
+import { railRipProgress, ripProgressFromTracks } from '../rip-progress';
 
 describe('ripProgressFromTracks', () => {
 	it('counts done, failed and total and finds the current track', () => {
@@ -32,5 +32,27 @@ describe('ripProgressFromTracks', () => {
 			current_track_id: null,
 			current_track_index: null
 		});
+	});
+});
+
+describe('railRipProgress', () => {
+	const tracks = [
+		{ id: 't1', index: 1, status: 'done' as const },
+		{ id: 't2', index: 2, status: 'in_progress' as const }
+	];
+	const sent = ripProgressFromTracks([{ id: 'x', index: 1, status: 'done' }]);
+
+	it('derives the summary from the tracks while ripping with none sent', () => {
+		expect(railRipProgress({ status: 'ripping', rip_progress: null }, tracks)).toEqual(ripProgressFromTracks(tracks));
+	});
+
+	it('keeps the sent summary while ripping', () => {
+		expect(railRipProgress({ status: 'ripping', rip_progress: sent }, tracks)).toBe(sent);
+	});
+
+	it('passes the job value through for any other status', () => {
+		expect(railRipProgress({ status: 'failed', rip_progress: null }, tracks)).toBeNull();
+		expect(railRipProgress({ status: 'failed' }, tracks)).toBeNull();
+		expect(railRipProgress({ status: 'abandoned', rip_progress: sent }, tracks)).toBe(sent);
 	});
 });

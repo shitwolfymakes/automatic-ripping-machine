@@ -116,6 +116,8 @@ import { wsClient } from '$lib/api/ws';
 import { ApiError } from '$lib/api/client';
 import * as authStore from '$lib/stores/auth';
 import * as storesModule from '$app/stores';
+import { jobProgress } from '$lib/jobs/progress';
+import { EMPTY_LIVE } from '$lib/stores/job-live.svelte';
 
 const mockFetchJob = vi.mocked(fetchJob);
 const mockPreview = vi.mocked(fetchNamingPreview);
@@ -1012,9 +1014,19 @@ describe('stage rail', () => {
 		expect(await screen.findByText('title 2 of 3')).toBeInTheDocument();
 	});
 
-	it('shows Failed during rip for a failed job whose tracks started', async () => {
-		loadJobPage(detailOf({ status: 'failed', rip_progress: null }, [createTrack({ id: 'trk_1', status: 'failed' })]));
-		expect(await screen.findByText('Failed during rip')).toBeInTheDocument();
+	it('a failed job with started tracks shows the same readout as the dashboard card', async () => {
+		// The backend sends no rip_progress outside ripping, so the page must not
+		// rebuild one from the tracks: both screens read the same JobView.
+		const detail = detailOf({ status: 'failed', rip_progress: null }, [
+			createTrack({ id: 'trk_1', index: 1, status: 'done' }),
+			createTrack({ id: 'trk_2', index: 2, status: 'failed' })
+		]);
+		const card = jobProgress(detail.job, EMPTY_LIVE, { now: 0, reviewWaitSeconds: 60, rippingPaused: false });
+		const { container } = loadJobPage(detail);
+		await waitFor(() => expect(container.querySelector('.stage-rail-readout-label')).not.toBeNull());
+		expect(container.querySelector('.stage-rail-readout-label')).toHaveTextContent(card.readout.label);
+		expect(card.readout.label).toBe('Failed');
+		expect(screen.queryByText('Failed during rip')).not.toBeInTheDocument();
 	});
 });
 

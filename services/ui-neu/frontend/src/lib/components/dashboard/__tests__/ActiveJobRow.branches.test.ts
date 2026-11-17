@@ -148,7 +148,9 @@ describe('ActiveJobRow branches', () => {
 			expect(detailValue('Tracks')).toHaveTextContent('-');
 		});
 
-		it('hides the collapsed count when the job is not in progress', () => {
+		// The backend sends rip_progress only while ripping, which is always in
+		// progress; this pins the row's `active` guard against a stale summary.
+		it('hides the collapsed count for a stale rip_progress on a job not in progress', () => {
 			renderComponent(ActiveJobRow, {
 				props: { job: createJob({ status: 'failed', rip_progress: ripProgress(2, 5) }) }
 			});
