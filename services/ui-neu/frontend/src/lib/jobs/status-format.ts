@@ -1,24 +1,3 @@
-import { formatDuration } from '$lib/utils/format';
-
-/**
- * Estimate time remaining for an in-flight job.
- * Returns null when an ETA can't be reasonably computed (just started,
- * already done, no progress signal); the caller renders an em-dash.
- *
- * The 30s elapsed threshold smooths the noisy first-percent jitter
- * that MakeMKV/abcde produce during drive-spin and warm-up.
- * Capped at 24h+ to avoid printing absurd estimates from sub-1%
- * progress values that haven't yet stabilised.
- */
-export function etaTime(startTime: string | null | undefined, progressPct: number | null | undefined): string | null {
-	if (!startTime || progressPct == null) return null;
-	if (progressPct <= 0 || progressPct >= 100) return null;
-	const start = new Date(startTime);
-	const elapsedSec = (Date.now() - start.getTime()) / 1000;
-	if (elapsedSec < 30) return null;
-	return formatDuration((elapsedSec * (100 - progressPct)) / progressPct);
-}
-
 /**
  * Map a status to a themeable CSS variable reference suitable for inline
  * `style="background: ${statusAccentVar(status)}"` use. Falls back to the

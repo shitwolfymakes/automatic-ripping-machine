@@ -3,7 +3,6 @@
 // keyed on the generated JobStatus so a new backend status fails `npm run check`
 // until it is placed in every group.
 import type { JobStatus, JobView } from '$lib/types/api.gen';
-import type { LifecycleStageId } from '$lib/jobs/lifecycle-stage';
 import { effectiveJobStatus } from '$lib/jobs/status';
 
 // Raw statuses after which nothing further happens to the job.
@@ -77,32 +76,6 @@ const RIPPED: Record<JobStatus, boolean> = {
  */
 export function isRipped(status: string): boolean {
 	return RIPPED[status as JobStatus] === true;
-}
-
-const STAGE_BY_STATUS: Record<JobStatus, LifecycleStageId | null> = {
-	created: 'identifying',
-	awaiting_user_id: 'identifying',
-	identified: 'identifying',
-	awaiting_review: 'identifying',
-	ripping: 'ripping',
-	ripped: 'ripping',
-	ripped_partial: 'ripping',
-	ripped_awaiting_identify: 'ripping',
-	abandoned: null,
-	failed: null
-};
-
-const STAGE_BY_EFFECTIVE: Record<string, LifecycleStageId> = {
-	transcoding: 'transcoding',
-	complete: 'complete'
-};
-
-export const LIFECYCLE_FAILURE_STATUSES: ReadonlySet<string> = new Set(['failed', 'abandoned', 'transcode_failed']);
-
-/** Lifecycle stage for a raw or effective status; null for failures and unknowns. */
-export function lifecycleStageFor(status: string): LifecycleStageId | null {
-	const s = status.toLowerCase();
-	return STAGE_BY_EFFECTIVE[s] ?? STAGE_BY_STATUS[s as JobStatus] ?? null;
 }
 
 const POST_RIP: Record<JobStatus, boolean> = {
