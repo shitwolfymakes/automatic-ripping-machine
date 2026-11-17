@@ -83,6 +83,11 @@ describe('rip feed', () => {
 		expect(feed({ track_id: 't1', progress_pct: 20, eta_seconds: 7 }, 10_000).etaSeconds).toBe(7);
 	});
 
+	it('clamps a published negative eta_seconds to 0', () => {
+		const feed = createRipFeed();
+		expect(feed({ track_id: 't1', progress_pct: 10, eta_seconds: -5 }, 0).etaSeconds).toBe(0);
+	});
+
 	it('carries the phase', () => {
 		const feed = createRipFeed();
 		expect(feed({ track_id: 't1', progress_pct: 100, phase: 'verifying' }, 0).phase).toBe('verifying');
@@ -178,7 +183,9 @@ describe('estimateEtaSeconds', () => {
 		['no percent', START, null],
 		['an undefined percent', START, undefined],
 		['zero percent', START, 0],
-		['100 percent', START, 100]
+		['100 percent', START, 100],
+		['a NaN percent', START, NaN],
+		['an unparseable start', 'not a date', 50]
 	])('is null with %s', (_name, startedAt, pct) => {
 		expect(estimateEtaSeconds(startedAt, pct, at(100))).toBeNull();
 	});

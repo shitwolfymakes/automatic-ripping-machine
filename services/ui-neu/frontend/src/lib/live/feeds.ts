@@ -34,6 +34,10 @@ function num(value: unknown): number | null {
 	return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function nonNegative(value: number | null): number | null {
+	return value === null ? null : Math.max(0, value);
+}
+
 function str(value: unknown): string | null {
 	return typeof value === 'string' ? value : null;
 }
@@ -72,7 +76,7 @@ function readRip(payload: Payload): LiveSample {
 	return {
 		...EMPTY_SAMPLE,
 		pct: num(payload.progress_pct),
-		etaSeconds: num(payload.eta_seconds),
+		etaSeconds: nonNegative(num(payload.eta_seconds)),
 		bytesDone: num(payload.bytes_done),
 		bytesTotal: num(payload.bytes_total),
 		rateBps: num(payload.rate_bps),
@@ -123,8 +127,8 @@ export function estimateEtaSeconds(
 	pct: number | null | undefined,
 	now: number
 ): number | null {
-	if (!startedAt || pct == null || pct <= 0 || pct >= 100) return null;
+	if (!startedAt || pct == null || !Number.isFinite(pct) || pct <= 0 || pct >= 100) return null;
 	const elapsedSeconds = (now - new Date(startedAt).getTime()) / 1000;
-	if (elapsedSeconds < ESTIMATE_MIN_ELAPSED_SECONDS) return null;
+	if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < ESTIMATE_MIN_ELAPSED_SECONDS) return null;
 	return (elapsedSeconds * (100 - pct)) / pct;
 }
