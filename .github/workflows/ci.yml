@@ -154,6 +154,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
+      # tests for ui-neu's own ESLint rules (eslint-rules/)
+      - run: npm run test:lint-rules
       - run: npm run lint
       - run: npm run format:check
 
