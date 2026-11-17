@@ -25,25 +25,25 @@ describe('MatchDetailPane rating line', () => {
 		const badge = screen.getByText('TMDb');
 		expect(badge).toHaveClass('badge');
 		expect(badge).not.toHaveClass('badge-imdb');
-		expect(screen.getByText('★ 8.1')).toBeInTheDocument();
+		expect(screen.getByText('8.1')).toBeInTheDocument();
 	});
 
 	it('labels an unknown source "Rating"', () => {
 		renderComponent(MatchDetailPane, { props: withFacts({ rating: 6, rating_source: 'rottentomatoes' }) });
 		const badge = screen.getByText('Rating');
 		expect(badge).not.toHaveClass('badge-imdb');
-		expect(screen.getByText('★ 6.0')).toBeInTheDocument();
+		expect(screen.getByText('6.0')).toBeInTheDocument();
 	});
 
 	it('labels a missing source "Rating"', () => {
 		renderComponent(MatchDetailPane, { props: withFacts({ rating: 5.5 }) });
 		expect(screen.getByText('Rating')).toBeInTheDocument();
-		expect(screen.getByText('★ 5.5')).toBeInTheDocument();
+		expect(screen.getByText('5.5')).toBeInTheDocument();
 	});
 
 	it('shows no votes when there are none', () => {
 		renderComponent(MatchDetailPane, { props: withFacts({ rating: 7.9, rating_source: 'imdb', votes: 0 }) });
-		expect(screen.getByText('★ 7.9')).toBeInTheDocument();
+		expect(screen.getByText('7.9')).toBeInTheDocument();
 		expect(screen.queryByText(/votes/)).toBeNull();
 	});
 
@@ -51,12 +51,12 @@ describe('MatchDetailPane rating line', () => {
 		renderComponent(MatchDetailPane, { props: withFacts({ rating: null }, { imdb: 'tt0071003' }) });
 		expect(screen.getByText('tt0071003')).toBeInTheDocument();
 		expect(screen.queryByText('IMDb')).toBeNull();
-		expect(screen.queryByText(/★/)).toBeNull();
+		expect(screen.queryByText(/^\d+\.\d$/)).toBeNull();
 	});
 
 	it('hides the line when there is neither a rating nor an IMDb id', () => {
 		renderComponent(MatchDetailPane, { props: withFacts({ rating: null }) });
-		expect(screen.queryByText(/★/)).toBeNull();
+		expect(screen.queryByText(/^\d+\.\d$/)).toBeNull();
 		expect(screen.queryByText('Rating')).toBeNull();
 		expect(screen.queryByText('IMDb')).toBeNull();
 	});

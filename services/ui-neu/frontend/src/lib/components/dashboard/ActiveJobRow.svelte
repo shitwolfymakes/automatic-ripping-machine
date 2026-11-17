@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from '../shared/StatusBadge.svelte';
@@ -167,6 +168,7 @@
 				<!-- ISO rip: admin-only Cancel (removes the virtual drive too) -->
 				{#if isoSource && $isAdmin}
 					<button
+						type="button"
 						onclick={handleCancelIso}
 						disabled={cancelling}
 						class="btn btn-danger btn-sm shrink-0"
@@ -178,19 +180,12 @@
 
 				<!-- Expand chevron -->
 				<button
+					type="button"
 					class="row-toggle shrink-0 job-active-row-chevron-btn"
 					aria-expanded={expanded}
 					title={expanded ? 'Collapse' : 'Expand'}
 				>
-					<svg
-						class="h-4 w-4 job-active-row-chevron"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-					</svg>
+					<Glyph name="chevron-down" class="h-4 w-4 job-active-row-chevron" />
 				</button>
 			</div>
 		</div>
@@ -316,10 +311,12 @@
 	.job-active-row-chevron-btn:hover {
 		color: var(--color-text-secondary);
 	}
-	.job-active-row-chevron {
+	/* :global: set on Glyph through its class prop */
+	:global(.job-active-row-chevron) {
 		transition: transform var(--motion-fast) var(--ease);
 	}
-	.job-active-row-chevron-btn[aria-expanded='true'] .job-active-row-chevron {
+	/* :global: set on Glyph through its class prop */
+	.job-active-row-chevron-btn[aria-expanded='true'] :global(.job-active-row-chevron) {
 		transform: rotate(180deg);
 	}
 	.job-active-row-progress {

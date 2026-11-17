@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import JsonTree from '$lib/components/shared/JsonTree.svelte';
 
 	interface Props {
@@ -19,9 +20,7 @@
 		class="flex w-full items-center gap-2 job-detail-section-title"
 		aria-expanded={showRawMetadata}
 	>
-		<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-		</svg>
+		<Glyph name="chevron-right" class="h-4 w-4 chevron" />
 		Raw metadata
 	</button>
 	{#if showRawMetadata}
@@ -40,10 +39,12 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	.job-detail-section-title .chevron {
+	/* :global: set on Glyph through its class prop */
+	.job-detail-section-title :global(.chevron) {
 		transition: transform var(--motion-fast) var(--ease);
 	}
-	.job-detail-section-title[aria-expanded='true'] .chevron {
+	/* :global: set on Glyph through its class prop */
+	.job-detail-section-title[aria-expanded='true'] :global(.chevron) {
 		transform: rotate(90deg);
 	}
 	.job-detail-raw-metadata {

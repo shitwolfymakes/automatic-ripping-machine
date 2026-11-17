@@ -16,6 +16,7 @@
 <div class="flex flex-wrap items-stretch gap-1.5">
 	{#each results.slice(0, 8) as result, i (i)}
 		<button
+			type="button"
 			onclick={() => onselect(result)}
 			class="flex min-w-0 flex-1 items-center gap-1.5 track-title-search-result"
 			title="{result.title}{result.year ? ` (${result.year})` : ''}"

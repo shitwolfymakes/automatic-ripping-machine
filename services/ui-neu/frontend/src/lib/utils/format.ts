@@ -135,7 +135,7 @@ export function formatTransfer(live: ByteTransfer | null | undefined): string | 
 			: formatBytes(live.bytes_done)
 	];
 	if (live.rate_bps != null && live.rate_bps > 0) parts.push(`${formatBytes(live.rate_bps)}/s`);
-	return parts.join(' · ');
+	return parts.join(' | ');
 }
 
 export function formatEta(seconds: number): string {

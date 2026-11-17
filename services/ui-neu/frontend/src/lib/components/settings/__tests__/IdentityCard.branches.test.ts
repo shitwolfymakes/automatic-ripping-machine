@@ -29,6 +29,12 @@ describe('IdentityCard', () => {
 		expect(valuesOf(component).episode_match_tolerance_seconds).toBe(120);
 	});
 
+	it('draws the episode sources without a tolerance box when its field is missing', () => {
+		render(without('episode_match_tolerance_seconds'));
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+		expect(screen.queryByRole('spinbutton', { name: 'Episode match tolerance (seconds)' })).toBeNull();
+	});
+
 	it('draws no box for a source list whose field is missing', () => {
 		render(without('movie_sources'));
 		expect(screen.queryByRole('list', { name: 'Movie sources' })).toBeNull();

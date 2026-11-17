@@ -359,7 +359,7 @@ describe('TunableField fidelity', () => {
 
 		it('shows an unlisted stored value as Custom with the value in the text input', () => {
 			mountPad({ value: '#1a2b3c', stored: true });
-			expect(select().selectedOptions[0].textContent).toBe('Custom\u2026');
+			expect(select().selectedOptions[0].textContent).toBe('Custom...');
 			expect(custom()!.value).toBe('#1a2b3c');
 		});
 

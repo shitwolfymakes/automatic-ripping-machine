@@ -182,7 +182,7 @@ describe('LogView', () => {
 			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:04Z', event: 'late two' }
 		];
 		await rerender({ entries: more });
-		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 2 new lines');
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 2 new lines');
 
 		await fireEvent.click(screen.getByTestId('job-log-jump'));
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Following');
@@ -200,7 +200,7 @@ describe('LogView', () => {
 			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:05Z', event: 'late three' }
 		].slice(-ENTRIES.length);
 		await rerender({ entries: shifted, appended: 8 });
-		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 3 new lines');
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 3 new lines');
 	});
 
 	it('follows the latest line again when a collapsed view is expanded', async () => {

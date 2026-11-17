@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { FileRoot } from '$lib/api/files';
 	import { pathTrail } from '$lib/utils/path';
 	interface Props {
@@ -25,9 +26,7 @@
 <nav class="breadcrumb flex items-center gap-1">
 	{#each segments as segment, i (segment.subpath)}
 		{#if i > 0}
-			<svg class="breadcrumb-sep shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-			</svg>
+			<Glyph name="chevron-right" class="breadcrumb-sep shrink-0" />
 		{/if}
 		{#if i === segments.length - 1}
 			<span class="breadcrumb-current">{segment.label}</span>
@@ -44,7 +43,8 @@
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
 	}
-	.breadcrumb-sep {
+	/* :global: set on Glyph through its class prop */
+	:global(.breadcrumb-sep) {
 		width: 1rem;
 		height: 1rem;
 		color: var(--color-text-faint);

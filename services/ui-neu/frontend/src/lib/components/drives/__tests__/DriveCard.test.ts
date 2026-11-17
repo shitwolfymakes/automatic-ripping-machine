@@ -100,7 +100,7 @@ describe('DriveCard', () => {
 
 		it('renders the detached copy and dims the card when offline and absent', () => {
 			const { container } = renderDrive({ status: 'offline', present: false, media_status: 'detached' });
-			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
+			expect(screen.getByText('detached: reconnect the drive')).toBeInTheDocument();
 			// the shell's only status-driven style is opacity-60 while
 			// detached, carried here as the data-detached state hook.
 			expect(container.querySelector('.drive-card')).toHaveAttribute('data-detached', 'true');

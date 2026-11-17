@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import Flyout from '../shared/Flyout.svelte';
 	import FlyoutItem from '../shared/FlyoutItem.svelte';
 	import FlyoutDivider from '../shared/FlyoutDivider.svelte';
@@ -56,13 +57,18 @@
      "Delete Selected" stays in the flyout for keyboard users who open the menu. -->
 <Flyout align="right" width="w-56" label="Bulk actions">
 	{#snippet trigger({ toggle })}
-		<button onclick={toggle} disabled={bulkBusy} class="chip bulk-actions-trigger inline-flex items-center gap-1">
+		<button
+			type="button"
+			onclick={toggle}
+			disabled={bulkBusy}
+			class="chip bulk-actions-trigger inline-flex items-center gap-1"
+		>
 			{#if bulkBusy}
 				<span class="bulk-actions-spinner" aria-hidden="true"></span>
 			{:else}
-				&#9881;
+				<Glyph name="gear" />
 			{/if}
-			Actions &#9662;
+			Actions <Glyph name="chevron-down" class="h-3 w-3" />
 		</button>
 	{/snippet}
 	{#snippet children({ close })}

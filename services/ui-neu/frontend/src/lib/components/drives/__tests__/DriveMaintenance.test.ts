@@ -18,7 +18,7 @@ describe('DriveMaintenance', () => {
 		renderComponent(DriveMaintenance, { props: { onrescanned } });
 		await fireEvent.click(screen.getByTestId('drive-rescan'));
 		await waitFor(() =>
-			expect(screen.getByTestId('drive-rescan-summary')).toHaveTextContent('2 detected · 1 enrolled · 1 ignored')
+			expect(screen.getByTestId('drive-rescan-summary')).toHaveTextContent('2 detected | 1 enrolled | 1 ignored')
 		);
 		expect(rescanMock).toHaveBeenCalledWith(false);
 		expect(onrescanned).toHaveBeenCalledWith(summary);

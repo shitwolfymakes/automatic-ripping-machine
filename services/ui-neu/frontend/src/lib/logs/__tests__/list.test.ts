@@ -15,12 +15,12 @@ const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
 
 describe('discPosition', () => {
 	it('joins season and disc of total', () => {
-		expect(discPosition({ season: 1, disc_number: 1, disc_total: 4 })).toBe('S1 · Disc 1/4');
+		expect(discPosition({ season: 1, disc_number: 1, disc_total: 4 })).toBe('S1 | Disc 1/4');
 	});
 	it('omits the parts that are unknown', () => {
 		expect(discPosition({ season: null, disc_number: 2, disc_total: 4 })).toBe('Disc 2/4');
 		expect(discPosition({ season: 1, disc_number: null, disc_total: null })).toBe('S1');
-		expect(discPosition({ season: 1, disc_number: 2, disc_total: null })).toBe('S1 · Disc 2');
+		expect(discPosition({ season: 1, disc_number: 2, disc_total: null })).toBe('S1 | Disc 2');
 	});
 	it('drops a total with no disc number', () => {
 		expect(discPosition({ season: 2, disc_number: null, disc_total: 4 })).toBe('S2');

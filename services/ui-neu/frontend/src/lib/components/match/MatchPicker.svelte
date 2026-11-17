@@ -55,7 +55,7 @@
 <div class="match-picker">
 	<div class="match-picker-head">
 		<span class="match-picker-count">{results.length} {plural(results.length, 'RESULT', 'RESULTS')}</span>
-		<span class="match-picker-query">"{query}"{year ? ` · ${year}` : ''} · {providerLabel}</span>
+		<span class="match-picker-query">"{query}"{year ? ` | ${year}` : ''} | {providerLabel}</span>
 		<button type="button" class="match-picker-close" onclick={onclose}>Close</button>
 	</div>
 	<div class="match-picker-body">

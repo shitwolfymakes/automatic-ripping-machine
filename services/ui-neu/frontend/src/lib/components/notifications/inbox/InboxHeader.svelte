@@ -31,7 +31,7 @@
 			</button>
 		{/if}
 		{#if unseenCount > 0 && $isAdmin}
-			<button onclick={ondismissall} class="btn notifications-page-dismiss-all-btn"> Dismiss All </button>
+			<button type="button" onclick={ondismissall} class="btn notifications-page-dismiss-all-btn"> Dismiss All </button>
 		{/if}
 	</div>
 </div>
