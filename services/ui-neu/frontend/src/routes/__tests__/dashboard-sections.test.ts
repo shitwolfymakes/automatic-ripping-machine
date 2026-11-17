@@ -12,10 +12,9 @@ const h = vi.hoisted(() => ({
 	ripperListeners: [] as Array<(ids: Set<string>, types: Map<string, Set<string>>) => void>,
 	offRipperEvents: vi.fn(),
 	startRipperEvents: vi.fn(),
-	startWS: vi.fn(),
-	stopWS: vi.fn(),
-	reconcileSubscriptions: vi.fn(),
-	ripProgress: { value: {} as Record<string, unknown> }
+	wsStart: vi.fn(),
+	jobLiveWatch: vi.fn(() => () => {}),
+	live: {} as Record<string, unknown>
 }));
 
 vi.mock('$lib/stores/auth', async () => {
@@ -35,11 +34,16 @@ vi.mock('svelte/transition', () => ({
 	slide: () => ({ duration: 0 })
 }));
 
-vi.mock('$lib/stores/rips.svelte', () => ({
-	ripProgress: h.ripProgress,
-	startWS: h.startWS,
-	stopWS: h.stopWS,
-	reconcileSubscriptions: h.reconcileSubscriptions
+vi.mock('$lib/api/ws', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api/ws')>();
+	return { ...actual, wsClient: Object.assign(Object.create(actual.wsClient), { start: h.wsStart }) };
+});
+
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: {
+		watch: h.jobLiveWatch,
+		get: (id: string) => h.live[id] ?? { rip: null, transcode: null }
+	}
 }));
 
 vi.mock('$lib/stores/ripper-events.svelte', () => ({
@@ -167,7 +171,7 @@ async function deleteFirstReviewCard() {
 beforeEach(() => {
 	vi.clearAllMocks();
 	h.ripperListeners = [];
-	h.ripProgress.value = {};
+	h.live = {};
 	setDashboard(dash());
 	setJobs([listed('l1')]);
 	vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: [], skipped_non_terminal: [] });
@@ -493,29 +497,32 @@ describe('Dashboard sections', () => {
 			expect(screen.queryByLabelText(/^(ISO file|Disc folder) /)).toBeNull();
 		});
 
-		it('passes the live rip progress to an active row', async () => {
-			h.ripProgress.value = {
+		it('renders an active row from the job-live store without progress props', async () => {
+			h.live = {
 				live_job: {
-					track_id: 't1',
-					progress_pct: 42,
-					eta_seconds: 600,
-					bytes_done: 1024 * 1024 * 512,
-					bytes_total: 1024 * 1024 * 1024,
-					rate_bps: 1024 * 1024
+					rip: {
+						pct: 42,
+						etaSeconds: 600,
+						bytesDone: 1024 * 1024 * 512,
+						bytesTotal: 1024 * 1024 * 1024,
+						rateBps: 1024 * 1024
+					},
+					transcode: null
 				}
 			};
 			setDashboard(dash({ active_jobs: [job('live_job', 'ripping'), job('quiet_job', 'ripping')] }));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('42%')).toBeInTheDocument());
 			expect(screen.getByText('10m left')).toBeInTheDocument();
-			expect(screen.getByText('512 MB of 1 GB · 1 MB/s')).toBeInTheDocument();
+			expect(screen.getByText('512 MB of 1 GB \u00b7 1 MB/s')).toBeInTheDocument();
 			expect(screen.getAllByText('42%')).toHaveLength(1);
 		});
 
-		it('subscribes the live progress to the ripping jobs only', async () => {
+		it('lets each row watch its own job instead of the page subscribing', async () => {
 			setDashboard(dash({ active_jobs: [job('r1', 'ripping'), job('c1', 'created')] }));
 			await renderPage();
-			await waitFor(() => expect(h.reconcileSubscriptions).toHaveBeenLastCalledWith(['r1']));
+			await waitFor(() => expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'r1', status: 'ripping' }));
+			expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'c1', status: 'created' });
 		});
 
 		it('lists preparing ISO rows with their file name', async () => {
@@ -931,9 +938,9 @@ describe('Dashboard All Jobs list', () => {
 });
 
 describe('Dashboard lifecycle', () => {
-	it('starts the WebSocket and ripper events on mount', async () => {
+	it('starts the WebSocket client and ripper events on mount', async () => {
 		await renderPage();
-		expect(h.startWS).toHaveBeenCalledTimes(1);
+		expect(h.wsStart).toHaveBeenCalledTimes(1);
 		expect(h.startRipperEvents).toHaveBeenCalledTimes(1);
 		expect(h.ripperListeners.length).toBeGreaterThan(0);
 	});
@@ -965,7 +972,6 @@ describe('Dashboard lifecycle', () => {
 
 		unmount();
 		expect(h.offRipperEvents).toHaveBeenCalledTimes(1);
-		expect(h.stopWS).toHaveBeenCalledTimes(1);
 		await vi.advanceTimersByTimeAsync(30000);
 		expect(fetchDashboard).toHaveBeenCalledTimes(3);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(2);

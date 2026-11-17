@@ -3,6 +3,11 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testi
 import ActiveJobRow from '../ActiveJobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
 
+const live = vi.hoisted(() => ({ value: { rip: null, transcode: null } as Record<string, unknown> }));
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: { watch: vi.fn(() => () => {}), get: vi.fn(() => live.value) }
+}));
+
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
 	const _role = writable<string | null>('admin');
