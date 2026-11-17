@@ -219,7 +219,7 @@ describe('jobProgress: status table', () => {
 	it('transcode_failed, partly done', () => {
 		const j = job({
 			status: 'ripped',
-			transcode_progress: tp({ state: 'done_partial', tasks_done: 3, tasks_failed: 1 })
+			transcode_progress: tp({ state: 'done_partial', tasks_done: 2, tasks_failed: 1 })
 		});
 		expect(states(j)).toEqual(['done', 'done', 'done', 'done', 'partial']);
 		expect(readout(j)).toEqual({
@@ -228,6 +228,22 @@ describe('jobProgress: status table', () => {
 			detail: '2 of 3 tasks succeeded',
 			figure: null
 		});
+	});
+	it('caps the title number at the total', () => {
+		const j = job({ status: 'ripping', rip_progress: rp({ tracks_done: 4 }) });
+		expect(readout(j).detail).toBe('title 4 of 4');
+	});
+	it('counts a failed task toward the task number', () => {
+		const j = job({ status: 'transcoding', transcode_progress: tp({ tasks_done: 1, tasks_failed: 1 }) });
+		expect(readout(j).detail).toBe('task 3 of 3');
+	});
+	it('a non-finite live percent falls back to the snapshot percent', () => {
+		const j = job({ status: 'transcoding', transcode_progress: tp({ percent: 30 }) });
+		expect(jobProgress(j, encLive({ pct: NaN }), CTX).segments[3].pct).toBe(30);
+	});
+	it('complete with one track reads singular', () => {
+		const j = job({ status: 'complete', rip_progress: rp({ tracks_total: 1 }) });
+		expect(readout(j).detail).toBe('1 track');
 	});
 	it('transcode_failed, all failed', () => {
 		const j = job({ status: 'ripped', transcode_progress: tp({ state: 'failed', tasks_failed: 3 }) });

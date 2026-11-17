@@ -104,7 +104,7 @@ function ripReadout(job: ProgressJob, live: JobLive, pct: number | null): Readou
 	const rp = job.rip_progress;
 	if (phase === 'verifying') return say('Verifying', 'checking the ripped files');
 	if (!rp || rp.tracks_total === 0) return say('Ripping', 'starting MakeMKV');
-	const n = rp.current_track_index ?? rp.tracks_done + 1;
+	const n = Math.min(rp.current_track_index ?? rp.tracks_done + 1, rp.tracks_total);
 	const figure = pctFigure(pct, finite(live.rip?.etaSeconds)) ?? `${rp.tracks_done} / ${rp.tracks_total} titles`;
 	const detail = phase != null && phase in COPY_STAGE_WORDS ? ripStageWords(phase) : `title ${n} of ${rp.tracks_total}`;
 	return say('Ripping', detail, 'default', figure);
@@ -117,8 +117,10 @@ function ripping(job: ProgressJob, live: JobLive): Position {
 
 function transcoding(job: ProgressJob, live: JobLive): Position {
 	const tp = job.transcode_progress;
-	const pct = finite(live.transcode?.pct ?? tp?.percent ?? null);
-	const detail = tp ? `task ${Math.min(tp.tasks_done + 1, tp.tasks_total)} of ${tp.tasks_total}` : null;
+	const pct = finite(live.transcode?.pct) ?? finite(tp?.percent) ?? null;
+	const detail = tp
+		? `task ${Math.min(tp.tasks_done + tp.tasks_failed + 1, tp.tasks_total)} of ${tp.tasks_total}`
+		: null;
 	const figure = pctFigure(pct, finite(live.transcode?.etaSeconds));
 	return {
 		states: row('done', 'done', 'done', 'active', 'pending'),
@@ -130,11 +132,10 @@ function transcoding(job: ProgressJob, live: JobLive): Position {
 function transcodeFailed(job: ProgressJob): Position {
 	const tp = job.transcode_progress;
 	if (tp?.state === 'done_partial') {
-		const ok = tp.tasks_done - tp.tasks_failed;
 		return {
 			states: row('done', 'done', 'done', 'done', 'partial'),
 			pct: null,
-			readout: say('Done with gaps', `${ok} of ${tp.tasks_total} tasks succeeded`, 'warning')
+			readout: say('Done with gaps', `${tp.tasks_done} of ${tp.tasks_total} tasks succeeded`, 'warning')
 		};
 	}
 	return {
@@ -162,7 +163,7 @@ function complete(job: ProgressJob): Position {
 	return {
 		states: row('done', 'done', 'done', 'done', 'done'),
 		pct: null,
-		readout: say('Complete', n > 0 ? `${n} tracks` : null, 'success')
+		readout: say('Complete', n > 0 ? `${n} ${n === 1 ? 'track' : 'tracks'}` : null, 'success')
 	};
 }
 
