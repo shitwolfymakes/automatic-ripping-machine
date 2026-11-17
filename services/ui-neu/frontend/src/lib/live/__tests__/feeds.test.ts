@@ -117,12 +117,14 @@ describe('rip feed', () => {
 
 describe('transcode sample', () => {
 	it('reads pct, eta, fps, avg fps and pass', () => {
-		expect(transcodeSample({ progress_pct: 40, eta_seconds: 120, fps: 24.5, avg_fps: 23, pass: 2 })).toEqual({
+		expect(
+			transcodeSample({ progress_pct: 40, eta_seconds: 120, fps: 24.5, avg_fps: 23, current_pass: '1/2' })
+		).toEqual({
 			pct: 40,
 			etaSeconds: 120,
 			fps: 24.5,
 			avgFps: 23,
-			pass: 2,
+			pass: '1/2',
 			bytesDone: null,
 			bytesTotal: null,
 			rateBps: null,
@@ -137,7 +139,13 @@ describe('transcode sample', () => {
 	});
 
 	it('non-numeric fields read as null', () => {
-		const sample = transcodeSample({ progress_pct: '50', eta_seconds: null, fps: NaN, avg_fps: Infinity, pass: '1' });
+		const sample = transcodeSample({
+			progress_pct: '50',
+			eta_seconds: null,
+			fps: NaN,
+			avg_fps: Infinity,
+			current_pass: 2
+		});
 		expect([sample.pct, sample.etaSeconds, sample.fps, sample.avgFps, sample.pass]).toEqual([
 			null,
 			null,
