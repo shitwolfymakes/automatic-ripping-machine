@@ -95,6 +95,16 @@
 			opacity: 0.85;
 		}
 	}
+	/* Text colours: each mix reaches 4.5:1 on --color-surface in both schemes
+	   (the raw status hues and --color-text-muted fall short in light mode).
+	   The bars keep the raw status colours. */
+	.stage-rail {
+		--rail-text-pending: color-mix(in srgb, var(--color-text-muted) 90%, var(--color-text));
+		--rail-text-quiet: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-text));
+		--rail-text-waiting: color-mix(in srgb, var(--color-status-waiting) 50%, var(--color-text));
+		--rail-text-success: color-mix(in srgb, var(--color-status-success) 55%, var(--color-text));
+		--rail-text-error: color-mix(in srgb, var(--color-status-error) 75%, var(--color-text));
+	}
 	.stage-rail-track {
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -139,7 +149,7 @@
 		transition: width 0.4s ease;
 	}
 	.stage-rail-step[data-state='attention'] .stage-rail-label {
-		color: var(--color-status-waiting);
+		color: var(--rail-text-waiting);
 	}
 	.stage-rail-step[data-state='attention'] .stage-rail-bar {
 		background: var(--color-status-waiting);
@@ -159,23 +169,23 @@
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: var(--color-text-faint);
+		color: var(--rail-text-pending);
 	}
 	[data-size='md'] .stage-rail-label {
 		font-size: 0.6875rem;
 	}
 	.stage-rail-step[data-state='done'] .stage-rail-label {
-		color: var(--color-text-muted);
+		color: var(--rail-text-quiet);
 	}
 	.stage-rail-step[data-state='active'] .stage-rail-label {
 		color: var(--color-text);
 		font-weight: 700;
 	}
 	.stage-rail-step[data-state='failed'] .stage-rail-label {
-		color: var(--color-status-error);
+		color: var(--rail-text-error);
 	}
 	.stage-rail-step[data-state='partial'] .stage-rail-label {
-		color: var(--color-status-waiting);
+		color: var(--rail-text-waiting);
 	}
 	.stage-rail-readout {
 		margin-top: 0.5rem;
@@ -191,21 +201,21 @@
 		color: var(--color-text);
 	}
 	[data-tone='success'] .stage-rail-readout-label {
-		color: var(--color-status-success);
+		color: var(--rail-text-success);
 	}
 	[data-tone='warning'] .stage-rail-readout-label {
-		color: var(--color-status-waiting);
+		color: var(--rail-text-waiting);
 	}
 	[data-tone='error'] .stage-rail-readout-label {
-		color: var(--color-status-error);
+		color: var(--rail-text-error);
 	}
 	.stage-rail-readout-detail {
 		margin-left: 0.25rem;
-		color: var(--color-text-muted);
+		color: var(--rail-text-quiet);
 	}
 	.stage-rail-figure {
 		flex-shrink: 0;
 		font-family: var(--font-mono);
-		color: var(--color-text-muted);
+		color: var(--rail-text-quiet);
 	}
 </style>
