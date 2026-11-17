@@ -95,6 +95,7 @@ function dash(overrides: DashOverrides = {}) {
 		transcoder_online: true,
 		transcoder_stats: null,
 		active_transcodes: [],
+		review_wait_seconds: 60,
 		...overrides
 	};
 }
@@ -181,6 +182,15 @@ afterEach(async () => {
 });
 
 describe('Dashboard sections', () => {
+	it('passes the configured countdown length to the review card', async () => {
+		const waitStart = new Date(Date.now() - 10_000).toISOString();
+		setDashboard(
+			dash({ review_wait_seconds: 300, active_jobs: [job('r1', 'awaiting_review', { wait_start_time: waitStart })] })
+		);
+		await renderPage();
+		await waitFor(() => expect(screen.getByText(/^4m 5\ds$/)).toBeInTheDocument());
+	});
+
 	describe('labels', () => {
 		it.each([
 			['one disc', 1, 'WAITING FOR REVIEW - 1 DISC'],
