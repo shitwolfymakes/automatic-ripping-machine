@@ -2,6 +2,7 @@
 // the active one. Pure data and functions; the layout supplies the store
 // values.
 import { isScreenEnabled } from '$lib/features';
+import { GLYPH_PATHS } from '$lib/ui/glyph-names';
 
 export interface NavItem {
 	href: string;
@@ -28,7 +29,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 	{
 		href: '/files',
 		label: 'Files',
-		icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+		icon: GLYPH_PATHS.folder
 	},
 	{
 		href: '/transcoder',

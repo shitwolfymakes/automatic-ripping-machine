@@ -63,7 +63,12 @@
 				<input type="text" bind:value={editEpisodeName} placeholder="Episode name" />
 			</label>
 		{/if}
-		<button onclick={saveOptions} disabled={savingOptions} class="btn btn-primary track-title-search-action-btn">
+		<button
+			type="button"
+			onclick={saveOptions}
+			disabled={savingOptions}
+			class="btn btn-primary track-title-search-action-btn"
+		>
 			{savingOptions ? 'Saving...' : 'Save options'}
 		</button>
 	</div>

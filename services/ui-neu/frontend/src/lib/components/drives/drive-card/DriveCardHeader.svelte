@@ -64,7 +64,7 @@
 				>{statusText}</span
 			>
 		{:else if !editing}
-			<button onclick={startEdit} class="btn btn-link btn-sm flex-shrink-0">Rename</button>
+			<button type="button" onclick={startEdit} class="btn btn-link btn-sm flex-shrink-0">Rename</button>
 		{/if}
 	</div>
 	{#if drive.current_job}
@@ -84,8 +84,8 @@
 			class="field-control drive-card-edit-input"
 			disabled={saving}
 		/>
-		<button onclick={saveEdit} disabled={saving} class="btn btn-primary btn-sm">Save</button>
-		<button onclick={cancelEdit} disabled={saving} class="btn btn-ghost btn-sm">Cancel</button>
+		<button type="button" onclick={saveEdit} disabled={saving} class="btn btn-primary btn-sm">Save</button>
+		<button type="button" onclick={cancelEdit} disabled={saving} class="btn btn-ghost btn-sm">Cancel</button>
 	</div>
 {/if}
 

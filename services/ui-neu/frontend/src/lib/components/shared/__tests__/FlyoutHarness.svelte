@@ -10,11 +10,11 @@
 </script>
 
 <!-- An "outside" target to test click-away dismissal -->
-<button data-testid="outside">outside</button>
+<button type="button" data-testid="outside">outside</button>
 
 <Flyout {align} width="w-52" label="Test menu">
 	{#snippet trigger({ toggle, open })}
-		<button data-testid="trigger" aria-expanded={open} onclick={toggle}>Open</button>
+		<button type="button" data-testid="trigger" aria-expanded={open} onclick={toggle}>Open</button>
 	{/snippet}
 	{#snippet children({ close })}
 		<FlyoutItem

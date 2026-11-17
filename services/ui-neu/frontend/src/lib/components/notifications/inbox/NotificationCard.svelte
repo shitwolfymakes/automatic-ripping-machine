@@ -31,7 +31,12 @@
 			{/if}
 		</div>
 		{#if !notif.seen && $isAdmin}
-			<button onclick={() => ondismiss(notif.id)} disabled={dismissing} class="btn notifications-page-dismiss-btn">
+			<button
+				type="button"
+				onclick={() => ondismiss(notif.id)}
+				disabled={dismissing}
+				class="btn notifications-page-dismiss-btn"
+			>
 				{dismissing ? '...' : 'Dismiss'}
 			</button>
 		{/if}

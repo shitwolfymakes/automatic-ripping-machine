@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import PosterImage from '$lib/components/shared/PosterImage.svelte';
@@ -43,7 +44,9 @@
 					<span class={facts.rating_source === 'imdb' ? 'badge badge-imdb' : 'badge'}>
 						{RATING_LABEL[facts.rating_source ?? ''] ?? 'Rating'}
 					</span>
-					<span>★ {facts.rating.toFixed(1)}</span>
+					<span class="inline-flex items-center gap-1"
+						><Glyph name="star" class="h-3 w-3" />{facts.rating.toFixed(1)}</span
+					>
 					{#if facts.votes}<span class="match-pane-muted">{formatVotes(facts.votes)}</span>{/if}
 				{/if}
 				{#if imdb}<span class="match-pane-muted mono">{imdb}</span>{/if}
@@ -72,7 +75,7 @@
 			{/if}
 			{#if imdb}
 				<a class="btn" href="https://www.imdb.com/title/{imdb}/" target="_blank" rel="noopener noreferrer">
-					Open on IMDb ↗
+					Open on IMDb <Glyph name="external-link" class="h-3 w-3" />
 				</a>
 			{/if}
 		</div>

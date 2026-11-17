@@ -42,9 +42,9 @@ export const SOURCE_LISTS: { key: string; heading: string }[] = [
 
 /** Step 4's trust boxes: one auto-apply checkbox per media kind. */
 export const TRUST_OPTIONS: { key: string; label: string }[] = [
-	{ key: 'movie_auto_apply', label: 'Apply confident matches · Movies' },
-	{ key: 'episode_auto_apply', label: 'Apply confident matches · TV shows' },
-	{ key: 'music_auto_apply', label: 'Apply confident matches · Music' }
+	{ key: 'movie_auto_apply', label: 'Apply confident matches | Movies' },
+	{ key: 'episode_auto_apply', label: 'Apply confident matches | TV shows' },
+	{ key: 'music_auto_apply', label: 'Apply confident matches | Music' }
 ];
 
 /** The Advanced ignore boxes: one per disc hint the card can switch off. */

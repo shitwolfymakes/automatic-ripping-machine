@@ -122,16 +122,16 @@ describe('IdentityCard', () => {
 		expect(within(s4).queryByText('Apply confident matches', { exact: true })).toBeNull();
 		const boxes = within(s4).getAllByRole('checkbox');
 		const labels = [
-			'Apply confident matches · Movies',
-			'Apply confident matches · TV shows',
-			'Apply confident matches · Music'
+			'Apply confident matches | Movies',
+			'Apply confident matches | TV shows',
+			'Apply confident matches | Music'
 		];
 		expect(boxes.map((c) => c.getAttribute('aria-label'))).toEqual(labels);
 		for (const l of labels) expect(within(s4).getByText(l)).toBeInTheDocument();
 		expect(s4).toHaveTextContent(
-			"When off, a match waits on the job page for you to confirm it and the disc is held with no countdown; a TV show's episode placement is then a guess too: still placed, shown amber, and it holds the countdown. Ripping › Review first still holds every disc."
+			"When off, a match waits on the job page for you to confirm it and the disc is held with no countdown; a TV show's episode placement is then a guess too: still placed, shown amber, and it holds the countdown. Ripping > Review first still holds every disc."
 		);
-		await fireEvent.click(within(s4).getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
+		await fireEvent.click(within(s4).getByRole('checkbox', { name: 'Apply confident matches | Movies' }));
 		expect((component as unknown as { getValues: () => Record<string, unknown> }).getValues().movie_auto_apply).toBe(
 			false
 		);

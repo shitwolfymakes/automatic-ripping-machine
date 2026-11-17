@@ -53,6 +53,7 @@
 
 <div class="flex flex-wrap items-center gap-1.5 disc-review-widget-actions">
 	<button
+		type="button"
 		onclick={() => sections.toggle('info')}
 		class="btn disc-review-widget-action-btn"
 		aria-pressed={sections.isOpen('info')}
@@ -61,6 +62,7 @@
 	</button>
 	{#if isVideo}
 		<button
+			type="button"
 			onclick={() => sections.toggle('title')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('title')}>Search</button
@@ -68,6 +70,7 @@
 	{/if}
 	{#if episodeRow && (episodeRow.state !== 'matched' || sections.isOpen('episodes'))}
 		<button
+			type="button"
 			onclick={() => sections.toggle('episodes')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('episodes')}>Episodes</button
@@ -75,6 +78,7 @@
 	{/if}
 	{#if isMusic}
 		<button
+			type="button"
 			onclick={() => sections.toggle('music')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('music')}>Search</button
@@ -82,6 +86,7 @@
 	{/if}
 	{#if $isAdmin && job.actions.can_apply}
 		<button
+			type="button"
 			onclick={onapplysession}
 			class="btn {isPostRip ? 'disc-review-widget-success-btn' : 'disc-review-widget-action-btn'}"
 			>{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button
@@ -90,6 +95,7 @@
 	<a href="/jobs/{job.id}" class="btn disc-review-widget-action-btn"> View details </a>
 	{#if $isAdmin && job.actions.can_abandon}
 		<button
+			type="button"
 			onclick={oncancel}
 			disabled={actions.cancelling}
 			class="btn btn-danger ml-auto"
@@ -99,12 +105,18 @@
 		</button>
 	{/if}
 	{#if $isAdmin && job.actions.can_delete}
-		<button onclick={() => (actions.confirmDelete = true)} disabled={actions.deleting} class="btn btn-danger ml-auto">
+		<button
+			type="button"
+			onclick={() => (actions.confirmDelete = true)}
+			disabled={actions.deleting}
+			class="btn btn-danger ml-auto"
+		>
 			{actions.deleting ? 'Deleting...' : 'Delete'}
 		</button>
 	{/if}
 	{#if canStart && $isAdmin}
 		<button
+			type="button"
 			onclick={onstartrip}
 			disabled={actions.starting}
 			class="btn disc-review-widget-success-btn"

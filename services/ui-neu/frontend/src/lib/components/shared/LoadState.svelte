@@ -43,12 +43,13 @@
 	const phase = $derived(loadPhase({ data, loading, error, delayElapsed, isEmpty }));
 </script>
 
-{#if phase === 'error'}
+<!-- loadPhase is 'error' exactly when error is set; testing error narrows it. -->
+{#if error}
 	<div in:fade|local={fadeIn}>
 		{#if errorSlot}
-			{@render errorSlot(error!)}
+			{@render errorSlot(error)}
 		{:else}
-			<p class="load-state-error">Failed to load: {error!.message}</p>
+			<p class="load-state-error">Failed to load: {error.message}</p>
 		{/if}
 	</div>
 {:else if phase === 'waiting'}
@@ -70,9 +71,10 @@
 			{@render loadingSlot()}
 		{/if}
 	</div>
-{:else}
+{:else if data != null}
+	<!-- 'ready' is only reached with data set. -->
 	<div in:fade|local={fadeIn}>
-		{@render ready(data!)}
+		{@render ready(data)}
 	</div>
 {/if}
 

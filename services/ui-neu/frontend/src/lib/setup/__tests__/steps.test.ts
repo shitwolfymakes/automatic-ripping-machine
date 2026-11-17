@@ -8,6 +8,7 @@ import {
 	openSteps,
 	prevStep,
 	progressState,
+	requiredStepMeta,
 	uiState,
 	stepMeta
 } from '../steps';
@@ -117,6 +118,11 @@ describe('setup step registry', () => {
 		expect(prevStep('account')).toBeNull();
 		expect(prevStep('drives')).toBe('system');
 		expect(stepMeta('nope')).toBeUndefined();
+	});
+
+	it('requiredStepMeta returns a known step and throws for an unknown one', () => {
+		expect(requiredStepMeta('drives')).toBe(stepMeta('drives'));
+		expect(() => requiredStepMeta('nope')).toThrow('Unknown setup step "nope"');
 	});
 
 	it('maps recorded progress to stepper states', () => {

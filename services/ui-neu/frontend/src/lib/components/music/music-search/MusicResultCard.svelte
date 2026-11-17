@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	// One music search result as a flip card, with the release's facts on the
 	// front and its tracklist on the back.
 	import type { TrackView, MetadataCandidate, MetadataReleaseDetail } from '$lib/types/api.gen';
@@ -33,7 +34,7 @@
 	<div class="music-search-poster-card" data-flipped={flipped}>
 		<!-- FRONT FACE -->
 		<div class="music-search-poster-face">
-			<button onclick={() => onopen()} class="group flex w-full flex-col music-search-result-card">
+			<button type="button" onclick={() => onopen()} class="group flex w-full flex-col music-search-result-card">
 				<PosterImage url={candidate.poster_url} class="aspect-square w-full music-search-result-poster" />
 				<div class="p-1.5">
 					<p class="truncate music-search-result-title">{candidate.title}</p>
@@ -54,18 +55,12 @@
 			</button>
 			{#if candidate.track_count}
 				<button
+					type="button"
 					onclick={flip}
 					class="absolute top-1 right-1 flex items-center gap-1 music-search-flip-btn"
 					title="Flip to see tracklist"
 				>
-					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						/>
-					</svg>
+					<Glyph name="refresh" class="h-3 w-3" />
 					{candidate.track_count} tracks
 				</button>
 			{/if}
@@ -120,18 +115,12 @@
 			{/if}
 			<!-- Flip-back button -->
 			<button
+				type="button"
 				onclick={flip}
 				class="absolute top-1 right-1 flex items-center gap-1 music-search-flip-btn"
 				title="Flip back"
 			>
-				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					/>
-				</svg>
+				<Glyph name="refresh" class="h-3 w-3" />
 				Back
 			</button>
 		</div>

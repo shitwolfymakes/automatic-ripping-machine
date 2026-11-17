@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { onMount } from 'svelte';
 	import type { JobView, TrackView, ScanResult } from '$lib/types/api.gen';
 	import { DiscReviewData } from '$lib/stores/disc-review-data.svelte';
@@ -277,7 +278,11 @@
 		{#if actions.errorMessage}
 			<div class="alert alert-danger disc-review-widget-error">
 				<span class="flex-1">{actions.errorMessage}</span>
-				<button onclick={actions.dismissError} class="shrink-0 disc-review-widget-error-dismiss">&times;</button>
+				<CloseButton
+					onclick={actions.dismissError}
+					label="Dismiss error"
+					class="shrink-0 disc-review-widget-error-dismiss"
+				/>
 			</div>
 		{/if}
 
@@ -486,10 +491,12 @@
 		border-radius: 0;
 		padding: 0.5rem 1rem;
 	}
-	.disc-review-widget-error-dismiss {
+	/* :global: forwarded through CloseButton's class prop */
+	:global(.disc-review-widget-error-dismiss) {
 		color: var(--color-danger);
 	}
-	.disc-review-widget-error-dismiss:hover {
+	/* :global: set on CloseButton through its class prop */
+	:global(.disc-review-widget-error-dismiss:hover) {
 		color: var(--color-on-danger-soft);
 	}
 	.disc-review-widget-panel {

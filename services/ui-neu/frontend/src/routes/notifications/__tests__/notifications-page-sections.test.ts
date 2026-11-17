@@ -219,7 +219,7 @@ describe('Notifications Page sections', () => {
 			await waitFor(() => {
 				expect(screen.getByText('API 403: Forbidden')).toBeInTheDocument();
 			});
-			await fireEvent.click(screen.getByRole('button', { name: '×' }));
+			await fireEvent.click(screen.getByRole('button', { name: 'Dismiss message' }));
 			expect(screen.queryByText('API 403: Forbidden')).not.toBeInTheDocument();
 		});
 	});

@@ -53,7 +53,7 @@
 	<div class="cluster panel-section log-detail-page-actions">
 		<span class="eyebrow">Actions</span>
 		<div class="cluster">
-			<button onclick={() => log.load()} class="btn log-detail-page-action-btn"> Refresh </button>
+			<button type="button" onclick={() => log.load()} class="btn log-detail-page-action-btn"> Refresh </button>
 			<a href={jobLogDownloadUrl(jobId)} class="btn log-detail-page-action-btn" aria-disabled={entries.length === 0}>
 				Download .zip
 			</a>

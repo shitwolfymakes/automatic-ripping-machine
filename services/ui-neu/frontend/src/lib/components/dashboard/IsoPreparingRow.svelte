@@ -45,6 +45,7 @@
 		<span class="flex-1"></span>
 		{#if $isAdmin}
 			<button
+				type="button"
 				onclick={handleCancel}
 				disabled={cancelling}
 				class="btn btn-danger btn-sm shrink-0"
