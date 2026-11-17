@@ -56,19 +56,22 @@
 <!-- Gear menu. The selection count lives in the dashboard's selection bar;
      "Delete Selected" stays in the flyout for keyboard users who open the menu. -->
 <Flyout align="right" width="w-56" label="Bulk actions">
-	{#snippet trigger({ toggle })}
+	{#snippet trigger({ toggle, open })}
+		<!-- .btn: the same control height and type size as the status filter and the Details buttons -->
 		<button
 			type="button"
 			onclick={toggle}
 			disabled={bulkBusy}
-			class="chip bulk-actions-trigger inline-flex items-center gap-1"
+			aria-expanded={open}
+			class="btn bulk-actions-trigger inline-flex items-center gap-1.5"
 		>
 			{#if bulkBusy}
 				<span class="bulk-actions-spinner" aria-hidden="true"></span>
 			{:else}
-				<Glyph name="gear" />
+				<Glyph name="gear" class="h-3.5 w-3.5" />
 			{/if}
-			Actions <Glyph name="chevron-down" class="h-3 w-3" />
+			Actions
+			<Glyph name="chevron-down" class="chevron" />
 		</button>
 	{/snippet}
 	{#snippet children({ close })}
@@ -102,6 +105,11 @@
 </Flyout>
 
 <style>
+	/* .btn's block padding plus its border comes to 38px; dropping the padding
+	   lets min-height (--control-h) set it, level with the status filter. */
+	.bulk-actions-trigger {
+		padding-block: 0;
+	}
 	.bulk-actions-trigger:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
