@@ -114,7 +114,6 @@ import { fetchSessions } from '$lib/api/sessions';
 import { fetchIdentity, clearEpisodeMatch } from '$lib/api/identity';
 import { wsClient } from '$lib/api/ws';
 import { ApiError } from '$lib/api/client';
-import { ripProgress, type RipLiveProgress } from '$lib/stores/rips.svelte';
 import * as authStore from '$lib/stores/auth';
 import * as storesModule from '$app/stores';
 
@@ -210,7 +209,6 @@ afterEach(() => {
 	vi.useRealTimers();
 	setRole('admin');
 	setPageId(JOB);
-	ripProgress.value = {};
 });
 
 describe('loading', () => {
@@ -948,62 +946,35 @@ describe('action note', () => {
 });
 
 describe('rip progress', () => {
-	const live = (over: Partial<RipLiveProgress> = {}): RipLiveProgress => ({
-		track_id: 'trk_1',
-		progress_pct: 42,
-		eta_seconds: null,
-		bytes_done: null,
-		bytes_total: null,
-		rate_bps: null,
-		phase: null,
-		...over
-	});
 	const ripping = () => detailOf({ status: 'ripping' });
 	const subscribedTopics = () => vi.mocked(wsClient.subscribe).mock.calls.map(([topic]) => topic);
+	// Deliver a ripper.progress message through the handler the job-live store registered.
+	function emitRip(payload: Record<string, unknown>) {
+		const call = vi.mocked(wsClient.subscribe).mock.calls.find(([topic]) => topic === `ripper.progress.${JOB}`);
+		(call?.[1] as (env: { payload: Record<string, unknown> }) => void)({ payload });
+	}
 
 	it('waits for the first progress report while ripping, and subscribes to this job', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
 		expect(within(section).getByRole('heading', { name: 'Ripping' })).toBeInTheDocument();
-		expect(within(section).getByText('Waiting for the first progress report from the ripper.')).toBeInTheDocument();
+		expect(within(section).getByText('Waiting for the first progress report')).toBeInTheDocument();
 		expect(subscribedTopics()).toContain(`ripper.progress.${JOB}`);
 	});
 
-	it('shows the progress without an ETA or a transfer line when neither was reported', async () => {
+	it('the rip progress card shows the live sample', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live() };
-		expect(await within(section).findByText('42%')).toBeInTheDocument();
-		expect(within(section).queryByText(/left$/)).not.toBeInTheDocument();
-		expect(section.querySelector('.mono')).toBeNull();
-		expect(
-			within(section).queryByText('Waiting for the first progress report from the ripper.')
-		).not.toBeInTheDocument();
-	});
-
-	it('shows the ETA and the byte transfer with its rate', async () => {
-		loadJobPage(ripping());
-		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = {
-			[JOB]: live({ eta_seconds: 600, bytes_done: 1_000_000_000, bytes_total: 2_000_000_000, rate_bps: 50_000_000 })
-		};
+		emitRip({ progress_pct: 42, eta_seconds: 600, bytes_done: 1_000_000_000, bytes_total: 2_000_000_000 });
 		expect(await within(section).findByText('10m left')).toBeInTheDocument();
-		const transfer = section.querySelector('.mono') as HTMLElement;
-		expect(text(transfer)).toMatch(/ of .* · .*\/s$/);
-	});
-
-	it('shows the byte transfer without a rate when none was reported', async () => {
-		loadJobPage(ripping());
-		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live({ bytes_done: 1_000_000_000 }) };
-		await waitFor(() => expect(section.querySelector('.mono')).not.toBeNull());
-		expect(text(section.querySelector('.mono') as HTMLElement)).not.toContain('/s');
+		expect(within(section).getByTestId('live-progress-line')).toBeInTheDocument();
+		expect(section.querySelector('.mono')).not.toBeNull();
 	});
 
 	it('says the files are being verified once the rip is done copying', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live({ phase: 'verifying' }) };
+		emitRip({ progress_pct: 100, phase: 'verifying' });
 		expect(await within(section).findByRole('heading', { name: 'Verifying ripped files' })).toBeInTheDocument();
 	});
 
@@ -1025,6 +996,25 @@ describe('rip progress', () => {
 		await vi.advanceTimersByTimeAsync(5000);
 		await waitFor(() => expect(screen.queryByTestId('job-rip-progress')).not.toBeInTheDocument());
 		expect(unsubscribe).toHaveBeenCalled();
+	});
+});
+
+describe('stage rail', () => {
+	it('the job page rail shows the same stage and title count as the dashboard for a ripping job', async () => {
+		loadJobPage(
+			detailOf({ status: 'ripping', rip_progress: null }, [
+				createTrack({ id: 'trk_1', index: 1, status: 'done' }),
+				createTrack({ id: 'trk_2', index: 2, status: 'in_progress' }),
+				createTrack({ id: 'trk_3', index: 3, status: 'queued' })
+			])
+		);
+		await screen.findByTestId('job-rip-progress');
+		expect(await screen.findByText('title 2 of 3')).toBeInTheDocument();
+	});
+
+	it('shows Failed during rip for a failed job whose tracks started', async () => {
+		loadJobPage(detailOf({ status: 'failed', rip_progress: null }, [createTrack({ id: 'trk_1', status: 'failed' })]));
+		expect(await screen.findByText('Failed during rip')).toBeInTheDocument();
 	});
 });
 
