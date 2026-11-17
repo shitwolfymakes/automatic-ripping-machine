@@ -36,7 +36,7 @@ import { fetchJobs } from '$lib/api/jobs';
 import { fetchNotificationCount } from '$lib/api/notifications';
 import { fetchTranscoderJobs, fetchTranscoderStats } from '$lib/api/transcoder';
 import type { DriveView, IsoPrepareView, JobView } from '$lib/types/api.gen';
-import { fetchDashboard, fetchDashboardSnapshot } from '../dashboard';
+import { fetchDashboardSnapshot } from '../dashboard';
 
 const mockFetchDrives = vi.mocked(fetchDrives);
 
@@ -44,7 +44,7 @@ beforeEach(() => {
 	mockFetchDrives.mockClear();
 });
 
-describe('fetchDashboard', () => {
+describe('fetchDashboardSnapshot composition', () => {
 	it('counts optical drives only and maps ISO sources', async () => {
 		mockFetchDrives.mockResolvedValue([
 			{ id: 'drv_1', kind: 'optical', display_name: 'Drive 1' },
@@ -52,7 +52,7 @@ describe('fetchDashboard', () => {
 			{ id: 'drv_iso_1', kind: 'virtual', display_name: 'Paddington_2.iso', source_path: 'Paddington_2.iso' }
 		] as DriveView[]);
 
-		const dash = await fetchDashboard();
+		const dash = await fetchDashboardSnapshot();
 
 		expect(dash.drives_online).toBe(2);
 		expect(dash.iso_sources).toEqual({ drv_iso_1: 'Paddington_2.iso' });
@@ -66,22 +66,13 @@ describe('fetchDashboard', () => {
 			{ id: 'drv_iso_done', kind: 'virtual', lifecycle: 'retired', display_name: 'Done.iso' }
 		] as DriveView[]);
 
-		const dash = await fetchDashboard();
+		const dash = await fetchDashboardSnapshot();
 
 		expect(mockFetchDrives).toHaveBeenCalledWith({ includeRetired: true });
 		// A finished ISO job still resolves to its file name, not the raw id.
-		expect(dash.drive_names.drv_iso_done).toBe('Done.iso');
+		expect(dash.drive_names?.drv_iso_done).toBe('Done.iso');
 		expect(dash.iso_sources).toEqual({ drv_iso_live: 'Live.iso' });
 		expect(dash.drives_online).toBe(1);
-	});
-
-	it('degrades to zero drives when the drives fetch fails', async () => {
-		mockFetchDrives.mockRejectedValue(new Error('boom'));
-
-		const dash = await fetchDashboard();
-
-		expect(dash.drives_online).toBe(0);
-		expect(dash.iso_sources).toEqual({});
 	});
 
 	it('reports the drive fields as null in a snapshot when the drives fetch fails', async () => {
@@ -118,7 +109,7 @@ describe('fetchDashboard', () => {
 			{ drive_id: 'drv_done', phase: 'scanning', updated_at: at }
 		] as IsoPrepareView[]);
 
-		const dash = await fetchDashboard();
+		const dash = await fetchDashboardSnapshot();
 
 		expect(dash.preparing).toEqual([
 			{
@@ -137,7 +128,7 @@ describe('fetchDashboard', () => {
 		mockFetchDrives.mockResolvedValue([] as DriveView[]);
 		vi.mocked(fetchIsoPreparing).mockRejectedValueOnce(new Error('boom'));
 
-		expect((await fetchDashboard()).preparing).toEqual([]);
+		expect((await fetchDashboardSnapshot()).preparing).toEqual([]);
 	});
 
 	it('records whether each live virtual drive rips an ISO or a disc folder', async () => {
@@ -150,7 +141,7 @@ describe('fetchDashboard', () => {
 			{ drive_id: 'drv_dir', phase: 'scanning', updated_at: '2026-10-02T14:00:00Z' }
 		] as IsoPrepareView[]);
 
-		const dash = await fetchDashboard();
+		const dash = await fetchDashboardSnapshot();
 
 		expect(dash.iso_source_kinds).toEqual({ drv_iso: 'iso', drv_dir: 'folder', drv_old: 'iso' });
 		expect(dash.preparing[0].iso_kind).toBe('folder');
@@ -164,7 +155,7 @@ describe('fetchDashboard', () => {
 			{ id: 'drv_opt', kind: 'optical', lifecycle: 'enrolled', display_name: 'sr0' }
 		] as DriveView[]);
 
-		const dash = await fetchDashboard();
+		const dash = await fetchDashboardSnapshot();
 
 		expect(dash.drive_source_kinds).toEqual({ drv_live: 'iso', drv_done: 'folder', drv_gone: 'iso' });
 		expect(dash.iso_source_kinds).toEqual({ drv_live: 'iso' });
@@ -297,25 +288,5 @@ describe('fetchDashboardSnapshot endpoint failures', () => {
 		] as IsoPrepareView[]);
 
 		expect((await fetchDashboardSnapshot()).preparing).toEqual([]);
-	});
-});
-
-describe('fetchDashboard defaults for failed reads', () => {
-	it('fills every null snapshot field with its empty default', async () => {
-		mockFetchDrives.mockRejectedValueOnce(new Error('boom'));
-		vi.mocked(fetchJobs).mockRejectedValueOnce(new Error('boom'));
-		vi.mocked(fetchNotificationCount).mockRejectedValueOnce(new Error('boom'));
-		vi.mocked(apiFetch).mockRejectedValueOnce(new Error('boom'));
-
-		const dash = await fetchDashboard();
-
-		expect(dash.active_jobs).toEqual([]);
-		expect(dash.drives_online).toBe(0);
-		expect(dash.drive_names).toEqual({});
-		expect(dash.iso_sources).toEqual({});
-		expect(dash.iso_source_kinds).toEqual({});
-		expect(dash.drive_source_kinds).toEqual({});
-		expect(dash.notification_count).toBe(0);
-		expect(dash.ripping_enabled).toBe(true);
 	});
 });
