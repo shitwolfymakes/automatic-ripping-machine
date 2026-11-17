@@ -8,7 +8,7 @@
 	import { jobPoster } from '$lib/match/poster';
 	import { effectiveJobStatus } from '$lib/jobs/status';
 	import { discTypeLabel, type VideoTypeConfig } from '$lib/jobs/type';
-	import { formatRipStage } from '$lib/jobs/status-format';
+	import { ripStageWords } from '$lib/jobs/progress';
 
 	interface Props {
 		/** The job the panel describes. */
@@ -87,7 +87,7 @@
 					<td class="job-active-row-detail-label">Progress</td>
 					<td class="job-active-row-detail-value" colspan="3">
 						{#if active && progressStage}
-							{formatRipStage(progressStage)}
+							{ripStageWords(progressStage)}
 						{:else}
 							-
 						{/if}
