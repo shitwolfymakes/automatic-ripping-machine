@@ -23,19 +23,13 @@ export function effectiveJobStatus(job: JobLike): string {
 			// A partially- or fully-FAILED transcode is NOT "complete" — the disc
 			// ripped fine but some/all tracks failed to transcode. Surface that
 			// honestly as a transcode failure (the lifecycle stepper paints the
-			// transcode stage red; the rip stage stays done). `isPartialComplete`
-			// still adds the "Done x/y" chip so partial-vs-total stays visible.
+			// transcode stage red; the rip stage stays done).
 			case 'done_partial':
 			case 'failed':
 				return 'transcode_failed';
 		}
 	}
 	return s;
-}
-
-/** True when the job finished transcoding but some titles failed. */
-export function isPartialComplete(job: JobLike): boolean {
-	return job.transcode_progress?.state === 'done_partial';
 }
 
 const RIPPING_STATUSES = new Set(['ripping']);
