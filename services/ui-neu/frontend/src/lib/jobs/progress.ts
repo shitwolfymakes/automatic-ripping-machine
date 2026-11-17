@@ -145,16 +145,25 @@ function transcodeFailed(job: ProgressJob): Position {
 	};
 }
 
-/** No recorded failure stage (#625): a rip that started failed in RIP, else ID. */
+function failedLabel(abandoned: boolean, ripStarted: boolean): string {
+	if (abandoned) return 'Abandoned';
+	return ripStarted ? 'Failed during rip' : 'Failed';
+}
+
+/**
+ * The job records no failure stage (issue #625), and the backend sends
+ * rip_progress only while ripping. Started tracks in rip_progress place the
+ * failure in RIP; otherwise the stage is unknown, so the readout says only
+ * "Failed" and the ID segment, the one position left, carries the failure.
+ */
 function failed(job: ProgressJob, abandoned: boolean): Position {
 	const ripStarted = (job.rip_progress?.tracks_total ?? 0) > 0;
-	const where = ripStarted ? 'rip' : 'identification';
 	return {
 		states: ripStarted
 			? row('done', 'done', 'failed', 'pending', 'pending')
 			: row('failed', 'pending', 'pending', 'pending', 'pending'),
 		pct: null,
-		readout: say(abandoned ? 'Abandoned' : `Failed during ${where}`, null, 'error')
+		readout: say(failedLabel(abandoned, ripStarted), null, 'error')
 	};
 }
 

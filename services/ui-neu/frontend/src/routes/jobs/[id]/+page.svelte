@@ -20,7 +20,7 @@
 	import ApplySessionDialog from '$lib/components/jobs/ApplySessionDialog.svelte';
 	import StageRail from '$lib/components/jobs/StageRail.svelte';
 	import LiveProgressLine from '$lib/components/jobs/LiveProgressLine.svelte';
-	import { ripProgressFromTracks } from '$lib/jobs/rip-progress';
+	import { railRipProgress } from '$lib/jobs/rip-progress';
 	import { jobLive } from '$lib/stores/job-live.svelte';
 	import { wsClient } from '$lib/api/ws';
 	import { identitySuggestionOf } from '$lib/jobs/review';
@@ -251,7 +251,7 @@
 
 			<!-- Lifecycle widget: visual stage progression below header, above status bars -->
 			<div class="job-detail-lifecycle-card">
-				<StageRail job={{ ...job, rip_progress: job.rip_progress ?? ripProgressFromTracks(tracks) }} size="md" />
+				<StageRail job={{ ...job, rip_progress: railRipProgress(job, tracks) }} size="md" />
 			</div>
 
 			{#if job.status === 'ripping'}
