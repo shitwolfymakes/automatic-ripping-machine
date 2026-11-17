@@ -247,6 +247,24 @@ describe('fetchDashboardSnapshot endpoint failures', () => {
 		expect((await fetchDashboardSnapshot()).ripping_enabled).toBe(false);
 	});
 
+	it('review_wait_seconds comes from the config manual_wait_seconds', async () => {
+		vi.mocked(apiFetch).mockResolvedValueOnce({ ripping_paused: false, manual_wait_seconds: 300 });
+
+		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBe(300);
+	});
+
+	it('review_wait_seconds is 60 when the config read fails', async () => {
+		vi.mocked(apiFetch).mockRejectedValueOnce(new Error('down'));
+
+		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBe(60);
+	});
+
+	it('0 is kept, not replaced by the default', async () => {
+		vi.mocked(apiFetch).mockResolvedValueOnce({ ripping_paused: false, manual_wait_seconds: 0 });
+
+		expect((await fetchDashboardSnapshot()).review_wait_seconds).toBe(0);
+	});
+
 	it('drops terminal jobs from active_jobs but keeps ripped ones', async () => {
 		vi.mocked(fetchJobs).mockResolvedValueOnce([
 			{ id: 'j1', drive_id: 'd', status: 'ripping' },
