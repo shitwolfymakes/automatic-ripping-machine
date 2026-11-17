@@ -1,4 +1,4 @@
-import { formatRemaining } from '$lib/utils/format';
+import { formatDuration } from '$lib/utils/format';
 
 /**
  * Estimate time remaining for an in-flight job.
@@ -16,7 +16,7 @@ export function etaTime(startTime: string | null | undefined, progressPct: numbe
 	const start = new Date(startTime);
 	const elapsedSec = (Date.now() - start.getTime()) / 1000;
 	if (elapsedSec < 30) return null;
-	return formatRemaining((elapsedSec * (100 - progressPct)) / progressPct);
+	return formatDuration((elapsedSec * (100 - progressPct)) / progressPct);
 }
 
 /**

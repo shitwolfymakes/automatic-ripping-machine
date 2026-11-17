@@ -5,7 +5,7 @@
 	import ProgressBar from '../shared/ProgressBar.svelte';
 	import ActiveJobRowDetails from './active-job-row/ActiveJobRowDetails.svelte';
 	import { statusAccentVar } from '$lib/jobs/status-format';
-	import { formatEta, formatTransfer } from '$lib/utils/format';
+	import { formatDuration, formatTransfer } from '$lib/utils/format';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
 	import { isInProgress } from '$lib/jobs/status-groups';
@@ -205,7 +205,7 @@
 					<div class="flex items-center gap-2">
 						<div class="flex-1"><ProgressBar value={progress} colorVar={accentVar} /></div>
 						{#if eta != null}
-							<span class="shrink-0 job-active-row-meta">{formatEta(eta)} left</span>
+							<span class="shrink-0 job-active-row-meta">{formatDuration(eta, { coarse: true })} left</span>
 						{/if}
 					</div>
 					{#if transfer}
