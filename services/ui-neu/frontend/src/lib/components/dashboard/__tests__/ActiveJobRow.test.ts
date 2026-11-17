@@ -110,10 +110,13 @@ describe('ActiveJobRow', () => {
 			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
 		});
 
-		it('omits the ISO chip and Cancel for an optical drive record', () => {
-			renderComponent(ActiveJobRow, { props: { job: createJob(), drive: createDriveSummary({ name: 'Front' }) } });
+		it('omits the ISO chip, Cancel and data-source for an optical drive record', () => {
+			const { container } = renderComponent(ActiveJobRow, {
+				props: { job: createJob(), drive: createDriveSummary({ name: 'Front' }) }
+			});
 			expect(screen.queryByText('ISO')).not.toBeInTheDocument();
 			expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+			expect(container.querySelector('.job-active-row')?.hasAttribute('data-source')).toBe(false);
 		});
 
 		it('omits the ISO chip, Cancel and data-source once the virtual drive retires', () => {
