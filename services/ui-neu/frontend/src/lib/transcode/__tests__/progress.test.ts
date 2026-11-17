@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { etaTime } from '../../jobs/status-format';
-import { formatRemaining } from '../../utils/format';
+import { formatDuration } from '../../utils/format';
 import { formatFps } from '../fps';
 import { etaLabel, fpsLabel, liveSample, type TranscodeLiveSample } from '../progress';
 
@@ -74,12 +74,12 @@ describe('etaLabel', () => {
 
 	it("prefers the sample's ETA over the task's eta_seconds", () => {
 		const task = { eta_seconds: 600, started_at: STARTED, progress_pct: 50 };
-		expect(etaLabel(task, sample({ eta: 90 }))).toBe(formatRemaining(90));
+		expect(etaLabel(task, sample({ eta: 90 }))).toBe(formatDuration(90));
 	});
 
 	it('uses a sample ETA of 0', () => {
 		const task = { eta_seconds: 600, started_at: null, progress_pct: 0 };
-		expect(etaLabel(task, sample({ eta: 0 }))).toBe(formatRemaining(0));
+		expect(etaLabel(task, sample({ eta: 0 }))).toBe(formatDuration(0));
 	});
 
 	it.each([
@@ -87,13 +87,13 @@ describe('etaLabel', () => {
 		['a sample with a null ETA', sample({ eta: null })]
 	])("falls back to the task's eta_seconds for %s", (_name, live) => {
 		const task = { eta_seconds: 600, started_at: null, progress_pct: 0 };
-		expect(etaLabel(task, live)).toBe(formatRemaining(600));
+		expect(etaLabel(task, live)).toBe(formatDuration(600));
 	});
 
 	it('estimates from started_at when neither the sample nor the task has an ETA', () => {
 		const task = { eta_seconds: null, started_at: STARTED, progress_pct: 50 };
 		expect(etaLabel(task, null)).toBe(etaTime(STARTED, 50));
-		expect(etaLabel(task, null)).toBe(formatRemaining(3600));
+		expect(etaLabel(task, null)).toBe(formatDuration(3600));
 	});
 
 	it('is null when the estimate has no progress to go on', () => {

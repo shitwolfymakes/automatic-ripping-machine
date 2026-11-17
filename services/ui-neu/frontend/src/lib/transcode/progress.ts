@@ -3,7 +3,7 @@
 // from it or from the task row.
 import type { TranscodeTaskView } from '$lib/types/api.gen';
 import { etaTime } from '../jobs/status-format';
-import { formatRemaining } from '../utils/format';
+import { formatDuration } from '../utils/format';
 import { formatFps } from './fps';
 
 /** One progress sample for a task; each value is null when not a number. */
@@ -38,7 +38,7 @@ export function etaLabel(
 	live: TranscodeLiveSample | null
 ): string | null {
 	const eta = live?.eta ?? task.eta_seconds;
-	if (typeof eta === 'number') return formatRemaining(eta);
+	if (typeof eta === 'number') return formatDuration(eta);
 	return task.started_at ? etaTime(task.started_at, task.progress_pct) : null;
 }
 

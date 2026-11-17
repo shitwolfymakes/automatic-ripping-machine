@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ripProgress } from '$lib/stores/rips.svelte';
-	import { formatEta, formatTransfer } from '$lib/utils/format';
+	import { formatDuration, formatTransfer } from '$lib/utils/format';
 	import ProgressBar from '$lib/components/shared/ProgressBar.svelte';
 
 	interface Props {
@@ -19,7 +19,7 @@
 			{liveProgress?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
 		</h2>
 		{#if liveProgress?.eta_seconds != null}
-			<span class="job-detail-rip-meta">{formatEta(liveProgress.eta_seconds)} left</span>
+			<span class="job-detail-rip-meta">{formatDuration(liveProgress.eta_seconds, { coarse: true })} left</span>
 		{/if}
 	</div>
 	{#if liveProgress}
