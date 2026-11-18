@@ -1050,6 +1050,42 @@ describe('Settings page sections', () => {
 			expect(rescanDrives).toHaveBeenCalledTimes(1);
 		});
 
+		it('does not start polling when the tab closes before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			await renderReady();
+			await fireEvent.click(tab('Drives'));
+			await fireEvent.click(tab('System'));
+			expect(lastPoller().stop).toHaveBeenCalledTimes(1);
+			rescan.resolve(undefined as never);
+			await settle();
+			expect(lastPoller().start).not.toHaveBeenCalled();
+		});
+
+		it('does not start polling when Settings unmounts before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			renderComponent(SettingsPage);
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Drives' }));
+			cleanup();
+			rescan.resolve(undefined as never);
+			await settle();
+			expect(lastPoller().start).not.toHaveBeenCalled();
+		});
+
+		it('starts once when the tab reopens before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			await renderReady();
+			await fireEvent.click(tab('Drives'));
+			await fireEvent.click(tab('System'));
+			await fireEvent.click(tab('Drives'));
+			expect(lastPoller().start).toHaveBeenCalledTimes(1);
+			rescan.resolve(undefined as never);
+			await settle();
+			expect(lastPoller().start).toHaveBeenCalledTimes(1);
+		});
+
 		it('fetches the drive sessions once: a second visit does not refetch', async () => {
 			vi.mocked(fetchSessions).mockResolvedValue([session({ id: 's1', name: 'Movie rip' })] as never);
 			vi.mocked(fetchDrives).mockResolvedValue([drive({ display_name: 'Main Drive' })]);

@@ -95,18 +95,27 @@
 	const driveError = drives.error;
 	let drivesRescanned = false;
 
-	function startDrivesTab() {
+	// `isOpen` says whether the tab visit that asked is still open: the first
+	// visit starts polling only after its rescan, and must not start it once
+	// the tab has closed or Settings has gone.
+	function startDrivesTab(isOpen: () => boolean) {
 		if (drivesRescanned) return drives.start();
 		drivesRescanned = true;
 		rescanDrives()
 			.catch(() => {})
-			.then(() => drives.start());
+			.then(() => {
+				if (isOpen()) drives.start();
+			});
 	}
 
 	$effect(() => {
 		if (activeTab !== 'drives') return;
-		startDrivesTab();
-		return () => drives.stop();
+		let open = true;
+		startDrivesTab(() => open);
+		return () => {
+			open = false;
+			drives.stop();
+		};
 	});
 
 	const driveSessionOptions = new DriveSessionOptions();
