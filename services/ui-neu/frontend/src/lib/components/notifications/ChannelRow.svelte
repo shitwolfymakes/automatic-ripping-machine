@@ -38,7 +38,8 @@
 	tabindex="0"
 	onclick={() => onexpand?.()}
 	onkeydown={(e) => {
-		if (e.key === 'Enter') onexpand?.();
+		// Only the focused row itself: Enter on a button inside it runs that button.
+		if (e.key === 'Enter' && e.target === e.currentTarget) onexpand?.();
 	}}
 >
 	<div class="list-row-lead">

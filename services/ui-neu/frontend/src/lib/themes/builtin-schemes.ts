@@ -29,12 +29,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(37, 99, 235)', // blue-600
 			'--color-primary-hover': 'rgb(29, 78, 216)', // blue-700
-			'--color-primary-dark': 'rgb(30, 64, 175)', // blue-800
-			'--color-primary-light-bg': 'rgb(219, 234, 254)', // blue-100
-			'--color-primary-light-bg-dark': 'rgb(30, 58, 138)', // blue-900
 			'--color-primary-text': 'rgb(29, 78, 216)', // blue-700
 			'--color-primary-text-dark': 'rgb(96, 165, 250)', // blue-400
-			'--color-primary-border': 'rgb(59, 130, 246)', // blue-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(232, 240, 255)', // blue-tinted light
 			'--color-page-dark': 'rgb(13, 16, 28)', // dark navy
@@ -50,12 +46,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(220, 38, 38)', // red-600
 			'--color-primary-hover': 'rgb(185, 28, 28)', // red-700
-			'--color-primary-dark': 'rgb(153, 27, 27)', // red-800
-			'--color-primary-light-bg': 'rgb(254, 226, 226)', // red-100
-			'--color-primary-light-bg-dark': 'rgb(127, 29, 29)', // red-900
 			'--color-primary-text': 'rgb(185, 28, 28)', // red-700
 			'--color-primary-text-dark': 'rgb(248, 113, 113)', // red-400
-			'--color-primary-border': 'rgb(239, 68, 68)', // red-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(255, 235, 235)', // red-tinted light
 			'--color-page-dark': 'rgb(38, 0, 0)', // dark red
@@ -74,12 +66,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(239, 68, 68)',
 			'--color-primary-hover': 'rgb(220, 38, 38)',
-			'--color-primary-dark': 'rgb(153, 27, 27)',
-			'--color-primary-light-bg': 'rgb(30, 10, 10)',
-			'--color-primary-light-bg-dark': 'rgb(20, 5, 5)',
 			'--color-primary-text': 'rgb(248, 113, 113)',
 			'--color-primary-text-dark': 'rgb(252, 165, 165)',
-			'--color-primary-border': 'rgb(239, 68, 68)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(10, 10, 10)',
 			'--color-page-dark': 'rgb(5, 5, 5)',
@@ -99,12 +87,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(127, 29, 29)',
 			'--color-primary-hover': 'rgb(153, 27, 27)',
-			'--color-primary-dark': 'rgb(69, 10, 10)',
-			'--color-primary-light-bg': 'rgb(254, 242, 242)',
-			'--color-primary-light-bg-dark': 'rgb(24, 10, 10)',
 			'--color-primary-text': 'rgb(127, 29, 29)',
 			'--color-primary-text-dark': 'rgb(248, 113, 113)',
-			'--color-primary-border': 'rgb(185, 28, 28)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(250, 247, 240)',
 			'--color-page-dark': 'rgb(20, 18, 16)',
@@ -124,12 +108,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(255, 0, 127)',
 			'--color-primary-hover': 'rgb(220, 0, 110)',
-			'--color-primary-dark': 'rgb(150, 0, 80)',
-			'--color-primary-light-bg': 'rgb(40, 0, 30)',
-			'--color-primary-light-bg-dark': 'rgb(30, 0, 20)',
 			'--color-primary-text': 'rgb(255, 0, 127)',
 			'--color-primary-text-dark': 'rgb(255, 120, 200)',
-			'--color-primary-border': 'rgb(255, 0, 127)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(18, 12, 28)',
 			'--color-page-dark': 'rgb(12, 8, 20)',
@@ -149,12 +129,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(255, 0, 127)',
 			'--color-primary-hover': 'rgb(220, 0, 110)',
-			'--color-primary-dark': 'rgb(80, 0, 40)',
-			'--color-primary-light-bg': 'rgb(25, 10, 20)',
-			'--color-primary-light-bg-dark': 'rgb(20, 5, 15)',
 			'--color-primary-text': 'rgb(255, 100, 180)',
 			'--color-primary-text-dark': 'rgb(255, 150, 210)',
-			'--color-primary-border': 'rgb(150, 0, 80)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(10, 6, 14)',
 			'--color-page-dark': 'rgb(8, 4, 10)',
@@ -174,12 +150,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(249, 115, 22)',
 			'--color-primary-hover': 'rgb(234, 88, 12)',
-			'--color-primary-dark': 'rgb(154, 52, 18)',
-			'--color-primary-light-bg': 'rgb(40, 20, 10)',
-			'--color-primary-light-bg-dark': 'rgb(25, 12, 8)',
 			'--color-primary-text': 'rgb(251, 146, 60)',
 			'--color-primary-text-dark': 'rgb(253, 186, 116)',
-			'--color-primary-border': 'rgb(249, 115, 22)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(15, 15, 20)',
 			'--color-page-dark': 'rgb(12, 12, 16)',
@@ -202,12 +174,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 			// borrowing primary.
 			'--color-primary': 'rgb(153, 153, 255)', // lcars blue
 			'--color-primary-hover': 'rgb(187, 187, 255)', // lighter blue
-			'--color-primary-dark': 'rgb(40, 30, 0)', // dark orange
-			'--color-primary-light-bg': 'rgb(153, 153, 255)', // lcars blue
-			'--color-primary-light-bg-dark': 'rgb(30, 30, 60)', // dark blue
 			'--color-primary-text': 'rgb(153, 153, 255)', // lcars blue
 			'--color-primary-text-dark': 'rgb(153, 153, 255)',
-			'--color-primary-border': 'rgb(153, 153, 255)',
 			'--color-on-primary': 'rgb(0, 0, 0)', // black
 			'--color-page': 'rgb(0, 0, 0)', // pure black
 			'--color-page-dark': 'rgb(0, 0, 0)',
@@ -230,12 +198,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(160, 129, 108)',
 			'--color-primary-hover': 'rgb(138, 108, 88)',
-			'--color-primary-dark': 'rgb(90, 70, 55)',
-			'--color-primary-light-bg': 'rgb(60, 56, 54)',
-			'--color-primary-light-bg-dark': 'rgb(40, 40, 40)',
 			'--color-primary-text': 'rgb(160, 129, 108)',
 			'--color-primary-text-dark': 'rgb(235, 219, 178)',
-			'--color-primary-border': 'rgb(160, 129, 108)',
 			'--color-on-primary': 'rgb(40, 40, 40)',
 			'--color-page': 'rgb(29, 32, 33)',
 			'--color-page-dark': 'rgb(29, 32, 33)',
@@ -253,12 +217,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(212, 175, 55)', // gold
 			'--color-primary-hover': 'rgb(188, 155, 40)', // darker gold
-			'--color-primary-dark': 'rgb(138, 109, 59)', // muted gold
-			'--color-primary-light-bg': 'rgb(30, 25, 10)', // dark gold tint
-			'--color-primary-light-bg-dark': 'rgb(30, 25, 10)', // dark gold tint
 			'--color-primary-text': 'rgb(212, 175, 55)', // gold
 			'--color-primary-text-dark': 'rgb(212, 175, 55)', // gold
-			'--color-primary-border': 'rgb(138, 109, 59)', // muted gold
 			'--color-on-primary': 'rgb(13, 13, 13)', // cinema black
 			'--color-page': 'rgb(26, 26, 26)', // dark gray
 			'--color-page-dark': 'rgb(26, 26, 26)', // dark gray
@@ -277,12 +237,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(251, 191, 36)',
 			'--color-primary-hover': 'rgb(245, 158, 11)',
-			'--color-primary-dark': 'rgb(180, 83, 9)',
-			'--color-primary-light-bg': 'rgb(30, 25, 10)',
-			'--color-primary-light-bg-dark': 'rgb(20, 15, 5)',
 			'--color-primary-text': 'rgb(251, 191, 36)',
 			'--color-primary-text-dark': 'rgb(253, 230, 138)',
-			'--color-primary-border': 'rgb(251, 191, 36)',
 			'--color-on-primary': 'rgb(0, 0, 0)',
 			'--color-page': 'rgb(15, 17, 23)',
 			'--color-page-dark': 'rgb(10, 12, 18)',
@@ -300,12 +256,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(0, 123, 255)', // fortnite blue
 			'--color-primary-hover': 'rgb(248, 251, 17)', // fortnite yellow
-			'--color-primary-dark': 'rgb(17, 42, 94)', // deep blue border
-			'--color-primary-light-bg': 'rgb(11, 26, 61)', // item bg
-			'--color-primary-light-bg-dark': 'rgb(11, 26, 61)', // item bg
 			'--color-primary-text': 'rgb(248, 251, 17)', // yellow
 			'--color-primary-text-dark': 'rgb(248, 251, 17)', // yellow
-			'--color-primary-border': 'rgb(17, 42, 94)', // deep blue
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(5, 5, 5)', // near-black
 			'--color-page-dark': 'rgb(5, 5, 5)', // near-black
@@ -322,12 +274,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(30, 130, 30)', // darker MC green (readable headers)
 			'--color-primary-hover': 'rgb(128, 128, 255)', // MC hover blue
-			'--color-primary-dark': 'rgb(34, 34, 34)', // dark stone
-			'--color-primary-light-bg': 'rgb(74, 74, 74)', // pressed button
-			'--color-primary-light-bg-dark': 'rgb(74, 74, 74)',
 			'--color-primary-text': 'rgb(56, 255, 56)', // MC green
 			'--color-primary-text-dark': 'rgb(56, 255, 56)',
-			'--color-primary-border': 'rgb(0, 0, 0)', // black
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(30, 30, 30)', // dark bg
 			'--color-page-dark': 'rgb(30, 30, 30)',
@@ -344,12 +292,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(57, 255, 20)', // terminal green
 			'--color-primary-hover': 'rgb(45, 200, 16)', // dimmer green
-			'--color-primary-dark': 'rgb(10, 26, 5)', // dark green
-			'--color-primary-light-bg': 'rgb(10, 26, 5)', // dark green (light bg unused)
-			'--color-primary-light-bg-dark': 'rgb(10, 26, 5)', // dark green
 			'--color-primary-text': 'rgb(57, 255, 20)', // terminal green
 			'--color-primary-text-dark': 'rgb(57, 255, 20)', // terminal green
-			'--color-primary-border': 'rgb(57, 255, 20)', // terminal green
 			'--color-on-primary': 'rgb(5, 5, 5)', // near-black
 			'--color-page': 'rgb(5, 5, 5)', // CRT black
 			'--color-page-dark': 'rgb(5, 5, 5)', // CRT black
@@ -365,12 +309,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(5, 150, 105)', // emerald-600
 			'--color-primary-hover': 'rgb(4, 120, 87)', // emerald-700
-			'--color-primary-dark': 'rgb(6, 95, 70)', // emerald-800
-			'--color-primary-light-bg': 'rgb(209, 250, 229)', // emerald-100
-			'--color-primary-light-bg-dark': 'rgb(6, 78, 59)', // emerald-900
 			'--color-primary-text': 'rgb(4, 120, 87)', // emerald-700
 			'--color-primary-text-dark': 'rgb(110, 231, 183)', // emerald-400
-			'--color-primary-border': 'rgb(16, 185, 129)', // emerald-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(228, 248, 238)', // emerald-tinted light
 			'--color-page-dark': 'rgb(12, 19, 15)', // dark forest
@@ -386,12 +326,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(13, 148, 136)', // teal-600
 			'--color-primary-hover': 'rgb(15, 118, 110)', // teal-700
-			'--color-primary-dark': 'rgb(17, 94, 89)', // teal-800
-			'--color-primary-light-bg': 'rgb(204, 251, 241)', // teal-100
-			'--color-primary-light-bg-dark': 'rgb(19, 78, 74)', // teal-900
 			'--color-primary-text': 'rgb(15, 118, 110)', // teal-700
 			'--color-primary-text-dark': 'rgb(94, 234, 212)', // teal-400
-			'--color-primary-border': 'rgb(20, 184, 166)', // teal-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(228, 248, 245)', // teal-tinted light
 			'--color-page-dark': 'rgb(12, 19, 20)', // dark teal
@@ -408,12 +344,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(0, 120, 100)', // darker teal (readable headers)
 			'--color-primary-hover': 'rgb(80, 200, 175)', // dimmer teal
-			'--color-primary-dark': 'rgb(10, 25, 47)', // navy
-			'--color-primary-light-bg': 'rgb(10, 25, 47)', // navy
-			'--color-primary-light-bg-dark': 'rgb(10, 25, 47)',
 			'--color-primary-text': 'rgb(100, 255, 218)', // teal
 			'--color-primary-text-dark': 'rgb(100, 255, 218)',
-			'--color-primary-border': 'rgb(100, 255, 218)', // teal
 			// text on a primary fill: the scheme's signal teal, not white
 			'--color-on-primary': 'rgb(0, 223, 169)',
 			'--color-page': 'rgb(2, 6, 23)', // deep navy
@@ -433,12 +365,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(0, 109, 109)',
 			'--color-primary-hover': 'rgb(2, 132, 199)',
-			'--color-primary-dark': 'rgb(7, 89, 133)',
-			'--color-primary-light-bg': 'rgb(8, 20, 30)',
-			'--color-primary-light-bg-dark': 'rgb(4, 15, 25)',
 			'--color-primary-text': 'rgb(56, 189, 248)',
 			'--color-primary-text-dark': 'rgb(125, 211, 252)',
-			'--color-primary-border': 'rgb(12, 74, 110)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(6, 10, 15)',
 			'--color-page-dark': 'rgb(4, 7, 12)',
@@ -457,12 +385,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(136, 192, 208)',
 			'--color-primary-hover': 'rgb(129, 161, 193)',
-			'--color-primary-dark': 'rgb(94, 129, 172)',
-			'--color-primary-light-bg': 'rgb(236, 239, 244)',
-			'--color-primary-light-bg-dark': 'rgb(46, 52, 64)',
 			'--color-primary-text': 'rgb(94, 129, 172)',
 			'--color-primary-text-dark': 'rgb(143, 188, 187)',
-			'--color-primary-border': 'rgb(136, 192, 208)',
 			'--color-on-primary': 'rgb(46, 52, 64)',
 			'--color-page': 'rgb(229, 233, 240)',
 			'--color-page-dark': 'rgb(46, 52, 64)',
@@ -482,12 +406,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(38, 139, 210)',
 			'--color-primary-hover': 'rgb(42, 161, 152)',
-			'--color-primary-dark': 'rgb(7, 54, 66)',
-			'--color-primary-light-bg': 'rgb(0, 43, 54)',
-			'--color-primary-light-bg-dark': 'rgb(0, 30, 38)',
 			'--color-primary-text': 'rgb(38, 139, 210)',
 			'--color-primary-text-dark': 'rgb(147, 161, 161)',
-			'--color-primary-border': 'rgb(38, 139, 210)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(0, 43, 54)',
 			'--color-page-dark': 'rgb(0, 43, 54)',
@@ -505,12 +425,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(255, 235, 0)', // vibrant yellow
 			'--color-primary-hover': 'rgb(215, 200, 0)', // slightly darker yellow
-			'--color-primary-dark': 'rgb(180, 160, 0)', // deep gold for borders
-			'--color-primary-light-bg': 'rgb(0, 51, 153)', // rich blue
-			'--color-primary-light-bg-dark': 'rgb(0, 31, 103)', // deep blue
 			'--color-primary-text': 'rgb(255, 235, 0)', // yellow
 			'--color-primary-text-dark': 'rgb(255, 235, 0)', // yellow
-			'--color-primary-border': 'rgb(255, 235, 0)', // yellow
 			'--color-on-primary': 'rgb(0, 0, 0)', // black on yellow
 			'--color-page': 'rgb(0, 41, 123)', // darker blue page
 			'--color-page-dark': 'rgb(0, 41, 123)',
@@ -529,12 +445,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(255, 255, 255)',
 			'--color-primary-hover': 'rgb(200, 200, 200)',
-			'--color-primary-dark': 'rgb(150, 150, 150)',
-			'--color-primary-light-bg': 'rgb(0, 0, 130)',
-			'--color-primary-light-bg-dark': 'rgb(0, 0, 80)',
 			'--color-primary-text': 'rgb(255, 255, 255)',
 			'--color-primary-text-dark': 'rgb(180, 180, 180)',
-			'--color-primary-border': 'rgb(255, 255, 255)',
 			'--color-on-primary': 'rgb(0, 0, 187)',
 			'--color-page': 'rgb(0, 0, 187)',
 			'--color-page-dark': 'rgb(0, 0, 150)',
@@ -552,12 +464,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(129, 140, 248)', // indigo-400
 			'--color-primary-hover': 'rgb(99, 102, 241)', // indigo-500
-			'--color-primary-dark': 'rgb(67, 56, 202)', // indigo-700
-			'--color-primary-light-bg': 'rgb(49, 46, 129)', // indigo-900
-			'--color-primary-light-bg-dark': 'rgb(49, 46, 129)', // indigo-900
 			'--color-primary-text': 'rgb(165, 180, 252)', // indigo-300
 			'--color-primary-text-dark': 'rgb(165, 180, 252)', // indigo-300
-			'--color-primary-border': 'rgb(129, 140, 248)', // indigo-400
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(15, 23, 42)', // slate-900
 			'--color-page-dark': 'rgb(15, 23, 42)', // slate-900
@@ -576,12 +484,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(122, 162, 247)',
 			'--color-primary-hover': 'rgb(187, 154, 247)',
-			'--color-primary-dark': 'rgb(65, 72, 104)',
-			'--color-primary-light-bg': 'rgb(26, 27, 38)',
-			'--color-primary-light-bg-dark': 'rgb(22, 22, 30)',
 			'--color-primary-text': 'rgb(122, 162, 247)',
 			'--color-primary-text-dark': 'rgb(158, 206, 106)',
-			'--color-primary-border': 'rgb(122, 162, 247)',
 			'--color-on-primary': 'rgb(26, 27, 38)',
 			'--color-page': 'rgb(26, 27, 38)',
 			'--color-page-dark': 'rgb(15, 15, 21)',
@@ -598,12 +502,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(147, 51, 234)', // purple-600
 			'--color-primary-hover': 'rgb(126, 34, 206)', // purple-700
-			'--color-primary-dark': 'rgb(107, 33, 168)', // purple-800
-			'--color-primary-light-bg': 'rgb(237, 226, 255)', // purple-100
-			'--color-primary-light-bg-dark': 'rgb(76, 29, 149)', // purple-900
 			'--color-primary-text': 'rgb(126, 34, 206)', // purple-700
 			'--color-primary-text-dark': 'rgb(192, 132, 252)', // purple-400
-			'--color-primary-border': 'rgb(168, 85, 247)', // purple-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(243, 235, 255)', // purple-tinted light
 			'--color-page-dark': 'rgb(16, 13, 26)', // dark violet
@@ -621,12 +521,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(124, 58, 237)',
 			'--color-primary-hover': 'rgb(109, 40, 217)',
-			'--color-primary-dark': 'rgb(76, 29, 149)',
-			'--color-primary-light-bg': 'rgb(243, 244, 246)',
-			'--color-primary-light-bg-dark': 'rgb(31, 41, 55)',
 			'--color-primary-text': 'rgb(109, 40, 217)',
 			'--color-primary-text-dark': 'rgb(167, 139, 250)',
-			'--color-primary-border': 'rgb(124, 58, 237)',
 			'--color-on-primary': 'rgb(255, 255, 255)',
 			'--color-page': 'rgb(209, 213, 219)',
 			'--color-page-dark': 'rgb(17, 24, 39)',
@@ -644,12 +540,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(217, 11, 28)', // #D90B1C Red
 			'--color-primary-hover': 'rgb(170, 8, 22)', // darker red
-			'--color-primary-dark': 'rgb(110, 5, 14)', // deep red
-			'--color-primary-light-bg': 'rgb(35, 22, 64)', // #231640 Purple
-			'--color-primary-light-bg-dark': 'rgb(22, 14, 38)', // #160E26 Deep Purple
 			'--color-primary-text': 'rgb(242, 183, 5)', // #F2B705 Gold
 			'--color-primary-text-dark': 'rgb(242, 183, 5)', // #F2B705 Gold
-			'--color-primary-border': 'rgb(35, 22, 64)', // #231640 Purple
 			'--color-on-primary': 'rgb(255, 255, 255)', // White on Red
 			'--color-page': 'rgb(22, 14, 38)', // #160E26 Deep Purple
 			'--color-page-dark': 'rgb(22, 14, 38)', // #160E26 Deep Purple
@@ -668,12 +560,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(189, 147, 249)',
 			'--color-primary-hover': 'rgb(255, 121, 198)',
-			'--color-primary-dark': 'rgb(98, 114, 164)',
-			'--color-primary-light-bg': 'rgb(68, 71, 90)',
-			'--color-primary-light-bg-dark': 'rgb(40, 42, 54)',
 			'--color-primary-text': 'rgb(189, 147, 249)',
 			'--color-primary-text-dark': 'rgb(139, 233, 253)',
-			'--color-primary-border': 'rgb(189, 147, 249)',
 			'--color-on-primary': 'rgb(40, 42, 54)',
 			'--color-page': 'rgb(40, 42, 54)',
 			'--color-page-dark': 'rgb(33, 34, 44)',
@@ -691,12 +579,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(0, 135, 164)', // darker neon blue (headers)
 			'--color-primary-hover': 'rgb(188, 19, 254)', // neon purple
-			'--color-primary-dark': 'rgb(27, 27, 47)', // border dark
-			'--color-primary-light-bg': 'rgb(0, 210, 255)', // blue (unused in dark)
-			'--color-primary-light-bg-dark': 'rgb(0, 30, 50)', // dark blue tint
 			'--color-primary-text': 'rgb(0, 210, 255)', // neon blue
 			'--color-primary-text-dark': 'rgb(0, 210, 255)', // neon blue
-			'--color-primary-border': 'rgb(0, 210, 255)', // neon blue
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(5, 5, 10)', // bg dark
 			'--color-page-dark': 'rgb(5, 5, 10)', // bg dark
@@ -712,12 +596,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(219, 39, 119)', // pink-600
 			'--color-primary-hover': 'rgb(190, 24, 93)', // pink-700
-			'--color-primary-dark': 'rgb(157, 23, 77)', // pink-800
-			'--color-primary-light-bg': 'rgb(252, 231, 243)', // pink-100
-			'--color-primary-light-bg-dark': 'rgb(131, 24, 67)', // pink-900
 			'--color-primary-text': 'rgb(190, 24, 93)', // pink-700
 			'--color-primary-text-dark': 'rgb(244, 114, 182)', // pink-400
-			'--color-primary-border': 'rgb(236, 72, 153)', // pink-500
 			'--color-on-primary': 'rgb(255, 255, 255)', // white
 			'--color-page': 'rgb(252, 232, 243)', // pink-tinted light
 			'--color-page-dark': 'rgb(47, 0, 23)', // dark rose
@@ -737,12 +617,8 @@ export const COLOR_SCHEMES: ColorScheme[] = [
 		tokens: {
 			'--color-primary': 'rgb(0, 255, 0)',
 			'--color-primary-hover': 'rgb(51, 255, 51)',
-			'--color-primary-dark': 'rgb(0, 180, 0)',
-			'--color-primary-light-bg': 'rgb(24, 26, 42)',
-			'--color-primary-light-bg-dark': 'rgb(18, 20, 34)',
 			'--color-primary-text': 'rgb(0, 255, 0)',
 			'--color-primary-text-dark': 'rgb(0, 255, 0)',
-			'--color-primary-border': 'rgb(0, 0, 255)',
 			'--color-on-primary': 'rgb(0, 0, 0)',
 			'--color-page': 'rgb(14, 15, 24)',
 			'--color-page-dark': 'rgb(14, 15, 24)',

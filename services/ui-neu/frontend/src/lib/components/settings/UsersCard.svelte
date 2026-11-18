@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import TimeAgo from '$lib/components/shared/TimeAgo.svelte';
 	import GuestAccessField from '$lib/components/settings/GuestAccessField.svelte';
 	import ChangePasswordForm from '$lib/components/shared/ChangePasswordForm.svelte';
@@ -13,6 +13,7 @@
 	let users = $state<UserView[]>([]);
 	let loading = $state(true);
 	const feedback = new TimedFeedback();
+	onDestroy(() => feedback.dispose());
 
 	const admin = $derived(users.find((u) => u.role === 'admin') ?? null);
 	const guest = $derived(users.find((u) => u.role === 'guest') ?? null);
