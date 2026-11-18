@@ -11,7 +11,17 @@ import type { SetupView } from '$lib/types/api.gen';
 
 const catalog: Catalog = {
 	featured: ['ntfy'],
-	services: [{ id: 'ntfy', name: 'ntfy', docs_url: '', url_scheme: 'ntfy', required_fields: [], advanced_fields: [] }]
+	services: [
+		{
+			id: 'ntfy',
+			name: 'ntfy',
+			docs_url: '',
+			setup_url: '',
+			url_scheme: 'ntfy',
+			required_fields: [],
+			advanced_fields: []
+		}
+	]
 };
 const eventTypes = [{ key: 'rip.completed', label: 'Rip completed' }];
 const createChannel = vi.fn((b: unknown) => Promise.resolve({ id: 1, ...(b as object) }));
