@@ -223,3 +223,27 @@ def test_non_string_encoder_is_not_importable(hb_schema, plex_export, encoder):
 def test_non_string_preset_name_becomes_text(hb_schema, plex_export, name):
     p = _only(hb_schema, _export(plex_export, PresetName=name))
     assert p.importable and p.name == str(name)
+
+
+def test_wrong_typed_encoder_values_become_issues(hb_schema):
+    body = {
+        "PresetList": [
+            {
+                "PresetName": "a",
+                "VideoEncoder": "x264",
+                "VideoMultiPass": "yes",
+                "VideoTurboMultiPass": "no",
+                "VideoOptionExtra": ["x"],
+                "x264Option": {"k": 1},
+                "x264UseAdvancedOptions": 7,
+            }
+        ]
+    }
+    issues = {(i.key, i.code) for i in import_export(hb_schema, body).presets[0].issues}
+    assert issues == {
+        ("VideoMultiPass", "wrong_type"),
+        ("VideoTurboMultiPass", "wrong_type"),
+        ("VideoOptionExtra", "wrong_type"),
+        ("x264Option", "wrong_type"),
+        ("x264UseAdvancedOptions", "wrong_type"),
+    }
