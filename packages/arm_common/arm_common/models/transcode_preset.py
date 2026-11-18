@@ -23,7 +23,7 @@ class TranscodePreset(SQLModel, table=True):
     is_builtin: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     tool: TranscodeTool = Field(sa_column=enum_column(TranscodeTool, "transcode_tool"))
     preset_ref: str | None = Field(default=None)
-    preset_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    handbrake_settings: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     container: ContainerFormat = Field(sa_column=enum_column(ContainerFormat, "container_format"))
     # Catalog id (arm_common.encoders): what to encode with; replaces codec +
     # hw_preference. Validated in the app layer, stored as VARCHAR.

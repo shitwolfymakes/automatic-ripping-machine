@@ -2,16 +2,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
 import type { MediaType } from '$lib/types/api.gen';
 
-// Branch pins for SessionsArea, beside SessionsArea.svelte.test.ts. Two
-// branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - The `if (!deleteSessionTarget) return;` and `if (!deletePresetTarget)
-//   return;` guards: ConfirmDialog fires onconfirm only while it is open,
-//   which is only while the target is set, and each handler clears the
-//   target only after reading it, so the guard never sees a null target.
-// - The `: ''` side of each ConfirmDialog's message: ConfirmDialog renders
-//   the message only while open, and open is the same target-is-set test, so
-//   the empty string is never shown.
+// Branch pins for SessionsArea, beside SessionsArea.svelte.test.ts. The delete
+// handlers read their target with an as-cast rather than a null guard:
+// ConfirmDialog fires onconfirm only while it is open, which is only while the
+// target is set. The empty-message arms of the ConfirmDialog messages are
+// covered in sessionsAreaModel.test.ts.
 
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn(),
@@ -33,6 +28,12 @@ vi.mock('$lib/api/transcodePresets', () => ({
 	updateTranscodePreset: vi.fn(),
 	deleteTranscodePreset: vi.fn()
 }));
+// The transcode preset sidebar loads the HandBrake schema.
+vi.mock('$lib/api/handbrakeSchema', () => ({
+	fetchHandbrakeSchema: vi.fn().mockRejectedValue(new Error('No HandBrake schema loaded yet')),
+	fetchBuiltinPreset: vi.fn(),
+	refreshHandbrakeSchema: vi.fn()
+}));
 // The preset form's encoders store follows transcode.events; keep jsdom off a real socket.
 vi.mock('$lib/api/ws', () => ({
 	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) }
@@ -47,6 +48,7 @@ import {
 	deleteTranscodePreset
 } from '$lib/api/transcodePresets';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';
+import { handbrakeSchema } from '$lib/stores/handbrakeSchema.svelte';
 import SessionsArea from '../SessionsArea.svelte';
 
 const makeSession = (id = 's1', name = 'ses Alpha') => ({
@@ -84,7 +86,7 @@ const makeTranscode = (id = 't1', name = 'tc t1') => ({
 	is_builtin: false,
 	tool: 'handbrake' as const,
 	preset_ref: null,
-	preset_json: null,
+	handbrake_settings: null,
 	container: 'mkv' as const,
 	encoder: 'any_h265',
 	extra_args: null,
@@ -100,6 +102,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+	handbrakeSchema.reset();
 	vi.mocked(fetchSessions).mockResolvedValue([makeSession()]);
 	vi.mocked(fetchRipPresets).mockResolvedValue([makeRip()]);
 	vi.mocked(fetchTranscodePresets).mockResolvedValue([makeTranscode()]);
@@ -149,12 +152,66 @@ describe('sessions', () => {
 		expect(screen.getByRole('heading', { name: 'View session' })).toBeInTheDocument();
 	});
 
+	async function confirmSessionDelete() {
+		const dialog = await screen.findByRole('dialog', { name: 'Delete session' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+	}
+	const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
+
+	it('highlights the row of the session whose builder is open', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		expect(rowOf('ses Alpha')).not.toHaveAttribute('aria-current');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		expect(rowOf('ses Alpha')).toHaveAttribute('aria-current', 'true');
+	});
+
+	it('highlights no row while a new session is being built', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
+		expect(rowOf('ses Alpha')).not.toHaveAttribute('aria-current');
+	});
+
+	it('deleting the session open in the builder closes the builder', async () => {
+		vi.mocked(deleteSession).mockResolvedValue(undefined);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await fireEvent.click(within(rowOf('ses Alpha')).getByRole('button', { name: 'Delete' }));
+		await confirmSessionDelete();
+		await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit session' })).not.toBeInTheDocument());
+	});
+
+	it('a delete that fails keeps the open builder', async () => {
+		vi.mocked(deleteSession).mockRejectedValue(new Error('boom'));
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await fireEvent.click(within(rowOf('ses Alpha')).getByRole('button', { name: 'Delete' }));
+		await confirmSessionDelete();
+		await expectToast('Delete failed', 'boom');
+		expect(screen.getByRole('heading', { name: 'Edit session' })).toBeInTheDocument();
+	});
+
+	it('deleting a session other than the open one keeps the builder', async () => {
+		vi.mocked(fetchSessions).mockResolvedValue([makeSession('s1', 'ses Alpha'), makeSession('s2', 'ses Beta')]);
+		vi.mocked(deleteSession).mockResolvedValue(undefined);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Beta');
+		await fireEvent.click(within(rowOf('ses Alpha')).getByRole('button', { name: 'Edit' }));
+		await fireEvent.click(within(rowOf('ses Beta')).getByRole('button', { name: 'Delete' }));
+		await confirmSessionDelete();
+		await waitFor(() => expect(deleteSession).toHaveBeenCalledWith('s2'));
+		expect(screen.getByRole('heading', { name: 'Edit session' })).toBeInTheDocument();
+	});
+
 	it('saving from the builder closes it and reloads', async () => {
 		vi.mocked(updateSession).mockResolvedValue(makeSession() as any);
 		renderComponent(SessionsArea);
 		await screen.findByText('ses Alpha');
 		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
-		await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(screen.queryByRole('heading', { name: 'Edit session' })).not.toBeInTheDocument());
 		await waitFor(() => expect(fetchSessions).toHaveBeenCalledTimes(2));
 	});
@@ -197,20 +254,81 @@ describe('sessions', () => {
 });
 
 describe('presets, opening', () => {
-	it('View on a rip preset opens the rip form in the inline dialog', async () => {
+	it('View on a rip preset opens the read-only rip sidebar with its built-in note and a Clone button', async () => {
 		vi.mocked(fetchRipPresets).mockResolvedValue([{ ...makeRip(), is_builtin: true }]);
 		await renderPresetTab(/rip presets/i, 'rip r1');
 		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
-		const dialog = await screen.findByRole('dialog', { name: 'Edit rip preset' });
+		const dialog = await screen.findByRole('dialog', { name: 'View rip preset' });
 		expect(within(dialog).getByTestId('preset-name')).toHaveValue('rip r1');
+		expect(within(dialog).getByTestId('preset-name')).toBeDisabled();
+		expect(within(dialog).getByTestId('preset-builtin-note')).toBeInTheDocument();
+		expect(within(dialog).getByRole('button', { name: 'Clone' })).toBeInTheDocument();
+		expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		expect(document.querySelector('.sessions-area-inline-modal')).toBeNull();
 	});
 
-	it('View on a transcode preset opens the transcode form in the inline dialog', async () => {
+	it('Clone in the read-only rip sidebar copies the preset and closes the sidebar', async () => {
+		vi.mocked(fetchRipPresets).mockResolvedValue([{ ...makeRip(), is_builtin: true }]);
+		vi.mocked(createRipPreset).mockResolvedValue(makeRip('r2', 'rip r1 (copy)') as any);
+		await renderPresetTab(/rip presets/i, 'rip r1');
+		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'View rip preset' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Clone' }));
+		await waitFor(() => expect(createRipPreset).toHaveBeenCalled());
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+	});
+
+	it('a failed Clone in the read-only rip sidebar keeps the sidebar open', async () => {
+		vi.mocked(fetchRipPresets).mockResolvedValue([{ ...makeRip(), is_builtin: true }]);
+		vi.mocked(createRipPreset).mockRejectedValue(new Error('no room'));
+		await renderPresetTab(/rip presets/i, 'rip r1');
+		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'View rip preset' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Clone' }));
+		await expectToast('Clone failed', 'no room');
+		expect(screen.getByRole('dialog', { name: 'View rip preset' })).toBeInTheDocument();
+	});
+
+	it('View on a built-in transcode preset opens the sidebar read-only', async () => {
 		vi.mocked(fetchTranscodePresets).mockResolvedValue([{ ...makeTranscode(), is_builtin: true }]);
 		await renderPresetTab(/transcode presets/i, 'tc t1');
 		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
-		const dialog = await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		const dialog = await screen.findByRole('dialog', { name: 'View transcode preset' });
 		expect(within(dialog).getByTestId('tp-name')).toHaveValue('tc t1');
+		expect(within(dialog).getByTestId('tp-name')).toBeDisabled();
+		expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+	});
+
+	it('Clone in the read-only transcode sidebar copies the preset and closes the sidebar', async () => {
+		vi.mocked(fetchTranscodePresets).mockResolvedValue([{ ...makeTranscode(), is_builtin: true }]);
+		vi.mocked(createTranscodePreset).mockResolvedValue(makeTranscode('t2', 'tc t1 (copy)') as any);
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'View transcode preset' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Clone' }));
+		await waitFor(() => expect(createTranscodePreset).toHaveBeenCalled());
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+	});
+
+	it('a failed Clone in the read-only transcode sidebar keeps the sidebar open', async () => {
+		vi.mocked(fetchTranscodePresets).mockResolvedValue([{ ...makeTranscode(), is_builtin: true }]);
+		vi.mocked(createTranscodePreset).mockRejectedValue(new Error('no room'));
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(screen.getByRole('button', { name: /^view$/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'View transcode preset' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Clone' }));
+		await expectToast('Clone failed', 'no room');
+		expect(screen.getByRole('dialog', { name: 'View transcode preset' })).toBeInTheDocument();
+	});
+
+	it('the sidebar shows how many sessions use the preset', async () => {
+		vi.mocked(fetchSessions).mockResolvedValue([{ ...makeSession(), transcode_preset_id: 't1' }]);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await openTab(/transcode presets/i);
+		await fireEvent.click(await screen.findByRole('button', { name: /^edit$/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		expect(within(dialog).getByText('Used by 1 session')).toBeInTheDocument();
 	});
 
 	it('"New transcode preset" from the library opens an empty transcode form', async () => {
@@ -305,6 +423,78 @@ describe('presets, cloning', () => {
 	});
 });
 
+describe('the table row of the open preset editor', () => {
+	const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
+
+	it('is highlighted while a transcode preset sidebar is open, and cleared when it closes', async () => {
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		expect(rowOf('tc t1')).not.toHaveAttribute('aria-current');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		expect(rowOf('tc t1')).toHaveAttribute('aria-current', 'true');
+		await fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+		await waitFor(() => expect(rowOf('tc t1')).not.toHaveAttribute('aria-current'));
+	});
+
+	it('is highlighted while the rip preset dialog is open', async () => {
+		await renderPresetTab(/rip presets/i, 'rip r1');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit rip preset' });
+		expect(rowOf('rip r1')).toHaveAttribute('aria-current', 'true');
+	});
+
+	it('deleting the open transcode preset closes its sidebar and clears the highlight', async () => {
+		vi.mocked(deleteTranscodePreset).mockResolvedValue(undefined);
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		await fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+		await confirmDelete();
+		await waitFor(() => expect(deleteTranscodePreset).toHaveBeenCalledWith('t1'));
+		await waitFor(() =>
+			expect(screen.queryByRole('dialog', { name: 'Edit transcode preset' })).not.toBeInTheDocument()
+		);
+		expect(rowOf('tc t1')).not.toHaveAttribute('aria-current');
+	});
+
+	it('deleting the open rip preset closes its dialog and clears the highlight', async () => {
+		vi.mocked(deleteRipPreset).mockResolvedValue(undefined);
+		await renderPresetTab(/rip presets/i, 'rip r1');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit rip preset' });
+		await fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+		await confirmDelete();
+		await waitFor(() => expect(deleteRipPreset).toHaveBeenCalledWith('r1'));
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit rip preset' })).not.toBeInTheDocument());
+		expect(rowOf('rip r1')).not.toHaveAttribute('aria-current');
+	});
+
+	it('a delete that fails keeps the open editor and its highlight', async () => {
+		vi.mocked(deleteTranscodePreset).mockRejectedValue(new Error('in use'));
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		await fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+		await confirmDelete();
+		await expectToast('Delete failed', 'in use');
+		expect(screen.getByRole('dialog', { name: 'Edit transcode preset' })).toBeInTheDocument();
+		expect(rowOf('tc t1')).toHaveAttribute('aria-current', 'true');
+	});
+
+	it('deleting another preset leaves the open editor and its highlight alone', async () => {
+		vi.mocked(deleteTranscodePreset).mockResolvedValue(undefined);
+		vi.mocked(fetchTranscodePresets).mockResolvedValue([makeTranscode('t1', 'tc t1'), makeTranscode('t2', 'tc t2')]);
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(within(rowOf('tc t1')).getByRole('button', { name: /^edit$/i }));
+		await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		await fireEvent.click(within(rowOf('tc t2')).getByRole('button', { name: /^delete$/i }));
+		await confirmDelete();
+		await waitFor(() => expect(deleteTranscodePreset).toHaveBeenCalledWith('t2'));
+		expect(screen.getByRole('dialog', { name: 'Edit transcode preset' })).toBeInTheDocument();
+		expect(rowOf('tc t1')).toHaveAttribute('aria-current', 'true');
+	});
+});
+
 describe('presets, deleting', () => {
 	it('confirming a rip preset delete calls deleteRipPreset only, then reloads', async () => {
 		vi.mocked(deleteRipPreset).mockResolvedValue(undefined);
@@ -355,7 +545,7 @@ describe('presets, deleting', () => {
 	});
 });
 
-describe('the inline dialog', () => {
+describe('the inline dialog and the transcode preset sidebar', () => {
 	it('is labelled "New rip preset" for a new rip preset', async () => {
 		await renderPresetTab(/rip presets/i, 'rip r1');
 		await fireEvent.click(screen.getByRole('button', { name: /new rip preset/i }));
@@ -380,6 +570,14 @@ describe('the inline dialog', () => {
 		expect(await screen.findByRole('dialog', { name: 'Edit transcode preset' })).toBeInTheDocument();
 	});
 
+	it('Cancel closes the transcode preset sidebar', async () => {
+		await renderPresetTab(/transcode presets/i, 'tc t1');
+		await fireEvent.click(screen.getByRole('button', { name: /new transcode preset/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'New transcode preset' });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+	});
+
 	async function openBuilderTranscodeSelect() {
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
 		return screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
@@ -389,12 +587,12 @@ describe('the inline dialog', () => {
 		vi.mocked(updateRipPreset).mockResolvedValue(makeRip() as any);
 		await renderPresetTab(/rip presets/i, 'rip r1');
 		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
-		await screen.findByRole('dialog', { name: 'Edit rip preset' });
-		await fireEvent.click(screen.getByTestId('preset-submit'));
+		const editor = await screen.findByRole('dialog', { name: 'Edit rip preset' });
+		await fireEvent.click(within(editor).getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(updateRipPreset).toHaveBeenCalled());
 		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 		await waitFor(() => expect(fetchRipPresets).toHaveBeenCalledTimes(2));
-		await openTab(/^sessions$/i);
+		await openTab(/^sessions\b/i);
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
 		expect(screen.getByLabelText(/rip preset/i)).toHaveValue('');
 	});
@@ -406,9 +604,9 @@ describe('the inline dialog', () => {
 		const select = await openBuilderTranscodeSelect();
 		vi.mocked(fetchTranscodePresets).mockResolvedValue([makeTranscode(), makeTranscode('t2', 'tc new')]);
 		await fireEvent.change(select, { target: { value: '__create_tc__' } });
-		await screen.findByRole('dialog', { name: 'New transcode preset' });
+		const tcDialog = await screen.findByRole('dialog', { name: 'New transcode preset' });
 		await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'tc new' } });
-		await fireEvent.click(screen.getByTestId('tp-submit'));
+		await fireEvent.click(within(tcDialog).getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(createTranscodePreset).toHaveBeenCalled());
 		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New transcode preset' })).not.toBeInTheDocument());
 		await waitFor(() => expect(select.value).toBe('t2'));
@@ -419,11 +617,11 @@ describe('the inline dialog', () => {
 		await renderPresetTab(/transcode presets/i, 'tc t1');
 		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
 		await screen.findByRole('dialog', { name: 'Edit transcode preset' });
-		await fireEvent.click(screen.getByTestId('tp-submit'));
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(updateTranscodePreset).toHaveBeenCalled());
 		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 		await waitFor(() => expect(fetchTranscodePresets).toHaveBeenCalledTimes(2));
-		await openTab(/^sessions$/i);
+		await openTab(/^sessions\b/i);
 		const select = await openBuilderTranscodeSelect();
 		expect(select.value).toBe('');
 	});
@@ -432,7 +630,7 @@ describe('the inline dialog', () => {
 		await renderPresetTab(/rip presets/i, 'rip r1');
 		await fireEvent.click(screen.getByRole('button', { name: /new rip preset/i }));
 		await screen.findByRole('dialog', { name: 'New rip preset' });
-		await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+		await fireEvent.click(document.querySelector('.slide-over-scrim') as HTMLElement);
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 

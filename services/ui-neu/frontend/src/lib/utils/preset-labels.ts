@@ -1,5 +1,5 @@
 // The labels and one-line summaries the sessions screens show for a
-// session's or preset's settings, shared by SessionCard and PresetRow.
+// session's or preset's settings, shared by the Sessions and preset tables.
 // Each label shows an unknown value as it is, and a missing one as -.
 
 import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
 import RipPresetForm from '../RipPresetForm.svelte';
+import RipPresetFormHarness from './RipPresetFormHarness.svelte';
 import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
 import type { RipPresetView } from '$lib/types/api.gen';
 
@@ -41,8 +42,8 @@ describe('RipPresetForm', () => {
 
 	describe('create mode', () => {
 		it('renders all five selects with enum options and an enabled media_type', () => {
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved: vi.fn() }
 			});
 
 			const mediaType = screen.getByTestId('preset-media-type') as HTMLSelectElement;
@@ -69,8 +70,8 @@ describe('RipPresetForm', () => {
 		it('submits the full create body with track_filters_json null for non-custom', async () => {
 			createRipPresetMock.mockResolvedValue(resultPreset());
 			const onsaved = vi.fn();
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved, oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved }
 			});
 
 			await fireEvent.input(screen.getByTestId('preset-name'), {
@@ -82,7 +83,7 @@ describe('RipPresetForm', () => {
 			await fireEvent.change(screen.getByTestId('preset-track-selection'), {
 				target: { value: 'all_tracks' }
 			});
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 
 			await waitFor(() => {
 				expect(createRipPresetMock).toHaveBeenCalledWith({
@@ -100,8 +101,8 @@ describe('RipPresetForm', () => {
 		it('shows the TrackFiltersEditor and passes track_filters_json when custom', async () => {
 			createRipPresetMock.mockResolvedValue(resultPreset());
 			const onsaved = vi.fn();
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved, oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved }
 			});
 
 			await fireEvent.input(screen.getByTestId('preset-name'), {
@@ -116,7 +117,7 @@ describe('RipPresetForm', () => {
 			await fireEvent.input(screen.getByTestId('tf-min-duration'), {
 				target: { value: '120' }
 			});
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 
 			await waitFor(() => {
 				expect(createRipPresetMock).toHaveBeenCalledWith({
@@ -144,8 +145,8 @@ describe('RipPresetForm', () => {
 				output_mode: 'iso',
 				is_builtin: false
 			});
-			renderComponent(RipPresetForm, {
-				props: { preset, onsaved, oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset, onsaved }
 			});
 
 			const name = screen.getByTestId('preset-name') as HTMLInputElement;
@@ -159,7 +160,7 @@ describe('RipPresetForm', () => {
 			expect(trackSelection).not.toBeDisabled();
 
 			await fireEvent.input(name, { target: { value: 'Renamed' } });
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 
 			await waitFor(() => {
 				expect(updateRipPresetMock).toHaveBeenCalledWith('preset_99', {
@@ -184,8 +185,8 @@ describe('RipPresetForm', () => {
 				is_builtin: true,
 				track_selection: 'custom'
 			});
-			renderComponent(RipPresetForm, {
-				props: { preset, onsaved, oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset, onsaved }
 			});
 
 			// Every field — including the name — is locked.
@@ -201,44 +202,87 @@ describe('RipPresetForm', () => {
 			// TrackFiltersEditor hidden for built-in even though track_selection is custom
 			expect(screen.queryByTestId('tf-min-duration')).not.toBeInTheDocument();
 
-			// No Save button at all; heading reads View.
-			expect(screen.queryByTestId('preset-submit')).not.toBeInTheDocument();
-			expect(screen.getByRole('heading', { name: /view rip preset/i })).toBeInTheDocument();
+			// No Save button at all.
+			expect(screen.queryByRole('button', { name: /^save/i })).not.toBeInTheDocument();
 			expect(updateRipPresetMock).not.toHaveBeenCalled();
 		});
 	});
 
 	describe('validation', () => {
-		it('disables submit when name is empty', () => {
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
+		it('keeps Save clickable; an empty name blocks the save, marks the field and focuses it', async () => {
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved: vi.fn() }
 			});
-			expect(screen.getByTestId('preset-submit')).toBeDisabled();
-		});
-	});
+			const save = screen.getByRole('button', { name: /^save/i });
+			expect(save).not.toBeDisabled();
+			const name = screen.getByTestId('preset-name');
+			expect(name).not.toHaveAttribute('aria-invalid');
 
-	describe('cancel', () => {
-		it('fires oncancel', async () => {
-			const oncancel = vi.fn();
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved: vi.fn(), oncancel }
+			await fireEvent.click(save);
+
+			await waitFor(() => expect(document.activeElement).toBe(name));
+			expect(createRipPresetMock).not.toHaveBeenCalled();
+			expect(name).toHaveAttribute('aria-invalid', 'true');
+			expect(name).toHaveAttribute('aria-describedby', 'preset-name-error');
+			const message = document.getElementById('preset-name-error');
+			expect(message).toHaveTextContent('Name is required');
+			expect(message).toHaveClass('field-error');
+		});
+
+		it('clears the mark once the name is filled in', async () => {
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved: vi.fn() }
 			});
-			await fireEvent.click(screen.getByText('Cancel'));
-			expect(oncancel).toHaveBeenCalledTimes(1);
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			const name = screen.getByTestId('preset-name');
+			await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+
+			await fireEvent.input(name, { target: { value: 'Movies' } });
+
+			expect(name).not.toHaveAttribute('aria-invalid');
+			expect(screen.queryByText('Name is required')).toBeNull();
 		});
 	});
 
 	describe('error handling', () => {
 		it('shows the thrown error message inline', async () => {
 			createRipPresetMock.mockRejectedValue(new Error('save boom'));
-			renderComponent(RipPresetForm, {
-				props: { preset: null, onsaved: vi.fn(), oncancel: vi.fn() }
+			renderComponent(RipPresetFormHarness, {
+				props: { preset: null, onsaved: vi.fn() }
 			});
 			await fireEvent.input(screen.getByTestId('preset-name'), {
 				target: { value: 'X' }
 			});
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(screen.getByText('save boom')).toBeInTheDocument());
 		});
+	});
+});
+
+describe('RipPresetForm inside a sidebar (formId)', () => {
+	afterEach(cleanup);
+
+	it('takes the id, and leaves the title and the buttons to the sidebar', () => {
+		const { container } = renderComponent(RipPresetForm, {
+			props: { onsaved: vi.fn(), formId: 'f1' }
+		});
+		expect(container.querySelector('form#f1')).not.toBeNull();
+		expect(screen.queryByRole('heading')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+		expect(screen.queryByRole('button', { name: /^save/i })).toBeNull();
+	});
+
+	it('submits from outside through the form attribute', async () => {
+		createRipPresetMock.mockResolvedValue(resultPreset());
+		const onsaved = vi.fn();
+		renderComponent(RipPresetForm, { props: { onsaved, formId: 'f1' } });
+		await fireEvent.input(screen.getByTestId('preset-name'), { target: { value: 'N' } });
+		const external = document.createElement('button');
+		external.type = 'submit';
+		external.setAttribute('form', 'f1');
+		document.body.appendChild(external);
+		await fireEvent.click(external);
+		await waitFor(() => expect(onsaved).toHaveBeenCalledWith(resultPreset()));
+		external.remove();
 	});
 });

@@ -4,10 +4,11 @@
 	interface Props {
 		open?: boolean;
 		onclose?: () => void;
+		stacked?: boolean;
 	}
-	let { open = $bindable(true), onclose }: Props = $props();
+	let { open = $bindable(true), onclose, stacked }: Props = $props();
 </script>
 
-<SlideOver bind:open title="Panel title" {onclose}>
+<SlideOver bind:open title="Panel title" {onclose} {stacked}>
 	<p data-testid="body">Body content</p>
 </SlideOver>

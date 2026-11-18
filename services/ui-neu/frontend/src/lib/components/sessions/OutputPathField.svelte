@@ -10,9 +10,11 @@
 		has_transcode_preset?: boolean;
 		id?: string;
 		disabled?: boolean;
+		/** Id of the message that marks the input invalid; unset while it is valid. */
+		errorId?: string;
 	}
 
-	let { value, mediaType, onchange, has_transcode_preset, id, disabled = false }: Props = $props();
+	let { value, mediaType, onchange, has_transcode_preset, id, disabled = false, errorId }: Props = $props();
 
 	// Tokens that commonly have no value; each gets an extra chip inserting {token?}.
 	const OPTIONAL_CHIPS = new Set(['year']);
@@ -63,6 +65,8 @@
 		{value}
 		oninput={(e) => onchange((e.target as HTMLInputElement).value)}
 		{disabled}
+		aria-invalid={errorId ? 'true' : undefined}
+		aria-describedby={errorId}
 	/>
 
 	<!-- Token chips (hidden when read-only — nothing to insert) -->

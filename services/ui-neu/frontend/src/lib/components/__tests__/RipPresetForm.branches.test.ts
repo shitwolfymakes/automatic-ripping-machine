@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
-import RipPresetForm from '../RipPresetForm.svelte';
+import RipPresetFormHarness from './RipPresetFormHarness.svelte';
 import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
 import type { RipPresetView } from '$lib/types/api.gen';
 
@@ -41,7 +41,7 @@ function resultPreset(): RipPresetView {
 }
 
 function renderForm(preset: RipPresetView | null, onsaved = vi.fn()) {
-	return renderComponent(RipPresetForm, { props: { preset, onsaved, oncancel: vi.fn() } });
+	return renderComponent(RipPresetFormHarness, { props: { preset, onsaved } });
 }
 
 function submitForm(): Promise<boolean> {
@@ -99,7 +99,7 @@ describe('RipPresetForm submit rules', () => {
 			await submitForm();
 			expect(createRipPresetMock).toHaveBeenCalledTimes(1);
 			save.resolve(resultPreset());
-			await waitFor(() => expect(screen.getByTestId('preset-submit')).not.toBeDisabled());
+			await waitFor(() => expect(screen.getByRole('button', { name: /^save/i })).not.toBeDisabled());
 		});
 	});
 
@@ -112,7 +112,7 @@ describe('RipPresetForm submit rules', () => {
 			await fireEvent.change(screen.getByTestId('preset-track-selection'), { target: { value: 'archive' } });
 			await fireEvent.change(screen.getByTestId('preset-identification-mode'), { target: { value: 'skip' } });
 			await fireEvent.change(screen.getByTestId('preset-output-mode'), { target: { value: 'folder' } });
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(createRipPresetMock).toHaveBeenCalledTimes(1));
 			expect(createRipPresetMock).toHaveBeenCalledWith({
 				name: 'Picked',
@@ -131,7 +131,7 @@ describe('RipPresetForm submit rules', () => {
 				target: { value: 'deferred_placeholder' }
 			});
 			await fireEvent.change(screen.getByTestId('preset-output-mode'), { target: { value: 'iso' } });
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(updateRipPresetMock).toHaveBeenCalledTimes(1));
 			expect(updateRipPresetMock).toHaveBeenCalledWith('preset_7', {
 				name: 'My preset',
@@ -151,7 +151,7 @@ describe('RipPresetForm submit rules', () => {
 					track_filters_json: { min_duration_seconds: 90 }
 				})
 			);
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(updateRipPresetMock).toHaveBeenCalledTimes(1));
 			expect(updateRipPresetMock.mock.calls[0][1].track_filters_json).toBeNull();
 		});
@@ -169,7 +169,7 @@ describe('RipPresetForm submit rules', () => {
 					} as unknown as RipPresetView['track_filters_json']
 				})
 			);
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(updateRipPresetMock).toHaveBeenCalledTimes(1));
 			expect(updateRipPresetMock.mock.calls[0][1].track_filters_json).toEqual({
 				min_duration_seconds: 120,
@@ -188,7 +188,7 @@ describe('RipPresetForm submit rules', () => {
 			renderForm(null);
 			await typeName('Bare custom');
 			await fireEvent.change(screen.getByTestId('preset-track-selection'), { target: { value: 'custom' } });
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(createRipPresetMock).toHaveBeenCalledTimes(1));
 			expect(createRipPresetMock.mock.calls[0][0].track_filters_json).toEqual({});
 		});
@@ -200,14 +200,13 @@ describe('RipPresetForm submit rules', () => {
 			createRipPresetMock.mockReturnValue(save.promise);
 			renderForm(null);
 			await typeName('Slow');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
-			await waitFor(() => expect(screen.getByTestId('preset-submit')).toHaveTextContent('Saving...'));
-			expect(screen.getByTestId('preset-submit')).toBeDisabled();
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled());
 			expect(screen.getByText('Cancel')).toBeDisabled();
 			expect(screen.getByTestId('preset-name')).toBeDisabled();
 			save.resolve(resultPreset());
-			await waitFor(() => expect(screen.getByTestId('preset-submit')).toHaveTextContent('Save'));
-			expect(screen.getByTestId('preset-submit')).not.toHaveTextContent('Saving...');
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+			expect(screen.queryByRole('button', { name: 'Saving...' })).not.toBeInTheDocument();
 		});
 
 		it('passes the returned preset to onsaved and clears the busy state', async () => {
@@ -215,10 +214,10 @@ describe('RipPresetForm submit rules', () => {
 			const onsaved = vi.fn();
 			renderForm(null, onsaved);
 			await typeName('Done');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(onsaved).toHaveBeenCalledWith(resultPreset()));
-			await waitFor(() => expect(screen.getByTestId('preset-submit')).not.toBeDisabled());
-			expect(screen.getByTestId('preset-submit')).toHaveTextContent('Save');
+			await waitFor(() => expect(screen.getByRole('button', { name: /^save/i })).not.toBeDisabled());
+			expect(screen.getByRole('button', { name: /^save/i })).toHaveTextContent('Save');
 			expect(screen.getByTestId('preset-name')).not.toBeDisabled();
 			expect(screen.getByText('Cancel')).not.toBeDisabled();
 		});
@@ -228,10 +227,10 @@ describe('RipPresetForm submit rules', () => {
 			const onsaved = vi.fn();
 			renderForm(null, onsaved);
 			await typeName('Bad');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(screen.getByTestId('preset-error')).toHaveTextContent('save boom'));
 			expect(onsaved).not.toHaveBeenCalled();
-			expect(screen.getByTestId('preset-submit')).not.toBeDisabled();
+			expect(screen.getByRole('button', { name: /^save/i })).not.toBeDisabled();
 			expect(screen.getByTestId('preset-name')).not.toBeDisabled();
 		});
 
@@ -239,7 +238,7 @@ describe('RipPresetForm submit rules', () => {
 			createRipPresetMock.mockRejectedValue('nope');
 			renderForm(null);
 			await typeName('Odd');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(screen.getByTestId('preset-error')).toHaveTextContent('Save failed'));
 		});
 
@@ -249,12 +248,12 @@ describe('RipPresetForm submit rules', () => {
 			createRipPresetMock.mockReturnValueOnce(retry.promise);
 			renderForm(null);
 			await typeName('Again');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(screen.getByTestId('preset-error')).toBeInTheDocument());
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(screen.queryByTestId('preset-error')).not.toBeInTheDocument());
 			retry.resolve(resultPreset());
-			await waitFor(() => expect(screen.getByTestId('preset-submit')).not.toBeDisabled());
+			await waitFor(() => expect(screen.getByRole('button', { name: /^save/i })).not.toBeDisabled());
 		});
 
 		it('calls the onsaved current when the save resolves, not the one at submit', async () => {
@@ -264,9 +263,9 @@ describe('RipPresetForm submit rules', () => {
 			const second = vi.fn();
 			const { rerender } = renderForm(null, first);
 			await typeName('Swap');
-			await fireEvent.click(screen.getByTestId('preset-submit'));
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(createRipPresetMock).toHaveBeenCalledTimes(1));
-			await rerender({ preset: null, onsaved: second, oncancel: vi.fn() });
+			await rerender({ preset: null, onsaved: second });
 			save.resolve(resultPreset());
 			await waitFor(() => expect(second).toHaveBeenCalledWith(resultPreset()));
 			expect(first).not.toHaveBeenCalled();

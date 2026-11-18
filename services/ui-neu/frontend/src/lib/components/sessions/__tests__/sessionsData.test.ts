@@ -30,7 +30,7 @@ const tc = (id: string, media_type = 'movie') =>
 		container: 'mkv',
 		encoder: 'any_h265',
 		preset_ref: null,
-		preset_json: null,
+		handbrake_settings: null,
 		extra_args: null
 	}) as any;
 const ses = (id: string, ripId: string, tcId: string | null, media_type = 'movie') =>

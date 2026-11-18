@@ -5,18 +5,24 @@
 	// submit-body shapes follow the Vue source faithfully.
 	import { createRipPreset, updateRipPreset } from '$lib/api/ripPresets';
 	import { PresetSave } from '$lib/stores/presetSave.svelte';
+	import type { EditorStatus } from './editorStatus';
 	import TrackFiltersEditor from './TrackFiltersEditor.svelte';
 	import { trackFiltersBody, type TrackFilters } from '$lib/utils/track-filters';
+	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/utils/formValidation';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
 
 	let {
 		preset = null,
 		onsaved,
-		oncancel
+		formId,
+		onstatus
 	}: {
 		preset?: RipPresetView | null;
 		onsaved: (p: RipPresetView) => void;
-		oncancel: () => void;
+		/** The hosting EditorSidebar's footer owns the title and the buttons, and submits this form by id. */
+		formId: string;
+		/** Reports the save state to the hosting footer, whenever it changes. */
+		onstatus?: (status: EditorStatus) => void;
 	} = $props();
 
 	const editing = $derived(!!preset);
@@ -32,8 +38,16 @@
 
 	const save = new PresetSave();
 
+	const NAME_ID = 'preset-name';
+
 	const showFilters = $derived(trackSelection === 'custom' && !isBuiltin);
-	const canSubmit = $derived(!save.submitting && name.trim().length > 0);
+	// Marks show from the first Save on, and each clears once its field is valid.
+	let attempted = $state(false);
+	const errors = $derived(attempted ? nameErrors(NAME_ID, name) : {});
+
+	$effect(() => {
+		onstatus?.({ submitting: save.submitting, note: '' });
+	});
 
 	function savePreset(): Promise<RipPresetView> {
 		// Custom edit: no media_type (immutable after create).
@@ -58,7 +72,9 @@
 	async function submit(event: Event): Promise<void> {
 		event.preventDefault();
 		// Built-ins are read-only — no save path (Enter is a no-op too).
-		if (isBuiltin || !canSubmit) return;
+		if (isBuiltin || save.submitting) return;
+		attempted = true;
+		if (await focusFirstInvalid(nameErrors(NAME_ID, name), [NAME_ID])) return;
 		await save.run(savePreset, (p) => onsaved(p));
 	}
 
@@ -66,11 +82,7 @@
 	// wrappers now, styled by field.css's descendant rule.
 </script>
 
-<form class="stack rip-preset-form" onsubmit={submit}>
-	<h3 class="rip-preset-form-title">
-		{isBuiltin ? 'View rip preset' : editing ? 'Edit rip preset' : 'New rip preset'}
-	</h3>
-
+<form id={formId} class="stack rip-preset-form" onsubmit={submit}>
 	{#if isBuiltin}
 		<div class="alert alert-warning" data-testid="preset-builtin-note" role="status">
 			This is a built-in preset and can't be edited. Clone it to make an editable copy.
@@ -81,17 +93,18 @@
 		<p class="field-error" data-testid="preset-error">{save.error}</p>
 	{/if}
 
-	<label class="field">
-		<span class="field-label">Name</span>
+	<div class="field">
+		<label class="field-label" for={NAME_ID}>Name</label>
 		<input
-			id="preset-name"
+			id={NAME_ID}
 			data-testid="preset-name"
 			type="text"
-			required
 			bind:value={name}
 			disabled={save.submitting || isBuiltin}
+			{...invalidAttrs(NAME_ID, errors[NAME_ID])}
 		/>
-	</label>
+		{#if errors[NAME_ID]}<p class="field-error" id={errorId(NAME_ID)}>{errors[NAME_ID]}</p>{/if}
+	</div>
 
 	<label class="field">
 		<span class="field-label">Media type</span>
@@ -146,30 +159,4 @@
 	{#if showFilters}
 		<TrackFiltersEditor value={filters} onchange={(v) => (filters = v)} />
 	{/if}
-
-	<div class="rip-preset-form-actions">
-		<button type="button" onclick={oncancel} disabled={save.submitting} class="btn btn-ghost">
-			{isBuiltin ? 'Close' : 'Cancel'}
-		</button>
-		{#if !isBuiltin}
-			<button type="submit" disabled={!canSubmit} data-testid="preset-submit" class="btn btn-primary">
-				{save.submitting ? 'Saving...' : 'Save'}
-			</button>
-		{/if}
-	</div>
 </form>
-
-<style>
-	.rip-preset-form-title {
-		font-size: 1.125rem;
-		line-height: 1.75rem;
-		font-weight: 600;
-		color: var(--color-text);
-	}
-	.rip-preset-form-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
-		padding-top: 0.5rem;
-	}
-</style>

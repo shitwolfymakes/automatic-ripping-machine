@@ -1,7 +1,11 @@
 <script lang="ts">
 	import type { JoinedSession } from './sessionsData.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
-	import SessionCard from './SessionCard.svelte';
+	import DataTable from '$lib/components/DataTable.svelte';
+	import { encodersStore } from '$lib/stores/encoders.svelte';
+	import { onMount } from 'svelte';
+	import { resolveSample } from './sampleTokens';
+	import { deleteGuard, openLabel, sessionColumns } from './tableColumns';
 	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, matchesTranscode, type SourceFilter, type TranscodeFilter } from './listFilters';
 
@@ -9,13 +13,15 @@
 		sessions: JoinedSession[];
 		typeCounts: Record<string, number>;
 		loading: boolean;
+		/** The id of the session whose editor is open, to highlight its row. */
+		activeKey?: string | null;
 		onedit: (session: JoinedSession) => void;
 		onclone: (session: JoinedSession) => void;
 		ondelete: (session: JoinedSession) => void;
 		onnew: () => void;
 	}
 
-	let { sessions, typeCounts, loading, onedit, onclone, ondelete, onnew }: Props = $props();
+	let { sessions, typeCounts, loading, activeKey = null, onedit, onclone, ondelete, onnew }: Props = $props();
 
 	// Local filter state
 	let search = $state('');
@@ -31,9 +37,35 @@
 		)
 	);
 
+	// A session row carries its joined presets; the columns look them up by id.
+	const columns = sessionColumns({
+		rip: (id) => sessions.find((s) => s.rip_preset_id === id)?.ripPreset,
+		transcode: (id) => sessions.find((s) => s.transcode_preset_id === id)?.transcodePreset,
+		samplePath: (s) => resolveSample(s.output_path_template, s.media_type)
+	});
+
+	// The encoder label names encoders from the shared catalog.
+	onMount(() => {
+		encodersStore.load();
+	});
+
 	// Skeleton count for loading state
 	const SKELETON_COUNT = 3;
 </script>
+
+{#snippet sessionActions(session: JoinedSession)}
+	<div class="sessions-hub-actions">
+		<button type="button" class="btn btn-sm" onclick={() => onedit(session)}>{openLabel(session)}</button>
+		<button type="button" class="btn btn-sm" onclick={() => onclone(session)}>Clone</button>
+		<button
+			type="button"
+			class="btn btn-danger btn-sm"
+			disabled={deleteGuard(session, 0).disabled}
+			title={session.is_builtin ? 'Built-in session: clone to customise' : undefined}
+			onclick={() => ondelete(session)}>Delete</button
+		>
+	</div>
+{/snippet}
 
 <div class="stack">
 	<!-- Search + filter container (hidden in the empty state — the guided panel
@@ -114,21 +146,17 @@
 		<!-- No matches -->
 		<p class="sessions-hub-no-matches">No sessions match your filters.</p>
 	{:else}
-		<!-- Session cards -->
-		<div class="stack stack-sm">
-			{#each visible as session (session.id)}
-				<SessionCard
-					{session}
-					onedit={() => onedit(session)}
-					onclone={() => onclone(session)}
-					ondelete={() => ondelete(session)}
-				/>
-			{/each}
-		</div>
+		<h3 class="sr-only">Sessions</h3>
+		<DataTable {columns} rows={visible} rowKey={(s) => s.id} {activeKey} label="Sessions" actions={sessionActions} />
 	{/if}
 </div>
 
 <style>
+	.sessions-hub-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.375rem;
+	}
 	/* original bar: rounded-lg border border-primary/20 bg-surface px-4 py-3
 	   shadow-xs dark:bg-surface-dark - .panel's own padding is 1rem all round,
 	   not the original's 1rem/0.75rem; restated to match. */

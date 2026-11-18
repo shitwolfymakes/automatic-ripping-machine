@@ -4,10 +4,13 @@ import {
 	DISC_SCOPES,
 	MEDIA_TYPES,
 	discLabel,
+	otherRouteView,
 	otherRoutes,
+	routeCellView,
 	routeFor,
 	rowKey,
 	sessionNameFor,
+	sessionOptionLabel,
 	sessionsFor,
 	withRoute
 } from '../session-routes';
@@ -141,5 +144,61 @@ describe('discLabel', () => {
 
 	it('labels null as Any disc', () => {
 		expect(discLabel(null)).toBe('Any disc');
+	});
+});
+
+describe('routeCellView', () => {
+	it('is the set class, the session id and enabled for an admin with a route', () => {
+		expect(routeCellView(route({}), 2, false, true)).toEqual({
+			value: 's1',
+			className: 'routing-cell routing-cell-set',
+			disabled: false
+		});
+	});
+
+	it('is the empty class and a blank value with no route', () => {
+		expect(routeCellView(undefined, 2, false, true)).toEqual({
+			value: '',
+			className: 'routing-cell routing-cell-empty',
+			disabled: false
+		});
+	});
+
+	it('is disabled for a non-admin', () => {
+		expect(routeCellView(route({}), 2, false, false).disabled).toBe(true);
+	});
+
+	it('is disabled while the row is in flight', () => {
+		expect(routeCellView(route({}), 2, true, true).disabled).toBe(true);
+	});
+
+	it('is disabled with no session on offer', () => {
+		expect(routeCellView(undefined, 0, false, true).disabled).toBe(true);
+	});
+});
+
+describe('sessionOptionLabel', () => {
+	it('is the name alone for a custom session', () => {
+		expect(sessionOptionLabel(session({ name: 'Mine', is_builtin: false }))).toBe('Mine');
+	});
+
+	it('marks a built-in session', () => {
+		expect(sessionOptionLabel(session({ name: 'Movie', is_builtin: true }))).toBe('Movie (built-in)');
+	});
+});
+
+describe('otherRouteView', () => {
+	it('labels the route and names its session', () => {
+		expect(otherRouteView(route({ media_type: 'iso', disc_type: 'data' }), [session({})])).toEqual({
+			label: 'ISO / data',
+			name: 'Movie session'
+		});
+	});
+
+	it('labels the wildcard disc and falls back to the session id', () => {
+		expect(otherRouteView(route({ media_type: 'iso', disc_type: null, session_id: 'gone' }), [])).toEqual({
+			label: 'ISO / Any disc',
+			name: 'gone'
+		});
 	});
 });

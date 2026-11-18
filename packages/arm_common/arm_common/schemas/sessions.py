@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from arm_common.schemas.handbrake import HandbrakeSettings, SettingIssue
 from arm_common.enums import (
     ContainerFormat,
     IdentificationMode,
@@ -84,7 +85,9 @@ class TranscodePresetView(BaseModel):
     is_builtin: bool
     tool: TranscodeTool
     preset_ref: str | None
-    preset_json: dict[str, Any] | None
+    handbrake_settings: HandbrakeSettings | None
+    issues: list[SettingIssue] = Field(default_factory=list)
+    host_notes: list[Literal["encodes_on_cpu_here"]] = Field(default_factory=list)
     container: ContainerFormat
     encoder: str
     extra_args: str | None
@@ -98,7 +101,7 @@ class TranscodePresetCreateRequest(BaseModel):
     media_type: MediaType
     tool: TranscodeTool
     preset_ref: str | None = None
-    preset_json: dict[str, Any] | None = None
+    handbrake_settings: HandbrakeSettings | None = None
     container: ContainerFormat
     encoder: str = Field(default="preset", min_length=1)
     extra_args: str | None = None
@@ -108,7 +111,7 @@ class TranscodePresetUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     tool: TranscodeTool | None = None
     preset_ref: str | None = None
-    preset_json: dict[str, Any] | None = None
+    handbrake_settings: HandbrakeSettings | None = None
     container: ContainerFormat | None = None
     encoder: str | None = Field(default=None, min_length=1)
     extra_args: str | None = None

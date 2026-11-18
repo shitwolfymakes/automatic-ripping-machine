@@ -10,15 +10,28 @@
 		title: string;
 		/** Panel body. */
 		children: Snippet;
+		/** Optional footer, pinned below the scrolling body. */
+		footer?: Snippet;
 		/** Optional extra header content (right of the title, before the close button). */
 		headerActions?: Snippet;
 		/** Width utility for the panel (defaults to a comfortable form width). */
 		width?: string;
 		/** Called when the user dismisses (backdrop, ✕, or Escape). */
 		onclose?: () => void;
+		/** Opened over another slide-over: the scrim and panel layer above it. */
+		stacked?: boolean;
 	}
 
-	let { open = $bindable(false), title, children, headerActions, width = 'max-w-lg', onclose }: Props = $props();
+	let {
+		open = $bindable(false),
+		title,
+		children,
+		footer,
+		headerActions,
+		width = 'max-w-lg',
+		onclose,
+		stacked = false
+	}: Props = $props();
 
 	function close() {
 		open = false;
@@ -29,7 +42,10 @@
 	$effect(() => {
 		if (!open) return;
 		function onKeydown(e: KeyboardEvent) {
-			if (e.key === 'Escape') close();
+			if (e.key !== 'Escape') return;
+			// Escape dismisses the topmost panel only: a lower one waits while a stacked one is open.
+			if (!stacked && document.querySelector('[role="dialog"][data-stacked="true"]')) return;
+			close();
 		}
 		document.addEventListener('keydown', onKeydown);
 		return () => document.removeEventListener('keydown', onKeydown);
@@ -41,13 +57,14 @@
 	     a containing block (transform/filter/backdrop-filter/will-change). -->
 	<div use:portal>
 		<!-- Backdrop -->
-		<div role="presentation" class="slide-over-scrim fixed inset-0" onclick={close}></div>
+		<div role="presentation" class="slide-over-scrim fixed inset-0" data-stacked={stacked} onclick={close}></div>
 
 		<!-- Panel -->
 		<div
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
+			data-stacked={stacked}
 			class="slide-over-panel slide-over-panel-fixed fixed flex {width}"
 		>
 			<div class="slide-over-header">
@@ -61,6 +78,8 @@
 			<div class="flex-1 overflow-y-auto p-6">
 				{@render children()}
 			</div>
+
+			{#if footer}{@render footer()}{/if}
 		</div>
 	</div>
 {/if}
@@ -74,11 +93,18 @@
 		z-index: 40;
 		background: var(--color-backdrop);
 	}
+	/* Above the session builder's inline slide-over (z-index 50), like the stacked preset dialog. */
+	.slide-over-scrim[data-stacked='true'] {
+		z-index: 60;
+	}
 	.slide-over-panel-fixed {
 		z-index: 50;
 		top: 0;
 		bottom: 0;
 		right: 0;
 		flex-direction: column;
+	}
+	.slide-over-panel-fixed[data-stacked='true'] {
+		z-index: 61;
 	}
 </style>

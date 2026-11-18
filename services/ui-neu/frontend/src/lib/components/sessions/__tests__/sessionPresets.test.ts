@@ -23,7 +23,7 @@ const makeTranscode = (id = 't1', name = 'tc t1') => ({
 	is_builtin: false,
 	tool: 'handbrake' as const,
 	preset_ref: null,
-	preset_json: null,
+	handbrake_settings: null,
 	container: 'mkv' as const,
 	encoder: 'any_h265',
 	extra_args: null,

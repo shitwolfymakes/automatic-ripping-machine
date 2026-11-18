@@ -33,6 +33,7 @@
 		"@vitest/coverage-v8": "^4.1.8",
 		"eslint": "^10.11.0",
 		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-sonarjs": "4.2.2",
 		"eslint-plugin-svelte": "^3.23.0",
 		"globals": "^17.12.0",
 		"jsdom": "^29",
