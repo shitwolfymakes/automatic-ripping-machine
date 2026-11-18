@@ -19,6 +19,8 @@ export const RETRIES = 2;
 export const BACKOFF_MS = 1000;
 export const LABEL = 'docs-links';
 export const ISSUE_TITLE = 'Broken field docs links';
+// The workflow runs with the repository's GITHUB_TOKEN, so its issues are opened by the Actions bot.
+export const BOT_LOGIN = 'github-actions[bot]';
 const API = 'https://api.github.com';
 const REGISTRY = fileURLToPath(
   new URL('../packages/arm_common/arm_common/field_docs.json', import.meta.url),
@@ -43,7 +45,7 @@ export function classifyStatus(status) {
   return 'fail';
 }
 
-const sleepReal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleepReal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function requestOnce(fetchFn, url, method) {
   const res = await fetchFn(url, {
@@ -163,12 +165,20 @@ async function closeIssue(call, number) {
   await call('PATCH', `/issues/${number}`, { state: 'closed' });
 }
 
-/** Open or update the one open `docs-links` issue, or comment and close every one when clean. */
+/** An issue this workflow opened: not a pull request, its exact title, by the Actions bot. */
+function isOwnIssue(item) {
+  return !item.pull_request && item.title === ISSUE_TITLE && item.user?.login === BOT_LOGIN;
+}
+
+/**
+ * Open or update the one open issue this workflow opened, or comment on and close every one when
+ * clean. A labelled issue someone else opened (a person's report of a broken link) is left alone.
+ */
 export async function syncIssue(broken, { fetchFn = fetch, repo, token }) {
   const call = ghClient(fetchFn, repo, token);
   await ensureLabel(call);
   const listed = await call('GET', `/issues?labels=${LABEL}&state=open&per_page=100`);
-  const issues = listed.filter((item) => !item.pull_request);
+  const issues = listed.filter(isOwnIssue);
   if (broken.length === 0) {
     for (const { number } of issues) await closeIssue(call, number);
     return issues.length
@@ -201,6 +211,16 @@ export async function main({ argv, env, fetchFn = fetch, sleep = sleepReal, log 
   return 0;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exit(await main({ argv: process.argv.slice(2), env: process.env }));
+/** Runs main and exits with its code; the command-line entry, injectable for tests. */
+export async function runCli({ argv, env, fetchFn, sleep, log, exit = process.exit }) {
+  exit(await main({ argv, env, fetchFn, sleep, log }));
+}
+
+/** The script was started directly (`node devtools/check-field-docs-links.mjs`), not imported. */
+export function isEntry(scriptPath, moduleUrl) {
+  return Boolean(scriptPath) && path.resolve(scriptPath) === fileURLToPath(moduleUrl);
+}
+
+if (isEntry(process.argv[1], import.meta.url)) {
+  await runCli({ argv: process.argv.slice(2), env: process.env });
 }

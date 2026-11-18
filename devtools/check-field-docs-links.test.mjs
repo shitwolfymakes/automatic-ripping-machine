@@ -9,8 +9,15 @@ import {
   renderDryRun,
   syncIssue,
   main,
+  runCli,
+  isEntry,
+  sleepReal,
   USER_AGENT,
+  ISSUE_TITLE,
+  BOT_LOGIN,
 } from './check-field-docs-links.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const res = (status, json) => ({ status, ok: status >= 200 && status < 300, json: async () => json });
 const noSleep = () => {
@@ -175,6 +182,8 @@ function fakeGithub({ label = true, issues = [], labelPost = 201 } = {}) {
   return { calls, fetchFn };
 }
 const opts = (fetchFn) => ({ fetchFn, repo: 'o/r', token: 'tok' });
+// An issue this workflow opened: its title, by the Actions bot.
+const own = (number, extra = {}) => ({ number, title: ISSUE_TITLE, user: { login: BOT_LOGIN }, ...extra });
 const LIST = '/issues?labels=docs-links&state=open&per_page=100';
 
 test('syncIssue opens an issue, creating the missing label', async () => {
@@ -208,7 +217,7 @@ test('syncIssue fails on other label POST errors', async () => {
 
 test('syncIssue updates the first real open issue and skips pull requests', async () => {
   const { calls, fetchFn } = fakeGithub({
-    issues: [{ number: 3, pull_request: {} }, { number: 4 }, { number: 5 }],
+    issues: [own(3, { pull_request: {} }), own(4), own(5)],
   });
   assert.equal(await syncIssue(BROKEN, opts(fetchFn)), 'updated #4');
   assert.deepEqual(calls.slice(1), [
@@ -219,7 +228,7 @@ test('syncIssue updates the first real open issue and skips pull requests', asyn
 
 test('syncIssue comments on and closes every open issue on a clean run', async () => {
   const { calls, fetchFn } = fakeGithub({
-    issues: [{ number: 4 }, { number: 3, pull_request: {} }, { number: 6 }],
+    issues: [own(4), own(3, { pull_request: {} }), own(6)],
   });
   assert.equal(await syncIssue([], opts(fetchFn)), 'closed #4, #6');
   const comment = { body: 'All field docs links resolve again; closing.' };
@@ -229,6 +238,24 @@ test('syncIssue comments on and closes every open issue on a clean run', async (
     { method: 'POST', route: '/issues/6/comments', body: comment },
     { method: 'PATCH', route: '/issues/6', body: { state: 'closed' } },
   ]);
+});
+
+// A person's report with the label, or another bot issue with the label, is not this workflow's.
+const FOREIGN = [
+  { number: 7, title: ISSUE_TITLE, user: { login: 'someone' } },
+  { number: 8, title: 'The help link on Ripping is broken', user: { login: BOT_LOGIN } },
+];
+
+test('syncIssue leaves labelled issues it did not open alone on a clean run', async () => {
+  const { calls, fetchFn } = fakeGithub({ issues: FOREIGN });
+  assert.equal(await syncIssue([], opts(fetchFn)), 'clean, nothing to close');
+  assert.equal(calls.length, 2);
+});
+
+test('syncIssue opens its own issue instead of overwriting one it did not open', async () => {
+  const { calls, fetchFn } = fakeGithub({ issues: FOREIGN });
+  assert.equal(await syncIssue(BROKEN, opts(fetchFn)), 'opened #9');
+  assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
 });
 
 test('syncIssue does nothing on a clean run with no open issue', async () => {
@@ -245,7 +272,7 @@ test('syncIssue surfaces API failures, including a 404 outside the label lookup'
 
 test('syncIssue handles a 204 response', async () => {
   const fetchFn = async (url, init) =>
-    url.includes('/labels/') ? res(200, {}) : init.method === 'GET' ? res(200, [{ number: 1 }]) : res(204);
+    url.includes('/labels/') ? res(200, {}) : init.method === 'GET' ? res(200, [own(1)]) : res(204);
   assert.equal(await syncIssue([], opts(fetchFn)), 'closed #1');
 });
 
@@ -302,4 +329,40 @@ test('main without --dry-run fails fast when the token or repository is unset', 
     /GITHUB_TOKEN and GITHUB_REPOSITORY must be set/,
   );
   assert.equal(calls, 0, 'no link is probed before the environment is checked');
+});
+
+test('sleepReal waits for the given time', async () => {
+  const start = Date.now();
+  await sleepReal(20);
+  assert.ok(Date.now() - start >= 15);
+});
+
+test('runCli exits with what main returns', async () => {
+  const codes = [];
+  await runCli({
+    argv: ['--dry-run'],
+    env: {},
+    fetchFn: async () => res(200),
+    sleep: noSleep(),
+    log() {},
+    exit: (code) => codes.push(code),
+  });
+  assert.deepEqual(codes, [0]);
+});
+
+test('isEntry is true only for the script run directly', () => {
+  const self = new URL('./check-field-docs-links.mjs', import.meta.url).href;
+  assert.equal(isEntry(fileURLToPath(self), self), true);
+  assert.equal(isEntry('/elsewhere/other.mjs', self), false);
+  assert.equal(isEntry(undefined, self), false);
+});
+
+test('run directly without a token, the script fails before any request', () => {
+  const env = { ...process.env };
+  delete env.GITHUB_TOKEN;
+  delete env.GITHUB_REPOSITORY;
+  const script = fileURLToPath(new URL('./check-field-docs-links.mjs', import.meta.url));
+  const run = spawnSync(process.execPath, [script], { env, encoding: 'utf8' });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /GITHUB_TOKEN and GITHUB_REPOSITORY must be set/);
 });
