@@ -6,7 +6,8 @@ import type { MediaType } from '$lib/types/api.gen';
 // handlers read their target with an as-cast rather than a null guard:
 // ConfirmDialog fires onconfirm only while it is open, which is only while the
 // target is set. The empty-message arms of the ConfirmDialog messages are
-// covered in sessionsAreaModel.test.ts.
+// covered in sessionsAreaModel.test.ts. One open arm is Svelte's: the tab's
+// `{tab.label}` compiles to `(...) ?? ''`, and every tab label is a string.
 
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn(),
