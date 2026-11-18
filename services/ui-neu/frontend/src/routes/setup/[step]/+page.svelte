@@ -6,7 +6,7 @@
 	import SetupShell from '$lib/components/setup/SetupShell.svelte';
 	import SetupStepper from '$lib/components/setup/SetupStepper.svelte';
 	import SetupFooter from '$lib/components/setup/SetupFooter.svelte';
-	import { STEPS, nextStep, prevStep, stepIndex, stepMeta, type SetupStepComponent } from '$lib/setup/steps';
+	import { STEPS, nextStep, prevStep, requiredStepMeta, stepIndex, type SetupStepComponent } from '$lib/setup/steps';
 	import AccountStep from '$lib/components/setup/steps/AccountStep.svelte';
 	import SystemStep from '$lib/components/setup/steps/SystemStep.svelte';
 	import DrivesStep from '$lib/components/setup/steps/DrivesStep.svelte';
@@ -35,7 +35,7 @@
 		finish: FinishStep
 	};
 
-	const meta = $derived(stepMeta(data.step)!);
+	const meta = $derived(requiredStepMeta(data.step));
 	const index = $derived(stepIndex(data.step));
 	const StepComponent = $derived(STEP_COMPONENTS[data.step]);
 

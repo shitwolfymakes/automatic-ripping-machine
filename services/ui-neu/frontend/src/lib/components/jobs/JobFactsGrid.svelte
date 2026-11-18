@@ -26,13 +26,14 @@
 							: ''}">{field.value}</a
 					>
 				{:else if field.edit}
-					<div class="mt-1 job-detail-metadata-value" data-testid="fact-{field.edit}">
+					{@const edit = field.edit}
+					<div class="mt-1 job-detail-metadata-value" data-testid="fact-{edit}">
 						<InlineField
 							label={field.label}
 							value={field.raw ?? ''}
 							type="number"
 							{canEdit}
-							onsave={(raw) => onsave(field.edit!, raw)}
+							onsave={(raw) => onsave(edit, raw)}
 						/>
 					</div>
 				{:else}

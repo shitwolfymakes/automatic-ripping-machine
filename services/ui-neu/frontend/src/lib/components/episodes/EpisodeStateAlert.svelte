@@ -31,7 +31,7 @@
 		<p class="alert-title">No episode source is set up</p>
 		<p class="alert-body">
 			ARM needs an episode list from TMDb, TVmaze or TVDB to place these tracks. Turn one on in
-			<a href="/settings#Identification/episode_sources">Settings › Identification › Identity</a>.
+			<a href="/settings#Identification/episode_sources">Settings > Identification > Identity</a>.
 		</p>
 	</div>
 {:else if view === 'unsure' && held}

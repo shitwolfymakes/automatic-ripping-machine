@@ -45,9 +45,9 @@ export function matchLabel(count: number): string {
 	return `${count} ${plural(count, 'match', 'matches')}`;
 }
 
-/** "Following", "Paused", or "Paused · N new line(s)". */
+/** "Following", "Paused", or "Paused | N new line(s)". */
 export function followLabel(following: boolean, waiting: number): string {
-	return following ? 'Following' : waiting === 0 ? 'Paused' : `Paused · ${waiting} new ${plural(waiting, 'line')}`;
+	return following ? 'Following' : waiting === 0 ? 'Paused' : `Paused | ${waiting} new ${plural(waiting, 'line')}`;
 }
 
 /** What a log line's `data-tone` can be: a tone, or null for none. */

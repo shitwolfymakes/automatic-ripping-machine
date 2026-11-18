@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
 	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import { candidateSubtitle } from '$lib/match/match';
@@ -27,7 +28,9 @@
 		<span class="match-row-sub">{sub}</span>
 		{#if cast}<span class="match-row-cast">{cast}</span>{/if}
 	</span>
-	{#if rating != null}<span class="match-row-rating">★ {rating.toFixed(1)}</span>{/if}
+	{#if rating != null}<span class="match-row-rating inline-flex items-center gap-1"
+			><Glyph name="star" class="h-3 w-3" />{rating.toFixed(1)}</span
+		>{/if}
 </button>
 
 <style>

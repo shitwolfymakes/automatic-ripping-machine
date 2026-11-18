@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { GLYPH_PATHS } from '$lib/ui/glyph-names';
+
 	interface Props {
 		category?: string;
 	}
@@ -8,7 +10,7 @@
 	const icons: Record<string, { color: string; path: string }> = {
 		directory: {
 			color: 'file-icon-directory',
-			path: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+			path: GLYPH_PATHS.folder
 		},
 		video: {
 			color: 'file-icon-video',

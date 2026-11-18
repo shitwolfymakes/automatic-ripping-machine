@@ -18,8 +18,7 @@
 {#if result.status === 'ok'}
 	<span class="flex items-center gap-1.5 key-check-result-success">
 		<Glyph name="check-circle" class="shrink-0" />
-		<strong>Works</strong>{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1"
-				>&middot;</span
+		<strong>Works</strong>{#if result.detail}, {result.detail}{/if}{#if result.checked_at}<span class="mx-1">|</span
 			>checked {formatDateTime(result.checked_at)}{/if}
 	</span>
 {:else if result.status === 'invalid'}

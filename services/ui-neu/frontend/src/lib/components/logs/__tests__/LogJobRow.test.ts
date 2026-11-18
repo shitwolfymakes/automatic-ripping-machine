@@ -79,7 +79,7 @@ describe('LogJobRow', () => {
 	});
 
 	it('shows the disc position', () => {
-		expect(within(renderRow()).getByText('S1 · Disc 1/4')).toBeInTheDocument();
+		expect(within(renderRow()).getByText('S1 | Disc 1/4')).toBeInTheDocument();
 	});
 
 	it('shows a named drive with a tooltip', () => {

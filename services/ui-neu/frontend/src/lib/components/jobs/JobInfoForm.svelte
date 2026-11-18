@@ -159,10 +159,15 @@
 	{#if dirty && resolvable}
 		<div class="mt-3 flex items-center gap-2 job-info-form-save-bar">
 			{#if $isAdmin}
-				<button onclick={saveInfo} disabled={saving || !title.trim()} class="btn btn-primary job-info-form-save-btn">
+				<button
+					type="button"
+					onclick={saveInfo}
+					disabled={saving || !title.trim()}
+					class="btn btn-primary job-info-form-save-btn"
+				>
 					{saving ? 'Saving...' : 'Save'}
 				</button>
-				<button onclick={resetInfo} disabled={saving} class="btn job-info-form-reset-btn"> Reset </button>
+				<button type="button" onclick={resetInfo} disabled={saving} class="btn job-info-form-reset-btn"> Reset </button>
 			{/if}
 			{#if feedback}
 				<span in:reveal class="ml-auto job-info-form-feedback" data-tone={feedback.type}>{feedback.message}</span>

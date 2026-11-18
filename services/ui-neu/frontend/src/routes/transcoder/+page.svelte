@@ -128,7 +128,9 @@
 			{#if taskActions.error}
 				<div class="alert alert-danger">
 					{taskActions.error}
-					<button onclick={taskActions.dismiss} class="btn btn-link transcoder-page-dismiss">Dismiss</button>
+					<button type="button" onclick={taskActions.dismiss} class="btn btn-link transcoder-page-dismiss"
+						>Dismiss</button
+					>
 				</div>
 			{/if}
 

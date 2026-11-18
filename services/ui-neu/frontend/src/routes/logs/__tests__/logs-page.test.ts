@@ -126,7 +126,7 @@ describe('Logs job-list page', () => {
 		expect(within(bravo).getByText('ISO')).toBeInTheDocument();
 
 		// Disc
-		expect(within(alpha).getByText('S1 · Disc 1/4')).toBeInTheDocument();
+		expect(within(alpha).getByText('S1 | Disc 1/4')).toBeInTheDocument();
 		expect(bravo.querySelector('[data-label="Disc"]')?.textContent?.trim()).toBe('-');
 
 		// Drive, truncated with a tooltip

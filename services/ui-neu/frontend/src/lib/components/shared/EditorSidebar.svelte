@@ -34,7 +34,7 @@
 
 {#snippet footerStrip()}
 	<footer class="editor-sidebar-footer" data-testid="editor-sidebar-footer">
-		{@render footerContent!()}
+		{@render footerContent?.()}
 	</footer>
 {/snippet}
 

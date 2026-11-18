@@ -261,7 +261,7 @@ describe('LogView follow label', () => {
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent(/^Paused$/);
 
 		await rerender({ entries: [...ENTRIES, entry({ event: 'late' })] });
-		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 1 new line');
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 1 new line');
 		expect(screen.getByTestId('job-log-follow')).not.toHaveTextContent('lines');
 	});
 });
@@ -406,7 +406,7 @@ describe('LogView follow and pause', () => {
 		expect(view.scrollTop).toBe(0);
 
 		await rerender({ entries: [...ENTRIES, entry({ event: 'late' })] });
-		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 1 new line');
+		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 1 new line');
 		expect(view.scrollTop).toBe(0);
 	});
 
@@ -454,7 +454,7 @@ describe('LogView follow and pause', () => {
 
 		// growing from the lowered baseline counts 1, not 0 and not -2
 		await rerender({ entries: ENTRIES, appended: 6 });
-		expect(follow).toHaveTextContent('Paused · 1 new line');
+		expect(follow).toHaveTextContent('Paused | 1 new line');
 	});
 });
 
