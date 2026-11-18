@@ -1,6 +1,7 @@
 <script lang="ts">
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
 	import Toggle from '$lib/components/shared/Toggle.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	interface Props {
 		enabled: boolean;
@@ -15,11 +16,11 @@
 		<h2 class="settings-page-section-title" data-page-section-title>Notifications</h2>
 		<p class="settings-page-description">Manage notification channels - Discord, Slack, webhooks, scripts, and more.</p>
 	</div>
-	<label class="field field-row settings-page-notif-toggle-row">
-		<Toggle checked={enabled} label="Enable notifications" onchange={ontoggle} />
-		<span class="field-label">Enable notifications</span>
+	<div class="field field-row settings-page-notif-toggle-row">
+		<Toggle id="notifications-enabled" checked={enabled} label="Enable notifications" onchange={ontoggle} />
+		<FieldLabel for="notifications-enabled" label="Enable notifications" docsId="config.notifications_enabled" />
 		<span class="settings-page-inline-hint">(changes save automatically)</span>
-	</label>
+	</div>
 	{#if enabled}
 		<NotificationsTab />
 	{:else}

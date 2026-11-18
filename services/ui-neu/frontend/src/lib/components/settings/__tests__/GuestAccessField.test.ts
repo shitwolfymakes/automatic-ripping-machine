@@ -32,4 +32,12 @@ describe('GuestAccessField', () => {
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 		await waitFor(() => expect(onerror).toHaveBeenCalledWith('nope'));
 	});
+
+	it('links guest access to the setup walkthrough', () => {
+		renderComponent(GuestAccessField, { props: { guest } });
+		expect(screen.getByRole('link', { name: 'Docs for Guest access (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/setup-walkthrough#1-secure-your-account'
+		);
+	});
 });

@@ -467,7 +467,7 @@ describe('Settings page sections', () => {
 		it('an external hash with a field part sets the pending field and lands on its tab', async () => {
 			await renderReady();
 			window.location.hash = '#Keys/tmdb_api_key';
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
@@ -513,7 +513,7 @@ describe('Settings page sections', () => {
 			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			window.location.hash = '#Identification/tmdb_api_key';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 			expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
 			const el = screen.getByTestId('setting-tmdb_api_key');
@@ -527,7 +527,7 @@ describe('Settings page sections', () => {
 		it('decodes a URL-encoded field key', async () => {
 			window.location.hash = '#Keys/tmdb%5Fapi%5Fkey';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 		});
 
 		it('a key no group owns does nothing and is not retried on a later tab click', async () => {

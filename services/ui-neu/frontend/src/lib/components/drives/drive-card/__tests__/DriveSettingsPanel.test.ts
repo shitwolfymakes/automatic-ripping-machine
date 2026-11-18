@@ -293,8 +293,8 @@ describe('DriveSettingsPanel prescan fields', () => {
 	it('shows each label, unit and tooltip', () => {
 		renderPanel();
 		for (const f of FIELDS) {
-			const label = input(f.label).closest('div')!.querySelector('label')!;
-			const unit = label.querySelector('span');
+			const row = input(f.label).closest('.field')!.querySelector('.field-label-row')!;
+			const unit = row.querySelector('.drive-card-unit');
 			if (f.unit) expect(unit?.textContent).toBe(f.unit);
 			else expect(unit).toBeNull();
 			expect(screen.getByText(f.tooltip)).toBeTruthy();
@@ -441,5 +441,18 @@ describe('DriveSettingsPanel onupdate', () => {
 		await typeAndBlur(input(/Rip Speed/), '8');
 		await typeAndBlur(input(/Enum Timeout/), '20');
 		await waitFor(() => expect(updateDriveMock).toHaveBeenCalledTimes(3));
+	});
+});
+
+describe('DriveSettingsPanel docs links', () => {
+	it('links the default session to the ARM help, and rip speed and pre-scan tuning to nothing', () => {
+		renderPanel();
+		expect(screen.getByRole('link', { name: 'Docs for Default session (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip-presets-transcode-presets-and-sessions'
+		);
+		expect(screen.queryByRole('link', { name: 'Docs for Rip Speed (opens in a new tab)' })).toBeNull();
+		for (const f of FIELDS)
+			expect(screen.queryByRole('link', { name: `Docs for ${f.label} (opens in a new tab)` })).toBeNull();
 	});
 });

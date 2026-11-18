@@ -3,7 +3,8 @@
 	import { reveal } from '$lib/ui/transitions';
 	import { changePassword } from '$lib/api/auth';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
-	import { PASSWORD_MIN_LENGTH, passwordProblem } from '$lib/utils/password';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import { FIELD_IDS, PASSWORD_MIN_LENGTH, passwordProblem } from '$lib/utils/password';
 
 	// Shared by /change-password, Settings > Users and the setup walkthrough's
 	// first step. `currentPasswordDefault` hides the current-password field and
@@ -79,7 +80,7 @@
 	describedby?: string
 )}
 	<div class="field">
-		<label class="field-label" for="{uid}-{key}">{label}</label>
+		<FieldLabel for="{uid}-{key}" {label} docsId={FIELD_IDS[key]} />
 		<div class="change-password-form-row">
 			{#if key === 'current'}
 				<input
