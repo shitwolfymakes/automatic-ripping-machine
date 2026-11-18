@@ -37,10 +37,9 @@ describe('dashboard API', () => {
 	});
 });
 
-// drives API is covered by drives-api.test.ts (repointed to v3: get/patch
-// helpers, DriveView, string ids). It was removed from this wrapper test
-// because drives.ts no longer routes through the mocked `apiFetch`.
+// drives API is covered by drives-api.test.ts (get/patch helpers, DriveView, string ids), not here,
+// because drives.ts does not route through the mocked `apiFetch`.
 //
-// notifications API is covered by notifications-api.test.ts (repointed to v3:
-// get/patch/post helpers, NotificationInboxView, string ids). It was removed
-// here because notifications.ts no longer routes through the mocked `apiFetch`.
+// notifications API is covered by notifications-api.test.ts (get/patch/post helpers,
+// NotificationInboxView, string ids), not here, because notifications.ts does not route through the
+// mocked `apiFetch`.

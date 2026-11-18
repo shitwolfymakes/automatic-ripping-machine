@@ -11,7 +11,7 @@ vi.mock('$lib/api/auth', () => ({
 	login: vi.fn()
 }));
 
-// isGuest is now simply "tokenless" (derived from isAuthenticated) — the test
+// isGuest is simply "tokenless" (derived from isAuthenticated) — the test
 // helper drives that directly rather than through a role string.
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -97,7 +97,7 @@ describe('Login page Continue as Guest', () => {
 	});
 });
 
-describe('Login page on first run (setup spec §5.1)', () => {
+describe('Login page on first run', () => {
 	function firstRunFetch(firstRun: boolean) {
 		fetchMock.mockImplementation((url: string) =>
 			Promise.resolve(

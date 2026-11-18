@@ -16,6 +16,7 @@
 	import DiscKindSwitch from './DiscKindSwitch.svelte';
 	import IdentityCheckbox from './IdentityCheckbox.svelte';
 	import IdentityPreview from './IdentityPreview.svelte';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
 
 	// Settings › Identification › Identity: the four pipeline steps over the
 	// form's own `values` (bound), so Save, change detection and guest gating
@@ -66,6 +67,7 @@
 					<div class="identity-card-row-head">
 						<IdentityCheckbox
 							label={db.label}
+							docsId={`config.${db.key}`}
 							describedby="identity-help-{db.key}"
 							checked={Boolean(values[db.key])}
 							disabled={off(db.key)}
@@ -87,7 +89,10 @@
 				{@const field = meta(list.key)}
 				{#if field}
 					<div class="stack identity-card-column" id="setting-{list.key}" data-testid="setting-{list.key}">
-						<h5 class="field-label">{list.heading}</h5>
+						<div class="identity-card-list-head">
+							<h5 class="field-label">{list.heading}</h5>
+							<FieldDocsLink id={`config.${list.key}`} label={list.heading} />
+						</div>
 						{#if isEmptyList(values, list.key)}
 							<p class="identity-card-note">No sources on</p>
 						{/if}
@@ -99,15 +104,17 @@
 							{keyTab}
 							disabled={off(list.key)}
 						/>
-						{#if list.key === 'episode_sources' && meta('episode_match_tolerance_seconds')}
-							{@const tolerance = meta('episode_match_tolerance_seconds')!}
-							<ConfigSchemaField
-								field={{ ...tolerance, label: 'Episode match tolerance (seconds)' }}
-								bind:value={values[tolerance.key]}
-								config={values}
-								context={config}
-								{disabled}
-							/>
+						{#if list.key === 'episode_sources'}
+							{@const tolerance = meta('episode_match_tolerance_seconds')}
+							{#if tolerance}
+								<ConfigSchemaField
+									field={{ ...tolerance, label: 'Episode match tolerance (seconds)' }}
+									bind:value={values[tolerance.key]}
+									config={values}
+									context={config}
+									{disabled}
+								/>
+							{/if}
 						{/if}
 					</div>
 				{/if}
@@ -123,6 +130,7 @@
 					<div class="identity-card-option" id="setting-{t.key}" data-testid="setting-{t.key}">
 						<IdentityCheckbox
 							label={t.label}
+							docsId={`config.${t.key}`}
 							describedby="identity-help-trust"
 							checked={Boolean(values[t.key])}
 							disabled={off(t.key)}
@@ -134,7 +142,7 @@
 		</div>
 		<p class="field-help identity-card-footer" id="identity-help-trust">
 			When off, a match waits on the job page for you to confirm it and the disc is held with no countdown; a TV show's
-			episode placement is then a guess too: still placed, shown amber, and it holds the countdown. Ripping › Review
+			episode placement is then a guess too: still placed, shown amber, and it holds the countdown. Ripping > Review
 			first still holds every disc.
 		</p>
 	</div>
@@ -146,6 +154,7 @@
 				<div class="identity-card-option">
 					<IdentityCheckbox
 						label={box.label}
+						docsId="config.disc_hint_sources"
 						describedby="identity-help-ignore-{box.hint}"
 						checked={isIgnored(box.hint)}
 						disabled={off('disc_hint_sources')}
@@ -187,6 +196,11 @@
 	.identity-card-row-head {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.identity-card-list-head {
+		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 	}

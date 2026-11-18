@@ -53,6 +53,7 @@
 
 <div class="flex flex-wrap items-center gap-1.5 disc-review-widget-actions">
 	<button
+		type="button"
 		onclick={() => sections.toggle('info')}
 		class="btn disc-review-widget-action-btn"
 		aria-pressed={sections.isOpen('info')}
@@ -61,6 +62,7 @@
 	</button>
 	{#if isVideo}
 		<button
+			type="button"
 			onclick={() => sections.toggle('title')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('title')}>Search</button
@@ -68,6 +70,7 @@
 	{/if}
 	{#if episodeRow && (episodeRow.state !== 'matched' || sections.isOpen('episodes'))}
 		<button
+			type="button"
 			onclick={() => sections.toggle('episodes')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('episodes')}>Episodes</button
@@ -75,6 +78,7 @@
 	{/if}
 	{#if isMusic}
 		<button
+			type="button"
 			onclick={() => sections.toggle('music')}
 			class="btn disc-review-widget-action-btn"
 			aria-pressed={sections.isOpen('music')}>Search</button
@@ -82,6 +86,7 @@
 	{/if}
 	{#if $isAdmin && job.actions.can_apply}
 		<button
+			type="button"
 			onclick={onapplysession}
 			class="btn {isPostRip ? 'disc-review-widget-success-btn' : 'disc-review-widget-action-btn'}"
 			>{isPostRip ? 'Apply session & transcode' : 'Apply session'}</button
@@ -90,6 +95,7 @@
 	<a href="/jobs/{job.id}" class="btn disc-review-widget-action-btn"> View details </a>
 	{#if $isAdmin && job.actions.can_abandon}
 		<button
+			type="button"
 			onclick={oncancel}
 			disabled={actions.cancelling}
 			class="btn btn-danger ml-auto"
@@ -99,12 +105,18 @@
 		</button>
 	{/if}
 	{#if $isAdmin && job.actions.can_delete}
-		<button onclick={() => (actions.confirmDelete = true)} disabled={actions.deleting} class="btn btn-danger ml-auto">
+		<button
+			type="button"
+			onclick={() => (actions.confirmDelete = true)}
+			disabled={actions.deleting}
+			class="btn btn-danger ml-auto"
+		>
 			{actions.deleting ? 'Deleting...' : 'Delete'}
 		</button>
 	{/if}
 	{#if canStart && $isAdmin}
 		<button
+			type="button"
 			onclick={onstartrip}
 			disabled={actions.starting}
 			class="btn disc-review-widget-success-btn"
@@ -121,11 +133,10 @@
 		background: color-mix(in srgb, var(--color-primary-tint-3) 50%, transparent);
 		padding: 0.5rem 1rem;
 	}
-	/* the original action buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
-	   0.875rem) - between .btn's default and .btn-sm, so neither preset
-	   alone matches; override both on the row's own .btn children. The
-	   original border was a ring (box-shadow, no layout space), not .btn's
-	   real 1px border, so border:0 here keeps the height exact. */
+	/* the action buttons use 0.375rem/0.75rem padding and 0.875rem text - between .btn's default and
+	   .btn-sm, so neither preset alone matches; override both on the row's own .btn children. The
+	   border is a ring (box-shadow, no layout space), not .btn's real 1px border, so border:0 here
+	   keeps the height exact. */
 	.disc-review-widget-actions .btn {
 		min-height: auto;
 		padding: 0.375rem 0.75rem;
@@ -133,8 +144,7 @@
 		line-height: 1.25rem;
 		border: 0;
 	}
-	/* the original inactive action button was a tinted fill (bg-primary/5,
-	   ring-primary/25, text-gray-700), not .btn's bare-outline default
+	/* the inactive action button is a tinted fill with a ring, not .btn's bare-outline default
 	   (transparent background, primary-text colour) */
 	.disc-review-widget-action-btn {
 		background: var(--color-primary-tint-1);
@@ -157,7 +167,7 @@
 		background: var(--color-success);
 		filter: brightness(0.9);
 	}
-	/* Cancel keeps .btn-danger's tone but the original border was a ring too */
+	/* Cancel keeps .btn-danger's tone but its border is a ring too */
 	.disc-review-widget-actions .btn-danger {
 		box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 30%, transparent);
 	}

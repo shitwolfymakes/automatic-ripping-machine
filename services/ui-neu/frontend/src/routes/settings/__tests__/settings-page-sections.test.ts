@@ -467,7 +467,7 @@ describe('Settings page sections', () => {
 		it('an external hash with a field part sets the pending field and lands on its tab', async () => {
 			await renderReady();
 			window.location.hash = '#Keys/tmdb_api_key';
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
@@ -513,7 +513,7 @@ describe('Settings page sections', () => {
 			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			window.location.hash = '#Identification/tmdb_api_key';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 			expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
 			const el = screen.getByTestId('setting-tmdb_api_key');
@@ -527,7 +527,7 @@ describe('Settings page sections', () => {
 		it('decodes a URL-encoded field key', async () => {
 			window.location.hash = '#Keys/tmdb%5Fapi%5Fkey';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 		});
 
 		it('a key no group owns does nothing and is not retried on a later tab click', async () => {
@@ -651,28 +651,14 @@ describe('Settings page sections', () => {
 			expect(setupAgain()).not.toBeDisabled();
 		});
 
-		// Pins today's behaviour: a failed restart escapes the click handler as
-		// an unhandled rejection and shows no error (#588). The test swaps in
-		// its own listener so vitest does not fail the run on it, and puts
-		// vitest's back afterwards.
-		it('the button comes back after a failed restart, which does not navigate', async () => {
-			const rejections: unknown[] = [];
-			const previous = process.listeners('unhandledRejection');
-			process.removeAllListeners('unhandledRejection');
-			process.on('unhandledRejection', (r) => rejections.push(r));
-			try {
-				vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
-				await openTab('System');
-				await fireEvent.click(setupAgain());
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('restart failed');
-				expect(goto).not.toHaveBeenCalled();
-				expect(setupAgain()).toHaveTextContent('Run setup again');
-				expect(setupAgain()).not.toBeDisabled();
-			} finally {
-				process.removeAllListeners('unhandledRejection');
-				previous.forEach((l) => process.on('unhandledRejection', l));
-			}
+		it('a failed restart shows its error, does not navigate, and the button comes back', async () => {
+			vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
+			await openTab('System');
+			await fireEvent.click(setupAgain());
+			expect(await screen.findByText('restart failed')).toHaveClass('alert-danger');
+			expect(goto).not.toHaveBeenCalled();
+			expect(setupAgain()).toHaveTextContent('Run setup again');
+			expect(setupAgain()).not.toBeDisabled();
 		});
 
 		it('lists the read-only configuration rows from the config value', async () => {
@@ -873,16 +859,15 @@ describe('Settings page sections', () => {
 		});
 
 		// The feedback shows twice, at the top and under the user themes (#541).
-		it('a delete reloads the themes and shows its success feedback in both places', async () => {
+		it('a delete reloads the themes and shows its success feedback once', async () => {
 			writableOf<string>(colorScheme).set('red');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('mine'));
 			expect(loadThemesFromApi).toHaveBeenCalledTimes(1);
 			const feedback = await screen.findAllByText('Theme "Mine" deleted');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-success');
-			expect(feedback[1]).toHaveAttribute('data-error', 'false');
 			expect(get(colorScheme)).toBe('red');
 		});
 
@@ -895,14 +880,13 @@ describe('Settings page sections', () => {
 			expect(get(colorScheme)).toBe('blue');
 		});
 
-		it('a failed delete shows the Error message in both places', async () => {
+		it('a failed delete shows the Error message once', async () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce(new Error('in use'));
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
 			const feedback = await screen.findAllByText('in use');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-danger');
-			expect(feedback[1]).toHaveAttribute('data-error', 'true');
 			expect(loadThemesFromApi).not.toHaveBeenCalled();
 		});
 
@@ -910,7 +894,7 @@ describe('Settings page sections', () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce('nope');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
-			expect(await screen.findAllByText('Delete failed')).toHaveLength(2);
+			expect(await screen.findAllByText('Delete failed')).toHaveLength(1);
 		});
 
 		it('shows dark mode on', async () => {

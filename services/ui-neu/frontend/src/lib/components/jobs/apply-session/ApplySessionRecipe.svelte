@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	// What applying the chosen session would do to this job (its rip preset, its
 	// transcode preset and the output paths), or why its output paths cannot be
 	// resolved.
@@ -66,21 +67,13 @@
 </div>
 {#if problem}
 	<p data-testid="recipe-output-problem" class="apply-session-problem">
-		<svg class="apply-session-problem-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				stroke-width="2"
-				d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-			/>
-		</svg>
+		<Glyph name="warning" class="apply-session-problem-icon" />
 		<span>{problem}</span>
 	</p>
 {/if}
 
 <style>
-	/* original recipe box: rounded-lg border border-gray-200 bg-gray-50
-	   px-3 py-2 text-sm - code-block's own font-mono/0.72rem sizing is for
+	/* recipe box: code-block's own font-mono/0.72rem sizing is for
 	   literal preformatted text; this dl reads as prose, so type is reset
 	   back to text-sm/text-secondary while keeping code-block's box (border,
 	   radius, tint background). */
@@ -144,7 +137,8 @@
 		font-size: 0.875rem;
 		color: var(--color-on-warning-soft);
 	}
-	.apply-session-problem-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.apply-session-problem-icon) {
 		flex-shrink: 0;
 		margin-top: 0.125rem;
 		width: 1rem;

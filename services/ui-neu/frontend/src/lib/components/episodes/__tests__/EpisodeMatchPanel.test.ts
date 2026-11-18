@@ -170,7 +170,7 @@ describe('EpisodeMatchPanel', () => {
 			'href',
 			'/settings#Identification/episode_sources'
 		);
-		expect(screen.getByRole('link', { name: /Settings/ })).toHaveTextContent('Settings › Identification › Identity');
+		expect(screen.getByRole('link', { name: /Settings/ })).toHaveTextContent('Settings > Identification > Identity');
 	});
 
 	it('a guess: amber chip, one-line reason, rows placed, nothing to accept', async () => {
@@ -511,7 +511,7 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
-describe('EpisodeMatchPanel fix round 1', () => {
+describe('EpisodeMatchPanel loading and job changes', () => {
 	it('shows a neutral loading line, not "unavailable", before the first fetch settles', async () => {
 		const first = deferred<IdentityView>();
 		fetchIdentity.mockReturnValue(first.promise);

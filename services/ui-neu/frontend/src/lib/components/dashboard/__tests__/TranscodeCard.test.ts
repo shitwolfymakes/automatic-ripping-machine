@@ -87,7 +87,7 @@ describe('TranscodeCard', () => {
 
 		it('renders status badge with a humanized label', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
-			// in_progress now renders as the parsed label "In Progress".
+			// in_progress renders as the parsed label "In Progress".
 			const matches = screen.getAllByText('In Progress');
 			expect(matches.length).toBeGreaterThanOrEqual(1);
 		});
@@ -170,7 +170,7 @@ describe('TranscodeCard', () => {
 			});
 		});
 	});
-	// D-130: the ETA must not count the time a task sat queued. The store owns
+	// The ETA must not count the time a task sat queued. The store owns
 	// the estimate from started_at; the card shows what task() returns.
 	describe('ETA', () => {
 		it('shows the ETA the store reports, in the coarse form', () => {
@@ -210,7 +210,7 @@ describe('TranscodeCard', () => {
 		});
 	});
 
-	// D-248: the encoder frame rate beside the ETA.
+	// The encoder frame rate beside the ETA.
 	describe('frame rate', () => {
 		it('shows the rate and average the store reports', () => {
 			h.task.mockReturnValue(taskLive({ fps: 45.67, avgFps: 23.46 }));

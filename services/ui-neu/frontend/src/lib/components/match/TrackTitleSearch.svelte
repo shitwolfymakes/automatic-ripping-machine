@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { errorMessage } from '$lib/utils/errors';
 	import type { TrackView, MetadataCandidate, MediaType } from '$lib/types/api.gen';
 	import { trackTitleBody } from '$lib/jobs/track-edit';
@@ -128,15 +129,18 @@
 		</h5>
 		<div class="flex items-center gap-1.5">
 			{#if track.title}
-				<button onclick={handleClear} disabled={clearing} class="btn btn-warning track-title-search-action-btn">
+				<button
+					type="button"
+					onclick={handleClear}
+					disabled={clearing}
+					class="btn btn-warning track-title-search-action-btn"
+				>
 					{clearing ? 'Clearing...' : 'Clear Override'}
 				</button>
 			{/if}
 			{#if onclose}
-				<button onclick={onclose} title="Close" class="btn btn-icon">
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-						><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg
-					>
+				<button type="button" onclick={onclose} title="Close" class="btn btn-icon">
+					<Glyph name="x" class="h-4 w-4" />
 				</button>
 			{/if}
 		</div>
@@ -166,6 +170,7 @@
 			class="field-control w-28"
 		/>
 		<button
+			type="button"
 			onclick={handleSearch}
 			disabled={search.searching || (!query.trim() && !imdbInput.trim())}
 			class="btn btn-primary track-title-search-btn track-title-search-action-btn"
@@ -223,6 +228,7 @@
 			</div>
 			<div class="flex items-center gap-2">
 				<button
+					type="button"
 					onclick={applyFromDetail}
 					disabled={applying || !editTitle.trim()}
 					class="btn track-title-search-success-btn track-title-search-action-btn"
@@ -231,6 +237,7 @@
 				</button>
 				{#if results.length > 0}
 					<button
+						type="button"
 						onclick={() => {
 							detail = null;
 						}}
@@ -257,7 +264,7 @@
 		width: 62px;
 		justify-content: center;
 	}
-	/* the original buttons were px-2 py-1 text-xs (0.5rem/0.25rem, 12px/16px) -
+	/* the buttons are 0.5rem/0.25rem padding with text-xs (12px/16px) -
 	   .btn-sm's own padding (0.75rem/0.25rem) and line-height (inherited
 	   1.25rem) both differ */
 	.track-title-search-action-btn {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { TranscodeTaskView } from '$lib/types/api.gen';
 	import StatusBadge from '../shared/StatusBadge.svelte';
 	import ProgressBar from '../shared/ProgressBar.svelte';
@@ -103,13 +104,12 @@
 
 				<!-- Expand chevron -->
 				<button
+					type="button"
 					class="row-toggle shrink-0 transcode-card-chevron"
 					aria-expanded={expanded}
 					title={expanded ? 'Collapse' : 'Expand'}
 				>
-					<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-					</svg>
+					<Glyph name="chevron-down" class="h-4 w-4 chevron" />
 				</button>
 			</div>
 		</div>
@@ -193,9 +193,8 @@
 {/if}
 
 <style>
-	/* card-status colours its left accent from data-status; the ORIGINAL
-	   TranscodeCard accent was always primary blue (border-l-primary), not
-	   status-driven - same precedent as JobCard's video-type accent
+	/* card-status colours its left accent from data-status; the TranscodeCard accent is always primary
+	   blue, not status-driven - same precedent as JobCard's video-type accent
 	   override: a style:--card-accent custom property set from the
 	   template, read here, no !important needed (this scoped rule already
 	   compiles unlayered, which beats card-status[data-status]'s own
@@ -233,7 +232,8 @@
 	.transcode-card-chevron:hover {
 		color: var(--color-text-muted);
 	}
-	.transcode-card-chevron[aria-expanded='true'] .chevron {
+	/* :global: set on Glyph through its class prop */
+	.transcode-card-chevron[aria-expanded='true'] :global(.chevron) {
 		transform: rotate(180deg);
 	}
 	.transcode-card-progress-row {

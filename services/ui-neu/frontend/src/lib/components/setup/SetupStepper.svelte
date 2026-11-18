@@ -47,7 +47,7 @@
 					{@render marker(state, i + 1)}
 					<span class="setup-stepper-text">
 						<span class="setup-stepper-label">{s.label}</span>
-						<span class="setup-stepper-state">{STATE_WORD[state]}{s.optional ? ' · Optional' : ''}</span>
+						<span class="setup-stepper-state">{STATE_WORD[state]}{s.optional ? ' | Optional' : ''}</span>
 					</span>
 				</button>
 			</li>
@@ -65,7 +65,7 @@
 			aria-controls="setup-stepper-mobile-list"
 			onclick={() => (open = !open)}
 		>
-			<span>Step {currentIndex + 1} of {STEPS.length} · <strong>{currentLabel}</strong></span>
+			<span>Step {currentIndex + 1} of {STEPS.length} | <strong>{currentLabel}</strong></span>
 			<Glyph name={open ? 'chevron-up' : 'chevron-down'} />
 		</button>
 		<div class="setup-stepper-bar" aria-hidden="true">

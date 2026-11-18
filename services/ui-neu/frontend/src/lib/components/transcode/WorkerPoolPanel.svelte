@@ -22,11 +22,11 @@
 			</span>
 		</div>
 		<span class="transcoder-page-worker-summary">
-			GPUs: {stats.gpus_available}/{stats.gpus_total} available &middot; Queue: {taskCount(stats, 'queued')} queued
+			GPUs: {stats.gpus_available}/{stats.gpus_total} available | Queue: {taskCount(stats, 'queued')} queued
 		</span>
 	</div>
 	{#if gpus.length > 0}
-		<!-- Per-device inventory rows (G-30 awareness): live status per GPU,
+		<!-- Per-device inventory rows: live status per GPU,
 				     with the management card one link away in Settings. -->
 		<div class="stack stack-sm transcoder-page-gpu-rows" data-testid="gpu-rows">
 			{#each gpus as g (g.id)}
@@ -44,13 +44,14 @@
 						<p class="truncate transcoder-page-worker-task" title={worker.output_path ?? worker.source_track_id}>
 							Task #{worker.task_id}
 							{#if worker.claimed_by}
-								<span class="transcoder-page-worker-claimed"> &mdash; {worker.claimed_by}</span>
+								<span class="transcoder-page-worker-claimed">: {worker.claimed_by}</span>
 							{/if}
 						</p>
 						{#if worker.claim_heartbeat_at}
 							{@const dur = formatElapsed(worker.claim_heartbeat_at)}
 							<p class="transcoder-page-worker-heartbeat">
-								{worker.progress_pct}%{#if dur}&nbsp;&middot; {dur} since heartbeat{/if}
+								{worker.progress_pct}%{#if dur}
+									| {dur} since heartbeat{/if}
 							</p>
 						{:else}
 							<p class="transcoder-page-worker-heartbeat-idle">{worker.progress_pct}%</p>
@@ -83,9 +84,8 @@
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* the original worker card used a literal indigo hue (border-indigo-200,
-	   bg-indigo-50/50) with no shared token; collapses onto
-	   --color-status-transcoding (violet), the same tone the transcoder
+	/* the worker card has no shared token for its indigo hue (border-indigo-200, bg-indigo-50/50); it
+	   uses --color-status-transcoding (violet), the same tone the transcoder
 	   domain's progress bar uses */
 	.transcoder-page-worker-card {
 		border: 1px solid color-mix(in srgb, var(--color-status-transcoding) 30%, transparent);

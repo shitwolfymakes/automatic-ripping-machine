@@ -31,6 +31,27 @@ describe('ChannelRow', () => {
 		expect(screen.getByText(/HTTP 502/)).toBeInTheDocument();
 	});
 
+	it('Enter on the row itself expands it', async () => {
+		const onexpand = vi.fn();
+		const { container } = renderComponent(ChannelRow, { props: { channel: ch, serviceName: 'Discord', onexpand } });
+		await fireEvent.keyDown(container.querySelector('.list-row') as HTMLElement, { key: 'Enter' });
+		expect(onexpand).toHaveBeenCalledTimes(1);
+	});
+
+	it('another key on the row does not expand it', async () => {
+		const onexpand = vi.fn();
+		const { container } = renderComponent(ChannelRow, { props: { channel: ch, serviceName: 'Discord', onexpand } });
+		await fireEvent.keyDown(container.querySelector('.list-row') as HTMLElement, { key: ' ' });
+		expect(onexpand).not.toHaveBeenCalled();
+	});
+
+	it.each(['Send test', 'Edit', 'Expand'])('Enter on the %s button does not toggle the row', async (name) => {
+		const onexpand = vi.fn();
+		renderComponent(ChannelRow, { props: { channel: ch, serviceName: 'Discord', onexpand } });
+		await fireEvent.keyDown(screen.getByRole('button', { name }), { key: 'Enter' });
+		expect(onexpand).not.toHaveBeenCalled();
+	});
+
 	it('toggle click fires ontoggle but not onexpand', async () => {
 		const ontoggle = vi.fn();
 		const onexpand = vi.fn();

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { features } from '$lib/features';
 	import { formatBytes } from '$lib/utils/format';
 	import type { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
@@ -59,19 +60,7 @@
 								disabled={orphans.busy}
 								class="files-page-select-all"
 							/>
-							<svg
-								class="h-5 w-5 shrink-0 files-page-folder-icon"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="1.5"
-									d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-								/>
-							</svg>
+							<Glyph name="folder" class="h-5 w-5 shrink-0 files-page-folder-icon" />
 							<div class="min-w-0 flex-1">
 								<div class="truncate files-page-orphan-name">{folder.name}</div>
 								<div class="files-page-orphan-size">{formatBytes(folder.size_bytes)}</div>
@@ -86,14 +75,7 @@
 								class="btn btn-icon files-page-orphan-delete"
 								title="Delete folder"
 							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-									/>
-								</svg>
+								<Glyph name="trash" class="h-4 w-4" />
 							</button>
 						</div>
 					{/each}
@@ -115,14 +97,7 @@
 								disabled={orphans.busy}
 								class="btn files-page-bulk-btn files-page-bulk-btn-danger"
 							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-									/>
-								</svg>
+								<Glyph name="trash" class="h-4 w-4" />
 								Delete {orphans.selected.size} selected
 							</button>
 						{/if}
@@ -135,14 +110,12 @@
 {/if}
 
 <style>
-	/* original was px-3 py-1.5 (0.75rem/0.375rem) */
 	.files-page-orphan-feedback {
 		padding: 0.375rem 0.75rem;
 	}
-	/* original bulk-action buttons were px-3 py-1.5 text-xs (0.75rem/1rem),
-	   smaller than .btn's own default 1rem/0.5rem/text-sm - restated to
-	   match; the icon+label gap (gap-1.5) is close enough to .btn's own
-	   0.375rem default that no override is needed there */
+	/* bulk-action buttons are text-xs (0.75rem/1rem) with 0.375rem/0.75rem padding, smaller than
+	   .btn's own default 1rem/0.5rem/text-sm - restated here; the icon+label gap is close enough to
+	   .btn's own 0.375rem default that no override is needed there */
 	.files-page-bulk-btn {
 		padding: 0.375rem 0.75rem;
 		font-size: 0.75rem;
@@ -153,13 +126,14 @@
 		background: var(--color-danger);
 		color: var(--color-on-primary);
 	}
-	/* darkens on hover like the original's bg-red-600 -> hover:bg-red-700;
+	/* darkens on hover;
 	   no darker danger token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
 	.files-page-bulk-btn-danger:hover {
 		filter: brightness(0.9);
 	}
-	.files-page-folder-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.files-page-folder-icon) {
 		color: var(--color-warning);
 	}
 	.files-page-empty {
@@ -210,7 +184,7 @@
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
 	}
-	/* the original row was a plain flex row (no hover/pointer affordance -
+	/* the row is a plain flex row (no hover/pointer affordance -
 	   only its checkbox/delete button are interactive); list-row's own
 	   cursor:pointer/hover-tint are for a clickable row and don't apply here */
 	.files-page-orphan-row {
@@ -233,8 +207,8 @@
 		line-height: 1rem;
 		color: var(--color-text-muted);
 	}
-	/* the original category pill used two literal hues with no shared
-	   badge look (rounded-full px-2 py-0.5 text-xs font-medium); nearest
+	/* the category pill is a rounded-full badge (px-2 py-0.5 text-xs font-medium) with no shared badge
+	   look; nearest
 	   tones are warning (raw) and success (completed) */
 	.files-page-category-badge {
 		border-radius: 9999px;

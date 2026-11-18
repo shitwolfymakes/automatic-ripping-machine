@@ -14,13 +14,14 @@
 </script>
 
 <div class="job-pagination flex flex-wrap items-center justify-between gap-2" data-testid="jobs-pagination">
-	<p class="job-pagination-summary">Showing {first}&ndash;{last} of {total}</p>
+	<p class="job-pagination-summary">Showing {first}-{last} of {total}</p>
 	{#if pages > 1}
 		<div class="flex gap-1">
-			<button disabled={page <= 1} onclick={() => onpage(page - 1)} class="btn btn-sm">Prev</button>
+			<button type="button" disabled={page <= 1} onclick={() => onpage(page - 1)} class="btn btn-sm">Prev</button>
 			{#each Array.from({ length: pages }, (_, i) => i + 1) as p (p)}
 				{#if p === page || p === 1 || p === pages || Math.abs(p - page) <= 1}
 					<button
+						type="button"
 						onclick={() => onpage(p)}
 						aria-pressed={p === page}
 						class="btn btn-sm {p === page ? 'btn-primary' : ''}">{p}</button
@@ -29,7 +30,7 @@
 					<span class="job-pagination-ellipsis px-1">...</span>
 				{/if}
 			{/each}
-			<button disabled={page >= pages} onclick={() => onpage(page + 1)} class="btn btn-sm">Next</button>
+			<button type="button" disabled={page >= pages} onclick={() => onpage(page + 1)} class="btn btn-sm">Next</button>
 		</div>
 	{/if}
 </div>

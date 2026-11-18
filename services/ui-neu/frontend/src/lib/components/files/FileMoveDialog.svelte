@@ -35,14 +35,7 @@
 			<!-- Current picker location -->
 			<div class="shrink-0 files-page-picker-location">
 				<div class="flex items-center gap-2 files-page-picker-location-text">
-					<svg class="h-4 w-4 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="1.5"
-							d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-						/>
-					</svg>
+					<Glyph name="folder" class="h-4 w-4 shrink-0 files-page-folder-icon" />
 					<span class="files-page-picker-path">{picker.displayPath()}</span>
 					{#if picker.atSource}
 						<span class="badge files-page-current-badge">current</span>
@@ -63,9 +56,7 @@
 					<!-- Go up -->
 					{#if picker.canGoUp}
 						<button type="button" onclick={picker.goUp} class="flex w-full items-center gap-3 files-page-picker-row">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-							</svg>
+							<Glyph name="arrow-left-short" class="h-4 w-4" />
 							..
 						</button>
 					{/if}
@@ -80,19 +71,7 @@
 							onclick={() => picker.load(picker.location.root, childSubpath(picker.location.subpath, folder.name))}
 							class="flex w-full items-center gap-3 files-page-picker-row files-page-picker-row-folder"
 						>
-							<svg
-								class="h-5 w-5 shrink-0 files-page-folder-icon"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="1.5"
-									d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-								/>
-							</svg>
+							<Glyph name="folder" class="h-5 w-5 shrink-0 files-page-folder-icon" />
 							{folder.name}
 							<Glyph name="chevron-right" class="ml-auto h-4 w-4 files-page-chevron" />
 						</button>
@@ -133,9 +112,8 @@
 		font-weight: 500;
 		color: var(--color-text);
 	}
-	/* original was a plain lowercase gray-200/gray-600 tag, not .badge's
-	   primary-tinted pill nor .badge-sm's uppercase transform - no neutral
-	   token exists (spec 5.1), so this keeps .badge's shape (pill, weight,
+	/* a plain lowercase neutral tag, not .badge's primary-tinted pill nor .badge-sm's uppercase
+	   transform - no neutral token exists, so this keeps .badge's shape (pill, weight,
 	   size) but restates the case and a text-sm-scale padding */
 	.files-page-current-badge {
 		border-radius: var(--radius-sm);
@@ -198,7 +176,8 @@
 		border-top: 1px solid var(--color-border);
 		padding: 1rem 1.5rem;
 	}
-	.files-page-folder-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.files-page-folder-icon) {
 		color: var(--color-warning);
 	}
 </style>

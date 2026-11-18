@@ -1,4 +1,4 @@
-"""What an episode-list provider is (design spec 6.2).
+"""What an episode-list provider is.
 
 One `EpisodeListProvider` per external episode-order source (TMDb, TVmaze,
 TVDB). Each provider owns its own `SourceHttp` instance (rate limit, cache,

@@ -38,7 +38,10 @@
 </script>
 
 <div class="stack panel-section">
-	<button onclick={() => onback()} class="btn music-search-action-btn inline-flex items-center gap-1 self-start"
+	<button
+		type="button"
+		onclick={() => onback()}
+		class="btn music-search-action-btn inline-flex items-center gap-1 self-start"
 		><Glyph name="arrow-left" /> Back to results</button
 	>
 	<div class="flex items-start gap-3">
@@ -93,6 +96,7 @@
 				><Glyph name="warning" /> Total length differs, likely the wrong release</span
 			>
 			<button
+				type="button"
 				onclick={() => {
 					release.acceptMismatch();
 					onapply();
@@ -101,7 +105,11 @@
 			>
 				Apply anyway
 			</button>
-			<button onclick={() => (release.confirmMismatch = false)} class="btn btn-ghost music-search-action-btn">
+			<button
+				type="button"
+				onclick={() => (release.confirmMismatch = false)}
+				class="btn btn-ghost music-search-action-btn"
+			>
 				Cancel
 			</button>
 		</div>
@@ -121,6 +129,7 @@
 	<div class="flex items-center gap-2">
 		{#if $isAdmin}
 			<button
+				type="button"
 				onclick={() => onapply()}
 				disabled={release.applying || !fields.album.trim()}
 				class="btn music-search-success-btn music-search-action-btn"
@@ -170,8 +179,7 @@
 	.music-search-success-btn:hover {
 		filter: brightness(0.9);
 	}
-	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
-	   narrower than .btn's default */
+	/* the action buttons use 0.75rem/0.375rem padding, narrower than .btn's default */
 	.music-search-action-btn {
 		padding: 0.375rem 0.75rem;
 		border: 0;

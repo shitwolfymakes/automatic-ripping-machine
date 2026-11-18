@@ -1,6 +1,6 @@
 """Tests for the Backend GPU inventory loader.
 
-The backend no longer probes hardware; it parses the `ARM_GPUS` JSON descriptor
+The backend does not probe hardware; it parses the `ARM_GPUS` JSON descriptor
 written host-side at install time. These tests cover `load_configured_gpus` and
 the per-entry validation in `_parse_entry`.
 """

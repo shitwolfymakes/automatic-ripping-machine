@@ -1,4 +1,4 @@
-<!-- Settings > GPUs: the DB-authoritative transcode GPU inventory (G-30).
+<!-- Settings > GPUs: the DB-authoritative transcode GPU inventory.
      Rows are seeded from the host probe (ARM_GPUS) only while the table is
      empty; after that this card is how operators manage devices. Disable
      keeps a device listed but the dispatcher never claims it; delete needs

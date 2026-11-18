@@ -1,4 +1,4 @@
-// Display and merge helpers for the match picker (match picker spec 4.1).
+// Display and merge helpers for the match picker.
 import type { ExternalIds, IdentityFacts, MetadataCandidate } from '$lib/types/api.gen';
 import { plural } from '$lib/utils/plural';
 
@@ -12,7 +12,7 @@ export function isSeriesKind(kind: string): boolean {
  * show and an unknown end look the same). */
 export function formatYears(year: number | null | undefined, endYear: number | null | undefined, kind: string): string {
 	if (year == null) return '';
-	if (isSeriesKind(kind) && endYear != null && endYear !== year) return `${year}–${endYear}`;
+	if (isSeriesKind(kind) && endYear != null && endYear !== year) return `${year}-${endYear}`;
 	return String(year);
 }
 
@@ -23,7 +23,7 @@ export function kindLabel(kind: string): string {
 /** A candidate's subtitle: its years and kind, then any extra parts,
  * leaving out each part that is empty, joined with " · ". */
 export function candidateSubtitle(c: MetadataCandidate, ...extra: string[]): string {
-	return [formatYears(c.year, c.facts?.end_year, c.kind), kindLabel(c.kind), ...extra].filter(Boolean).join(' · ');
+	return [formatYears(c.year, c.facts?.end_year, c.kind), kindLabel(c.kind), ...extra].filter(Boolean).join(' | ');
 }
 
 export function formatVotes(n: number): string {

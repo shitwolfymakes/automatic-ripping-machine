@@ -53,10 +53,9 @@ function withConfig(patch: Record<string, unknown>) {
 	} as never);
 }
 
-// New schema-driven config shape. The page reads `settings.config` (values),
+// The schema-driven config shape. The page reads `settings.config` (values),
 // `settings.schema.groups` (structure → tabs + fields), and `settings.infra`
-// (System read-only values). The dead v2 ARM_* blob / abcde / transcoder-config
-// / systemInfo surface is gone.
+// (System read-only values).
 const mockSchema = {
 	groups: [
 		{
@@ -320,6 +319,7 @@ vi.mock('$lib/api/channels', () => ({
 					id: 'discord',
 					name: 'Discord',
 					docs_url: '',
+					setup_url: '',
 					url_scheme: 'discord',
 					required_fields: [],
 					advanced_fields: []
@@ -458,7 +458,7 @@ describe('Settings Page', () => {
 				Element.prototype.scrollIntoView = scrollIntoView;
 				renderComponent(SettingsPage);
 				await waitFor(() => {
-					expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+					expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus();
 				});
 				expect(screen.getByRole('tab', { name: 'API Keys' })).toHaveAttribute('aria-selected', 'true');
 				expect(scrollIntoView).toHaveBeenCalled();
@@ -495,7 +495,7 @@ describe('Settings Page', () => {
 				transcoder_config: null
 			} as never);
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/makemkv key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^makemkv key$/i)).toHaveFocus());
 			const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
 			expect(headings.slice(0, 2)).toEqual(['MakeMKV', 'API keys']);
 		});
@@ -815,7 +815,7 @@ describe('Settings Page', () => {
 			expect(useTvdb().checked).toBe(true);
 			await fireEvent.click(tab('API Keys'));
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
-			expect(screen.getByLabelText(/tvdb api key/i)).toBeVisible();
+			expect(screen.getByLabelText(/^tvdb api key$/i)).toBeVisible();
 			await fireEvent.click(tab('Identification'));
 			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
 			expect(useTvdb().checked).toBe(true);
@@ -828,7 +828,7 @@ describe('Settings Page', () => {
 			await renderAndWait();
 			expect(tvdbChip()).toBeInTheDocument();
 			await fireEvent.click(tab('API Keys'));
-			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.input(screen.getByLabelText(/^tvdb api key$/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
 			await fireEvent.click(tab('Identification'));
@@ -843,7 +843,7 @@ describe('Settings Page', () => {
 			await renderAndWait();
 			await fireEvent.click(useTvdb());
 			await fireEvent.click(tab('API Keys'));
-			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.input(screen.getByLabelText(/^tvdb api key$/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
 			await fireEvent.click(tab('Identification'));

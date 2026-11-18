@@ -85,7 +85,7 @@ async function clickEditorSendTest() {
 async function dirtyThreadField() {
 	const adv = (await screen.findByText(/Advanced \(/)).closest('details') as HTMLDetailsElement;
 	adv.open = true;
-	await fireEvent.input(await screen.findByLabelText(/Thread/i), { target: { value: '9' } });
+	await fireEvent.input(await screen.findByLabelText(/^Thread/i), { target: { value: '9' } });
 }
 
 async function openAddForm() {

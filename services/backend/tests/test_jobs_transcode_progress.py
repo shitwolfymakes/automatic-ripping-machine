@@ -140,7 +140,7 @@ def test_waiting_identify_zero_task_is_not_terminal() -> None:
 
 
 def test_settled_parked_app_is_left_out_of_the_rollup() -> None:
-    """D-081: on a ripped job the drain already ran, so a WAITING_IDENTIFY
+    """On a ripped job the drain already ran, so a WAITING_IDENTIFY
     app with no tasks is parked, not in flight: no transcode state at all
     when it is the only app, and it does not hold others at "transcoding"."""
     parked = _sa("sap_1", SessionApplicationStatus.WAITING_IDENTIFY)
@@ -153,7 +153,7 @@ def test_settled_parked_app_is_left_out_of_the_rollup() -> None:
 
 
 def test_parked_apps_settle_once_the_rip_is_over() -> None:
-    """D-142: a parked app waiting on resolve (ripped_awaiting_identify, or an
+    """A parked app waiting on resolve (ripped_awaiting_identify, or an
     unidentified partial rip) is waiting on identity, not transcoding, so it
     is settled for the rollup like any other post-rip job's. A job that has
     not ripped yet still drains at rip-complete."""
@@ -370,7 +370,7 @@ def test_get_job_detail_populates_track_transcode_status() -> None:
     tracks = {t["source_ref"]: t for t in r.json()["tracks"]}
     # Most-recent task (greater ULID id) wins → failed
     assert tracks["t:1"]["transcode_status"] == "failed"
-    # The frame rate comes from the same task (D-248).
+    # The frame rate comes from the same task.
     assert (tracks["t:1"]["transcode_fps"], tracks["t:1"]["transcode_avg_fps"]) == (45.7, 23.5)
     # track_b has no task → None
     assert tracks["t:2"]["transcode_status"] is None
@@ -503,7 +503,7 @@ def test_parked_session_ids_ordered_by_created_at_none_last() -> None:
 
 
 def test_ripped_job_with_only_a_parked_app_reads_no_transcode_state() -> None:
-    """D-081 end to end: the detail view of a ripped job whose application
+    """The detail view of a ripped job whose application
     stayed parked has no transcode_progress (not "transcoding 0/0") and
     still lists the parked session."""
     job_id = "job_01JZXR7K3M5Q8N4VWA00000033"

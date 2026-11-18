@@ -28,9 +28,9 @@ describe('MatchDetailPane', () => {
 	it('shows the full record', () => {
 		renderComponent(MatchDetailPane, { props: { ...base, candidate: full, onuse: vi.fn() } });
 		expect(screen.getByRole('heading', { name: 'Kolchak: The Night Stalker' })).toBeInTheDocument();
-		expect(screen.getByText('1974–1975 · TV Series · 20 episodes')).toBeInTheDocument();
+		expect(screen.getByText('1974-1975 | TV Series | 20 episodes')).toBeInTheDocument();
 		expect(screen.getByText('IMDb')).toBeInTheDocument();
-		expect(screen.getByText('★ 7.9')).toBeInTheDocument();
+		expect(screen.getByText('7.9')).toBeInTheDocument();
 		expect(screen.getByText('9.8K votes')).toBeInTheDocument();
 		expect(screen.getByText('tt0071003')).toBeInTheDocument();
 		expect(screen.getByText('A reporter investigates.')).toBeInTheDocument();
@@ -38,7 +38,7 @@ describe('MatchDetailPane', () => {
 		expect(screen.getByText('Creator')).toBeInTheDocument();
 		expect(screen.getByText('Jeff Rice')).toBeInTheDocument();
 		expect(screen.getByText('Darren McGavin, Simon Oakland')).toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'Open on IMDb ↗' })).toHaveAttribute(
+		expect(screen.getByRole('link', { name: 'Open on IMDb' })).toHaveAttribute(
 			'href',
 			'https://www.imdb.com/title/tt0071003/'
 		);
@@ -63,7 +63,7 @@ describe('MatchDetailPane', () => {
 			}
 		});
 		expect(screen.getByText('Director')).toBeInTheDocument();
-		expect(screen.queryByRole('link', { name: 'Open on IMDb ↗' })).toBeNull();
+		expect(screen.queryByRole('link', { name: 'Open on IMDb' })).toBeNull();
 	});
 
 	it('shows a skeleton while loading and the error note on failure', async () => {

@@ -19,7 +19,7 @@ export function discPosition(job: DiscFields): string {
 	if (job.disc_number != null) {
 		parts.push(job.disc_total != null ? `Disc ${job.disc_number}/${job.disc_total}` : `Disc ${job.disc_number}`);
 	}
-	return parts.length ? parts.join(' · ') : '-';
+	return parts.length ? parts.join(' | ') : '-';
 }
 
 /**
@@ -52,10 +52,13 @@ export function indexLogFiles(files: JobLogFileView[]): Map<string, string> {
  * original (job) order. `modified` maps job id to the log's modified_at.
  */
 export function orderByLastModified<T extends { id: string }>(jobs: T[], modified: Map<string, string>): T[] {
-	const withLog = jobs.filter((j) => modified.has(j.id));
+	const withLog = jobs.flatMap((job) => {
+		const at = modified.get(job.id);
+		return at === undefined ? [] : [{ job, at: Date.parse(at) }];
+	});
 	const withoutLog = jobs.filter((j) => !modified.has(j.id));
-	withLog.sort((a, b) => Date.parse(modified.get(b.id)!) - Date.parse(modified.get(a.id)!));
-	return [...withLog, ...withoutLog];
+	withLog.sort((a, b) => b.at - a.at);
+	return [...withLog.map((w) => w.job), ...withoutLog];
 }
 
 /**

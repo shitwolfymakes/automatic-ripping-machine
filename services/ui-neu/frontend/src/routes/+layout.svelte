@@ -64,7 +64,7 @@
 		// `goto('/login')` because the root layout persists across navigations —
 		// so it would keep firing requests that 401, re-entering this handler
 		// many times per tick and re-navigating to /login on each (which steals
-		// focus from the login inputs). Fix: stop the poll loop the moment the
+		// focus from the login inputs). So stop the poll loop the moment the
 		// session is known stale, and guard the redirect so repeated 401s from
 		// in-flight requests don't pile up redundant navigations.
 		setUnauthorizedHandler(() => {
@@ -130,6 +130,7 @@
 			<!-- Top bar -->
 			<header class="layout-header flex h-14 items-center justify-between px-4 lg:px-6">
 				<button
+					type="button"
 					onclick={() => (sidebarOpen ? (sidebarOpen = false) : openSidebar())}
 					aria-label="Toggle sidebar"
 					class="btn btn-icon layout-header-icon lg:hidden"
@@ -148,7 +149,11 @@
 			<!-- Mobile sidebar overlay -->
 			{#if sidebarOpen}
 				<div class="layout-drawer-overlay fixed inset-0 lg:hidden">
-					<button class="layout-scrim absolute inset-0" aria-label="Close sidebar" onclick={() => (sidebarOpen = false)}
+					<button
+						type="button"
+						class="layout-scrim absolute inset-0"
+						aria-label="Close sidebar"
+						onclick={() => (sidebarOpen = false)}
 					></button>
 					<aside data-sidebar class="layout-drawer relative flex h-full flex-col">
 						<div data-logo class="nav-logo layout-drawer-logo">
@@ -191,7 +196,7 @@
 		</div>
 	</div>
 {/if}
-<!-- The setup walkthrough is a focused shell: no resource footer (setup spec §5.0). -->
+<!-- The setup walkthrough is a focused shell: no resource footer. -->
 {#if $uiPrefs.showStats && !isSetupPage}
 	<BottomStatsBar />
 {/if}
@@ -233,11 +238,9 @@
 	.layout-hr {
 		border-top: 1px solid var(--color-border);
 	}
-	/* original header icon buttons were p-2 (0.5rem/8px), not .btn-icon's
-	   default 0.375rem (6px) - that smaller value is right for the denser
-	   row icon buttons elsewhere (channel rows use p-1.5/6px), but shifts
-	   these four header buttons (sidebar toggle, quick actions, sign out,
-	   theme) ~2px narrower than the original. */
+	/* header icon buttons are 0.5rem/8px, not .btn-icon's default 0.375rem (6px) - that smaller value
+	   is right for the denser row icon buttons elsewhere (channel rows use 6px), but would make
+	   these four header buttons (sidebar toggle, quick actions, sign out, theme) ~2px narrower. */
 	.layout-header-icon {
 		padding: 0.5rem;
 	}

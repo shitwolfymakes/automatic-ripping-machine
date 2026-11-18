@@ -54,6 +54,9 @@ interface PresetBlockView {
 	baseNames: string[] | null;
 	// A HandBrake preset links its base preset field to HandBrake's official presets page.
 	showPresetsDocLink: boolean;
+	// HandBrake's command line reference documents the extra args of a HandBrake
+	// preset; ffmpeg and abcde flags are not HandBrake's.
+	showCliDocLink: boolean;
 	extraArgsLabel: string;
 	showOverrideHelp: boolean;
 	showClearedNote: boolean;
@@ -81,6 +84,7 @@ export function presetBlockView(input: PresetBlockInput): PresetBlockView {
 		encoderHint: hardwareHint(draft, input.presetEncoderId),
 		baseNames: draft.tool === 'handbrake' ? input.builtinNames : null,
 		showPresetsDocLink: draft.tool === 'handbrake',
+		showCliDocLink: draft.tool === 'handbrake' && !usesFfmpegVaapi,
 		extraArgsLabel: usesFfmpegVaapi ? 'ffmpeg arguments' : 'Extra args',
 		showOverrideHelp: showTabs(draft),
 		showClearedNote: clearsSettings(draft)
@@ -136,6 +140,17 @@ export function presetSidebarView(input: PresetSidebarInput): PresetSidebarView 
 
 /** The preset block's name input, the one field the sidebar checks before sending. */
 export const PRESET_NAME_ID = 'tp-name';
+
+/** The preset block's fields in the field docs registry. */
+export const FIELD_IDS = {
+	name: 'form.transcode_preset.name',
+	media_type: 'form.transcode_preset.media_type',
+	tool: 'form.transcode_preset.tool',
+	container: 'form.transcode_preset.container',
+	encoder: 'form.transcode_preset.encoder',
+	preset_ref: 'form.transcode_preset.preset_ref',
+	extra_args: 'form.transcode_preset.extra_args'
+} as const;
 
 /** What the sidebar marks on Save before any request: a blank name. */
 export function presetErrors(draft: Draft): FieldErrors {

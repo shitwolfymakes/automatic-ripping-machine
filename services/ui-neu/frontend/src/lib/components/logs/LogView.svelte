@@ -201,7 +201,7 @@
 
 		<div class="log-view-status">
 			<span data-testid="job-log-count">{countLabel(filtered.length, entries.length)}</span>
-			<span aria-hidden="true">·</span>
+			<span aria-hidden="true">|</span>
 			<span data-testid="job-log-follow">{followLabel(follow.following, follow.newWhilePaused)}</span>
 		</div>
 	{/if}

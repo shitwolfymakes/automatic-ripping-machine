@@ -1,6 +1,7 @@
 <script lang="ts">
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
 	import Toggle from '$lib/components/shared/Toggle.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	interface Props {
 		enabled: boolean;
@@ -15,11 +16,11 @@
 		<h2 class="settings-page-section-title" data-page-section-title>Notifications</h2>
 		<p class="settings-page-description">Manage notification channels - Discord, Slack, webhooks, scripts, and more.</p>
 	</div>
-	<label class="field field-row settings-page-notif-toggle-row">
-		<Toggle checked={enabled} label="Enable notifications" onchange={ontoggle} />
-		<span class="field-label">Enable notifications</span>
+	<div class="field field-row settings-page-notif-toggle-row">
+		<Toggle id="notifications-enabled" checked={enabled} label="Enable notifications" onchange={ontoggle} />
+		<FieldLabel for="notifications-enabled" label="Enable notifications" docsId="config.notifications_enabled" />
 		<span class="settings-page-inline-hint">(changes save automatically)</span>
-	</label>
+	</div>
 	{#if enabled}
 		<NotificationsTab />
 	{:else}
@@ -36,9 +37,9 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* most "muted description under a heading" paragraphs on this page were
-	   text-sm (0.875rem/1.25rem), not panel-hint's 0.75rem - panel-hint is
-	   sized for a note under a form control, a visibly smaller role. */
+	/* most "muted description under a heading" paragraphs on this page are text-sm (0.875rem/1.25rem),
+	   not panel-hint's 0.75rem - panel-hint is sized for a note under a form control, a visibly
+	   smaller role. */
 	.settings-page-description {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
@@ -59,7 +60,7 @@
 		line-height: 1rem;
 		color: var(--color-text-muted);
 	}
-	/* the original toggle row was gap-3 (0.75rem), not field-row's 0.5rem. */
+	/* the toggle row gap is 0.75rem, not field-row's 0.5rem. */
 	.settings-page-notif-toggle-row {
 		gap: 0.75rem;
 	}

@@ -1,7 +1,6 @@
-// Pins the notifications page's remaining branches ahead of its split into a
-// class and components. Dismiss all's empty-list guard is not reached from
+// Pins the notifications page's remaining branches. Dismiss all's empty-list guard is not reached from
 // here: the Dismiss All button only shows while a row is unseen. The guard
-// now lives in NotificationInbox, whose own tests cover it.
+// lives in NotificationInbox, whose own tests cover it.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import NotificationsPage from '../+page.svelte';
@@ -127,10 +126,12 @@ describe('Notifications Page sections', () => {
 
 	describe('dismiss all', () => {
 		it('keeps an already dismissed row dismissed after Dismiss All', async () => {
-			vi.mocked(fetchNotifications).mockResolvedValueOnce([
-				row({ id: 'n-1', title: 'First' }),
-				row({ id: 'n-2', title: 'Second' })
-			] as never);
+			vi.mocked(fetchNotifications)
+				.mockResolvedValueOnce([row({ id: 'n-1', title: 'First' }), row({ id: 'n-2', title: 'Second' })] as never)
+				.mockResolvedValueOnce([
+					row({ id: 'n-1', title: 'First', seen: true, cleared: true }),
+					row({ id: 'n-2', title: 'Second', seen: true, cleared: true })
+				] as never);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('First')).toBeInTheDocument();
@@ -218,14 +219,14 @@ describe('Notifications Page sections', () => {
 			await waitFor(() => {
 				expect(screen.getByText('API 403: Forbidden')).toBeInTheDocument();
 			});
-			await fireEvent.click(screen.getByRole('button', { name: '×' }));
+			await fireEvent.click(screen.getByRole('button', { name: 'Dismiss message' }));
 			expect(screen.queryByText('API 403: Forbidden')).not.toBeInTheDocument();
 		});
 	});
 
 	describe('empty text', () => {
 		it('says "No notifications" when Show dismissed is on and the list is empty', async () => {
-			vi.mocked(fetchNotifications).mockResolvedValueOnce([]);
+			vi.mocked(fetchNotifications).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('No new notifications')).toBeInTheDocument();

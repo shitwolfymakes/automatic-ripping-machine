@@ -40,12 +40,31 @@ describe('SetupRestart', () => {
 		expect(restart.running).toBe(false);
 	});
 
-	it('rejects with the request error, stays put and clears running on failure', async () => {
-		const error = new Error('boom');
-		restartSetupMock.mockRejectedValue(error);
+	it('shows the request error, stays put and clears running on failure', async () => {
+		restartSetupMock.mockRejectedValue(new Error('boom'));
 		const restart = new SetupRestart();
-		await expect(restart.run()).rejects.toBe(error);
+		await restart.run();
+		expect(restart.feedback.current).toEqual({ type: 'error', message: 'boom' });
 		expect(gotoMock).not.toHaveBeenCalled();
 		expect(restart.running).toBe(false);
+	});
+
+	it('shows the fallback message when the failure is not an Error', async () => {
+		restartSetupMock.mockRejectedValue('nope');
+		const restart = new SetupRestart();
+		await restart.run();
+		expect(restart.feedback.current).toEqual({ type: 'error', message: 'Could not restart setup' });
+	});
+
+	it('clears an earlier error when it runs again', async () => {
+		restartSetupMock.mockRejectedValueOnce(new Error('boom'));
+		const restart = new SetupRestart();
+		await restart.run();
+		let resolve!: () => void;
+		restartSetupMock.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+		const pending = restart.run();
+		expect(restart.feedback.current).toBeNull();
+		resolve();
+		await pending;
 	});
 });

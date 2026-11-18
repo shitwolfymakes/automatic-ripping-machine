@@ -20,7 +20,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 // These tests exercise the 401/session-expiry path. Tokenless browsing is a
-// valid state now — a 401 just routes straight to /login, no guest attempt.
+// valid state — a 401 just routes straight to /login, no guest attempt.
 const apiLogoutMock = vi.fn(() => Promise.resolve());
 vi.mock('$lib/api/auth', () => ({
 	logout: () => apiLogoutMock()

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { classifyJsonValue } from '$lib/utils/json-tree';
 	import Self from './JsonTree.svelte';
 
@@ -35,9 +36,7 @@
 			class="json-tree-toggle flex w-full items-center gap-1"
 			aria-expanded={open}
 		>
-			<svg class="json-tree-chevron h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-			</svg>
+			<Glyph name="chevron-right" class="json-tree-chevron h-3 w-3 shrink-0" />
 			{#if name !== undefined}
 				<span class="json-tree-key">{name}</span>
 			{/if}
@@ -61,7 +60,7 @@
 {/if}
 
 <style>
-	/* .mono is size-neutral; this was font-mono text-xs (0.75rem/1rem). */
+	/* .mono is size-neutral; this is font-mono text-xs (0.75rem/1rem). */
 	.json-tree-node {
 		font-size: 0.75rem;
 		line-height: 1rem;
@@ -78,10 +77,12 @@
 	.json-tree-toggle:hover {
 		background: var(--color-primary-tint-1);
 	}
-	.json-tree-chevron {
+	/* :global: set on Glyph through its class prop */
+	:global(.json-tree-chevron) {
 		transition: transform var(--motion-fast) var(--ease);
 	}
-	.json-tree-toggle[aria-expanded='true'] .json-tree-chevron {
+	/* :global: set on Glyph through its class prop */
+	.json-tree-toggle[aria-expanded='true'] :global(.json-tree-chevron) {
 		transform: rotate(90deg);
 	}
 	.json-tree-children {

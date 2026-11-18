@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { GLYPH_PATHS } from '$lib/ui/glyph-names';
+
 	interface Props {
 		category?: string;
 	}
@@ -8,7 +10,7 @@
 	const icons: Record<string, { color: string; path: string }> = {
 		directory: {
 			color: 'file-icon-directory',
-			path: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+			path: GLYPH_PATHS.folder
 		},
 		video: {
 			color: 'file-icon-video',
@@ -44,7 +46,7 @@
 </svg>
 
 <style>
-	/* file-icon-*: category colour, dissolved from legacy.css (Task 6). Text
+	/* file-icon-*: category colour. Text
 	   colour only, so plain colour rules on tokens (no shared block covers a
 	   7-way category palette on a single-purpose icon). */
 	.file-icon-directory {

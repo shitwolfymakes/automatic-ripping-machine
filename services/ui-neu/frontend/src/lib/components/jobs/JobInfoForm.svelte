@@ -159,10 +159,15 @@
 	{#if dirty && resolvable}
 		<div class="mt-3 flex items-center gap-2 job-info-form-save-bar">
 			{#if $isAdmin}
-				<button onclick={saveInfo} disabled={saving || !title.trim()} class="btn btn-primary job-info-form-save-btn">
+				<button
+					type="button"
+					onclick={saveInfo}
+					disabled={saving || !title.trim()}
+					class="btn btn-primary job-info-form-save-btn"
+				>
 					{saving ? 'Saving...' : 'Save'}
 				</button>
-				<button onclick={resetInfo} disabled={saving} class="btn job-info-form-reset-btn"> Reset </button>
+				<button type="button" onclick={resetInfo} disabled={saving} class="btn job-info-form-reset-btn"> Reset </button>
 			{/if}
 			{#if feedback}
 				<span in:reveal class="ml-auto job-info-form-feedback" data-tone={feedback.type}>{feedback.message}</span>
@@ -180,7 +185,7 @@
 		border-top: 1px solid var(--color-border);
 		padding: 1rem;
 	}
-	/* the original labels were text-xs (12px/16px), one size down from
+	/* labels are text-xs (12px/16px), one size down from
 	   field-label's default text-sm (14px/20px) */
 	.job-info-form-small-label {
 		font-size: 0.75rem;
@@ -190,8 +195,7 @@
 		border-top: 1px solid var(--color-border);
 		padding-top: 0.75rem;
 	}
-	/* Save was px-4 py-1.5 (1rem/0.375rem) no border; Reset px-3 py-1.5
-	   (0.75rem/0.375rem) with a ring, not .btn's real border */
+	/* Save is 1rem/0.375rem with no border; Reset is 0.75rem/0.375rem with a ring, not .btn's real border */
 	.job-info-form-save-btn {
 		border: 0;
 		padding: 0.375rem 1rem;

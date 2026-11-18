@@ -60,7 +60,7 @@ describe('fetchJobs', () => {
 	});
 });
 
-describe('simple job endpoints (EXISTS in v3)', () => {
+describe('simple job endpoints', () => {
 	it('fetchJob GETs /api/jobs/{id}', async () => {
 		await fetchJob('job_42');
 		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_42');
@@ -90,7 +90,7 @@ describe('simple job endpoints (EXISTS in v3)', () => {
 	});
 });
 
-describe('metadata search (EXISTS in v3)', () => {
+describe('metadata search', () => {
 	it('searchMetadata uses v3 title param', async () => {
 		await searchMetadata('Matrix');
 		const url = mockApiFetch.mock.calls[0][0] as string;
@@ -132,7 +132,7 @@ describe('metadata search (EXISTS in v3)', () => {
 	});
 });
 
-describe('job/track edits via bulk-PATCH (EXISTS in v3)', () => {
+describe('job/track edits via bulk-PATCH', () => {
 	it('updateJobTitle PATCHes /api/jobs/{id} with poster_url_manual', async () => {
 		await updateJobTitle('job_1', { poster_url_manual: 'http://x/p.jpg' });
 		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1', {
@@ -149,14 +149,14 @@ describe('ripAgain', () => {
 	});
 });
 
-describe('startWaitingJob (EXISTS in v3 — timed review gate Start)', () => {
+describe('startWaitingJob (timed review gate Start)', () => {
 	it('POSTs /api/jobs/{id}/rip-start-review', async () => {
 		await startWaitingJob('job_1');
 		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1/rip-start-review', { method: 'POST' });
 	});
 });
 
-describe('pauseWaitingJob (EXISTS in v3 — per-job review pause)', () => {
+describe('pauseWaitingJob (per-job review pause)', () => {
 	it('POSTs review-pause?paused=true by default', async () => {
 		await pauseWaitingJob('job_1');
 		expect(mockApiFetch).toHaveBeenCalledWith('/api/jobs/job_1/review-pause?paused=true', { method: 'POST' });
@@ -168,7 +168,7 @@ describe('pauseWaitingJob (EXISTS in v3 — per-job review pause)', () => {
 	});
 });
 
-describe('triggerManual (EXISTS in v3)', () => {
+describe('triggerManual', () => {
 	it('POSTs /api/jobs/manual with drive_id + session_id', async () => {
 		await triggerManual({ drive_id: 'drv_1', session_id: 'ses_1' });
 		expect(mockPost).toHaveBeenCalledWith('/api/jobs/manual', {

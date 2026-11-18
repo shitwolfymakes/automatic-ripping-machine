@@ -1,7 +1,7 @@
 import type { GlyphName } from '$lib/ui/glyph-names';
 import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 
-// The walkthrough's nine steps, in order (setup spec 2026-10-01 §5).
+// The walkthrough's nine steps, in order.
 export interface StepMeta {
 	id: SetupStep;
 	/** Stepper label. */
@@ -97,6 +97,13 @@ export const STEPS: StepMeta[] = [
 
 export function stepMeta(id: string): StepMeta | undefined {
 	return STEPS.find((s) => s.id === id);
+}
+
+/** The step's metadata; throws for an id that is not a setup step (the route's loader 404s those first). */
+export function requiredStepMeta(id: string): StepMeta {
+	const meta = stepMeta(id);
+	if (!meta) throw new Error(`Unknown setup step "${id}"`);
+	return meta;
 }
 
 export function stepIndex(id: string): number {

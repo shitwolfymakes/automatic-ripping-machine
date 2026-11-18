@@ -3,6 +3,8 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 	import { isRipped } from '$lib/jobs/status-groups';
+	import { onDestroy } from 'svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
 
 	interface Props {
 		job: JobView;
@@ -14,17 +16,14 @@
 	let { job, onaction, ondelete, compact = false }: Props = $props();
 
 	let loading = $state<string | null>(null);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback(3000);
+	onDestroy(() => feedback.dispose());
 
 	let canAbandon = $derived(job.actions.can_abandon);
 	let canDelete = $derived(job.actions.can_delete);
 	// A ripped disc that the previously-ripped setting would hold or reject
 	// on its next insert: let it through (or start the copy already held).
 	let canRipAgain = $derived(isRipped(job.status));
-
-	function clearFeedback() {
-		setTimeout(() => (feedback = null), 3000);
-	}
 
 	function jobLabel(): string {
 		return job.title || job.id;
@@ -35,17 +34,16 @@
 	// when the action handed off and shows no line (a delete with ondelete).
 	async function runAction(name: string, failed: string, act: () => Promise<string | null>): Promise<void> {
 		loading = name;
-		feedback = null;
+		feedback.clear();
 		try {
 			const message = await act();
 			if (message === null) return;
-			feedback = { type: 'success', message };
+			feedback.show('success', message);
 			onaction?.();
 		} catch (e) {
-			feedback = { type: 'error', message: errorMessage(e, failed) };
+			feedback.show('error', errorMessage(e, failed));
 		} finally {
 			loading = null;
-			clearFeedback();
 		}
 	}
 
@@ -83,6 +81,7 @@
 	<div class="cluster job-actions-row">
 		{#if canRipAgain}
 			<button
+				type="button"
 				onclick={handleRipAgain}
 				disabled={loading !== null}
 				data-compact={compact}
@@ -94,6 +93,7 @@
 		{/if}
 		{#if canAbandon}
 			<button
+				type="button"
 				onclick={handleAbandon}
 				disabled={loading !== null}
 				data-compact={compact}
@@ -104,6 +104,7 @@
 		{/if}
 		{#if canDelete}
 			<button
+				type="button"
 				onclick={handleDelete}
 				disabled={loading !== null}
 				data-compact={compact}
@@ -112,9 +113,9 @@
 				{loading === 'delete' ? 'Deleting...' : 'Delete'}
 			</button>
 		{/if}
-		{#if feedback}
-			<span class="job-actions-feedback" data-tone={feedback.type}>
-				{feedback.message}
+		{#if feedback.current}
+			<span class="job-actions-feedback" data-tone={feedback.current.type}>
+				{feedback.current.message}
 			</span>
 		{/if}
 	</div>
@@ -124,8 +125,7 @@
 	.job-actions-row {
 		gap: 0.375rem;
 	}
-	/* the original was a filled soft pill (rounded-full, bg-*-100/text-*-700),
-	   not .btn's outlined default nor .btn-danger/.btn-warning's outlined tone
+	/* a filled soft pill (rounded-full), not .btn's outlined default nor .btn-danger/.btn-warning's outlined tone
 	   look */
 	.job-actions-pill {
 		border: 0;
@@ -137,8 +137,8 @@
 		cursor: pointer;
 		transition: background-color var(--motion-fast) var(--ease);
 	}
-	/* compact: original was rounded px-2 py-0.5 (not rounded-full px-3 py-1.5);
-	   Tailwind's unprefixed `rounded` is 0.25rem, matching neither radius token exactly */
+	/* compact: a 0.25rem radius with px-2 py-0.5 (not rounded-full px-3 py-1.5); 0.25rem matches
+	   neither radius token exactly */
 	.job-actions-pill[data-compact='true'] {
 		border-radius: 0.25rem;
 		padding: 0.125rem 0.5rem;
@@ -162,7 +162,7 @@
 	.job-actions-pill-warning:hover {
 		background: color-mix(in srgb, var(--color-warning-soft) 70%, var(--color-warning));
 	}
-	/* the original also carried ring-1 ring-red-200 (a box-shadow ring, not
+	/* also carries a danger ring (a box-shadow ring, not
 	   .btn's real border - same 30%-mix treatment as DiscReviewWidget's
 	   Cancel button) */
 	.job-actions-pill-danger {

@@ -1,4 +1,4 @@
-"""Tier-1 settings audit: default_retention_policy + notification_apprise_urls
+"""Settings audit: default_retention_policy + notification_apprise_urls
 are hidden from the editable surface (registry + ConfigUpdateRequest) but stay
 readable in ConfigView for back-compat."""
 

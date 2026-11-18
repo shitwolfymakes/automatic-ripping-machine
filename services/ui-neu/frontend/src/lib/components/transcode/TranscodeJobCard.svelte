@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { fade } from 'svelte/transition';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import ProgressBar from '$lib/components/shared/ProgressBar.svelte';
@@ -38,10 +39,12 @@
 			{#if $isAdmin}
 				<div class="flex shrink-0 gap-2">
 					{#if job.status === 'failed'}
-						<button onclick={() => onretry(job.id)} class="btn btn-primary transcoder-page-job-action-btn">Retry</button
+						<button type="button" onclick={() => onretry(job.id)} class="btn btn-primary transcoder-page-job-action-btn"
+							>Retry</button
 						>
 					{/if}
 					<button
+						type="button"
 						onclick={() => ondelete(job.id)}
 						class="btn transcoder-page-job-action-btn transcoder-page-job-delete-btn">Delete</button
 					>
@@ -86,7 +89,7 @@
 			{#if job.updated_at}
 				<span>Updated <TimeAgo date={job.updated_at} /></span>
 			{/if}
-			<!-- From claim to finish: created_at would add the queue wait (D-202).
+			<!-- From claim to finish: created_at would add the queue wait.
 			     Tasks from before started_at existed fall back to created_at. -->
 			{#if job.status === 'done' && (job.started_at ?? job.created_at) && job.updated_at}
 				{@const dur = formatElapsed(job.started_at ?? job.created_at, job.updated_at)}
@@ -99,7 +102,7 @@
 		<!-- Output path for done tasks -->
 		{#if job.status === 'done' && job.output_path}
 			<p class="mt-2 flex items-center gap-1 transcoder-page-job-meta-sm">
-				<span class="transcoder-page-arrow">&rarr;</span>
+				<span class="transcoder-page-arrow"><Glyph name="arrow-right" class="h-3 w-3" /></span>
 				<span class="mono truncate" title={job.output_path}>{sourceFile}</span>
 			</p>
 		{/if}
@@ -108,7 +111,7 @@
 
 <style>
 	/* card-status colours its left accent from data-status, but this card
-	   never sets that attribute - the original was always primary blue.
+	   never sets that attribute - its accent is always primary blue.
 	   style:--card-accent + this scoped rule (which already compiles
 	   unlayered, beating card-status's own @layer components rule
 	   regardless of specificity) reproduces that with no !important -
@@ -121,7 +124,7 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* original action buttons were px-2.5 py-1 text-xs (0.625rem/0.25rem),
+	/* action buttons are px-2.5 py-1 text-xs (0.625rem/0.25rem),
 	   smaller than .btn's own default */
 	.transcoder-page-job-action-btn {
 		padding: 0.25rem 0.625rem;

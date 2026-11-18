@@ -5,7 +5,7 @@
 	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 2: deploy-time facts the operator can't change in the browser. Never
-	// blocks; problems record the step as needing attention (setup spec §5.3).
+	// blocks; problems record the step as needing attention.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 

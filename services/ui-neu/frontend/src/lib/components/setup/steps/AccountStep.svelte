@@ -8,7 +8,7 @@
 	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 1, the one hard gate: ARM locks everything else until the seeded
-	// admin password is changed (setup spec §5.2).
+	// admin password is changed.
 	let { view, setBlocked }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 
 	let version = $state<string | null>(null);
@@ -29,9 +29,7 @@
 	}
 
 	export async function commit(): Promise<StepCommitResult> {
-		if (view.admin_default_password) {
-			if (!pw || !(await pw.submit())) return false;
-		}
+		if (view.admin_default_password && !(await pw?.submit())) return false;
 		return 'done';
 	}
 </script>

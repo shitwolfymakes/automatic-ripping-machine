@@ -23,7 +23,7 @@
 	let { job, discTrackCount, searching, onsearch }: Props = $props();
 
 	// Seed from the typed `music` section (metadata_json.music.artist/.album) —
-	// bare top-level metadata keys are gone post-migration (see job-fields.ts).
+	// bare top-level metadata keys are not used (see job-fields.ts).
 	const meta = readJobMetadata(job.metadata_json, job);
 	let query = $state(job.title || meta.album || '');
 	let artist = $state(meta.artist || '');
@@ -140,11 +140,16 @@
 		{/if}
 		<div class="flex items-center gap-2">
 			<span class="eyebrow music-search-label">&nbsp;</span>
-			<button onclick={submit} disabled={searching || !query.trim()} class="btn btn-primary music-search-action-btn">
+			<button
+				type="button"
+				onclick={submit}
+				disabled={searching || !query.trim()}
+				class="btn btn-primary music-search-action-btn"
+			>
 				{searching ? 'Searching...' : 'Search'}
 			</button>
 			{#if activeFilterCount > 0}
-				<button onclick={clearFilters} class="btn btn-ghost music-search-clear-btn"> Clear </button>
+				<button type="button" onclick={clearFilters} class="btn btn-ghost music-search-clear-btn"> Clear </button>
 			{/if}
 		</div>
 	</div>
@@ -182,8 +187,7 @@
 		font-size: 0.75rem;
 		line-height: 1rem;
 	}
-	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
-	   narrower than .btn's default */
+	/* the action buttons use 0.75rem/0.375rem padding, narrower than .btn's default */
 	.music-search-action-btn {
 		padding: 0.375rem 0.75rem;
 		border: 0;

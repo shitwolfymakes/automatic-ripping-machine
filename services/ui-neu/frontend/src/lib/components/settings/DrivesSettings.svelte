@@ -69,8 +69,7 @@
 		color: var(--color-text);
 	}
 
-	/* Drive cards grid: 2 columns at md, matching the original's md:2/xl:3
-	   step (grid-2's own responsive breaks at sm, so xl needs its own rule). */
+	/* Drive cards grid: 2 columns at md, stepping to 3 at xl (grid-2's own responsive breaks at sm, so xl needs its own rule). */
 	.settings-page-drive-grid {
 		grid-template-columns: 1fr;
 	}

@@ -1,11 +1,12 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import Flyout from '../shared/Flyout.svelte';
 	import FlyoutItem from '../shared/FlyoutItem.svelte';
 	import FlyoutDivider from '../shared/FlyoutDivider.svelte';
 	import Glyph from '../shared/Glyph.svelte';
 
 	interface Props {
-		// v3 job ids are strings (was Set<number> under the BFF).
+		// Job ids are strings.
 		selectedJobs: Set<string>;
 		bulkBusy: boolean;
 		onaction: (action: 'delete', params: { job_ids?: string[]; status?: string }, description: string) => void;

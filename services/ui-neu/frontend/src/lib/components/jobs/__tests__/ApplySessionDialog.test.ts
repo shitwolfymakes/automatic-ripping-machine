@@ -253,7 +253,7 @@ describe('ApplySessionDialog', () => {
 			expect(screen.getByText(/queued\/done in DB in job 0000000J/)).toBeInTheDocument();
 		});
 
-		// I3: the backend refuses overwrite unconditionally on a cross-job
+		// The backend refuses overwrite unconditionally on a cross-job
 		// collision — offering the control would just loop the user into a
 		// 409 every time, so it must be hidden with explanatory copy instead.
 		expect(screen.queryByTestId('apply-session-overwrite')).not.toBeInTheDocument();
