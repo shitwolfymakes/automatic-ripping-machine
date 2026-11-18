@@ -61,7 +61,8 @@ export class JobDetail {
 			this.excludeError = { trackId, message: errorMessage(e, 'Could not save') };
 		} finally {
 			// Refetch regardless: on success to pick up new naming/derived state,
-			// on failure to restore the last server-truth value in the checkbox.
+			// on failure so the row can put the server's value back in its
+			// checkbox once this resolves (JobTrackRow's toggleIncluded).
 			await this.load();
 		}
 	};

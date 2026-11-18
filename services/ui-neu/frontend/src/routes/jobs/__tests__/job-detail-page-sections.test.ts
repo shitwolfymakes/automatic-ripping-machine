@@ -1269,9 +1269,13 @@ describe('tracks table', () => {
 				mockUpdateTrack.mockRejectedValue(new Error('update failed'));
 				loadJobPage();
 				await screen.findByText('Tracks (1)');
-				await fireEvent.click(screen.getByRole('checkbox'));
+				const box = screen.getByRole('checkbox') as HTMLInputElement;
+				expect(box.checked).toBe(true);
+				await fireEvent.click(box);
 				await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
 				expect(await screen.findByRole('alert')).toHaveTextContent('update failed');
+				// the reloaded track is still included, and the box shows it again
+				await waitFor(() => expect(box.checked).toBe(true));
 				expect(rejections).toEqual([]);
 			} finally {
 				process.removeAllListeners('unhandledRejection');
@@ -1449,5 +1453,14 @@ describe('navigation between jobs', () => {
 		await screen.findByText('Tracks (1)');
 		await fireEvent.click(screen.getByRole('checkbox'));
 		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith('', 'trk_1', { excluded: true }));
+	});
+});
+
+describe('session names', () => {
+	it('still loads the page when the session list cannot be read', async () => {
+		vi.mocked(fetchSessions).mockRejectedValueOnce(new Error('sessions down'));
+		loadJobPage();
+		expect(await screen.findByText('Tracks (1)')).toBeInTheDocument();
+		expect(fetchSessions).toHaveBeenCalledTimes(1);
 	});
 });

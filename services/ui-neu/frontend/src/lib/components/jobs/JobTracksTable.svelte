@@ -7,7 +7,7 @@
 		tracks: TrackView[];
 		tracksAreSeries: boolean;
 		previewByTrack: ReadonlyMap<string, NamingPreviewItem>;
-		onexcludedchange: (trackId: string, excluded: boolean) => void;
+		onexcludedchange: (trackId: string, excluded: boolean) => void | Promise<void>;
 		/** The last include toggle that failed, shown on its track's row. */
 		excludeError?: { trackId: string; message: string } | null;
 		ontitleapplied: () => void;

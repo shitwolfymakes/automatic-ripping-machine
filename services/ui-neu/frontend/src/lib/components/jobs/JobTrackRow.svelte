@@ -17,7 +17,8 @@
 		editing: boolean;
 		ontoggleedit: () => void;
 		oncloseedit: () => void;
-		onexcludedchange: (trackId: string, excluded: boolean) => void;
+		/** Saves the include toggle; resolves once the job has been reloaded, whether the save worked or not. */
+		onexcludedchange: (trackId: string, excluded: boolean) => void | Promise<void>;
 		/** Why this track's last include toggle failed, or null. */
 		excludeError?: string | null;
 		ontitleapplied: () => void;
@@ -35,6 +36,15 @@
 		excludeError = null,
 		ontitleapplied
 	}: Props = $props();
+
+	// `checked={!track.excluded}` writes the input only when the value changes,
+	// and a failed save reloads the same value, so the box would keep the
+	// user's click. Once the save and reload settle, put the server's value back.
+	async function toggleIncluded(e: Event) {
+		const box = e.currentTarget as HTMLInputElement;
+		await onexcludedchange(track.id, !box.checked);
+		box.checked = !track.excluded;
+	}
 </script>
 
 <!-- An admin opens the title search from the title: a button whose overlay
@@ -144,7 +154,7 @@
 			<input
 				type="checkbox"
 				checked={!track.excluded}
-				onchange={(e) => onexcludedchange(track.id, !(e.currentTarget as HTMLInputElement).checked)}
+				onchange={toggleIncluded}
 				title="Include this track in transcode output (the disc still rips in full)"
 				class="job-detail-track-checkbox"
 			/>
